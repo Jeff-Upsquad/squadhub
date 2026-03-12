@@ -16,8 +16,13 @@ RUN npm install
 COPY shared/ shared/
 COPY server/ server/
 
-# Build shared first, then server
-RUN npm run build -w shared && npm run build -w server
+# Build shared, then manually place it in node_modules for tsc resolution
+RUN npm run build -w shared && \
+    rm -rf node_modules/@squadhub/shared && \
+    mkdir -p node_modules/@squadhub/shared && \
+    cp shared/package.json node_modules/@squadhub/shared/ && \
+    cp -r shared/dist node_modules/@squadhub/shared/ && \
+    npm run build -w server
 
 # ---- Production image ----
 FROM node:20-alpine
