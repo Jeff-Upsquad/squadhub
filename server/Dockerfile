@@ -1,19 +1,22 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Copy root package files
+# Copy all package files for full workspace install
 COPY package.json package-lock.json* ./
 COPY shared/package.json shared/
 COPY server/package.json server/
+COPY web/package.json web/
+COPY desktop/package.json desktop/
+COPY mobile/package.json mobile/
 
-# Install dependencies
-RUN npm install --workspace=shared --workspace=server
+# Full install to ensure workspace symlinks are created
+RUN npm install
 
 # Copy source
 COPY shared/ shared/
 COPY server/ server/
 
-# Build
+# Build shared first, then server
 RUN npm run build -w shared && npm run build -w server
 
 # ---- Production image ----
