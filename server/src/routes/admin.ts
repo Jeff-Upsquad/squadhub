@@ -80,7 +80,7 @@ const updateRoleSchema = z.object({
 
 router.put('/users/:id/role', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const body = updateRoleSchema.parse(req.body);
 
     // Prevent admin from demoting themselves
@@ -119,7 +119,7 @@ const banSchema = z.object({
 
 router.put('/users/:id/ban', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const body = banSchema.parse(req.body);
 
     // Prevent admin from banning themselves
@@ -165,7 +165,7 @@ router.put('/users/:id/ban', async (req: Request, res: Response) => {
 // DELETE /admin/users/:id — delete a user
 router.delete('/users/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     // Prevent admin from deleting themselves
     if (id === req.userId) {
