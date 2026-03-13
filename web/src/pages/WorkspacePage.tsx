@@ -238,7 +238,7 @@ export default function WorkspacePage() {
   const [showCreateChannel, setShowCreateChannel] = useState(false);
 
   // Fetch workspaces
-  const { data: workspacesRes } = useQuery({
+  const { data: workspacesRes, isLoading: workspacesLoading } = useQuery({
     queryKey: ['workspaces'],
     queryFn: () => api.get('/workspaces').then((r) => r.data),
   });
@@ -278,8 +278,17 @@ export default function WorkspacePage() {
     }
   }, [currentWorkspace]);
 
+  // Show loading while fetching workspaces
+  if (workspacesLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-950">
+        <p className="text-lg text-gray-400">Loading...</p>
+      </div>
+    );
+  }
+
   // Show workspace creation if none exist
-  if (workspacesRes && workspaces.length === 0) {
+  if (!workspacesRes || workspaces.length === 0) {
     return <CreateWorkspaceView />;
   }
 
