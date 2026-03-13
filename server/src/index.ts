@@ -14,6 +14,7 @@ import messageRoutes from './routes/messages';
 import dmRoutes from './routes/dms';
 import uploadRoutes from './routes/upload';
 import userRoutes from './routes/users';
+import adminRoutes from './routes/admin';
 
 // Validate env vars before starting
 validateConfig();
@@ -49,6 +50,7 @@ app.use('/messages', messageRoutes);
 app.use('/dms', dmRoutes);
 app.use('/upload', uploadRoutes);
 app.use('/users', userRoutes);
+app.use('/admin', adminRoutes);
 
 // 404 handler
 app.use((_req, res) => {

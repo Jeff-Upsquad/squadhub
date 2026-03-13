@@ -3,6 +3,7 @@ import { useAuthStore } from './stores/authStore';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import WorkspacePage from './pages/WorkspacePage';
+import AdminPage from './pages/AdminPage';
 
 // Protect routes that require authentication
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -23,6 +24,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
       <Route path="/signup" element={<GuestRoute><SignupPage /></GuestRoute>} />
+      <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
       <Route path="/*" element={<ProtectedRoute><WorkspacePage /></ProtectedRoute>} />
     </Routes>
   );
