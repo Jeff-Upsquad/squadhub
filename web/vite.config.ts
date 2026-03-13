@@ -22,6 +22,7 @@ export default defineConfig({
       '/upload': 'http://localhost:4000',
       '/users': 'http://localhost:4000',
       '/admin': 'http://localhost:4000',
+      '/pm': 'http://localhost:4000',
       '/health': 'http://localhost:4000',
       '/socket.io': {
         target: 'http://localhost:4000',

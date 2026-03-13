@@ -15,6 +15,10 @@ import dmRoutes from './routes/dms';
 import uploadRoutes from './routes/upload';
 import userRoutes from './routes/users';
 import adminRoutes from './routes/admin';
+import pmSpaceRoutes from './routes/pm/spaces';
+import pmFolderRoutes from './routes/pm/folders';
+import pmListRoutes from './routes/pm/lists';
+import pmTaskRoutes from './routes/pm/tasks';
 
 // Validate env vars before starting
 validateConfig();
@@ -51,6 +55,10 @@ app.use('/dms', dmRoutes);
 app.use('/upload', uploadRoutes);
 app.use('/users', userRoutes);
 app.use('/admin', adminRoutes);
+app.use('/pm', pmSpaceRoutes);
+app.use('/pm', pmFolderRoutes);
+app.use('/pm', pmListRoutes);
+app.use('/pm', pmTaskRoutes);
 
 // 404 handler
 app.use((_req, res) => {

@@ -88,41 +88,90 @@ export interface MessageThread {
 }
 
 // ---- Project Management ----
+export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low' | 'none';
+export type StatusCategory = 'todo' | 'active' | 'done' | 'closed';
+export type ListView = 'list' | 'board';
+
 export interface Space {
   id: string;
   workspace_id: string;
   name: string;
   color: string;
   icon: string;
+  description: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  position: number;
+  // Joined
+  statuses?: SpaceStatus[];
+  folders?: Folder[];
+  lists?: List[]; // lists directly under space (no folder)
+}
+
+export interface SpaceStatus {
+  id: string;
+  space_id: string;
+  name: string;
+  color: string;
+  position: number;
+  is_default: boolean;
+  category: StatusCategory;
 }
 
 export interface Folder {
   id: string;
   space_id: string;
   name: string;
+  position: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  lists?: List[];
 }
 
 export interface List {
   id: string;
+  space_id: string;
   folder_id: string | null;
-  space_id: string | null;
   name: string;
+  position: number;
+  default_view: ListView;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  task_count?: number;
 }
-
-export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled';
-export type TaskPriority = 'urgent' | 'high' | 'medium' | 'low' | 'none';
 
 export interface Task {
   id: string;
   list_id: string;
+  parent_task_id: string | null;
   title: string;
   description: string | null;
-  status: TaskStatus;
+  status_id: string;
   priority: TaskPriority;
-  assignee_ids: string[];
+  position: number;
   due_date: string | null;
   created_by: string;
   created_at: string;
+  updated_at: string;
+  // Joined
+  status?: SpaceStatus;
+  assignees?: User[];
+  tags?: TaskTag[];
+  subtasks?: Task[];
+  comment_count?: number;
+  creator?: User;
+}
+
+export interface TaskTag {
+  id: string;
+  workspace_id: string;
+  name: string;
+  color: string;
 }
 
 export interface TaskComment {
@@ -131,6 +180,9 @@ export interface TaskComment {
   user_id: string;
   content: string;
   created_at: string;
+  updated_at: string;
+  // Joined
+  user?: User;
 }
 
 // ---- Roles & Permissions ----
