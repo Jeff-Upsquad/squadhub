@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -243,7 +243,7 @@ export default function WorkspacePage() {
     queryFn: () => api.get('/workspaces').then((r) => r.data),
   });
 
-  const workspaces: (Workspace & { my_role?: string })[] = workspacesRes?.data || [];
+  const workspaces: (Workspace & { my_role?: string })[] = useMemo(() => workspacesRes?.data || [], [workspacesRes]);
 
   // Auto-select first workspace
   useEffect(() => {
@@ -259,7 +259,7 @@ export default function WorkspacePage() {
     enabled: !!currentWorkspace,
   });
 
-  const channels: Channel[] = channelsRes?.data || [];
+  const channels: Channel[] = useMemo(() => channelsRes?.data || [], [channelsRes]);
 
   // Update store when channels change
   useEffect(() => {
