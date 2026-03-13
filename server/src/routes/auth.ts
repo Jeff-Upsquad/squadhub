@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { supabaseAdmin } from '../supabase';
+import { supabaseAdmin, supabase } from '../supabase';
 
 const router = Router();
 
@@ -21,7 +21,7 @@ router.post('/register', async (req: Request, res: Response) => {
   try {
     const body = registerSchema.parse(req.body);
 
-    // Create user in Supabase Auth
+    // Create user in Supabase Auth (admin API for user creation)
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: body.email,
       password: body.password,
@@ -46,8 +46,8 @@ router.post('/register', async (req: Request, res: Response) => {
       console.error('Failed to insert user row:', dbError);
     }
 
-    // Sign in to get tokens
-    const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+    // Sign in using the PUBLIC client (not admin) to avoid contaminating admin client state
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
       email: body.email,
       password: body.password,
     });
@@ -65,8 +65,8 @@ router.post('/register', async (req: Request, res: Response) => {
           email: body.email,
           display_name: body.display_name,
         },
-        access_token: signInData.session.access_token,
-        refresh_token: signInData.session.refresh_token,
+        access_token: signInData.session!.access_token,
+        refresh_token: signInData.session!.refresh_token,
       },
     });
   } catch (err) {
@@ -84,7 +84,8 @@ router.post('/login', async (req: Request, res: Response) => {
   try {
     const body = loginSchema.parse(req.body);
 
-    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+    // Use the PUBLIC client for signInWithPassword (not admin) to avoid contaminating admin client
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: body.email,
       password: body.password,
     });
@@ -94,7 +95,7 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    // Fetch user profile from our users table
+    // Fetch user profile from our users table (admin client for DB query is fine)
     const { data: profile } = await supabaseAdmin
       .from('users')
       .select('*')
@@ -109,8 +110,8 @@ router.post('/login', async (req: Request, res: Response) => {
           email: data.user.email,
           display_name: data.user.user_metadata?.display_name || 'User',
         },
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
+        access_token: data.session!.access_token,
+        refresh_token: data.session!.refresh_token,
       },
     });
   } catch (err) {
