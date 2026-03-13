@@ -11,6 +11,8 @@ services:
       - ./server/.env.production
     environment:
       - NODE_ENV=production
+    networks:
+      - squadhub
 
   web:
     build:
@@ -22,3 +24,9 @@ services:
       - "80:80"
     depends_on:
       - server
+    networks:
+      - squadhub
+
+networks:
+  squadhub:
+    driver: bridge
