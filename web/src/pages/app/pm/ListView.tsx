@@ -1,0 +1,91 @@
+import { useMemo } from 'react';
+import type { SpaceStatus, Task } from '@squadhub/shared';
+import { useTasks, useUpdateTask, groupTasksByStatus } from '../../../hooks/useTasks';
+import TaskRow from './TaskRow';
+import QuickAddTask from './QuickAddTask';
+
+export default function ListView({
+  listId,
+  statuses,
+}: {
+  listId: string;
+  statuses: SpaceStatus[];
+}) {
+  const { data: tasks, isLoading } = useTasks(listId);
+  const updateTask = useUpdateTask(listId);
+
+  const groups = useMemo(
+    () => groupTasksByStatus(tasks || [], statuses),
+    [tasks, statuses],
+  );
+
+  const handleStatusChange = (taskId: string, statusId: string) => {
+    updateTask.mutate({ id: taskId, status_id: statusId });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <p className="text-sm text-gray-500">Loading tasks...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      {groups.map(({ status, tasks: groupTasks }) => (
+        <StatusGroup
+          key={status.id}
+          status={status}
+          tasks={groupTasks}
+          allStatuses={statuses}
+          listId={listId}
+          onStatusChange={handleStatusChange}
+        />
+      ))}
+    </div>
+  );
+}
+
+function StatusGroup({
+  status,
+  tasks,
+  allStatuses,
+  listId,
+  onStatusChange,
+}: {
+  status: SpaceStatus;
+  tasks: Task[];
+  allStatuses: SpaceStatus[];
+  listId: string;
+  onStatusChange: (taskId: string, statusId: string) => void;
+}) {
+  return (
+    <div className="mb-2">
+      {/* Status header */}
+      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-gray-800 bg-gray-950/90 px-4 py-2 backdrop-blur-sm">
+        <span
+          className="h-2.5 w-2.5 rounded-full"
+          style={{ backgroundColor: status.color }}
+        />
+        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+          {status.name}
+        </span>
+        <span className="text-xs text-gray-600">{tasks.length}</span>
+      </div>
+
+      {/* Tasks */}
+      {tasks.map((task) => (
+        <TaskRow
+          key={task.id}
+          task={task}
+          statuses={allStatuses}
+          onStatusChange={onStatusChange}
+        />
+      ))}
+
+      {/* Quick add */}
+      <QuickAddTask listId={listId} statusId={status.id} />
+    </div>
+  );
+}

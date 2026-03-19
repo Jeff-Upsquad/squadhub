@@ -12,6 +12,8 @@ import ChannelSidebar from '../pages/app/chat/ChannelSidebar';
 import ChatPanel from '../pages/app/chat/ChatPanel';
 import CreateChannelModal from '../pages/app/chat/CreateChannelModal';
 import CreateWorkspaceView from '../pages/app/CreateWorkspaceView';
+import SpaceTree from '../pages/app/pm/SpaceTree';
+import ListPage from '../pages/app/pm/ListPage';
 
 // ---- Sidebar Workspace Icon ----
 function SidebarIcon({ label, active, onClick }: { label: string; active?: boolean; onClick?: () => void }) {
@@ -151,14 +153,7 @@ export default function MainLayout() {
               onCreateChannel={() => setShowCreateChannel(true)}
             />
           ) : (
-            /* Tasks sidebar — placeholder until Phase 3 */
-            <div className="flex flex-1 flex-col items-center justify-center px-4 text-center">
-              <svg className="mb-3 h-10 w-10 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-              </svg>
-              <p className="text-sm font-medium text-gray-400">Tasks</p>
-              <p className="mt-1 text-xs text-gray-600">Coming soon</p>
-            </div>
+            <SpaceTree workspaceId={currentWorkspace.id} />
           )}
         </div>
       )}
@@ -186,16 +181,7 @@ export default function MainLayout() {
             )}
           </>
         ) : (
-          /* Tasks content — placeholder until Phase 3 */
-          <div className="flex flex-1 items-center justify-center">
-            <div className="text-center">
-              <svg className="mx-auto mb-4 h-16 w-16 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-              </svg>
-              <h2 className="text-lg font-semibold text-gray-400">Project Management</h2>
-              <p className="mt-1 text-sm text-gray-600">Spaces, lists, and tasks coming soon</p>
-            </div>
-          </div>
+          <ListPage />
         )}
       </div>
 
