@@ -86,13 +86,18 @@ router.post('/roles', async (req: Request, res: Response) => {
       .single();
 
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      console.error('Create role DB error:', error);
+      const msg = error.message.includes('unique')
+        ? 'A role with that name already exists'
+        : error.message;
+      res.status(400).json({ success: false, error: msg });
       return;
     }
 
     res.status(201).json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) {
+      console.error('Create role validation error:', err.errors);
       res.status(400).json({ success: false, error: err.errors[0].message });
       return;
     }
@@ -120,13 +125,18 @@ router.put('/roles/:id', async (req: Request, res: Response) => {
       .single();
 
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      console.error('Update role DB error:', error);
+      const msg = error.message.includes('unique')
+        ? 'A role with that name already exists'
+        : error.message;
+      res.status(400).json({ success: false, error: msg });
       return;
     }
 
     res.json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) {
+      console.error('Update role validation error:', err.errors);
       res.status(400).json({ success: false, error: err.errors[0].message });
       return;
     }

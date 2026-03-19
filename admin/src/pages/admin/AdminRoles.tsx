@@ -33,6 +33,7 @@ export default function AdminRoles() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [editingRole, setEditingRole] = useState<RoleWithCount | null>(null);
+  const [formError, setFormError] = useState('');
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -46,12 +47,20 @@ export default function AdminRoles() {
 
   const roles: RoleWithCount[] = rolesRes?.data || [];
 
+  const getErrorMessage = (err: unknown): string => {
+    const axiosErr = err as { response?: { data?: { error?: string } } };
+    return axiosErr?.response?.data?.error || 'Something went wrong. Please try again.';
+  };
+
   const createMutation = useMutation({
     mutationFn: (data: { name: string; color: string; permissions: RolePermissions }) =>
       api.post('/admin/roles', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-roles'] });
       closeModal();
+    },
+    onError: (err) => {
+      setFormError(getErrorMessage(err));
     },
   });
 
@@ -61,6 +70,9 @@ export default function AdminRoles() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-roles'] });
       closeModal();
+    },
+    onError: (err) => {
+      setFormError(getErrorMessage(err));
     },
   });
 
@@ -77,6 +89,7 @@ export default function AdminRoles() {
     setFormName('');
     setFormColor('#22c55e');
     setFormPermissions({ ...DEFAULT_PERMISSIONS });
+    setFormError('');
     setShowModal(true);
   };
 
@@ -85,16 +98,19 @@ export default function AdminRoles() {
     setFormName(role.name);
     setFormColor(role.color);
     setFormPermissions({ ...DEFAULT_PERMISSIONS, ...role.permissions });
+    setFormError('');
     setShowModal(true);
   };
 
   const closeModal = () => {
     setShowModal(false);
     setEditingRole(null);
+    setFormError('');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
     const payload = { name: formName, color: formColor, permissions: formPermissions };
     if (editingRole) {
       updateMutation.mutate({ id: editingRole.id, ...payload });
@@ -270,6 +286,13 @@ export default function AdminRoles() {
                   ))}
                 </div>
               </div>
+
+              {/* Error */}
+              {formError && (
+                <div className="rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-400">
+                  {formError}
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-2">
