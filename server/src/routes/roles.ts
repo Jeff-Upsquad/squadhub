@@ -37,11 +37,11 @@ router.get('/roles', async (_req: Request, res: Response) => {
   try {
     const { data: roles, error } = await supabaseAdmin
       .from('roles')
-      .select('*')
-      .order('is_default', { ascending: false })
+      .select('id, name, color, permissions, is_default, created_at, updated_at')
       .order('created_at', { ascending: true });
 
     if (error) {
+      console.error('List roles DB error:', error);
       res.status(500).json({ success: false, error: error.message });
       return;
     }
@@ -62,6 +62,13 @@ router.get('/roles', async (_req: Request, res: Response) => {
       ...role,
       member_count: countMap[role.id] || 0,
     }));
+
+    // Sort: default roles first, then by created_at
+    rolesWithCounts.sort((a: any, b: any) => {
+      if (a.is_default && !b.is_default) return -1;
+      if (!a.is_default && b.is_default) return 1;
+      return 0;
+    });
 
     res.json({ success: true, data: rolesWithCounts });
   } catch (err) {
