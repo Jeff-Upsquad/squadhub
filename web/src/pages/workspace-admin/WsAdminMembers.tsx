@@ -22,10 +22,10 @@ const ROLES = ['super_admin', 'admin', 'member', 'guest'] as const;
 
 function roleBadgeColor(role: string) {
   switch (role) {
-    case 'super_admin': return 'bg-purple-500/20 text-purple-400';
-    case 'admin': return 'bg-blue-500/20 text-blue-400';
-    case 'guest': return 'bg-gray-500/20 text-gray-400';
-    default: return 'bg-green-500/20 text-green-400';
+    case 'super_admin': return 'bg-purple-500/15 text-purple-400';
+    case 'admin': return 'bg-blue-500/15 text-blue-400';
+    case 'guest': return 'bg-[#222] text-[#888]';
+    default: return 'bg-green-500/15 text-green-400';
   }
 }
 
@@ -91,28 +91,28 @@ export default function WsAdminMembers() {
   };
 
   if (!currentWorkspace) {
-    return <p className="text-gray-500">No workspace selected</p>;
+    return <p className="text-[#555]">No workspace selected</p>;
   }
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h2 className="mb-6 text-2xl font-bold">Members</h2>
+      <h2 className="mb-6 text-2xl font-semibold text-[#ededed]">Members</h2>
 
       {/* Invite form */}
-      <form onSubmit={handleInvite} className="mb-6 rounded-xl border border-gray-800 bg-gray-900 p-5">
-        <h3 className="mb-3 text-sm font-semibold text-gray-400">Invite Member</h3>
+      <form onSubmit={handleInvite} className="mb-6 rounded-lg border border-[#222] bg-[#111] p-5">
+        <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-[#888]">Invite Member</h3>
         <div className="flex gap-3">
           <input
             type="email"
             value={inviteEmail}
             onChange={(e) => setInviteEmail(e.target.value)}
             placeholder="user@example.com"
-            className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-brand-500"
+            className="flex-1 rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2 text-sm text-[#ededed] placeholder-[#555] outline-none focus:border-[#ededed]"
           />
           <select
             value={inviteRole}
             onChange={(e) => setInviteRole(e.target.value)}
-            className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white outline-none"
+            className="rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2 text-sm text-[#ededed] outline-none"
           >
             <option value="member">Member</option>
             <option value="admin">Admin</option>
@@ -121,7 +121,7 @@ export default function WsAdminMembers() {
           <button
             type="submit"
             disabled={!inviteEmail.trim() || inviteMember.isPending}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
+            className="rounded-md bg-[#ededed] px-4 py-2 text-sm font-medium text-[#0a0a0a] hover:bg-white disabled:opacity-50"
           >
             {inviteMember.isPending ? 'Inviting...' : 'Invite'}
           </button>
@@ -130,21 +130,21 @@ export default function WsAdminMembers() {
       </form>
 
       {/* Members list */}
-      <div className="rounded-xl border border-gray-800 bg-gray-900">
-        <div className="border-b border-gray-800 px-5 py-3">
-          <span className="text-sm font-medium text-gray-400">
+      <div className="rounded-lg border border-[#222] bg-[#111]">
+        <div className="border-b border-[#222] px-5 py-3">
+          <span className="text-sm font-medium text-[#888]">
             {members?.length || 0} members
           </span>
         </div>
 
         {isLoading ? (
-          <p className="p-5 text-sm text-gray-500">Loading members...</p>
+          <p className="p-5 text-sm text-[#555]">Loading members...</p>
         ) : (
-          <div className="divide-y divide-gray-800/50">
+          <div className="divide-y divide-[#222]/50">
             {members?.map((m) => (
               <div key={m.user_id} className="flex items-center gap-4 px-5 py-3">
                 {/* Avatar */}
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-700 text-sm font-medium text-gray-300">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#222] text-sm font-medium text-[#888]">
                   {m.user.avatar_url ? (
                     <img src={m.user.avatar_url} className="h-9 w-9 rounded-full" alt="" />
                   ) : (
@@ -154,13 +154,13 @@ export default function WsAdminMembers() {
 
                 {/* Name & email */}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-white">
+                  <p className="truncate text-sm font-medium text-[#ededed]">
                     {m.user.display_name || 'No name'}
                     {m.user_id === currentUser?.id && (
-                      <span className="ml-1.5 text-xs text-gray-500">(you)</span>
+                      <span className="ml-1.5 text-xs text-[#555]">(you)</span>
                     )}
                   </p>
-                  <p className="truncate text-xs text-gray-500">{m.user.email}</p>
+                  <p className="truncate text-xs text-[#555]">{m.user.email}</p>
                 </div>
 
                 {/* Role */}
@@ -183,11 +183,11 @@ export default function WsAdminMembers() {
                 {m.user_id !== currentUser?.id && (
                   <button
                     onClick={() => removeMember.mutate(m.user_id)}
-                    className="rounded p-1 text-gray-500 hover:bg-gray-800 hover:text-red-400"
+                    className="rounded p-1 text-[#555] hover:bg-[#1a1a1a] hover:text-red-400"
                     title="Remove member"
                   >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
                 )}

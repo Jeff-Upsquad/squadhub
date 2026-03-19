@@ -5,23 +5,23 @@ export default function ModuleSwitcher({ active, onChange }: {
   onChange: (module: ActiveModule) => void;
 }) {
   return (
-    <div className="flex border-b border-gray-800 bg-[var(--color-sidebar)]">
+    <div className="flex border-b border-[#222] bg-[#0a0a0a]">
       <button
         onClick={() => onChange('chat')}
-        className={`flex-1 px-4 py-2.5 text-sm font-medium transition ${
+        className={`flex-1 px-4 py-2.5 text-xs font-medium uppercase tracking-wider transition ${
           active === 'chat'
-            ? 'border-b-2 border-brand-500 text-white'
-            : 'text-gray-400 hover:text-gray-200'
+            ? 'border-b-2 border-[#ededed] text-[#ededed]'
+            : 'text-[#555] hover:text-[#888]'
         }`}
       >
         Chat
       </button>
       <button
         onClick={() => onChange('tasks')}
-        className={`flex-1 px-4 py-2.5 text-sm font-medium transition ${
+        className={`flex-1 px-4 py-2.5 text-xs font-medium uppercase tracking-wider transition ${
           active === 'tasks'
-            ? 'border-b-2 border-brand-500 text-white'
-            : 'text-gray-400 hover:text-gray-200'
+            ? 'border-b-2 border-[#ededed] text-[#ededed]'
+            : 'text-[#555] hover:text-[#888]'
         }`}
       >
         Tasks

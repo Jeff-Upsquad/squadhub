@@ -36,30 +36,30 @@ function UserRow({ user, currentUserId, onAction }: {
   const date = new Date(user.created_at).toLocaleDateString();
 
   return (
-    <tr className="border-t border-gray-800 hover:bg-gray-900/50">
+    <tr className="border-t border-[#222] hover:bg-[#111]/50">
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-700 text-sm font-bold text-white">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#222] text-sm font-medium text-[#ededed]">
             {user.display_name[0]?.toUpperCase() || '?'}
           </div>
           <div>
-            <p className="text-sm font-medium text-white">{user.display_name}</p>
-            <p className="text-xs text-gray-500">{user.email}</p>
+            <p className="text-sm font-medium text-[#ededed]">{user.display_name}</p>
+            <p className="text-xs text-[#555]">{user.email}</p>
           </div>
         </div>
       </td>
       <td className="px-4 py-3">
         <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
           user.role === 'admin'
-            ? 'bg-yellow-500/20 text-yellow-400'
+            ? 'bg-yellow-500/15 text-yellow-400'
             : user.role === 'banned'
-            ? 'bg-red-500/20 text-red-400'
-            : 'bg-gray-700 text-gray-300'
+            ? 'bg-red-500/15 text-red-400'
+            : 'bg-[#222] text-[#888]'
         }`}>
           {user.role}
         </span>
       </td>
-      <td className="px-4 py-3 text-sm text-gray-400">{date}</td>
+      <td className="px-4 py-3 text-sm text-[#888]">{date}</td>
       <td className="px-4 py-3">
         {!isSelf && (
           <div className="flex gap-2">
@@ -67,7 +67,7 @@ function UserRow({ user, currentUserId, onAction }: {
               <button
                 onClick={() => roleMutation.mutate(user.role === 'admin' ? 'member' : 'admin')}
                 disabled={roleMutation.isPending}
-                className="rounded-md bg-gray-800 px-2.5 py-1 text-xs text-gray-300 hover:bg-gray-700 disabled:opacity-50"
+                className="rounded-md border border-[#333] bg-transparent px-2.5 py-1 text-xs text-[#888] hover:border-[#555] hover:text-[#ededed] disabled:opacity-50"
               >
                 {user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
               </button>
@@ -77,8 +77,8 @@ function UserRow({ user, currentUserId, onAction }: {
               disabled={banMutation.isPending}
               className={`rounded-md px-2.5 py-1 text-xs disabled:opacity-50 ${
                 isBanned
-                  ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30'
-                  : 'bg-red-600/20 text-red-400 hover:bg-red-600/30'
+                  ? 'bg-green-600/15 text-green-400 hover:bg-green-600/25'
+                  : 'bg-red-600/15 text-red-400 hover:bg-red-600/25'
               }`}
             >
               {isBanned ? 'Unban' : 'Ban'}
@@ -86,13 +86,13 @@ function UserRow({ user, currentUserId, onAction }: {
             <button
               onClick={handleDelete}
               disabled={deleteMutation.isPending}
-              className="rounded-md bg-red-600/20 px-2.5 py-1 text-xs text-red-400 hover:bg-red-600/30 disabled:opacity-50"
+              className="rounded-md bg-red-600/15 px-2.5 py-1 text-xs text-red-400 hover:bg-red-600/25 disabled:opacity-50"
             >
               Delete
             </button>
           </div>
         )}
-        {isSelf && <span className="text-xs text-gray-600">You</span>}
+        {isSelf && <span className="text-xs text-[#555]">You</span>}
       </td>
     </tr>
   );
@@ -121,26 +121,26 @@ export default function AdminUsers() {
   return (
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-2xl font-bold">Users ({total})</h2>
+        <h2 className="text-2xl font-semibold text-[#ededed]">Users ({total})</h2>
         <input
           type="text"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           placeholder="Search by name or email..."
-          className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-brand-500 focus:outline-none sm:w-72"
+          className="w-full rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2 text-sm text-[#ededed] placeholder-[#555] focus:border-[#ededed] focus:outline-none sm:w-72"
         />
       </div>
 
-      <div className="rounded-xl bg-gray-900 p-5">
+      <div className="rounded-lg border border-[#222] bg-[#111] p-5">
         {isLoading ? (
-          <p className="py-8 text-center text-gray-500">Loading users...</p>
+          <p className="py-8 text-center text-[#555]">Loading users...</p>
         ) : users.length === 0 ? (
-          <p className="py-8 text-center text-gray-500">No users found</p>
+          <p className="py-8 text-center text-[#555]">No users found</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="text-xs uppercase text-gray-500">
+                <tr className="text-xs uppercase tracking-wider text-[#555]">
                   <th className="px-4 py-2">User</th>
                   <th className="px-4 py-2">Role</th>
                   <th className="px-4 py-2">Joined</th>
@@ -166,15 +166,15 @@ export default function AdminUsers() {
             <button
               onClick={() => setPage(Math.max(1, page - 1))}
               disabled={page <= 1}
-              className="rounded-md bg-gray-800 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700 disabled:opacity-40"
+              className="rounded-md border border-[#333] bg-transparent px-3 py-1.5 text-sm text-[#888] hover:border-[#555] hover:text-[#ededed] disabled:opacity-40"
             >
               Previous
             </button>
-            <span className="text-sm text-gray-400">Page {page} of {totalPages}</span>
+            <span className="text-sm text-[#888]">Page {page} of {totalPages}</span>
             <button
               onClick={() => setPage(Math.min(totalPages, page + 1))}
               disabled={page >= totalPages}
-              className="rounded-md bg-gray-800 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700 disabled:opacity-40"
+              className="rounded-md border border-[#333] bg-transparent px-3 py-1.5 text-sm text-[#888] hover:border-[#555] hover:text-[#ededed] disabled:opacity-40"
             >
               Next
             </button>

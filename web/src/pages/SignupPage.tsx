@@ -35,67 +35,67 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-950">
-      <div className="w-full max-w-md rounded-xl bg-gray-900 p-8 shadow-2xl">
+    <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
+      <div className="w-full max-w-sm p-8">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-white">SquadHub</h1>
-          <p className="mt-2 text-gray-400">Create your account</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-[#ededed]">SquadHub</h1>
+          <p className="mt-2 text-sm text-[#888]">Create your account</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="rounded-lg bg-red-900/30 p-3 text-sm text-red-400">{error}</div>
+            <div className="rounded-md border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">{error}</div>
           )}
 
           <div>
-            <label className="mb-1 block text-sm text-gray-300">Display Name</label>
+            <label className="mb-1.5 block text-xs font-medium text-[#888]">Name</label>
             <input
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               required
-              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2 text-sm text-[#ededed] placeholder-[#555] outline-none transition focus:border-[#ededed]"
               placeholder="Jane Doe"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm text-gray-300">Email</label>
+            <label className="mb-1.5 block text-xs font-medium text-[#888]">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2 text-sm text-[#ededed] placeholder-[#555] outline-none transition focus:border-[#ededed]"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm text-gray-300">Password</label>
+            <label className="mb-1.5 block text-xs font-medium text-[#888]">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              placeholder="At least 8 characters"
+              className="w-full rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2 text-sm text-[#ededed] placeholder-[#555] outline-none transition focus:border-[#ededed]"
+              placeholder="Min 8 characters"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-brand-600 py-2.5 font-medium text-white transition hover:bg-brand-700 disabled:opacity-50"
+            className="w-full rounded-md bg-[#ededed] py-2 text-sm font-medium text-[#0a0a0a] transition hover:bg-white disabled:opacity-50"
           >
             {loading ? 'Creating account...' : 'Create Account'}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-gray-400">
+        <p className="mt-6 text-center text-sm text-[#555]">
           Already have an account?{' '}
-          <Link to="/login" className="text-brand-400 hover:text-brand-300">
+          <Link to="/login" className="text-[#ededed] hover:underline">
             Sign in
           </Link>
         </p>

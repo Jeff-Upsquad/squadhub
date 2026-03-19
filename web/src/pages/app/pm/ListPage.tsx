@@ -51,10 +51,10 @@ export default function ListPage() {
     return (
       <div className="flex flex-1 items-center justify-center">
         <div className="text-center">
-          <svg className="mx-auto mb-3 h-12 w-12 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="mx-auto mb-3 h-12 w-12 text-[#333]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
-          <p className="text-sm text-gray-500">Select a list to view tasks</p>
+          <p className="text-sm text-[#555]">Select a list to view tasks</p>
         </div>
       </div>
     );
@@ -63,12 +63,12 @@ export default function ListPage() {
   return (
     <div className="flex flex-1 flex-col">
       {/* List header */}
-      <div className="border-b border-gray-800">
+      <div className="border-b border-[#222]">
         <div className="flex items-center justify-between px-5 py-3">
           <div>
-            <h2 className="text-base font-semibold text-white">{listData?.name || 'Loading...'}</h2>
+            <h2 className="text-base font-semibold text-[#ededed]">{listData?.name || 'Loading...'}</h2>
             {listData?.task_count !== undefined && (
-              <span className="text-xs text-gray-500">{listData.task_count} tasks</span>
+              <span className="text-xs text-[#555]">{listData.task_count} tasks</span>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -77,8 +77,8 @@ export default function ListPage() {
               onClick={() => setShowFilters(!showFilters)}
               className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
                 hasActiveFilters
-                  ? 'bg-brand-600/20 text-brand-400'
-                  : 'text-gray-500 hover:text-gray-300'
+                  ? 'bg-[#ededed]/20 text-[#ededed]'
+                  : 'text-[#555] hover:text-[#ededed]'
               }`}
             >
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -87,13 +87,13 @@ export default function ListPage() {
               Filter
             </button>
 
-            <div className="h-4 w-px bg-gray-800" />
+            <div className="h-4 w-px bg-[#222]" />
 
             {/* List / Board toggle */}
             <button
               onClick={() => setViewMode('list')}
               className={`rounded px-2.5 py-1 text-xs font-medium transition ${
-                viewMode === 'list' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'
+                viewMode === 'list' ? 'bg-[#1a1a1a] text-[#ededed]' : 'text-[#555] hover:text-[#ededed]'
               }`}
             >
               List
@@ -101,7 +101,7 @@ export default function ListPage() {
             <button
               onClick={() => setViewMode('board')}
               className={`rounded px-2.5 py-1 text-xs font-medium transition ${
-                viewMode === 'board' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'
+                viewMode === 'board' ? 'bg-[#1a1a1a] text-[#ededed]' : 'text-[#555] hover:text-[#ededed]'
               }`}
             >
               Board
@@ -111,14 +111,14 @@ export default function ListPage() {
 
         {/* Filter bar */}
         {showFilters && (
-          <div className="flex items-center gap-3 border-t border-gray-800/50 px-5 py-2">
+          <div className="flex items-center gap-3 border-t border-[#222]/50 px-5 py-2">
             {/* Status filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-500">Status:</span>
+              <span className="text-xs text-[#555]">Status:</span>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="rounded border border-gray-700 bg-gray-800 px-2 py-0.5 text-xs text-white outline-none"
+                className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-0.5 text-xs text-[#ededed] outline-none"
               >
                 <option value="">All</option>
                 {statuses.map((s) => (
@@ -129,11 +129,11 @@ export default function ListPage() {
 
             {/* Priority filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-500">Priority:</span>
+              <span className="text-xs text-[#555]">Priority:</span>
               <select
                 value={filterPriority}
                 onChange={(e) => setFilterPriority(e.target.value)}
-                className="rounded border border-gray-700 bg-gray-800 px-2 py-0.5 text-xs text-white outline-none"
+                className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-0.5 text-xs text-[#ededed] outline-none"
               >
                 <option value="">All</option>
                 <option value="urgent">Urgent</option>
@@ -146,11 +146,11 @@ export default function ListPage() {
 
             {/* Sort */}
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-500">Sort:</span>
+              <span className="text-xs text-[#555]">Sort:</span>
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value)}
-                className="rounded border border-gray-700 bg-gray-800 px-2 py-0.5 text-xs text-white outline-none"
+                className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-0.5 text-xs text-[#ededed] outline-none"
               >
                 <option value="position">Manual</option>
                 <option value="created_at">Created</option>
@@ -163,7 +163,7 @@ export default function ListPage() {
             {hasActiveFilters && (
               <button
                 onClick={() => { setFilterPriority(''); setFilterStatus(''); setSort('position'); }}
-                className="text-xs text-gray-500 hover:text-white"
+                className="text-xs text-[#555] hover:text-[#ededed]"
               >
                 Clear
               </button>

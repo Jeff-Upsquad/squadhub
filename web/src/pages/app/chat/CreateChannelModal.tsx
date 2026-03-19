@@ -19,24 +19,24 @@ export default function CreateChannelModal({ workspaceId, onClose }: { workspace
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-sm rounded-xl bg-gray-900 p-6">
-        <h3 className="mb-4 text-lg font-bold text-white">Create Channel</h3>
+      <div className="w-full max-w-sm rounded-lg border border-[#222] bg-[#111] p-6">
+        <h3 className="mb-4 text-lg font-semibold text-[#ededed]">Create Channel</h3>
         {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
           placeholder="channel-name"
-          className="mb-4 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 focus:border-brand-500 focus:outline-none"
+          className="mb-4 w-full rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2 text-[#ededed] placeholder-[#555] focus:border-[#ededed] focus:outline-none"
         />
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-gray-400 hover:text-white">
+          <button onClick={onClose} className="rounded-md px-4 py-2 text-sm text-[#888] hover:text-[#ededed]">
             Cancel
           </button>
           <button
             onClick={() => name && mutation.mutate(name)}
             disabled={!name || mutation.isPending}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+            className="rounded-md bg-[#ededed] px-4 py-2 text-sm font-medium text-[#0a0a0a] hover:bg-white disabled:opacity-50"
           >
             Create
           </button>

@@ -10,9 +10,9 @@ interface Stats {
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl bg-gray-900 p-5">
-      <p className="text-sm text-gray-400">{label}</p>
-      <p className="mt-1 text-3xl font-bold text-white">{value}</p>
+    <div className="rounded-lg border border-[#222] bg-[#111] p-5">
+      <p className="text-sm text-[#888]">{label}</p>
+      <p className="mt-1 text-3xl font-semibold text-[#ededed]">{value}</p>
     </div>
   );
 }
@@ -26,7 +26,7 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      <h2 className="mb-6 text-2xl font-bold">Dashboard</h2>
+      <h2 className="mb-6 text-2xl font-semibold text-[#ededed]">Dashboard</h2>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Total Users" value={stats.total_users} />
         <StatCard label="Workspaces" value={stats.total_workspaces} />

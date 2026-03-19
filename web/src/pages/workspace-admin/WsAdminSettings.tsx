@@ -33,26 +33,26 @@ export default function WsAdminSettings() {
   };
 
   if (!currentWorkspace) {
-    return <p className="text-gray-500">No workspace selected</p>;
+    return <p className="text-[#555]">No workspace selected</p>;
   }
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h2 className="mb-6 text-2xl font-bold">Workspace Settings</h2>
+      <h2 className="mb-6 text-2xl font-semibold text-[#ededed]">Workspace Settings</h2>
 
-      <form onSubmit={handleSave} className="rounded-xl border border-gray-800 bg-gray-900 p-6">
-        <label className="mb-1 block text-sm font-medium text-gray-400">Workspace Name</label>
+      <form onSubmit={handleSave} className="rounded-lg border border-[#222] bg-[#111] p-6">
+        <label className="mb-1 block text-xs font-medium text-[#888]">Workspace Name</label>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="mb-4 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white outline-none focus:border-brand-500"
+          className="mb-4 w-full rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2 text-sm text-[#ededed] outline-none focus:border-[#ededed]"
         />
 
         <div className="flex items-center gap-3">
           <button
             type="submit"
             disabled={!name.trim() || name === currentWorkspace.name || updateWorkspace.isPending}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-50"
+            className="rounded-md bg-[#ededed] px-4 py-2 text-sm font-medium text-[#0a0a0a] hover:bg-white disabled:opacity-50"
           >
             {updateWorkspace.isPending ? 'Saving...' : 'Save Changes'}
           </button>
@@ -64,20 +64,20 @@ export default function WsAdminSettings() {
       </form>
 
       {/* Workspace info */}
-      <div className="mt-6 rounded-xl border border-gray-800 bg-gray-900 p-6">
-        <h3 className="mb-3 text-sm font-semibold text-gray-400">Info</h3>
+      <div className="mt-6 rounded-lg border border-[#222] bg-[#111] p-6">
+        <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-[#888]">Info</h3>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-gray-500">ID</span>
-            <span className="font-mono text-xs text-gray-400">{currentWorkspace.id}</span>
+            <span className="text-[#555]">ID</span>
+            <span className="font-mono text-xs text-[#888]">{currentWorkspace.id}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-500">Slug</span>
-            <span className="text-gray-400">{currentWorkspace.slug}</span>
+            <span className="text-[#555]">Slug</span>
+            <span className="text-[#888]">{currentWorkspace.slug}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-500">Created</span>
-            <span className="text-gray-400">{new Date(currentWorkspace.created_at).toLocaleDateString()}</span>
+            <span className="text-[#555]">Created</span>
+            <span className="text-[#888]">{new Date(currentWorkspace.created_at).toLocaleDateString()}</span>
           </div>
         </div>
       </div>

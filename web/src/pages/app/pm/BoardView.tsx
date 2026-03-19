@@ -13,7 +13,7 @@ function formatDate(dateStr: string | null | undefined) {
   const formatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   if (days < 0) return { text: formatted, color: 'text-red-400' };
   if (days <= 1) return { text: days === 0 ? 'Today' : 'Tomorrow', color: 'text-yellow-400' };
-  return { text: formatted, color: 'text-gray-400' };
+  return { text: formatted, color: 'text-[#888]' };
 }
 
 // ---- Task card ----
@@ -24,9 +24,9 @@ function TaskCard({ task, statuses }: { task: Task; statuses: SpaceStatus[] }) {
   return (
     <div
       onClick={() => setActiveTask(task.id)}
-      className="mb-2 cursor-pointer rounded-lg border border-gray-800 bg-gray-900 p-3 transition hover:border-gray-700 hover:bg-gray-800/60"
+      className="mb-2 cursor-pointer rounded-lg border border-[#222] bg-[#111] p-3 transition hover:border-[#333] hover:bg-[#1a1a1a]/60"
     >
-      <p className="mb-2 text-sm text-gray-200">{task.title}</p>
+      <p className="mb-2 text-sm text-[#ededed]">{task.title}</p>
       <div className="flex flex-wrap items-center gap-2">
         <TaskPriorityBadge priority={task.priority} />
         {due && <span className={`text-xs ${due.color}`}>{due.text}</span>}
@@ -35,7 +35,7 @@ function TaskCard({ task, statuses }: { task: Task; statuses: SpaceStatus[] }) {
             {task.assignees.slice(0, 3).map((u: any) => (
               <div
                 key={u.id}
-                className="flex h-5 w-5 items-center justify-center rounded-full bg-gray-700 text-[10px] font-medium text-gray-300 ring-1 ring-gray-900"
+                className="flex h-5 w-5 items-center justify-center rounded-full bg-[#222] text-[10px] font-medium text-[#ededed] ring-1 ring-[#0a0a0a]"
                 title={u.display_name || u.email}
               >
                 {(u.display_name || u.email)?.[0]?.toUpperCase()}
@@ -89,7 +89,7 @@ function BoardColumn({
     <div
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className="flex w-72 shrink-0 flex-col rounded-lg bg-gray-900/40"
+      className="flex w-72 shrink-0 flex-col rounded-lg bg-[#111]/60"
     >
       {/* Column header */}
       <div className="flex items-center gap-2 px-3 py-3">
@@ -97,10 +97,10 @@ function BoardColumn({
           className="h-2.5 w-2.5 rounded-full"
           style={{ backgroundColor: status.color }}
         />
-        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <span className="text-xs font-semibold uppercase tracking-wide text-[#888]">
           {status.name}
         </span>
-        <span className="text-xs text-gray-600">{tasks.length}</span>
+        <span className="text-xs text-[#444]">{tasks.length}</span>
       </div>
 
       {/* Cards */}
@@ -128,13 +128,13 @@ function BoardColumn({
               }}
               onBlur={handleAdd}
               placeholder="Task name..."
-              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-brand-500"
+              className="w-full rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-2 text-sm text-[#ededed] placeholder-[#555] outline-none focus:border-[#ededed]"
             />
           </div>
         ) : (
           <button
             onClick={() => setAddingTask(true)}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-gray-500 transition hover:bg-gray-800/50 hover:text-gray-300"
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-[#555] transition hover:bg-[#1a1a1a]/50 hover:text-[#ededed]"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -172,7 +172,7 @@ export default function BoardView({
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-gray-500">Loading tasks...</p>
+        <p className="text-sm text-[#555]">Loading tasks...</p>
       </div>
     );
   }

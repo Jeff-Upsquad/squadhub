@@ -20,8 +20,10 @@ function SidebarIcon({ label, active, onClick }: { label: string; active?: boole
   return (
     <button
       onClick={onClick}
-      className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold transition ${
-        active ? 'bg-brand-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+      className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-semibold transition ${
+        active
+          ? 'bg-[#ededed] text-[#0a0a0a]'
+          : 'bg-[#1a1a1a] text-[#888] hover:bg-[#222] hover:text-[#ededed]'
       }`}
       title={label}
     >
@@ -92,8 +94,8 @@ export default function MainLayout() {
   // Loading state
   if (workspacesLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-950">
-        <p className="text-lg text-gray-400">Loading...</p>
+      <div className="flex h-screen items-center justify-center bg-[#0a0a0a]">
+        <p className="text-sm text-[#555]">Loading...</p>
       </div>
     );
   }
@@ -104,9 +106,9 @@ export default function MainLayout() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-950 text-white">
+    <div className="flex h-screen bg-[#0a0a0a] text-[#ededed]">
       {/* Far-left icon sidebar */}
-      <div className="flex w-16 flex-col items-center gap-2 border-r border-gray-800 bg-gray-950 py-3">
+      <div className="flex w-14 flex-col items-center gap-2 border-r border-[#222] bg-[#0a0a0a] py-3">
         {workspaces.map((ws) => (
           <SidebarIcon
             key={ws.id}
@@ -119,41 +121,41 @@ export default function MainLayout() {
           {currentWorkspace && (currentWorkspace as any).my_role && ['super_admin', 'admin'].includes((currentWorkspace as any).my_role) && (
             <button
               onClick={() => navigate('/workspace-admin')}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-800 hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-[#555] transition hover:bg-[#1a1a1a] hover:text-[#ededed]"
               title="Workspace Settings"
             >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
             </button>
           )}
           {user?.role === 'admin' && (
             <button
               onClick={() => navigate('/admin')}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-800 hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-[#555] transition hover:bg-[#1a1a1a] hover:text-[#ededed]"
               title="Admin Panel"
             >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </button>
           )}
           <button
             onClick={logout}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-800 hover:text-white"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-[#555] transition hover:bg-[#1a1a1a] hover:text-[#ededed]"
             title="Logout"
           >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
           </button>
         </div>
       </div>
 
-      {/* Module sidebar (Chat channels or Task spaces) */}
+      {/* Module sidebar */}
       {currentWorkspace && (
-        <div className="flex h-full w-60 flex-col border-r border-gray-800 bg-[var(--color-sidebar)]">
+        <div className="flex h-full w-56 flex-col border-r border-[#222] bg-[#0a0a0a]">
           <ModuleSwitcher active={activeModule} onChange={setActiveModule} />
 
           {activeModule === 'chat' ? (
@@ -170,14 +172,13 @@ export default function MainLayout() {
       )}
 
       {/* Main content area */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col bg-[#0a0a0a]">
         {activeModule === 'chat' ? (
           <>
-            {/* Channel header */}
             {activeChannelId && (
-              <div className="flex items-center border-b border-gray-800 px-5 py-3">
-                <span className="mr-2 text-gray-500">#</span>
-                <span className="font-semibold text-white">
+              <div className="flex items-center border-b border-[#222] px-5 py-3">
+                <span className="mr-2 text-[#555]">#</span>
+                <span className="text-sm font-medium text-[#ededed]">
                   {channels.find((c) => c.id === activeChannelId)?.name}
                 </span>
               </div>
@@ -186,7 +187,7 @@ export default function MainLayout() {
             {activeChannelId ? (
               <ChatPanel channelId={activeChannelId} />
             ) : (
-              <div className="flex flex-1 items-center justify-center text-gray-500">
+              <div className="flex flex-1 items-center justify-center text-sm text-[#555]">
                 Select a channel to start chatting
               </div>
             )}
