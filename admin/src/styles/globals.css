@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+/* Vercel-inspired dark theme */
+@theme {
+  /* Brand accent */
+  --color-brand-50: #faf5ff;
+  --color-brand-100: #f3e8ff;
+  --color-brand-200: #e9d5ff;
+  --color-brand-300: #d8b4fe;
+  --color-brand-400: #c084fc;
+  --color-brand-500: #a855f7;
+  --color-brand-600: #9333ea;
+  --color-brand-700: #7e22ce;
+  --color-brand-800: #6b21a8;
+  --color-brand-900: #581c87;
+
+  /* Vercel-style surfaces */
+  --color-sidebar: #0a0a0a;
+  --color-sidebar-hover: #1a1a1a;
+  --color-sidebar-active: #1a1a1a;
+  --color-sidebar-text: #888;
+  --color-sidebar-text-bright: #ededed;
+}
+
+/* Base */
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.011em;
+}
+
+/* Minimal scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+::selection {
+  background: rgba(168, 85, 247, 0.3);
+  color: #fff;
+}

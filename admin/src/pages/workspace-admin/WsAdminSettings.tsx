@@ -1,13 +1,27 @@
 import { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
+import type { Workspace } from '@squadhub/shared';
 
 export default function WsAdminSettings() {
   const { currentWorkspace, setWorkspace } = useWorkspaceStore();
   const qc = useQueryClient();
   const [name, setName] = useState('');
   const [saved, setSaved] = useState(false);
+
+  // Fetch workspaces and auto-select first one if none selected
+  const { data: workspacesRes } = useQuery({
+    queryKey: ['workspaces'],
+    queryFn: () => api.get('/workspaces').then((r) => r.data),
+  });
+
+  useEffect(() => {
+    const workspaces: Workspace[] = workspacesRes?.data || [];
+    if (!currentWorkspace && workspaces.length > 0) {
+      setWorkspace(workspaces[0]);
+    }
+  }, [workspacesRes, currentWorkspace, setWorkspace]);
 
   useEffect(() => {
     if (currentWorkspace) setName(currentWorkspace.name);
@@ -33,7 +47,7 @@ export default function WsAdminSettings() {
   };
 
   if (!currentWorkspace) {
-    return <p className="text-[#555]">No workspace selected</p>;
+    return <p className="text-[#555]">Loading workspace...</p>;
   }
 
   return (

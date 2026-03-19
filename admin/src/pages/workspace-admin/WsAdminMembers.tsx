@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useAuthStore } from '../../stores/authStore';
+import type { Workspace } from '@squadhub/shared';
 
 interface MemberWithUser {
   id: string;
@@ -30,13 +31,26 @@ function roleBadgeColor(role: string) {
 }
 
 export default function WsAdminMembers() {
-  const { currentWorkspace } = useWorkspaceStore();
+  const { currentWorkspace, setWorkspace } = useWorkspaceStore();
   const currentUser = useAuthStore((s) => s.user);
   const qc = useQueryClient();
 
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<string>('member');
   const [inviteError, setInviteError] = useState('');
+
+  // Fetch workspaces and auto-select first one if none selected
+  const { data: workspacesRes } = useQuery({
+    queryKey: ['workspaces'],
+    queryFn: () => api.get('/workspaces').then((r) => r.data),
+  });
+
+  useEffect(() => {
+    const workspaces: Workspace[] = workspacesRes?.data || [];
+    if (!currentWorkspace && workspaces.length > 0) {
+      setWorkspace(workspaces[0]);
+    }
+  }, [workspacesRes, currentWorkspace, setWorkspace]);
 
   const wsId = currentWorkspace?.id;
 
@@ -91,7 +105,7 @@ export default function WsAdminMembers() {
   };
 
   if (!currentWorkspace) {
-    return <p className="text-[#555]">No workspace selected</p>;
+    return <p className="text-[#555]">Loading workspace...</p>;
   }
 
   return (

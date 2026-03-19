@@ -15,18 +15,18 @@ RUN npm install
 
 # Copy source
 COPY shared/ shared/
-COPY web/ web/
+COPY admin/ admin/
 
-# Build shared first, then web
-RUN npm run build -w shared && npm run build -w web
+# Build shared first, then admin
+RUN npm run build -w shared && npm run build -w admin
 
 # ---- Serve with Nginx ----
 FROM nginx:alpine
 
 # Copy custom nginx config
-COPY web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY admin/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built files
-COPY --from=builder /app/web/dist /usr/share/nginx/html
+COPY --from=builder /app/admin/dist /usr/share/nginx/html
 
 EXPOSE 80

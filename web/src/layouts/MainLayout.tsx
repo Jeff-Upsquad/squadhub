@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+
+const ADMIN_APP_URL = import.meta.env.PROD ? 'http://72.61.245.97:3081' : 'http://localhost:5174';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useAuthStore } from '../stores/authStore';
 import { usePMStore } from '../stores/pmStore';
@@ -37,7 +38,6 @@ export default function MainLayout() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const pmReset = usePMStore((s) => s.reset);
-  const navigate = useNavigate();
   const [activeModule, setActiveModule] = useState<ActiveModule>('chat');
   const [showCreateChannel, setShowCreateChannel] = useState(false);
 
@@ -119,19 +119,19 @@ export default function MainLayout() {
         ))}
         <div className="mt-auto flex flex-col items-center gap-2 pb-3">
           {currentWorkspace && (currentWorkspace as any).my_role && ['super_admin', 'admin'].includes((currentWorkspace as any).my_role) && (
-            <button
-              onClick={() => navigate('/workspace-admin')}
+            <a
+              href={`${ADMIN_APP_URL}/workspace-admin`}
               className="flex h-8 w-8 items-center justify-center rounded-md text-[#555] transition hover:bg-[#1a1a1a] hover:text-[#ededed]"
               title="Workspace Settings"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
-            </button>
+            </a>
           )}
           {user?.role === 'admin' && (
-            <button
-              onClick={() => navigate('/admin')}
+            <a
+              href={ADMIN_APP_URL}
               className="flex h-8 w-8 items-center justify-center rounded-md text-[#555] transition hover:bg-[#1a1a1a] hover:text-[#ededed]"
               title="Admin Panel"
             >
@@ -139,7 +139,7 @@ export default function MainLayout() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-            </button>
+            </a>
           )}
           <button
             onClick={logout}

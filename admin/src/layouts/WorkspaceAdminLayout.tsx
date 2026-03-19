@@ -1,7 +1,10 @@
-import { Outlet, useNavigate, NavLink } from 'react-router-dom';
+import { Outlet, NavLink } from 'react-router-dom';
+import { useAuthStore } from '../stores/authStore';
+
+const MAIN_APP_URL = import.meta.env.PROD ? 'http://72.61.245.97:3080' : 'http://localhost:5173';
 
 export default function WorkspaceAdminLayout() {
-  const navigate = useNavigate();
+  const logout = useAuthStore((s) => s.logout);
 
   return (
     <div className="flex min-h-screen bg-[#0a0a0a] text-[#ededed]">
@@ -33,16 +36,41 @@ export default function WorkspaceAdminLayout() {
           >
             Members
           </NavLink>
+
+          <div className="!mt-4 border-t border-[#222] pt-3">
+            <NavLink
+              to="/"
+              className={({ isActive }) =>
+                `flex items-center gap-2 rounded-md px-3 py-2 text-sm transition ${
+                  isActive ? 'bg-[#1a1a1a] text-[#ededed]' : 'text-[#888] hover:bg-[#111] hover:text-[#ededed]'
+                }`
+              }
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              Platform Admin
+            </NavLink>
+          </div>
         </nav>
-        <div className="border-t border-[#222] p-3">
-          <button
-            onClick={() => navigate('/')}
+        <div className="border-t border-[#222] p-3 space-y-0.5">
+          <a
+            href={MAIN_APP_URL}
             className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-[#888] hover:bg-[#111] hover:text-[#ededed]"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
             Back to App
+          </a>
+          <button
+            onClick={() => logout()}
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-[#888] hover:bg-[#111] hover:text-[#ededed]"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Logout
           </button>
         </div>
       </aside>

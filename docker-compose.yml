@@ -27,6 +27,19 @@ services:
     networks:
       - squadhub
 
+  admin:
+    build:
+      context: .
+      dockerfile: admin/Dockerfile
+    container_name: squadhub-admin
+    restart: unless-stopped
+    ports:
+      - "3081:80"
+    depends_on:
+      - server
+    networks:
+      - squadhub
+
 networks:
   squadhub:
     driver: bridge

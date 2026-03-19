@@ -103,7 +103,7 @@ export default function AdminUsers() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
-  const authState = JSON.parse(localStorage.getItem('squadhub-auth') || '{}');
+  const authState = JSON.parse(localStorage.getItem('squadhub-admin-auth') || '{}');
   const currentUserId = authState?.state?.user?.id || '';
 
   const { data: usersRes, isLoading } = useQuery({

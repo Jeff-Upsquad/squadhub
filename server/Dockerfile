@@ -6,6 +6,7 @@ COPY package.json package-lock.json* ./
 COPY shared/package.json shared/
 COPY server/package.json server/
 COPY web/package.json web/
+COPY admin/package.json admin/
 COPY desktop/package.json desktop/
 COPY mobile/package.json mobile/
 
