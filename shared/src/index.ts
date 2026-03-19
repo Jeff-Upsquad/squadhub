@@ -28,6 +28,9 @@ export interface WorkspaceMember {
   workspace_id: string;
   user_id: string;
   role: 'super_admin' | 'admin' | 'member' | 'guest';
+  role_id: string | null;
+  // Joined fields
+  custom_role?: Role;
 }
 
 // ---- Channels ----
@@ -189,9 +192,12 @@ export interface TaskComment {
 // ---- Roles & Permissions ----
 export interface Role {
   id: string;
-  workspace_id: string;
   name: string;
+  color: string;
   permissions: RolePermissions;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface RolePermissions {

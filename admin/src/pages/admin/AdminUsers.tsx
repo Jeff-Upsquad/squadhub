@@ -1,11 +1,16 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { User } from '@squadhub/shared';
+import type { User, Role } from '@squadhub/shared';
 
-function UserRow({ user, currentUserId, onAction }: {
-  user: User;
+interface UserWithRole extends User {
+  custom_role?: { id: string; name: string; color: string } | null;
+}
+
+function UserRow({ user, currentUserId, roles, onAction }: {
+  user: UserWithRole;
   currentUserId: string;
+  roles: Role[];
   onAction: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -25,6 +30,11 @@ function UserRow({ user, currentUserId, onAction }: {
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/admin/users/${user.id}`),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-users'] }); onAction(); },
+  });
+
+  const customRoleMutation = useMutation({
+    mutationFn: (role_id: string) => api.put(`/admin/users/${user.id}/custom-role`, { role_id }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-users'] }); },
   });
 
   const handleDelete = () => {
@@ -58,6 +68,24 @@ function UserRow({ user, currentUserId, onAction }: {
         }`}>
           {user.role}
         </span>
+      </td>
+      <td className="px-4 py-3">
+        {user.custom_role ? (
+          <select
+            value={user.custom_role.id}
+            onChange={(e) => customRoleMutation.mutate(e.target.value)}
+            disabled={customRoleMutation.isPending || isBanned}
+            className="rounded-md border border-[#333] bg-[#0a0a0a] px-2 py-1 text-xs text-[#ededed] outline-none focus:border-[#ededed] disabled:opacity-50"
+          >
+            {roles.map((role) => (
+              <option key={role.id} value={role.id}>
+                {role.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="text-xs text-[#555]">{user.status === 'pending' ? 'Pending' : '—'}</span>
+        )}
       </td>
       <td className="px-4 py-3 text-sm text-[#888]">{date}</td>
       <td className="px-4 py-3">
@@ -110,7 +138,14 @@ export default function AdminUsers() {
     queryKey: ['admin-users', search, page],
     queryFn: () => api.get(`/admin/users?search=${search}&page=${page}&limit=20`).then((r) => r.data),
   });
-  const users: User[] = usersRes?.data || [];
+
+  const { data: rolesRes } = useQuery({
+    queryKey: ['admin-roles'],
+    queryFn: () => api.get('/admin/roles').then((r) => r.data),
+  });
+
+  const users: UserWithRole[] = usersRes?.data || [];
+  const roles: Role[] = rolesRes?.data || [];
   const total: number = usersRes?.total || 0;
   const totalPages = Math.ceil(total / 20);
 
@@ -142,6 +177,7 @@ export default function AdminUsers() {
               <thead>
                 <tr className="text-xs uppercase tracking-wider text-[#555]">
                   <th className="px-4 py-2">User</th>
+                  <th className="px-4 py-2">Platform</th>
                   <th className="px-4 py-2">Role</th>
                   <th className="px-4 py-2">Joined</th>
                   <th className="px-4 py-2">Actions</th>
@@ -153,6 +189,7 @@ export default function AdminUsers() {
                     key={user.id}
                     user={user}
                     currentUserId={currentUserId}
+                    roles={roles}
                     onAction={refreshStats}
                   />
                 ))}

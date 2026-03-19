@@ -7,6 +7,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminApprovals from './pages/admin/AdminApprovals';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminWorkspaces from './pages/admin/AdminWorkspaces';
+import AdminRoles from './pages/admin/AdminRoles';
 import WsAdminSettings from './pages/workspace-admin/WsAdminSettings';
 import WsAdminMembers from './pages/workspace-admin/WsAdminMembers';
 
@@ -44,6 +45,7 @@ export default function App() {
         <Route index element={<AdminDashboard />} />
         <Route path="approvals" element={<AdminApprovals />} />
         <Route path="users" element={<AdminUsers />} />
+        <Route path="roles" element={<AdminRoles />} />
         <Route path="workspaces" element={<AdminWorkspaces />} />
       </Route>
 

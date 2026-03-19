@@ -12,7 +12,6 @@ import ModuleSwitcher, { type ActiveModule } from '../components/ModuleSwitcher'
 import ChannelSidebar from '../pages/app/chat/ChannelSidebar';
 import ChatPanel from '../pages/app/chat/ChatPanel';
 import CreateChannelModal from '../pages/app/chat/CreateChannelModal';
-import CreateWorkspaceView from '../pages/app/CreateWorkspaceView';
 import SpaceTree from '../pages/app/pm/SpaceTree';
 import ListPage from '../pages/app/pm/ListPage';
 
@@ -100,9 +99,22 @@ export default function MainLayout() {
     );
   }
 
-  // No workspaces — show creation form
+  // No workspaces — user hasn't been added yet (shouldn't happen after approval)
   if (!workspacesRes || workspaces.length === 0) {
-    return <CreateWorkspaceView />;
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#0a0a0a]">
+        <div className="text-center">
+          <h2 className="text-lg font-medium text-[#ededed]">Welcome to SquadHub</h2>
+          <p className="mt-2 text-sm text-[#888]">Your workspace is being set up. Please refresh in a moment.</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 rounded-md bg-[#ededed] px-4 py-2 text-sm font-medium text-[#0a0a0a] transition hover:bg-white"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

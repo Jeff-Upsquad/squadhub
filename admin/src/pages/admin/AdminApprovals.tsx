@@ -1,19 +1,29 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { User } from '@squadhub/shared';
+import type { User, Role } from '@squadhub/shared';
 
 export default function AdminApprovals() {
   const queryClient = useQueryClient();
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [selectedRoles, setSelectedRoles] = useState<Record<string, string>>({});
 
   const { data: res, isLoading } = useQuery({
     queryKey: ['admin-pending-users'],
     queryFn: () => api.get('/admin/pending-users').then((r) => r.data),
   });
 
+  const { data: rolesRes } = useQuery({
+    queryKey: ['admin-roles'],
+    queryFn: () => api.get('/admin/roles').then((r) => r.data),
+  });
+
+  const roles: Role[] = rolesRes?.data || [];
+  const defaultRole = roles.find((r) => r.is_default);
+
   const approveMutation = useMutation({
-    mutationFn: (id: string) => api.put(`/admin/users/${id}/approve`),
+    mutationFn: ({ id, role_id }: { id: string; role_id?: string }) =>
+      api.put(`/admin/users/${id}/approve`, { role_id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-pending-users'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
@@ -32,7 +42,7 @@ export default function AdminApprovals() {
 
   const handleApprove = (id: string) => {
     setActionLoading(id + '-approve');
-    approveMutation.mutate(id);
+    approveMutation.mutate({ id, role_id: selectedRoles[id] || undefined });
   };
 
   const handleReject = (id: string) => {
@@ -63,6 +73,7 @@ export default function AdminApprovals() {
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#888]">Name</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#888]">Email</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#888]">Signed Up</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#888]">Role</th>
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-[#888]">Actions</th>
               </tr>
             </thead>
@@ -73,6 +84,21 @@ export default function AdminApprovals() {
                   <td className="px-4 py-3 text-sm text-[#888]">{user.email}</td>
                   <td className="px-4 py-3 text-sm text-[#888]">
                     {new Date(user.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <select
+                      value={selectedRoles[user.id] || defaultRole?.id || ''}
+                      onChange={(e) =>
+                        setSelectedRoles((prev) => ({ ...prev, [user.id]: e.target.value }))
+                      }
+                      className="rounded-md border border-[#333] bg-[#0a0a0a] px-2 py-1.5 text-xs text-[#ededed] outline-none focus:border-[#ededed]"
+                    >
+                      {roles.map((role) => (
+                        <option key={role.id} value={role.id}>
+                          {role.name}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">

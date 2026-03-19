@@ -10,7 +10,7 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
-// GET /admin/users — list all users with optional search
+// GET /admin/users — list all users with optional search, includes custom role
 router.get('/users', async (req: Request, res: Response) => {
   try {
     const search = (req.query.search as string) || '';
@@ -35,9 +35,30 @@ router.get('/users', async (req: Request, res: Response) => {
       return;
     }
 
+    // Fetch workspace member roles for all returned users
+    const userIds = (users || []).map((u: any) => u.id);
+    const { data: members } = await supabaseAdmin
+      .from('workspace_members')
+      .select('user_id, role_id, roles(id, name, color)')
+      .in('user_id', userIds);
+
+    // Build a map: user_id → custom_role
+    const roleMap: Record<string, any> = {};
+    (members || []).forEach((m: any) => {
+      if (m.roles) {
+        roleMap[m.user_id] = m.roles;
+      }
+    });
+
+    // Attach custom_role to each user
+    const usersWithRoles = (users || []).map((u: any) => ({
+      ...u,
+      custom_role: roleMap[u.id] || null,
+    }));
+
     res.json({
       success: true,
-      data: users,
+      data: usersWithRoles,
       total: count || 0,
       page,
       limit,
@@ -96,11 +117,13 @@ router.get('/pending-users', async (_req: Request, res: Response) => {
   }
 });
 
-// PUT /admin/users/:id/approve — approve a pending user
+// PUT /admin/users/:id/approve — approve a pending user & auto-join workspace
 router.put('/users/:id/approve', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+    const roleId = req.body?.role_id || null;
 
+    // 1. Set status to approved
     const { data, error } = await supabaseAdmin
       .from('users')
       .update({ status: 'approved' })
@@ -111,6 +134,34 @@ router.put('/users/:id/approve', async (req: Request, res: Response) => {
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
+    }
+
+    // 2. Find the workspace (there should be exactly one)
+    const { data: workspace } = await supabaseAdmin
+      .from('workspaces')
+      .select('id')
+      .limit(1)
+      .single();
+
+    if (workspace) {
+      // Determine which custom role to assign
+      let assignRoleId = roleId;
+      if (!assignRoleId) {
+        const { data: defaultRole } = await supabaseAdmin
+          .from('roles')
+          .select('id')
+          .eq('is_default', true)
+          .single();
+        assignRoleId = defaultRole?.id || null;
+      }
+
+      // 3. Add user as member of the workspace
+      await supabaseAdmin.from('workspace_members').insert({
+        workspace_id: workspace.id,
+        user_id: id,
+        role: 'member',
+        role_id: assignRoleId,
+      });
     }
 
     res.json({ success: true, data });
@@ -144,7 +195,49 @@ router.put('/users/:id/reject', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /admin/users/:id/role — change a user's role
+// PUT /admin/users/:id/custom-role — change a user's custom role
+router.put('/users/:id/custom-role', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const { role_id } = z.object({ role_id: z.string().uuid() }).parse(req.body);
+
+    // Find the workspace
+    const { data: workspace } = await supabaseAdmin
+      .from('workspaces')
+      .select('id')
+      .limit(1)
+      .single();
+
+    if (!workspace) {
+      res.status(404).json({ success: false, error: 'No workspace found' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('workspace_members')
+      .update({ role_id })
+      .eq('user_id', id)
+      .eq('workspace_id', workspace.id)
+      .select('*, roles(id, name, color)')
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Admin update custom role error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /admin/users/:id/role — change a user's platform role
 const updateRoleSchema = z.object({
   role: z.enum(['admin', 'member']),
 });
