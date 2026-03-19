@@ -7,11 +7,13 @@ import QuickAddTask from './QuickAddTask';
 export default function ListView({
   listId,
   statuses,
+  filters,
 }: {
   listId: string;
   statuses: SpaceStatus[];
+  filters?: { status_id?: string; priority?: string; sort?: string };
 }) {
-  const { data: tasks, isLoading } = useTasks(listId);
+  const { data: tasks, isLoading } = useTasks(listId, filters);
   const updateTask = useUpdateTask(listId);
 
   const groups = useMemo(
