@@ -195,6 +195,55 @@ router.put('/users/:id/reject', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /admin/users/:id/profile — update a user's display name and email
+const updateProfileSchema = z.object({
+  display_name: z.string().min(1).max(50).optional(),
+  email: z.string().email().optional(),
+});
+
+router.put('/users/:id/profile', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const body = updateProfileSchema.parse(req.body);
+
+    const updates: Record<string, string> = {};
+    if (body.display_name !== undefined) updates.display_name = body.display_name;
+    if (body.email !== undefined) updates.email = body.email;
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ success: false, error: 'No fields to update' });
+      return;
+    }
+
+    // Update in our users table
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    // Also update email in Supabase Auth if changed
+    if (body.email) {
+      await supabaseAdmin.auth.admin.updateUserById(id, { email: body.email });
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Admin update profile error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // PUT /admin/users/:id/custom-role — change a user's custom role
 router.put('/users/:id/custom-role', async (req: Request, res: Response) => {
   try {

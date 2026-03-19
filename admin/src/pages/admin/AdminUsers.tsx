@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import type { User, Role } from '@squadhub/shared';
@@ -7,11 +7,255 @@ interface UserWithRole extends User {
   custom_role?: { id: string; name: string; color: string } | null;
 }
 
-function UserRow({ user, currentUserId, roles, onAction }: {
+/* ─────────────────────────── Edit Slider ─────────────────────────── */
+function EditUserSlider({
+  user,
+  roles,
+  onClose,
+}: {
+  user: UserWithRole;
+  roles: Role[];
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState(user.display_name);
+  const [email, setEmail] = useState(user.email);
+  const [roleId, setRoleId] = useState(user.custom_role?.id || '');
+  const [error, setError] = useState('');
+  const [visible, setVisible] = useState(false);
+
+  // Animate in
+  useEffect(() => {
+    requestAnimationFrame(() => setVisible(true));
+  }, []);
+
+  const close = () => {
+    setVisible(false);
+    setTimeout(onClose, 200);
+  };
+
+  const profileMutation = useMutation({
+    mutationFn: (data: { display_name?: string; email?: string }) =>
+      api.put(`/admin/users/${user.id}/profile`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    },
+    onError: (err: any) => {
+      setError(err?.response?.data?.error || 'Failed to update profile');
+    },
+  });
+
+  const customRoleMutation = useMutation({
+    mutationFn: (role_id: string) =>
+      api.put(`/admin/users/${user.id}/custom-role`, { role_id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    },
+    onError: (err: any) => {
+      setError(err?.response?.data?.error || 'Failed to update role');
+    },
+  });
+
+  const isSaving = profileMutation.isPending || customRoleMutation.isPending;
+
+  const handleSave = async () => {
+    setError('');
+    const profileUpdates: { display_name?: string; email?: string } = {};
+    if (name.trim() !== user.display_name) profileUpdates.display_name = name.trim();
+    if (email.trim() !== user.email) profileUpdates.email = email.trim();
+
+    try {
+      // Update profile if changed
+      if (Object.keys(profileUpdates).length > 0) {
+        await profileMutation.mutateAsync(profileUpdates);
+      }
+      // Update custom role if changed
+      if (roleId && roleId !== (user.custom_role?.id || '')) {
+        await customRoleMutation.mutateAsync(roleId);
+      }
+      close();
+    } catch {
+      // Error is handled in onError
+    }
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-200 ${
+          visible ? 'opacity-100' : 'opacity-0'
+        }`}
+        onClick={close}
+      />
+
+      {/* Slider panel */}
+      <div
+        className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-[#222] bg-[#0a0a0a] shadow-2xl transition-transform duration-200 ${
+          visible ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-[#222] px-6 py-4">
+          <h3 className="text-lg font-semibold text-[#ededed]">Edit User</h3>
+          <button
+            onClick={close}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-[#888] transition hover:bg-[#222] hover:text-[#ededed]"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* Avatar + Status */}
+          <div className="mb-6 flex items-center gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#222] text-xl font-semibold text-[#ededed]">
+              {user.display_name[0]?.toUpperCase() || '?'}
+            </div>
+            <div>
+              <p className="text-base font-medium text-[#ededed]">{user.display_name}</p>
+              <div className="mt-0.5 flex items-center gap-2">
+                <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  user.role === 'admin'
+                    ? 'bg-yellow-500/15 text-yellow-400'
+                    : user.role === 'banned'
+                    ? 'bg-red-500/15 text-red-400'
+                    : 'bg-[#222] text-[#888]'
+                }`}>
+                  {user.role}
+                </span>
+                <span className="text-xs text-[#555]">
+                  Joined {new Date(user.created_at).toLocaleDateString()}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            {/* Display Name */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-[#888]">Display Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={50}
+                className="w-full rounded-md border border-[#333] bg-[#111] px-3 py-2.5 text-sm text-[#ededed] placeholder-[#555] outline-none transition focus:border-[#ededed]"
+              />
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-[#888]">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-md border border-[#333] bg-[#111] px-3 py-2.5 text-sm text-[#ededed] placeholder-[#555] outline-none transition focus:border-[#ededed]"
+              />
+            </div>
+
+            {/* Custom Role */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-[#888]">Role</label>
+              {roles.length > 0 ? (
+                <div className="space-y-1.5">
+                  {roles.map((role) => (
+                    <button
+                      key={role.id}
+                      type="button"
+                      onClick={() => setRoleId(role.id)}
+                      className={`flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left text-sm transition ${
+                        roleId === role.id
+                          ? 'border-[#ededed] bg-[#1a1a1a] text-[#ededed]'
+                          : 'border-[#222] bg-[#111] text-[#888] hover:border-[#333] hover:text-[#ededed]'
+                      }`}
+                    >
+                      <span
+                        className="inline-block h-3 w-3 shrink-0 rounded-full"
+                        style={{ backgroundColor: role.color }}
+                      />
+                      <span className="font-medium">{role.name}</span>
+                      {role.is_default && (
+                        <span className="ml-auto rounded-full bg-[#222] px-2 py-0.5 text-[10px] text-[#555]">
+                          Default
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-[#555]">
+                  {user.status === 'pending' ? 'User is pending approval' : 'No roles available'}
+                </p>
+              )}
+            </div>
+
+            {/* Platform Role */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-[#888]">Platform Access</label>
+              <div className="rounded-md border border-[#222] bg-[#111] px-3 py-2.5">
+                <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                  user.role === 'admin'
+                    ? 'bg-yellow-500/15 text-yellow-400'
+                    : user.role === 'banned'
+                    ? 'bg-red-500/15 text-red-400'
+                    : 'bg-[#222] text-[#888]'
+                }`}>
+                  {user.role}
+                </span>
+                <p className="mt-1 text-[11px] text-[#555]">
+                  Use the actions in the table to change platform role (admin/member) or ban/unban.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="mt-4 rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-400">
+              {error}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 border-t border-[#222] px-6 py-4">
+          <button
+            onClick={close}
+            className="rounded-md border border-[#333] px-4 py-2 text-sm text-[#888] transition hover:border-[#555] hover:text-[#ededed]"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving || !name.trim()}
+            className="rounded-md bg-[#ededed] px-4 py-2 text-sm font-medium text-[#0a0a0a] transition hover:bg-white disabled:opacity-50"
+          >
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ─────────────────────────── User Row ─────────────────────────── */
+function UserRow({
+  user,
+  currentUserId,
+  roles,
+  onAction,
+  onEdit,
+}: {
   user: UserWithRole;
   currentUserId: string;
   roles: Role[];
   onAction: () => void;
+  onEdit: (user: UserWithRole) => void;
 }) {
   const queryClient = useQueryClient();
   const isSelf = user.id === currentUserId;
@@ -30,11 +274,6 @@ function UserRow({ user, currentUserId, roles, onAction }: {
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/admin/users/${user.id}`),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-users'] }); onAction(); },
-  });
-
-  const customRoleMutation = useMutation({
-    mutationFn: (role_id: string) => api.put(`/admin/users/${user.id}/custom-role`, { role_id }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-users'] }); },
   });
 
   const handleDelete = () => {
@@ -71,65 +310,70 @@ function UserRow({ user, currentUserId, roles, onAction }: {
       </td>
       <td className="px-4 py-3">
         {user.custom_role ? (
-          <select
-            value={user.custom_role.id}
-            onChange={(e) => customRoleMutation.mutate(e.target.value)}
-            disabled={customRoleMutation.isPending || isBanned}
-            className="rounded-md border border-[#333] bg-[#0a0a0a] px-2 py-1 text-xs text-[#ededed] outline-none focus:border-[#ededed] disabled:opacity-50"
-          >
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-1.5">
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: user.custom_role.color }}
+            />
+            <span className="text-xs text-[#ededed]">{user.custom_role.name}</span>
+          </div>
         ) : (
           <span className="text-xs text-[#555]">{user.status === 'pending' ? 'Pending' : '—'}</span>
         )}
       </td>
       <td className="px-4 py-3 text-sm text-[#888]">{date}</td>
       <td className="px-4 py-3">
-        {!isSelf && (
-          <div className="flex gap-2">
-            {!isBanned && (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onEdit(user)}
+            className="rounded-md border border-[#333] bg-transparent px-2.5 py-1 text-xs text-[#888] hover:border-[#555] hover:text-[#ededed]"
+          >
+            Edit
+          </button>
+          {!isSelf && (
+            <>
+              {!isBanned && (
+                <button
+                  onClick={() => roleMutation.mutate(user.role === 'admin' ? 'member' : 'admin')}
+                  disabled={roleMutation.isPending}
+                  className="rounded-md border border-[#333] bg-transparent px-2.5 py-1 text-xs text-[#888] hover:border-[#555] hover:text-[#ededed] disabled:opacity-50"
+                >
+                  {user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
+                </button>
+              )}
               <button
-                onClick={() => roleMutation.mutate(user.role === 'admin' ? 'member' : 'admin')}
-                disabled={roleMutation.isPending}
-                className="rounded-md border border-[#333] bg-transparent px-2.5 py-1 text-xs text-[#888] hover:border-[#555] hover:text-[#ededed] disabled:opacity-50"
+                onClick={() => banMutation.mutate(!isBanned)}
+                disabled={banMutation.isPending}
+                className={`rounded-md px-2.5 py-1 text-xs disabled:opacity-50 ${
+                  isBanned
+                    ? 'bg-green-600/15 text-green-400 hover:bg-green-600/25'
+                    : 'bg-red-600/15 text-red-400 hover:bg-red-600/25'
+                }`}
               >
-                {user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
+                {isBanned ? 'Unban' : 'Ban'}
               </button>
-            )}
-            <button
-              onClick={() => banMutation.mutate(!isBanned)}
-              disabled={banMutation.isPending}
-              className={`rounded-md px-2.5 py-1 text-xs disabled:opacity-50 ${
-                isBanned
-                  ? 'bg-green-600/15 text-green-400 hover:bg-green-600/25'
-                  : 'bg-red-600/15 text-red-400 hover:bg-red-600/25'
-              }`}
-            >
-              {isBanned ? 'Unban' : 'Ban'}
-            </button>
-            <button
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-              className="rounded-md bg-red-600/15 px-2.5 py-1 text-xs text-red-400 hover:bg-red-600/25 disabled:opacity-50"
-            >
-              Delete
-            </button>
-          </div>
-        )}
-        {isSelf && <span className="text-xs text-[#555]">You</span>}
+              <button
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
+                className="rounded-md bg-red-600/15 px-2.5 py-1 text-xs text-red-400 hover:bg-red-600/25 disabled:opacity-50"
+              >
+                Delete
+              </button>
+            </>
+          )}
+          {isSelf && <span className="text-xs text-[#555]">You</span>}
+        </div>
       </td>
     </tr>
   );
 }
 
+/* ─────────────────────────── Main Page ─────────────────────────── */
 export default function AdminUsers() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [editingUser, setEditingUser] = useState<UserWithRole | null>(null);
 
   const authState = JSON.parse(localStorage.getItem('squadhub-admin-auth') || '{}');
   const currentUserId = authState?.state?.user?.id || '';
@@ -191,6 +435,7 @@ export default function AdminUsers() {
                     currentUserId={currentUserId}
                     roles={roles}
                     onAction={refreshStats}
+                    onEdit={setEditingUser}
                   />
                 ))}
               </tbody>
@@ -218,6 +463,16 @@ export default function AdminUsers() {
           </div>
         )}
       </div>
+
+      {/* Edit User Slider */}
+      {editingUser && (
+        <EditUserSlider
+          key={editingUser.id}
+          user={editingUser}
+          roles={roles}
+          onClose={() => setEditingUser(null)}
+        />
+      )}
     </div>
   );
 }
