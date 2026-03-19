@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage';
 import MasterAdminLayout from './layouts/MasterAdminLayout';
 import WorkspaceAdminLayout from './layouts/WorkspaceAdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminApprovals from './pages/admin/AdminApprovals';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminWorkspaces from './pages/admin/AdminWorkspaces';
 import WsAdminSettings from './pages/workspace-admin/WsAdminSettings';
@@ -41,6 +42,7 @@ export default function App() {
       {/* Master Admin — platform owner */}
       <Route path="/" element={<RequireAdmin><MasterAdminLayout /></RequireAdmin>}>
         <Route index element={<AdminDashboard />} />
+        <Route path="approvals" element={<AdminApprovals />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="workspaces" element={<AdminWorkspaces />} />
       </Route>

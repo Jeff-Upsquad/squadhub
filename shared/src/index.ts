@@ -10,6 +10,7 @@ export interface User {
   display_name: string;
   avatar_url: string | null;
   role: string;
+  status: 'pending' | 'approved' | 'rejected';
   created_at: string;
 }
 

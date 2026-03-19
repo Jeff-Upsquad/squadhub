@@ -51,11 +51,12 @@ router.get('/users', async (req: Request, res: Response) => {
 // GET /admin/stats — basic platform stats
 router.get('/stats', async (_req: Request, res: Response) => {
   try {
-    const [usersRes, workspacesRes, channelsRes, messagesRes] = await Promise.all([
+    const [usersRes, workspacesRes, channelsRes, messagesRes, pendingRes] = await Promise.all([
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('workspaces').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('channels').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('messages').select('*', { count: 'exact', head: true }),
+      supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
     ]);
 
     res.json({
@@ -65,10 +66,80 @@ router.get('/stats', async (_req: Request, res: Response) => {
         total_workspaces: workspacesRes.count || 0,
         total_channels: channelsRes.count || 0,
         total_messages: messagesRes.count || 0,
+        pending_approvals: pendingRes.count || 0,
       },
     });
   } catch (err) {
     console.error('Admin stats error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /admin/pending-users — list users awaiting approval
+router.get('/pending-users', async (_req: Request, res: Response) => {
+  try {
+    const { data: users, error } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data: users });
+  } catch (err) {
+    console.error('Admin pending users error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /admin/users/:id/approve — approve a pending user
+router.put('/users/:id/approve', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .update({ status: 'approved' })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Admin approve user error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /admin/users/:id/reject — reject a pending user
+router.put('/users/:id/reject', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .update({ status: 'rejected' })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Admin reject user error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

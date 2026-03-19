@@ -6,6 +6,7 @@ interface Stats {
   total_workspaces: number;
   total_channels: number;
   total_messages: number;
+  pending_approvals: number;
 }
 
 function StatCard({ label, value }: { label: string; value: number }) {
@@ -22,13 +23,14 @@ export default function AdminDashboard() {
     queryKey: ['admin-stats'],
     queryFn: () => api.get('/admin/stats').then((r) => r.data),
   });
-  const stats: Stats = statsRes?.data || { total_users: 0, total_workspaces: 0, total_channels: 0, total_messages: 0 };
+  const stats: Stats = statsRes?.data || { total_users: 0, total_workspaces: 0, total_channels: 0, total_messages: 0, pending_approvals: 0 };
 
   return (
     <div>
       <h2 className="mb-6 text-2xl font-semibold text-[#ededed]">Dashboard</h2>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatCard label="Total Users" value={stats.total_users} />
+        <StatCard label="Pending Approvals" value={stats.pending_approvals} />
         <StatCard label="Workspaces" value={stats.total_workspaces} />
         <StatCard label="Channels" value={stats.total_channels} />
         <StatCard label="Messages" value={stats.total_messages} />

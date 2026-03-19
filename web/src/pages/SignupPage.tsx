@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
-import { useAuthStore } from '../stores/authStore';
 
 export default function SignupPage() {
   const [displayName, setDisplayName] = useState('');
@@ -9,8 +8,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-  const setAuth = useAuthStore((s) => s.setAuth);
+  const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,8 +22,7 @@ export default function SignupPage() {
         display_name: displayName,
       });
       if (res.success) {
-        setAuth(res.data.user, res.data.access_token, res.data.refresh_token);
-        navigate('/');
+        setSubmitted(true);
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Registration failed');
@@ -33,6 +30,31 @@ export default function SignupPage() {
       setLoading(false);
     }
   };
+
+  // Success state — awaiting admin approval
+  if (submitted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
+        <div className="w-full max-w-sm p-8 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-[#222] bg-[#111]">
+            <svg className="h-6 w-6 text-green-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-semibold tracking-tight text-[#ededed]">Account Created</h1>
+          <p className="mt-3 text-sm text-[#888]">
+            Your account is pending admin approval. You'll be able to sign in once an admin reviews your request.
+          </p>
+          <Link
+            to="/login"
+            className="mt-6 inline-block rounded-md bg-[#ededed] px-6 py-2 text-sm font-medium text-[#0a0a0a] transition hover:bg-white"
+          >
+            Back to Sign In
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">

@@ -34,40 +34,23 @@ router.post('/register', async (req: Request, res: Response) => {
       return;
     }
 
-    // Insert into our users table
+    // Insert into our users table with pending status
     const { error: dbError } = await supabaseAdmin.from('users').insert({
       id: authData.user.id,
       email: body.email,
       display_name: body.display_name,
       role: 'member',
+      status: 'pending',
     });
 
     if (dbError) {
       console.error('Failed to insert user row:', dbError);
     }
 
-    // Sign in using the PUBLIC client (not admin) to avoid contaminating admin client state
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email: body.email,
-      password: body.password,
-    });
-
-    if (signInError) {
-      res.status(500).json({ success: false, error: 'Account created but sign-in failed. Please log in.' });
-      return;
-    }
-
+    // Do NOT auto-sign in — account needs admin approval first
     res.status(201).json({
       success: true,
-      data: {
-        user: {
-          id: authData.user.id,
-          email: body.email,
-          display_name: body.display_name,
-        },
-        access_token: signInData.session!.access_token,
-        refresh_token: signInData.session!.refresh_token,
-      },
+      message: 'Account created. Awaiting admin approval.',
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -101,6 +84,16 @@ router.post('/login', async (req: Request, res: Response) => {
       .select('*')
       .eq('id', data.user.id)
       .single();
+
+    // Check user approval status
+    if (profile?.status === 'pending') {
+      res.status(403).json({ success: false, error: 'Your account is pending admin approval.' });
+      return;
+    }
+    if (profile?.status === 'rejected') {
+      res.status(403).json({ success: false, error: 'Your account has been rejected.' });
+      return;
+    }
 
     res.json({
       success: true,

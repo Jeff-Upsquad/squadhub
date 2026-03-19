@@ -30,6 +30,19 @@ export default function MasterAdminLayout() {
             Dashboard
           </NavLink>
           <NavLink
+            to="/approvals"
+            className={({ isActive }) =>
+              `flex items-center gap-2 rounded-md px-3 py-2 text-sm transition ${
+                isActive ? 'bg-[#1a1a1a] text-[#ededed]' : 'text-[#888] hover:bg-[#111] hover:text-[#ededed]'
+              }`
+            }
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Approvals
+          </NavLink>
+          <NavLink
             to="/users"
             className={({ isActive }) =>
               `flex items-center gap-2 rounded-md px-3 py-2 text-sm transition ${
