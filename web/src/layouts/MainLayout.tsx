@@ -8,36 +8,78 @@ import { useAuthStore } from '../stores/authStore';
 import { usePMStore } from '../stores/pmStore';
 import type { Workspace, Channel } from '@squadhub/shared';
 import { connectSocket, disconnectSocket } from '../services/socket';
-import ModuleSwitcher, { type ActiveModule } from '../components/ModuleSwitcher';
+import ModuleSwitcher, { type ActiveSection, type HomeTab } from '../components/ModuleSwitcher';
 import ChannelSidebar from '../pages/app/chat/ChannelSidebar';
 import ChatPanel from '../pages/app/chat/ChatPanel';
 import CreateChannelModal from '../pages/app/chat/CreateChannelModal';
 import SpaceTree from '../pages/app/pm/SpaceTree';
 import ListPage from '../pages/app/pm/ListPage';
 
-// ---- Sidebar Workspace Icon ----
-function SidebarIcon({ label, active, onClick }: { label: string; active?: boolean; onClick?: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-semibold transition ${
-        active
-          ? 'bg-[#ededed] text-[#0a0a0a]'
-          : 'bg-[#1a1a1a] text-[#888] hover:bg-[#222] hover:text-[#ededed]'
-      }`}
-      title={label}
-    >
-      {label[0].toUpperCase()}
-    </button>
-  );
-}
+// ---- Section definitions ----
+const SECTIONS: { id: ActiveSection; label: string; icon: React.ReactNode }[] = [
+  {
+    id: 'home',
+    label: 'Home',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'docs',
+    label: 'Docs',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'calendar',
+    label: 'Calendar',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'apps',
+    label: 'Apps',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'teams',
+    label: 'Teams',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+    ),
+  },
+];
+
+// ---- Placeholder sidebar/content labels ----
+const SECTION_TITLES: Record<ActiveSection, string> = {
+  home: 'Home',
+  docs: 'Documents',
+  calendar: 'Calendar',
+  apps: 'Apps',
+  teams: 'Teams',
+};
 
 export default function MainLayout() {
   const { currentWorkspace, activeChannelId, setWorkspace, setChannels, setActiveChannel } = useWorkspaceStore();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const pmReset = usePMStore((s) => s.reset);
-  const [activeModule, setActiveModule] = useState<ActiveModule>('chat');
+  const [activeSection, setActiveSection] = useState<ActiveSection>('home');
+  const [homeTab, setHomeTab] = useState<HomeTab>('chat');
   const [showCreateChannel, setShowCreateChannel] = useState(false);
 
   // Fetch workspaces
@@ -83,13 +125,6 @@ export default function MainLayout() {
     }
   }, [currentWorkspace]);
 
-  // Handle workspace switch
-  const handleSwitchWorkspace = (ws: Workspace & { my_role?: string }) => {
-    setWorkspace(ws);
-    setActiveChannel(null);
-    pmReset();
-  };
-
   // Loading state
   if (workspacesLoading) {
     return (
@@ -99,7 +134,7 @@ export default function MainLayout() {
     );
   }
 
-  // No workspaces — user hasn't been added yet (shouldn't happen after approval)
+  // No workspaces — user hasn't been added yet
   if (!workspacesRes || workspaces.length === 0) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#0a0a0a]">
@@ -119,35 +154,37 @@ export default function MainLayout() {
 
   return (
     <div className="flex h-screen bg-[#0a0a0a] text-[#ededed]">
-      {/* Far-left icon sidebar */}
-      <div className="flex w-14 flex-col items-center gap-2 border-r border-[#222] bg-[#0a0a0a] py-3">
-        {workspaces.map((ws) => (
-          <SidebarIcon
-            key={ws.id}
-            label={ws.name}
-            active={currentWorkspace?.id === ws.id}
-            onClick={() => handleSwitchWorkspace(ws)}
-          />
-        ))}
-        <div className="mt-auto flex flex-col items-center gap-2 pb-3">
-          {currentWorkspace && (currentWorkspace as any).my_role && ['super_admin', 'admin'].includes((currentWorkspace as any).my_role) && (
-            <a
-              href={`${ADMIN_APP_URL}/workspace-admin`}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-[#555] transition hover:bg-[#1a1a1a] hover:text-[#ededed]"
-              title="Workspace Settings"
+      {/* Far-left section icon sidebar */}
+      <div className="flex w-14 flex-col items-center border-r border-[#222] bg-[#0a0a0a] pt-3">
+        <div className="flex flex-col items-center gap-1">
+          {SECTIONS.map((section) => (
+            <button
+              key={section.id}
+              onClick={() => setActiveSection(section.id)}
+              className={`relative flex h-10 w-10 items-center justify-center rounded-lg transition ${
+                activeSection === section.id
+                  ? 'bg-[#1a1a1a] text-[#ededed]'
+                  : 'text-[#555] hover:bg-[#111] hover:text-[#888]'
+              }`}
+              title={section.label}
             >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-            </a>
-          )}
+              {activeSection === section.id && (
+                <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[#ededed]" />
+              )}
+              {section.icon}
+            </button>
+          ))}
+        </div>
+
+        {/* Bottom actions */}
+        <div className="mt-auto flex flex-col items-center gap-2 pb-3">
           {user?.role === 'admin' && (
             <a
               href={ADMIN_APP_URL}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-[#555] transition hover:bg-[#1a1a1a] hover:text-[#ededed]"
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-[#555] transition hover:bg-[#111] hover:text-[#888]"
               title="Admin Panel"
             >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
@@ -155,10 +192,10 @@ export default function MainLayout() {
           )}
           <button
             onClick={logout}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-[#555] transition hover:bg-[#1a1a1a] hover:text-[#ededed]"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-[#555] transition hover:bg-[#111] hover:text-[#888]"
             title="Logout"
           >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
           </button>
@@ -168,44 +205,68 @@ export default function MainLayout() {
       {/* Module sidebar */}
       {currentWorkspace && (
         <div className="flex h-full w-56 flex-col border-r border-[#222] bg-[#0a0a0a]">
-          <ModuleSwitcher active={activeModule} onChange={setActiveModule} />
-
-          {activeModule === 'chat' ? (
-            <ChannelSidebar
-              channels={channels}
-              activeId={activeChannelId}
-              onSelect={setActiveChannel}
-              onCreateChannel={() => setShowCreateChannel(true)}
-            />
+          {activeSection === 'home' ? (
+            <>
+              <ModuleSwitcher active={homeTab} onChange={setHomeTab} />
+              {homeTab === 'chat' ? (
+                <ChannelSidebar
+                  channels={channels}
+                  activeId={activeChannelId}
+                  onSelect={setActiveChannel}
+                  onCreateChannel={() => setShowCreateChannel(true)}
+                />
+              ) : (
+                <SpaceTree workspaceId={currentWorkspace.id} />
+              )}
+            </>
           ) : (
-            <SpaceTree workspaceId={currentWorkspace.id} />
+            <div className="flex flex-col">
+              <div className="border-b border-[#222] px-4 py-3">
+                <h3 className="text-sm font-semibold text-[#ededed]">{SECTION_TITLES[activeSection]}</h3>
+              </div>
+              <div className="flex flex-1 items-center justify-center px-4 py-12">
+                <p className="text-center text-xs text-[#555]">Coming soon</p>
+              </div>
+            </div>
           )}
         </div>
       )}
 
       {/* Main content area */}
       <div className="flex flex-1 flex-col bg-[#0a0a0a]">
-        {activeModule === 'chat' ? (
+        {activeSection === 'home' ? (
           <>
-            {activeChannelId && (
-              <div className="flex items-center border-b border-[#222] px-5 py-3">
-                <span className="mr-2 text-[#555]">#</span>
-                <span className="text-sm font-medium text-[#ededed]">
-                  {channels.find((c) => c.id === activeChannelId)?.name}
-                </span>
-              </div>
-            )}
+            {homeTab === 'chat' ? (
+              <>
+                {activeChannelId && (
+                  <div className="flex items-center border-b border-[#222] px-5 py-3">
+                    <span className="mr-2 text-[#555]">#</span>
+                    <span className="text-sm font-medium text-[#ededed]">
+                      {channels.find((c) => c.id === activeChannelId)?.name}
+                    </span>
+                  </div>
+                )}
 
-            {activeChannelId ? (
-              <ChatPanel channelId={activeChannelId} />
+                {activeChannelId ? (
+                  <ChatPanel channelId={activeChannelId} />
+                ) : (
+                  <div className="flex flex-1 items-center justify-center text-sm text-[#555]">
+                    Select a channel to start chatting
+                  </div>
+                )}
+              </>
             ) : (
-              <div className="flex flex-1 items-center justify-center text-sm text-[#555]">
-                Select a channel to start chatting
-              </div>
+              <ListPage />
             )}
           </>
         ) : (
-          <ListPage />
+          <div className="flex flex-1 flex-col items-center justify-center text-[#555]">
+            <div className="mb-4 opacity-30">
+              {SECTIONS.find((s) => s.id === activeSection)?.icon}
+            </div>
+            <h3 className="text-lg font-medium text-[#888]">{SECTION_TITLES[activeSection]}</h3>
+            <p className="mt-1 text-sm">Coming soon</p>
+          </div>
         )}
       </div>
 

@@ -1,8 +1,9 @@
-export type ActiveModule = 'chat' | 'tasks';
+export type ActiveSection = 'home' | 'docs' | 'calendar' | 'apps' | 'teams';
+export type HomeTab = 'chat' | 'tasks';
 
 export default function ModuleSwitcher({ active, onChange }: {
-  active: ActiveModule;
-  onChange: (module: ActiveModule) => void;
+  active: HomeTab;
+  onChange: (tab: HomeTab) => void;
 }) {
   return (
     <div className="flex border-b border-[#222] bg-[#0a0a0a]">
