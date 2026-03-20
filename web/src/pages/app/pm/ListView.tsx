@@ -65,7 +65,7 @@ function StatusGroup({
   return (
     <div className="mb-2">
       {/* Status header */}
-      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-[#eaeaea] bg-[#ffffff]/90 px-4 py-2 backdrop-blur-sm">
+      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-[#E2E8F0] bg-[#ffffff]/90 px-4 py-2 backdrop-blur-sm">
         <span
           className="h-2.5 w-2.5 rounded-full"
           style={{ backgroundColor: status.color }}

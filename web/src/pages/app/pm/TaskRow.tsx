@@ -32,7 +32,7 @@ export default function TaskRow({
   return (
     <div
       onClick={() => setActiveTask(task.id)}
-      className="group flex cursor-pointer items-center gap-3 border-b border-[#eaeaea]/50 px-4 py-2 transition hover:bg-[#fafafa]/30"
+      className="group flex cursor-pointer items-center gap-3 border-b border-[#E2E8F0]/50 px-4 py-2 transition hover:bg-[#F1F5F9]/30"
     >
       {/* Status dot / dropdown */}
       <div className="relative">
@@ -53,7 +53,7 @@ export default function TaskRow({
       </div>
 
       {/* Title */}
-      <span className="min-w-0 flex-1 truncate text-sm text-[#171717]">{task.title}</span>
+      <span className="min-w-0 flex-1 truncate text-sm text-[#0F172B]">{task.title}</span>
 
       {/* Priority */}
       <TaskPriorityBadge priority={task.priority} />
@@ -64,7 +64,7 @@ export default function TaskRow({
           {task.assignees.slice(0, 3).map((u: any) => (
             <div
               key={u.id}
-              className="flex h-5 w-5 items-center justify-center rounded-full bg-[#eaeaea] text-[10px] font-medium text-[#171717] ring-1 ring-white"
+              className="flex h-5 w-5 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#0F172B] ring-1 ring-white"
               title={u.display_name || u.email}
             >
               {(u.display_name || u.email)?.[0]?.toUpperCase()}

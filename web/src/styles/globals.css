@@ -1,35 +1,39 @@
 @import "tailwindcss";
 
-/* Vercel light theme + ClickUp typography */
+/* Hashnode design language */
 @theme {
-  /* Vercel accent */
-  --color-accent: #0070F3;
+  /* Primary accent — Hashnode Royal Blue */
+  --color-accent: #2962FF;
 
-  /* Vercel gray scale */
-  --color-gray-50: #f5f5f5;
-  --color-gray-100: #fafafa;
-  --color-gray-200: #eaeaea;
-  --color-gray-300: #d9d9d9;
-  --color-gray-500: #999999;
-  --color-gray-700: #666666;
-  --color-gray-900: #333333;
+  /* Slate scale (Hashnode neutrals) */
+  --color-gray-50: #F8FAFC;
+  --color-gray-100: #F1F5F9;
+  --color-gray-200: #E2E8F0;
+  --color-gray-300: #CAD5E2;
+  --color-gray-400: #90A1B9;
+  --color-gray-500: #62748E;
+  --color-gray-600: #45556C;
+  --color-gray-700: #314158;
+  --color-gray-800: #1D293D;
+  --color-gray-900: #0F172B;
+  --color-gray-950: #020618;
 
   /* Surfaces */
   --color-sidebar: #ffffff;
-  --color-sidebar-hover: #f5f5f5;
-  --color-sidebar-active: #f5f5f5;
-  --color-sidebar-text: #666666;
-  --color-sidebar-text-bright: #171717;
+  --color-sidebar-hover: #F1F5F9;
+  --color-sidebar-active: #F1F5F9;
+  --color-sidebar-text: #62748E;
+  --color-sidebar-text-bright: #0F172B;
 
   /* Font families */
-  --font-display: 'Geist', sans-serif;
-  --font-body: 'Geist', system-ui, -apple-system, sans-serif;
+  --font-display: 'Google Sans Flex', sans-serif;
+  --font-body: 'Google Sans Flex', system-ui, -apple-system, sans-serif;
   --font-mono: 'Geist Mono', monospace;
 }
 
 /* Base */
 body {
-  font-family: 'Geist', system-ui, -apple-system, sans-serif;
+  font-family: 'Google Sans Flex', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.011em;
@@ -44,14 +48,14 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d9d9d9;
+  background: #CAD5E2;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #bbb;
+  background: #90A1B9;
 }
 
 ::selection {
-  background: rgba(0, 112, 243, 0.15);
+  background: rgba(41, 98, 255, 0.15);
   color: #000;
 }

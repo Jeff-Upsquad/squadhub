@@ -27,7 +27,7 @@ const TABS: { id: HomeTab; label: string }[] = [
 
 // ---- Favorite icon helper ----
 function FavoriteIcon({ type }: { type: string }) {
-  const cls = 'h-4 w-4 shrink-0 text-[#999]';
+  const cls = 'h-4 w-4 shrink-0 text-[#90A1B9]';
   switch (type) {
     case 'channel':
       return (
@@ -76,7 +76,7 @@ function SectionHeader({
 }) {
   return (
     <div className="flex items-center justify-between px-4 py-2">
-      <button onClick={onToggle} className="flex items-center gap-1.5 text-[#666] transition hover:text-[#171717]">
+      <button onClick={onToggle} className="flex items-center gap-1.5 text-[#62748E] transition hover:text-[#0F172B]">
         <svg
           className={`h-3 w-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
           fill="none"
@@ -128,20 +128,20 @@ export default function HomeSidebar({
   return (
     <div className="flex h-full w-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[#eaeaea] px-4 py-3">
-        <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-[#171717]">Home</h2>
+      <div className="flex items-center justify-between border-b border-[#E2E8F0] px-4 py-3">
+        <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">Home</h2>
       </div>
 
       {/* Tab pills */}
-      <div className="flex gap-1.5 border-b border-[#eaeaea] px-4 py-2">
+      <div className="flex gap-1.5 border-b border-[#E2E8F0] px-4 py-2">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => handleTabChange(tab.id)}
             className={`rounded-full px-3 py-1 text-xs font-medium transition ${
               activeTab === tab.id
-                ? 'bg-[#171717] text-white'
-                : 'bg-[#f5f5f5] text-[#666] hover:bg-[#eaeaea] hover:text-[#171717]'
+                ? 'bg-[#0F172B] text-white'
+                : 'bg-[#F8FAFC] text-[#62748E] hover:bg-[#E2E8F0] hover:text-[#0F172B]'
             }`}
           >
             {tab.label}
@@ -153,21 +153,21 @@ export default function HomeSidebar({
       <div className="flex-1 overflow-y-auto">
         {/* Navigation items */}
         <div className="px-2 py-2">
-          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-[#666] transition hover:bg-[#f5f5f5] hover:text-[#171717]">
+          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-[#62748E] transition hover:bg-[#F8FAFC] hover:text-[#0F172B]">
             <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859M12 3v8.25m0 0l-3-3m3 3l3-3" />
             </svg>
             Inbox
           </button>
 
-          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-[#666] transition hover:bg-[#f5f5f5] hover:text-[#171717]">
+          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-[#62748E] transition hover:bg-[#F8FAFC] hover:text-[#0F172B]">
             <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             New Tasks
           </button>
 
-          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-[#666] transition hover:bg-[#f5f5f5] hover:text-[#171717]">
+          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-[#62748E] transition hover:bg-[#F8FAFC] hover:text-[#0F172B]">
             <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
             </svg>
@@ -176,7 +176,7 @@ export default function HomeSidebar({
         </div>
 
         {/* Divider */}
-        <div className="mx-4 border-t border-[#eaeaea]" />
+        <div className="mx-4 border-t border-[#E2E8F0]" />
 
         {/* Favorites section */}
         <div className="py-1">
@@ -188,22 +188,22 @@ export default function HomeSidebar({
           {expandedSections.favorites && (
             <div className="px-2 pb-1">
               {favoritesLoading && (
-                <p className="px-3 py-1.5 text-xs text-[#999]">Loading...</p>
+                <p className="px-3 py-1.5 text-xs text-[#90A1B9]">Loading...</p>
               )}
               {!favoritesLoading && (!favorites || favorites.length === 0) && (
-                <p className="px-3 py-2 text-center text-xs text-[#999]">
+                <p className="px-3 py-2 text-center text-xs text-[#90A1B9]">
                   Star items to pin them here
                 </p>
               )}
               {favorites?.map((fav) => (
                 <div key={fav.id} className="group flex items-center">
-                  <button className="flex flex-1 items-center gap-2 rounded-md px-3 py-1 text-left text-sm text-[#666] transition hover:bg-[#f5f5f5] hover:text-[#171717]">
+                  <button className="flex flex-1 items-center gap-2 rounded-md px-3 py-1 text-left text-sm text-[#62748E] transition hover:bg-[#F8FAFC] hover:text-[#0F172B]">
                     <FavoriteIcon type={fav.item_type} />
                     <span className="truncate">{fav.item_name}</span>
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); removeFavorite.mutate(fav.id); }}
-                    className="mr-2 hidden rounded p-0.5 text-[#999] transition hover:text-[#171717] group-hover:block"
+                    className="mr-2 hidden rounded p-0.5 text-[#90A1B9] transition hover:text-[#0F172B] group-hover:block"
                     title="Remove"
                   >
                     <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -217,7 +217,7 @@ export default function HomeSidebar({
         </div>
 
         {/* Divider */}
-        <div className="mx-4 border-t border-[#eaeaea]" />
+        <div className="mx-4 border-t border-[#E2E8F0]" />
 
         {/* Spaces section */}
         <div className="py-1">
@@ -234,7 +234,7 @@ export default function HomeSidebar({
         </div>
 
         {/* Divider */}
-        <div className="mx-4 border-t border-[#eaeaea]" />
+        <div className="mx-4 border-t border-[#E2E8F0]" />
 
         {/* Channels section */}
         <div className="py-1">
@@ -245,7 +245,7 @@ export default function HomeSidebar({
             action={
               <button
                 onClick={onCreateChannel}
-                className="text-[#999] transition hover:text-[#171717]"
+                className="text-[#90A1B9] transition hover:text-[#0F172B]"
                 title="Create channel"
               >
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -257,7 +257,7 @@ export default function HomeSidebar({
           {expandedSections.channels && (
             <div className="px-2 pb-1">
               {channels.length === 0 ? (
-                <p className="px-3 py-2 text-center text-xs text-[#999]">No channels yet</p>
+                <p className="px-3 py-2 text-center text-xs text-[#90A1B9]">No channels yet</p>
               ) : (
                 channels.map((ch) => (
                   <button
@@ -265,11 +265,11 @@ export default function HomeSidebar({
                     onClick={() => onSelectChannel(ch.id)}
                     className={`mb-0.5 flex w-full items-center rounded-md px-3 py-1 text-left text-sm transition ${
                       activeChannelId === ch.id && homeView === 'chat'
-                        ? 'bg-[#f5f5f5] text-[#171717] font-medium'
-                        : 'text-[#666] hover:bg-[#fafafa] hover:text-[#171717]'
+                        ? 'bg-[#F8FAFC] text-[#0F172B] font-medium'
+                        : 'text-[#62748E] hover:bg-[#F1F5F9] hover:text-[#0F172B]'
                     }`}
                   >
-                    <span className="mr-2 text-[#999]">#</span>
+                    <span className="mr-2 text-[#90A1B9]">#</span>
                     <span className="truncate">{ch.name}</span>
                   </button>
                 ))
@@ -279,7 +279,7 @@ export default function HomeSidebar({
         </div>
 
         {/* Divider */}
-        <div className="mx-4 border-t border-[#eaeaea]" />
+        <div className="mx-4 border-t border-[#E2E8F0]" />
 
         {/* DMs section */}
         <div className="py-1">
@@ -290,7 +290,7 @@ export default function HomeSidebar({
           />
           {expandedSections.dms && (
             <div className="px-2 pb-1">
-              <p className="px-3 py-2 text-center text-xs text-[#999]">No direct messages yet</p>
+              <p className="px-3 py-2 text-center text-xs text-[#90A1B9]">No direct messages yet</p>
             </div>
           )}
         </div>

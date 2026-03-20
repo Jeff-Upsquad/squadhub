@@ -5,18 +5,18 @@ const MAIN_APP_URL = import.meta.env.PROD ? 'http://72.61.245.97:3080' : 'http:/
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2 rounded-md px-3 py-2 text-sm transition ${
-    isActive ? 'bg-[#f5f5f5] text-[#171717] font-medium' : 'text-[#666] hover:bg-[#f5f5f5] hover:text-[#171717]'
+    isActive ? 'bg-[#F8FAFC] text-[#0F172B] font-medium' : 'text-[#62748E] hover:bg-[#F8FAFC] hover:text-[#0F172B]'
   }`;
 
 export default function MasterAdminLayout() {
   const logout = useAuthStore((s) => s.logout);
 
   return (
-    <div className="flex min-h-screen bg-white text-[#171717]">
+    <div className="flex min-h-screen bg-white text-[#0F172B]">
       {/* Sidebar */}
-      <aside className="flex w-56 flex-col border-r border-[#eaeaea] bg-white">
-        <div className="flex items-center gap-2 border-b border-[#eaeaea] px-5 py-4">
-          <h1 className="font-[family-name:var(--font-display)] text-lg font-bold text-[#171717]">SquadHub</h1>
+      <aside className="flex w-56 flex-col border-r border-[#E2E8F0] bg-white">
+        <div className="flex items-center gap-2 border-b border-[#E2E8F0] px-5 py-4">
+          <h1 className="font-[family-name:var(--font-display)] text-lg font-bold text-[#0F172B]">SquadHub</h1>
           <span className="font-[family-name:var(--font-mono)] rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-600">Admin</span>
         </div>
         <nav className="flex-1 p-3 space-y-0.5">
@@ -51,7 +51,7 @@ export default function MasterAdminLayout() {
             Workspaces
           </NavLink>
 
-          <div className="!mt-4 border-t border-[#eaeaea] pt-3">
+          <div className="!mt-4 border-t border-[#E2E8F0] pt-3">
             <NavLink to="/workspace-admin" className={navLinkClass}>
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -61,10 +61,10 @@ export default function MasterAdminLayout() {
             </NavLink>
           </div>
         </nav>
-        <div className="border-t border-[#eaeaea] p-3 space-y-0.5">
+        <div className="border-t border-[#E2E8F0] p-3 space-y-0.5">
           <a
             href={MAIN_APP_URL}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-[#666] hover:bg-[#f5f5f5] hover:text-[#171717]"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC] hover:text-[#0F172B]"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -73,7 +73,7 @@ export default function MasterAdminLayout() {
           </a>
           <button
             onClick={() => logout()}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-[#666] hover:bg-[#f5f5f5] hover:text-[#171717]"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC] hover:text-[#0F172B]"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -84,7 +84,7 @@ export default function MasterAdminLayout() {
       </aside>
 
       {/* Content area */}
-      <main className="flex-1 overflow-y-auto bg-[#fafafa] p-6">
+      <main className="flex-1 overflow-y-auto bg-[#F1F5F9] p-6">
         <Outlet />
       </main>
     </div>

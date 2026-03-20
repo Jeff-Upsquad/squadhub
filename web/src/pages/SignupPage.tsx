@@ -36,18 +36,18 @@ export default function SignupPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
         <div className="w-full max-w-sm p-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-[#eaeaea] bg-[#fafafa]">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-[#E2E8F0] bg-[#F1F5F9]">
             <svg className="h-6 w-6 text-green-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-[#171717]">Account Created</h1>
-          <p className="mt-3 text-sm text-[#666]">
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-[#0F172B]">Account Created</h1>
+          <p className="mt-3 text-sm text-[#62748E]">
             Your account is pending admin approval. You'll be able to sign in once an admin reviews your request.
           </p>
           <Link
             to="/login"
-            className="mt-6 inline-block rounded-md bg-[#171717] px-6 py-2 text-sm font-medium text-white transition hover:bg-[#333]"
+            className="mt-6 inline-block rounded-md bg-[#0F172B] px-6 py-2 text-sm font-medium text-white transition hover:bg-[#1D293D]"
           >
             Back to Sign In
           </Link>
@@ -60,8 +60,8 @@ export default function SignupPage() {
     <div className="flex min-h-screen items-center justify-center bg-white">
       <div className="w-full max-w-sm p-8">
         <div className="mb-8 text-center">
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-[#171717]">SquadHub</h1>
-          <p className="mt-2 text-sm text-[#666]">Create your account</p>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-[#0F172B]">SquadHub</h1>
+          <p className="mt-2 text-sm text-[#62748E]">Create your account</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -70,38 +70,38 @@ export default function SignupPage() {
           )}
 
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-[#666]">Name</label>
+            <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Name</label>
             <input
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               required
-              className="w-full rounded-md border border-[#d9d9d9] bg-white px-3 py-2 text-sm text-[#171717] placeholder-[#999] outline-none transition focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
+              className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
               placeholder="Jane Doe"
             />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-[#666]">Email</label>
+            <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded-md border border-[#d9d9d9] bg-white px-3 py-2 text-sm text-[#171717] placeholder-[#999] outline-none transition focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
+              className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-[#666]">Password</label>
+            <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full rounded-md border border-[#d9d9d9] bg-white px-3 py-2 text-sm text-[#171717] placeholder-[#999] outline-none transition focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
+              className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
               placeholder="Min 8 characters"
             />
           </div>
@@ -109,15 +109,15 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-[#171717] py-2 text-sm font-medium text-white transition hover:bg-[#333] disabled:opacity-50"
+            className="w-full rounded-md bg-[#0F172B] py-2 text-sm font-medium text-white transition hover:bg-[#1D293D] disabled:opacity-50"
           >
             {loading ? 'Creating account...' : 'Create Account'}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-[#999]">
+        <p className="mt-6 text-center text-sm text-[#90A1B9]">
           Already have an account?{' '}
-          <Link to="/login" className="text-[#0070F3] hover:underline">
+          <Link to="/login" className="text-[#2962FF] hover:underline">
             Sign in
           </Link>
         </p>

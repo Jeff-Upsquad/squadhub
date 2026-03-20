@@ -33,8 +33,8 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-white">
       <div className="w-full max-w-sm p-8">
         <div className="mb-8 text-center">
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-[#171717]">SquadHub</h1>
-          <p className="mt-2 text-sm text-[#666]">Sign in to your workspace</p>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-[#0F172B]">SquadHub</h1>
+          <p className="mt-2 text-sm text-[#62748E]">Sign in to your workspace</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -43,25 +43,25 @@ export default function LoginPage() {
           )}
 
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-[#666]">Email</label>
+            <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded-md border border-[#d9d9d9] bg-white px-3 py-2 text-sm text-[#171717] placeholder-[#999] outline-none transition focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
+              className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-[#666]">Password</label>
+            <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full rounded-md border border-[#d9d9d9] bg-white px-3 py-2 text-sm text-[#171717] placeholder-[#999] outline-none transition focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
+              className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
               placeholder="Enter password"
             />
           </div>
@@ -69,15 +69,15 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-[#171717] py-2 text-sm font-medium text-white transition hover:bg-[#333] disabled:opacity-50"
+            className="w-full rounded-md bg-[#0F172B] py-2 text-sm font-medium text-white transition hover:bg-[#1D293D] disabled:opacity-50"
           >
             {loading ? 'Signing in...' : 'Continue'}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-[#999]">
+        <p className="mt-6 text-center text-sm text-[#90A1B9]">
           Don't have an account?{' '}
-          <Link to="/signup" className="text-[#0070F3] hover:underline">
+          <Link to="/signup" className="text-[#2962FF] hover:underline">
             Sign up
           </Link>
         </p>

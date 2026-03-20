@@ -12,7 +12,7 @@ export default function ChannelSidebar({ channels, activeId, onSelect, onCreateC
         <h2 className="font-[family-name:var(--font-mono)] text-xs font-medium uppercase tracking-[0.12em] text-[#666666]">Channels</h2>
         <button
           onClick={onCreateChannel}
-          className="text-[#999999] transition hover:text-[#171717]"
+          className="text-[#999999] transition hover:text-[#0F172B]"
           title="Create channel"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -27,8 +27,8 @@ export default function ChannelSidebar({ channels, activeId, onSelect, onCreateC
             onClick={() => onSelect(ch.id)}
             className={`mb-0.5 flex w-full items-center rounded-md px-3 py-1.5 text-left text-sm transition ${
               activeId === ch.id
-                ? 'bg-[#f5f5f5] text-[#171717]'
-                : 'text-[#666666] hover:bg-[#fafafa] hover:text-[#171717]'
+                ? 'bg-[#F8FAFC] text-[#0F172B]'
+                : 'text-[#666666] hover:bg-[#F1F5F9] hover:text-[#0F172B]'
             }`}
           >
             <span className="mr-2 text-[#999999]">#</span>

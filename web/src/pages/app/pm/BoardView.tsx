@@ -24,9 +24,9 @@ function TaskCard({ task, statuses }: { task: Task; statuses: SpaceStatus[] }) {
   return (
     <div
       onClick={() => setActiveTask(task.id)}
-      className="mb-2 cursor-pointer rounded-lg border border-[#eaeaea] bg-[#fafafa] p-3 transition hover:border-[#d9d9d9] hover:bg-[#f5f5f5]/60"
+      className="mb-2 cursor-pointer rounded-lg border border-[#E2E8F0] bg-[#F1F5F9] p-3 transition hover:border-[#CAD5E2] hover:bg-[#F8FAFC]/60"
     >
-      <p className="mb-2 text-sm text-[#171717]">{task.title}</p>
+      <p className="mb-2 text-sm text-[#0F172B]">{task.title}</p>
       <div className="flex flex-wrap items-center gap-2">
         <TaskPriorityBadge priority={task.priority} />
         {due && <span className={`text-xs ${due.color}`}>{due.text}</span>}
@@ -35,7 +35,7 @@ function TaskCard({ task, statuses }: { task: Task; statuses: SpaceStatus[] }) {
             {task.assignees.slice(0, 3).map((u: any) => (
               <div
                 key={u.id}
-                className="flex h-5 w-5 items-center justify-center rounded-full bg-[#eaeaea] text-[10px] font-medium text-[#171717] ring-1 ring-white"
+                className="flex h-5 w-5 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#0F172B] ring-1 ring-white"
                 title={u.display_name || u.email}
               >
                 {(u.display_name || u.email)?.[0]?.toUpperCase()}
@@ -89,7 +89,7 @@ function BoardColumn({
     <div
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className="flex w-72 shrink-0 flex-col rounded-lg bg-[#fafafa]/60"
+      className="flex w-72 shrink-0 flex-col rounded-lg bg-[#F1F5F9]/60"
     >
       {/* Column header */}
       <div className="flex items-center gap-2 px-3 py-3">
@@ -128,13 +128,13 @@ function BoardColumn({
               }}
               onBlur={handleAdd}
               placeholder="Task name..."
-              className="w-full rounded-lg border border-[#d9d9d9] bg-[#f5f5f5] px-3 py-2 text-sm text-[#171717] placeholder-[#999999] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
+              className="w-full rounded-lg border border-[#CAD5E2] bg-[#F8FAFC] px-3 py-2 text-sm text-[#0F172B] placeholder-[#999999] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
             />
           </div>
         ) : (
           <button
             onClick={() => setAddingTask(true)}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-[#999999] transition hover:bg-[#f5f5f5]/50 hover:text-[#171717]"
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-[#999999] transition hover:bg-[#F8FAFC]/50 hover:text-[#0F172B]"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

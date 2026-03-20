@@ -91,16 +91,16 @@ function EditUserSlider({
 
       {/* Slider panel */}
       <div
-        className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-[#eaeaea] bg-white shadow-2xl transition-transform duration-200 ${
+        className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-[#E2E8F0] bg-white shadow-2xl transition-transform duration-200 ${
           visible ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#eaeaea] px-6 py-4">
-          <h3 className="font-[family-name:var(--font-display)] text-lg font-semibold text-[#171717]">Edit User</h3>
+        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
+          <h3 className="font-[family-name:var(--font-display)] text-lg font-semibold text-[#0F172B]">Edit User</h3>
           <button
             onClick={close}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-[#999] transition hover:bg-[#f5f5f5] hover:text-[#171717]"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-[#90A1B9] transition hover:bg-[#F8FAFC] hover:text-[#0F172B]"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -112,22 +112,22 @@ function EditUserSlider({
         <div className="flex-1 overflow-y-auto p-6">
           {/* Avatar + Status */}
           <div className="mb-6 flex items-center gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#eaeaea] text-xl font-semibold text-[#171717]">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-xl font-semibold text-[#0F172B]">
               {user.display_name[0]?.toUpperCase() || '?'}
             </div>
             <div>
-              <p className="text-base font-medium text-[#171717]">{user.display_name}</p>
+              <p className="text-base font-medium text-[#0F172B]">{user.display_name}</p>
               <div className="mt-0.5 flex items-center gap-2">
                 <span className={`inline-block rounded-full px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] font-medium ${
                   user.role === 'admin'
                     ? 'bg-amber-50 text-amber-600'
                     : user.role === 'banned'
                     ? 'bg-red-50 text-red-600'
-                    : 'bg-[#f5f5f5] text-[#666]'
+                    : 'bg-[#F8FAFC] text-[#62748E]'
                 }`}>
                   {user.role}
                 </span>
-                <span className="font-[family-name:var(--font-mono)] text-xs text-[#999]">
+                <span className="font-[family-name:var(--font-mono)] text-xs text-[#90A1B9]">
                   Joined {new Date(user.created_at).toLocaleDateString()}
                 </span>
               </div>
@@ -137,30 +137,30 @@ function EditUserSlider({
           <div className="space-y-5">
             {/* Display Name */}
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-[#666]">Display Name</label>
+              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Display Name</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 maxLength={50}
-                className="w-full rounded-md border border-[#d9d9d9] bg-white px-3 py-2.5 text-sm text-[#171717] placeholder-[#999] outline-none transition focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
+                className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2.5 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
               />
             </div>
 
             {/* Email */}
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-[#666]">Email</label>
+              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-md border border-[#d9d9d9] bg-white px-3 py-2.5 text-sm text-[#171717] placeholder-[#999] outline-none transition focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
+                className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2.5 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
               />
             </div>
 
             {/* Custom Role */}
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-[#666]">Role</label>
+              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Role</label>
               {roles.length > 0 ? (
                 <div className="space-y-1.5">
                   {roles.map((role) => (
@@ -170,8 +170,8 @@ function EditUserSlider({
                       onClick={() => setRoleId(role.id)}
                       className={`flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left text-sm transition ${
                         roleId === role.id
-                          ? 'border-[#0070F3] bg-[#f5f5f5] text-[#171717]'
-                          : 'border-[#eaeaea] bg-white text-[#666] hover:border-[#d9d9d9] hover:text-[#171717]'
+                          ? 'border-[#2962FF] bg-[#F8FAFC] text-[#0F172B]'
+                          : 'border-[#E2E8F0] bg-white text-[#62748E] hover:border-[#CAD5E2] hover:text-[#0F172B]'
                       }`}
                     >
                       <span
@@ -180,7 +180,7 @@ function EditUserSlider({
                       />
                       <span className="font-medium">{role.name}</span>
                       {role.is_default && (
-                        <span className="ml-auto rounded-full bg-[#f5f5f5] px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] text-[#999]">
+                        <span className="ml-auto rounded-full bg-[#F8FAFC] px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] text-[#90A1B9]">
                           Default
                         </span>
                       )}
@@ -188,7 +188,7 @@ function EditUserSlider({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-[#999]">
+                <p className="text-xs text-[#90A1B9]">
                   {user.status === 'pending' ? 'User is pending approval' : 'No roles available'}
                 </p>
               )}
@@ -196,18 +196,18 @@ function EditUserSlider({
 
             {/* Platform Role */}
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-[#666]">Platform Access</label>
-              <div className="rounded-md border border-[#eaeaea] bg-[#fafafa] px-3 py-2.5">
+              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Platform Access</label>
+              <div className="rounded-md border border-[#E2E8F0] bg-[#F1F5F9] px-3 py-2.5">
                 <span className={`inline-block rounded-full px-2.5 py-0.5 font-[family-name:var(--font-mono)] text-xs font-medium ${
                   user.role === 'admin'
                     ? 'bg-amber-50 text-amber-600'
                     : user.role === 'banned'
                     ? 'bg-red-50 text-red-600'
-                    : 'bg-[#f5f5f5] text-[#666]'
+                    : 'bg-[#F8FAFC] text-[#62748E]'
                 }`}>
                   {user.role}
                 </span>
-                <p className="mt-1 text-[11px] text-[#999]">
+                <p className="mt-1 text-[11px] text-[#90A1B9]">
                   Use the actions in the table to change platform role (admin/member) or ban/unban.
                 </p>
               </div>
@@ -223,17 +223,17 @@ function EditUserSlider({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-[#eaeaea] px-6 py-4">
+        <div className="flex items-center justify-end gap-3 border-t border-[#E2E8F0] px-6 py-4">
           <button
             onClick={close}
-            className="rounded-md border border-[#d9d9d9] px-4 py-2 text-sm text-[#666] transition hover:border-[#999] hover:text-[#171717]"
+            className="rounded-md border border-[#CAD5E2] px-4 py-2 text-sm text-[#62748E] transition hover:border-[#90A1B9] hover:text-[#0F172B]"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={isSaving || !name.trim()}
-            className="rounded-md bg-[#171717] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#333] disabled:opacity-50"
+            className="rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1D293D] disabled:opacity-50"
           >
             {isSaving ? 'Saving...' : 'Save Changes'}
           </button>
@@ -285,15 +285,15 @@ function UserRow({
   const date = new Date(user.created_at).toLocaleDateString();
 
   return (
-    <tr className="border-t border-[#eaeaea] hover:bg-[#fafafa]">
+    <tr className="border-t border-[#E2E8F0] hover:bg-[#F1F5F9]">
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#eaeaea] text-sm font-medium text-[#171717]">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-sm font-medium text-[#0F172B]">
             {user.display_name[0]?.toUpperCase() || '?'}
           </div>
           <div>
-            <p className="text-sm font-medium text-[#171717]">{user.display_name}</p>
-            <p className="text-xs text-[#999]">{user.email}</p>
+            <p className="text-sm font-medium text-[#0F172B]">{user.display_name}</p>
+            <p className="text-xs text-[#90A1B9]">{user.email}</p>
           </div>
         </div>
       </td>
@@ -303,7 +303,7 @@ function UserRow({
             ? 'bg-amber-50 text-amber-600'
             : user.role === 'banned'
             ? 'bg-red-50 text-red-600'
-            : 'bg-[#f5f5f5] text-[#666]'
+            : 'bg-[#F8FAFC] text-[#62748E]'
         }`}>
           {user.role}
         </span>
@@ -315,18 +315,18 @@ function UserRow({
               className="inline-block h-2.5 w-2.5 rounded-full"
               style={{ backgroundColor: user.custom_role.color }}
             />
-            <span className="text-xs text-[#171717]">{user.custom_role.name}</span>
+            <span className="text-xs text-[#0F172B]">{user.custom_role.name}</span>
           </div>
         ) : (
-          <span className="text-xs text-[#999]">{user.status === 'pending' ? 'Pending' : '—'}</span>
+          <span className="text-xs text-[#90A1B9]">{user.status === 'pending' ? 'Pending' : '—'}</span>
         )}
       </td>
-      <td className="px-4 py-3 font-[family-name:var(--font-mono)] text-sm text-[#666]">{date}</td>
+      <td className="px-4 py-3 font-[family-name:var(--font-mono)] text-sm text-[#62748E]">{date}</td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
           <button
             onClick={() => onEdit(user)}
-            className="rounded-md border border-[#d9d9d9] bg-transparent px-2.5 py-1 text-xs text-[#666] hover:border-[#999] hover:text-[#171717]"
+            className="rounded-md border border-[#CAD5E2] bg-transparent px-2.5 py-1 text-xs text-[#62748E] hover:border-[#90A1B9] hover:text-[#0F172B]"
           >
             Edit
           </button>
@@ -336,7 +336,7 @@ function UserRow({
                 <button
                   onClick={() => roleMutation.mutate(user.role === 'admin' ? 'member' : 'admin')}
                   disabled={roleMutation.isPending}
-                  className="rounded-md border border-[#d9d9d9] bg-transparent px-2.5 py-1 text-xs text-[#666] hover:border-[#999] hover:text-[#171717] disabled:opacity-50"
+                  className="rounded-md border border-[#CAD5E2] bg-transparent px-2.5 py-1 text-xs text-[#62748E] hover:border-[#90A1B9] hover:text-[#0F172B] disabled:opacity-50"
                 >
                   {user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
                 </button>
@@ -361,7 +361,7 @@ function UserRow({
               </button>
             </>
           )}
-          {isSelf && <span className="text-xs text-[#999]">You</span>}
+          {isSelf && <span className="text-xs text-[#90A1B9]">You</span>}
         </div>
       </td>
     </tr>
@@ -400,31 +400,31 @@ export default function AdminUsers() {
   return (
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[#171717]">Users ({total})</h2>
+        <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[#0F172B]">Users ({total})</h2>
         <input
           type="text"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           placeholder="Search by name or email..."
-          className="w-full rounded-md border border-[#d9d9d9] bg-white px-3 py-2 text-sm text-[#171717] placeholder-[#999] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3] sm:w-72"
+          className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF] sm:w-72"
         />
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-[#eaeaea] bg-white">
+      <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
         {isLoading ? (
-          <p className="py-8 text-center text-sm text-[#999]">Loading users...</p>
+          <p className="py-8 text-center text-sm text-[#90A1B9]">Loading users...</p>
         ) : users.length === 0 ? (
-          <p className="py-8 text-center text-sm text-[#999]">No users found</p>
+          <p className="py-8 text-center text-sm text-[#90A1B9]">No users found</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-[#eaeaea] bg-[#fafafa]">
-                  <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">User</th>
-                  <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Platform</th>
-                  <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Role</th>
-                  <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Joined</th>
-                  <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Actions</th>
+                <tr className="border-b border-[#E2E8F0] bg-[#F1F5F9]">
+                  <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">User</th>
+                  <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Platform</th>
+                  <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Role</th>
+                  <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Joined</th>
+                  <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -444,19 +444,19 @@ export default function AdminUsers() {
         )}
 
         {totalPages > 1 && (
-          <div className="mt-4 flex items-center justify-center gap-2 border-t border-[#eaeaea] px-4 py-3">
+          <div className="mt-4 flex items-center justify-center gap-2 border-t border-[#E2E8F0] px-4 py-3">
             <button
               onClick={() => setPage(Math.max(1, page - 1))}
               disabled={page <= 1}
-              className="rounded-md border border-[#d9d9d9] bg-transparent px-3 py-1.5 text-sm text-[#666] hover:border-[#999] hover:text-[#171717] disabled:opacity-40"
+              className="rounded-md border border-[#CAD5E2] bg-transparent px-3 py-1.5 text-sm text-[#62748E] hover:border-[#90A1B9] hover:text-[#0F172B] disabled:opacity-40"
             >
               Previous
             </button>
-            <span className="font-[family-name:var(--font-mono)] text-sm text-[#666]">Page {page} of {totalPages}</span>
+            <span className="font-[family-name:var(--font-mono)] text-sm text-[#62748E]">Page {page} of {totalPages}</span>
             <button
               onClick={() => setPage(Math.min(totalPages, page + 1))}
               disabled={page >= totalPages}
-              className="rounded-md border border-[#d9d9d9] bg-transparent px-3 py-1.5 text-sm text-[#666] hover:border-[#999] hover:text-[#171717] disabled:opacity-40"
+              className="rounded-md border border-[#CAD5E2] bg-transparent px-3 py-1.5 text-sm text-[#62748E] hover:border-[#90A1B9] hover:text-[#0F172B] disabled:opacity-40"
             >
               Next
             </button>

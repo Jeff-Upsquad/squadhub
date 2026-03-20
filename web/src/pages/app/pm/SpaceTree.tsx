@@ -28,8 +28,8 @@ function ListItem({ list, depth = 0 }: { list: List; depth?: number }) {
       onClick={() => setActiveList(list.id)}
       className={`flex w-full items-center gap-2 rounded-md py-1 text-left text-[13px] transition ${
         isActive
-          ? 'bg-[#f5f5f5] text-[#171717]'
-          : 'text-[#666666] hover:bg-[#f5f5f5]'
+          ? 'bg-[#F8FAFC] text-[#0F172B]'
+          : 'text-[#666666] hover:bg-[#F8FAFC]'
       }`}
       style={{ paddingLeft: `${12 + depth * 16}px` }}
     >
@@ -60,7 +60,7 @@ function FolderItem({ folder, spaceId }: { folder: Folder; spaceId: string }) {
       <div className="group flex items-center">
         <button
           onClick={() => setOpen(!open)}
-          className="flex flex-1 items-center gap-1.5 rounded-md px-3 py-1 text-left text-[13px] text-[#666666] hover:bg-[#f5f5f5]"
+          className="flex flex-1 items-center gap-1.5 rounded-md px-3 py-1 text-left text-[13px] text-[#666666] hover:bg-[#F8FAFC]"
         >
           <ChevronIcon open={open} />
           <svg className="h-3.5 w-3.5 shrink-0 text-yellow-500/70" fill="currentColor" viewBox="0 0 24 24">
@@ -70,7 +70,7 @@ function FolderItem({ folder, spaceId }: { folder: Folder; spaceId: string }) {
         </button>
         <button
           onClick={() => setAdding(true)}
-          className="mr-2 hidden text-[#999999] hover:text-[#171717] group-hover:block"
+          className="mr-2 hidden text-[#999999] hover:text-[#0F172B] group-hover:block"
           title="Add list"
         >
           <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -92,7 +92,7 @@ function FolderItem({ folder, spaceId }: { folder: Folder; spaceId: string }) {
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setAdding(false); }}
                 onBlur={handleAdd}
                 placeholder="List name..."
-                className="w-full rounded border border-[#d9d9d9] bg-[#f5f5f5] px-2 py-0.5 text-xs text-[#171717] placeholder-[#999999] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
+                className="w-full rounded border border-[#CAD5E2] bg-[#F8FAFC] px-2 py-0.5 text-xs text-[#0F172B] placeholder-[#999999] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
               />
             </div>
           )}
@@ -146,8 +146,8 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
           onClick={() => { setOpen(!open); if (!open) handleSelect(); }}
           className={`flex flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm font-medium transition ${
             isActive && open
-              ? 'text-[#171717]'
-              : 'text-[#666666] hover:bg-[#f5f5f5]'
+              ? 'text-[#0F172B]'
+              : 'text-[#666666] hover:bg-[#F8FAFC]'
           }`}
         >
           <ChevronIcon open={open} />
@@ -162,7 +162,7 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
         <div className="mr-2 hidden gap-0.5 group-hover:flex">
           <button
             onClick={() => setAddingFolder(true)}
-            className="rounded p-0.5 text-[#999999] hover:text-[#171717]"
+            className="rounded p-0.5 text-[#999999] hover:text-[#0F172B]"
             title="Add folder"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -171,7 +171,7 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
           </button>
           <button
             onClick={() => setAddingList(true)}
-            className="rounded p-0.5 text-[#999999] hover:text-[#171717]"
+            className="rounded p-0.5 text-[#999999] hover:text-[#0F172B]"
             title="Add list"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -203,7 +203,7 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddFolder(); if (e.key === 'Escape') setAddingFolder(false); }}
                 onBlur={handleAddFolder}
                 placeholder="Folder name..."
-                className="w-full rounded border border-[#d9d9d9] bg-[#f5f5f5] px-2 py-0.5 text-xs text-[#171717] placeholder-[#999999] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
+                className="w-full rounded border border-[#CAD5E2] bg-[#F8FAFC] px-2 py-0.5 text-xs text-[#0F172B] placeholder-[#999999] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
               />
             </div>
           )}
@@ -218,7 +218,7 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddList(); if (e.key === 'Escape') setAddingList(false); }}
                 onBlur={handleAddList}
                 placeholder="List name..."
-                className="w-full rounded border border-[#d9d9d9] bg-[#f5f5f5] px-2 py-0.5 text-xs text-[#171717] placeholder-[#999999] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
+                className="w-full rounded border border-[#CAD5E2] bg-[#F8FAFC] px-2 py-0.5 text-xs text-[#0F172B] placeholder-[#999999] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
               />
             </div>
           )}
@@ -236,10 +236,10 @@ export default function SpaceTree({ workspaceId }: { workspaceId: string }) {
   return (
     <div className="flex h-full w-full flex-col">
       <div className="flex items-center justify-between px-4 py-3">
-        <h2 className="text-sm font-semibold text-[#171717] font-[family-name:var(--font-display)]">Spaces</h2>
+        <h2 className="text-sm font-semibold text-[#0F172B] font-[family-name:var(--font-display)]">Spaces</h2>
         <button
           onClick={() => setShowCreate(true)}
-          className="text-lg text-[#666666] hover:text-[#171717]"
+          className="text-lg text-[#666666] hover:text-[#0F172B]"
           title="Create space"
         >
           +
@@ -255,7 +255,7 @@ export default function SpaceTree({ workspaceId }: { workspaceId: string }) {
             <p className="text-xs text-[#999999]">No spaces yet</p>
             <button
               onClick={() => setShowCreate(true)}
-              className="mt-2 text-xs font-medium text-[#171717] hover:text-[#0070F3]"
+              className="mt-2 text-xs font-medium text-[#0F172B] hover:text-[#2962FF]"
             >
               Create your first space
             </button>
