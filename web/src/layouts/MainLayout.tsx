@@ -238,8 +238,8 @@ export default function MainLayout() {
       {/* Module sidebar */}
       {currentWorkspace && (
         <div
-          className={`flex h-full shrink-0 flex-col border-r border-[#E2E8F0] bg-white transition-[width] duration-200 ease-in-out ${
-            sidebarOpen ? 'w-60' : 'w-0 overflow-hidden border-r-0'
+          className={`flex h-full shrink-0 flex-col bg-white transition-[width] duration-200 ease-in-out ${
+            sidebarOpen ? 'w-60' : 'w-0 overflow-hidden'
           }`}
         >
           {activeSection === 'home' ? (
@@ -266,8 +266,8 @@ export default function MainLayout() {
         </div>
       )}
 
-      {/* Main content area — rounded floating panel */}
-      <div className="my-3 mr-3 flex flex-1 flex-col overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white">
+      {/* Main content area — rounded left-side panel */}
+      <div className="my-2 mr-0 flex flex-1 flex-col overflow-hidden rounded-l-2xl border-l border-t border-b border-[#E2E8F0] bg-white">
         {activeSection === 'home' ? (
           homeView === 'chat' ? (
             <>
