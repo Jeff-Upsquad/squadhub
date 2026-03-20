@@ -20,6 +20,7 @@ import pmSpaceRoutes from './routes/pm/spaces';
 import pmFolderRoutes from './routes/pm/folders';
 import pmListRoutes from './routes/pm/lists';
 import pmTaskRoutes from './routes/pm/tasks';
+import favoritesRoutes from './routes/favorites';
 
 // Validate env vars before starting
 validateConfig();
@@ -61,6 +62,7 @@ app.use('/pm', pmSpaceRoutes);
 app.use('/pm', pmFolderRoutes);
 app.use('/pm', pmListRoutes);
 app.use('/pm', pmTaskRoutes);
+app.use('/favorites', favoritesRoutes);
 
 // 404 handler
 app.use((_req, res) => {

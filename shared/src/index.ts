@@ -228,6 +228,19 @@ export interface Notification {
   created_at: string;
 }
 
+// ---- Favorites ----
+export type FavoriteItemType = 'channel' | 'list' | 'folder' | 'space';
+
+export interface Favorite {
+  id: string;
+  user_id: string;
+  workspace_id: string;
+  item_type: FavoriteItemType;
+  item_id: string;
+  created_at: string;
+  item_name?: string;
+}
+
 // ---- Socket.io Events ----
 export interface ServerToClientEvents {
   new_message: (message: Message) => void;

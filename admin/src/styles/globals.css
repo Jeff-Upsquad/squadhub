@@ -22,14 +22,14 @@
   --color-sidebar-text-bright: #171717;
 
   /* Font families */
-  --font-display: 'Plus Jakarta Sans', sans-serif;
-  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'Sometype Mono', monospace;
+  --font-display: 'Geist', sans-serif;
+  --font-body: 'Geist', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', monospace;
 }
 
 /* Base */
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Geist', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.011em;

@@ -23,6 +23,7 @@ export default defineConfig({
       '/users': 'http://localhost:4000',
       '/admin': 'http://localhost:4000',
       '/pm': 'http://localhost:4000',
+      '/favorites': 'http://localhost:4000',
       '/health': 'http://localhost:4000',
       '/socket.io': {
         target: 'http://localhost:4000',
