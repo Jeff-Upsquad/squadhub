@@ -201,8 +201,21 @@ export interface Role {
 }
 
 export interface RolePermissions {
-  can_manage_channels: boolean;
+  // Channel & Structure
+  can_create_channels: boolean;
+  can_create_lists: boolean;
+  can_create_folders: boolean;
+  can_create_spaces: boolean;
+  // Archive Controls
+  can_archive_lists: boolean;
+  can_archive_spaces: boolean;
+  can_archive_folders: boolean;
+  // Message Controls
   can_delete_messages: boolean;
+  can_edit_messages: boolean;
+  can_send_dms: boolean;
+  // Administration
+  can_manage_channels: boolean;
   can_manage_members: boolean;
   can_manage_tasks: boolean;
   can_manage_roles: boolean;

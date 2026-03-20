@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import type { Role, RolePermissions } from '@squadhub/shared';
@@ -7,31 +7,168 @@ interface RoleWithCount extends Role {
   member_count: number;
 }
 
-const DEFAULT_PERMISSIONS: RolePermissions = {
-  can_manage_channels: false,
-  can_delete_messages: false,
-  can_manage_members: false,
-  can_manage_tasks: false,
-  can_manage_roles: false,
-  can_view_admin_panel: false,
-  can_manage_workspace: false,
-};
+// ---- Permission schema ----
+interface PermissionDef {
+  key: string;
+  label: string;
+  description: string;
+}
 
-const PERMISSION_LABELS: Record<string, string> = {
-  can_manage_channels: 'Manage Channels',
-  can_delete_messages: 'Delete Messages',
-  can_manage_members: 'Manage Members',
-  can_manage_tasks: 'Manage Tasks',
-  can_manage_roles: 'Manage Roles',
-  can_view_admin_panel: 'View Admin Panel',
-  can_manage_workspace: 'Manage Workspace',
-};
+interface PermissionGroup {
+  id: string;
+  title: string;
+  icon: React.ReactNode;
+  permissions: PermissionDef[];
+}
+
+const PERMISSION_GROUPS: PermissionGroup[] = [
+  {
+    id: 'structure',
+    title: 'Channel & Structure',
+    icon: (
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h6c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-6A1.125 1.125 0 012.25 10.875v-3.75zM14.25 8.625c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-8.25zM3.75 16.125c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-2.25z" />
+      </svg>
+    ),
+    permissions: [
+      { key: 'can_create_channels', label: 'Create Channels', description: 'Create new channels in workspaces' },
+      { key: 'can_create_lists', label: 'Create Lists', description: 'Create new task lists in spaces' },
+      { key: 'can_create_folders', label: 'Create Folders', description: 'Create folders to organize lists' },
+      { key: 'can_create_spaces', label: 'Create Spaces', description: 'Create new project spaces' },
+    ],
+  },
+  {
+    id: 'archive',
+    title: 'Archive Controls',
+    icon: (
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+      </svg>
+    ),
+    permissions: [
+      { key: 'can_archive_lists', label: 'Archive Lists', description: 'Archive and restore task lists' },
+      { key: 'can_archive_spaces', label: 'Archive Spaces', description: 'Archive and restore project spaces' },
+      { key: 'can_archive_folders', label: 'Archive Folders', description: 'Archive and restore folders' },
+    ],
+  },
+  {
+    id: 'messages',
+    title: 'Message Controls',
+    icon: (
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+      </svg>
+    ),
+    permissions: [
+      { key: 'can_delete_messages', label: 'Delete Messages', description: "Delete any member's messages" },
+      { key: 'can_edit_messages', label: 'Edit Messages', description: "Edit any member's messages" },
+      { key: 'can_send_dms', label: 'Send Direct Messages', description: 'Send private messages to other members' },
+    ],
+  },
+  {
+    id: 'admin',
+    title: 'Administration',
+    icon: (
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    ),
+    permissions: [
+      { key: 'can_manage_channels', label: 'Manage Channels', description: 'Edit and delete channels, change settings' },
+      { key: 'can_manage_members', label: 'Manage Members', description: 'Invite, remove, and manage workspace members' },
+      { key: 'can_manage_tasks', label: 'Manage Tasks', description: 'Edit and delete any tasks in the workspace' },
+      { key: 'can_manage_roles', label: 'Manage Roles', description: 'Create, edit, and delete roles' },
+      { key: 'can_view_admin_panel', label: 'View Admin Panel', description: 'Access the workspace admin dashboard' },
+      { key: 'can_manage_workspace', label: 'Manage Workspace', description: 'Full workspace settings and configuration access' },
+    ],
+  },
+];
+
+const ALL_PERMISSION_KEYS = PERMISSION_GROUPS.flatMap((g) => g.permissions.map((p) => p.key));
+
+const DEFAULT_PERMISSIONS: RolePermissions = Object.fromEntries(
+  ALL_PERMISSION_KEYS.map((k) => [k, false]),
+) as unknown as RolePermissions;
 
 const PRESET_COLORS = ['#22c55e', '#a855f7', '#3b82f6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#888888'];
 
+// ---- Toggle switch ----
+function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onChange}
+      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+        checked ? 'bg-[#0070F3]' : 'bg-[#d9d9d9]'
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+          checked ? 'translate-x-4' : 'translate-x-0.5'
+        }`}
+      />
+    </button>
+  );
+}
+
+// ---- Permission group component ----
+function PermissionGroupPanel({
+  group,
+  permissions,
+  onToggle,
+  onSelectAll,
+  onDeselectAll,
+}: {
+  group: PermissionGroup;
+  permissions: RolePermissions;
+  onToggle: (key: string) => void;
+  onSelectAll: (keys: string[]) => void;
+  onDeselectAll: (keys: string[]) => void;
+}) {
+  const keys = group.permissions.map((p) => p.key);
+  const enabledCount = keys.filter((k) => permissions[k]).length;
+  const allEnabled = enabledCount === keys.length;
+
+  return (
+    <div className="rounded-lg border border-[#eaeaea] bg-white">
+      {/* Group header */}
+      <div className="flex items-center justify-between border-b border-[#eaeaea] bg-[#fafafa] px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <span className="text-[#666]">{group.icon}</span>
+          <h4 className="text-sm font-semibold text-[#171717]">{group.title}</h4>
+          <span className="rounded-full bg-[#f0f0f0] px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] font-medium text-[#666]">
+            {enabledCount}/{keys.length}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => (allEnabled ? onDeselectAll(keys) : onSelectAll(keys))}
+          className="font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.08em] text-[#0070F3] transition hover:text-[#005bb5]"
+        >
+          {allEnabled ? 'Deselect All' : 'Select All'}
+        </button>
+      </div>
+      {/* Permission rows */}
+      <div className="divide-y divide-[#f0f0f0]">
+        {group.permissions.map((perm) => (
+          <div key={perm.key} className="flex items-center justify-between px-4 py-3">
+            <div className="mr-4">
+              <p className="text-sm font-medium text-[#171717]">{perm.label}</p>
+              <p className="mt-0.5 text-xs text-[#999]">{perm.description}</p>
+            </div>
+            <Toggle checked={!!permissions[perm.key]} onChange={() => onToggle(perm.key)} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---- Main ----
 export default function AdminRoles() {
   const queryClient = useQueryClient();
-  const [showModal, setShowModal] = useState(false);
+  const [showPanel, setShowPanel] = useState(false);
   const [editingRole, setEditingRole] = useState<RoleWithCount | null>(null);
   const [formError, setFormError] = useState('');
 
@@ -57,11 +194,9 @@ export default function AdminRoles() {
       api.post('/admin/roles', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-roles'] });
-      closeModal();
+      closePanel();
     },
-    onError: (err) => {
-      setFormError(getErrorMessage(err));
-    },
+    onError: (err) => setFormError(getErrorMessage(err)),
   });
 
   const updateMutation = useMutation({
@@ -69,11 +204,9 @@ export default function AdminRoles() {
       api.put(`/admin/roles/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-roles'] });
-      closeModal();
+      closePanel();
     },
-    onError: (err) => {
-      setFormError(getErrorMessage(err));
-    },
+    onError: (err) => setFormError(getErrorMessage(err)),
   });
 
   const deleteMutation = useMutation({
@@ -84,13 +217,20 @@ export default function AdminRoles() {
     },
   });
 
+  // Permission stats
+  const totalPermissions = ALL_PERMISSION_KEYS.length;
+  const enabledPermissions = useMemo(
+    () => ALL_PERMISSION_KEYS.filter((k) => formPermissions[k]).length,
+    [formPermissions],
+  );
+
   const openCreate = () => {
     setEditingRole(null);
     setFormName('');
     setFormColor('#22c55e');
     setFormPermissions({ ...DEFAULT_PERMISSIONS });
     setFormError('');
-    setShowModal(true);
+    setShowPanel(true);
   };
 
   const openEdit = (role: RoleWithCount) => {
@@ -99,11 +239,11 @@ export default function AdminRoles() {
     setFormColor(role.color);
     setFormPermissions({ ...DEFAULT_PERMISSIONS, ...role.permissions });
     setFormError('');
-    setShowModal(true);
+    setShowPanel(true);
   };
 
-  const closeModal = () => {
-    setShowModal(false);
+  const closePanel = () => {
+    setShowPanel(false);
     setEditingRole(null);
     setFormError('');
   };
@@ -130,12 +270,32 @@ export default function AdminRoles() {
     setFormPermissions((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const selectAll = (keys: string[]) => {
+    setFormPermissions((prev) => {
+      const next = { ...prev };
+      keys.forEach((k) => { next[k] = true; });
+      return next;
+    });
+  };
+
+  const deselectAll = (keys: string[]) => {
+    setFormPermissions((prev) => {
+      const next = { ...prev };
+      keys.forEach((k) => { next[k] = false; });
+      return next;
+    });
+  };
+
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <div>
+    <div className="relative">
+      {/* Header */}
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[#171717]">Roles</h2>
+        <div>
+          <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[#171717]">Roles</h2>
+          <p className="mt-1 text-sm text-[#666]">Manage roles and their permissions for this workspace.</p>
+        </div>
         <button
           onClick={openCreate}
           className="rounded-md bg-[#171717] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#333]"
@@ -144,10 +304,16 @@ export default function AdminRoles() {
         </button>
       </div>
 
+      {/* Roles table */}
       {isLoading ? (
         <p className="text-sm text-[#666]">Loading...</p>
       ) : roles.length === 0 ? (
-        <p className="text-sm text-[#666]">No roles found.</p>
+        <div className="rounded-lg border border-[#eaeaea] bg-[#fafafa] px-6 py-12 text-center">
+          <svg className="mx-auto h-10 w-10 text-[#d9d9d9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+          </svg>
+          <p className="mt-3 text-sm text-[#666]">No roles yet. Create your first role to get started.</p>
+        </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-[#eaeaea] bg-white">
           <table className="w-full">
@@ -161,40 +327,40 @@ export default function AdminRoles() {
             </thead>
             <tbody>
               {roles.map((role) => {
-                const enabledPerms = Object.entries(role.permissions || {})
-                  .filter(([, v]) => v)
-                  .map(([k]) => PERMISSION_LABELS[k] || k);
-
+                const enabledPerms = ALL_PERMISSION_KEYS.filter((k) => role.permissions?.[k]);
                 return (
-                  <tr key={role.id} className="border-b border-[#eaeaea] last:border-b-0">
+                  <tr
+                    key={role.id}
+                    onClick={() => openEdit(role)}
+                    className="cursor-pointer border-b border-[#eaeaea] transition hover:bg-[#fafafa] last:border-b-0"
+                  >
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="inline-block h-3 w-3 rounded-full"
-                          style={{ backgroundColor: role.color }}
-                        />
+                      <div className="flex items-center gap-2.5">
+                        <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: role.color }} />
                         <span className="text-sm font-medium text-[#171717]">{role.name}</span>
                         {role.is_default && (
                           <span className="rounded-full bg-[#f5f5f5] px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] text-[#666]">Default</span>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-[#666]">{role.member_count}</td>
                     <td className="px-4 py-3">
-                      {enabledPerms.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {enabledPerms.map((p) => (
-                            <span key={p} className="rounded bg-[#f5f5f5] px-1.5 py-0.5 font-[family-name:var(--font-mono)] text-[10px] text-[#666]">
-                              {p}
-                            </span>
-                          ))}
+                      <span className="text-sm text-[#666]">{role.member_count}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-[family-name:var(--font-mono)] text-xs text-[#666]">
+                          {enabledPerms.length} of {totalPermissions}
+                        </span>
+                        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-[#eaeaea]">
+                          <div
+                            className="h-full rounded-full bg-[#0070F3] transition-all"
+                            style={{ width: `${totalPermissions ? (enabledPerms.length / totalPermissions) * 100 : 0}%` }}
+                          />
                         </div>
-                      ) : (
-                        <span className="text-xs text-[#999]">None</span>
-                      )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => openEdit(role)}
                           className="rounded-md border border-[#d9d9d9] bg-transparent px-2.5 py-1 text-xs text-[#666] hover:border-[#999] hover:text-[#171717]"
@@ -220,100 +386,129 @@ export default function AdminRoles() {
         </div>
       )}
 
-      {/* Create / Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-lg border border-[#eaeaea] bg-white p-6 shadow-lg">
-            <h3 className="mb-4 font-[family-name:var(--font-display)] text-lg font-semibold text-[#171717]">
-              {editingRole ? 'Edit Role' : 'Create Role'}
-            </h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Name */}
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-[#666]">Name</label>
-                <input
-                  type="text"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  required
-                  maxLength={30}
-                  className="w-full rounded-md border border-[#d9d9d9] bg-white px-3 py-2 text-sm text-[#171717] placeholder-[#999] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
-                  placeholder="e.g. Designer"
-                />
-              </div>
+      {/* Slide-over panel */}
+      {showPanel && (
+        <>
+          {/* Backdrop */}
+          <div className="fixed inset-0 z-40 bg-black/30 transition-opacity" onClick={closePanel} />
 
-              {/* Color */}
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-[#666]">Color</label>
-                <div className="flex items-center gap-2">
-                  {PRESET_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setFormColor(c)}
-                      className={`h-7 w-7 rounded-full border-2 transition ${
-                        formColor === c ? 'border-[#171717]' : 'border-transparent hover:border-[#d9d9d9]'
-                      }`}
-                      style={{ backgroundColor: c }}
+          {/* Panel */}
+          <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-white shadow-xl">
+            {/* Panel header */}
+            <div className="flex items-center justify-between border-b border-[#eaeaea] px-6 py-4">
+              <div className="flex items-center gap-3">
+                {editingRole && (
+                  <span className="inline-block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: formColor }} />
+                )}
+                <h3 className="font-[family-name:var(--font-display)] text-lg font-semibold text-[#171717]">
+                  {editingRole ? 'Edit Role' : 'Create Role'}
+                </h3>
+              </div>
+              <button
+                onClick={closePanel}
+                className="rounded-md p-1.5 text-[#999] transition hover:bg-[#f5f5f5] hover:text-[#171717]"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Panel body - scrollable */}
+            <form onSubmit={handleSubmit} className="flex flex-1 flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                <div className="space-y-6">
+                  {/* Role name */}
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-[#666]">Role Name</label>
+                    <input
+                      type="text"
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      required
+                      maxLength={30}
+                      className="w-full rounded-md border border-[#d9d9d9] bg-white px-3 py-2 text-sm text-[#171717] placeholder-[#999] outline-none transition focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
+                      placeholder="e.g. Designer, Manager, Viewer"
                     />
-                  ))}
-                </div>
-              </div>
+                  </div>
 
-              {/* Permissions */}
-              <div>
-                <label className="mb-2 block text-xs font-medium text-[#666]">Permissions</label>
-                <div className="space-y-2">
-                  {Object.entries(PERMISSION_LABELS).map(([key, label]) => (
-                    <label key={key} className="flex items-center justify-between rounded-md border border-[#eaeaea] bg-[#fafafa] px-3 py-2">
-                      <span className="text-sm text-[#171717]">{label}</span>
-                      <button
-                        type="button"
-                        onClick={() => togglePermission(key)}
-                        className={`relative h-5 w-9 rounded-full transition ${
-                          formPermissions[key] ? 'bg-[#0070F3]' : 'bg-[#d9d9d9]'
-                        }`}
-                      >
-                        <span
-                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-                            formPermissions[key]
-                              ? 'translate-x-4'
-                              : 'translate-x-0.5'
+                  {/* Role color */}
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-[#666]">Color</label>
+                    <div className="flex items-center gap-2">
+                      {PRESET_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setFormColor(c)}
+                          className={`h-7 w-7 rounded-full border-2 transition ${
+                            formColor === c ? 'border-[#171717] scale-110' : 'border-transparent hover:border-[#d9d9d9]'
                           }`}
+                          style={{ backgroundColor: c }}
                         />
-                      </button>
-                    </label>
-                  ))}
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Permission summary */}
+                  <div className="flex items-center justify-between rounded-lg bg-[#fafafa] px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <svg className="h-4 w-4 text-[#0070F3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                      </svg>
+                      <span className="text-sm font-medium text-[#171717]">
+                        {enabledPermissions} of {totalPermissions} permissions enabled
+                      </span>
+                    </div>
+                    <div className="h-2 w-24 overflow-hidden rounded-full bg-[#eaeaea]">
+                      <div
+                        className="h-full rounded-full bg-[#0070F3] transition-all"
+                        style={{ width: `${totalPermissions ? (enabledPermissions / totalPermissions) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Permission groups */}
+                  <div className="space-y-4">
+                    {PERMISSION_GROUPS.map((group) => (
+                      <PermissionGroupPanel
+                        key={group.id}
+                        group={group}
+                        permissions={formPermissions}
+                        onToggle={togglePermission}
+                        onSelectAll={selectAll}
+                        onDeselectAll={deselectAll}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Error */}
-              {formError && (
-                <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
-                  {formError}
+              {/* Panel footer - sticky */}
+              <div className="border-t border-[#eaeaea] bg-white px-6 py-4">
+                {formError && (
+                  <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{formError}</div>
+                )}
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={closePanel}
+                    className="rounded-md border border-[#d9d9d9] px-4 py-2 text-sm text-[#666] transition hover:border-[#999] hover:text-[#171717]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving || !formName.trim()}
+                    className="rounded-md bg-[#171717] px-5 py-2 text-sm font-medium text-white transition hover:bg-[#333] disabled:opacity-50"
+                  >
+                    {isSaving ? 'Saving...' : editingRole ? 'Save Changes' : 'Create Role'}
+                  </button>
                 </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="rounded-md border border-[#d9d9d9] px-4 py-2 text-sm text-[#666] hover:border-[#999] hover:text-[#171717]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving || !formName.trim()}
-                  className="rounded-md bg-[#171717] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#333] disabled:opacity-50"
-                >
-                  {isSaving ? 'Saving...' : editingRole ? 'Save Changes' : 'Create Role'}
-                </button>
               </div>
             </form>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
