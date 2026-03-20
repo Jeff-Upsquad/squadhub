@@ -174,9 +174,9 @@ export default function MainLayout() {
   }
 
   return (
-    <div className="flex h-screen bg-[#F1F5F9] text-[#0F172B]">
-      {/* Far-left icon sidebar — grey shade with drop shadow */}
-      <div className="flex w-[68px] flex-col items-center bg-[#F1F5F9] pt-3 shadow-[2px_0_8px_rgba(0,0,0,0.06)]">
+    <div className="flex h-screen bg-[#F0F2F5] text-[#0F172B]">
+      {/* Far-left icon sidebar */}
+      <div className="flex w-[68px] shrink-0 flex-col items-center bg-[#F0F2F5] pt-3">
         <div className="flex flex-col items-center gap-0.5">
           {SECTIONS.map((section) => (
             <button
@@ -224,9 +224,9 @@ export default function MainLayout() {
         </div>
       </div>
 
-      {/* Module sidebar — white with drop shadow */}
+      {/* Module sidebar */}
       {currentWorkspace && (
-        <div className="flex h-full w-60 flex-col bg-white shadow-[2px_0_6px_rgba(0,0,0,0.04)]">
+        <div className="flex h-full w-60 shrink-0 flex-col border-r border-[#E2E8F0] bg-white">
           {activeSection === 'home' ? (
             <HomeSidebar
               workspaceId={currentWorkspace.id}
@@ -252,7 +252,7 @@ export default function MainLayout() {
       )}
 
       {/* Main content area — rounded floating panel */}
-      <div className="m-2 ml-0 flex flex-1 flex-col overflow-hidden rounded-xl bg-white shadow-sm">
+      <div className="my-3 mr-3 flex flex-1 flex-col overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white">
         {activeSection === 'home' ? (
           homeView === 'chat' ? (
             <>
