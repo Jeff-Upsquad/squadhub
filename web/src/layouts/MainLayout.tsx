@@ -251,8 +251,8 @@ export default function MainLayout() {
         </div>
       )}
 
-      {/* Main content area */}
-      <div className="flex flex-1 flex-col bg-white">
+      {/* Main content area — rounded floating panel */}
+      <div className="m-2 ml-0 flex flex-1 flex-col overflow-hidden rounded-xl bg-white shadow-sm">
         {activeSection === 'home' ? (
           homeView === 'chat' ? (
             <>
