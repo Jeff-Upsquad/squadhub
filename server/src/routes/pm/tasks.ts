@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
+import { checkResourceAccess, meetsAccessLevel, requirePermission } from '../../middleware/permissions';
 
 const router = Router();
 router.use(requireAuth);
@@ -26,12 +27,24 @@ const updateSchema = z.object({
   position: z.number().optional(),
 });
 
-// GET /pm/tasks?list_id=xxx&status_id=&priority=&assignee=&sort=
+// Helper to get list_id from a task
+async function getTaskListId(taskId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin.from('tasks').select('list_id').eq('id', taskId).single();
+  return data?.list_id || null;
+}
+
+// GET /pm/tasks?list_id=xxx — requires viewer access on the list
 router.get('/tasks', async (req: Request, res: Response) => {
   try {
     const listId = req.query.list_id as string;
     if (!listId) {
       res.status(400).json({ success: false, error: 'list_id is required' });
+      return;
+    }
+
+    const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this list' });
       return;
     }
 
@@ -78,10 +91,22 @@ router.get('/tasks', async (req: Request, res: Response) => {
   }
 });
 
-// GET /pm/tasks/:id — full task with subtasks, assignees, comments count
+// GET /pm/tasks/:id — requires viewer access on parent list
 router.get('/tasks/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+
+    const listId = await getTaskListId(id);
+    if (!listId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this task' });
+      return;
+    }
 
     const { data: task, error } = await supabaseAdmin
       .from('tasks')
@@ -131,10 +156,16 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
   }
 });
 
-// POST /pm/tasks
+// POST /pm/tasks — requires member access on the list
 router.post('/tasks', async (req: Request, res: Response) => {
   try {
     const body = createSchema.parse(req.body);
+
+    const userLevel = await checkResourceAccess(req.userId!, 'list', body.list_id);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required to create tasks' });
+      return;
+    }
 
     // Get next position
     const { count } = await supabaseAdmin
@@ -182,11 +213,23 @@ router.post('/tasks', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /pm/tasks/:id
+// PUT /pm/tasks/:id — requires member access on parent list
 router.put('/tasks/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     const body = updateSchema.parse(req.body);
+
+    const listId = await getTaskListId(id);
+    if (!listId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required to update tasks' });
+      return;
+    }
 
     const { data, error } = await supabaseAdmin
       .from('tasks')
@@ -211,10 +254,23 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /pm/tasks/:id
+// DELETE /pm/tasks/:id — requires member access on parent list
 router.delete('/tasks/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+
+    const listId = await getTaskListId(id);
+    if (!listId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required to delete tasks' });
+      return;
+    }
+
     const { error } = await supabaseAdmin.from('tasks').delete().eq('id', id);
 
     if (error) {
@@ -229,11 +285,23 @@ router.delete('/tasks/:id', async (req: Request, res: Response) => {
   }
 });
 
-// POST /pm/tasks/:id/assignees
+// POST /pm/tasks/:id/assignees — requires member access
 router.post('/tasks/:id/assignees', async (req: Request, res: Response) => {
   try {
     const taskId = req.params.id as string;
     const { user_id } = req.body;
+
+    const listId = await getTaskListId(taskId);
+    if (!listId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required to assign users' });
+      return;
+    }
 
     const { error } = await supabaseAdmin
       .from('task_assignees')
@@ -251,11 +319,23 @@ router.post('/tasks/:id/assignees', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /pm/tasks/:taskId/assignees/:userId
+// DELETE /pm/tasks/:taskId/assignees/:userId — requires member access
 router.delete('/tasks/:taskId/assignees/:userId', async (req: Request, res: Response) => {
   try {
     const taskId = req.params.taskId as string;
     const userId = req.params.userId as string;
+
+    const listId = await getTaskListId(taskId);
+    if (!listId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required to unassign users' });
+      return;
+    }
 
     const { error } = await supabaseAdmin
       .from('task_assignees')
@@ -275,10 +355,19 @@ router.delete('/tasks/:taskId/assignees/:userId', async (req: Request, res: Resp
   }
 });
 
-// GET /pm/tasks/:id/comments
+// GET /pm/tasks/:id/comments — requires viewer access on parent list
 router.get('/tasks/:id/comments', async (req: Request, res: Response) => {
   try {
     const taskId = req.params.id as string;
+
+    const listId = await getTaskListId(taskId);
+    if (listId) {
+      const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+      if (!userLevel) {
+        res.status(403).json({ success: false, error: 'You do not have access to this task' });
+        return;
+      }
+    }
 
     const { data, error } = await supabaseAdmin
       .from('task_comments')
@@ -304,7 +393,7 @@ router.get('/tasks/:id/comments', async (req: Request, res: Response) => {
   }
 });
 
-// POST /pm/tasks/:id/comments
+// POST /pm/tasks/:id/comments — requires commenter access on parent list
 router.post('/tasks/:id/comments', async (req: Request, res: Response) => {
   try {
     const taskId = req.params.id as string;
@@ -313,6 +402,15 @@ router.post('/tasks/:id/comments', async (req: Request, res: Response) => {
     if (!content?.trim()) {
       res.status(400).json({ success: false, error: 'Content is required' });
       return;
+    }
+
+    const listId = await getTaskListId(taskId);
+    if (listId) {
+      const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+      if (!userLevel || !meetsAccessLevel(userLevel, 'commenter')) {
+        res.status(403).json({ success: false, error: 'Commenter access required to add comments' });
+        return;
+      }
     }
 
     const { data, error } = await supabaseAdmin
@@ -340,8 +438,8 @@ router.post('/tasks/:id/comments', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /pm/task-comments/:id
-router.delete('/task-comments/:id', async (req: Request, res: Response) => {
+// DELETE /pm/task-comments/:id — requires can_delete_messages or member access
+router.delete('/task-comments/:id', requirePermission('can_delete_messages'), async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     const { error } = await supabaseAdmin.from('task_comments').delete().eq('id', id);

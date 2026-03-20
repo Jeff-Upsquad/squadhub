@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
+import { requirePermission } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 
 const router = Router();
@@ -57,8 +58,8 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// POST /dms — create or find existing DM conversation
-router.post('/', requireAuth, async (req: Request, res: Response) => {
+// POST /dms — create or find existing DM conversation (requires can_send_dms)
+router.post('/', requireAuth, requirePermission('can_send_dms'), async (req: Request, res: Response) => {
   try {
     const body = createDmSchema.parse(req.body);
     const allParticipants = [...new Set([req.userId!, ...body.participant_ids])];

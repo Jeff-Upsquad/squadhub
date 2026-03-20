@@ -91,6 +91,22 @@ export interface MessageThread {
   reply_message_id: string;
 }
 
+// ---- Resource Access Control ----
+export type ResourceType = 'channel' | 'space' | 'folder' | 'list';
+export type AccessLevel = 'viewer' | 'commenter' | 'member' | 'manager';
+
+export interface ResourceMembership {
+  id: string;
+  resource_type: ResourceType;
+  resource_id: string;
+  user_id: string;
+  access_level: AccessLevel;
+  invited_by: string | null;
+  created_at: string;
+  // Joined
+  user?: User;
+}
+
 // ---- Project Management ----
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low' | 'none';
 export type StatusCategory = 'todo' | 'active' | 'done' | 'closed';
@@ -103,10 +119,12 @@ export interface Space {
   color: string;
   icon: string;
   description: string | null;
+  is_private: boolean;
   created_by: string;
   created_at: string;
   updated_at: string;
   position: number;
+  my_access_level?: AccessLevel;
   // Joined
   statuses?: SpaceStatus[];
   folders?: Folder[];
@@ -127,10 +145,12 @@ export interface Folder {
   id: string;
   space_id: string;
   name: string;
+  is_private: boolean;
   position: number;
   created_by: string;
   created_at: string;
   updated_at: string;
+  my_access_level?: AccessLevel;
   // Joined
   lists?: List[];
 }
@@ -140,11 +160,13 @@ export interface List {
   space_id: string;
   folder_id: string | null;
   name: string;
+  is_private: boolean;
   position: number;
   default_view: ListView;
   created_by: string;
   created_at: string;
   updated_at: string;
+  my_access_level?: AccessLevel;
   // Joined
   task_count?: number;
 }

@@ -27,6 +27,10 @@ export default function CreateSpaceModal({
     );
   };
 
+  const errorMessage = createSpace.error
+    ? (createSpace.error as any)?.response?.data?.error || createSpace.error.message
+    : null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <form
@@ -70,6 +74,11 @@ export default function CreateSpaceModal({
           rows={2}
           className="mb-5 w-full resize-none rounded-lg border border-[#CAD5E2] bg-[#F8FAFC] px-3 py-2 text-sm text-[#0F172B] placeholder-[#999999] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
         />
+
+        {/* Error message */}
+        {errorMessage && (
+          <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{errorMessage}</p>
+        )}
 
         {/* Actions */}
         <div className="flex justify-end gap-3">

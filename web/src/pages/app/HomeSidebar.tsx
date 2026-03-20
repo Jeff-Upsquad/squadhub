@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Channel } from '@squadhub/shared';
 import type { HomeView } from '../../layouts/MainLayout';
 import { useFavorites, useRemoveFavorite } from '../../hooks/useFavorites';
+import { useHasPermission } from '../../hooks/usePermissions';
 import SpaceTree from './pm/SpaceTree';
 
 // ---- Props ----
@@ -105,6 +106,7 @@ export default function HomeSidebar({
 }: HomeSidebarProps) {
   const { data: favorites, isLoading: favoritesLoading } = useFavorites(workspaceId);
   const removeFavorite = useRemoveFavorite(workspaceId);
+  const canCreateChannels = useHasPermission('can_create_channels');
 
   const [activeTab, setActiveTab] = useState<HomeTab>('unread');
   const [expandedSections, setExpandedSections] = useState({
@@ -243,15 +245,17 @@ export default function HomeSidebar({
             expanded={expandedSections.channels}
             onToggle={() => toggleSection('channels')}
             action={
-              <button
-                onClick={onCreateChannel}
-                className="text-[#90A1B9] transition hover:text-[#0F172B]"
-                title="Create channel"
-              >
-                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
+              canCreateChannels ? (
+                <button
+                  onClick={onCreateChannel}
+                  className="text-[#90A1B9] transition hover:text-[#0F172B]"
+                  title="Create channel"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+              ) : undefined
             }
           />
           {expandedSections.channels && (

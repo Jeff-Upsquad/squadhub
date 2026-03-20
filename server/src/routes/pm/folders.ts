@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
+import { requirePermission, checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
 
 const router = Router();
 router.use(requireAuth);
@@ -17,6 +18,13 @@ router.get('/folders', async (req: Request, res: Response) => {
     const spaceId = req.query.space_id as string;
     if (!spaceId) {
       res.status(400).json({ success: false, error: 'space_id is required' });
+      return;
+    }
+
+    // Check user has at least viewer access to the parent space
+    const userLevel = await checkResourceAccess(req.userId!, 'space', spaceId);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this space' });
       return;
     }
 
@@ -38,10 +46,17 @@ router.get('/folders', async (req: Request, res: Response) => {
   }
 });
 
-// POST /pm/folders
-router.post('/folders', async (req: Request, res: Response) => {
+// POST /pm/folders — requires can_create_folders + member access on space
+router.post('/folders', requirePermission('can_create_folders'), async (req: Request, res: Response) => {
   try {
     const body = createSchema.parse(req.body);
+
+    // Check member+ access on parent space
+    const spaceAccess = await checkResourceAccess(req.userId!, 'space', body.space_id);
+    if (!spaceAccess || !meetsAccessLevel(spaceAccess, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access on the space is required to create folders' });
+      return;
+    }
 
     const { count } = await supabaseAdmin
       .from('folders')
@@ -53,6 +68,7 @@ router.post('/folders', async (req: Request, res: Response) => {
       .insert({
         space_id: body.space_id,
         name: body.name,
+        is_private: true,
         created_by: req.userId!,
         position: count || 0,
       })
@@ -75,10 +91,17 @@ router.post('/folders', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /pm/folders/:id
+// PUT /pm/folders/:id — requires manager access on folder
 router.put('/folders/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+
+    const userLevel = await checkResourceAccess(req.userId!, 'folder', id);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
+      res.status(403).json({ success: false, error: 'Manager access required to update folders' });
+      return;
+    }
+
     const { data, error } = await supabaseAdmin
       .from('folders')
       .update({ name: req.body.name })
@@ -98,10 +121,16 @@ router.put('/folders/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /pm/folders/:id
+// DELETE /pm/folders/:id — requires manager access on folder
 router.delete('/folders/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+
+    const userLevel = await checkResourceAccess(req.userId!, 'folder', id);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
+      res.status(403).json({ success: false, error: 'Manager access required to delete folders' });
+      return;
+    }
 
     // Move lists to space root before deleting folder
     const { data: folder } = await supabaseAdmin

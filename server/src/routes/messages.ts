@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
+import { checkResourceAccess, meetsAccessLevel, requirePermission } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 
 const router = Router();
@@ -31,6 +32,15 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
     if (!channelId && !dmConversationId) {
       res.status(400).json({ success: false, error: 'channel_id or dm_conversation_id required' });
       return;
+    }
+
+    // Check channel access if reading from a channel
+    if (channelId) {
+      const userLevel = await checkResourceAccess(req.userId!, 'channel', channelId);
+      if (!userLevel) {
+        res.status(403).json({ success: false, error: 'You do not have access to this channel' });
+        return;
+      }
     }
 
     let query = supabaseAdmin
@@ -75,10 +85,19 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// POST /messages — send a new message
+// POST /messages — send a message (commenter+ on channel, or can_send_dms for DMs)
 router.post('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const body = sendMessageSchema.parse(req.body);
+
+    // Check access
+    if (body.channel_id) {
+      const userLevel = await checkResourceAccess(req.userId!, 'channel', body.channel_id);
+      if (!userLevel || !meetsAccessLevel(userLevel, 'commenter')) {
+        res.status(403).json({ success: false, error: 'Commenter access required to send messages' });
+        return;
+      }
+    }
 
     const { data: message, error } = await supabaseAdmin
       .from('messages')
@@ -124,7 +143,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// POST /messages/:id/reactions — add a reaction
+// POST /messages/:id/reactions — add a reaction (commenter+ on channel)
 router.post('/:id/reactions', requireAuth, async (req: Request, res: Response) => {
   try {
     const messageId = req.params.id;

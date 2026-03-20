@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
+import { requirePermission, checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
 
 const router = Router();
 router.use(requireAuth);
@@ -19,15 +20,30 @@ router.get('/lists', async (req: Request, res: Response) => {
     const spaceId = req.query.space_id as string;
     const folderId = req.query.folder_id as string;
 
+    // Check access on parent space or folder
+    if (folderId) {
+      const userLevel = await checkResourceAccess(req.userId!, 'folder', folderId);
+      if (!userLevel) {
+        res.status(403).json({ success: false, error: 'You do not have access to this folder' });
+        return;
+      }
+    } else if (spaceId) {
+      const userLevel = await checkResourceAccess(req.userId!, 'space', spaceId);
+      if (!userLevel) {
+        res.status(403).json({ success: false, error: 'You do not have access to this space' });
+        return;
+      }
+    } else {
+      res.status(400).json({ success: false, error: 'space_id or folder_id is required' });
+      return;
+    }
+
     let query = supabaseAdmin.from('lists').select('*').order('position');
 
     if (folderId) {
       query = query.eq('folder_id', folderId);
     } else if (spaceId) {
       query = query.eq('space_id', spaceId);
-    } else {
-      res.status(400).json({ success: false, error: 'space_id or folder_id is required' });
-      return;
     }
 
     const { data, error } = await query;
@@ -49,6 +65,13 @@ router.get('/lists/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
 
+    // Check access on the list (inherits from space/folder)
+    const userLevel = await checkResourceAccess(req.userId!, 'list', id);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this list' });
+      return;
+    }
+
     const { data: list, error } = await supabaseAdmin
       .from('lists')
       .select('*')
@@ -67,17 +90,24 @@ router.get('/lists/:id', async (req: Request, res: Response) => {
       .eq('list_id', id)
       .is('parent_task_id', null);
 
-    res.json({ success: true, data: { ...list, task_count: count || 0 } });
+    res.json({ success: true, data: { ...list, task_count: count || 0, my_access_level: userLevel } });
   } catch (err) {
     console.error('Get list error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
-// POST /pm/lists
-router.post('/lists', async (req: Request, res: Response) => {
+// POST /pm/lists — requires can_create_lists + member access on parent space
+router.post('/lists', requirePermission('can_create_lists'), async (req: Request, res: Response) => {
   try {
     const body = createSchema.parse(req.body);
+
+    // Check member+ access on parent space
+    const spaceAccess = await checkResourceAccess(req.userId!, 'space', body.space_id);
+    if (!spaceAccess || !meetsAccessLevel(spaceAccess, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access on the space is required to create lists' });
+      return;
+    }
 
     const { count } = await supabaseAdmin
       .from('lists')
@@ -91,6 +121,7 @@ router.post('/lists', async (req: Request, res: Response) => {
         folder_id: body.folder_id || null,
         name: body.name,
         default_view: body.default_view || 'list',
+        is_private: true,
         created_by: req.userId!,
         position: count || 0,
       })
@@ -113,10 +144,17 @@ router.post('/lists', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /pm/lists/:id
+// PUT /pm/lists/:id — requires manager access
 router.put('/lists/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+
+    const userLevel = await checkResourceAccess(req.userId!, 'list', id);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
+      res.status(403).json({ success: false, error: 'Manager access required to update lists' });
+      return;
+    }
+
     const updates: Record<string, unknown> = {};
     if (req.body.name) updates.name = req.body.name;
     if (req.body.default_view) updates.default_view = req.body.default_view;
@@ -141,10 +179,17 @@ router.put('/lists/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /pm/lists/:id
+// DELETE /pm/lists/:id — requires manager access
 router.delete('/lists/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+
+    const userLevel = await checkResourceAccess(req.userId!, 'list', id);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
+      res.status(403).json({ success: false, error: 'Manager access required to delete lists' });
+      return;
+    }
+
     const { error } = await supabaseAdmin.from('lists').delete().eq('id', id);
 
     if (error) {

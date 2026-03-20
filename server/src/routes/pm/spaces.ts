@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
+import { requirePermission, isWorkspaceAdmin, checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ const createSchema = z.object({
   description: z.string().optional(),
 });
 
-// GET /pm/spaces?workspace_id=xxx
+// GET /pm/spaces?workspace_id=xxx — list spaces the user has access to
 router.get('/spaces', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspace_id as string;
@@ -25,10 +26,51 @@ router.get('/spaces', async (req: Request, res: Response) => {
       return;
     }
 
+    // Admins see all spaces
+    const admin = await isWorkspaceAdmin(req.userId!);
+    if (admin) {
+      const { data, error } = await supabaseAdmin
+        .from('spaces')
+        .select('*, space_statuses(*)')
+        .eq('workspace_id', workspaceId)
+        .order('position');
+
+      if (error) {
+        res.status(500).json({ success: false, error: error.message });
+        return;
+      }
+      res.json({ success: true, data });
+      return;
+    }
+
+    // Non-admins: only spaces they have membership for, or they created
+    const { data: memberships } = await supabaseAdmin
+      .from('resource_memberships')
+      .select('resource_id, access_level')
+      .eq('resource_type', 'space')
+      .eq('user_id', req.userId!);
+
+    const memberMap = new Map((memberships || []).map((m: any) => [m.resource_id, m.access_level]));
+
+    const { data: createdSpaces } = await supabaseAdmin
+      .from('spaces')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .eq('created_by', req.userId!);
+
+    const createdIds = (createdSpaces || []).map((s: any) => s.id);
+    const allIds = [...new Set([...memberMap.keys(), ...createdIds])];
+
+    if (allIds.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
     const { data, error } = await supabaseAdmin
       .from('spaces')
       .select('*, space_statuses(*)')
       .eq('workspace_id', workspaceId)
+      .in('id', allIds)
       .order('position');
 
     if (error) {
@@ -36,7 +78,13 @@ router.get('/spaces', async (req: Request, res: Response) => {
       return;
     }
 
-    res.json({ success: true, data });
+    // Attach access level
+    const enriched = (data || []).map((space: any) => ({
+      ...space,
+      my_access_level: createdIds.includes(space.id) ? 'manager' : memberMap.get(space.id) || 'viewer',
+    }));
+
+    res.json({ success: true, data: enriched });
   } catch (err) {
     console.error('Get spaces error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -47,6 +95,13 @@ router.get('/spaces', async (req: Request, res: Response) => {
 router.get('/spaces/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+
+    // Check access
+    const userLevel = await checkResourceAccess(req.userId!, 'space', id);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this space' });
+      return;
+    }
 
     const { data: space, error } = await supabaseAdmin
       .from('spaces')
@@ -78,6 +133,7 @@ router.get('/spaces/:id', async (req: Request, res: Response) => {
       success: true,
       data: {
         ...space,
+        my_access_level: userLevel,
         folders: folders || [],
         lists: rootLists || [],
       },
@@ -88,8 +144,8 @@ router.get('/spaces/:id', async (req: Request, res: Response) => {
   }
 });
 
-// POST /pm/spaces
-router.post('/spaces', async (req: Request, res: Response) => {
+// POST /pm/spaces — requires can_create_spaces permission
+router.post('/spaces', requirePermission('can_create_spaces'), async (req: Request, res: Response) => {
   try {
     const body = createSchema.parse(req.body);
 
@@ -99,7 +155,7 @@ router.post('/spaces', async (req: Request, res: Response) => {
       .select('*', { count: 'exact', head: true })
       .eq('workspace_id', body.workspace_id);
 
-    const { data, error } = await supabaseAdmin
+    const { data: inserted, error: insertError } = await supabaseAdmin
       .from('spaces')
       .insert({
         workspace_id: body.workspace_id,
@@ -107,14 +163,30 @@ router.post('/spaces', async (req: Request, res: Response) => {
         color: body.color || '#7c3aed',
         icon: body.icon || 'folder',
         description: body.description || null,
+        is_private: true,
         created_by: req.userId!,
         position: count || 0,
       })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Space insert error:', insertError);
+      res.status(500).json({ success: false, error: insertError.message });
+      return;
+    }
+
+    // Fetch the space with statuses separately (trigger-created rows
+    // may not be visible in the same insert statement's RETURNING clause)
+    const { data, error } = await supabaseAdmin
+      .from('spaces')
       .select('*, space_statuses(*)')
+      .eq('id', inserted.id)
       .single();
 
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      console.error('Space select error:', error);
+      res.status(201).json({ success: true, data: inserted });
       return;
     }
 
@@ -129,10 +201,17 @@ router.post('/spaces', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /pm/spaces/:id
+// PUT /pm/spaces/:id — requires manager access
 router.put('/spaces/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+
+    const userLevel = await checkResourceAccess(req.userId!, 'space', id);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
+      res.status(403).json({ success: false, error: 'Manager access required to update spaces' });
+      return;
+    }
+
     const updates: Record<string, unknown> = {};
     if (req.body.name) updates.name = req.body.name;
     if (req.body.color) updates.color = req.body.color;
@@ -158,10 +237,17 @@ router.put('/spaces/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /pm/spaces/:id
+// DELETE /pm/spaces/:id — requires manager access
 router.delete('/spaces/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+
+    const userLevel = await checkResourceAccess(req.userId!, 'space', id);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
+      res.status(403).json({ success: false, error: 'Manager access required to delete spaces' });
+      return;
+    }
+
     const { error } = await supabaseAdmin.from('spaces').delete().eq('id', id);
 
     if (error) {
