@@ -1,7 +1,7 @@
 import { Outlet, NavLink } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 
-const MAIN_APP_URL = import.meta.env.PROD ? 'http://72.61.245.97:3080' : 'http://localhost:5173';
+const MAIN_APP_URL = import.meta.env.VITE_APP_URL || (import.meta.env.PROD ? '/' : 'http://localhost:5173');
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2 rounded-md px-3 py-2 text-sm transition ${

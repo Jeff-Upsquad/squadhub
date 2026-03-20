@@ -36,8 +36,8 @@ app.set('io', io); // Make io accessible in route handlers
 app.use(helmet());
 app.use(cors({
   origin: config.nodeEnv === 'production'
-    ? [config.clientUrl, `http://${process.env.VPS_IP || '72.61.245.97'}`]
-    : config.clientUrl,
+    ? [config.clientUrl, config.adminUrl].filter(Boolean)
+    : [config.clientUrl, config.adminUrl],
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));

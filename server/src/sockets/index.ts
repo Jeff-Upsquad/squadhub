@@ -11,8 +11,8 @@ export function setupSocketIO(httpServer: HttpServer) {
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
     cors: {
       origin: config.nodeEnv === 'production'
-        ? [config.clientUrl, `http://${process.env.VPS_IP || '72.61.245.97'}`]
-        : config.clientUrl,
+        ? [config.clientUrl, config.adminUrl].filter(Boolean)
+        : [config.clientUrl, config.adminUrl],
       methods: ['GET', 'POST'],
       credentials: true,
     },

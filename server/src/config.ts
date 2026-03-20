@@ -25,6 +25,7 @@ export const config = {
 
   // CORS
   clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
+  adminUrl: process.env.ADMIN_URL || 'http://localhost:5174',
 } as const;
 
 // Validate required env vars at startup

@@ -1,6 +1,10 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Build args for Vite env vars (baked in at build time)
+ARG VITE_ADMIN_URL
+ENV VITE_ADMIN_URL=$VITE_ADMIN_URL
+
 # Copy all package files for full workspace install
 COPY package.json package-lock.json* ./
 COPY shared/package.json shared/
