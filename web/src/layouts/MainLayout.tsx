@@ -91,6 +91,7 @@ export default function MainLayout() {
   const pmReset = usePMStore((s) => s.reset);
   const [activeSection, setActiveSection] = useState<ActiveSection>('home');
   const [homeView, setHomeView] = useState<HomeView>('hub');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
 
   // Fetch workspaces
@@ -176,7 +177,17 @@ export default function MainLayout() {
   return (
     <div className="flex h-screen bg-[#F0F2F5] text-[#0F172B]">
       {/* Far-left icon sidebar */}
-      <div className="flex w-[68px] shrink-0 flex-col items-center bg-[#F0F2F5] pt-3">
+      <div className="flex w-[68px] shrink-0 flex-col items-center bg-[#F0F2F5] pt-2">
+        {/* Sidebar toggle */}
+        <button
+          onClick={() => setSidebarOpen((v) => !v)}
+          className="mb-1 flex h-8 w-8 items-center justify-center rounded-md text-[#90A1B9] transition hover:bg-white/60 hover:text-[#62748E]"
+          title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+        >
+          <svg className={`h-4 w-4 transition-transform ${sidebarOpen ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
         <div className="flex flex-col items-center gap-0.5">
           {SECTIONS.map((section) => (
             <button
@@ -226,7 +237,11 @@ export default function MainLayout() {
 
       {/* Module sidebar */}
       {currentWorkspace && (
-        <div className="flex h-full w-60 shrink-0 flex-col border-r border-[#E2E8F0] bg-white">
+        <div
+          className={`flex h-full shrink-0 flex-col border-r border-[#E2E8F0] bg-white transition-[width] duration-200 ease-in-out ${
+            sidebarOpen ? 'w-60' : 'w-0 overflow-hidden border-r-0'
+          }`}
+        >
           {activeSection === 'home' ? (
             <HomeSidebar
               workspaceId={currentWorkspace.id}
