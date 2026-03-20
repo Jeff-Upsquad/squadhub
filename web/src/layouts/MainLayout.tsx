@@ -128,8 +128,8 @@ export default function MainLayout() {
   // Loading state
   if (workspacesLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#0a0a0a]">
-        <p className="text-sm text-[#555]">Loading...</p>
+      <div className="flex h-screen items-center justify-center bg-white">
+        <p className="text-sm text-[#999]">Loading...</p>
       </div>
     );
   }
@@ -137,13 +137,13 @@ export default function MainLayout() {
   // No workspaces — user hasn't been added yet
   if (!workspacesRes || workspaces.length === 0) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#0a0a0a]">
+      <div className="flex h-screen items-center justify-center bg-white">
         <div className="text-center">
-          <h2 className="text-lg font-medium text-[#ededed]">Welcome to SquadHub</h2>
-          <p className="mt-2 text-sm text-[#888]">Your workspace is being set up. Please refresh in a moment.</p>
+          <h2 className="font-[family-name:var(--font-display)] text-lg font-semibold text-[#171717]">Welcome to SquadHub</h2>
+          <p className="mt-2 text-sm text-[#666]">Your workspace is being set up. Please refresh in a moment.</p>
           <button
             onClick={() => window.location.reload()}
-            className="mt-4 rounded-md bg-[#ededed] px-4 py-2 text-sm font-medium text-[#0a0a0a] transition hover:bg-white"
+            className="mt-4 rounded-md bg-[#171717] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#333]"
           >
             Refresh
           </button>
@@ -153,9 +153,9 @@ export default function MainLayout() {
   }
 
   return (
-    <div className="flex h-screen bg-[#0a0a0a] text-[#ededed]">
+    <div className="flex h-screen bg-white text-[#171717]">
       {/* Far-left section icon sidebar */}
-      <div className="flex w-14 flex-col items-center border-r border-[#222] bg-[#0a0a0a] pt-3">
+      <div className="flex w-14 flex-col items-center border-r border-[#eaeaea] bg-white pt-3">
         <div className="flex flex-col items-center gap-1">
           {SECTIONS.map((section) => (
             <button
@@ -163,13 +163,13 @@ export default function MainLayout() {
               onClick={() => setActiveSection(section.id)}
               className={`relative flex h-10 w-10 items-center justify-center rounded-lg transition ${
                 activeSection === section.id
-                  ? 'bg-[#1a1a1a] text-[#ededed]'
-                  : 'text-[#555] hover:bg-[#111] hover:text-[#888]'
+                  ? 'bg-[#f5f5f5] text-[#171717]'
+                  : 'text-[#999] hover:bg-[#f5f5f5] hover:text-[#666]'
               }`}
               title={section.label}
             >
               {activeSection === section.id && (
-                <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[#ededed]" />
+                <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[#0070F3]" />
               )}
               {section.icon}
             </button>
@@ -181,7 +181,7 @@ export default function MainLayout() {
           {user?.role === 'admin' && (
             <a
               href={ADMIN_APP_URL}
-              className="flex h-10 w-10 items-center justify-center rounded-lg text-[#555] transition hover:bg-[#111] hover:text-[#888]"
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-[#999] transition hover:bg-[#f5f5f5] hover:text-[#666]"
               title="Admin Panel"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -192,7 +192,7 @@ export default function MainLayout() {
           )}
           <button
             onClick={logout}
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-[#555] transition hover:bg-[#111] hover:text-[#888]"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-[#999] transition hover:bg-[#f5f5f5] hover:text-[#666]"
             title="Logout"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,7 +204,7 @@ export default function MainLayout() {
 
       {/* Module sidebar */}
       {currentWorkspace && (
-        <div className="flex h-full w-56 flex-col border-r border-[#222] bg-[#0a0a0a]">
+        <div className="flex h-full w-56 flex-col border-r border-[#eaeaea] bg-white">
           {activeSection === 'home' ? (
             <>
               <ModuleSwitcher active={homeTab} onChange={setHomeTab} />
@@ -221,11 +221,11 @@ export default function MainLayout() {
             </>
           ) : (
             <div className="flex flex-col">
-              <div className="border-b border-[#222] px-4 py-3">
-                <h3 className="text-sm font-semibold text-[#ededed]">{SECTION_TITLES[activeSection]}</h3>
+              <div className="border-b border-[#eaeaea] px-4 py-3">
+                <h3 className="font-[family-name:var(--font-display)] text-sm font-semibold text-[#171717]">{SECTION_TITLES[activeSection]}</h3>
               </div>
               <div className="flex flex-1 items-center justify-center px-4 py-12">
-                <p className="text-center text-xs text-[#555]">Coming soon</p>
+                <p className="font-[family-name:var(--font-mono)] text-center text-[10px] uppercase tracking-[0.12em] text-[#999]">Coming soon</p>
               </div>
             </div>
           )}
@@ -233,15 +233,15 @@ export default function MainLayout() {
       )}
 
       {/* Main content area */}
-      <div className="flex flex-1 flex-col bg-[#0a0a0a]">
+      <div className="flex flex-1 flex-col bg-white">
         {activeSection === 'home' ? (
           <>
             {homeTab === 'chat' ? (
               <>
                 {activeChannelId && (
-                  <div className="flex items-center border-b border-[#222] px-5 py-3">
-                    <span className="mr-2 text-[#555]">#</span>
-                    <span className="text-sm font-medium text-[#ededed]">
+                  <div className="flex items-center border-b border-[#eaeaea] px-5 py-3">
+                    <span className="mr-2 text-[#999]">#</span>
+                    <span className="text-sm font-medium text-[#171717]">
                       {channels.find((c) => c.id === activeChannelId)?.name}
                     </span>
                   </div>
@@ -250,7 +250,7 @@ export default function MainLayout() {
                 {activeChannelId ? (
                   <ChatPanel channelId={activeChannelId} />
                 ) : (
-                  <div className="flex flex-1 items-center justify-center text-sm text-[#555]">
+                  <div className="flex flex-1 items-center justify-center text-sm text-[#999]">
                     Select a channel to start chatting
                   </div>
                 )}
@@ -260,11 +260,11 @@ export default function MainLayout() {
             )}
           </>
         ) : (
-          <div className="flex flex-1 flex-col items-center justify-center text-[#555]">
+          <div className="flex flex-1 flex-col items-center justify-center text-[#999]">
             <div className="mb-4 opacity-30">
               {SECTIONS.find((s) => s.id === activeSection)?.icon}
             </div>
-            <h3 className="text-lg font-medium text-[#888]">{SECTION_TITLES[activeSection]}</h3>
+            <h3 className="font-[family-name:var(--font-display)] text-lg font-medium text-[#666]">{SECTION_TITLES[activeSection]}</h3>
             <p className="mt-1 text-sm">Coming soon</p>
           </div>
         )}

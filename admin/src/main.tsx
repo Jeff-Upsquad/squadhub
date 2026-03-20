@@ -22,12 +22,12 @@ class ErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: 40, color: '#ededed', background: '#0a0a0a', minHeight: '100vh' }}>
-          <h1 style={{ fontSize: 24, marginBottom: 16 }}>Something went wrong</h1>
-          <p style={{ color: '#f87171', fontFamily: 'monospace' }}>{this.state.error}</p>
+        <div style={{ padding: 40, color: '#171717', background: '#ffffff', minHeight: '100vh', fontFamily: "'Inter', system-ui, sans-serif" }}>
+          <h1 style={{ fontSize: 24, marginBottom: 16, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Something went wrong</h1>
+          <p style={{ color: '#EE0000', fontFamily: "'Sometype Mono', monospace", fontSize: 13 }}>{this.state.error}</p>
           <button
             onClick={() => window.location.reload()}
-            style={{ marginTop: 20, padding: '10px 20px', background: '#ededed', color: '#0a0a0a', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500 }}
+            style={{ marginTop: 20, padding: '10px 20px', background: '#171717', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500 }}
           >
             Reload Page
           </button>

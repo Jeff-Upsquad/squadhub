@@ -27,19 +27,19 @@ export default function MessageComposer({ channelId, onSend }: { channelId: stri
   };
 
   return (
-    <form onSubmit={handleSubmit} className="border-t border-[#222] px-5 py-3">
-      <div className="flex items-center gap-2 rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2">
+    <form onSubmit={handleSubmit} className="border-t border-[#eaeaea] px-5 py-3">
+      <div className="flex items-center gap-2 rounded-md border border-[#d9d9d9] bg-[#ffffff] px-3 py-2">
         <input
           type="text"
           value={text}
           onChange={(e) => { setText(e.target.value); handleTyping(); }}
           placeholder="Type a message..."
-          className="flex-1 bg-transparent text-sm text-[#ededed] placeholder-[#555] focus:outline-none"
+          className="flex-1 bg-transparent text-sm text-[#171717] placeholder-[#999999] focus:outline-none"
         />
         <button
           type="submit"
           disabled={!text.trim() || sending}
-          className="rounded-md bg-[#ededed] px-3 py-1 text-sm font-medium text-[#0a0a0a] transition hover:bg-white disabled:opacity-40"
+          className="rounded-md bg-[#171717] px-3 py-1 text-sm font-medium text-white transition hover:bg-[#333] disabled:opacity-40"
         >
           Send
         </button>

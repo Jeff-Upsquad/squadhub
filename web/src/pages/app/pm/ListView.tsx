@@ -28,7 +28,7 @@ export default function ListView({
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-[#555]">Loading tasks...</p>
+        <p className="text-sm text-[#999999]">Loading tasks...</p>
       </div>
     );
   }
@@ -65,15 +65,15 @@ function StatusGroup({
   return (
     <div className="mb-2">
       {/* Status header */}
-      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-[#222] bg-[#0a0a0a]/90 px-4 py-2 backdrop-blur-sm">
+      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-[#eaeaea] bg-[#ffffff]/90 px-4 py-2 backdrop-blur-sm">
         <span
           className="h-2.5 w-2.5 rounded-full"
           style={{ backgroundColor: status.color }}
         />
-        <span className="text-xs font-semibold uppercase tracking-wide text-[#888]">
+        <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#666666] font-[family-name:var(--font-mono)]">
           {status.name}
         </span>
-        <span className="text-xs text-[#444]">{tasks.length}</span>
+        <span className="text-xs text-[#999999]">{tasks.length}</span>
       </div>
 
       {/* Tasks */}

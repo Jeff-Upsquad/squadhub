@@ -23,10 +23,10 @@ const ROLES = ['super_admin', 'admin', 'member', 'guest'] as const;
 
 function roleBadgeColor(role: string) {
   switch (role) {
-    case 'super_admin': return 'bg-purple-500/15 text-purple-400';
-    case 'admin': return 'bg-blue-500/15 text-blue-400';
-    case 'guest': return 'bg-[#222] text-[#888]';
-    default: return 'bg-green-500/15 text-green-400';
+    case 'super_admin': return 'bg-purple-50 text-purple-600';
+    case 'admin': return 'bg-blue-50 text-blue-600';
+    case 'guest': return 'bg-[#f5f5f5] text-[#666]';
+    default: return 'bg-green-50 text-green-600';
   }
 }
 
@@ -105,28 +105,28 @@ export default function WsAdminMembers() {
   };
 
   if (!currentWorkspace) {
-    return <p className="text-[#555]">Loading workspace...</p>;
+    return <p className="text-[#999]">Loading workspace...</p>;
   }
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h2 className="mb-6 text-2xl font-semibold text-[#ededed]">Members</h2>
+      <h2 className="mb-6 font-[family-name:var(--font-display)] text-2xl font-bold text-[#171717]">Members</h2>
 
       {/* Invite form */}
-      <form onSubmit={handleInvite} className="mb-6 rounded-lg border border-[#222] bg-[#111] p-5">
-        <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-[#888]">Invite Member</h3>
+      <form onSubmit={handleInvite} className="mb-6 rounded-lg border border-[#eaeaea] bg-white p-5">
+        <h3 className="mb-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Invite Member</h3>
         <div className="flex gap-3">
           <input
             type="email"
             value={inviteEmail}
             onChange={(e) => setInviteEmail(e.target.value)}
             placeholder="user@example.com"
-            className="flex-1 rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2 text-sm text-[#ededed] placeholder-[#555] outline-none focus:border-[#ededed]"
+            className="flex-1 rounded-md border border-[#d9d9d9] bg-white px-3 py-2 text-sm text-[#171717] placeholder-[#999] outline-none transition focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
           />
           <select
             value={inviteRole}
             onChange={(e) => setInviteRole(e.target.value)}
-            className="rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2 text-sm text-[#ededed] outline-none"
+            className="rounded-md border border-[#d9d9d9] bg-white px-3 py-2 text-sm text-[#171717] outline-none"
           >
             <option value="member">Member</option>
             <option value="admin">Admin</option>
@@ -135,30 +135,30 @@ export default function WsAdminMembers() {
           <button
             type="submit"
             disabled={!inviteEmail.trim() || inviteMember.isPending}
-            className="rounded-md bg-[#ededed] px-4 py-2 text-sm font-medium text-[#0a0a0a] hover:bg-white disabled:opacity-50"
+            className="rounded-md bg-[#171717] px-4 py-2 text-sm font-medium text-white hover:bg-[#333] disabled:opacity-50"
           >
             {inviteMember.isPending ? 'Inviting...' : 'Invite'}
           </button>
         </div>
-        {inviteError && <p className="mt-2 text-sm text-red-400">{inviteError}</p>}
+        {inviteError && <p className="mt-2 text-sm text-red-600">{inviteError}</p>}
       </form>
 
       {/* Members list */}
-      <div className="rounded-lg border border-[#222] bg-[#111]">
-        <div className="border-b border-[#222] px-5 py-3">
-          <span className="text-sm font-medium text-[#888]">
+      <div className="rounded-lg border border-[#eaeaea] bg-white">
+        <div className="border-b border-[#eaeaea] px-5 py-3">
+          <span className="text-sm font-medium text-[#666]">
             {members?.length || 0} members
           </span>
         </div>
 
         {isLoading ? (
-          <p className="p-5 text-sm text-[#555]">Loading members...</p>
+          <p className="p-5 text-sm text-[#999]">Loading members...</p>
         ) : (
-          <div className="divide-y divide-[#222]/50">
+          <div className="divide-y divide-[#eaeaea]">
             {members?.map((m) => (
               <div key={m.user_id} className="flex items-center gap-4 px-5 py-3">
                 {/* Avatar */}
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#222] text-sm font-medium text-[#888]">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaeaea] text-sm font-medium text-[#666]">
                   {m.user.avatar_url ? (
                     <img src={m.user.avatar_url} className="h-9 w-9 rounded-full" alt="" />
                   ) : (
@@ -168,13 +168,13 @@ export default function WsAdminMembers() {
 
                 {/* Name & email */}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-[#ededed]">
+                  <p className="truncate text-sm font-medium text-[#171717]">
                     {m.user.display_name || 'No name'}
                     {m.user_id === currentUser?.id && (
-                      <span className="ml-1.5 text-xs text-[#555]">(you)</span>
+                      <span className="ml-1.5 text-xs text-[#999]">(you)</span>
                     )}
                   </p>
-                  <p className="truncate text-xs text-[#555]">{m.user.email}</p>
+                  <p className="truncate text-xs text-[#999]">{m.user.email}</p>
                 </div>
 
                 {/* Role */}
@@ -197,7 +197,7 @@ export default function WsAdminMembers() {
                 {m.user_id !== currentUser?.id && (
                   <button
                     onClick={() => removeMember.mutate(m.user_id)}
-                    className="rounded p-1 text-[#555] hover:bg-[#1a1a1a] hover:text-red-400"
+                    className="rounded p-1 text-[#999] hover:bg-[#f5f5f5] hover:text-red-500"
                     title="Remove member"
                   >
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">

@@ -39,7 +39,7 @@ export default function ChatPanel({ channelId }: { channelId: string }) {
     <div className="flex flex-1 flex-col">
       <div className="flex-1 overflow-y-auto py-4">
         {messages.length === 0 && (
-          <p className="px-5 text-sm text-[#555]">No messages yet. Say something!</p>
+          <p className="px-5 text-sm text-[#999999]">No messages yet. Say something!</p>
         )}
         {messages.map((msg) => (
           <MessageBubble key={msg.id} message={msg} />

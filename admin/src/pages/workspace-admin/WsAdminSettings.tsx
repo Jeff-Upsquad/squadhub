@@ -47,51 +47,51 @@ export default function WsAdminSettings() {
   };
 
   if (!currentWorkspace) {
-    return <p className="text-[#555]">Loading workspace...</p>;
+    return <p className="text-[#999]">Loading workspace...</p>;
   }
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h2 className="mb-6 text-2xl font-semibold text-[#ededed]">Workspace Settings</h2>
+      <h2 className="mb-6 font-[family-name:var(--font-display)] text-2xl font-bold text-[#171717]">Workspace Settings</h2>
 
-      <form onSubmit={handleSave} className="rounded-lg border border-[#222] bg-[#111] p-6">
-        <label className="mb-1 block text-xs font-medium text-[#888]">Workspace Name</label>
+      <form onSubmit={handleSave} className="rounded-lg border border-[#eaeaea] bg-white p-6">
+        <label className="mb-1 block text-xs font-medium text-[#666]">Workspace Name</label>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="mb-4 w-full rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2 text-sm text-[#ededed] outline-none focus:border-[#ededed]"
+          className="mb-4 w-full rounded-md border border-[#d9d9d9] bg-white px-3 py-2 text-sm text-[#171717] outline-none transition focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
         />
 
         <div className="flex items-center gap-3">
           <button
             type="submit"
             disabled={!name.trim() || name === currentWorkspace.name || updateWorkspace.isPending}
-            className="rounded-md bg-[#ededed] px-4 py-2 text-sm font-medium text-[#0a0a0a] hover:bg-white disabled:opacity-50"
+            className="rounded-md bg-[#171717] px-4 py-2 text-sm font-medium text-white hover:bg-[#333] disabled:opacity-50"
           >
             {updateWorkspace.isPending ? 'Saving...' : 'Save Changes'}
           </button>
-          {saved && <span className="text-sm text-green-400">Saved!</span>}
+          {saved && <span className="text-sm text-green-600">Saved!</span>}
           {updateWorkspace.isError && (
-            <span className="text-sm text-red-400">Failed to save</span>
+            <span className="text-sm text-red-600">Failed to save</span>
           )}
         </div>
       </form>
 
       {/* Workspace info */}
-      <div className="mt-6 rounded-lg border border-[#222] bg-[#111] p-6">
-        <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-[#888]">Info</h3>
+      <div className="mt-6 rounded-lg border border-[#eaeaea] bg-white p-6">
+        <h3 className="mb-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Info</h3>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-[#555]">ID</span>
-            <span className="font-mono text-xs text-[#888]">{currentWorkspace.id}</span>
+            <span className="text-[#999]">ID</span>
+            <span className="font-[family-name:var(--font-mono)] text-xs text-[#666]">{currentWorkspace.id}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-[#555]">Slug</span>
-            <span className="text-[#888]">{currentWorkspace.slug}</span>
+            <span className="text-[#999]">Slug</span>
+            <span className="text-[#666]">{currentWorkspace.slug}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-[#555]">Created</span>
-            <span className="text-[#888]">{new Date(currentWorkspace.created_at).toLocaleDateString()}</span>
+            <span className="text-[#999]">Created</span>
+            <span className="font-[family-name:var(--font-mono)] text-xs text-[#666]">{new Date(currentWorkspace.created_at).toLocaleDateString()}</span>
           </div>
         </div>
       </div>

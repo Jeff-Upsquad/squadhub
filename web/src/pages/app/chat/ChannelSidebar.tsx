@@ -9,10 +9,10 @@ export default function ChannelSidebar({ channels, activeId, onSelect, onCreateC
   return (
     <div className="flex h-full w-full flex-col">
       <div className="flex items-center justify-between px-4 py-3">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-[#888]">Channels</h2>
+        <h2 className="font-[family-name:var(--font-mono)] text-xs font-medium uppercase tracking-[0.12em] text-[#666666]">Channels</h2>
         <button
           onClick={onCreateChannel}
-          className="text-[#555] transition hover:text-[#ededed]"
+          className="text-[#999999] transition hover:text-[#171717]"
           title="Create channel"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -27,11 +27,11 @@ export default function ChannelSidebar({ channels, activeId, onSelect, onCreateC
             onClick={() => onSelect(ch.id)}
             className={`mb-0.5 flex w-full items-center rounded-md px-3 py-1.5 text-left text-sm transition ${
               activeId === ch.id
-                ? 'bg-[#1a1a1a] text-[#ededed]'
-                : 'text-[#888] hover:bg-[#111] hover:text-[#ededed]'
+                ? 'bg-[#f5f5f5] text-[#171717]'
+                : 'text-[#666666] hover:bg-[#fafafa] hover:text-[#171717]'
             }`}
           >
-            <span className="mr-2 text-[#555]">#</span>
+            <span className="mr-2 text-[#999999]">#</span>
             {ch.name}
           </button>
         ))}

@@ -51,10 +51,10 @@ export default function ListPage() {
     return (
       <div className="flex flex-1 items-center justify-center">
         <div className="text-center">
-          <svg className="mx-auto mb-3 h-12 w-12 text-[#333]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="mx-auto mb-3 h-12 w-12 text-[#d9d9d9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
-          <p className="text-sm text-[#555]">Select a list to view tasks</p>
+          <p className="text-sm text-[#999999]">Select a list to view tasks</p>
         </div>
       </div>
     );
@@ -63,12 +63,12 @@ export default function ListPage() {
   return (
     <div className="flex flex-1 flex-col">
       {/* List header */}
-      <div className="border-b border-[#222]">
+      <div className="border-b border-[#eaeaea]">
         <div className="flex items-center justify-between px-5 py-3">
           <div>
-            <h2 className="text-base font-semibold text-[#ededed]">{listData?.name || 'Loading...'}</h2>
+            <h2 className="text-base font-semibold text-[#171717] font-[family-name:var(--font-display)]">{listData?.name || 'Loading...'}</h2>
             {listData?.task_count !== undefined && (
-              <span className="text-xs text-[#555]">{listData.task_count} tasks</span>
+              <span className="text-xs text-[#999999]">{listData.task_count} tasks</span>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -77,8 +77,8 @@ export default function ListPage() {
               onClick={() => setShowFilters(!showFilters)}
               className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
                 hasActiveFilters
-                  ? 'bg-[#ededed]/20 text-[#ededed]'
-                  : 'text-[#555] hover:text-[#ededed]'
+                  ? 'bg-[#171717]/10 text-[#171717]'
+                  : 'text-[#999999] hover:text-[#171717]'
               }`}
             >
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -87,13 +87,13 @@ export default function ListPage() {
               Filter
             </button>
 
-            <div className="h-4 w-px bg-[#222]" />
+            <div className="h-4 w-px bg-[#eaeaea]" />
 
             {/* List / Board toggle */}
             <button
               onClick={() => setViewMode('list')}
               className={`rounded px-2.5 py-1 text-xs font-medium transition ${
-                viewMode === 'list' ? 'bg-[#1a1a1a] text-[#ededed]' : 'text-[#555] hover:text-[#ededed]'
+                viewMode === 'list' ? 'bg-[#f5f5f5] text-[#171717]' : 'text-[#999999] hover:text-[#171717]'
               }`}
             >
               List
@@ -101,7 +101,7 @@ export default function ListPage() {
             <button
               onClick={() => setViewMode('board')}
               className={`rounded px-2.5 py-1 text-xs font-medium transition ${
-                viewMode === 'board' ? 'bg-[#1a1a1a] text-[#ededed]' : 'text-[#555] hover:text-[#ededed]'
+                viewMode === 'board' ? 'bg-[#f5f5f5] text-[#171717]' : 'text-[#999999] hover:text-[#171717]'
               }`}
             >
               Board
@@ -111,14 +111,14 @@ export default function ListPage() {
 
         {/* Filter bar */}
         {showFilters && (
-          <div className="flex items-center gap-3 border-t border-[#222]/50 px-5 py-2">
+          <div className="flex items-center gap-3 border-t border-[#eaeaea]/50 px-5 py-2">
             {/* Status filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-[#555]">Status:</span>
+              <span className="text-xs text-[#999999] font-[family-name:var(--font-mono)] uppercase tracking-[0.12em]">Status:</span>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-0.5 text-xs text-[#ededed] outline-none"
+                className="rounded border border-[#d9d9d9] bg-[#f5f5f5] px-2 py-0.5 text-xs text-[#171717] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
               >
                 <option value="">All</option>
                 {statuses.map((s) => (
@@ -129,11 +129,11 @@ export default function ListPage() {
 
             {/* Priority filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-[#555]">Priority:</span>
+              <span className="text-xs text-[#999999] font-[family-name:var(--font-mono)] uppercase tracking-[0.12em]">Priority:</span>
               <select
                 value={filterPriority}
                 onChange={(e) => setFilterPriority(e.target.value)}
-                className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-0.5 text-xs text-[#ededed] outline-none"
+                className="rounded border border-[#d9d9d9] bg-[#f5f5f5] px-2 py-0.5 text-xs text-[#171717] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
               >
                 <option value="">All</option>
                 <option value="urgent">Urgent</option>
@@ -146,11 +146,11 @@ export default function ListPage() {
 
             {/* Sort */}
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-[#555]">Sort:</span>
+              <span className="text-xs text-[#999999] font-[family-name:var(--font-mono)] uppercase tracking-[0.12em]">Sort:</span>
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value)}
-                className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-0.5 text-xs text-[#ededed] outline-none"
+                className="rounded border border-[#d9d9d9] bg-[#f5f5f5] px-2 py-0.5 text-xs text-[#171717] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
               >
                 <option value="position">Manual</option>
                 <option value="created_at">Created</option>
@@ -163,7 +163,7 @@ export default function ListPage() {
             {hasActiveFilters && (
               <button
                 onClick={() => { setFilterPriority(''); setFilterStatus(''); setSort('position'); }}
-                className="text-xs text-[#555] hover:text-[#ededed]"
+                className="text-xs text-[#999999] hover:text-[#171717]"
               >
                 Clear
               </button>

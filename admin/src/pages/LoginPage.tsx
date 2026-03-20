@@ -33,38 +33,38 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
+    <div className="flex min-h-screen items-center justify-center bg-white">
       <div className="w-full max-w-sm p-8">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-semibold text-[#ededed]">SquadHub Admin</h1>
-          <p className="mt-1 text-sm text-[#888]">Sign in with your admin account</p>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[#171717]">SquadHub Admin</h1>
+          <p className="mt-1 text-sm text-[#666]">Sign in with your admin account</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <p className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
           )}
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-[#888]">Email</label>
+            <label className="mb-1 block text-xs font-medium text-[#666]">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2 text-sm text-[#ededed] placeholder-[#555] outline-none focus:border-[#ededed]"
+              className="w-full rounded-md border border-[#d9d9d9] bg-white px-3 py-2 text-sm text-[#171717] placeholder-[#999] outline-none transition focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
               placeholder="admin@example.com"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-[#888]">Password</label>
+            <label className="mb-1 block text-xs font-medium text-[#666]">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2 text-sm text-[#ededed] placeholder-[#555] outline-none focus:border-[#ededed]"
+              className="w-full rounded-md border border-[#d9d9d9] bg-white px-3 py-2 text-sm text-[#171717] placeholder-[#999] outline-none transition focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
               placeholder="••••••••"
             />
           </div>
@@ -72,7 +72,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-[#ededed] py-2 text-sm font-medium text-[#0a0a0a] transition hover:bg-white disabled:opacity-50"
+            className="w-full rounded-md bg-[#171717] py-2 text-sm font-medium text-white transition hover:bg-[#333] disabled:opacity-50"
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </button>

@@ -26,8 +26,8 @@ export default function TaskDetailPanel({
 
   if (isLoading || !task) {
     return (
-      <div className="flex w-96 items-center justify-center border-l border-[#222] bg-[#111]/60">
-        <p className="text-sm text-[#555]">Loading...</p>
+      <div className="flex w-96 items-center justify-center border-l border-[#eaeaea] bg-[#fafafa]/60">
+        <p className="text-sm text-[#999999]">Loading...</p>
       </div>
     );
   }
@@ -57,14 +57,14 @@ export default function TaskDetailPanel({
   };
 
   return (
-    <div className="flex w-96 shrink-0 flex-col border-l border-[#222] bg-[#111]/60">
+    <div className="flex w-96 shrink-0 flex-col border-l border-[#eaeaea] bg-[#fafafa]/60">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[#222] px-4 py-3">
-        <span className="text-xs font-medium text-[#555]">Task Detail</span>
+      <div className="flex items-center justify-between border-b border-[#eaeaea] px-4 py-3">
+        <span className="text-xs font-medium text-[#999999] font-[family-name:var(--font-mono)] uppercase tracking-[0.12em]">Task Detail</span>
         <div className="flex items-center gap-1">
           <button
             onClick={handleDelete}
-            className="rounded p-1 text-[#555] hover:bg-[#1a1a1a] hover:text-red-400"
+            className="rounded p-1 text-[#999999] hover:bg-[#f5f5f5] hover:text-red-500"
             title="Delete task"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -73,7 +73,7 @@ export default function TaskDetailPanel({
           </button>
           <button
             onClick={() => setActiveTask(null)}
-            className="rounded p-1 text-[#555] hover:bg-[#1a1a1a] hover:text-[#ededed]"
+            className="rounded p-1 text-[#999999] hover:bg-[#f5f5f5] hover:text-[#171717]"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -92,12 +92,12 @@ export default function TaskDetailPanel({
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleSave('title'); if (e.key === 'Escape') setEditing(null); }}
             onBlur={() => handleSave('title')}
-            className="mb-3 w-full rounded border border-[#333] bg-[#1a1a1a] px-2 py-1 text-base font-semibold text-[#ededed] outline-none focus:border-[#ededed]"
+            className="mb-3 w-full rounded border border-[#d9d9d9] bg-[#f5f5f5] px-2 py-1 text-base font-semibold text-[#171717] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
           />
         ) : (
           <h3
             onClick={() => { setEditing('title'); setEditValue(task.title); }}
-            className="mb-3 cursor-pointer text-base font-semibold text-[#ededed] hover:text-[#ededed]"
+            className="mb-3 cursor-pointer text-base font-semibold text-[#171717] font-[family-name:var(--font-display)] hover:text-[#171717]"
           >
             {task.title}
           </h3>
@@ -107,11 +107,11 @@ export default function TaskDetailPanel({
         <div className="mb-4 space-y-3">
           {/* Status */}
           <div className="flex items-center justify-between">
-            <span className="text-xs text-[#555]">Status</span>
+            <span className="text-xs text-[#999999] font-[family-name:var(--font-mono)] uppercase tracking-[0.12em]">Status</span>
             <select
               value={task.status_id}
               onChange={(e) => updateTask.mutate({ id: task.id, status_id: e.target.value })}
-              className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-0.5 text-xs text-[#ededed] outline-none"
+              className="rounded border border-[#d9d9d9] bg-[#f5f5f5] px-2 py-0.5 text-xs text-[#171717] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
             >
               {statuses.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
@@ -121,11 +121,11 @@ export default function TaskDetailPanel({
 
           {/* Priority */}
           <div className="flex items-center justify-between">
-            <span className="text-xs text-[#555]">Priority</span>
+            <span className="text-xs text-[#999999] font-[family-name:var(--font-mono)] uppercase tracking-[0.12em]">Priority</span>
             <select
               value={task.priority}
               onChange={(e) => updateTask.mutate({ id: task.id, priority: e.target.value as any })}
-              className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-0.5 text-xs text-[#ededed] outline-none"
+              className="rounded border border-[#d9d9d9] bg-[#f5f5f5] px-2 py-0.5 text-xs text-[#171717] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
             >
               <option value="none">None</option>
               <option value="low">Low</option>
@@ -137,24 +137,24 @@ export default function TaskDetailPanel({
 
           {/* Due date */}
           <div className="flex items-center justify-between">
-            <span className="text-xs text-[#555]">Due date</span>
+            <span className="text-xs text-[#999999] font-[family-name:var(--font-mono)] uppercase tracking-[0.12em]">Due date</span>
             <input
               type="date"
               value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
               onChange={(e) => updateTask.mutate({ id: task.id, due_date: e.target.value || null })}
-              className="rounded border border-[#333] bg-[#1a1a1a] px-2 py-0.5 text-xs text-[#ededed] outline-none"
+              className="rounded border border-[#d9d9d9] bg-[#f5f5f5] px-2 py-0.5 text-xs text-[#171717] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
             />
           </div>
 
           {/* Assignees */}
           {task.assignees && task.assignees.length > 0 && (
             <div className="flex items-center justify-between">
-              <span className="text-xs text-[#555]">Assignees</span>
+              <span className="text-xs text-[#999999] font-[family-name:var(--font-mono)] uppercase tracking-[0.12em]">Assignees</span>
               <div className="flex -space-x-1">
                 {task.assignees.map((u: any) => (
                   <div
                     key={u.id}
-                    className="flex h-6 w-6 items-center justify-center rounded-full bg-[#222] text-[10px] font-medium text-[#ededed] ring-1 ring-[#0a0a0a]"
+                    className="flex h-6 w-6 items-center justify-center rounded-full bg-[#eaeaea] text-[10px] font-medium text-[#171717] ring-1 ring-white"
                     title={u.display_name || u.email}
                   >
                     {(u.display_name || u.email)?.[0]?.toUpperCase()}
@@ -167,7 +167,7 @@ export default function TaskDetailPanel({
 
         {/* Description */}
         <div className="mb-4">
-          <span className="mb-1 block text-xs text-[#555]">Description</span>
+          <span className="mb-1 block text-xs text-[#999999] font-[family-name:var(--font-mono)] uppercase tracking-[0.12em]">Description</span>
           {editing === 'description' ? (
             <textarea
               autoFocus
@@ -175,14 +175,14 @@ export default function TaskDetailPanel({
               onChange={(e) => setEditValue(e.target.value)}
               onBlur={() => handleSave('description')}
               rows={4}
-              className="w-full resize-none rounded border border-[#333] bg-[#1a1a1a] px-2 py-1.5 text-sm text-[#ededed] outline-none focus:border-[#ededed]"
+              className="w-full resize-none rounded border border-[#d9d9d9] bg-[#f5f5f5] px-2 py-1.5 text-sm text-[#171717] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
             />
           ) : (
             <div
               onClick={() => { setEditing('description'); setEditValue(task.description || ''); }}
-              className="min-h-[60px] cursor-pointer rounded border border-transparent p-2 text-sm text-[#ededed] hover:border-[#333] hover:bg-[#1a1a1a]/50"
+              className="min-h-[60px] cursor-pointer rounded border border-transparent p-2 text-sm text-[#171717] hover:border-[#d9d9d9] hover:bg-[#f5f5f5]/50"
             >
-              {task.description || <span className="text-[#444]">Add a description...</span>}
+              {task.description || <span className="text-[#999999]">Add a description...</span>}
             </div>
           )}
         </div>
@@ -190,9 +190,9 @@ export default function TaskDetailPanel({
         {/* Subtasks */}
         {task.subtasks && task.subtasks.length > 0 && (
           <div className="mb-4">
-            <span className="mb-1 block text-xs text-[#555]">Subtasks ({task.subtasks.length})</span>
+            <span className="mb-1 block text-xs text-[#999999] font-[family-name:var(--font-mono)] uppercase tracking-[0.12em]">Subtasks ({task.subtasks.length})</span>
             {task.subtasks.map((sub: any) => (
-              <div key={sub.id} className="flex items-center gap-2 py-1 text-sm text-[#888]">
+              <div key={sub.id} className="flex items-center gap-2 py-1 text-sm text-[#666666]">
                 <span
                   className="h-2.5 w-2.5 rounded-full"
                   style={{ backgroundColor: statuses.find((s) => s.id === sub.status_id)?.color || '#6b7280' }}
@@ -205,22 +205,22 @@ export default function TaskDetailPanel({
 
         {/* Comments */}
         <div>
-          <span className="mb-2 block text-xs text-[#555]">
+          <span className="mb-2 block text-xs text-[#999999] font-[family-name:var(--font-mono)] uppercase tracking-[0.12em]">
             Comments {task.comment_count ? `(${task.comment_count})` : ''}
           </span>
 
           {comments?.map((c) => (
             <div key={c.id} className="mb-3">
               <div className="flex items-center gap-2">
-                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#222] text-[10px] font-medium text-[#ededed]">
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#eaeaea] text-[10px] font-medium text-[#171717]">
                   {(c.user?.display_name || c.user?.email)?.[0]?.toUpperCase()}
                 </div>
-                <span className="text-xs font-medium text-[#ededed]">{c.user?.display_name || c.user?.email}</span>
-                <span className="text-[10px] text-[#444]">
+                <span className="text-xs font-medium text-[#171717]">{c.user?.display_name || c.user?.email}</span>
+                <span className="text-[10px] text-[#999999]">
                   {new Date(c.created_at).toLocaleDateString()}
                 </span>
               </div>
-              <p className="mt-1 pl-7 text-sm text-[#888]">{c.content}</p>
+              <p className="mt-1 pl-7 text-sm text-[#666666]">{c.content}</p>
             </div>
           ))}
 
@@ -231,12 +231,12 @@ export default function TaskDetailPanel({
               onChange={(e) => setCommentText(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleAddComment(); }}
               placeholder="Write a comment..."
-              className="flex-1 rounded border border-[#333] bg-[#1a1a1a] px-2.5 py-1.5 text-sm text-[#ededed] placeholder-[#555] outline-none focus:border-[#ededed]"
+              className="flex-1 rounded border border-[#d9d9d9] bg-[#f5f5f5] px-2.5 py-1.5 text-sm text-[#171717] placeholder-[#999999] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
             />
             <button
               onClick={handleAddComment}
               disabled={!commentText.trim() || addComment.isPending}
-              className="rounded bg-[#ededed] text-[#0a0a0a] px-3 py-1.5 text-xs font-medium hover:bg-white disabled:opacity-50"
+              className="rounded bg-[#171717] text-white px-3 py-1.5 text-xs font-medium hover:bg-[#333] disabled:opacity-50"
             >
               Send
             </button>

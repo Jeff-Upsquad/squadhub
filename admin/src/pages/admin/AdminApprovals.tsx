@@ -54,35 +54,35 @@ export default function AdminApprovals() {
 
   return (
     <div>
-      <h2 className="mb-6 text-2xl font-semibold text-[#ededed]">User Approvals</h2>
+      <h2 className="mb-6 font-[family-name:var(--font-display)] text-2xl font-bold text-[#171717]">User Approvals</h2>
 
       {isLoading ? (
-        <p className="text-sm text-[#888]">Loading...</p>
+        <p className="text-sm text-[#666]">Loading...</p>
       ) : pendingUsers.length === 0 ? (
-        <div className="rounded-lg border border-[#222] bg-[#111] p-8 text-center">
-          <svg className="mx-auto h-10 w-10 text-[#555]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+        <div className="rounded-lg border border-[#eaeaea] bg-white p-8 text-center">
+          <svg className="mx-auto h-10 w-10 text-[#999]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p className="mt-3 text-sm text-[#888]">No pending approvals</p>
+          <p className="mt-3 text-sm text-[#666]">No pending approvals</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-[#222]">
+        <div className="overflow-hidden rounded-lg border border-[#eaeaea] bg-white">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-[#222] bg-[#111]">
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#888]">Name</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#888]">Email</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#888]">Signed Up</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#888]">Role</th>
-                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-[#888]">Actions</th>
+              <tr className="border-b border-[#eaeaea] bg-[#fafafa]">
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Name</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Email</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Signed Up</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Role</th>
+                <th className="px-4 py-3 text-right font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Actions</th>
               </tr>
             </thead>
             <tbody>
               {pendingUsers.map((user) => (
-                <tr key={user.id} className="border-b border-[#222] last:border-b-0">
-                  <td className="px-4 py-3 text-sm text-[#ededed]">{user.display_name}</td>
-                  <td className="px-4 py-3 text-sm text-[#888]">{user.email}</td>
-                  <td className="px-4 py-3 text-sm text-[#888]">
+                <tr key={user.id} className="border-b border-[#eaeaea] last:border-b-0">
+                  <td className="px-4 py-3 text-sm text-[#171717]">{user.display_name}</td>
+                  <td className="px-4 py-3 text-sm text-[#666]">{user.email}</td>
+                  <td className="px-4 py-3 font-[family-name:var(--font-mono)] text-xs text-[#666]">
                     {new Date(user.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
@@ -91,7 +91,7 @@ export default function AdminApprovals() {
                       onChange={(e) =>
                         setSelectedRoles((prev) => ({ ...prev, [user.id]: e.target.value }))
                       }
-                      className="rounded-md border border-[#333] bg-[#0a0a0a] px-2 py-1.5 text-xs text-[#ededed] outline-none focus:border-[#ededed]"
+                      className="rounded-md border border-[#d9d9d9] bg-white px-2 py-1.5 text-xs text-[#171717] outline-none focus:border-[#0070F3]"
                     >
                       {roles.map((role) => (
                         <option key={role.id} value={role.id}>
@@ -105,14 +105,14 @@ export default function AdminApprovals() {
                       <button
                         onClick={() => handleApprove(user.id)}
                         disabled={actionLoading === user.id + '-approve'}
-                        className="rounded-md bg-green-500/15 px-3 py-1.5 text-xs font-medium text-green-400 transition hover:bg-green-500/25 disabled:opacity-50"
+                        className="rounded-md bg-green-50 px-3 py-1.5 text-xs font-medium text-green-600 transition hover:bg-green-100 disabled:opacity-50"
                       >
                         {actionLoading === user.id + '-approve' ? 'Approving...' : 'Approve'}
                       </button>
                       <button
                         onClick={() => handleReject(user.id)}
                         disabled={actionLoading === user.id + '-reject'}
-                        className="rounded-md bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-400 transition hover:bg-red-500/25 disabled:opacity-50"
+                        className="rounded-md bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-50"
                       >
                         {actionLoading === user.id + '-reject' ? 'Rejecting...' : 'Reject'}
                       </button>

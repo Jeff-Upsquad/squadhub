@@ -135,28 +135,28 @@ export default function AdminRoles() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-2xl font-semibold text-[#ededed]">Roles</h2>
+        <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[#171717]">Roles</h2>
         <button
           onClick={openCreate}
-          className="rounded-md bg-[#ededed] px-4 py-2 text-sm font-medium text-[#0a0a0a] transition hover:bg-white"
+          className="rounded-md bg-[#171717] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#333]"
         >
           Create Role
         </button>
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-[#888]">Loading...</p>
+        <p className="text-sm text-[#666]">Loading...</p>
       ) : roles.length === 0 ? (
-        <p className="text-sm text-[#888]">No roles found.</p>
+        <p className="text-sm text-[#666]">No roles found.</p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-[#222]">
+        <div className="overflow-hidden rounded-lg border border-[#eaeaea] bg-white">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-[#222] bg-[#111]">
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#888]">Role</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#888]">Members</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-[#888]">Permissions</th>
-                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-[#888]">Actions</th>
+              <tr className="border-b border-[#eaeaea] bg-[#fafafa]">
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Role</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Members</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Permissions</th>
+                <th className="px-4 py-3 text-right font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#666]">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -166,38 +166,38 @@ export default function AdminRoles() {
                   .map(([k]) => PERMISSION_LABELS[k] || k);
 
                 return (
-                  <tr key={role.id} className="border-b border-[#222] last:border-b-0">
+                  <tr key={role.id} className="border-b border-[#eaeaea] last:border-b-0">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span
                           className="inline-block h-3 w-3 rounded-full"
                           style={{ backgroundColor: role.color }}
                         />
-                        <span className="text-sm font-medium text-[#ededed]">{role.name}</span>
+                        <span className="text-sm font-medium text-[#171717]">{role.name}</span>
                         {role.is_default && (
-                          <span className="rounded-full bg-[#222] px-2 py-0.5 text-[10px] text-[#888]">Default</span>
+                          <span className="rounded-full bg-[#f5f5f5] px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] text-[#666]">Default</span>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-[#888]">{role.member_count}</td>
+                    <td className="px-4 py-3 text-sm text-[#666]">{role.member_count}</td>
                     <td className="px-4 py-3">
                       {enabledPerms.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {enabledPerms.map((p) => (
-                            <span key={p} className="rounded bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] text-[#888]">
+                            <span key={p} className="rounded bg-[#f5f5f5] px-1.5 py-0.5 font-[family-name:var(--font-mono)] text-[10px] text-[#666]">
                               {p}
                             </span>
                           ))}
                         </div>
                       ) : (
-                        <span className="text-xs text-[#555]">None</span>
+                        <span className="text-xs text-[#999]">None</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => openEdit(role)}
-                          className="rounded-md border border-[#333] bg-transparent px-2.5 py-1 text-xs text-[#888] hover:border-[#555] hover:text-[#ededed]"
+                          className="rounded-md border border-[#d9d9d9] bg-transparent px-2.5 py-1 text-xs text-[#666] hover:border-[#999] hover:text-[#171717]"
                         >
                           Edit
                         </button>
@@ -205,7 +205,7 @@ export default function AdminRoles() {
                           <button
                             onClick={() => handleDelete(role)}
                             disabled={deleteMutation.isPending}
-                            className="rounded-md bg-red-500/15 px-2.5 py-1 text-xs text-red-400 hover:bg-red-500/25 disabled:opacity-50"
+                            className="rounded-md bg-red-50 px-2.5 py-1 text-xs text-red-600 hover:bg-red-100 disabled:opacity-50"
                           >
                             Delete
                           </button>
@@ -222,29 +222,29 @@ export default function AdminRoles() {
 
       {/* Create / Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="w-full max-w-md rounded-lg border border-[#222] bg-[#111] p-6">
-            <h3 className="mb-4 text-lg font-semibold text-[#ededed]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md rounded-lg border border-[#eaeaea] bg-white p-6 shadow-lg">
+            <h3 className="mb-4 font-[family-name:var(--font-display)] text-lg font-semibold text-[#171717]">
               {editingRole ? 'Edit Role' : 'Create Role'}
             </h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Name */}
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-[#888]">Name</label>
+                <label className="mb-1.5 block text-xs font-medium text-[#666]">Name</label>
                 <input
                   type="text"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   required
                   maxLength={30}
-                  className="w-full rounded-md border border-[#333] bg-[#0a0a0a] px-3 py-2 text-sm text-[#ededed] placeholder-[#555] outline-none focus:border-[#ededed]"
+                  className="w-full rounded-md border border-[#d9d9d9] bg-white px-3 py-2 text-sm text-[#171717] placeholder-[#999] outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]"
                   placeholder="e.g. Designer"
                 />
               </div>
 
               {/* Color */}
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-[#888]">Color</label>
+                <label className="mb-1.5 block text-xs font-medium text-[#666]">Color</label>
                 <div className="flex items-center gap-2">
                   {PRESET_COLORS.map((c) => (
                     <button
@@ -252,7 +252,7 @@ export default function AdminRoles() {
                       type="button"
                       onClick={() => setFormColor(c)}
                       className={`h-7 w-7 rounded-full border-2 transition ${
-                        formColor === c ? 'border-[#ededed]' : 'border-transparent hover:border-[#555]'
+                        formColor === c ? 'border-[#171717]' : 'border-transparent hover:border-[#d9d9d9]'
                       }`}
                       style={{ backgroundColor: c }}
                     />
@@ -262,23 +262,23 @@ export default function AdminRoles() {
 
               {/* Permissions */}
               <div>
-                <label className="mb-2 block text-xs font-medium text-[#888]">Permissions</label>
+                <label className="mb-2 block text-xs font-medium text-[#666]">Permissions</label>
                 <div className="space-y-2">
                   {Object.entries(PERMISSION_LABELS).map(([key, label]) => (
-                    <label key={key} className="flex items-center justify-between rounded-md border border-[#222] bg-[#0a0a0a] px-3 py-2">
-                      <span className="text-sm text-[#ededed]">{label}</span>
+                    <label key={key} className="flex items-center justify-between rounded-md border border-[#eaeaea] bg-[#fafafa] px-3 py-2">
+                      <span className="text-sm text-[#171717]">{label}</span>
                       <button
                         type="button"
                         onClick={() => togglePermission(key)}
                         className={`relative h-5 w-9 rounded-full transition ${
-                          formPermissions[key] ? 'bg-[#ededed]' : 'bg-[#333]'
+                          formPermissions[key] ? 'bg-[#0070F3]' : 'bg-[#d9d9d9]'
                         }`}
                       >
                         <span
-                          className={`absolute top-0.5 h-4 w-4 rounded-full transition-transform ${
+                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
                             formPermissions[key]
-                              ? 'translate-x-4 bg-[#0a0a0a]'
-                              : 'translate-x-0.5 bg-[#888]'
+                              ? 'translate-x-4'
+                              : 'translate-x-0.5'
                           }`}
                         />
                       </button>
@@ -289,7 +289,7 @@ export default function AdminRoles() {
 
               {/* Error */}
               {formError && (
-                <div className="rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-400">
+                <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
                   {formError}
                 </div>
               )}
@@ -299,14 +299,14 @@ export default function AdminRoles() {
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="rounded-md border border-[#333] px-4 py-2 text-sm text-[#888] hover:border-[#555] hover:text-[#ededed]"
+                  className="rounded-md border border-[#d9d9d9] px-4 py-2 text-sm text-[#666] hover:border-[#999] hover:text-[#171717]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving || !formName.trim()}
-                  className="rounded-md bg-[#ededed] px-4 py-2 text-sm font-medium text-[#0a0a0a] transition hover:bg-white disabled:opacity-50"
+                  className="rounded-md bg-[#171717] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#333] disabled:opacity-50"
                 >
                   {isSaving ? 'Saving...' : editingRole ? 'Save Changes' : 'Create Role'}
                 </button>

@@ -11,10 +11,10 @@ function formatDate(dateStr: string | null | undefined) {
 
   const formatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-  if (days < 0) return { text: formatted, color: 'text-red-400' };
-  if (days === 0) return { text: 'Today', color: 'text-yellow-400' };
-  if (days === 1) return { text: 'Tomorrow', color: 'text-yellow-400' };
-  return { text: formatted, color: 'text-[#888]' };
+  if (days < 0) return { text: formatted, color: 'text-red-500' };
+  if (days === 0) return { text: 'Today', color: 'text-yellow-600' };
+  if (days === 1) return { text: 'Tomorrow', color: 'text-yellow-600' };
+  return { text: formatted, color: 'text-[#666666]' };
 }
 
 export default function TaskRow({
@@ -32,7 +32,7 @@ export default function TaskRow({
   return (
     <div
       onClick={() => setActiveTask(task.id)}
-      className="group flex cursor-pointer items-center gap-3 border-b border-[#222]/50 px-4 py-2 transition hover:bg-[#111]/30"
+      className="group flex cursor-pointer items-center gap-3 border-b border-[#eaeaea]/50 px-4 py-2 transition hover:bg-[#fafafa]/30"
     >
       {/* Status dot / dropdown */}
       <div className="relative">
@@ -53,7 +53,7 @@ export default function TaskRow({
       </div>
 
       {/* Title */}
-      <span className="min-w-0 flex-1 truncate text-sm text-[#ededed]">{task.title}</span>
+      <span className="min-w-0 flex-1 truncate text-sm text-[#171717]">{task.title}</span>
 
       {/* Priority */}
       <TaskPriorityBadge priority={task.priority} />
@@ -64,7 +64,7 @@ export default function TaskRow({
           {task.assignees.slice(0, 3).map((u: any) => (
             <div
               key={u.id}
-              className="flex h-5 w-5 items-center justify-center rounded-full bg-[#222] text-[10px] font-medium text-[#ededed] ring-1 ring-[#0a0a0a]"
+              className="flex h-5 w-5 items-center justify-center rounded-full bg-[#eaeaea] text-[10px] font-medium text-[#171717] ring-1 ring-white"
               title={u.display_name || u.email}
             >
               {(u.display_name || u.email)?.[0]?.toUpperCase()}
