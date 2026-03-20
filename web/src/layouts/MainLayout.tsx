@@ -176,12 +176,12 @@ export default function MainLayout() {
 
   return (
     <div className="flex h-screen bg-[#F0F2F5] text-[#0F172B]">
-      {/* Far-left icon sidebar */}
-      <div className="flex w-[68px] shrink-0 flex-col items-center bg-[#F0F2F5] pt-2">
+      {/* Far-left icon sidebar — black */}
+      <div className="flex w-[68px] shrink-0 flex-col items-center bg-[#1A1A2E] pt-2">
         {/* Sidebar toggle */}
         <button
           onClick={() => setSidebarOpen((v) => !v)}
-          className="mb-1 flex h-8 w-8 items-center justify-center rounded-md text-[#90A1B9] transition hover:bg-white/60 hover:text-[#62748E]"
+          className="mb-1 flex h-8 w-8 items-center justify-center rounded-md text-[#8888A0] transition hover:bg-white/10 hover:text-white"
           title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
         >
           <svg className={`h-4 w-4 transition-transform ${sidebarOpen ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -195,8 +195,8 @@ export default function MainLayout() {
               onClick={() => setActiveSection(section.id)}
               className={`relative flex h-11 w-11 flex-col items-center justify-center rounded-lg transition ${
                 activeSection === section.id
-                  ? 'bg-white text-[#0F172B] shadow-sm'
-                  : 'text-[#888] hover:bg-white/60 hover:text-[#62748E]'
+                  ? 'bg-white/15 text-white'
+                  : 'text-[#8888A0] hover:bg-white/10 hover:text-white'
               }`}
               title={SECTION_TITLES[section.id]}
             >
@@ -214,7 +214,7 @@ export default function MainLayout() {
           {user?.role === 'admin' && (
             <a
               href={ADMIN_APP_URL}
-              className="flex h-10 w-10 items-center justify-center rounded-lg text-[#888] transition hover:bg-white/60 hover:text-[#62748E]"
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-[#8888A0] transition hover:bg-white/10 hover:text-white"
               title="Admin Panel"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -225,7 +225,7 @@ export default function MainLayout() {
           )}
           <button
             onClick={logout}
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-[#888] transition hover:bg-white/60 hover:text-[#62748E]"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-[#8888A0] transition hover:bg-white/10 hover:text-white"
             title="Logout"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -238,7 +238,7 @@ export default function MainLayout() {
       {/* Module sidebar */}
       {currentWorkspace && (
         <div
-          className={`flex h-full shrink-0 flex-col bg-white transition-[width] duration-200 ease-in-out ${
+          className={`flex h-full shrink-0 flex-col bg-[#F0F2F5] transition-[width] duration-200 ease-in-out ${
             sidebarOpen ? 'w-60' : 'w-0 overflow-hidden'
           }`}
         >
