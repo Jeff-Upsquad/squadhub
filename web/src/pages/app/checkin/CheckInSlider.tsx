@@ -9,7 +9,7 @@ interface Props {
   onSuccess: () => void;
 }
 
-type ResultStatus = 'on_time' | 'late' | 'error' | null;
+type ResultStatus = 'on_time' | 'late' | 'error' | 'already' | null;
 
 export default function CheckInSlider({ checklistItems, onClose, onSuccess }: Props) {
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -36,8 +36,13 @@ export default function CheckInSlider({ checklistItems, onClose, onSuccess }: Pr
         onSuccess();
       }, 2000);
     },
-    onError: () => {
-      setResult('error');
+    onError: (err: any) => {
+      if (err?.response?.status === 409) {
+        setResult('already');
+        setTimeout(() => { onSuccess(); }, 2000);
+      } else {
+        setResult('error');
+      }
     },
   });
 
@@ -92,6 +97,13 @@ export default function CheckInSlider({ checklistItems, onClose, onSuccess }: Pr
                   <div className="mb-3 text-5xl">&#128336;</div>
                   <h3 className="text-lg font-semibold text-yellow-700">Late Check-In</h3>
                   <p className="mt-1 text-sm text-[#62748E]">Submitted after the deadline.</p>
+                </>
+              )}
+              {result === 'already' && (
+                <>
+                  <div className="mb-3 text-5xl">&#9989;</div>
+                  <h3 className="text-lg font-semibold text-[#0F172B]">Already Checked In</h3>
+                  <p className="mt-1 text-sm text-[#62748E]">You have already checked in today.</p>
                 </>
               )}
               {result === 'error' && (
