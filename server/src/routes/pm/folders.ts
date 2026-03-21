@@ -32,6 +32,7 @@ router.get('/folders', async (req: Request, res: Response) => {
       .from('folders')
       .select('*, lists(*)')
       .eq('space_id', spaceId)
+      .is('deleted_at', null)
       .order('position');
 
     if (error) {
@@ -121,7 +122,7 @@ router.put('/folders/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /pm/folders/:id — requires manager access on folder
+// DELETE /pm/folders/:id — soft-delete, requires manager access
 router.delete('/folders/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
@@ -132,28 +133,23 @@ router.delete('/folders/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    // Move lists to space root before deleting folder
-    const { data: folder } = await supabaseAdmin
+    const now = new Date().toISOString();
+
+    // Soft-delete the folder
+    const { error } = await supabaseAdmin
       .from('folders')
-      .select('space_id')
-      .eq('id', id)
-      .single();
-
-    if (folder) {
-      await supabaseAdmin
-        .from('lists')
-        .update({ folder_id: null })
-        .eq('folder_id', id);
-    }
-
-    const { error } = await supabaseAdmin.from('folders').delete().eq('id', id);
+      .update({ deleted_at: now })
+      .eq('id', id);
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
 
-    res.json({ success: true, message: 'Folder deleted' });
+    // Also soft-delete child lists
+    await supabaseAdmin.from('lists').update({ deleted_at: now }).eq('folder_id', id).is('deleted_at', null);
+
+    res.json({ success: true, message: 'Folder moved to trash' });
   } catch (err) {
     console.error('Delete folder error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });

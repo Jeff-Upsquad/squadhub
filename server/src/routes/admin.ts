@@ -409,4 +409,143 @@ router.delete('/users/:id', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================================
+// Trash Management (soft-deleted spaces, folders, lists)
+// ============================================================
+
+// GET /admin/trash — list all soft-deleted items
+router.get('/trash', async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspace_id as string;
+
+    const [spacesRes, foldersRes, listsRes] = await Promise.all([
+      supabaseAdmin
+        .from('spaces')
+        .select('id, name, color, icon, deleted_at, created_by, workspace_id')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .then(async (r) => {
+          if (!r.data) return r;
+          // Attach creator info
+          const userIds = [...new Set(r.data.map((s: any) => s.created_by).filter(Boolean))];
+          if (userIds.length === 0) return r;
+          const { data: users } = await supabaseAdmin.from('users').select('id, display_name').in('id', userIds);
+          const userMap = new Map((users || []).map((u: any) => [u.id, u.display_name]));
+          return { ...r, data: r.data.map((s: any) => ({ ...s, created_by_name: userMap.get(s.created_by) || null })) };
+        }),
+      supabaseAdmin
+        .from('folders')
+        .select('id, name, space_id, deleted_at, created_by, spaces!inner(name, workspace_id)')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .then(async (r) => {
+          if (!r.data) return r;
+          const userIds = [...new Set(r.data.map((f: any) => f.created_by).filter(Boolean))];
+          if (userIds.length === 0) return r;
+          const { data: users } = await supabaseAdmin.from('users').select('id, display_name').in('id', userIds);
+          const userMap = new Map((users || []).map((u: any) => [u.id, u.display_name]));
+          return { ...r, data: r.data.map((f: any) => ({ ...f, created_by_name: userMap.get(f.created_by) || null })) };
+        }),
+      supabaseAdmin
+        .from('lists')
+        .select('id, name, space_id, folder_id, deleted_at, created_by, spaces!inner(name, workspace_id)')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .then(async (r) => {
+          if (!r.data) return r;
+          const userIds = [...new Set(r.data.map((l: any) => l.created_by).filter(Boolean))];
+          if (userIds.length === 0) return r;
+          const { data: users } = await supabaseAdmin.from('users').select('id, display_name').in('id', userIds);
+          const userMap = new Map((users || []).map((u: any) => [u.id, u.display_name]));
+          return { ...r, data: r.data.map((l: any) => ({ ...l, created_by_name: userMap.get(l.created_by) || null })) };
+        }),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        spaces: spacesRes.data || [],
+        folders: foldersRes.data || [],
+        lists: listsRes.data || [],
+      },
+    });
+  } catch (err) {
+    console.error('Admin get trash error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /admin/trash/restore — restore a soft-deleted item
+router.put('/trash/restore', async (req: Request, res: Response) => {
+  try {
+    const { type, id } = z.object({
+      type: z.enum(['space', 'folder', 'list']),
+      id: z.string().uuid(),
+    }).parse(req.body);
+
+    const table = type === 'space' ? 'spaces' : type === 'folder' ? 'folders' : 'lists';
+
+    const { error } = await supabaseAdmin
+      .from(table)
+      .update({ deleted_at: null })
+      .eq('id', id);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    // If restoring a space, also restore its child folders and lists
+    if (type === 'space') {
+      await supabaseAdmin.from('folders').update({ deleted_at: null }).eq('space_id', id);
+      await supabaseAdmin.from('lists').update({ deleted_at: null }).eq('space_id', id);
+    }
+
+    // If restoring a folder, also restore its child lists
+    if (type === 'folder') {
+      await supabaseAdmin.from('lists').update({ deleted_at: null }).eq('folder_id', id);
+    }
+
+    res.json({ success: true, message: `${type} restored` });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Admin restore error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /admin/trash/permanent — permanently delete a soft-deleted item
+router.delete('/trash/permanent', async (req: Request, res: Response) => {
+  try {
+    const { type, id } = z.object({
+      type: z.enum(['space', 'folder', 'list']),
+      id: z.string().uuid(),
+    }).parse(req.body);
+
+    const table = type === 'space' ? 'spaces' : type === 'folder' ? 'folders' : 'lists';
+
+    const { error } = await supabaseAdmin
+      .from(table)
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, message: `${type} permanently deleted` });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Admin permanent delete error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 export default router;

@@ -8,6 +8,7 @@ import AdminApprovals from './pages/admin/AdminApprovals';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminWorkspaces from './pages/admin/AdminWorkspaces';
 import AdminRoles from './pages/admin/AdminRoles';
+import AdminTrash from './pages/admin/AdminTrash';
 import WsAdminSettings from './pages/workspace-admin/WsAdminSettings';
 import WsAdminMembers from './pages/workspace-admin/WsAdminMembers';
 
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="users" element={<AdminUsers />} />
         <Route path="roles" element={<AdminRoles />} />
         <Route path="workspaces" element={<AdminWorkspaces />} />
+        <Route path="trash" element={<AdminTrash />} />
       </Route>
 
       {/* Workspace Admin — workspace owner/admin */}

@@ -38,7 +38,7 @@ router.get('/lists', async (req: Request, res: Response) => {
       return;
     }
 
-    let query = supabaseAdmin.from('lists').select('*').order('position');
+    let query = supabaseAdmin.from('lists').select('*').is('deleted_at', null).order('position');
 
     if (folderId) {
       query = query.eq('folder_id', folderId);
@@ -179,7 +179,7 @@ router.put('/lists/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /pm/lists/:id — requires manager access
+// DELETE /pm/lists/:id — soft-delete, requires manager access
 router.delete('/lists/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
@@ -190,14 +190,17 @@ router.delete('/lists/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const { error } = await supabaseAdmin.from('lists').delete().eq('id', id);
+    const { error } = await supabaseAdmin
+      .from('lists')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id);
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
 
-    res.json({ success: true, message: 'List deleted' });
+    res.json({ success: true, message: 'List moved to trash' });
   } catch (err) {
     console.error('Delete list error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });

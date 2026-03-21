@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import type { Space } from '@squadhub/shared';
+import { useWorkspaceStore } from '../stores/workspaceStore';
 
 export function useSpaces(workspaceId: string | undefined) {
   return useQuery<Space[]>({
@@ -56,6 +57,43 @@ export function useCreateList(spaceId: string) {
     mutationFn: async (body: { name: string; folder_id?: string }) => {
       const res = await api.post('/pm/lists', { ...body, space_id: spaceId });
       return res.data.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['space', spaceId] });
+    },
+  });
+}
+
+export function useDeleteSpace() {
+  const qc = useQueryClient();
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
+  return useMutation({
+    mutationFn: async (spaceId: string) => {
+      await api.delete(`/pm/spaces/${spaceId}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['spaces', workspaceId] });
+    },
+  });
+}
+
+export function useDeleteFolder(spaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (folderId: string) => {
+      await api.delete(`/pm/folders/${folderId}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['space', spaceId] });
+    },
+  });
+}
+
+export function useDeleteList(spaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (listId: string) => {
+      await api.delete(`/pm/lists/${listId}`);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['space', spaceId] });

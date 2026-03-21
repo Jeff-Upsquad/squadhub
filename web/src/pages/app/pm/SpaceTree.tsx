@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSpaces, useSpace, useCreateFolder, useCreateList } from '../../../hooks/useSpaces';
+import { useSpaces, useSpace, useCreateFolder, useCreateList, useDeleteSpace, useDeleteFolder, useDeleteList } from '../../../hooks/useSpaces';
 import { useHasPermission } from '../../../hooks/usePermissions';
 import { usePMStore } from '../../../stores/pmStore';
 import CreateSpaceModal from './CreateSpaceModal';
@@ -28,34 +28,56 @@ function ChevronIcon({ open }: { open: boolean }) {
 }
 
 // ---- List item ----
-function ListItem({ list, depth = 0 }: { list: List; depth?: number }) {
+function ListItem({ list, depth = 0, spaceId, canDelete }: { list: List; depth?: number; spaceId: string; canDelete: boolean }) {
   const { activeListId, setActiveList } = usePMStore();
   const isActive = activeListId === list.id;
+  const deleteList = useDeleteList(spaceId);
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm(`Delete list "${list.name}"? It will be moved to trash.`)) {
+      deleteList.mutate(list.id);
+    }
+  };
 
   return (
-    <button
-      onClick={() => setActiveList(list.id)}
-      className={`flex w-full items-center gap-2 rounded-md py-1 text-left text-[13px] transition ${
-        isActive
-          ? 'bg-[#F8FAFC] text-[#0F172B]'
-          : 'text-[#666666] hover:bg-[#F8FAFC]'
-      }`}
-      style={{ paddingLeft: `${12 + depth * 16}px` }}
-    >
-      <svg className="h-3.5 w-3.5 shrink-0 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-      </svg>
-      <span className="truncate">{list.name}</span>
-    </button>
+    <div className="group/list flex items-center">
+      <button
+        onClick={() => setActiveList(list.id)}
+        className={`flex flex-1 items-center gap-2 rounded-md py-1 text-left text-[13px] transition ${
+          isActive
+            ? 'bg-[#F8FAFC] text-[#0F172B]'
+            : 'text-[#666666] hover:bg-[#F8FAFC]'
+        }`}
+        style={{ paddingLeft: `${12 + depth * 16}px` }}
+      >
+        <svg className="h-3.5 w-3.5 shrink-0 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+        </svg>
+        <span className="truncate">{list.name}</span>
+      </button>
+      {canDelete && (
+        <button
+          onClick={handleDelete}
+          className="mr-2 hidden rounded p-0.5 text-[#999999] hover:text-red-500 group-hover/list:block"
+          title="Delete list"
+        >
+          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }
 
 // ---- Folder item ----
-function FolderItem({ folder, spaceId, canAdd }: { folder: Folder; spaceId: string; canAdd: boolean }) {
+function FolderItem({ folder, spaceId, canAdd, canDelete }: { folder: Folder; spaceId: string; canAdd: boolean; canDelete: boolean }) {
   const [open, setOpen] = useState(true);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const createList = useCreateList(spaceId);
+  const deleteFolder = useDeleteFolder(spaceId);
 
   const handleAdd = () => {
     if (!newName.trim()) { setAdding(false); return; }
@@ -77,22 +99,39 @@ function FolderItem({ folder, spaceId, canAdd }: { folder: Folder; spaceId: stri
           </svg>
           <span className="truncate">{folder.name}</span>
         </button>
-        {canAdd && (
-          <button
-            onClick={() => setAdding(true)}
-            className="mr-2 hidden text-[#999999] hover:text-[#0F172B] group-hover:block"
-            title="Add list"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
-        )}
+        <div className="mr-2 hidden gap-0.5 group-hover:flex">
+          {canAdd && (
+            <button
+              onClick={() => setAdding(true)}
+              className="rounded p-0.5 text-[#999999] hover:text-[#0F172B]"
+              title="Add list"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          )}
+          {canDelete && (
+            <button
+              onClick={() => {
+                if (confirm(`Delete folder "${folder.name}"? It and its lists will be moved to trash.`)) {
+                  deleteFolder.mutate(folder.id);
+                }
+              }}
+              className="rounded p-0.5 text-[#999999] hover:text-red-500"
+              title="Delete folder"
+            >
+              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
       {open && (
         <div className="ml-1">
           {folder.lists?.map((list) => (
-            <ListItem key={list.id} list={list} depth={2} />
+            <ListItem key={list.id} list={list} depth={2} spaceId={spaceId} canDelete={canDelete} />
           ))}
           {adding && (
             <div className="px-3 py-1" style={{ paddingLeft: '44px' }}>
@@ -128,6 +167,7 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
   const { data: space } = useSpace(isActive || open ? spaceId : null);
   const createFolder = useCreateFolder(spaceId);
   const createList = useCreateList(spaceId);
+  const deleteSpace = useDeleteSpace();
 
   const myAccess = space?.my_access_level;
   const canAddItems = canAtLeast(myAccess, 'member');
@@ -211,6 +251,21 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
               </svg>
             </button>
           )}
+          {isManager && (
+            <button
+              onClick={() => {
+                if (confirm(`Delete space "${space?.name}"? It and all its contents will be moved to trash.`)) {
+                  deleteSpace.mutate(spaceId);
+                }
+              }}
+              className="rounded p-0.5 text-[#999999] hover:text-red-500"
+              title="Delete space"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -218,12 +273,12 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
         <div className="ml-1">
           {/* Folders */}
           {space.folders?.map((folder) => (
-            <FolderItem key={folder.id} folder={folder} spaceId={spaceId} canAdd={canAddItems && canCreateLists} />
+            <FolderItem key={folder.id} folder={folder} spaceId={spaceId} canAdd={canAddItems && canCreateLists} canDelete={isManager} />
           ))}
 
           {/* Root lists (not in any folder) */}
           {space.lists?.map((list) => (
-            <ListItem key={list.id} list={list} depth={1} />
+            <ListItem key={list.id} list={list} depth={1} spaceId={spaceId} canDelete={isManager} />
           ))}
 
           {/* Inline add folder */}

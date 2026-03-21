@@ -33,6 +33,7 @@ router.get('/spaces', async (req: Request, res: Response) => {
         .from('spaces')
         .select('*, space_statuses(*)')
         .eq('workspace_id', workspaceId)
+        .is('deleted_at', null)
         .order('position');
 
       if (error) {
@@ -56,6 +57,7 @@ router.get('/spaces', async (req: Request, res: Response) => {
       .from('spaces')
       .select('id')
       .eq('workspace_id', workspaceId)
+      .is('deleted_at', null)
       .eq('created_by', req.userId!);
 
     const createdIds = (createdSpaces || []).map((s: any) => s.id);
@@ -70,6 +72,7 @@ router.get('/spaces', async (req: Request, res: Response) => {
       .from('spaces')
       .select('*, space_statuses(*)')
       .eq('workspace_id', workspaceId)
+      .is('deleted_at', null)
       .in('id', allIds)
       .order('position');
 
@@ -114,27 +117,37 @@ router.get('/spaces/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    // Fetch folders with their lists
+    // Fetch non-deleted folders
     const { data: folders } = await supabaseAdmin
       .from('folders')
-      .select('*, lists(*)')
+      .select('*')
       .eq('space_id', id)
+      .is('deleted_at', null)
       .order('position');
 
-    // Fetch lists directly in space (no folder)
-    const { data: rootLists } = await supabaseAdmin
+    // Fetch all non-deleted lists in this space
+    const { data: allLists } = await supabaseAdmin
       .from('lists')
       .select('*')
       .eq('space_id', id)
-      .is('folder_id', null)
+      .is('deleted_at', null)
       .order('position');
+
+    // Attach lists to their folders
+    const foldersWithLists = (folders || []).map((f: any) => ({
+      ...f,
+      lists: (allLists || []).filter((l: any) => l.folder_id === f.id),
+    }));
+
+    // Root lists (no folder)
+    const rootLists = (allLists || []).filter((l: any) => !l.folder_id);
 
     res.json({
       success: true,
       data: {
         ...space,
         my_access_level: userLevel,
-        folders: folders || [],
+        folders: foldersWithLists,
         lists: rootLists || [],
       },
     });
@@ -237,7 +250,7 @@ router.put('/spaces/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /pm/spaces/:id — requires manager access
+// DELETE /pm/spaces/:id — soft-delete, requires manager access
 router.delete('/spaces/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
@@ -248,14 +261,24 @@ router.delete('/spaces/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const { error } = await supabaseAdmin.from('spaces').delete().eq('id', id);
+    const now = new Date().toISOString();
+
+    // Soft-delete the space
+    const { error } = await supabaseAdmin
+      .from('spaces')
+      .update({ deleted_at: now })
+      .eq('id', id);
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
 
-    res.json({ success: true, message: 'Space deleted' });
+    // Also soft-delete child folders and lists
+    await supabaseAdmin.from('folders').update({ deleted_at: now }).eq('space_id', id).is('deleted_at', null);
+    await supabaseAdmin.from('lists').update({ deleted_at: now }).eq('space_id', id).is('deleted_at', null);
+
+    res.json({ success: true, message: 'Space moved to trash' });
   } catch (err) {
     console.error('Delete space error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
