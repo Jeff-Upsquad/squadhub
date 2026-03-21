@@ -399,3 +399,36 @@ export interface CheckInDashboardSummary {
   holidays: number;
   attendance_rate: number;
 }
+
+// ---- Mini App Access Management ----
+export interface MiniApp {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  icon: string;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  role_access?: MiniAppRoleAccess[];
+  user_access?: MiniAppUserAccess[];
+}
+
+export interface MiniAppRoleAccess {
+  id: string;
+  mini_app_id: string;
+  role_id: string;
+  created_at: string;
+  // Joined
+  role?: Role;
+}
+
+export interface MiniAppUserAccess {
+  id: string;
+  mini_app_id: string;
+  user_id: string;
+  created_at: string;
+  // Joined
+  user?: User;
+}

@@ -4,6 +4,7 @@ import type { HomeView } from '../../layouts/MainLayout';
 import { useFavorites, useRemoveFavorite } from '../../hooks/useFavorites';
 import { useHasPermission } from '../../hooks/usePermissions';
 import SpaceTree from './pm/SpaceTree';
+import { useHasMiniApp } from '../../hooks/useMiniApps';
 
 // ---- Props ----
 interface HomeSidebarProps {
@@ -107,6 +108,7 @@ export default function HomeSidebar({
   const { data: favorites, isLoading: favoritesLoading } = useFavorites(workspaceId);
   const removeFavorite = useRemoveFavorite(workspaceId);
   const canCreateChannels = useHasPermission('can_create_channels');
+  const hasCheckin = useHasMiniApp('daily-checkin');
 
   const [activeTab, setActiveTab] = useState<HomeTab>('unread');
   const [expandedSections, setExpandedSections] = useState({
@@ -176,19 +178,21 @@ export default function HomeSidebar({
             Assigned Comments
           </button>
 
-          <button
-            onClick={() => onChangeView('checkin')}
-            className={`flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm transition ${
-              homeView === 'checkin'
-                ? 'bg-white text-[#0F172B] font-medium'
-                : 'text-[#62748E] hover:bg-white/70 hover:text-[#0F172B]'
-            }`}
-          >
-            <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Daily Check-In
-          </button>
+          {hasCheckin && (
+            <button
+              onClick={() => onChangeView('checkin')}
+              className={`flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm transition ${
+                homeView === 'checkin'
+                  ? 'bg-white text-[#0F172B] font-medium'
+                  : 'text-[#62748E] hover:bg-white/70 hover:text-[#0F172B]'
+              }`}
+            >
+              <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Daily Check-In
+            </button>
+          )}
         </div>
 
         {/* Divider */}
