@@ -98,29 +98,30 @@ router.post('/submit', async (req: Request, res: Response) => {
     }
 
     // Get user's deadline time
-    const { data: settings } = await supabaseAdmin
+    const { data: settingsRows } = await supabaseAdmin
       .from('user_checkin_settings')
       .select('deadline_time')
       .eq('user_id', userId)
-      .single();
+      .limit(1);
 
-    const deadlineTime = settings?.deadline_time || '10:00';
+    const deadlineTime = settingsRows?.[0]?.deadline_time || '10:00';
 
     // Get user's role
-    const { data: member } = await supabaseAdmin
+    const { data: members } = await supabaseAdmin
       .from('workspace_members')
       .select('role_id')
       .eq('user_id', userId)
-      .limit(1)
-      .single();
+      .limit(1);
+    const member = members?.[0] || null;
 
     // Validate required items
     if (member?.role_id) {
-      const { data: config } = await supabaseAdmin
+      const { data: configRows } = await supabaseAdmin
         .from('checkin_configs')
         .select('items')
         .eq('role_id', member.role_id)
-        .single();
+        .limit(1);
+      const config = configRows?.[0] || null;
 
       if (config?.items) {
         const items = config.items as any[];
@@ -175,38 +176,40 @@ router.get('/today', async (req: Request, res: Response) => {
 
     const isHoliday = await isNonWorkingDay(today);
 
-    const { data: checkin } = await supabaseAdmin
+    const { data: checkinRows } = await supabaseAdmin
       .from('checkins')
       .select('*')
       .eq('user_id', userId)
       .eq('date', today)
-      .single();
+      .limit(1);
+    const checkin = checkinRows?.[0] || null;
 
     // Get user's config (checklist items for their role)
-    const { data: member } = await supabaseAdmin
+    const { data: memberRows } = await supabaseAdmin
       .from('workspace_members')
       .select('role_id, roles(id, name)')
       .eq('user_id', userId)
-      .limit(1)
-      .single();
+      .limit(1);
+    const member = memberRows?.[0] || null;
 
     let checklistItems: any[] = [];
     if (member?.role_id) {
-      const { data: config } = await supabaseAdmin
+      const { data: configRows } = await supabaseAdmin
         .from('checkin_configs')
         .select('items')
         .eq('role_id', member.role_id)
-        .single();
+        .limit(1);
 
-      checklistItems = (config?.items as any[]) || [];
+      checklistItems = (configRows?.[0]?.items as any[]) || [];
     }
 
     // Get user's deadline
-    const { data: settings } = await supabaseAdmin
+    const { data: settingsRows } = await supabaseAdmin
       .from('user_checkin_settings')
       .select('deadline_time')
       .eq('user_id', userId)
-      .single();
+      .limit(1);
+    const settings = settingsRows?.[0] || null;
 
     res.json({
       success: true,
