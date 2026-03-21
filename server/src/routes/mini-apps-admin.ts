@@ -9,6 +9,53 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
+// Helper: enrich mini app with role and user access details
+async function enrichMiniApp(app: any) {
+  // Get role access with role details
+  const { data: roleAccess } = await supabaseAdmin
+    .from('mini_app_role_access')
+    .select('id, mini_app_id, role_id, created_at')
+    .eq('mini_app_id', app.id);
+
+  const roleIds = (roleAccess || []).map((ra: any) => ra.role_id);
+  let rolesMap: Record<string, any> = {};
+  if (roleIds.length > 0) {
+    const { data: roles } = await supabaseAdmin
+      .from('roles')
+      .select('id, name, color')
+      .in('id', roleIds);
+    (roles || []).forEach((r: any) => { rolesMap[r.id] = r; });
+  }
+
+  // Get user access with user details
+  const { data: userAccess } = await supabaseAdmin
+    .from('mini_app_user_access')
+    .select('id, mini_app_id, user_id, created_at')
+    .eq('mini_app_id', app.id);
+
+  const userIds = (userAccess || []).map((ua: any) => ua.user_id);
+  let usersMap: Record<string, any> = {};
+  if (userIds.length > 0) {
+    const { data: users } = await supabaseAdmin
+      .from('users')
+      .select('id, display_name, email')
+      .in('id', userIds);
+    (users || []).forEach((u: any) => { usersMap[u.id] = u; });
+  }
+
+  return {
+    ...app,
+    role_access: (roleAccess || []).map((ra: any) => ({
+      ...ra,
+      role: rolesMap[ra.role_id] || null,
+    })),
+    user_access: (userAccess || []).map((ua: any) => ({
+      ...ua,
+      user: usersMap[ua.user_id] || null,
+    })),
+  };
+}
+
 // ============================================================
 // Mini App CRUD
 // ============================================================
@@ -18,7 +65,7 @@ router.get('/', async (_req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('mini_apps')
-      .select('*, mini_app_role_access(*, roles(id, name, color)), mini_app_user_access(*, users(id, display_name, email))')
+      .select('*')
       .order('name');
 
     if (error) {
@@ -26,28 +73,8 @@ router.get('/', async (_req: Request, res: Response) => {
       return;
     }
 
-    // Reshape: flatten joined role/user into the access arrays
-    const shaped = (data || []).map((app: any) => ({
-      ...app,
-      role_access: (app.mini_app_role_access || []).map((ra: any) => ({
-        id: ra.id,
-        mini_app_id: ra.mini_app_id,
-        role_id: ra.role_id,
-        created_at: ra.created_at,
-        role: ra.roles,
-      })),
-      user_access: (app.mini_app_user_access || []).map((ua: any) => ({
-        id: ua.id,
-        mini_app_id: ua.mini_app_id,
-        user_id: ua.user_id,
-        created_at: ua.created_at,
-        user: ua.users,
-      })),
-      mini_app_role_access: undefined,
-      mini_app_user_access: undefined,
-    }));
-
-    res.json({ success: true, data: shaped });
+    const enriched = await Promise.all((data || []).map(enrichMiniApp));
+    res.json({ success: true, data: enriched });
   } catch (err) {
     console.error('List mini apps error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -59,7 +86,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('mini_apps')
-      .select('*, mini_app_role_access(*, roles(id, name, color)), mini_app_user_access(*, users(id, display_name, email))')
+      .select('*')
       .eq('id', req.params.id)
       .single();
 
@@ -68,68 +95,10 @@ router.get('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const shaped = {
-      ...data,
-      role_access: (data.mini_app_role_access || []).map((ra: any) => ({
-        id: ra.id,
-        mini_app_id: ra.mini_app_id,
-        role_id: ra.role_id,
-        created_at: ra.created_at,
-        role: ra.roles,
-      })),
-      user_access: (data.mini_app_user_access || []).map((ua: any) => ({
-        id: ua.id,
-        mini_app_id: ua.mini_app_id,
-        user_id: ua.user_id,
-        created_at: ua.created_at,
-        user: ua.users,
-      })),
-      mini_app_role_access: undefined,
-      mini_app_user_access: undefined,
-    };
-
-    res.json({ success: true, data: shaped });
+    const enriched = await enrichMiniApp(data);
+    res.json({ success: true, data: enriched });
   } catch (err) {
     console.error('Get mini app error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
-// POST /admin/mini-apps — create a new mini app
-const createSchema = z.object({
-  slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with dashes'),
-  name: z.string().min(1).max(100),
-  description: z.string().max(500).default(''),
-  icon: z.string().max(50).default('puzzle'),
-  is_enabled: z.boolean().default(true),
-});
-
-router.post('/', async (req: Request, res: Response) => {
-  try {
-    const body = createSchema.parse(req.body);
-
-    const { data, error } = await supabaseAdmin
-      .from('mini_apps')
-      .insert(body)
-      .select()
-      .single();
-
-    if (error) {
-      if (error.code === '23505') {
-        res.status(409).json({ success: false, error: 'A mini app with this slug already exists' });
-        return;
-      }
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
-
-    res.json({ success: true, data });
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ success: false, error: err.errors[0].message });
-      return;
-    }
-    console.error('Create mini app error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
@@ -169,26 +138,6 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /admin/mini-apps/:id — delete a mini app (cascades access records)
-router.delete('/:id', async (req: Request, res: Response) => {
-  try {
-    const { error } = await supabaseAdmin
-      .from('mini_apps')
-      .delete()
-      .eq('id', req.params.id);
-
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
-
-    res.json({ success: true, message: 'Mini app deleted' });
-  } catch (err) {
-    console.error('Delete mini app error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
 // ============================================================
 // Role Access Management
 // ============================================================
@@ -205,7 +154,7 @@ router.post('/:id/roles', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('mini_app_role_access')
       .insert({ mini_app_id: req.params.id, role_id: body.role_id })
-      .select('*, roles(id, name, color)')
+      .select()
       .single();
 
     if (error) {
@@ -217,16 +166,14 @@ router.post('/:id/roles', async (req: Request, res: Response) => {
       return;
     }
 
-    res.json({
-      success: true,
-      data: {
-        id: data.id,
-        mini_app_id: data.mini_app_id,
-        role_id: data.role_id,
-        created_at: data.created_at,
-        role: (data as any).roles,
-      },
-    });
+    // Fetch role details
+    const { data: role } = await supabaseAdmin
+      .from('roles')
+      .select('id, name, color')
+      .eq('id', body.role_id)
+      .single();
+
+    res.json({ success: true, data: { ...data, role } });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
@@ -274,7 +221,7 @@ router.post('/:id/users', async (req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('mini_app_user_access')
       .insert({ mini_app_id: req.params.id, user_id: body.user_id })
-      .select('*, users(id, display_name, email)')
+      .select()
       .single();
 
     if (error) {
@@ -286,16 +233,14 @@ router.post('/:id/users', async (req: Request, res: Response) => {
       return;
     }
 
-    res.json({
-      success: true,
-      data: {
-        id: data.id,
-        mini_app_id: data.mini_app_id,
-        user_id: data.user_id,
-        created_at: data.created_at,
-        user: (data as any).users,
-      },
-    });
+    // Fetch user details
+    const { data: user } = await supabaseAdmin
+      .from('users')
+      .select('id, display_name, email')
+      .eq('id', body.user_id)
+      .single();
+
+    res.json({ success: true, data: { ...data, user } });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
