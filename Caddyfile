@@ -5,3 +5,26 @@ squadhub.in {
 admin.squadhub.in {
 	reverse_proxy admin:80
 }
+
+upsquadconnect.com, www.upsquadconnect.com {
+	handle /api/* {
+		reverse_proxy host.docker.internal:5000
+	}
+
+	handle /uploads/* {
+		root * /srv/profiles/backend
+		file_server
+	}
+
+	handle /admin/* {
+		root * /srv/profiles/admin/dist
+		try_files {path} /admin/index.html
+		file_server
+	}
+
+	handle {
+		root * /srv/profiles/frontend/dist
+		try_files {path} /index.html
+		file_server
+	}
+}

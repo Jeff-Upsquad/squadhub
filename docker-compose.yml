@@ -11,9 +11,12 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
+      - /var/www/profiles:/srv/profiles:ro
     dns:
       - 1.1.1.1
       - 8.8.8.8
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - web
       - admin
