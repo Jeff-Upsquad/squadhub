@@ -25,6 +25,7 @@ export default defineConfig({
       '/pm': 'http://localhost:4000',
       '/favorites': 'http://localhost:4000',
       '/memberships': 'http://localhost:4000',
+      '/checkin': 'http://localhost:4000',
       '/health': 'http://localhost:4000',
       '/socket.io': {
         target: 'http://localhost:4000',

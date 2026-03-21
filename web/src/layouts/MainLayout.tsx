@@ -17,7 +17,7 @@ import CheckInWidget from '../pages/app/checkin/CheckInWidget';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'checkin';
 
 // ---- Section definitions (6 items) ----
 const SECTIONS: { id: ActiveSection; label: string; icon: React.ReactNode }[] = [
@@ -330,8 +330,13 @@ export default function MainLayout() {
             </>
           ) : homeView === 'tasks' ? (
             <ListPage />
-          ) : (
+          ) : homeView === 'checkin' ? (
             <CheckInWidget />
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center text-[#90A1B9]">
+              <h3 className="font-[family-name:var(--font-display)] text-lg font-medium text-[#62748E]">Welcome to SquadHub</h3>
+              <p className="mt-1 text-sm">Select a channel, space, or module to get started</p>
+            </div>
           )
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center text-[#90A1B9]">
