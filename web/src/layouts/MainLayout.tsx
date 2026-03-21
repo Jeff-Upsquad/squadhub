@@ -12,6 +12,7 @@ import ChatPanel from '../pages/app/chat/ChatPanel';
 import CreateChannelModal from '../pages/app/chat/CreateChannelModal';
 import ListPage from '../pages/app/pm/ListPage';
 import HomeSidebar from '../pages/app/HomeSidebar';
+import SettingsSlider from '../components/SettingsSlider';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'more';
@@ -93,6 +94,7 @@ export default function MainLayout() {
   const [homeView, setHomeView] = useState<HomeView>('hub');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [showChannelSettings, setShowChannelSettings] = useState(false);
 
   // Fetch workspaces
   const { data: workspacesRes, isLoading: workspacesLoading } = useQuery({
@@ -272,20 +274,58 @@ export default function MainLayout() {
           homeView === 'chat' ? (
             <>
               {activeChannelId && (
-                <div className="flex items-center border-b border-[#E2E8F0] px-5 py-3">
-                  <span className="mr-2 text-[#90A1B9]">#</span>
-                  <span className="text-sm font-medium text-[#0F172B]">
-                    {channels.find((c) => c.id === activeChannelId)?.name}
-                  </span>
+                <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-3">
+                  <div className="flex items-center">
+                    <span className="mr-2 text-[#90A1B9]">#</span>
+                    <span className="text-sm font-medium text-[#0F172B]">
+                      {channels.find((c) => c.id === activeChannelId)?.name}
+                    </span>
+                    {channels.find((c) => c.id === activeChannelId)?.description && (
+                      <span className="ml-3 text-xs text-[#999999] truncate max-w-xs">
+                        {channels.find((c) => c.id === activeChannelId)?.description}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setShowChannelSettings(!showChannelSettings)}
+                    className={`rounded p-1.5 transition ${
+                      showChannelSettings ? 'bg-[#F1F5F9] text-[#0F172B]' : 'text-[#999999] hover:text-[#0F172B]'
+                    }`}
+                    title="Channel settings"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                    </svg>
+                  </button>
                 </div>
               )}
-              {activeChannelId ? (
-                <ChatPanel channelId={activeChannelId} />
-              ) : (
-                <div className="flex flex-1 items-center justify-center text-sm text-[#90A1B9]">
-                  Select a channel to start chatting
-                </div>
-              )}
+              <div className="flex flex-1 overflow-hidden">
+                {activeChannelId ? (
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    <ChatPanel channelId={activeChannelId} />
+                  </div>
+                ) : (
+                  <div className="flex flex-1 items-center justify-center text-sm text-[#90A1B9]">
+                    Select a channel to start chatting
+                  </div>
+                )}
+                {showChannelSettings && activeChannelId && (() => {
+                  const ch = channels.find((c) => c.id === activeChannelId);
+                  return ch ? (
+                    <SettingsSlider
+                      type="channel"
+                      id={ch.id}
+                      name={ch.name}
+                      description={ch.description}
+                      onClose={() => setShowChannelSettings(false)}
+                      onDeleted={() => {
+                        setShowChannelSettings(false);
+                        setActiveChannel(null);
+                      }}
+                    />
+                  ) : null;
+                })()}
+              </div>
             </>
           ) : homeView === 'tasks' ? (
             <ListPage />

@@ -6,6 +6,7 @@ import type { SpaceStatus } from '@squadhub/shared';
 import ListView from './ListView';
 import BoardView from './BoardView';
 import TaskDetailPanel from './TaskDetailPanel';
+import SettingsSlider from '../../../components/SettingsSlider';
 
 export default function ListPage() {
   const { activeSpaceId, activeListId, activeTaskId, viewMode, setViewMode } = usePMStore();
@@ -13,6 +14,7 @@ export default function ListPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [sort, setSort] = useState('position');
   const [showFilters, setShowFilters] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Fetch list details
   const { data: listData } = useQuery({
@@ -106,6 +108,21 @@ export default function ListPage() {
             >
               Board
             </button>
+
+            <div className="h-4 w-px bg-[#E2E8F0]" />
+
+            {/* Settings three-dot menu */}
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className={`rounded p-1.5 transition ${
+                showSettings ? 'bg-[#F1F5F9] text-[#0F172B]' : 'text-[#999999] hover:text-[#0F172B]'
+              }`}
+              title="List settings"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -181,8 +198,22 @@ export default function ListPage() {
         )}
 
         {/* Task detail side panel */}
-        {activeTaskId && (
+        {activeTaskId && !showSettings && (
           <TaskDetailPanel statuses={statuses} listId={activeListId} />
+        )}
+
+        {/* List settings slider */}
+        {showSettings && activeListId && (
+          <SettingsSlider
+            type="list"
+            id={activeListId}
+            name={listData?.name || ''}
+            spaceId={activeSpaceId}
+            onClose={() => setShowSettings(false)}
+            onDeleted={() => {
+              setShowSettings(false);
+            }}
+          />
         )}
       </div>
     </div>

@@ -14,7 +14,7 @@ type TrashItem = {
   spaces?: { name: string; workspace_id: string };
 };
 
-type TrashType = 'space' | 'folder' | 'list';
+type TrashType = 'space' | 'folder' | 'list' | 'channel';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -31,6 +31,7 @@ function TypeBadge({ type }: { type: TrashType }) {
     space: 'bg-purple-50 text-purple-700',
     folder: 'bg-yellow-50 text-yellow-700',
     list: 'bg-blue-50 text-blue-700',
+    channel: 'bg-green-50 text-green-700',
   };
   return (
     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${colors[type]}`}>
@@ -63,6 +64,7 @@ export default function AdminTrash() {
     data.spaces?.forEach((s: TrashItem) => allItems.push({ type: 'space', item: s }));
     data.folders?.forEach((f: TrashItem) => allItems.push({ type: 'folder', item: f }));
     data.lists?.forEach((l: TrashItem) => allItems.push({ type: 'list', item: l }));
+    data.channels?.forEach((c: TrashItem) => allItems.push({ type: 'channel', item: c }));
   }
 
   // Sort by deleted_at descending
@@ -81,7 +83,7 @@ export default function AdminTrash() {
 
       {/* Filter tabs */}
       <div className="mb-4 flex gap-1 rounded-lg bg-white p-1 border border-[#E2E8F0] w-fit">
-        {(['all', 'space', 'folder', 'list'] as const).map((t) => (
+        {(['all', 'space', 'folder', 'list', 'channel'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setFilter(t)}
@@ -144,6 +146,9 @@ export default function AdminTrash() {
                       <svg className="h-4 w-4 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                       </svg>
+                    )}
+                    {type === 'channel' && (
+                      <span className="text-sm text-[#90A1B9]">#</span>
                     )}
                     <span className="text-sm font-medium text-[#0F172B]">{item.name}</span>
                   </div>

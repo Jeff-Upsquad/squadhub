@@ -418,7 +418,7 @@ router.get('/trash', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspace_id as string;
 
-    const [spacesRes, foldersRes, listsRes] = await Promise.all([
+    const [spacesRes, foldersRes, listsRes, channelsRes] = await Promise.all([
       supabaseAdmin
         .from('spaces')
         .select('id, name, color, icon, deleted_at, created_by, workspace_id')
@@ -459,6 +459,19 @@ router.get('/trash', async (req: Request, res: Response) => {
           const userMap = new Map((users || []).map((u: any) => [u.id, u.display_name]));
           return { ...r, data: r.data.map((l: any) => ({ ...l, created_by_name: userMap.get(l.created_by) || null })) };
         }),
+      supabaseAdmin
+        .from('channels')
+        .select('id, name, deleted_at, created_by, workspace_id')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .then(async (r) => {
+          if (!r.data) return r;
+          const userIds = [...new Set(r.data.map((c: any) => c.created_by).filter(Boolean))];
+          if (userIds.length === 0) return r;
+          const { data: users } = await supabaseAdmin.from('users').select('id, display_name').in('id', userIds);
+          const userMap = new Map((users || []).map((u: any) => [u.id, u.display_name]));
+          return { ...r, data: r.data.map((c: any) => ({ ...c, created_by_name: userMap.get(c.created_by) || null })) };
+        }),
     ]);
 
     res.json({
@@ -467,6 +480,7 @@ router.get('/trash', async (req: Request, res: Response) => {
         spaces: spacesRes.data || [],
         folders: foldersRes.data || [],
         lists: listsRes.data || [],
+        channels: channelsRes.data || [],
       },
     });
   } catch (err) {
@@ -479,11 +493,11 @@ router.get('/trash', async (req: Request, res: Response) => {
 router.put('/trash/restore', async (req: Request, res: Response) => {
   try {
     const { type, id } = z.object({
-      type: z.enum(['space', 'folder', 'list']),
+      type: z.enum(['space', 'folder', 'list', 'channel']),
       id: z.string().uuid(),
     }).parse(req.body);
 
-    const table = type === 'space' ? 'spaces' : type === 'folder' ? 'folders' : 'lists';
+    const table = type === 'space' ? 'spaces' : type === 'folder' ? 'folders' : type === 'channel' ? 'channels' : 'lists';
 
     const { error } = await supabaseAdmin
       .from(table)
@@ -521,11 +535,11 @@ router.put('/trash/restore', async (req: Request, res: Response) => {
 router.delete('/trash/permanent', async (req: Request, res: Response) => {
   try {
     const { type, id } = z.object({
-      type: z.enum(['space', 'folder', 'list']),
+      type: z.enum(['space', 'folder', 'list', 'channel']),
       id: z.string().uuid(),
     }).parse(req.body);
 
-    const table = type === 'space' ? 'spaces' : type === 'folder' ? 'folders' : 'lists';
+    const table = type === 'space' ? 'spaces' : type === 'folder' ? 'folders' : type === 'channel' ? 'channels' : 'lists';
 
     const { error } = await supabaseAdmin
       .from(table)

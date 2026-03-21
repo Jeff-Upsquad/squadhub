@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
-import { requirePermission, isWorkspaceAdmin } from '../middleware/permissions';
+import { requirePermission, isWorkspaceAdmin, checkResourceAccess, meetsAccessLevel } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 
 const router = Router();
@@ -29,6 +29,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
         .from('channels')
         .select('*')
         .eq('workspace_id', workspaceId)
+        .is('deleted_at', null)
         .order('created_at', { ascending: true });
 
       if (error) {
@@ -53,6 +54,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
       .from('channels')
       .select('id')
       .eq('workspace_id', workspaceId)
+      .is('deleted_at', null)
       .eq('created_by', req.userId!);
 
     const createdIds = (createdChannels || []).map((c: any) => c.id);
@@ -67,6 +69,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
       .from('channels')
       .select('*')
       .eq('workspace_id', workspaceId)
+      .is('deleted_at', null)
       .in('id', allIds)
       .order('created_at', { ascending: true });
 
@@ -115,11 +118,49 @@ router.post('/', requireAuth, requirePermission('can_create_channels'), async (r
   }
 });
 
-// DELETE /channels/:id — requires manager access or admin
+// PUT /channels/:id — update channel settings (requires manager access)
+router.put('/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const userLevel = await checkResourceAccess(req.userId!, 'channel', id);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
+      res.status(403).json({ success: false, error: 'Manager access required to update channels' });
+      return;
+    }
+
+    const updates: Record<string, unknown> = {};
+    if (req.body.name !== undefined) updates.name = req.body.name;
+    if (req.body.description !== undefined) updates.description = req.body.description;
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ success: false, error: 'No fields to update' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('channels')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Update channel error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /channels/:id — soft-delete, requires manager access
 router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { checkResourceAccess, meetsAccessLevel } = await import('../middleware/permissions');
-    const userLevel = await checkResourceAccess(req.userId!, 'channel', req.params.id as string);
+    const id = req.params.id as string;
+    const userLevel = await checkResourceAccess(req.userId!, 'channel', id);
     if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
       res.status(403).json({ success: false, error: 'Manager access required to delete channels' });
       return;
@@ -127,15 +168,15 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
 
     const { error } = await supabaseAdmin
       .from('channels')
-      .delete()
-      .eq('id', req.params.id);
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id);
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
 
-    res.json({ success: true, message: 'Channel deleted' });
+    res.json({ success: true, message: 'Channel moved to trash' });
   } catch (err) {
     console.error('Delete channel error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useSpaces, useSpace, useCreateFolder, useCreateList, useDeleteSpace, useDeleteFolder, useDeleteList } from '../../../hooks/useSpaces';
+import { useSpaces, useSpace, useCreateFolder, useCreateList } from '../../../hooks/useSpaces';
 import { useHasPermission } from '../../../hooks/usePermissions';
 import { usePMStore } from '../../../stores/pmStore';
 import CreateSpaceModal from './CreateSpaceModal';
 import ManageMembersModal from './ManageMembersModal';
+import SettingsSlider from '../../../components/SettingsSlider';
 import type { Folder, List, AccessLevel } from '@squadhub/shared';
 
 // Access level check helper
@@ -28,46 +29,25 @@ function ChevronIcon({ open }: { open: boolean }) {
 }
 
 // ---- List item ----
-function ListItem({ list, depth = 0, spaceId, canDelete }: { list: List; depth?: number; spaceId: string; canDelete: boolean }) {
+function ListItem({ list, depth = 0 }: { list: List; depth?: number }) {
   const { activeListId, setActiveList } = usePMStore();
   const isActive = activeListId === list.id;
-  const deleteList = useDeleteList(spaceId);
-
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm(`Delete list "${list.name}"? It will be moved to trash.`)) {
-      deleteList.mutate(list.id);
-    }
-  };
 
   return (
-    <div className="group/list flex items-center">
-      <button
-        onClick={() => setActiveList(list.id)}
-        className={`flex flex-1 items-center gap-2 rounded-md py-1 text-left text-[13px] transition ${
-          isActive
-            ? 'bg-[#F8FAFC] text-[#0F172B]'
-            : 'text-[#666666] hover:bg-[#F8FAFC]'
-        }`}
-        style={{ paddingLeft: `${12 + depth * 16}px` }}
-      >
-        <svg className="h-3.5 w-3.5 shrink-0 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-        </svg>
-        <span className="truncate">{list.name}</span>
-      </button>
-      {canDelete && (
-        <button
-          onClick={handleDelete}
-          className="mr-2 hidden rounded p-0.5 text-[#999999] hover:text-red-500 group-hover/list:block"
-          title="Delete list"
-        >
-          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
-      )}
-    </div>
+    <button
+      onClick={() => setActiveList(list.id)}
+      className={`flex w-full items-center gap-2 rounded-md py-1 text-left text-[13px] transition ${
+        isActive
+          ? 'bg-[#F8FAFC] text-[#0F172B]'
+          : 'text-[#666666] hover:bg-[#F8FAFC]'
+      }`}
+      style={{ paddingLeft: `${12 + depth * 16}px` }}
+    >
+      <svg className="h-3.5 w-3.5 shrink-0 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+      </svg>
+      <span className="truncate">{list.name}</span>
+    </button>
   );
 }
 
@@ -76,8 +56,8 @@ function FolderItem({ folder, spaceId, canAdd, canDelete }: { folder: Folder; sp
   const [open, setOpen] = useState(true);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
   const createList = useCreateList(spaceId);
-  const deleteFolder = useDeleteFolder(spaceId);
 
   const handleAdd = () => {
     if (!newName.trim()) { setAdding(false); return; }
@@ -113,16 +93,12 @@ function FolderItem({ folder, spaceId, canAdd, canDelete }: { folder: Folder; sp
           )}
           {canDelete && (
             <button
-              onClick={() => {
-                if (confirm(`Delete folder "${folder.name}"? It and its lists will be moved to trash.`)) {
-                  deleteFolder.mutate(folder.id);
-                }
-              }}
-              className="rounded p-0.5 text-[#999999] hover:text-red-500"
-              title="Delete folder"
+              onClick={() => setShowSettings(true)}
+              className="rounded p-0.5 text-[#999999] hover:text-[#0F172B]"
+              title="Folder settings"
             >
               <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
               </svg>
             </button>
           )}
@@ -131,7 +107,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete }: { folder: Folder; sp
       {open && (
         <div className="ml-1">
           {folder.lists?.map((list) => (
-            <ListItem key={list.id} list={list} depth={2} spaceId={spaceId} canDelete={canDelete} />
+            <ListItem key={list.id} list={list} depth={2} />
           ))}
           {adding && (
             <div className="px-3 py-1" style={{ paddingLeft: '44px' }}>
@@ -148,6 +124,21 @@ function FolderItem({ folder, spaceId, canAdd, canDelete }: { folder: Folder; sp
           )}
         </div>
       )}
+
+      {/* Folder settings overlay */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setShowSettings(false)}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <SettingsSlider
+              type="folder"
+              id={folder.id}
+              name={folder.name}
+              spaceId={spaceId}
+              onClose={() => setShowSettings(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -161,13 +152,14 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
   const [addingList, setAddingList] = useState(false);
   const [newName, setNewName] = useState('');
   const [showMembers, setShowMembers] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const canCreateFolders = useHasPermission('can_create_folders');
   const canCreateLists = useHasPermission('can_create_lists');
 
   const { data: space } = useSpace(isActive || open ? spaceId : null);
   const createFolder = useCreateFolder(spaceId);
   const createList = useCreateList(spaceId);
-  const deleteSpace = useDeleteSpace();
+
 
   const myAccess = space?.my_access_level;
   const canAddItems = canAtLeast(myAccess, 'member');
@@ -253,16 +245,12 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
           )}
           {isManager && (
             <button
-              onClick={() => {
-                if (confirm(`Delete space "${space?.name}"? It and all its contents will be moved to trash.`)) {
-                  deleteSpace.mutate(spaceId);
-                }
-              }}
-              className="rounded p-0.5 text-[#999999] hover:text-red-500"
-              title="Delete space"
+              onClick={() => setShowSettings(true)}
+              className="rounded p-0.5 text-[#999999] hover:text-[#0F172B]"
+              title="Space settings"
             >
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
               </svg>
             </button>
           )}
@@ -278,7 +266,7 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
 
           {/* Root lists (not in any folder) */}
           {space.lists?.map((list) => (
-            <ListItem key={list.id} list={list} depth={1} spaceId={spaceId} canDelete={isManager} />
+            <ListItem key={list.id} list={list} depth={1} />
           ))}
 
           {/* Inline add folder */}
@@ -320,6 +308,21 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
           resourceName={space?.name || 'Space'}
           onClose={() => setShowMembers(false)}
         />
+      )}
+
+      {/* Space settings overlay */}
+      {showSettings && space && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setShowSettings(false)}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <SettingsSlider
+              type="space"
+              id={spaceId}
+              name={space.name}
+              description={space.description}
+              onClose={() => setShowSettings(false)}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
