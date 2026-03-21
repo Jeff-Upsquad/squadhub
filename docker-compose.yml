@@ -1,18 +1,36 @@
 services:
+  caddy:
+    image: caddy:2
+    container_name: squadhub-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - admin
+    networks:
+      - squadhub
+
   server:
     build:
       context: .
       dockerfile: server/Dockerfile
     container_name: squadhub-server
     restart: unless-stopped
-    ports:
-      - "4000:4000"
+    expose:
+      - "4000"
     env_file:
       - ./server/.env.production
     environment:
       - NODE_ENV=production
-      - CLIENT_URL=${CLIENT_URL:-http://localhost:3080}
-      - ADMIN_URL=${ADMIN_URL:-http://localhost:3081}
+      - CLIENT_URL=${CLIENT_URL:-https://squadhub.in}
+      - ADMIN_URL=${ADMIN_URL:-https://admin.squadhub.in}
     networks:
       - squadhub
 
@@ -21,11 +39,11 @@ services:
       context: .
       dockerfile: web/Dockerfile
       args:
-        VITE_ADMIN_URL: ${ADMIN_URL:-http://localhost:3081}
+        VITE_ADMIN_URL: ${ADMIN_URL:-https://admin.squadhub.in}
     container_name: squadhub-web
     restart: unless-stopped
-    ports:
-      - "3080:80"
+    expose:
+      - "80"
     depends_on:
       - server
     networks:
@@ -36,15 +54,19 @@ services:
       context: .
       dockerfile: admin/Dockerfile
       args:
-        VITE_APP_URL: ${CLIENT_URL:-http://localhost:3080}
+        VITE_APP_URL: ${CLIENT_URL:-https://squadhub.in}
     container_name: squadhub-admin
     restart: unless-stopped
-    ports:
-      - "3081:80"
+    expose:
+      - "80"
     depends_on:
       - server
     networks:
       - squadhub
+
+volumes:
+  caddy_data:
+  caddy_config:
 
 networks:
   squadhub:

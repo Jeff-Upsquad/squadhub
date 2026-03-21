@@ -1,0 +1,7 @@
+squadhub.in {
+	reverse_proxy web:80
+}
+
+admin.squadhub.in {
+	reverse_proxy admin:80
+}
