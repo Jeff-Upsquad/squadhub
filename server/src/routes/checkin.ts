@@ -1,0 +1,358 @@
+import { Router, Request, Response } from 'express';
+import { z } from 'zod';
+import { requireAuth } from '../middleware/auth';
+import { supabaseAdmin } from '../supabase';
+
+const router = Router();
+
+// All check-in routes require auth
+router.use(requireAuth);
+
+// ---- IST helpers ----
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+function nowIST(): Date {
+  const now = new Date();
+  return new Date(now.getTime() + IST_OFFSET_MS);
+}
+
+function todayIST(): string {
+  return nowIST().toISOString().split('T')[0];
+}
+
+function formatTimeIST(date: Date): string {
+  const ist = new Date(date.getTime() + IST_OFFSET_MS);
+  return `${String(ist.getUTCHours()).padStart(2, '0')}:${String(ist.getUTCMinutes()).padStart(2, '0')}`;
+}
+
+// Check if a date is a holiday or non-working day
+async function isNonWorkingDay(dateStr: string): Promise<boolean> {
+  const date = new Date(dateStr + 'T00:00:00Z');
+  const dayOfWeek = date.getUTCDay(); // 0=Sun, 1=Mon, ...
+
+  // Check working days config
+  const { data: wdConfig } = await supabaseAdmin
+    .from('working_days_config')
+    .select('working_days')
+    .limit(1)
+    .single();
+
+  const workingDays: number[] = wdConfig?.working_days || [1, 2, 3, 4, 5, 6];
+  if (!workingDays.includes(dayOfWeek)) return true;
+
+  // Check specific holiday
+  const { data: specificHoliday } = await supabaseAdmin
+    .from('holidays')
+    .select('id')
+    .eq('date', dateStr)
+    .eq('is_recurring', false)
+    .limit(1);
+
+  if (specificHoliday && specificHoliday.length > 0) return true;
+
+  // Check recurring holiday
+  const month = date.getUTCMonth() + 1;
+  const day = date.getUTCDate();
+  const { data: recurringHoliday } = await supabaseAdmin
+    .from('holidays')
+    .select('id')
+    .eq('is_recurring', true)
+    .eq('recurring_month', month)
+    .eq('recurring_day', day)
+    .limit(1);
+
+  if (recurringHoliday && recurringHoliday.length > 0) return true;
+
+  return false;
+}
+
+// POST /checkin/submit — submit daily check-in
+const submitSchema = z.object({
+  completed_items: z.array(z.string()),
+});
+
+router.post('/submit', async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const body = submitSchema.parse(req.body);
+    const today = todayIST();
+
+    // Check if already checked in today
+    const { data: existing } = await supabaseAdmin
+      .from('checkins')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('date', today)
+      .neq('status', 'no_checkin')
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      res.status(409).json({ success: false, error: 'You have already checked in today' });
+      return;
+    }
+
+    // Check if today is a non-working day
+    if (await isNonWorkingDay(today)) {
+      res.status(400).json({ success: false, error: 'Today is a holiday or non-working day' });
+      return;
+    }
+
+    // Get user's deadline time
+    const { data: settings } = await supabaseAdmin
+      .from('user_checkin_settings')
+      .select('deadline_time')
+      .eq('user_id', userId)
+      .single();
+
+    const deadlineTime = settings?.deadline_time || '10:00';
+
+    // Get user's role
+    const { data: member } = await supabaseAdmin
+      .from('workspace_members')
+      .select('role_id')
+      .eq('user_id', userId)
+      .limit(1)
+      .single();
+
+    // Validate required items
+    if (member?.role_id) {
+      const { data: config } = await supabaseAdmin
+        .from('checkin_configs')
+        .select('items')
+        .eq('role_id', member.role_id)
+        .single();
+
+      if (config?.items) {
+        const items = config.items as any[];
+        const requiredIds = items.filter((i: any) => i.isRequired).map((i: any) => i.id);
+        const missing = requiredIds.filter((id: string) => !body.completed_items.includes(id));
+        if (missing.length > 0) {
+          res.status(400).json({ success: false, error: 'All required items must be completed' });
+          return;
+        }
+      }
+    }
+
+    // Determine status
+    const currentTimeIST = formatTimeIST(new Date());
+    const status = currentTimeIST <= deadlineTime ? 'on_time' : 'late';
+
+    // Upsert check-in (may have a no_checkin placeholder from cron)
+    const { data, error } = await supabaseAdmin
+      .from('checkins')
+      .upsert({
+        user_id: userId,
+        date: today,
+        submitted_at: new Date().toISOString(),
+        status,
+        completed_items: body.completed_items,
+        role_id: member?.role_id || null,
+      }, { onConflict: 'user_id,date' })
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Check-in submit error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /checkin/today — get today's check-in status
+router.get('/today', async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const today = todayIST();
+
+    const isHoliday = await isNonWorkingDay(today);
+
+    const { data: checkin } = await supabaseAdmin
+      .from('checkins')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('date', today)
+      .single();
+
+    // Get user's config (checklist items for their role)
+    const { data: member } = await supabaseAdmin
+      .from('workspace_members')
+      .select('role_id, roles(id, name)')
+      .eq('user_id', userId)
+      .limit(1)
+      .single();
+
+    let checklistItems: any[] = [];
+    if (member?.role_id) {
+      const { data: config } = await supabaseAdmin
+        .from('checkin_configs')
+        .select('items')
+        .eq('role_id', member.role_id)
+        .single();
+
+      checklistItems = (config?.items as any[]) || [];
+    }
+
+    // Get user's deadline
+    const { data: settings } = await supabaseAdmin
+      .from('user_checkin_settings')
+      .select('deadline_time')
+      .eq('user_id', userId)
+      .single();
+
+    res.json({
+      success: true,
+      data: {
+        checkin: checkin || null,
+        is_holiday: isHoliday,
+        checklist_items: checklistItems,
+        deadline_time: settings?.deadline_time || '10:00',
+        role: member?.roles || null,
+        already_checked_in: !!(checkin && checkin.status !== 'no_checkin'),
+      },
+    });
+  } catch (err) {
+    console.error('Check-in today error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /checkin/dashboard — get check-in history for the current user
+router.get('/dashboard', async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const view = (req.query.view as string) || 'week';
+
+    const ist = nowIST();
+    let startDate: string;
+    let endDate: string = todayIST();
+
+    if (view === 'week') {
+      const dayOfWeek = ist.getUTCDay();
+      const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const monday = new Date(ist);
+      monday.setUTCDate(monday.getUTCDate() - mondayOffset);
+      startDate = monday.toISOString().split('T')[0];
+      const saturday = new Date(monday);
+      saturday.setUTCDate(saturday.getUTCDate() + 6);
+      endDate = saturday.toISOString().split('T')[0];
+    } else if (view === 'month') {
+      const firstOfMonth = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth() - 1, 1));
+      const lastOfMonth = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), 0));
+      startDate = firstOfMonth.toISOString().split('T')[0];
+      endDate = lastOfMonth.toISOString().split('T')[0];
+    } else if (view === '3months') {
+      const firstOf3Months = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth() - 3, 1));
+      startDate = firstOf3Months.toISOString().split('T')[0];
+    } else {
+      // year
+      startDate = `${ist.getUTCFullYear()}-01-01`;
+    }
+
+    // Fetch check-ins for the period
+    const { data: checkins } = await supabaseAdmin
+      .from('checkins')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date', { ascending: true });
+
+    // Fetch holidays
+    const { data: holidays } = await supabaseAdmin
+      .from('holidays')
+      .select('*');
+
+    // Fetch working days config
+    const { data: wdConfig } = await supabaseAdmin
+      .from('working_days_config')
+      .select('working_days')
+      .limit(1)
+      .single();
+
+    const workingDays: number[] = wdConfig?.working_days || [1, 2, 3, 4, 5, 6];
+
+    // Build day-by-day data
+    const checkinMap = new Map((checkins || []).map((c: any) => [c.date, c]));
+    const holidayDates = new Set((holidays || []).filter((h: any) => !h.is_recurring && h.date).map((h: any) => h.date));
+    const recurringHolidays = (holidays || []).filter((h: any) => h.is_recurring);
+
+    const days: any[] = [];
+    let totalWorking = 0;
+    let onTime = 0;
+    let late = 0;
+    let missed = 0;
+    let holidayCount = 0;
+
+    const current = new Date(startDate + 'T00:00:00Z');
+    const end = new Date(endDate + 'T00:00:00Z');
+    const todayStr = todayIST();
+
+    while (current <= end) {
+      const dateStr = current.toISOString().split('T')[0];
+      const dayOfWeek = current.getUTCDay();
+      const month = current.getUTCMonth() + 1;
+      const day = current.getUTCDate();
+
+      const isNonWorking = !workingDays.includes(dayOfWeek);
+      const isSpecificHoliday = holidayDates.has(dateStr);
+      const isRecurringHoliday = recurringHolidays.some(
+        (h: any) => h.recurring_month === month && h.recurring_day === day
+      );
+
+      if (isNonWorking || isSpecificHoliday || isRecurringHoliday) {
+        days.push({ date: dateStr, status: 'holiday', submitted_at: null });
+        holidayCount++;
+      } else if (dateStr > todayStr) {
+        // Future date - skip from counts
+        days.push({ date: dateStr, status: 'future', submitted_at: null });
+      } else {
+        totalWorking++;
+        const checkin = checkinMap.get(dateStr);
+        if (checkin) {
+          days.push({ date: dateStr, status: checkin.status, submitted_at: checkin.submitted_at });
+          if (checkin.status === 'on_time') onTime++;
+          else if (checkin.status === 'late') late++;
+          else missed++;
+        } else {
+          days.push({ date: dateStr, status: 'no_checkin', submitted_at: null });
+          missed++;
+        }
+      }
+
+      current.setUTCDate(current.getUTCDate() + 1);
+    }
+
+    const attendanceRate = totalWorking > 0
+      ? Math.round(((onTime + late) / totalWorking) * 100)
+      : 100;
+
+    res.json({
+      success: true,
+      data: {
+        days,
+        summary: {
+          total_working_days: totalWorking,
+          on_time: onTime,
+          late,
+          missed,
+          holidays: holidayCount,
+          attendance_rate: attendanceRate,
+        },
+      },
+    });
+  } catch (err) {
+    console.error('Check-in dashboard error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+export default router;

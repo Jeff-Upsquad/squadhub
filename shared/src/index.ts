@@ -327,3 +327,75 @@ export interface RegisterRequest {
   password: string;
   display_name: string;
 }
+
+// ---- Daily Check-In ----
+export type CheckInStatus = 'on_time' | 'late' | 'no_checkin';
+
+export interface CheckIn {
+  id: string;
+  user_id: string;
+  date: string;
+  submitted_at: string | null;
+  status: CheckInStatus;
+  completed_items: string[];
+  role_id: string | null;
+  created_at: string;
+  // Joined
+  user?: User;
+}
+
+export interface CheckInConfigItem {
+  id: string;
+  label: string;
+  description: string;
+  isRequired: boolean;
+  order: number;
+}
+
+export interface CheckInConfig {
+  id: string;
+  role_id: string;
+  items: CheckInConfigItem[];
+  updated_at: string;
+  // Joined
+  role?: Role;
+}
+
+export interface Holiday {
+  id: string;
+  name: string;
+  date: string | null;
+  is_recurring: boolean;
+  recurring_month: number | null;
+  recurring_day: number | null;
+  created_at: string;
+}
+
+export interface UserCheckInSettings {
+  id: string;
+  user_id: string;
+  deadline_time: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkingDaysConfig {
+  id: string;
+  working_days: number[];
+  updated_at: string;
+}
+
+export interface CheckInDashboardDay {
+  date: string;
+  status: CheckInStatus | 'holiday';
+  submitted_at?: string | null;
+}
+
+export interface CheckInDashboardSummary {
+  total_working_days: number;
+  on_time: number;
+  late: number;
+  missed: number;
+  holidays: number;
+  attendance_rate: number;
+}

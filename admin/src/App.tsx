@@ -9,6 +9,9 @@ import AdminUsers from './pages/admin/AdminUsers';
 import AdminWorkspaces from './pages/admin/AdminWorkspaces';
 import AdminRoles from './pages/admin/AdminRoles';
 import AdminTrash from './pages/admin/AdminTrash';
+import AdminHolidays from './pages/admin/AdminHolidays';
+import AdminCheckInConfig from './pages/admin/AdminCheckInConfig';
+import AdminCheckInHistory from './pages/admin/AdminCheckInHistory';
 import WsAdminSettings from './pages/workspace-admin/WsAdminSettings';
 import WsAdminMembers from './pages/workspace-admin/WsAdminMembers';
 
@@ -49,6 +52,9 @@ export default function App() {
         <Route path="roles" element={<AdminRoles />} />
         <Route path="workspaces" element={<AdminWorkspaces />} />
         <Route path="trash" element={<AdminTrash />} />
+        <Route path="holidays" element={<AdminHolidays />} />
+        <Route path="checkin-config" element={<AdminCheckInConfig />} />
+        <Route path="checkin-history" element={<AdminCheckInHistory />} />
       </Route>
 
       {/* Workspace Admin — workspace owner/admin */}

@@ -22,6 +22,9 @@ import pmListRoutes from './routes/pm/lists';
 import pmTaskRoutes from './routes/pm/tasks';
 import favoritesRoutes from './routes/favorites';
 import membershipsRoutes from './routes/memberships';
+import checkinRoutes from './routes/checkin';
+import checkinAdminRoutes from './routes/checkin-admin';
+import { startCheckInCron } from './cron/checkin-cron';
 
 // Validate env vars before starting
 validateConfig();
@@ -65,6 +68,8 @@ app.use('/pm', pmListRoutes);
 app.use('/pm', pmTaskRoutes);
 app.use('/favorites', favoritesRoutes);
 app.use('/memberships', membershipsRoutes);
+app.use('/checkin', checkinRoutes);
+app.use('/admin/checkin', checkinAdminRoutes);
 
 // 404 handler
 app.use((_req, res) => {
@@ -81,4 +86,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 server.listen(config.port, () => {
   console.log(`SquadHub server running on http://localhost:${config.port}`);
   console.log(`Environment: ${config.nodeEnv}`);
+
+  // Start the check-in cron job (marks missing check-ins at 11:59 PM IST)
+  startCheckInCron();
 });

@@ -13,6 +13,7 @@ import CreateChannelModal from '../pages/app/chat/CreateChannelModal';
 import ListPage from '../pages/app/pm/ListPage';
 import HomeSidebar from '../pages/app/HomeSidebar';
 import SettingsSlider from '../components/SettingsSlider';
+import CheckInWidget from '../pages/app/checkin/CheckInWidget';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'more';
@@ -330,13 +331,7 @@ export default function MainLayout() {
           ) : homeView === 'tasks' ? (
             <ListPage />
           ) : (
-            <div className="flex flex-1 flex-col items-center justify-center text-[#90A1B9]">
-              <svg className="mb-4 h-10 w-10 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z" />
-              </svg>
-              <h3 className="font-[family-name:var(--font-display)] text-lg font-medium text-[#62748E]">Home</h3>
-              <p className="mt-1 text-sm">Your notifications and updates will appear here</p>
-            </div>
+            <CheckInWidget />
           )
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center text-[#90A1B9]">
