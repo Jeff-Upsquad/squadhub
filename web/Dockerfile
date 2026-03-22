@@ -34,7 +34,7 @@ RUN npm install --production
 
 # Copy built app and public files from builder
 COPY --from=builder /app/web/.next /app/web/.next
-COPY --from=builder /app/web/next.config.ts /app/web/next.config.ts
+COPY --from=builder /app/web/next.config.mjs /app/web/next.config.mjs
 COPY --from=builder /app/web/postcss.config.mjs /app/web/postcss.config.mjs
 COPY web/public /app/web/public
 
