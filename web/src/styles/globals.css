@@ -13,6 +13,7 @@
   --foreground:       #0F172B;
   --foreground-muted: #62748E;
   --foreground-dim:   #90A1B9;
+  --icon-bar:         #000000;
 }
 
 .dark {
@@ -24,6 +25,7 @@
   --foreground:       #e2e8f0;
   --foreground-muted: #8b97a8;
   --foreground-dim:   #566579;
+  --icon-bar:         #1A1A2E;
 }
 
 /* Expose as Tailwind utilities */
@@ -36,6 +38,7 @@
   --color-foreground:       var(--foreground);
   --color-foreground-muted: var(--foreground-muted);
   --color-foreground-dim:   var(--foreground-dim);
+  --color-icon-bar:         var(--icon-bar);
 }
 
 /* ── Hashnode design language ───────────────────────────── */

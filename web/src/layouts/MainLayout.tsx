@@ -181,7 +181,7 @@ export default function MainLayout() {
   return (
     <div className="flex h-screen bg-canvas text-foreground">
       {/* Far-left icon sidebar */}
-      <div className="flex w-[68px] shrink-0 flex-col items-center bg-[#1A1A2E] pt-2">
+      <div className="flex w-[68px] shrink-0 flex-col items-center bg-icon-bar pt-2">
         {/* Sidebar toggle */}
         <button
           onClick={() => setSidebarOpen((v) => !v)}
