@@ -14,6 +14,7 @@ import ListPage from '../views/app/pm/ListPage';
 import HomeSidebar from '../views/app/HomeSidebar';
 import SettingsSlider from '../components/SettingsSlider';
 import CheckInWidget from '../views/app/checkin/CheckInWidget';
+import ThemeToggle from '../components/ThemeToggle';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'more';
@@ -153,8 +154,8 @@ export default function MainLayout() {
   // Loading state
   if (workspacesLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-white">
-        <p className="text-sm text-[#90A1B9]">Loading...</p>
+      <div className="flex h-screen items-center justify-center bg-surface">
+        <p className="text-sm text-foreground-dim">Loading...</p>
       </div>
     );
   }
@@ -162,13 +163,13 @@ export default function MainLayout() {
   // No workspaces
   if (!workspacesRes || workspaces.length === 0) {
     return (
-      <div className="flex h-screen items-center justify-center bg-white">
+      <div className="flex h-screen items-center justify-center bg-surface">
         <div className="text-center">
-          <h2 className="font-[family-name:var(--font-display)] text-lg font-semibold text-[#0F172B]">Welcome to SquadHub</h2>
-          <p className="mt-2 text-sm text-[#62748E]">Your workspace is being set up. Please refresh in a moment.</p>
+          <h2 className="font-[family-name:var(--font-display)] text-lg font-semibold text-foreground">Welcome to SquadHub</h2>
+          <p className="mt-2 text-sm text-foreground-muted">Your workspace is being set up. Please refresh in a moment.</p>
           <button
             onClick={() => window.location.reload()}
-            className="mt-4 rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1D293D]"
+            className="mt-4 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition hover:opacity-80"
           >
             Refresh
           </button>
@@ -178,8 +179,8 @@ export default function MainLayout() {
   }
 
   return (
-    <div className="flex h-screen bg-[#F0F2F5] text-[#0F172B]">
-      {/* Far-left icon sidebar — black */}
+    <div className="flex h-screen bg-canvas text-foreground">
+      {/* Far-left icon sidebar */}
       <div className="flex w-[68px] shrink-0 flex-col items-center bg-[#1A1A2E] pt-2">
         {/* Sidebar toggle */}
         <button
@@ -226,6 +227,7 @@ export default function MainLayout() {
               </svg>
             </a>
           )}
+          <ThemeToggle />
           <button
             onClick={logout}
             className="flex h-10 w-10 items-center justify-center rounded-lg text-[#8888A0] transition hover:bg-white/10 hover:text-white"
@@ -241,7 +243,7 @@ export default function MainLayout() {
       {/* Module sidebar */}
       {currentWorkspace && (
         <div
-          className={`flex h-full shrink-0 flex-col bg-[#F0F2F5] transition-[width] duration-200 ease-in-out ${
+          className={`flex h-full shrink-0 flex-col bg-canvas transition-[width] duration-200 ease-in-out ${
             sidebarOpen ? 'w-60' : 'w-0 overflow-hidden'
           }`}
         >
@@ -258,11 +260,11 @@ export default function MainLayout() {
             />
           ) : (
             <div className="flex flex-col">
-              <div className="border-b border-[#E2E8F0] px-4 py-3">
-                <h3 className="font-[family-name:var(--font-display)] text-sm font-semibold text-[#0F172B]">{SECTION_TITLES[activeSection]}</h3>
+              <div className="border-b border-divider px-4 py-3">
+                <h3 className="font-[family-name:var(--font-display)] text-sm font-semibold text-foreground">{SECTION_TITLES[activeSection]}</h3>
               </div>
               <div className="flex flex-1 items-center justify-center px-4 py-12">
-                <p className="font-[family-name:var(--font-mono)] text-center text-[10px] uppercase tracking-[0.12em] text-[#90A1B9]">Coming soon</p>
+                <p className="font-[family-name:var(--font-mono)] text-center text-[10px] uppercase tracking-[0.12em] text-foreground-dim">Coming soon</p>
               </div>
             </div>
           )}
@@ -270,19 +272,19 @@ export default function MainLayout() {
       )}
 
       {/* Main content area — rounded top-left corner, Hashnode-style */}
-      <div className="mt-2 flex flex-1 flex-col overflow-hidden rounded-tl-2xl border-l border-t border-[#E2E8F0] bg-white">
+      <div className="mt-2 flex flex-1 flex-col overflow-hidden rounded-tl-2xl border-l border-t border-divider bg-surface">
         {activeSection === 'home' ? (
           homeView === 'chat' ? (
             <>
               {activeChannelId && (
-                <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-3">
+                <div className="flex items-center justify-between border-b border-divider px-5 py-3">
                   <div className="flex items-center">
-                    <span className="mr-2 text-[#90A1B9]">#</span>
-                    <span className="text-sm font-medium text-[#0F172B]">
+                    <span className="mr-2 text-foreground-dim">#</span>
+                    <span className="text-sm font-medium text-foreground">
                       {channels.find((c) => c.id === activeChannelId)?.name}
                     </span>
                     {channels.find((c) => c.id === activeChannelId)?.description && (
-                      <span className="ml-3 text-xs text-[#999999] truncate max-w-xs">
+                      <span className="ml-3 text-xs text-foreground-dim truncate max-w-xs">
                         {channels.find((c) => c.id === activeChannelId)?.description}
                       </span>
                     )}
@@ -290,7 +292,7 @@ export default function MainLayout() {
                   <button
                     onClick={() => setShowChannelSettings(!showChannelSettings)}
                     className={`rounded p-1.5 transition ${
-                      showChannelSettings ? 'bg-[#F1F5F9] text-[#0F172B]' : 'text-[#999999] hover:text-[#0F172B]'
+                      showChannelSettings ? 'bg-surface-alt text-foreground' : 'text-foreground-dim hover:text-foreground'
                     }`}
                     title="Channel settings"
                   >
@@ -306,7 +308,7 @@ export default function MainLayout() {
                     <ChatPanel channelId={activeChannelId} />
                   </div>
                 ) : (
-                  <div className="flex flex-1 items-center justify-center text-sm text-[#90A1B9]">
+                  <div className="flex flex-1 items-center justify-center text-sm text-foreground-dim">
                     Select a channel to start chatting
                   </div>
                 )}
@@ -333,17 +335,17 @@ export default function MainLayout() {
           ) : homeView === 'checkin' ? (
             <CheckInWidget />
           ) : (
-            <div className="flex flex-1 flex-col items-center justify-center text-[#90A1B9]">
-              <h3 className="font-[family-name:var(--font-display)] text-lg font-medium text-[#62748E]">Welcome to SquadHub</h3>
+            <div className="flex flex-1 flex-col items-center justify-center text-foreground-dim">
+              <h3 className="font-[family-name:var(--font-display)] text-lg font-medium text-foreground-muted">Welcome to SquadHub</h3>
               <p className="mt-1 text-sm">Select a channel, space, or module to get started</p>
             </div>
           )
         ) : (
-          <div className="flex flex-1 flex-col items-center justify-center text-[#90A1B9]">
+          <div className="flex flex-1 flex-col items-center justify-center text-foreground-dim">
             <div className="mb-4 opacity-20">
               {SECTIONS.find((s) => s.id === activeSection)?.icon}
             </div>
-            <h3 className="font-[family-name:var(--font-display)] text-lg font-medium text-[#62748E]">{SECTION_TITLES[activeSection]}</h3>
+            <h3 className="font-[family-name:var(--font-display)] text-lg font-medium text-foreground-muted">{SECTION_TITLES[activeSection]}</h3>
             <p className="mt-1 text-sm">Coming soon</p>
           </div>
         )}

@@ -1,12 +1,50 @@
 @import "tailwindcss";
 
-/* Hashnode design language */
+/* Class-based dark mode — .dark on <html> */
+@variant dark (&:where(.dark, .dark *));
+
+/* ── Theme tokens ───────────────────────────────────────── */
+:root {
+  --canvas:           #F0F2F5;
+  --surface:          #ffffff;
+  --surface-alt:      #F1F5F9;
+  --divider:          #E2E8F0;
+  --divider-subtle:   #E0E4E8;
+  --foreground:       #0F172B;
+  --foreground-muted: #62748E;
+  --foreground-dim:   #90A1B9;
+}
+
+.dark {
+  --canvas:           #0f1117;
+  --surface:          #161b22;
+  --surface-alt:      #1c2030;
+  --divider:          #21262d;
+  --divider-subtle:   #1e2533;
+  --foreground:       #e2e8f0;
+  --foreground-muted: #8b97a8;
+  --foreground-dim:   #566579;
+}
+
+/* Expose as Tailwind utilities */
+@theme inline {
+  --color-canvas:           var(--canvas);
+  --color-surface:          var(--surface);
+  --color-surface-alt:      var(--surface-alt);
+  --color-divider:          var(--divider);
+  --color-divider-subtle:   var(--divider-subtle);
+  --color-foreground:       var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-dim:   var(--foreground-dim);
+}
+
+/* ── Hashnode design language ───────────────────────────── */
 @theme {
-  /* Primary accent — Hashnode Royal Blue */
+  /* Primary accent */
   --color-accent: #2962FF;
 
-  /* Slate scale (Hashnode neutrals) */
-  --color-gray-50: #F8FAFC;
+  /* Slate scale */
+  --color-gray-50:  #F8FAFC;
   --color-gray-100: #F1F5F9;
   --color-gray-200: #E2E8F0;
   --color-gray-300: #CAD5E2;
@@ -18,44 +56,29 @@
   --color-gray-900: #0F172B;
   --color-gray-950: #020618;
 
-  /* Surfaces */
-  --color-sidebar: #ffffff;
-  --color-sidebar-hover: #F1F5F9;
-  --color-sidebar-active: #F1F5F9;
-  --color-sidebar-text: #62748E;
-  --color-sidebar-text-bright: #0F172B;
-
   /* Font families */
   --font-display: 'Google Sans Flex', sans-serif;
-  --font-body: 'Google Sans Flex', system-ui, -apple-system, sans-serif;
-  --font-mono: 'Geist Mono', monospace;
+  --font-body:    'Google Sans Flex', system-ui, -apple-system, sans-serif;
+  --font-mono:    'Geist Mono', monospace;
 }
 
-/* Base */
+/* ── Base ───────────────────────────────────────────────── */
 body {
   font-family: 'Google Sans Flex', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.011em;
+  background-color: var(--canvas);
+  color: var(--foreground);
 }
 
-/* Minimal scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #CAD5E2;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #90A1B9;
-}
+/* ── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--divider); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--foreground-dim); }
 
 ::selection {
   background: rgba(41, 98, 255, 0.15);
-  color: #000;
+  color: inherit;
 }
