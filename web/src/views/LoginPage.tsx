@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import api from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 
@@ -8,7 +9,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+  const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -20,7 +21,7 @@ export default function LoginPage() {
       const { data: res } = await api.post('/auth/login', { email, password });
       if (res.success) {
         setAuth(res.data.user, res.data.access_token, res.data.refresh_token);
-        navigate('/');
+        router.push('/');
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Login failed');
@@ -77,7 +78,7 @@ export default function LoginPage() {
 
         <p className="mt-6 text-center text-sm text-[#90A1B9]">
           Don't have an account?{' '}
-          <Link to="/signup" className="text-[#2962FF] hover:underline">
+          <Link href="/signup" className="text-[#2962FF] hover:underline">
             Sign up
           </Link>
         </p>

@@ -25,5 +25,5 @@ export default function AppLayout({
     return null;
   }
 
-  return <MainLayout>{children}</MainLayout>;
+  return <MainLayout />;
 }

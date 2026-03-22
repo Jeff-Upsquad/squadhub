@@ -2,18 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../services/api';
 
-const ADMIN_APP_URL = import.meta.env.VITE_ADMIN_URL || (import.meta.env.PROD ? '/admin' : 'http://localhost:5174');
+const ADMIN_APP_URL = process.env.NEXT_PUBLIC_ADMIN_URL || (process.env.NODE_ENV === 'production' ? '/admin' : 'http://localhost:3001');
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useAuthStore } from '../stores/authStore';
 import { usePMStore } from '../stores/pmStore';
 import type { Workspace, Channel } from '@squadhub/shared';
 import { connectSocket, disconnectSocket } from '../services/socket';
-import ChatPanel from '../pages/app/chat/ChatPanel';
-import CreateChannelModal from '../pages/app/chat/CreateChannelModal';
-import ListPage from '../pages/app/pm/ListPage';
-import HomeSidebar from '../pages/app/HomeSidebar';
+import ChatPanel from '../views/app/chat/ChatPanel';
+import CreateChannelModal from '../views/app/chat/CreateChannelModal';
+import ListPage from '../views/app/pm/ListPage';
+import HomeSidebar from '../views/app/HomeSidebar';
 import SettingsSlider from '../components/SettingsSlider';
-import CheckInWidget from '../pages/app/checkin/CheckInWidget';
+import CheckInWidget from '../views/app/checkin/CheckInWidget';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'more';

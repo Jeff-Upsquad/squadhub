@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
-import '../src/styles/globals.css';
+import '../styles/globals.css';
 
 export const metadata: Metadata = {
-  title: 'SquadHub',
-  description: 'Team collaboration and project management',
+  title: 'SquadHub Admin',
+  description: 'SquadHub Admin Panel',
 };
 
 export default function RootLayout({

@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
-import CreateWorkspaceView from '@/pages/app/CreateWorkspaceView';
+import CreateWorkspaceView from '@/views/app/CreateWorkspaceView';
 
 export default function Dashboard() {
   const router = useRouter();

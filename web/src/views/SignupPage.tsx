@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import api from '../services/api';
 
 export default function SignupPage() {
@@ -46,7 +46,7 @@ export default function SignupPage() {
             Your account is pending admin approval. You'll be able to sign in once an admin reviews your request.
           </p>
           <Link
-            to="/login"
+            href="/login"
             className="mt-6 inline-block rounded-md bg-[#0F172B] px-6 py-2 text-sm font-medium text-white transition hover:bg-[#1D293D]"
           >
             Back to Sign In
@@ -117,7 +117,7 @@ export default function SignupPage() {
 
         <p className="mt-6 text-center text-sm text-[#90A1B9]">
           Already have an account?{' '}
-          <Link to="/login" className="text-[#2962FF] hover:underline">
+          <Link href="/login" className="text-[#2962FF] hover:underline">
             Sign in
           </Link>
         </p>
