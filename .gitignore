@@ -12,6 +12,11 @@ build/
 .env.local
 .env.*.local
 .env.production
+.env.example
+
+# Google OAuth credentials
+credentials.json
+token.json
 
 # IDE
 .vscode/
@@ -38,6 +43,9 @@ out/
 
 # Turborepo
 .turbo/
+
+# WAT Framework - Temporary processing files
+.tmp/
 
 # Testing
 coverage/

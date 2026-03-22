@@ -1,7 +1,20 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git init)"
+      "Bash(git init)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")",
+      "Bash(find /Users/jeffzeena/squadhub/web/src -name *router* -o -name *route*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(grep -E \"\\\\.tsx?$\")",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(curl -s http://localhost:4000/auth/login -H 'Content-Type: application/json' -d '{\"\"\"\"email\"\"\"\":\"\"\"\"jeff@upsquadconnect.com\"\"\"\",\"\"\"\"password\"\"\"\":\"\"\"\"squad123###\"\"\"\"}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(TOKEN=\"eyJhbGciOiJFUzI1NiIsImtpZCI6IjFhMDdkYWY3LTgzNjEtNDY2OC04YTJmLWQzMTI4M2YzMDJjYiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2tmeGRiaHd4enZwdHp6Y3V6bGFsLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiIzOTRkM2Q5NS1iZTQyLTQ5ZmUtOWU2Ni00MDdkYjI2OWFhOWMiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzc0MDkzMzU0LCJpYXQiOjE3NzQwODk3NTQsImVtYWlsIjoiamVmZkB1cHNxdWFkY29ubmVjdC5jb20iLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImRpc3BsYXlfbmFtZSI6IkplZmYiLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZX0sInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiYWFsIjoiYWFsMSIsImFtciI6W3sibWV0aG9kIjoicGFzc3dvcmQiLCJ0aW1lc3RhbXAiOjE3NzQwODk3NTR9XSwic2Vzc2lvbl9pZCI6ImVmNTBiMjYyLTk4MTktNDEyYy04ZWQyLWMyZmIzOWZlNWEwZSIsImlzX2Fub255bW91cyI6ZmFsc2V9.NaI703Jec3fYm7N6b5YMZcqhfC4nyWGogubmBtv0TGuLYWTUjaQznSjUZmdN-Wc7MEW1Zb26lFKPYYFhWEtd2Q\")",
+      "Bash(curl -s http://localhost:4000/admin/mini-apps -H \"Authorization: Bearer $TOKEN\")"
     ]
   }
 }

@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Backend Server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "server"],
+      "port": 4000
+    },
+    {
+      "name": "Web App",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "web"],
+      "port": 5173
+    },
+    {
+      "name": "Admin App",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "admin"],
+      "port": 5174
+    }
+  ]
+}
