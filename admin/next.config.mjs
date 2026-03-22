@@ -9,11 +9,11 @@ const nextConfig = {
 
   rewrites: async () => ({
     beforeFiles: [
-      { source: '/auth/:path*', destination: 'http://localhost:4000/auth/:path*' },
-      { source: '/admin/:path*', destination: 'http://localhost:4000/admin/:path*' },
-      { source: '/users/:path*', destination: 'http://localhost:4000/users/:path*' },
-      { source: '/workspaces/:path*', destination: 'http://localhost:4000/workspaces/:path*' },
-      { source: '/health/:path*', destination: 'http://localhost:4000/health/:path*' },
+      { source: '/auth/:path*', destination: 'http://server:4000/auth/:path*' },
+      { source: '/admin/:path*', destination: 'http://server:4000/admin/:path*' },
+      { source: '/users/:path*', destination: 'http://server:4000/users/:path*' },
+      { source: '/workspaces/:path*', destination: 'http://server:4000/workspaces/:path*' },
+      { source: '/health/:path*', destination: 'http://server:4000/health/:path*' },
     ],
   }),
 
