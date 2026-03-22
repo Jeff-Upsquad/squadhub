@@ -34,7 +34,8 @@ RUN npm install --production
 
 # Copy built app and public files from builder
 COPY --from=builder /app/admin/.next /app/admin/.next
-COPY --from=builder /app/admin/public /app/admin/public
+COPY --from=builder /app/admin/next.config.ts /app/admin/next.config.ts
+COPY --from=builder /app/admin/postcss.config.mjs /app/admin/postcss.config.mjs
 COPY admin/public /app/admin/public
 
 EXPOSE 3001
