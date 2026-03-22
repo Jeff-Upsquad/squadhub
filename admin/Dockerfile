@@ -1,10 +1,6 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Build args for Vite env vars (baked in at build time)
-ARG VITE_APP_URL
-ENV VITE_APP_URL=$VITE_APP_URL
-
 # Copy all package files for full workspace install
 COPY package.json package-lock.json* ./
 COPY shared/package.json shared/
@@ -24,13 +20,24 @@ COPY admin/ admin/
 # Build shared first, then admin
 RUN npm run build -w shared && npm run build -w admin
 
-# ---- Serve with Nginx ----
-FROM nginx:alpine
+# ---- Next.js Runtime ----
+FROM node:20-alpine
 
-# Copy custom nginx config
-COPY admin/nginx.conf /etc/nginx/conf.d/default.conf
+WORKDIR /app
 
-# Copy built files
-COPY --from=builder /app/admin/dist /usr/share/nginx/html
+# Copy package files
+COPY package.json package-lock.json* ./
+COPY admin/package.json admin/
 
-EXPOSE 80
+# Install only production dependencies
+RUN npm install --production
+
+# Copy built app and public files from builder
+COPY --from=builder /app/admin/.next /app/admin/.next
+COPY --from=builder /app/admin/public /app/admin/public
+COPY admin/public /app/admin/public
+
+EXPOSE 3001
+
+CMD ["npm", "start", "-w", "admin"]
+

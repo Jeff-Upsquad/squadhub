@@ -1,9 +1,9 @@
 squadhub.in {
-	reverse_proxy web:80
+	reverse_proxy web:3000
 }
 
 admin.squadhub.in {
-	reverse_proxy admin:80
+	reverse_proxy admin:3001
 }
 
 upsquadconnect.com, www.upsquadconnect.com {
