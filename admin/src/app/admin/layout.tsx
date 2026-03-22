@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
-import WorkspaceAdminLayout from '@/layouts/WorkspaceAdminLayout';
+import MasterAdminLayout from '@/layouts/MasterAdminLayout';
 
 export default function AdminLayout({
   children,
@@ -23,5 +23,5 @@ export default function AdminLayout({
     return null;
   }
 
-  return <WorkspaceAdminLayout>{children}</WorkspaceAdminLayout>;
+  return <MasterAdminLayout>{children}</MasterAdminLayout>;
 }
