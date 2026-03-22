@@ -18,6 +18,7 @@ const nextConfig = {
       { source: '/favorites/:path*', destination: 'http://server:4000/favorites/:path*' },
       { source: '/checkin/:path*', destination: 'http://server:4000/checkin/:path*' },
       { source: '/pm/:path*', destination: 'http://server:4000/pm/:path*' },
+      { source: '/mini-apps/:path*', destination: 'http://server:4000/mini-apps/:path*' },
     ],
   }),
 
