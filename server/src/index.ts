@@ -26,6 +26,8 @@ import checkinRoutes from './routes/checkin';
 import checkinAdminRoutes from './routes/checkin-admin';
 import miniAppsRoutes from './routes/mini-apps';
 import miniAppsAdminRoutes from './routes/mini-apps-admin';
+import clientsPublicRoutes from './routes/clients-public';
+import clientsAdminRoutes from './routes/clients-admin';
 import { startCheckInCron } from './cron/checkin-cron';
 
 // Validate env vars before starting
@@ -74,6 +76,8 @@ app.use('/checkin', checkinRoutes);
 app.use('/admin/checkin', checkinAdminRoutes);
 app.use('/mini-apps', miniAppsRoutes);
 app.use('/admin/mini-apps', miniAppsAdminRoutes);
+app.use('/clients', clientsPublicRoutes);
+app.use('/admin/clients', clientsAdminRoutes);
 
 // 404 handler
 app.use((_req, res) => {

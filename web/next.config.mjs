@@ -19,6 +19,7 @@ const nextConfig = {
       { source: '/checkin/:path*', destination: 'http://server:4000/checkin/:path*' },
       { source: '/pm/:path*', destination: 'http://server:4000/pm/:path*' },
       { source: '/mini-apps/:path*', destination: 'http://server:4000/mini-apps/:path*' },
+      { source: '/clients/:path*', destination: 'http://server:4000/clients/:path*' },
     ],
   }),
 

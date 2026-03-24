@@ -14,6 +14,7 @@ const nextConfig = {
       { source: '/api/users/:path*', destination: 'http://server:4000/users/:path*' },
       { source: '/api/workspaces/:path*', destination: 'http://server:4000/workspaces/:path*' },
       { source: '/api/health/:path*', destination: 'http://server:4000/health/:path*' },
+      { source: '/api/clients/:path*', destination: 'http://server:4000/clients/:path*' },
     ],
   }),
 

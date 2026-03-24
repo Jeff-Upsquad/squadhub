@@ -432,3 +432,66 @@ export interface MiniAppUserAccess {
   // Joined
   user?: User;
 }
+
+// ---- Clients Mini-App ----
+export type SubscriptionSquad = 'Content Squad' | 'Accounts & Finance Squad' | 'Marketing Squad' | 'Tech Squad' | 'Legal Squad' | 'Hiring & HR Squad';
+export type SubscriptionLevel = 'Junior' | 'Pro' | 'Elites';
+export type ClientStatus = 'active' | 'paused' | 'cancelled';
+export type SubmissionStatus = 'pending' | 'approved' | 'rejected';
+export type ClientSubscriptionStatus = 'active' | 'paused' | 'cancelled';
+
+export interface Subscription {
+  id: string;
+  name: string;
+  squad: SubscriptionSquad;
+  level: SubscriptionLevel;
+  price: number;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClientSubmission {
+  id: string;
+  business_name: string;
+  contact_person: string;
+  designation: string | null;
+  contact_number: string;
+  email: string;
+  business_address: string;
+  gst_registered: boolean;
+  gst_number: string | null;
+  accounts_email: string | null;
+  status: SubmissionStatus;
+  created_at: string;
+}
+
+export interface Client {
+  id: string;
+  submission_id: string | null;
+  business_name: string;
+  contact_person: string;
+  designation: string | null;
+  contact_number: string;
+  email: string;
+  business_address: string;
+  gst_registered: boolean;
+  gst_number: string | null;
+  accounts_email: string | null;
+  status: ClientStatus;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  subscriptions?: ClientSubscription[];
+}
+
+export interface ClientSubscription {
+  id: string;
+  client_id: string;
+  subscription_id: string;
+  status: ClientSubscriptionStatus;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  subscription?: Subscription;
+}
