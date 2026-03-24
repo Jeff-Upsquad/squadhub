@@ -10,6 +10,7 @@ const nextConfig = {
   rewrites: async () => ({
     beforeFiles: [
       { source: '/api/auth/:path*', destination: 'http://server:4000/auth/:path*' },
+      { source: '/api/admin/clients/:path*', destination: 'http://server:4000/admin/clients/:path*' },
       { source: '/api/admin/:path*', destination: 'http://server:4000/admin/:path*' },
       { source: '/api/users/:path*', destination: 'http://server:4000/users/:path*' },
       { source: '/api/workspaces/:path*', destination: 'http://server:4000/workspaces/:path*' },
