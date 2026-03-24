@@ -7,7 +7,7 @@ import ClientsModule from './ClientsModule';
 
 type Tab = 'new-clients' | 'clients' | 'subscriptions';
 
-const WEB_APP_URL = process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'production' ? '/' : 'http://localhost:3000');
+const WEB_APP_URL = process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'production' ? 'https://squadhub.in' : 'http://localhost:3000');
 
 export default function AdminClients() {
   const [activeTab, setActiveTab] = useState<Tab>('new-clients');
