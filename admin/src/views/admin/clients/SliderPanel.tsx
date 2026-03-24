@@ -22,15 +22,15 @@ export default function SliderPanel({ open, onClose, title, children, width = 'w
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex">
+    <div className="fixed inset-0 z-50 flex justify-end">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
 
-      {/* Panel slides from left */}
+      {/* Panel slides from right */}
       <div
         ref={panelRef}
-        className={`relative ${width} flex h-full flex-col bg-white shadow-2xl animate-in slide-in-from-left duration-200`}
-        style={{ animation: 'slideInLeft 0.2s ease-out' }}
+        className={`relative ${width} flex h-full flex-col bg-white shadow-2xl`}
+        style={{ animation: 'slideInRight 0.2s ease-out' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-4">
@@ -52,8 +52,8 @@ export default function SliderPanel({ open, onClose, title, children, width = 'w
       </div>
 
       <style jsx>{`
-        @keyframes slideInLeft {
-          from { transform: translateX(-100%); }
+        @keyframes slideInRight {
+          from { transform: translateX(100%); }
           to { transform: translateX(0); }
         }
       `}</style>

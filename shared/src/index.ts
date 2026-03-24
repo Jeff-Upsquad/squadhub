@@ -435,7 +435,8 @@ export interface MiniAppUserAccess {
 
 // ---- Clients Mini-App ----
 export type SubscriptionSquad = 'Content Squad' | 'Accounts & Finance Squad' | 'Marketing Squad' | 'Tech Squad' | 'Legal Squad' | 'Hiring & HR Squad';
-export type SubscriptionLevel = 'Junior' | 'Pro' | 'Elites';
+export type SubscriptionLevel = 'Junior' | 'Pro' | 'Elite';
+export type SubscriptionPlan = 'Starter' | 'Basic' | 'Plus' | 'Pro' | 'Personal';
 export type ClientStatus = 'active' | 'paused' | 'cancelled';
 export type SubmissionStatus = 'pending' | 'approved' | 'rejected';
 export type ClientSubscriptionStatus = 'active' | 'paused' | 'cancelled';
@@ -445,6 +446,7 @@ export interface Subscription {
   name: string;
   squad: SubscriptionSquad;
   level: SubscriptionLevel;
+  plan: SubscriptionPlan;
   price: number;
   is_deleted: boolean;
   created_at: string;

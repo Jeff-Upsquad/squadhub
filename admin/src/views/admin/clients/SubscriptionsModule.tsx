@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
-import type { Subscription, SubscriptionSquad, SubscriptionLevel } from '@squadhub/shared';
+import type { Subscription, SubscriptionSquad, SubscriptionLevel, SubscriptionPlan } from '@squadhub/shared';
 import SliderPanel from './SliderPanel';
 
 const SQUADS: SubscriptionSquad[] = [
   'Content Squad', 'Accounts & Finance Squad', 'Marketing Squad',
   'Tech Squad', 'Legal Squad', 'Hiring & HR Squad',
 ];
-const LEVELS: SubscriptionLevel[] = ['Junior', 'Pro', 'Elites'];
+const LEVELS: SubscriptionLevel[] = ['Junior', 'Pro', 'Elite'];
+const PLANS: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
 
 const SQUAD_COLORS: Record<string, string> = {
   'Content Squad': 'bg-purple-100 text-purple-700',
@@ -22,7 +23,7 @@ const SQUAD_COLORS: Record<string, string> = {
 const LEVEL_COLORS: Record<string, string> = {
   'Junior': 'bg-slate-100 text-slate-600',
   'Pro': 'bg-indigo-100 text-indigo-700',
-  'Elites': 'bg-yellow-100 text-yellow-700',
+  'Elite': 'bg-yellow-100 text-yellow-700',
 };
 
 export default function SubscriptionsModule() {
@@ -31,7 +32,7 @@ export default function SubscriptionsModule() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({
-    name: '', squad: SQUADS[0] as SubscriptionSquad, level: LEVELS[0] as SubscriptionLevel, price: 0,
+    name: '', squad: SQUADS[0] as SubscriptionSquad, level: LEVELS[0] as SubscriptionLevel, plan: PLANS[0] as SubscriptionPlan, price: 0,
   });
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -56,13 +57,13 @@ export default function SubscriptionsModule() {
 
   function openCreate() {
     setEditingId(null);
-    setForm({ name: '', squad: SQUADS[0], level: LEVELS[0], price: 0 });
+    setForm({ name: '', squad: SQUADS[0], level: LEVELS[0], plan: PLANS[0], price: 0 });
     setSliderOpen(true);
   }
 
   function openEdit(sub: Subscription) {
     setEditingId(sub.id);
-    setForm({ name: sub.name, squad: sub.squad, level: sub.level, price: sub.price });
+    setForm({ name: sub.name, squad: sub.squad, level: sub.level, plan: sub.plan, price: sub.price });
     setSliderOpen(true);
   }
 
@@ -198,6 +199,17 @@ export default function SubscriptionsModule() {
               className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
             >
               {LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[#62748E]">Plan *</label>
+            <select
+              required
+              value={form.plan}
+              onChange={(e) => setForm({ ...form, plan: e.target.value as SubscriptionPlan })}
+              className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+            >
+              {PLANS.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
           <div>

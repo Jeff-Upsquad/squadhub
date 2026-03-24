@@ -36,7 +36,8 @@ router.get('/subscriptions', async (_req: Request, res: Response) => {
 const subscriptionSchema = z.object({
   name: z.string().min(1).max(200),
   squad: z.enum(['Content Squad', 'Accounts & Finance Squad', 'Marketing Squad', 'Tech Squad', 'Legal Squad', 'Hiring & HR Squad']),
-  level: z.enum(['Junior', 'Pro', 'Elites']),
+  level: z.enum(['Junior', 'Pro', 'Elite']),
+  plan: z.enum(['Starter', 'Basic', 'Plus', 'Pro', 'Personal']),
   price: z.number().int().min(0),
 });
 
