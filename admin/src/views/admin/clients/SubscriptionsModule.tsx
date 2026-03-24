@@ -45,10 +45,12 @@ export default function SubscriptionsModule() {
   const createMutation = useMutation({
     mutationFn: (data: any) => api.post('/api/admin/clients/subscriptions', data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-subscriptions'] }); closeSlider(); },
+    onError: (err: any) => { alert(err?.response?.data?.error || err.message || 'Failed to create subscription'); },
   });
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => api.put(`/api/admin/clients/subscriptions/${id}`, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-subscriptions'] }); closeSlider(); },
+    onError: (err: any) => { alert(err?.response?.data?.error || err.message || 'Failed to update subscription'); },
   });
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/api/admin/clients/subscriptions/${id}`),
