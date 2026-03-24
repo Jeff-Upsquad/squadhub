@@ -292,21 +292,33 @@ export default function ClientsModule() {
                       })}
                     </div>
                   )}
-                  <div className="max-h-32 space-y-1 overflow-y-auto">
-                    {allSubscriptions
-                      .filter((s) => !selectedClient.subscriptions?.some((cs) => cs.subscription_id === s.id))
-                      .map((sub) => (
-                        <label key={sub.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-white">
-                          <input
-                            type="checkbox"
-                            checked={newSubIds.includes(sub.id)}
-                            onChange={() => setNewSubIds((p) => p.includes(sub.id) ? p.filter((s) => s !== sub.id) : [...p, sub.id])}
-                            className="rounded border-[#E2E8F0] text-[#2962FF] focus:ring-[#2962FF]"
-                          />
-                          <span className="text-[#0F172B]">{sub.name}</span>
-                          <span className="text-xs text-[#90A1B9]">{'\u20B9'}{sub.price.toLocaleString('en-IN')}/mo</span>
-                        </label>
-                      ))}
+                  <div className="max-h-48 overflow-y-auto">
+                    {Object.entries(
+                      allSubscriptions
+                        .filter((s) => !selectedClient.subscriptions?.some((cs) => cs.subscription_id === s.id))
+                        .reduce<Record<string, typeof allSubscriptions>>((acc, sub) => {
+                          (acc[sub.squad] = acc[sub.squad] || []).push(sub);
+                          return acc;
+                        }, {})
+                    ).map(([squad, subs]) => (
+                      <div key={squad} className="mb-2">
+                        <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">{squad}</p>
+                        {subs.map((sub) => (
+                          <label key={sub.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-white">
+                            <input
+                              type="checkbox"
+                              checked={newSubIds.includes(sub.id)}
+                              onChange={() => setNewSubIds((p) => p.includes(sub.id) ? p.filter((s) => s !== sub.id) : [...p, sub.id])}
+                              className="rounded border-[#E2E8F0] text-[#2962FF] focus:ring-[#2962FF]"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-[#0F172B]">{sub.name}</p>
+                              <p className="text-xs text-[#90A1B9]">{sub.level} · {sub.plan} · ₹{sub.price.toLocaleString('en-IN')}/mo</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    ))}
                   </div>
                   <button
                     onClick={() => addSubsMutation.mutate({ clientId: selectedClient.id, subscription_ids: newSubIds })}
@@ -322,42 +334,53 @@ export default function ClientsModule() {
               {(!selectedClient.subscriptions || selectedClient.subscriptions.length === 0) ? (
                 <p className="py-4 text-center text-xs text-[#90A1B9]">No subscriptions assigned yet.</p>
               ) : (
-                <div className="space-y-2">
-                  {selectedClient.subscriptions.map((cs) => (
-                    <div
-                      key={cs.id}
-                      className={`rounded-lg border border-[#E2E8F0] bg-white px-4 py-3 ${cs.status === 'cancelled' ? 'opacity-50' : ''}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-[#0F172B]">{cs.subscription?.name || 'Unknown'}</p>
-                          <p className="mt-0.5 text-xs text-[#90A1B9]">
-                            {cs.subscription ? `${'\u20B9'}${cs.subscription.price.toLocaleString('en-IN')}/mo` : ''}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[cs.status]}`}>
-                            {cs.status}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="mt-2 flex gap-1.5">
-                        {cs.status === 'active' && (
-                          <>
-                            <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'paused' })} className="rounded bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100">Pause</button>
-                            <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'cancelled' })} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
-                          </>
-                        )}
-                        {cs.status === 'paused' && (
-                          <>
-                            <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'active' })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Resume</button>
-                            <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'cancelled' })} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
-                          </>
-                        )}
-                        {cs.status === 'cancelled' && (
-                          <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'active' })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Reactivate</button>
-                        )}
-                        <button onClick={() => removeSubMutation.mutate({ clientId: selectedClient.id, csId: cs.id })} className="rounded bg-[#F1F5F9] px-2 py-1 text-[10px] font-medium text-[#62748E] hover:bg-[#E2E8F0]">Remove</button>
+                <div className="space-y-4">
+                  {Object.entries(
+                    selectedClient.subscriptions.reduce<Record<string, typeof selectedClient.subscriptions>>((acc, cs) => {
+                      const squad = cs.subscription?.squad || 'Other';
+                      (acc[squad] = acc[squad] || []).push(cs);
+                      return acc;
+                    }, {})
+                  ).map(([squad, items]) => (
+                    <div key={squad}>
+                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">{squad}</p>
+                      <div className="space-y-2">
+                        {items.map((cs) => (
+                          <div
+                            key={cs.id}
+                            className={`rounded-lg border border-[#E2E8F0] bg-white px-4 py-3 ${cs.status === 'cancelled' ? 'opacity-50' : ''}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-[#0F172B]">{cs.subscription?.name || 'Unknown'}</p>
+                                <p className="mt-0.5 text-xs text-[#90A1B9]">
+                                  {cs.subscription ? `${cs.subscription.level} · ${cs.subscription.plan} · ₹${cs.subscription.price.toLocaleString('en-IN')}/mo` : ''}
+                                </p>
+                              </div>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[cs.status]}`}>
+                                {cs.status}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex gap-1.5">
+                              {cs.status === 'active' && (
+                                <>
+                                  <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'paused' })} className="rounded bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100">Pause</button>
+                                  <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'cancelled' })} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
+                                </>
+                              )}
+                              {cs.status === 'paused' && (
+                                <>
+                                  <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'active' })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Resume</button>
+                                  <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'cancelled' })} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
+                                </>
+                              )}
+                              {cs.status === 'cancelled' && (
+                                <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'active' })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Reactivate</button>
+                              )}
+                              <button onClick={() => removeSubMutation.mutate({ clientId: selectedClient.id, csId: cs.id })} className="rounded bg-[#F1F5F9] px-2 py-1 text-[10px] font-medium text-[#62748E] hover:bg-[#E2E8F0]">Remove</button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}

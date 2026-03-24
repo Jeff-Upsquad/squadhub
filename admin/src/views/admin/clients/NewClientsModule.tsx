@@ -160,29 +160,39 @@ export default function NewClientsModule() {
                 </div>
               )}
 
-              {/* Subscription list to pick from */}
-              <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-[#E2E8F0] p-2">
+              {/* Subscription list to pick from — grouped by squad */}
+              <div className="max-h-64 overflow-y-auto rounded-lg border border-[#E2E8F0] p-2">
                 {subscriptions.length === 0 ? (
                   <p className="py-4 text-center text-xs text-[#90A1B9]">No subscriptions created yet. Create some first.</p>
                 ) : (
-                  subscriptions.map((sub) => (
-                    <label
-                      key={sub.id}
-                      className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
-                        selectedSubscriptionIds.includes(sub.id) ? 'bg-blue-50' : 'hover:bg-[#F8FAFC]'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedSubscriptionIds.includes(sub.id)}
-                        onChange={() => toggleSubscription(sub.id)}
-                        className="rounded border-[#E2E8F0] text-[#2962FF] focus:ring-[#2962FF]"
-                      />
-                      <div className="flex-1">
-                        <span className="text-[#0F172B]">{sub.name}</span>
-                        <span className="ml-2 text-xs text-[#90A1B9]">{'\u20B9'}{sub.price.toLocaleString('en-IN')}/mo</span>
-                      </div>
-                    </label>
+                  Object.entries(
+                    subscriptions.reduce<Record<string, typeof subscriptions>>((acc, sub) => {
+                      (acc[sub.squad] = acc[sub.squad] || []).push(sub);
+                      return acc;
+                    }, {})
+                  ).map(([squad, subs]) => (
+                    <div key={squad} className="mb-2">
+                      <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">{squad}</p>
+                      {subs.map((sub) => (
+                        <label
+                          key={sub.id}
+                          className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
+                            selectedSubscriptionIds.includes(sub.id) ? 'bg-blue-50' : 'hover:bg-[#F8FAFC]'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedSubscriptionIds.includes(sub.id)}
+                            onChange={() => toggleSubscription(sub.id)}
+                            className="rounded border-[#E2E8F0] text-[#2962FF] focus:ring-[#2962FF]"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-[#0F172B]">{sub.name}</p>
+                            <p className="text-xs text-[#90A1B9]">{sub.level} · {sub.plan} · ₹{sub.price.toLocaleString('en-IN')}/mo</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
                   ))
                 )}
               </div>
