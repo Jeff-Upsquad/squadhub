@@ -21,13 +21,13 @@ export default function ClientsModule() {
 
   const { data: clientsRes, isLoading } = useQuery({
     queryKey: ['admin-clients'],
-    queryFn: () => api.get('/api/admin/clients').then((r) => r.data),
+    queryFn: () => api.get('/admin/clients').then((r) => r.data),
   });
   const clients: Client[] = clientsRes?.data || [];
 
   const { data: subscriptionsRes } = useQuery({
     queryKey: ['admin-subscriptions'],
-    queryFn: () => api.get('/api/admin/clients/subscriptions').then((r) => r.data),
+    queryFn: () => api.get('/admin/clients/subscriptions').then((r) => r.data),
   });
   const allSubscriptions: Subscription[] = subscriptionsRes?.data || [];
 
@@ -37,7 +37,7 @@ export default function ClientsModule() {
   };
 
   const updateClientMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => api.put(`/api/admin/clients/${id}`, data),
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.put(`/admin/clients/${id}`, data),
     onSuccess: (res) => {
       invalidateAll();
       setEditing(false);
@@ -48,7 +48,7 @@ export default function ClientsModule() {
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: ClientStatus }) =>
-      api.put(`/api/admin/clients/${id}/status`, { status }),
+      api.put(`/admin/clients/${id}/status`, { status }),
     onSuccess: (res) => {
       invalidateAll();
       if (res.data?.data) setSelectedClient(res.data.data);
@@ -57,7 +57,7 @@ export default function ClientsModule() {
 
   const addSubsMutation = useMutation({
     mutationFn: ({ clientId, subscription_ids }: { clientId: string; subscription_ids: string[] }) =>
-      api.post(`/api/admin/clients/${clientId}/subscriptions`, { subscription_ids }),
+      api.post(`/admin/clients/${clientId}/subscriptions`, { subscription_ids }),
     onSuccess: () => {
       invalidateAll();
       setAddSubOpen(false);
@@ -68,7 +68,7 @@ export default function ClientsModule() {
 
   const subStatusMutation = useMutation({
     mutationFn: ({ clientId, csId, status }: { clientId: string; csId: string; status: string }) =>
-      api.put(`/api/admin/clients/${clientId}/subscriptions/${csId}/status`, { status }),
+      api.put(`/admin/clients/${clientId}/subscriptions/${csId}/status`, { status }),
     onSuccess: () => {
       invalidateAll();
       if (selectedClient) refreshClient(selectedClient.id);
@@ -77,7 +77,7 @@ export default function ClientsModule() {
 
   const removeSubMutation = useMutation({
     mutationFn: ({ clientId, csId }: { clientId: string; csId: string }) =>
-      api.delete(`/api/admin/clients/${clientId}/subscriptions/${csId}`),
+      api.delete(`/admin/clients/${clientId}/subscriptions/${csId}`),
     onSuccess: () => {
       invalidateAll();
       if (selectedClient) refreshClient(selectedClient.id);
@@ -85,7 +85,7 @@ export default function ClientsModule() {
   });
 
   async function refreshClient(id: string) {
-    const res = await api.get(`/api/admin/clients/${id}`);
+    const res = await api.get(`/admin/clients/${id}`);
     if (res.data?.data) setSelectedClient(res.data.data);
   }
 

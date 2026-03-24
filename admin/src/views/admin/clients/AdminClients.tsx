@@ -16,17 +16,17 @@ export default function AdminClients() {
   // Counts for badges
   const { data: subCountRes } = useQuery({
     queryKey: ['admin-submissions-count'],
-    queryFn: () => api.get('/api/admin/clients/submissions/count').then((r) => r.data),
+    queryFn: () => api.get('/admin/clients/submissions/count').then((r) => r.data),
     refetchInterval: 30000,
   });
   const { data: clientCountRes } = useQuery({
     queryKey: ['admin-clients-count'],
-    queryFn: () => api.get('/api/admin/clients/count').then((r) => r.data),
+    queryFn: () => api.get('/admin/clients/count').then((r) => r.data),
     refetchInterval: 30000,
   });
   const { data: subscriptionsRes } = useQuery({
     queryKey: ['admin-subscriptions'],
-    queryFn: () => api.get('/api/admin/clients/subscriptions').then((r) => r.data),
+    queryFn: () => api.get('/admin/clients/subscriptions').then((r) => r.data),
   });
 
   const pendingCount = subCountRes?.data?.count || 0;

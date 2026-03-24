@@ -13,19 +13,19 @@ export default function NewClientsModule() {
 
   const { data: submissionsRes, isLoading } = useQuery({
     queryKey: ['admin-submissions'],
-    queryFn: () => api.get('/api/admin/clients/submissions').then((r) => r.data),
+    queryFn: () => api.get('/admin/clients/submissions').then((r) => r.data),
   });
   const submissions: ClientSubmission[] = submissionsRes?.data || [];
 
   const { data: subscriptionsRes } = useQuery({
     queryKey: ['admin-subscriptions'],
-    queryFn: () => api.get('/api/admin/clients/subscriptions').then((r) => r.data),
+    queryFn: () => api.get('/admin/clients/subscriptions').then((r) => r.data),
   });
   const subscriptions: Subscription[] = subscriptionsRes?.data || [];
 
   const approveMutation = useMutation({
     mutationFn: ({ id, subscription_ids }: { id: string; subscription_ids: string[] }) =>
-      api.post(`/api/admin/clients/submissions/${id}/approve`, { subscription_ids }),
+      api.post(`/admin/clients/submissions/${id}/approve`, { subscription_ids }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['admin-submissions-count'] });
@@ -36,7 +36,7 @@ export default function NewClientsModule() {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: (id: string) => api.post(`/api/admin/clients/submissions/${id}/reject`),
+    mutationFn: (id: string) => api.post(`/admin/clients/submissions/${id}/reject`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['admin-submissions-count'] });

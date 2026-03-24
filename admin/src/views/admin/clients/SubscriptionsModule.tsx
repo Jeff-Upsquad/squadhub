@@ -38,22 +38,22 @@ export default function SubscriptionsModule() {
 
   const { data: subscriptionsRes, isLoading } = useQuery({
     queryKey: ['admin-subscriptions'],
-    queryFn: () => api.get('/api/admin/clients/subscriptions').then((r) => r.data),
+    queryFn: () => api.get('/admin/clients/subscriptions').then((r) => r.data),
   });
   const subscriptions: Subscription[] = subscriptionsRes?.data || [];
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => api.post('/api/admin/clients/subscriptions', data),
+    mutationFn: (data: any) => api.post('/admin/clients/subscriptions', data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-subscriptions'] }); closeSlider(); },
     onError: (err: any) => { alert(err?.response?.data?.error || err.message || 'Failed to create subscription'); },
   });
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => api.put(`/api/admin/clients/subscriptions/${id}`, data),
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.put(`/admin/clients/subscriptions/${id}`, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-subscriptions'] }); closeSlider(); },
     onError: (err: any) => { alert(err?.response?.data?.error || err.message || 'Failed to update subscription'); },
   });
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/api/admin/clients/subscriptions/${id}`),
+    mutationFn: (id: string) => api.delete(`/admin/clients/subscriptions/${id}`),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-subscriptions'] }); setDeleteConfirm(null); },
   });
 
