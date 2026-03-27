@@ -11,20 +11,18 @@ const createSchema = z.object({
   list_id: z.string().uuid(),
   title: z.string().min(1).max(500),
   description: z.string().optional(),
-  status_id: z.string().uuid(),
+  status: z.string().optional(),
   priority: z.enum(['urgent', 'high', 'normal', 'low', 'none']).optional(),
   due_date: z.string().optional(),
-  parent_task_id: z.string().uuid().optional(),
   assignee_ids: z.array(z.string().uuid()).optional(),
 });
 
 const updateSchema = z.object({
   title: z.string().min(1).max(500).optional(),
   description: z.string().nullable().optional(),
-  status_id: z.string().uuid().optional(),
+  status: z.string().optional(),
   priority: z.enum(['urgent', 'high', 'normal', 'low', 'none']).optional(),
   due_date: z.string().nullable().optional(),
-  position: z.number().optional(),
 });
 
 // Helper to get list_id from a task
@@ -50,24 +48,21 @@ router.get('/tasks', async (req: Request, res: Response) => {
 
     let query = supabaseAdmin
       .from('tasks')
-      .select('*, task_assignees(user_id, users(id, display_name, email, avatar_url))')
-      .eq('list_id', listId)
-      .is('parent_task_id', null); // Only top-level tasks
+      .select('*')
+      .eq('list_id', listId);
 
     // Filters
-    if (req.query.status_id) query = query.eq('status_id', req.query.status_id as string);
+    if (req.query.status) query = query.eq('status', req.query.status as string);
     if (req.query.priority) query = query.eq('priority', req.query.priority as string);
 
     // Sort
-    const sort = (req.query.sort as string) || 'position';
+    const sort = (req.query.sort as string) || 'created_at';
     if (sort === 'due_date') {
       query = query.order('due_date', { ascending: true, nullsFirst: false });
     } else if (sort === 'priority') {
-      query = query.order('priority').order('position');
-    } else if (sort === 'created_at') {
-      query = query.order('created_at', { ascending: false });
+      query = query.order('priority').order('created_at', { ascending: false });
     } else {
-      query = query.order('position');
+      query = query.order('created_at', { ascending: false });
     }
 
     const { data, error } = await query;
@@ -77,14 +72,7 @@ router.get('/tasks', async (req: Request, res: Response) => {
       return;
     }
 
-    // Transform assignees into flat user array
-    const tasks = (data || []).map((task: any) => ({
-      ...task,
-      assignees: task.task_assignees?.map((ta: any) => ta.users).filter(Boolean) || [],
-      task_assignees: undefined,
-    }));
-
-    res.json({ success: true, data: tasks });
+    res.json({ success: true, data: data || [] });
   } catch (err) {
     console.error('Get tasks error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -110,7 +98,7 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
 
     const { data: task, error } = await supabaseAdmin
       .from('tasks')
-      .select('*, task_assignees(user_id, users(id, display_name, email, avatar_url))')
+      .select('*')
       .eq('id', id)
       .single();
 
@@ -119,18 +107,15 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    // Get subtasks
-    const { data: subtasks } = await supabaseAdmin
-      .from('tasks')
-      .select('*')
-      .eq('parent_task_id', id)
-      .order('position');
-
-    // Get comment count
-    const { count: commentCount } = await supabaseAdmin
-      .from('task_comments')
-      .select('*', { count: 'exact', head: true })
-      .eq('task_id', id);
+    // Get comment count (task_comments table may not exist)
+    let commentCount = 0;
+    try {
+      const { count } = await supabaseAdmin
+        .from('task_comments')
+        .select('*', { count: 'exact', head: true })
+        .eq('task_id', id);
+      commentCount = count || 0;
+    } catch { /* table may not exist */ }
 
     // Get creator
     const { data: creator } = await supabaseAdmin
@@ -143,10 +128,8 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
       success: true,
       data: {
         ...task,
-        assignees: (task as any).task_assignees?.map((ta: any) => ta.users).filter(Boolean) || [],
-        task_assignees: undefined,
-        subtasks: subtasks || [],
-        comment_count: commentCount || 0,
+        subtasks: [],
+        comment_count: commentCount,
         creator,
       },
     });
@@ -167,39 +150,26 @@ router.post('/tasks', async (req: Request, res: Response) => {
       return;
     }
 
-    // Get next position
-    const { count } = await supabaseAdmin
-      .from('tasks')
-      .select('*', { count: 'exact', head: true })
-      .eq('list_id', body.list_id)
-      .is('parent_task_id', body.parent_task_id || null);
+    const insertData: Record<string, any> = {
+      list_id: body.list_id,
+      title: body.title,
+      description: body.description || null,
+      status: body.status || 'todo',
+      priority: body.priority || 'none',
+      due_date: body.due_date || null,
+      assignee_ids: body.assignee_ids || [],
+      created_by: req.userId!,
+    };
 
     const { data: task, error } = await supabaseAdmin
       .from('tasks')
-      .insert({
-        list_id: body.list_id,
-        parent_task_id: body.parent_task_id || null,
-        title: body.title,
-        description: body.description || null,
-        status_id: body.status_id,
-        priority: body.priority || 'none',
-        due_date: body.due_date || null,
-        created_by: req.userId!,
-        position: count || 0,
-      })
+      .insert(insertData)
       .select()
       .single();
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
-    }
-
-    // Add assignees if provided
-    if (body.assignee_ids && body.assignee_ids.length > 0) {
-      await supabaseAdmin.from('task_assignees').insert(
-        body.assignee_ids.map((uid) => ({ task_id: task.id, user_id: uid }))
-      );
     }
 
     res.status(201).json({ success: true, data: task });

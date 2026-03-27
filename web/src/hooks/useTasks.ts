@@ -2,12 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import type { Task, SpaceStatus, TaskComment } from '@squadhub/shared';
 
-export function useTasks(listId: string | null, filters?: { status_id?: string; priority?: string; sort?: string }) {
+export function useTasks(listId: string | null, filters?: { status?: string; priority?: string; sort?: string }) {
   return useQuery<Task[]>({
     queryKey: ['tasks', listId, filters],
     queryFn: async () => {
       const params = new URLSearchParams({ list_id: listId! });
-      if (filters?.status_id) params.set('status_id', filters.status_id);
+      if (filters?.status) params.set('status', filters.status);
       if (filters?.priority) params.set('priority', filters.priority);
       if (filters?.sort) params.set('sort', filters.sort);
       const res = await api.get(`/pm/tasks?${params}`);
@@ -33,7 +33,7 @@ export function useCreateTask(listId: string | null) {
   return useMutation({
     mutationFn: async (body: {
       title: string;
-      status_id: string;
+      status?: string;
       priority?: string;
       description?: string;
       due_date?: string;
@@ -51,7 +51,7 @@ export function useCreateTask(listId: string | null) {
 export function useUpdateTask(listId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...body }: { id: string; title?: string; status_id?: string; priority?: string; description?: string | null; due_date?: string | null; position?: number }) => {
+    mutationFn: async ({ id, ...body }: { id: string; title?: string; status?: string; priority?: string; description?: string | null; due_date?: string | null }) => {
       const res = await api.put(`/pm/tasks/${id}`, body);
       return res.data.data;
     },
@@ -99,13 +99,13 @@ export function useAddComment(taskId: string | null) {
   });
 }
 
-// Helper: group tasks by status
+// Helper: group tasks by status — matches task.status (text) to spaceStatus.category
 export function groupTasksByStatus(tasks: Task[], statuses: SpaceStatus[]) {
   const groups: { status: SpaceStatus; tasks: Task[] }[] = [];
   for (const status of statuses) {
     groups.push({
       status,
-      tasks: tasks.filter((t) => t.status_id === status.id),
+      tasks: tasks.filter((t) => (t as any).status === status.category),
     });
   }
   return groups;

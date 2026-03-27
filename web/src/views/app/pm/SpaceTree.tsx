@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSpaces, useSpace, useCreateFolder, useCreateList } from '../../../hooks/useSpaces';
 import { useHasPermission } from '../../../hooks/usePermissions';
 import { usePMStore } from '../../../stores/pmStore';
@@ -14,11 +14,20 @@ function canAtLeast(userLevel: AccessLevel | undefined, required: AccessLevel): 
   return levels.indexOf(userLevel) >= levels.indexOf(required);
 }
 
+// ---- Lock icon for private items ----
+function LockIcon() {
+  return (
+    <svg className="h-3 w-3 shrink-0 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+    </svg>
+  );
+}
+
 // ---- Chevron icon ----
 function ChevronIcon({ open }: { open: boolean }) {
   return (
     <svg
-      className={`h-3.5 w-3.5 shrink-0 text-[#999999] transition-transform ${open ? 'rotate-90' : ''}`}
+      className={`h-3 w-3 shrink-0 text-[#999999] transition-transform ${open ? 'rotate-90' : ''}`}
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -28,26 +37,187 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
+// ---- Ellipsis menu button ----
+function EllipsisButton({ onClick, title }: { onClick: () => void; title: string }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      className="rounded p-0.5 text-[#999999] opacity-0 transition hover:text-[#0F172B] group-hover:opacity-100"
+      title={title}
+    >
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="12" cy="6" r="1.5" />
+        <circle cx="12" cy="12" r="1.5" />
+        <circle cx="12" cy="18" r="1.5" />
+      </svg>
+    </button>
+  );
+}
+
+// ---- Add button ----
+function AddButton({ onClick, title }: { onClick: () => void; title: string }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      className="rounded p-0.5 text-[#999999] opacity-0 transition hover:text-[#0F172B] group-hover:opacity-100"
+      title={title}
+    >
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+      </svg>
+    </button>
+  );
+}
+
+// ---- Dropdown menu for add actions ----
+function AddDropdown({
+  items,
+}: {
+  items: { icon: React.ReactNode; label: string; description: string; onClick: () => void }[];
+}) {
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current?.contains(e.target as Node) || btnRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const menuHeight = items.length * 52 + 32; // approximate
+      const fitsBelow = rect.bottom + 4 + menuHeight < window.innerHeight;
+      setPos({
+        top: fitsBelow ? rect.bottom + 4 : rect.top - menuHeight - 4,
+        left: rect.right - 224,
+      });
+    }
+    setOpen(!open);
+  };
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={handleToggle}
+        className="rounded p-0.5 text-[#999999] opacity-0 transition hover:text-[#0F172B] group-hover:opacity-100"
+        title="Add"
+      >
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          className="fixed z-[100] w-56 rounded-lg border border-[#E2E8F0] bg-white py-1 shadow-lg"
+          style={{ top: pos.top, left: pos.left }}
+        >
+          <div className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-[#999999]">Create</div>
+          {items.map((item) => (
+            <button
+              key={item.label}
+              onClick={(e) => { e.stopPropagation(); item.onClick(); setOpen(false); }}
+              className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-[#F5F5F5]"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#F1F5F9] text-[#64748B]">{item.icon}</span>
+              <div>
+                <div className="text-[13px] font-medium text-[#0F172B]">{item.label}</div>
+                <div className="text-[11px] text-[#999999]">{item.description}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// Icons for dropdown items
+const ListIcon = (
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+  </svg>
+);
+const FolderIcon = (
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+  </svg>
+);
+
 // ---- List item ----
 function ListItem({ list, depth = 0 }: { list: List; depth?: number }) {
-  const { activeListId, setActiveList } = usePMStore();
+  const { activeListId, setActiveList, setActiveSpace } = usePMStore();
   const isActive = activeListId === list.id;
+  const pl = 12 + depth * 20;
 
   return (
     <button
-      onClick={() => setActiveList(list.id)}
-      className={`flex w-full items-center gap-2 rounded-md py-1 text-left text-[13px] transition ${
+      onClick={() => { setActiveSpace(list.space_id); setActiveList(list.id); }}
+      className={`group flex w-full items-center gap-2 rounded-md py-[5px] text-left text-[13px] transition ${
         isActive
-          ? 'bg-[#F8FAFC] text-[#0F172B]'
-          : 'text-[#666666] hover:bg-[#F8FAFC]'
+          ? 'bg-[#F0F0F0] text-[#0F172B] font-medium'
+          : 'text-[#555555] hover:bg-[#F5F5F5]'
       }`}
-      style={{ paddingLeft: `${12 + depth * 16}px` }}
+      style={{ paddingLeft: `${pl}px`, paddingRight: '8px' }}
     >
-      <svg className="h-3.5 w-3.5 shrink-0 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {/* List bars icon */}
+      <svg className="h-4 w-4 shrink-0 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
       </svg>
-      <span className="truncate">{list.name}</span>
+      <span className="flex-1 truncate">{list.name}</span>
+      {list.is_private && <LockIcon />}
+      {list.task_count != null && list.task_count > 0 && (
+        <span className="ml-auto text-xs text-[#999999] tabular-nums">{list.task_count}</span>
+      )}
     </button>
+  );
+}
+
+// ---- Inline name input ----
+function InlineInput({
+  placeholder,
+  onSubmit,
+  onCancel,
+  depth = 0,
+}: {
+  placeholder: string;
+  onSubmit: (name: string) => void;
+  onCancel: () => void;
+  depth?: number;
+}) {
+  const [value, setValue] = useState('');
+  const submitted = useRef(false);
+  const pl = 12 + depth * 20;
+
+  const handleSubmit = useCallback(() => {
+    if (submitted.current) return;
+    if (!value.trim()) { onCancel(); return; }
+    submitted.current = true;
+    onSubmit(value.trim());
+  }, [value, onSubmit, onCancel]);
+
+  return (
+    <div style={{ paddingLeft: `${pl}px`, paddingRight: '8px' }} className="py-1">
+      <input
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); if (e.key === 'Escape') onCancel(); }}
+        onBlur={handleSubmit}
+        placeholder={placeholder}
+        className="w-full rounded border border-[#CAD5E2] bg-[#F8FAFC] px-2 py-1 text-xs text-[#0F172B] placeholder-[#999999] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
+      />
+    </div>
   );
 }
 
@@ -55,87 +225,55 @@ function ListItem({ list, depth = 0 }: { list: List; depth?: number }) {
 function FolderItem({ folder, spaceId, canAdd, canDelete }: { folder: Folder; spaceId: string; canAdd: boolean; canDelete: boolean }) {
   const [open, setOpen] = useState(true);
   const [adding, setAdding] = useState(false);
-  const [newName, setNewName] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const createList = useCreateList(spaceId);
 
-  const handleAdd = () => {
-    if (!newName.trim()) { setAdding(false); return; }
-    createList.mutate({ name: newName.trim(), folder_id: folder.id }, {
-      onSuccess: () => { setNewName(''); setAdding(false); },
-    });
-  };
-
   return (
     <div>
-      <div className="group flex items-center">
+      <div className="group flex items-center rounded-md py-[5px] hover:bg-[#F5F5F5]" style={{ paddingLeft: '32px', paddingRight: '8px' }}>
         <button
           onClick={() => setOpen(!open)}
-          className="flex flex-1 items-center gap-1.5 rounded-md px-3 py-1 text-left text-[13px] text-[#666666] hover:bg-[#F8FAFC]"
+          className="flex flex-1 items-center gap-2 text-left text-[13px] text-[#555555]"
         >
           <ChevronIcon open={open} />
-          <svg className="h-3.5 w-3.5 shrink-0 text-yellow-500/70" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M10 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V8a2 2 0 00-2-2h-8l-2-2z" />
+          {/* Folder icon */}
+          <svg className="h-4 w-4 shrink-0 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
           </svg>
-          <span className="truncate">{folder.name}</span>
+          <span className="flex-1 truncate">{folder.name}</span>
         </button>
-        <div className="mr-2 hidden gap-0.5 group-hover:flex">
-          {canAdd && (
-            <button
-              onClick={() => setAdding(true)}
-              className="rounded p-0.5 text-[#999999] hover:text-[#0F172B]"
-              title="Add list"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
-          )}
-          {canDelete && (
-            <button
-              onClick={() => setShowSettings(true)}
-              className="rounded p-0.5 text-[#999999] hover:text-[#0F172B]"
-              title="Folder settings"
-            >
-              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-              </svg>
-            </button>
-          )}
+        {folder.is_private && <LockIcon />}
+        <div className="flex items-center gap-0.5">
+          {canDelete && <EllipsisButton onClick={() => setShowSettings(true)} title="Folder settings" />}
+          {canAdd && <AddButton onClick={() => setAdding(true)} title="Add list" />}
         </div>
       </div>
+
       {open && (
-        <div className="ml-1">
+        <div>
           {folder.lists?.map((list) => (
-            <ListItem key={list.id} list={list} depth={2} />
+            <ListItem key={list.id} list={list} depth={3} />
           ))}
           {adding && (
-            <div className="px-3 py-1" style={{ paddingLeft: '44px' }}>
-              <input
-                autoFocus
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setAdding(false); }}
-                onBlur={handleAdd}
-                placeholder="List name..."
-                className="w-full rounded border border-[#CAD5E2] bg-[#F8FAFC] px-2 py-0.5 text-xs text-[#0F172B] placeholder-[#999999] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
-              />
-            </div>
+            <InlineInput
+              placeholder="List name..."
+              depth={3}
+              onSubmit={(name) => {
+                createList.mutate({ name, folder_id: folder.id }, {
+                  onSuccess: () => setAdding(false),
+                  onError: (err: any) => { console.error('Create list in folder error:', err?.response?.data || err); setAdding(false); },
+                });
+              }}
+              onCancel={() => setAdding(false)}
+            />
           )}
         </div>
       )}
 
-      {/* Folder settings overlay */}
       {showSettings && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setShowSettings(false)}>
           <div onClick={(e) => e.stopPropagation()}>
-            <SettingsSlider
-              type="folder"
-              id={folder.id}
-              name={folder.name}
-              spaceId={spaceId}
-              onClose={() => setShowSettings(false)}
-            />
+            <SettingsSlider type="folder" id={folder.id} name={folder.name} spaceId={spaceId} onClose={() => setShowSettings(false)} />
           </div>
         </div>
       )}
@@ -150,7 +288,6 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
   const [open, setOpen] = useState(false);
   const [addingFolder, setAddingFolder] = useState(false);
   const [addingList, setAddingList] = useState(false);
-  const [newName, setNewName] = useState('');
   const [showMembers, setShowMembers] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const canCreateFolders = useHasPermission('can_create_folders');
@@ -160,7 +297,6 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
   const createFolder = useCreateFolder(spaceId);
   const createList = useCreateList(spaceId);
 
-
   const myAccess = space?.my_access_level;
   const canAddItems = canAtLeast(myAccess, 'member');
   const isManager = canAtLeast(myAccess, 'manager');
@@ -168,135 +304,98 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
   const handleSelect = () => {
     setActiveSpace(spaceId);
     setOpen(true);
-    // Auto-select first list
     if (space) {
       const firstList = space.folders?.[0]?.lists?.[0] || space.lists?.[0];
       if (firstList) setActiveList(firstList.id);
     }
   };
 
-  const handleAddFolder = () => {
-    if (!newName.trim()) { setAddingFolder(false); return; }
-    createFolder.mutate({ name: newName.trim() }, {
-      onSuccess: () => { setNewName(''); setAddingFolder(false); },
-    });
-  };
-
-  const handleAddList = () => {
-    if (!newName.trim()) { setAddingList(false); return; }
-    createList.mutate({ name: newName.trim() }, {
-      onSuccess: () => { setNewName(''); setAddingList(false); },
-    });
-  };
-
   return (
-    <div className="mb-1">
-      <div className="group flex items-center">
+    <div className="mb-0.5">
+      {/* Space row */}
+      <div
+        className={`group flex items-center rounded-md py-[6px] transition ${
+          isActive && open ? 'bg-[#EAEAEA]' : 'hover:bg-[#F5F5F5]'
+        }`}
+        style={{ paddingLeft: '12px', paddingRight: '8px' }}
+      >
         <button
           onClick={() => { setOpen(!open); if (!open) handleSelect(); }}
-          className={`flex flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm font-medium transition ${
-            isActive && open
-              ? 'text-[#0F172B]'
-              : 'text-[#666666] hover:bg-[#F8FAFC]'
-          }`}
+          className="flex flex-1 items-center gap-2 text-left"
         >
           <ChevronIcon open={open} />
+          {/* Color badge */}
           <span
-            className="flex h-5 w-5 items-center justify-center rounded text-xs font-bold text-white"
+            className="flex h-[22px] w-[22px] items-center justify-center rounded text-[11px] font-bold text-white"
             style={{ backgroundColor: space?.color || '#7c3aed' }}
           >
             {space?.name?.[0]?.toUpperCase() || 'S'}
           </span>
-          <span className="truncate">{space?.name || 'Loading...'}</span>
+          <span className={`truncate text-[13px] ${isActive && open ? 'font-semibold text-[#0F172B]' : 'font-medium text-[#444444]'}`}>
+            {space?.name || 'Loading...'}
+          </span>
         </button>
-        <div className="mr-2 hidden gap-0.5 group-hover:flex">
-          {canAddItems && canCreateFolders && (
-            <button
-              onClick={() => setAddingFolder(true)}
-              className="rounded p-0.5 text-[#999999] hover:text-[#0F172B]"
-              title="Add folder"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-              </svg>
-            </button>
-          )}
-          {canAddItems && canCreateLists && (
-            <button
-              onClick={() => setAddingList(true)}
-              className="rounded p-0.5 text-[#999999] hover:text-[#0F172B]"
-              title="Add list"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
-          )}
-          {isManager && (
-            <button
-              onClick={() => setShowMembers(true)}
-              className="rounded p-0.5 text-[#999999] hover:text-[#0F172B]"
-              title="Manage members"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-              </svg>
-            </button>
-          )}
-          {isManager && (
-            <button
-              onClick={() => setShowSettings(true)}
-              className="rounded p-0.5 text-[#999999] hover:text-[#0F172B]"
-              title="Space settings"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-              </svg>
-            </button>
+
+        {space?.is_private && <LockIcon />}
+
+        <div className="flex items-center gap-0.5">
+          {isManager && <EllipsisButton onClick={() => setShowSettings(true)} title="Space settings" />}
+          {canAddItems && (canCreateFolders || canCreateLists) && (
+            <AddDropdown
+              items={[
+                ...(canCreateLists ? [{
+                  icon: ListIcon,
+                  label: 'List',
+                  description: 'Track tasks, projects, people & more',
+                  onClick: () => setAddingList(true),
+                }] : []),
+                ...(canCreateFolders ? [{
+                  icon: FolderIcon,
+                  label: 'Folder',
+                  description: 'Group Lists, Docs & more',
+                  onClick: () => setAddingFolder(true),
+                }] : []),
+              ]}
+            />
           )}
         </div>
       </div>
 
+      {/* Expanded children */}
       {open && space && (
-        <div className="ml-1">
+        <div>
           {/* Folders */}
           {space.folders?.map((folder) => (
             <FolderItem key={folder.id} folder={folder} spaceId={spaceId} canAdd={canAddItems && canCreateLists} canDelete={isManager} />
           ))}
 
-          {/* Root lists (not in any folder) */}
+          {/* Root lists */}
           {space.lists?.map((list) => (
-            <ListItem key={list.id} list={list} depth={1} />
+            <ListItem key={list.id} list={list} depth={2} />
           ))}
 
           {/* Inline add folder */}
           {addingFolder && (
-            <div className="px-3 py-1" style={{ paddingLeft: '28px' }}>
-              <input
-                autoFocus
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAddFolder(); if (e.key === 'Escape') setAddingFolder(false); }}
-                onBlur={handleAddFolder}
-                placeholder="Folder name..."
-                className="w-full rounded border border-[#CAD5E2] bg-[#F8FAFC] px-2 py-0.5 text-xs text-[#0F172B] placeholder-[#999999] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
-              />
-            </div>
+            <InlineInput
+              placeholder="Folder name..."
+              depth={2}
+              onSubmit={(name) => {
+                createFolder.mutate({ name }, { onSuccess: () => setAddingFolder(false) });
+              }}
+              onCancel={() => setAddingFolder(false)}
+            />
           )}
 
           {/* Inline add list */}
           {addingList && (
-            <div className="px-3 py-1" style={{ paddingLeft: '28px' }}>
-              <input
-                autoFocus
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAddList(); if (e.key === 'Escape') setAddingList(false); }}
-                onBlur={handleAddList}
-                placeholder="List name..."
-                className="w-full rounded border border-[#CAD5E2] bg-[#F8FAFC] px-2 py-0.5 text-xs text-[#0F172B] placeholder-[#999999] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
-              />
-            </div>
+            <InlineInput
+              placeholder="List name..."
+              depth={2}
+              onSubmit={(name) => {
+                createList.mutate({ name }, { onSuccess: () => setAddingList(false) });
+              }}
+              onCancel={() => setAddingList(false)}
+            />
           )}
         </div>
       )}
@@ -310,17 +409,10 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
         />
       )}
 
-      {/* Space settings overlay */}
       {showSettings && space && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setShowSettings(false)}>
           <div onClick={(e) => e.stopPropagation()}>
-            <SettingsSlider
-              type="space"
-              id={spaceId}
-              name={space.name}
-              description={space.description}
-              onClose={() => setShowSettings(false)}
-            />
+            <SettingsSlider type="space" id={spaceId} name={space.name} description={space.description} onClose={() => setShowSettings(false)} />
           </div>
         </div>
       )}
@@ -329,27 +421,19 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
 }
 
 // ---- Main SpaceTree ----
-export default function SpaceTree({ workspaceId }: { workspaceId: string }) {
+export default function SpaceTree({ workspaceId, onRequestCreate }: { workspaceId: string; onRequestCreate?: () => void }) {
   const { data: spaces, isLoading } = useSpaces(workspaceId);
   const [showCreate, setShowCreate] = useState(false);
   const canCreateSpaces = useHasPermission('can_create_spaces');
 
+  const handleCreate = () => {
+    if (onRequestCreate) onRequestCreate();
+    else setShowCreate(true);
+  };
+
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="flex items-center justify-between px-4 py-3">
-        <h2 className="text-sm font-semibold text-[#0F172B] font-[family-name:var(--font-display)]">Spaces</h2>
-        {canCreateSpaces && (
-          <button
-            onClick={() => setShowCreate(true)}
-            className="text-lg text-[#666666] hover:text-[#0F172B]"
-            title="Create space"
-          >
-            +
-          </button>
-        )}
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-2">
+      <div className="flex-1 overflow-y-auto px-1.5">
         {isLoading && (
           <p className="px-3 py-2 text-xs text-[#999999]">Loading spaces...</p>
         )}
@@ -358,7 +442,7 @@ export default function SpaceTree({ workspaceId }: { workspaceId: string }) {
             <p className="text-xs text-[#999999]">No spaces yet</p>
             {canCreateSpaces && (
               <button
-                onClick={() => setShowCreate(true)}
+                onClick={handleCreate}
                 className="mt-2 text-xs font-medium text-[#0F172B] hover:text-[#2962FF]"
               >
                 Create your first space
@@ -372,10 +456,7 @@ export default function SpaceTree({ workspaceId }: { workspaceId: string }) {
       </div>
 
       {showCreate && (
-        <CreateSpaceModal
-          workspaceId={workspaceId}
-          onClose={() => setShowCreate(false)}
-        />
+        <CreateSpaceModal workspaceId={workspaceId} onClose={() => setShowCreate(false)} />
       )}
     </div>
   );

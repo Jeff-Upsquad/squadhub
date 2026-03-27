@@ -65,7 +65,18 @@ export async function getUserPermissions(userId: string): Promise<{
   }
 
   // For members and guests: start from all-false, overlay only explicit true from custom role
-  const customPerms = (membership as any).roles?.permissions as Record<string, boolean> | undefined;
+  let customPerms = (membership as any).roles?.permissions as Record<string, boolean> | undefined;
+
+  // Fallback: if no custom role linked, use the default role's permissions
+  if (!customPerms) {
+    const { data: defaultRole } = await supabaseAdmin
+      .from('roles')
+      .select('permissions')
+      .eq('is_default', true)
+      .single();
+    customPerms = defaultRole?.permissions as Record<string, boolean> | undefined;
+  }
+
   const effective: RolePermissions = { ...ALL_FALSE_PERMISSIONS };
 
   if (customPerms) {

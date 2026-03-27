@@ -92,11 +92,17 @@ export default function MainLayout() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const pmReset = usePMStore((s) => s.reset);
+  const activeListId = usePMStore((s) => s.activeListId);
   const [activeSection, setActiveSection] = useState<ActiveSection>('home');
   const [homeView, setHomeView] = useState<HomeView>('hub');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
+
+  // Auto-switch to tasks view when a list is selected
+  useEffect(() => {
+    if (activeListId) setHomeView('tasks');
+  }, [activeListId]);
 
   // Fetch workspaces
   const { data: workspacesRes, isLoading: workspacesLoading } = useQuery({

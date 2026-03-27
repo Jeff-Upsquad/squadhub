@@ -112,19 +112,24 @@ router.post('/lists', requirePermission('can_create_lists'), async (req: Request
     const { count } = await supabaseAdmin
       .from('lists')
       .select('*', { count: 'exact', head: true })
-      .eq('space_id', body.space_id);
+      .eq('space_id', body.space_id)
+      .is('deleted_at', null);
 
-    const { data, error } = await supabaseAdmin
-      .from('lists')
-      .insert({
+    const insertPayload: Record<string, unknown> = {
         space_id: body.space_id,
         folder_id: body.folder_id || null,
         name: body.name,
-        default_view: body.default_view || 'list',
         is_private: true,
         created_by: req.userId!,
         position: count || 0,
-      })
+      };
+    if (body.default_view) {
+      insertPayload.default_view = body.default_view;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('lists')
+      .insert(insertPayload)
       .select()
       .single();
 

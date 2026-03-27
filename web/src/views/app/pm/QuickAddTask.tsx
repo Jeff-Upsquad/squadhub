@@ -3,10 +3,10 @@ import { useCreateTask } from '../../../hooks/useTasks';
 
 export default function QuickAddTask({
   listId,
-  statusId,
+  status,
 }: {
   listId: string;
-  statusId: string;
+  status: string;
 }) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
@@ -15,7 +15,7 @@ export default function QuickAddTask({
   const handleSubmit = () => {
     if (!title.trim()) { setAdding(false); return; }
     createTask.mutate(
-      { title: title.trim(), status_id: statusId },
+      { title: title.trim(), status },
       { onSuccess: () => { setTitle(''); } },
     );
   };

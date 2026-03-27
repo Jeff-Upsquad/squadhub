@@ -64,23 +64,33 @@ function BoardColumn({
 }) {
   const [addingTask, setAddingTask] = useState(false);
   const [title, setTitle] = useState('');
+  const [isDragOver, setIsDragOver] = useState(false);
   const createTask = useCreateTask(listId);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if leaving the column entirely (not entering a child)
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    setIsDragOver(false);
     const taskId = e.dataTransfer.getData('text/plain');
-    if (taskId) onDrop(taskId, status.id);
+    if (taskId) onDrop(taskId, status.category);
   };
 
   const handleAdd = () => {
     if (!title.trim()) { setAddingTask(false); return; }
     createTask.mutate(
-      { title: title.trim(), status_id: status.id },
+      { title: title.trim(), status: status.category },
       { onSuccess: () => { setTitle(''); } },
     );
   };
@@ -88,8 +98,11 @@ function BoardColumn({
   return (
     <div
       onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className="flex w-72 shrink-0 flex-col rounded-lg bg-[#F1F5F9]/60"
+      className={`flex w-72 shrink-0 flex-col rounded-lg transition-colors ${
+        isDragOver ? 'bg-[#E8F0FE] ring-2 ring-[#2962FF]/30' : 'bg-[#F1F5F9]/60'
+      }`}
     >
       {/* Column header */}
       <div className="flex items-center gap-2 px-3 py-3">
@@ -155,7 +168,7 @@ export default function BoardView({
 }: {
   listId: string;
   statuses: SpaceStatus[];
-  filters?: { status_id?: string; priority?: string; sort?: string };
+  filters?: { status?: string; priority?: string; sort?: string };
 }) {
   const { data: tasks, isLoading } = useTasks(listId, filters);
   const updateTask = useUpdateTask(listId);
@@ -166,7 +179,7 @@ export default function BoardView({
   );
 
   const handleDrop = (taskId: string, statusId: string) => {
-    updateTask.mutate({ id: taskId, status_id: statusId });
+    updateTask.mutate({ id: taskId, status: statusId });
   };
 
   if (isLoading) {

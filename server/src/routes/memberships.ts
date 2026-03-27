@@ -256,7 +256,18 @@ router.get('/my-permissions', async (req: Request, res: Response) => {
     }
 
     // Explicit-allow: start with all-false, overlay custom role permissions
-    const customPerms = (membership as any).roles?.permissions as Record<string, boolean> | undefined;
+    let customPerms = (membership as any).roles?.permissions as Record<string, boolean> | undefined;
+
+    // Fallback: if no custom role linked, use the default role's permissions
+    if (!customPerms) {
+      const { data: defaultRole } = await supabaseAdmin
+        .from('roles')
+        .select('permissions')
+        .eq('is_default', true)
+        .single();
+      customPerms = defaultRole?.permissions as Record<string, boolean> | undefined;
+    }
+
     const effective: Record<string, boolean> = {};
     const keys = [
       'can_create_channels', 'can_create_lists', 'can_create_folders', 'can_create_spaces',
