@@ -18,6 +18,8 @@ COPY shared/ shared/
 COPY web/ web/
 
 # Build shared first, then web
+ARG INTERNAL_API_URL=http://server:4000
+ENV INTERNAL_API_URL=$INTERNAL_API_URL
 RUN npm run build -w shared && npm run build -w web
 
 # ---- Next.js Runtime ----
