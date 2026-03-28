@@ -2,10 +2,32 @@
 
 import { useState } from 'react';
 
+const COUNTRY_CODES = [
+  { code: '+91', country: 'IN', flag: '🇮🇳' },
+  { code: '+1', country: 'US', flag: '🇺🇸' },
+  { code: '+44', country: 'GB', flag: '🇬🇧' },
+  { code: '+971', country: 'AE', flag: '🇦🇪' },
+  { code: '+65', country: 'SG', flag: '🇸🇬' },
+  { code: '+61', country: 'AU', flag: '🇦🇺' },
+  { code: '+49', country: 'DE', flag: '🇩🇪' },
+  { code: '+33', country: 'FR', flag: '🇫🇷' },
+  { code: '+81', country: 'JP', flag: '🇯🇵' },
+  { code: '+86', country: 'CN', flag: '🇨🇳' },
+  { code: '+55', country: 'BR', flag: '🇧🇷' },
+  { code: '+27', country: 'ZA', flag: '🇿🇦' },
+  { code: '+234', country: 'NG', flag: '🇳🇬' },
+  { code: '+254', country: 'KE', flag: '🇰🇪' },
+  { code: '+62', country: 'ID', flag: '🇮🇩' },
+  { code: '+60', country: 'MY', flag: '🇲🇾' },
+  { code: '+966', country: 'SA', flag: '🇸🇦' },
+  { code: '+974', country: 'QA', flag: '🇶🇦' },
+];
+
 type FormData = {
   business_name: string;
   contact_person: string;
   designation: string;
+  country_code: string;
   contact_number: string;
   email: string;
   business_address: string;
@@ -18,6 +40,7 @@ const initialForm: FormData = {
   business_name: '',
   contact_person: '',
   designation: '',
+  country_code: '+91',
   contact_number: '',
   email: '',
   business_address: '',
@@ -69,15 +92,15 @@ export default function OnboardPage() {
 
   if (submitted) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F1F5F9] px-4">
-        <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-            <svg className="h-8 w-8 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <div className="flex min-h-screen items-center justify-center bg-[#F7F7F7] px-4">
+        <div className="w-full max-w-md rounded-xl bg-white p-8 text-center border border-[#EBEBEB]">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#FFF0F2]">
+            <svg className="h-8 w-8 text-[#FF385C]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-[#0F172B]">Thank You!</h1>
-          <p className="mt-2 text-sm text-[#62748E]">
+          <h1 className="text-xl font-semibold text-[#222]">Thank You!</h1>
+          <p className="mt-2 text-base text-[#717171]">
             Your information has been submitted successfully. Our team will review your details and get back to you soon.
           </p>
         </div>
@@ -86,23 +109,28 @@ export default function OnboardPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-start justify-center bg-[#F1F5F9] px-4 py-8 sm:py-12">
-      <div className="w-full max-w-lg">
+    <div className="onboard-bg relative flex min-h-screen items-start justify-center px-4 py-8 sm:py-12 overflow-hidden">
+      {/* Decorative blobs */}
+      <div className="pointer-events-none absolute -top-32 -left-32 h-[420px] w-[420px] rounded-full bg-[#FF385C] opacity-[0.06] blur-[100px]" />
+      <div className="pointer-events-none absolute -bottom-40 -right-40 h-[500px] w-[500px] rounded-full bg-[#D70466] opacity-[0.05] blur-[120px]" />
+      <div className="pointer-events-none absolute top-1/3 right-0 h-[300px] w-[300px] rounded-full bg-[#E31C5F] opacity-[0.04] blur-[80px]" />
+      <div className="relative z-10 w-full max-w-lg">
         {/* Header */}
-        <div className="mb-6 text-center">
-          <h1 className="text-2xl font-bold text-[#0F172B]">SquadHub</h1>
-          <p className="mt-1 text-sm text-[#62748E]">Client Onboarding Form</p>
+        <div className="mb-8 text-center">
+          <h1 className="text-[26px] font-semibold text-[#222]">UpSquad</h1>
+          <p className="mt-1 text-base text-[#717171]">Client Onboarding Form</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="rounded-2xl bg-white p-6 shadow-sm sm:p-8 space-y-5">
+        <form onSubmit={handleSubmit} className="rounded-xl bg-white border border-[#EBEBEB] p-6 sm:p-8 space-y-6">
           {error && (
-            <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
+            <div className="rounded-lg bg-[#FFF0F2] border border-[#FF385C]/20 px-4 py-3 text-sm text-[#C13515]">{error}</div>
           )}
 
           <Field label="Name of Business / Brand" required>
             <input
               type="text"
               required
+              placeholder="Enter your business or brand name"
               value={form.business_name}
               onChange={(e) => update('business_name', e.target.value)}
               className="input-field"
@@ -113,6 +141,7 @@ export default function OnboardPage() {
             <input
               type="text"
               required
+              placeholder="Full name"
               value={form.contact_person}
               onChange={(e) => update('contact_person', e.target.value)}
               className="input-field"
@@ -122,6 +151,7 @@ export default function OnboardPage() {
           <Field label="Designation of Contact Person">
             <input
               type="text"
+              placeholder="e.g. Marketing Head, CEO"
               value={form.designation}
               onChange={(e) => update('designation', e.target.value)}
               className="input-field"
@@ -129,14 +159,57 @@ export default function OnboardPage() {
           </Field>
 
           <Field label="Contact Number" required helper="Ideally a WhatsApp number">
-            <div className="flex">
-              <span className="inline-flex items-center rounded-l-lg border border-r-0 border-[#E2E8F0] bg-[#F8FAFC] px-3 text-sm text-[#62748E]">+91</span>
+            <div
+              className="phone-group"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                border: '1px solid #B0B0B0',
+                borderRadius: 8,
+                overflow: 'hidden',
+                transition: 'border-color 0.2s, box-shadow 0.2s',
+              }}
+            >
+              <select
+                value={form.country_code}
+                onChange={(e) => update('country_code', e.target.value)}
+                style={{
+                  appearance: 'none',
+                  WebkitAppearance: 'none',
+                  border: 'none',
+                  outline: 'none',
+                  background: '#F7F7F7',
+                  padding: '10px 28px 10px 12px',
+                  fontSize: 15,
+                  color: '#222',
+                  cursor: 'pointer',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23717171' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 10px center',
+                }}
+              >
+                {COUNTRY_CODES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.flag} {c.code}
+                  </option>
+                ))}
+              </select>
+              <div style={{ width: 1, height: 24, background: '#DDDDDD', flexShrink: 0 }} />
               <input
                 type="tel"
                 required
+                placeholder="Phone number"
                 value={form.contact_number}
                 onChange={(e) => update('contact_number', e.target.value)}
-                className="input-field !rounded-l-none"
+                style={{
+                  flex: 1,
+                  border: 'none',
+                  outline: 'none',
+                  padding: '10px 12px',
+                  fontSize: 16,
+                  color: '#222',
+                  background: 'transparent',
+                }}
               />
             </div>
           </Field>
@@ -145,6 +218,7 @@ export default function OnboardPage() {
             <input
               type="email"
               required
+              placeholder="email@company.com"
               value={form.email}
               onChange={(e) => update('email', e.target.value)}
               className="input-field"
@@ -155,6 +229,7 @@ export default function OnboardPage() {
             <textarea
               required
               rows={3}
+              placeholder="Full business address"
               value={form.business_address}
               onChange={(e) => update('business_address', e.target.value)}
               className="input-field resize-none"
@@ -178,6 +253,7 @@ export default function OnboardPage() {
               <input
                 type="text"
                 required
+                placeholder="e.g. 22AAAAA0000A1Z5"
                 value={form.gst_number}
                 onChange={(e) => update('gst_number', e.target.value)}
                 className="input-field"
@@ -188,6 +264,7 @@ export default function OnboardPage() {
           <Field label="Accounts Email ID" helper="To which invoices should be mailed">
             <input
               type="email"
+              placeholder="accounts@company.com"
               value={form.accounts_email}
               onChange={(e) => update('accounts_email', e.target.value)}
               className="input-field"
@@ -197,7 +274,7 @@ export default function OnboardPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full rounded-lg bg-[#0F172B] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#1E293B] disabled:opacity-50"
+            className="airbnb-btn w-full rounded-lg px-4 py-3.5 text-base font-semibold text-white transition-opacity disabled:opacity-50"
           >
             {submitting ? 'Submitting...' : 'Submit'}
           </button>
@@ -207,20 +284,38 @@ export default function OnboardPage() {
       <style jsx global>{`
         .input-field {
           width: 100%;
-          border-radius: 0.5rem;
-          border: 1px solid #E2E8F0;
-          padding: 0.5rem 0.75rem;
-          font-size: 0.875rem;
-          color: #0F172B;
-          transition: border-color 0.15s;
+          border-radius: 8px;
+          border: 1px solid #B0B0B0;
+          padding: 10px 12px;
+          font-size: 16px;
+          color: #222;
+          background: #fff;
+          transition: border-color 0.2s, box-shadow 0.2s;
         }
         .input-field:focus {
           outline: none;
-          border-color: #2962FF;
-          box-shadow: 0 0 0 1px #2962FF;
+          border-color: #222;
+          box-shadow: 0 0 0 1px #222;
         }
         .input-field::placeholder {
-          color: #90A1B9;
+          color: #717171;
+        }
+        .airbnb-btn {
+          background: linear-gradient(to right, #E61E4D, #E31C5F, #D70466);
+        }
+        .airbnb-btn:hover {
+          background: linear-gradient(to right, #D70466, #BD1E59, #BD1E59);
+        }
+        .phone-group:focus-within {
+          border-color: #222 !important;
+          box-shadow: 0 0 0 1px #222;
+        }
+        .onboard-bg {
+          background: linear-gradient(135deg, #FAFAFA 0%, #F7F7F7 40%, #FFF5F6 100%);
+          background-image:
+            linear-gradient(135deg, #FAFAFA 0%, #F7F7F7 40%, #FFF5F6 100%),
+            radial-gradient(circle at 1px 1px, #E0E0E0 0.5px, transparent 0);
+          background-size: 100% 100%, 24px 24px;
         }
       `}</style>
     </div>
@@ -232,11 +327,11 @@ function Field({ label, required, helper, children }: {
 }) {
   return (
     <div>
-      <label className="mb-1.5 block text-sm font-medium text-[#0F172B]">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      <label className="mb-2 block text-sm font-semibold text-[#222]">
+        {label}{required && <span className="text-[#FF385C] ml-0.5">*</span>}
       </label>
       {children}
-      {helper && <p className="mt-1 text-xs text-[#90A1B9]">{helper}</p>}
+      {helper && <p className="mt-1.5 text-xs text-[#717171]">{helper}</p>}
     </div>
   );
 }
