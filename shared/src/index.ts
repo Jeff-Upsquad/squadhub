@@ -482,6 +482,24 @@ export interface MiniAppUserAccess {
   user?: User;
 }
 
+// ---- Invitations ----
+export type InvitationStatus = 'pending' | 'accepted' | 'expired';
+
+export interface Invitation {
+  id: string;
+  email: string;
+  role_id: string | null;
+  invited_by: string;
+  status: InvitationStatus;
+  invited_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+  created_at: string;
+  // Joined
+  role?: Role;
+  invited_by_user?: Pick<User, 'id' | 'display_name'>;
+}
+
 // ---- Clients Mini-App ----
 export type SubscriptionSquad = 'Content Squad' | 'Accounts & Finance Squad' | 'Marketing Squad' | 'Tech Squad' | 'Legal Squad' | 'Hiring & HR Squad';
 export type SubscriptionLevel = 'Junior' | 'Pro' | 'Elite';

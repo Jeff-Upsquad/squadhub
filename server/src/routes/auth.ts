@@ -34,24 +34,76 @@ router.post('/register', async (req: Request, res: Response) => {
       return;
     }
 
-    // Insert into our users table with pending status
+    // Check if this email has a pending, non-expired invitation
+    const { data: invitation } = await supabaseAdmin
+      .from('invitations')
+      .select('id, role_id, expires_at')
+      .eq('email', body.email)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    const isInvited = invitation && new Date(invitation.expires_at) > new Date();
+
+    // Insert into our users table
     const { error: dbError } = await supabaseAdmin.from('users').insert({
       id: authData.user.id,
       email: body.email,
       display_name: body.display_name,
       role: 'member',
-      status: 'pending',
+      status: isInvited ? 'approved' : 'pending',
     });
 
     if (dbError) {
       console.error('Failed to insert user row:', dbError);
     }
 
-    // Do NOT auto-sign in — account needs admin approval first
-    res.status(201).json({
-      success: true,
-      message: 'Account created. Awaiting admin approval.',
-    });
+    // If invited: auto-approve, assign role, add to workspace
+    if (isInvited) {
+      // Mark invitation as accepted
+      await supabaseAdmin
+        .from('invitations')
+        .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+        .eq('id', invitation.id);
+
+      // Add user to workspace with assigned role
+      const { data: workspace } = await supabaseAdmin
+        .from('workspaces')
+        .select('id')
+        .limit(1)
+        .single();
+
+      if (workspace) {
+        let roleId = invitation.role_id;
+        if (!roleId) {
+          const { data: defaultRole } = await supabaseAdmin
+            .from('roles')
+            .select('id')
+            .eq('is_default', true)
+            .single();
+          roleId = defaultRole?.id || null;
+        }
+
+        await supabaseAdmin.from('workspace_members').insert({
+          workspace_id: workspace.id,
+          user_id: authData.user.id,
+          role: 'member',
+          role_id: roleId,
+        });
+      }
+
+      res.status(201).json({
+        success: true,
+        invited: true,
+        message: 'Your signup has been approved! You can now proceed to the login page.',
+      });
+    } else {
+      // Standard flow — account needs admin approval
+      res.status(201).json({
+        success: true,
+        invited: false,
+        message: 'Account created. Awaiting admin approval.',
+      });
+    }
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });

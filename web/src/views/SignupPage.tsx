@@ -9,6 +9,7 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [wasInvited, setWasInvited] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,6 +23,7 @@ export default function SignupPage() {
         display_name: displayName,
       });
       if (res.success) {
+        setWasInvited(!!res.invited);
         setSubmitted(true);
       }
     } catch (err: any) {
@@ -31,7 +33,7 @@ export default function SignupPage() {
     }
   };
 
-  // Success state — awaiting admin approval
+  // Success state
   if (submitted) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
@@ -41,15 +43,19 @@ export default function SignupPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-[#0F172B]">Account Created</h1>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-[#0F172B]">
+            {wasInvited ? 'Welcome Aboard!' : 'Account Created'}
+          </h1>
           <p className="mt-3 text-sm text-[#62748E]">
-            Your account is pending admin approval. You'll be able to sign in once an admin reviews your request.
+            {wasInvited
+              ? 'Your signup has been approved! You can now proceed to the login page.'
+              : "Your account is pending admin approval. You'll be able to sign in once an admin reviews your request."}
           </p>
           <Link
             href="/login"
             className="mt-6 inline-block rounded-md bg-[#0F172B] px-6 py-2 text-sm font-medium text-white transition hover:bg-[#1D293D]"
           >
-            Back to Sign In
+            {wasInvited ? 'Go to Sign In' : 'Back to Sign In'}
           </Link>
         </div>
       </div>
