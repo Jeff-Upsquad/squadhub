@@ -51,6 +51,7 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=${CLIENT_URL:-https://squadhub.in}
+      - INTERNAL_API_URL=http://server:4000
     depends_on:
       - server
     networks:
@@ -67,6 +68,7 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=${ADMIN_URL:-https://admin.squadhub.in}
+      - INTERNAL_API_URL=http://server:4000
     depends_on:
       - server
     networks:

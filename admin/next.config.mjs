@@ -3,19 +3,21 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const API_URL = process.env.INTERNAL_API_URL || 'http://localhost:4000';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
 
   rewrites: async () => ({
     beforeFiles: [
-      { source: '/api/auth/:path*', destination: 'http://localhost:4000/auth/:path*' },
-      { source: '/api/admin/clients/:path*', destination: 'http://localhost:4000/admin/clients/:path*' },
-      { source: '/api/admin/:path*', destination: 'http://localhost:4000/admin/:path*' },
-      { source: '/api/users/:path*', destination: 'http://localhost:4000/users/:path*' },
-      { source: '/api/workspaces/:path*', destination: 'http://localhost:4000/workspaces/:path*' },
-      { source: '/api/health/:path*', destination: 'http://localhost:4000/health/:path*' },
-      { source: '/api/clients/:path*', destination: 'http://localhost:4000/clients/:path*' },
+      { source: '/api/auth/:path*', destination: `${API_URL}/auth/:path*` },
+      { source: '/api/admin/clients/:path*', destination: `${API_URL}/admin/clients/:path*` },
+      { source: '/api/admin/:path*', destination: `${API_URL}/admin/:path*` },
+      { source: '/api/users/:path*', destination: `${API_URL}/users/:path*` },
+      { source: '/api/workspaces/:path*', destination: `${API_URL}/workspaces/:path*` },
+      { source: '/api/health/:path*', destination: `${API_URL}/health/:path*` },
+      { source: '/api/clients/:path*', destination: `${API_URL}/clients/:path*` },
     ],
   }),
 

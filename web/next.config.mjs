@@ -3,26 +3,28 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const API_URL = process.env.INTERNAL_API_URL || 'http://localhost:4000';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
 
   rewrites: async () => ({
     beforeFiles: [
-      { source: '/auth/:path*', destination: 'http://localhost:4000/auth/:path*' },
-      { source: '/workspaces/:path*', destination: 'http://localhost:4000/workspaces/:path*' },
-      { source: '/channels/:path*', destination: 'http://localhost:4000/channels/:path*' },
-      { source: '/messages/:path*', destination: 'http://localhost:4000/messages/:path*' },
-      { source: '/users/:path*', destination: 'http://localhost:4000/users/:path*' },
-      { source: '/dms/:path*', destination: 'http://localhost:4000/dms/:path*' },
-      { source: '/favorites/:path*', destination: 'http://localhost:4000/favorites/:path*' },
-      { source: '/checkin/:path*', destination: 'http://localhost:4000/checkin/:path*' },
-      { source: '/pm/:path*', destination: 'http://localhost:4000/pm/:path*' },
-      { source: '/mini-apps/:path*', destination: 'http://localhost:4000/mini-apps/:path*' },
-      { source: '/memberships/:path*', destination: 'http://localhost:4000/memberships/:path*' },
-      { source: '/clients/:path*', destination: 'http://localhost:4000/clients/:path*' },
-      { source: '/timer/:path*', destination: 'http://localhost:4000/timer/:path*' },
-      { source: '/admin/:path*', destination: 'http://localhost:4000/admin/:path*' },
+      { source: '/auth/:path*', destination: `${API_URL}/auth/:path*` },
+      { source: '/workspaces/:path*', destination: `${API_URL}/workspaces/:path*` },
+      { source: '/channels/:path*', destination: `${API_URL}/channels/:path*` },
+      { source: '/messages/:path*', destination: `${API_URL}/messages/:path*` },
+      { source: '/users/:path*', destination: `${API_URL}/users/:path*` },
+      { source: '/dms/:path*', destination: `${API_URL}/dms/:path*` },
+      { source: '/favorites/:path*', destination: `${API_URL}/favorites/:path*` },
+      { source: '/checkin/:path*', destination: `${API_URL}/checkin/:path*` },
+      { source: '/pm/:path*', destination: `${API_URL}/pm/:path*` },
+      { source: '/mini-apps/:path*', destination: `${API_URL}/mini-apps/:path*` },
+      { source: '/memberships/:path*', destination: `${API_URL}/memberships/:path*` },
+      { source: '/clients/:path*', destination: `${API_URL}/clients/:path*` },
+      { source: '/timer/:path*', destination: `${API_URL}/timer/:path*` },
+      { source: '/admin/:path*', destination: `${API_URL}/admin/:path*` },
     ],
   }),
 
