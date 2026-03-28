@@ -1,0 +1,144 @@
+import type { TimerType } from '@squadhub/shared';
+import { useActiveTimer, useTimeStats, useStartTimer, useStopTimer } from '../../../hooks/useTimer';
+import { useWorkspaceStore } from '../../../stores/workspaceStore';
+import TimerDisplay from './TimerDisplay';
+import TodayTimeSummary from './TodayTimeSummary';
+
+const TIMER_CONFIG: { type: TimerType; label: string; icon: string; color: string; activeColor: string; activeBg: string }[] = [
+  {
+    type: 'work',
+    label: 'Work Lock',
+    icon: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z',
+    color: 'border-blue-200 text-blue-700 hover:bg-blue-50',
+    activeColor: 'text-white',
+    activeBg: 'bg-blue-600 border-blue-600',
+  },
+  {
+    type: 'break',
+    label: 'Break',
+    icon: 'M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z',
+    color: 'border-amber-200 text-amber-700 hover:bg-amber-50',
+    activeColor: 'text-white',
+    activeBg: 'bg-amber-500 border-amber-500',
+  },
+  {
+    type: 'no_work',
+    label: 'No Work',
+    icon: 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636',
+    color: 'border-gray-200 text-gray-600 hover:bg-gray-50',
+    activeColor: 'text-white',
+    activeBg: 'bg-gray-600 border-gray-600',
+  },
+];
+
+export default function TimerTab({ context = 'default' }: { context?: string }) {
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
+  const scope = { workspaceId, context };
+  const { data: activeRes } = useActiveTimer(scope);
+  const { data: statsRes } = useTimeStats(scope);
+  const startTimer = useStartTimer(scope);
+  const stopTimer = useStopTimer(scope);
+
+  const activeSession = activeRes?.data?.session;
+  const activeType = activeSession?.timer_type as TimerType | undefined;
+  const stats = statsRes?.data;
+  const todaySummary = stats?.today;
+
+  // Weekly chart data
+  const weekSummaries = stats?.week_summaries || [];
+
+  const handleTimerClick = (type: TimerType) => {
+    if (activeType === type) {
+      // Stop
+      stopTimer.mutate(activeSession?.id);
+    } else {
+      // Start (auto-stops current)
+      startTimer.mutate(type);
+    }
+  };
+
+  const isPending = startTimer.isPending || stopTimer.isPending;
+
+  return (
+    <div className="space-y-5 p-5">
+      {/* Timer buttons */}
+      <div className="space-y-2">
+        {TIMER_CONFIG.map((cfg) => {
+          const isActive = activeType === cfg.type;
+          return (
+            <button
+              key={cfg.type}
+              onClick={() => handleTimerClick(cfg.type)}
+              disabled={isPending}
+              className={`flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3 transition disabled:opacity-50 ${
+                isActive ? `${cfg.activeBg} ${cfg.activeColor}` : cfg.color
+              }`}
+            >
+              <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={cfg.icon} />
+              </svg>
+              <div className="flex flex-1 items-center justify-between">
+                <span className="text-sm font-medium">
+                  {isActive ? `Stop ${cfg.label}` : `Start ${cfg.label}`}
+                </span>
+                {isActive && activeSession && (
+                  <TimerDisplay startTime={activeSession.start_time} className="text-sm" />
+                )}
+              </div>
+              {isActive && (
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Today's summary */}
+      <TodayTimeSummary
+        workSeconds={todaySummary?.total_work_seconds || 0}
+        breakSeconds={todaySummary?.total_break_seconds || 0}
+        noWorkSeconds={todaySummary?.total_no_work_seconds || 0}
+      />
+
+      {/* Weekly mini chart */}
+      {weekSummaries.length > 0 && (
+        <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">This Week</h4>
+          <div className="flex items-end gap-1.5" style={{ height: 80 }}>
+            {weekSummaries.map((day: any) => {
+              const total = day.total_work_seconds + day.total_break_seconds + day.total_no_work_seconds;
+              const maxHours = 10 * 3600; // 10h max for scaling
+              const heightPct = Math.min((total / maxHours) * 100, 100);
+              const date = new Date(day.date + 'T00:00:00Z');
+              const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getUTCDay()];
+              return (
+                <div key={day.date} className="flex flex-1 flex-col items-center gap-1">
+                  <div className="flex w-full flex-col items-center" style={{ height: 60 }}>
+                    <div className="mt-auto w-full max-w-[20px]">
+                      <div
+                        className="w-full rounded-t bg-blue-500"
+                        style={{ height: `${(day.total_work_seconds / maxHours) * 60}px` }}
+                      />
+                      <div
+                        className="w-full bg-amber-400"
+                        style={{ height: `${(day.total_break_seconds / maxHours) * 60}px` }}
+                      />
+                      <div
+                        className="w-full rounded-b bg-gray-400"
+                        style={{ height: `${(day.total_no_work_seconds / maxHours) * 60}px` }}
+                      />
+                    </div>
+                  </div>
+                  <span className="text-[9px] text-[#90A1B9]">{dayName}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

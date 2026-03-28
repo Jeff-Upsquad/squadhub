@@ -400,6 +400,55 @@ export interface CheckInDashboardSummary {
   attendance_rate: number;
 }
 
+// ---- Time Tracking ----
+export type TimerType = 'work' | 'break' | 'no_work';
+
+export interface TimerSession {
+  id: string;
+  user_id: string;
+  date: string;
+  timer_type: TimerType;
+  start_time: string;
+  end_time: string | null;
+  duration_seconds: number | null;
+  is_auto_stopped: boolean;
+  created_at: string;
+  user?: User;
+}
+
+export interface DailyTimeSummary {
+  id: string;
+  user_id: string;
+  date: string;
+  total_work_seconds: number;
+  total_break_seconds: number;
+  total_no_work_seconds: number;
+  session_count: number;
+  first_start: string | null;
+  last_stop: string | null;
+  updated_at: string;
+  user?: User;
+}
+
+export interface ActiveTimerResponse {
+  session: TimerSession | null;
+  elapsed_seconds: number;
+}
+
+export interface TimeStatsResponse {
+  today: DailyTimeSummary | null;
+  active_timer: TimerSession | null;
+  week_summaries: DailyTimeSummary[];
+}
+
+export interface TeamTimerStatus {
+  user_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  active_timer: TimerSession | null;
+  today_summary: DailyTimeSummary | null;
+}
+
 // ---- Mini App Access Management ----
 export interface MiniApp {
   id: string;

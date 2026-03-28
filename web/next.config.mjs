@@ -21,6 +21,8 @@ const nextConfig = {
       { source: '/mini-apps/:path*', destination: 'http://localhost:4000/mini-apps/:path*' },
       { source: '/memberships/:path*', destination: 'http://localhost:4000/memberships/:path*' },
       { source: '/clients/:path*', destination: 'http://localhost:4000/clients/:path*' },
+      { source: '/timer/:path*', destination: 'http://localhost:4000/timer/:path*' },
+      { source: '/admin/:path*', destination: 'http://localhost:4000/admin/:path*' },
     ],
   }),
 

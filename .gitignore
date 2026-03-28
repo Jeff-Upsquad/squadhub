@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# MCP config (contains API keys)
+.mcp.json
+
 # Build output
 dist/
 build/

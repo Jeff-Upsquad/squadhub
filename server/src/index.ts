@@ -28,7 +28,10 @@ import miniAppsRoutes from './routes/mini-apps';
 import miniAppsAdminRoutes from './routes/mini-apps-admin';
 import clientsPublicRoutes from './routes/clients-public';
 import clientsAdminRoutes from './routes/clients-admin';
+import timerRoutes from './routes/timer';
+import timerAdminRoutes from './routes/timer-admin';
 import { startCheckInCron } from './cron/checkin-cron';
+import { startTimerCron } from './cron/timer-cron';
 
 // Validate env vars before starting
 validateConfig();
@@ -78,6 +81,8 @@ app.use('/mini-apps', miniAppsRoutes);
 app.use('/admin/mini-apps', miniAppsAdminRoutes);
 app.use('/clients', clientsPublicRoutes);
 app.use('/admin/clients', clientsAdminRoutes);
+app.use('/timer', timerRoutes);
+app.use('/admin/timer', timerAdminRoutes);
 
 // 404 handler
 app.use((_req, res) => {
@@ -95,6 +100,7 @@ server.listen(config.port, () => {
   console.log(`SquadHub server running on http://localhost:${config.port}`);
   console.log(`Environment: ${config.nodeEnv}`);
 
-  // Start the check-in cron job (marks missing check-ins at 11:59 PM IST)
+  // Start cron jobs
   startCheckInCron();
+  startTimerCron();
 });

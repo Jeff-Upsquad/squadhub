@@ -1,49 +1,5 @@
 import { supabaseAdmin } from '../supabase';
-
-const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-
-function todayIST(): string {
-  const now = new Date();
-  const ist = new Date(now.getTime() + IST_OFFSET_MS);
-  return ist.toISOString().split('T')[0];
-}
-
-async function isNonWorkingDay(dateStr: string): Promise<boolean> {
-  const date = new Date(dateStr + 'T00:00:00Z');
-  const dayOfWeek = date.getUTCDay();
-
-  const { data: wdConfig } = await supabaseAdmin
-    .from('working_days_config')
-    .select('working_days')
-    .limit(1)
-    .single();
-
-  const workingDays: number[] = wdConfig?.working_days || [1, 2, 3, 4, 5, 6];
-  if (!workingDays.includes(dayOfWeek)) return true;
-
-  const { data: specificHoliday } = await supabaseAdmin
-    .from('holidays')
-    .select('id')
-    .eq('date', dateStr)
-    .eq('is_recurring', false)
-    .limit(1);
-
-  if (specificHoliday && specificHoliday.length > 0) return true;
-
-  const month = date.getUTCMonth() + 1;
-  const day = date.getUTCDate();
-  const { data: recurringHoliday } = await supabaseAdmin
-    .from('holidays')
-    .select('id')
-    .eq('is_recurring', true)
-    .eq('recurring_month', month)
-    .eq('recurring_day', day)
-    .limit(1);
-
-  if (recurringHoliday && recurringHoliday.length > 0) return true;
-
-  return false;
-}
+import { todayIST, isNonWorkingDay } from '../utils/ist';
 
 /**
  * End-of-day cron job: marks missing check-ins as "no_checkin"

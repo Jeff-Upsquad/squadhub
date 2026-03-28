@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;600;700;900&display=swap');
 
 /* Class-based dark mode — .dark on <html> */
 @variant dark (&:where(.dark, .dark *));
@@ -8,12 +9,16 @@
   --canvas:           #F0F2F5;
   --surface:          #ffffff;
   --surface-alt:      #F1F5F9;
-  --divider:          #E2E8F0;
-  --divider-subtle:   #E0E4E8;
-  --foreground:       #0F172B;
-  --foreground-muted: #62748E;
-  --foreground-dim:   #90A1B9;
-  --icon-bar:         #000000;
+  --divider:          rgba(29,28,29,0.13);
+  --divider-subtle:   rgba(29,28,29,0.08);
+  --foreground:       #1D1C1D;
+  --foreground-muted: #616061;
+  --foreground-dim:   rgba(29,28,29,0.5);
+  --icon-bar:         #0F172A;
+  --sidebar:          #E2E8F0;
+  --sidebar-text:     #1D1C1D;
+  --sidebar-active:   #1264A3;
+  --sidebar-hover:    rgba(29,28,29,0.06);
 }
 
 .dark {
@@ -25,7 +30,11 @@
   --foreground:       #e2e8f0;
   --foreground-muted: #8b97a8;
   --foreground-dim:   #566579;
-  --icon-bar:         #1A1A2E;
+  --icon-bar:         #0F172A;
+  --sidebar:          #19171d;
+  --sidebar-text:     #bcabbc;
+  --sidebar-active:   #1264A3;
+  --sidebar-hover:    rgba(255,255,255,0.08);
 }
 
 /* Expose as Tailwind utilities */
@@ -39,6 +48,10 @@
   --color-foreground-muted: var(--foreground-muted);
   --color-foreground-dim:   var(--foreground-dim);
   --color-icon-bar:         var(--icon-bar);
+  --color-sidebar:          var(--sidebar);
+  --color-sidebar-text:     var(--sidebar-text);
+  --color-sidebar-active:   var(--sidebar-active);
+  --color-sidebar-hover:    var(--sidebar-hover);
 }
 
 /* ── Hashnode design language ───────────────────────────── */
@@ -50,24 +63,27 @@
   --color-gray-50:  #F8FAFC;
   --color-gray-100: #F1F5F9;
   --color-gray-200: #E2E8F0;
-  --color-gray-300: #CAD5E2;
-  --color-gray-400: #90A1B9;
-  --color-gray-500: #62748E;
-  --color-gray-600: #45556C;
-  --color-gray-700: #314158;
-  --color-gray-800: #1D293D;
-  --color-gray-900: #0F172B;
+  --color-gray-300: #CBD5E1;
+  --color-gray-400: #94A3B8;
+  --color-gray-500: #64748B;
+  --color-gray-600: #475569;
+  --color-gray-700: #334155;
+  --color-gray-800: #1E293B;
+  --color-gray-900: #0F172A;
   --color-gray-950: #020618;
 
+  /* Accent */
+  --color-green: #007A5A;
+
   /* Font families */
-  --font-display: 'Google Sans Flex', sans-serif;
-  --font-body:    'Google Sans Flex', system-ui, -apple-system, sans-serif;
-  --font-mono:    'Geist Mono', monospace;
+  --font-display: 'Lato', sans-serif;
+  --font-body:    'Lato', system-ui, -apple-system, sans-serif;
+  --font-mono:    'Lato', monospace;
 }
 
 /* ── Base ───────────────────────────────────────────────── */
 body {
-  font-family: 'Google Sans Flex', system-ui, -apple-system, sans-serif;
+  font-family: 'Lato', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.011em;
