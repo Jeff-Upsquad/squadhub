@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
+import { useCreateTask } from '../../../hooks/useTasks';
 import type { SpaceStatus } from '@squadhub/shared';
 import ListView from './ListView';
 import BoardView from './BoardView';
@@ -13,6 +14,16 @@ export default function ListPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [groupByStatus] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [addingTask, setAddingTask] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const addTaskInputRef = useRef<HTMLInputElement>(null);
+  const createTask = useCreateTask(activeListId);
+
+  useEffect(() => {
+    if (addingTask && addTaskInputRef.current) {
+      addTaskInputRef.current.focus();
+    }
+  }, [addingTask]);
 
   const { data: listData } = useQuery({
     queryKey: ['list', activeListId],
@@ -102,12 +113,38 @@ export default function ListPage() {
             />
           </div>
 
-          <button className="flex items-center gap-1.5 rounded-md bg-[#2962FF] px-3.5 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-[#1E50E0]">
-            Add Task
-            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+          {addingTask ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                ref={addTaskInputRef}
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newTaskTitle.trim()) {
+                    createTask.mutate({ title: newTaskTitle.trim() }, {
+                      onSuccess: () => { setNewTaskTitle(''); setAddingTask(false); },
+                    });
+                  }
+                  if (e.key === 'Escape') { setAddingTask(false); setNewTaskTitle(''); }
+                }}
+                onBlur={() => {
+                  if (!newTaskTitle.trim()) { setAddingTask(false); setNewTaskTitle(''); }
+                }}
+                placeholder="Task name..."
+                className="w-44 rounded-md border border-[#2962FF] bg-white px-2.5 py-1.5 text-xs text-[#0F172B] placeholder-[#999999] outline-none focus:ring-1 focus:ring-[#2962FF]"
+              />
+            </div>
+          ) : (
+            <button
+              onClick={() => setAddingTask(true)}
+              className="flex items-center gap-1.5 rounded-md bg-[#2962FF] px-3.5 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-[#1E50E0]"
+            >
+              Add Task
+              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 

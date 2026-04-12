@@ -3,7 +3,6 @@ import type { SpaceStatus, Task } from '@squadhub/shared';
 import { useTasks, useUpdateTask, groupTasksByStatus } from '../../../hooks/useTasks';
 import { usePMStore } from '../../../stores/pmStore';
 import TaskRow from './TaskRow';
-import QuickAddTask from './QuickAddTask';
 
 export default function ListView({
   listId,
@@ -146,7 +145,6 @@ function StatusGroup({
   const { collapsedGroups, toggleGroupCollapse } = usePMStore();
   const isCollapsed = collapsedGroups[status.id] || false;
   const [isDragOver, setIsDragOver] = useState(false);
-  const [showQuickAdd, setShowQuickAdd] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -215,36 +213,18 @@ function StatusGroup({
           </button>
 
           <div className="flex-1" />
-
-          {/* + Add Task */}
-          <button
-            onClick={(e) => { e.stopPropagation(); setShowQuickAdd(!showQuickAdd); }}
-            className="flex items-center gap-1 text-xs text-[#999999] hover:text-[#2962FF]"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Task
-          </button>
         </div>
       )}
 
       {/* Tasks */}
-      {!isCollapsed && (
-        <>
-          {tasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              statuses={allStatuses}
-              onStatusChange={onStatusChange}
-            />
-          ))}
-          {(showQuickAdd || !showHeader) && (
-            <QuickAddTask listId={listId} status={status.category} />
-          )}
-        </>
-      )}
+      {!isCollapsed && tasks.map((task) => (
+        <TaskRow
+          key={task.id}
+          task={task}
+          statuses={allStatuses}
+          onStatusChange={onStatusChange}
+        />
+      ))}
     </div>
   );
 }
