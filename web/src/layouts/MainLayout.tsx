@@ -198,8 +198,8 @@ export default function MainLayout() {
               {/* Icon container: 38x38, rounded-[14px] */}
               <div className={`flex h-[38px] w-[38px] items-center justify-center rounded-[14px] px-[8px] transition ${
                 isActive
-                  ? 'bg-white shadow-[0px_1px_3px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]'
-                  : ''
+                  ? 'bg-white text-[#0F172A] shadow-[0px_1px_3px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]'
+                  : 'text-[#99A1AF]'
               }`}>
                 {section.icon}
               </div>
