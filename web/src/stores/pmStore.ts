@@ -2,6 +2,14 @@ import { create } from 'zustand';
 
 export type ViewMode = 'list' | 'board';
 
+interface TimerState {
+  taskId: string;
+  taskTitle: string;
+  listId: string;
+  startedAt: number;
+  baseTracked: number;
+}
+
 interface PMState {
   activeSpaceId: string | null;
   activeListId: string | null;
@@ -9,6 +17,7 @@ interface PMState {
   viewMode: ViewMode;
   collapsedGroups: Record<string, boolean>;
   selectedTasks: string[];
+  timer: TimerState | null;
   setActiveSpace: (id: string | null) => void;
   setActiveList: (id: string | null) => void;
   setActiveTask: (id: string | null) => void;
@@ -17,16 +26,19 @@ interface PMState {
   toggleTaskSelection: (taskId: string) => void;
   selectAllTasks: (taskIds: string[]) => void;
   clearSelection: () => void;
+  startTimer: (taskId: string, taskTitle: string, listId: string, baseTracked: number) => TimerState | null;
+  stopTimer: () => TimerState | null;
   reset: () => void;
 }
 
-export const usePMStore = create<PMState>((set) => ({
+export const usePMStore = create<PMState>((set, get) => ({
   activeSpaceId: null,
   activeListId: null,
   activeTaskId: null,
   viewMode: 'list',
   collapsedGroups: {},
   selectedTasks: [],
+  timer: null,
 
   setActiveSpace: (id) => set({ activeSpaceId: id }),
   setActiveList: (id) => set({ activeListId: id, selectedTasks: [] }),
@@ -47,5 +59,17 @@ export const usePMStore = create<PMState>((set) => ({
     })),
   selectAllTasks: (taskIds) => set({ selectedTasks: taskIds }),
   clearSelection: () => set({ selectedTasks: [] }),
-  reset: () => set({ activeSpaceId: null, activeListId: null, activeTaskId: null, viewMode: 'list', collapsedGroups: {}, selectedTasks: [] }),
+  startTimer: (taskId, taskTitle, listId, baseTracked) => {
+    const prev = get().timer;
+    set({
+      timer: { taskId, taskTitle, listId, startedAt: Date.now(), baseTracked },
+    });
+    return prev;
+  },
+  stopTimer: () => {
+    const prev = get().timer;
+    set({ timer: null });
+    return prev;
+  },
+  reset: () => set({ activeSpaceId: null, activeListId: null, activeTaskId: null, viewMode: 'list', collapsedGroups: {}, selectedTasks: [], timer: null }),
 }));

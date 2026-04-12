@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
 import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment } from '../../../hooks/useTasks';
+import api from '../../../services/api';
 import type { SpaceStatus } from '@squadhub/shared';
 
 function parseTimeInput(input: string): number | null {
@@ -44,12 +46,13 @@ export default function TaskDetailPanel({
   statuses: SpaceStatus[];
   listId: string;
 }) {
-  const { activeTaskId, setActiveTask } = usePMStore();
+  const { activeTaskId, setActiveTask, timer, startTimer: globalStartTimer, stopTimer: globalStopTimer } = usePMStore();
   const { data: task, isLoading } = useTask(activeTaskId);
   const { data: comments } = useTaskComments(activeTaskId);
   const updateTask = useUpdateTask(listId);
   const deleteTask = useDeleteTask(listId);
   const addComment = useAddComment(activeTaskId);
+  const qc = useQueryClient();
 
   const [editing, setEditing] = useState<'title' | 'description' | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -57,38 +60,50 @@ export default function TaskDetailPanel({
   const [activeTab, setActiveTab] = useState<'activity' | 'comments'>('activity');
   const [estimateInput, setEstimateInput] = useState('');
   const [editingEstimate, setEditingEstimate] = useState(false);
-  const [timerRunning, setTimerRunning] = useState(false);
   const [timerElapsed, setTimerElapsed] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timerStartRef = useRef<number>(0);
 
-  const stopTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    if (timerElapsed > 0 && task) {
-      const newTracked = (task.time_tracked || 0) + timerElapsed;
-      updateTask.mutate({ id: task.id, time_tracked: newTracked });
-    }
-    setTimerRunning(false);
-    setTimerElapsed(0);
-  }, [timerElapsed, task, updateTask]);
+  const isTimerForThisTask = timer?.taskId === activeTaskId;
 
-  const startTimer = useCallback(() => {
-    timerStartRef.current = Date.now();
-    setTimerElapsed(0);
-    setTimerRunning(true);
-    timerRef.current = setInterval(() => {
-      setTimerElapsed(Math.floor((Date.now() - timerStartRef.current) / 1000));
-    }, 1000);
-  }, []);
-
+  // Tick the display when this task's timer is running
   useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
+    if (!isTimerForThisTask || !timer) { setTimerElapsed(0); return; }
+    const tick = () => setTimerElapsed(Math.floor((Date.now() - timer.startedAt) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [isTimerForThisTask, timer]);
+
+  const handleStartTimer = async () => {
+    if (!task) return;
+    // Starting a new timer auto-stops the previous one
+    const prev = globalStartTimer(task.id, task.title, listId, task.time_tracked || 0);
+    if (prev) {
+      // Save the previous timer's tracked time
+      const elapsedSecs = Math.floor((Date.now() - prev.startedAt) / 1000);
+      const newTracked = prev.baseTracked + elapsedSecs;
+      try {
+        await api.put(`/pm/tasks/${prev.taskId}`, { time_tracked: newTracked });
+        qc.invalidateQueries({ queryKey: ['tasks', prev.listId] });
+        qc.invalidateQueries({ queryKey: ['task', prev.taskId] });
+      } catch (err) {
+        console.error('Failed to save previous timer:', err);
+      }
+    }
+  };
+
+  const handleStopTimer = async () => {
+    const stopped = globalStopTimer();
+    if (!stopped) return;
+    const elapsedSecs = Math.floor((Date.now() - stopped.startedAt) / 1000);
+    const newTracked = stopped.baseTracked + elapsedSecs;
+    try {
+      await api.put(`/pm/tasks/${stopped.taskId}`, { time_tracked: newTracked });
+      qc.invalidateQueries({ queryKey: ['tasks', stopped.listId] });
+      qc.invalidateQueries({ queryKey: ['task', stopped.taskId] });
+    } catch (err) {
+      console.error('Failed to save tracked time:', err);
+    }
+  };
 
   if (!activeTaskId) return null;
 
@@ -328,7 +343,7 @@ export default function TaskDetailPanel({
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] text-[#999999] uppercase">Tracked</span>
                   <span className="text-xs text-[#0F172B]">
-                    {timerRunning
+                    {isTimerForThisTask
                       ? formatSeconds((task.time_tracked || 0) + timerElapsed)
                       : task.time_tracked
                         ? formatSeconds(task.time_tracked)
@@ -336,9 +351,9 @@ export default function TaskDetailPanel({
                     }
                   </span>
                 </div>
-                {timerRunning ? (
+                {isTimerForThisTask ? (
                   <button
-                    onClick={stopTimer}
+                    onClick={handleStopTimer}
                     className="flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-100"
                   >
                     <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
@@ -348,7 +363,7 @@ export default function TaskDetailPanel({
                   </button>
                 ) : (
                   <button
-                    onClick={startTimer}
+                    onClick={handleStartTimer}
                     className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100"
                   >
                     <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

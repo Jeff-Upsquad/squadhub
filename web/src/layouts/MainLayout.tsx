@@ -16,6 +16,7 @@ import SettingsSlider from '../components/SettingsSlider';
 import CheckInWidget from '../views/app/checkin/CheckInWidget';
 import TimeManagementPage from '../views/app/time-management/TimeManagementPage';
 import ThemeToggle from '../components/ThemeToggle';
+import ActiveTimer from '../components/ActiveTimer';
 import ClientDashboard from '../views/app/client/ClientDashboard';
 import PartnerDashboard from '../views/app/partner/PartnerDashboard';
 import { useUserType } from '../hooks/useUserType';
@@ -267,6 +268,7 @@ export default function MainLayout() {
 
       {/* Main content area */}
       <div className="flex flex-1 flex-col overflow-hidden bg-surface">
+        <ActiveTimer />
         {activeSection === 'home' ? (
           homeView === 'chat' ? (
             <>
