@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
-import { checkResourceAccess, meetsAccessLevel, requirePermission } from '../../middleware/permissions';
+import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
 
 const router = Router();
 router.use(requireAuth);
@@ -154,6 +154,12 @@ router.post('/tasks', async (req: Request, res: Response) => {
       return;
     }
 
+    const adminUser = await isWorkspaceAdmin(req.userId!);
+    if (!adminUser && await isResourceLocked('list', body.list_id)) {
+      res.status(403).json({ success: false, error: 'This list is locked' });
+      return;
+    }
+
     const insertData: Record<string, any> = {
       list_id: body.list_id,
       title: body.title,
@@ -205,6 +211,12 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    const adminUser = await isWorkspaceAdmin(req.userId!);
+    if (!adminUser && await isResourceLocked('list', listId)) {
+      res.status(403).json({ success: false, error: 'This list is locked' });
+      return;
+    }
+
     const { data, error } = await supabaseAdmin
       .from('tasks')
       .update(body)
@@ -242,6 +254,12 @@ router.delete('/tasks/:id', async (req: Request, res: Response) => {
     const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
     if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
       res.status(403).json({ success: false, error: 'Member access required to delete tasks' });
+      return;
+    }
+
+    const adminUser = await isWorkspaceAdmin(req.userId!);
+    if (!adminUser && await isResourceLocked('list', listId)) {
+      res.status(403).json({ success: false, error: 'This list is locked' });
       return;
     }
 

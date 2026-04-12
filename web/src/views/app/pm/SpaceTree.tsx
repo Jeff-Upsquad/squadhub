@@ -24,6 +24,15 @@ function LockIcon() {
   );
 }
 
+// ---- Admin lock icon (resource locked by admin) ----
+function AdminLockIcon() {
+  return (
+    <svg className="h-3 w-3 shrink-0 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
 // ---- Chevron icon ----
 function ChevronIcon({ open }: { open: boolean }) {
   return (
@@ -179,9 +188,10 @@ function ListItem({ list, depth = 0, isManager = false }: { list: List; depth?: 
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
         </svg>
         <span className="flex-1 truncate">{list.name}</span>
-        {list.is_private && <LockIcon />}
+        {list.is_locked && <AdminLockIcon />}
+        {list.is_private && !list.is_locked && <LockIcon />}
         <div className="flex items-center gap-0.5">
-          {isManager && (
+          {isManager && !list.is_locked && (
             <button
               onClick={(e) => { e.stopPropagation(); setShowShare(true); }}
               className="rounded p-0.5 text-[#999999] opacity-0 transition hover:text-[#0F172B] group-hover:opacity-100"
@@ -192,7 +202,7 @@ function ListItem({ list, depth = 0, isManager = false }: { list: List; depth?: 
               </svg>
             </button>
           )}
-          {isManager && (
+          {isManager && !list.is_locked && (
             <EllipsisButton onClick={() => setShowSettings(true)} title="List settings" />
           )}
         </div>
@@ -281,9 +291,10 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager }: { folder:
           </svg>
           <span className="flex-1 truncate">{folder.name}</span>
         </button>
-        {folder.is_private && <LockIcon />}
+        {folder.is_locked && <AdminLockIcon />}
+        {folder.is_private && !folder.is_locked && <LockIcon />}
         <div className="flex items-center gap-0.5">
-          {isManager && (
+          {isManager && !folder.is_locked && (
             <button
               onClick={(e) => { e.stopPropagation(); setShowShare(true); }}
               className="rounded p-0.5 text-[#999999] opacity-0 transition hover:text-[#0F172B] group-hover:opacity-100"
@@ -294,8 +305,8 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager }: { folder:
               </svg>
             </button>
           )}
-          {canDelete && <EllipsisButton onClick={() => setShowSettings(true)} title="Folder settings" />}
-          {canAdd && <AddButton onClick={() => setAdding(true)} title="Add list" />}
+          {canDelete && !folder.is_locked && <EllipsisButton onClick={() => setShowSettings(true)} title="Folder settings" />}
+          {canAdd && !folder.is_locked && <AddButton onClick={() => setAdding(true)} title="Add list" />}
         </div>
       </div>
 
@@ -392,11 +403,12 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
           </span>
         </button>
 
-        {space?.is_private && <LockIcon />}
+        {space?.is_locked && <AdminLockIcon />}
+        {space?.is_private && !space?.is_locked && <LockIcon />}
 
         <div className="flex items-center gap-0.5">
-          {isManager && <EllipsisButton onClick={() => setShowSettings(true)} title="Space settings" />}
-          {canAddItems && (canCreateFolders || canCreateLists) && (
+          {isManager && !space?.is_locked && <EllipsisButton onClick={() => setShowSettings(true)} title="Space settings" />}
+          {canAddItems && !space?.is_locked && (canCreateFolders || canCreateLists) && (
             <AddDropdown
               items={[
                 ...(canCreateLists ? [{

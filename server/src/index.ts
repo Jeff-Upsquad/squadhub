@@ -34,6 +34,7 @@ import invitationsRoutes from './routes/invitations';
 import adminPartnersRoutes from './routes/admin-partners';
 import customProfilesRoutes from './routes/custom-profiles';
 import customProfilesAdminRoutes from './routes/custom-profiles-admin';
+import resourceManagementAdminRoutes from './routes/resource-management-admin';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimerCron } from './cron/timer-cron';
 
@@ -91,6 +92,7 @@ app.use('/admin/invitations', invitationsRoutes);
 app.use('/admin/partners', adminPartnersRoutes);
 app.use('/pm/custom-profiles', customProfilesRoutes);
 app.use('/admin/custom-profiles', customProfilesAdminRoutes);
+app.use('/admin/resources', resourceManagementAdminRoutes);
 
 // 404 handler
 app.use((_req, res) => {

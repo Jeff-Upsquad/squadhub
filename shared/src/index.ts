@@ -114,6 +114,7 @@ export interface ResourceMembership {
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low' | 'none';
 export type StatusCategory = 'todo' | 'active' | 'done' | 'closed';
 export type ListView = 'list' | 'board';
+export type ResourceStatus = 'active' | 'inactive';
 
 export interface Space {
   id: string;
@@ -123,6 +124,8 @@ export interface Space {
   icon: string;
   description: string | null;
   is_private: boolean;
+  status: ResourceStatus;
+  is_locked: boolean;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -149,6 +152,8 @@ export interface Folder {
   space_id: string;
   name: string;
   is_private: boolean;
+  status: ResourceStatus;
+  is_locked: boolean;
   position: number;
   created_by: string;
   created_at: string;
@@ -167,6 +172,8 @@ export interface List {
   folder_id: string | null;
   name: string;
   is_private: boolean;
+  status: ResourceStatus;
+  is_locked: boolean;
   position: number;
   default_view: ListView;
   created_by: string;

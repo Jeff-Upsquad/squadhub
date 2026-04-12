@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
-import { requirePermission, checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
+import { requirePermission, checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
 
 const router = Router();
 router.use(requireAuth);
@@ -31,12 +31,18 @@ router.get('/folders', async (req: Request, res: Response) => {
       return;
     }
 
-    const { data, error } = await supabaseAdmin
+    // Non-admins only see active folders
+    const admin = await isWorkspaceAdmin(req.userId!);
+    let query = supabaseAdmin
       .from('folders')
       .select('*, lists(*)')
       .eq('space_id', spaceId)
       .is('deleted_at', null)
       .order('position');
+
+    if (!admin) query = query.eq('status', 'active');
+
+    const { data, error } = await query;
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -59,6 +65,13 @@ router.post('/folders', requirePermission('can_create_folders'), async (req: Req
     const spaceAccess = await checkResourceAccess(req.userId!, 'space', body.space_id);
     if (!spaceAccess || !meetsAccessLevel(spaceAccess, 'member')) {
       res.status(403).json({ success: false, error: 'Member access on the space is required to create folders' });
+      return;
+    }
+
+    // Lock check on parent space
+    const adminUser = await isWorkspaceAdmin(req.userId!);
+    if (!adminUser && await isResourceLocked('space', body.space_id)) {
+      res.status(403).json({ success: false, error: 'This space is locked' });
       return;
     }
 
@@ -149,6 +162,12 @@ router.put('/folders/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    const adminUser = await isWorkspaceAdmin(req.userId!);
+    if (!adminUser && await isResourceLocked('folder', id)) {
+      res.status(403).json({ success: false, error: 'This folder is locked' });
+      return;
+    }
+
     const { data, error } = await supabaseAdmin
       .from('folders')
       .update({ name: req.body.name })
@@ -176,6 +195,12 @@ router.delete('/folders/:id', async (req: Request, res: Response) => {
     const userLevel = await checkResourceAccess(req.userId!, 'folder', id);
     if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
       res.status(403).json({ success: false, error: 'Manager access required to delete folders' });
+      return;
+    }
+
+    const adminUser = await isWorkspaceAdmin(req.userId!);
+    if (!adminUser && await isResourceLocked('folder', id)) {
+      res.status(403).json({ success: false, error: 'This folder is locked' });
       return;
     }
 

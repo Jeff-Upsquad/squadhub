@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
-import { requirePermission, checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
+import { requirePermission, checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
 
 const router = Router();
 router.use(requireAuth);
@@ -41,7 +41,9 @@ router.get('/lists', async (req: Request, res: Response) => {
       return;
     }
 
+    const admin = await isWorkspaceAdmin(req.userId!);
     let query = supabaseAdmin.from('lists').select('*').is('deleted_at', null).order('position');
+    if (!admin) query = query.eq('status', 'active');
 
     if (folderId) {
       query = query.eq('folder_id', folderId);
@@ -110,6 +112,17 @@ router.post('/lists', requirePermission('can_create_lists'), async (req: Request
     if (!spaceAccess || !meetsAccessLevel(spaceAccess, 'member')) {
       res.status(403).json({ success: false, error: 'Member access on the space is required to create lists' });
       return;
+    }
+
+    // Lock check on parent space/folder
+    const adminUser = await isWorkspaceAdmin(req.userId!);
+    if (!adminUser) {
+      const parentType = body.folder_id ? 'folder' : 'space';
+      const parentId = body.folder_id || body.space_id;
+      if (await isResourceLocked(parentType, parentId)) {
+        res.status(403).json({ success: false, error: `This ${parentType} is locked` });
+        return;
+      }
     }
 
     // If profile_id is provided, fetch the profile template
@@ -191,6 +204,12 @@ router.put('/lists/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    const adminUser = await isWorkspaceAdmin(req.userId!);
+    if (!adminUser && await isResourceLocked('list', id)) {
+      res.status(403).json({ success: false, error: 'This list is locked' });
+      return;
+    }
+
     const updates: Record<string, unknown> = {};
     if (req.body.name) updates.name = req.body.name;
     if (req.body.default_view) updates.default_view = req.body.default_view;
@@ -223,6 +242,12 @@ router.delete('/lists/:id', async (req: Request, res: Response) => {
     const userLevel = await checkResourceAccess(req.userId!, 'list', id);
     if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
       res.status(403).json({ success: false, error: 'Manager access required to delete lists' });
+      return;
+    }
+
+    const adminUser = await isWorkspaceAdmin(req.userId!);
+    if (!adminUser && await isResourceLocked('list', id)) {
+      res.status(403).json({ success: false, error: 'This list is locked' });
       return;
     }
 

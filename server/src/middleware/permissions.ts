@@ -243,3 +243,34 @@ export async function isWorkspaceAdmin(userId: string): Promise<boolean> {
     .single();
   return data?.role === 'admin' || data?.role === 'super_admin';
 }
+
+/**
+ * Check if a resource (space/folder/list) is locked.
+ * Also checks parent resources: a list is locked if its folder or space is locked.
+ */
+export async function isResourceLocked(resourceType: string, resourceId: string): Promise<boolean> {
+  if (resourceType === 'space') {
+    const { data } = await supabaseAdmin.from('spaces').select('is_locked').eq('id', resourceId).single();
+    return data?.is_locked === true;
+  }
+
+  if (resourceType === 'folder') {
+    const { data } = await supabaseAdmin.from('folders').select('is_locked, space_id').eq('id', resourceId).single();
+    if (!data) return false;
+    if (data.is_locked) return true;
+    return isResourceLocked('space', data.space_id);
+  }
+
+  if (resourceType === 'list') {
+    const { data } = await supabaseAdmin.from('lists').select('is_locked, space_id, folder_id').eq('id', resourceId).single();
+    if (!data) return false;
+    if (data.is_locked) return true;
+    if (data.folder_id) {
+      const folderLocked = await isResourceLocked('folder', data.folder_id);
+      if (folderLocked) return true;
+    }
+    return isResourceLocked('space', data.space_id);
+  }
+
+  return false;
+}

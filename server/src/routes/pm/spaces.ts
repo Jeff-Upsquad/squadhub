@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
-import { requirePermission, isWorkspaceAdmin, checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
+import { requirePermission, isWorkspaceAdmin, checkResourceAccess, meetsAccessLevel, isResourceLocked } from '../../middleware/permissions';
 
 const router = Router();
 
@@ -60,6 +60,7 @@ router.get('/spaces', async (req: Request, res: Response) => {
       .select('id')
       .eq('workspace_id', workspaceId)
       .is('deleted_at', null)
+      .eq('status', 'active')
       .eq('created_by', req.userId!);
 
     const createdIds = (createdSpaces || []).map((s: any) => s.id);
@@ -75,6 +76,7 @@ router.get('/spaces', async (req: Request, res: Response) => {
       .select('*, space_statuses(*)')
       .eq('workspace_id', workspaceId)
       .is('deleted_at', null)
+      .eq('status', 'active')
       .in('id', allIds)
       .order('position');
 
@@ -227,6 +229,13 @@ router.put('/spaces/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    // Lock check (admins bypass via checkResourceAccess returning 'manager')
+    const admin = await isWorkspaceAdmin(req.userId!);
+    if (!admin && await isResourceLocked('space', id)) {
+      res.status(403).json({ success: false, error: 'This space is locked' });
+      return;
+    }
+
     const updates: Record<string, unknown> = {};
     if (req.body.name) updates.name = req.body.name;
     if (req.body.color) updates.color = req.body.color;
@@ -260,6 +269,12 @@ router.delete('/spaces/:id', async (req: Request, res: Response) => {
     const userLevel = await checkResourceAccess(req.userId!, 'space', id);
     if (!userLevel || !meetsAccessLevel(userLevel, 'manager')) {
       res.status(403).json({ success: false, error: 'Manager access required to delete spaces' });
+      return;
+    }
+
+    const admin = await isWorkspaceAdmin(req.userId!);
+    if (!admin && await isResourceLocked('space', id)) {
+      res.status(403).json({ success: false, error: 'This space is locked' });
       return;
     }
 
