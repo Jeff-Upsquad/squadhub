@@ -158,6 +158,67 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /admin/resources/members/:id — update access level
+// NOTE: Must be defined BEFORE /:type/:id to avoid Express matching "members" as a :type param
+const updateMemberSchema = z.object({
+  access_level: z.enum(['viewer', 'commenter', 'member', 'manager']),
+});
+
+router.put('/members/:id', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    const body = updateMemberSchema.parse(req.body);
+
+    const { data, error } = await supabaseAdmin
+      .from('resource_memberships')
+      .update({ access_level: body.access_level })
+      .eq('id', id)
+      .select('*, users!resource_memberships_user_id_fkey(id, display_name, email, avatar_url)')
+      .single();
+
+    if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+    if (!data) { res.status(404).json({ success: false, error: 'Membership not found' }); return; }
+
+    res.json({
+      success: true,
+      data: { ...data, user: (data as any).users, users: undefined },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Update membership error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /admin/resources/members/:id — remove a member
+router.delete('/members/:id', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+
+    const { data: existing } = await supabaseAdmin
+      .from('resource_memberships')
+      .select('id')
+      .eq('id', id)
+      .single();
+
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Membership not found' });
+      return;
+    }
+
+    const { error } = await supabaseAdmin.from('resource_memberships').delete().eq('id', id);
+    if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+
+    res.json({ success: true, message: 'Membership removed' });
+  } catch (err) {
+    console.error('Delete membership error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // PUT /admin/resources/:type/:id — update status and/or is_locked (with cascade)
 const updateSchema = z.object({
   status: z.enum(['active', 'inactive']).optional(),
@@ -297,66 +358,6 @@ router.post('/:type/:id/members', async (req: Request, res: Response) => {
       return;
     }
     console.error('Add resource member error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
-// PUT /admin/resources/members/:id — update access level
-const updateMemberSchema = z.object({
-  access_level: z.enum(['viewer', 'commenter', 'member', 'manager']),
-});
-
-router.put('/members/:id', async (req: Request, res: Response) => {
-  try {
-    const id = req.params.id;
-    const body = updateMemberSchema.parse(req.body);
-
-    const { data, error } = await supabaseAdmin
-      .from('resource_memberships')
-      .update({ access_level: body.access_level })
-      .eq('id', id)
-      .select('*, users!resource_memberships_user_id_fkey(id, display_name, email, avatar_url)')
-      .single();
-
-    if (error) { res.status(500).json({ success: false, error: error.message }); return; }
-    if (!data) { res.status(404).json({ success: false, error: 'Membership not found' }); return; }
-
-    res.json({
-      success: true,
-      data: { ...data, user: (data as any).users, users: undefined },
-    });
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ success: false, error: err.errors[0].message });
-      return;
-    }
-    console.error('Update membership error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
-// DELETE /admin/resources/members/:id — remove a member
-router.delete('/members/:id', async (req: Request, res: Response) => {
-  try {
-    const id = req.params.id;
-
-    const { data: existing } = await supabaseAdmin
-      .from('resource_memberships')
-      .select('id')
-      .eq('id', id)
-      .single();
-
-    if (!existing) {
-      res.status(404).json({ success: false, error: 'Membership not found' });
-      return;
-    }
-
-    const { error } = await supabaseAdmin.from('resource_memberships').delete().eq('id', id);
-    if (error) { res.status(500).json({ success: false, error: error.message }); return; }
-
-    res.json({ success: true, message: 'Membership removed' });
-  } catch (err) {
-    console.error('Delete membership error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
