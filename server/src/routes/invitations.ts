@@ -26,6 +26,7 @@ router.get('/', async (req: Request, res: Response) => {
     const { data, error } = await query;
 
     if (error) {
+      console.error('List invitations query error:', error);
       res.status(500).json({ success: false, error: error.message });
       return;
     }
