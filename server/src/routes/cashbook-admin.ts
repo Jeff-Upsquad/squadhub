@@ -11,10 +11,9 @@ router.use(requireAuth, requireAdmin);
 
 // ---- Client Access Management ----
 
-// GET /admin/cashbook/clients - List all clients with cash book access status
+// GET /admin/cashbook/clients - List all active clients (used by partner access dropdown too)
 router.get('/clients', async (_req: Request, res: Response) => {
   try {
-    // Get all active clients
     const { data: clients, error } = await supabaseAdmin
       .from('clients')
       .select('id, business_name, contact_person, email, status')
@@ -26,40 +25,96 @@ router.get('/clients', async (_req: Request, res: Response) => {
       return;
     }
 
-    // Get cash book access for all clients
-    const { data: accessList } = await supabaseAdmin
-      .from('cash_book_client_access')
-      .select('client_id, is_enabled, enabled_by, created_at');
-
-    const accessMap = new Map((accessList || []).map(a => [a.client_id, a]));
-
-    const result = (clients || []).map(client => ({
-      ...client,
-      cash_book: accessMap.get(client.id) || null,
-    }));
-
-    res.json({ success: true, data: result });
+    res.json({ success: true, data: clients || [] });
   } catch (err) {
     console.error('Admin clients error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
-// POST /admin/cashbook/clients/:clientId/enable
-router.post('/clients/:clientId/enable', async (req: Request, res: Response) => {
+// GET /admin/cashbook/client-access - List clients added to cash book
+router.get('/client-access', async (_req: Request, res: Response) => {
   try {
-    const enableSchema = z.object({
-      admin_user_id: z.string().uuid().optional(),
-    });
-    const body = enableSchema.parse(req.body ?? {});
+    const { data, error } = await supabaseAdmin
+      .from('cash_book_client_access')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-    const clientId = req.params.clientId;
+    if (error) {
+      res.status(500).json({ success: false, error: 'Failed to fetch client access' });
+      return;
+    }
+
+    // Enrich with client info
+    const clientIds = [...new Set((data || []).map(r => r.client_id))];
+
+    const { data: clients } = await supabaseAdmin
+      .from('clients')
+      .select('id, business_name, contact_person, email')
+      .in('id', clientIds.length ? clientIds : ['_']);
+
+    const clientMap = new Map((clients || []).map(c => [c.id, c]));
+
+    const enriched = (data || []).map(r => ({
+      ...r,
+      client: clientMap.get(r.client_id) || null,
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    console.error('Client access list error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /admin/cashbook/client-access/available - Clients not yet added to cash book
+router.get('/client-access/available', async (_req: Request, res: Response) => {
+  try {
+    // Get all client IDs that already have access
+    const { data: existing } = await supabaseAdmin
+      .from('cash_book_client_access')
+      .select('client_id');
+
+    const existingIds = (existing || []).map(r => r.client_id);
+
+    // Get active clients not in that list
+    let query = supabaseAdmin
+      .from('clients')
+      .select('id, business_name, contact_person, email')
+      .eq('status', 'active')
+      .order('business_name', { ascending: true });
+
+    if (existingIds.length > 0) {
+      query = query.not('id', 'in', `(${existingIds.join(',')})`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      res.status(500).json({ success: false, error: 'Failed to fetch available clients' });
+      return;
+    }
+
+    res.json({ success: true, data: data || [] });
+  } catch (err) {
+    console.error('Available clients error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /admin/cashbook/client-access - Add a client to cash book
+router.post('/client-access', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({
+      client_id: z.string().uuid(),
+    });
+    const body = schema.parse(req.body);
 
     // Verify client exists
     const { data: client } = await supabaseAdmin
       .from('clients')
-      .select('id, email, contact_person')
-      .eq('id', clientId)
+      .select('id')
+      .eq('id', body.client_id)
       .single();
 
     if (!client) {
@@ -67,62 +122,79 @@ router.post('/clients/:clientId/enable', async (req: Request, res: Response) => 
       return;
     }
 
-    // Upsert cash_book_client_access
-    const { error: accessError } = await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from('cash_book_client_access')
       .upsert({
-        client_id: clientId,
+        client_id: body.client_id,
         is_enabled: true,
         enabled_by: req.userId!,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'client_id' });
 
-    if (accessError) {
-      console.error('Enable error:', accessError);
-      res.status(500).json({ success: false, error: 'Failed to enable cash book' });
+    if (error) {
+      console.error('Add client access error:', error);
+      res.status(500).json({ success: false, error: 'Failed to add client' });
       return;
     }
 
-    // If admin_user_id is provided, make them the client_admin
-    if (body.admin_user_id) {
-      await supabaseAdmin
-        .from('cash_book_users')
-        .upsert({
-          user_id: body.admin_user_id,
-          client_id: clientId,
-          role: 'client_admin',
-          invited_by: req.userId!,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,client_id' });
-    }
-
-    res.json({ success: true, message: 'Cash book enabled for client' });
+    res.json({ success: true, message: 'Client added to Cash Book' });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
       return;
     }
-    console.error('Enable error:', err);
+    console.error('Add client access error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
-// POST /admin/cashbook/clients/:clientId/disable
-router.post('/clients/:clientId/disable', async (req: Request, res: Response) => {
+// PUT /admin/cashbook/client-access/:id/toggle - Toggle enabled/disabled
+router.put('/client-access/:id/toggle', async (req: Request, res: Response) => {
   try {
-    const { error } = await supabaseAdmin
+    const { data: existing } = await supabaseAdmin
       .from('cash_book_client_access')
-      .update({ is_enabled: false, updated_at: new Date().toISOString() })
-      .eq('client_id', req.params.clientId);
+      .select('id, is_enabled')
+      .eq('id', req.params.id)
+      .single();
 
-    if (error) {
-      res.status(500).json({ success: false, error: 'Failed to disable cash book' });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Access record not found' });
       return;
     }
 
-    res.json({ success: true, message: 'Cash book disabled for client' });
+    const { error } = await supabaseAdmin
+      .from('cash_book_client_access')
+      .update({ is_enabled: !existing.is_enabled, updated_at: new Date().toISOString() })
+      .eq('id', req.params.id);
+
+    if (error) {
+      res.status(500).json({ success: false, error: 'Failed to toggle access' });
+      return;
+    }
+
+    res.json({ success: true, is_enabled: !existing.is_enabled });
   } catch (err) {
-    console.error('Disable error:', err);
+    console.error('Toggle client access error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /admin/cashbook/client-access/:id - Remove client from cash book
+router.delete('/client-access/:id', async (req: Request, res: Response) => {
+  try {
+    const { error } = await supabaseAdmin
+      .from('cash_book_client_access')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) {
+      res.status(500).json({ success: false, error: 'Failed to remove client access' });
+      return;
+    }
+
+    res.json({ success: true, message: 'Client removed from Cash Book' });
+  } catch (err) {
+    console.error('Remove client access error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
