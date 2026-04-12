@@ -9,14 +9,12 @@ export default function ListView({
   listId,
   statuses,
   filters,
-  hasActiveFilters,
   groupByStatus = true,
   searchQuery = '',
 }: {
   listId: string;
   statuses: SpaceStatus[];
   filters?: { status?: string; priority?: string; sort?: string };
-  hasActiveFilters?: boolean;
   groupByStatus?: boolean;
   searchQuery?: string;
 }) {
@@ -77,12 +75,6 @@ export default function ListView({
           />
         ))}
       </div>
-
-      {hasActiveFilters && (
-        <div className="flex items-center justify-center py-4">
-          <p className="text-xs text-[#999999]">Some tasks are hidden by active filters.</p>
-        </div>
-      )}
 
       {/* Selection action bar */}
       {selectedTasks.length > 0 && (
