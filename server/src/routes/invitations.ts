@@ -16,7 +16,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     let query = supabaseAdmin
       .from('invitations')
-      .select('*, clients(id, business_name)')
+      .select('*')
       .order('invited_at', { ascending: false });
 
     if (status && ['pending', 'accepted', 'expired'].includes(status)) {
@@ -37,6 +37,13 @@ router.get('/', async (req: Request, res: Response) => {
       : { data: [] };
     const roleMap = new Map((roles || []).map((r: any) => [r.id, r]));
 
+    // Attach client info
+    const clientIds = [...new Set((data || []).filter((i: any) => i.client_id).map((i: any) => i.client_id))];
+    const { data: clients } = clientIds.length > 0
+      ? await supabaseAdmin.from('clients').select('id, business_name').in('id', clientIds)
+      : { data: [] };
+    const clientMap = new Map((clients || []).map((c: any) => [c.id, c]));
+
     // Attach invited_by user info
     const inviterIds = [...new Set((data || []).map((i: any) => i.invited_by))];
     const { data: inviters } = await supabaseAdmin
@@ -49,8 +56,7 @@ router.get('/', async (req: Request, res: Response) => {
     const enriched = (data || []).map((inv: any) => ({
       ...inv,
       role: roleMap.get(inv.role_id) || null,
-      client: inv.clients || null,
-      clients: undefined,
+      client: clientMap.get(inv.client_id) || null,
       invited_by_user: inviterMap.get(inv.invited_by) || null,
     }));
 
