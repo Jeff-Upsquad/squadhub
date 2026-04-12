@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useSpaces, useSpace, useCreateFolder, useCreateList } from '../../../hooks/useSpaces';
+import { useSpaces, useSpace, useCreateList } from '../../../hooks/useSpaces';
 import { useHasPermission } from '../../../hooks/usePermissions';
 import { usePMStore } from '../../../stores/pmStore';
 import CreateSpaceModal from './CreateSpaceModal';
+import CreateFolderListModal from './CreateFolderListModal';
 import ManageMembersModal from './ManageMembersModal';
 import SettingsSlider from '../../../components/SettingsSlider';
 import type { Folder, List, AccessLevel } from '@squadhub/shared';
@@ -286,16 +287,13 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
   const { activeSpaceId, setActiveSpace, setActiveList } = usePMStore();
   const isActive = activeSpaceId === spaceId;
   const [open, setOpen] = useState(false);
-  const [addingFolder, setAddingFolder] = useState(false);
-  const [addingList, setAddingList] = useState(false);
+  const [createModal, setCreateModal] = useState<'folder' | 'list' | null>(null);
   const [showMembers, setShowMembers] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const canCreateFolders = useHasPermission('can_create_folders');
   const canCreateLists = useHasPermission('can_create_lists');
 
   const { data: space } = useSpace(isActive || open ? spaceId : null);
-  const createFolder = useCreateFolder(spaceId);
-  const createList = useCreateList(spaceId);
 
   const myAccess = space?.my_access_level;
   const canAddItems = canAtLeast(myAccess, 'member');
@@ -347,13 +345,13 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
                   icon: ListIcon,
                   label: 'List',
                   description: 'Track tasks, projects, people & more',
-                  onClick: () => setAddingList(true),
+                  onClick: () => setCreateModal('list'),
                 }] : []),
                 ...(canCreateFolders ? [{
                   icon: FolderIcon,
                   label: 'Folder',
                   description: 'Group Lists, Docs & more',
-                  onClick: () => setAddingFolder(true),
+                  onClick: () => setCreateModal('folder'),
                 }] : []),
               ]}
             />
@@ -374,27 +372,12 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
             <ListItem key={list.id} list={list} depth={2} />
           ))}
 
-          {/* Inline add folder */}
-          {addingFolder && (
-            <InlineInput
-              placeholder="Folder name..."
-              depth={2}
-              onSubmit={(name) => {
-                createFolder.mutate({ name }, { onSuccess: () => setAddingFolder(false) });
-              }}
-              onCancel={() => setAddingFolder(false)}
-            />
-          )}
-
-          {/* Inline add list */}
-          {addingList && (
-            <InlineInput
-              placeholder="List name..."
-              depth={2}
-              onSubmit={(name) => {
-                createList.mutate({ name }, { onSuccess: () => setAddingList(false) });
-              }}
-              onCancel={() => setAddingList(false)}
+          {/* Create folder/list modal */}
+          {createModal && (
+            <CreateFolderListModal
+              type={createModal}
+              spaceId={spaceId}
+              onClose={() => setCreateModal(null)}
             />
           )}
         </div>

@@ -12,6 +12,7 @@ router.use(requireUserType('internal', 'partner'));
 const createSchema = z.object({
   space_id: z.string().uuid(),
   name: z.string().min(1).max(100),
+  profile_id: z.string().uuid().optional(),
 });
 
 // GET /pm/folders?space_id=xxx
@@ -61,26 +62,69 @@ router.post('/folders', requirePermission('can_create_folders'), async (req: Req
       return;
     }
 
+    // If profile_id is provided, fetch the profile template
+    let profile: any = null;
+    if (body.profile_id) {
+      const { data: profileData } = await supabaseAdmin
+        .from('custom_profiles')
+        .select('*')
+        .eq('id', body.profile_id)
+        .eq('target_type', 'folder')
+        .eq('is_enabled', true)
+        .single();
+
+      if (!profileData) {
+        res.status(400).json({ success: false, error: 'Invalid or disabled profile' });
+        return;
+      }
+      profile = profileData;
+    }
+
     const { count } = await supabaseAdmin
       .from('folders')
       .select('*', { count: 'exact', head: true })
       .eq('space_id', body.space_id);
 
+    const insertPayload: Record<string, unknown> = {
+      space_id: body.space_id,
+      name: body.name,
+      is_private: true,
+      created_by: req.userId!,
+      position: count || 0,
+    };
+
+    if (profile) {
+      insertPayload.profile_id = profile.id;
+      insertPayload.profile_version = profile.version;
+    }
+
     const { data, error } = await supabaseAdmin
       .from('folders')
-      .insert({
-        space_id: body.space_id,
-        name: body.name,
-        is_private: true,
-        created_by: req.userId!,
-        position: count || 0,
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
+    }
+
+    // Auto-create child lists from profile template
+    if (profile && profile.template?.lists) {
+      const templateLists = profile.template.lists as Array<{ name: string; position: number; default_view?: string }>;
+      for (const tl of templateLists) {
+        await supabaseAdmin.from('lists').insert({
+          space_id: body.space_id,
+          folder_id: data.id,
+          name: tl.name,
+          position: tl.position || 0,
+          default_view: tl.default_view || 'list',
+          is_private: true,
+          created_by: req.userId!,
+          profile_id: profile.id,
+          profile_version: profile.version,
+        });
+      }
     }
 
     res.status(201).json({ success: true, data });

@@ -41,7 +41,7 @@ export function useCreateSpace(workspaceId: string | undefined) {
 export function useCreateFolder(spaceId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { name: string }) => {
+    mutationFn: async (body: { name: string; profile_id?: string }) => {
       const res = await api.post('/pm/folders', { ...body, space_id: spaceId });
       return res.data.data;
     },
@@ -54,7 +54,7 @@ export function useCreateFolder(spaceId: string) {
 export function useCreateList(spaceId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { name: string; folder_id?: string }) => {
+    mutationFn: async (body: { name: string; folder_id?: string; profile_id?: string }) => {
       const res = await api.post('/pm/lists', { ...body, space_id: spaceId });
       return res.data.data;
     },

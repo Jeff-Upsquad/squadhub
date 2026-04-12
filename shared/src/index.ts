@@ -154,8 +154,11 @@ export interface Folder {
   created_at: string;
   updated_at: string;
   my_access_level?: AccessLevel;
+  profile_id?: string | null;
+  profile_version?: number | null;
   // Joined
   lists?: List[];
+  profile?: CustomProfile;
 }
 
 export interface List {
@@ -170,8 +173,11 @@ export interface List {
   created_at: string;
   updated_at: string;
   my_access_level?: AccessLevel;
+  profile_id?: string | null;
+  profile_version?: number | null;
   // Joined
   task_count?: number;
+  profile?: CustomProfile;
 }
 
 export interface Task {
@@ -479,6 +485,50 @@ export interface MiniAppRoleAccess {
 export interface MiniAppUserAccess {
   id: string;
   mini_app_id: string;
+  user_id: string;
+  created_at: string;
+  // Joined
+  user?: User;
+}
+
+// ---- Custom Profiles ----
+export interface CustomProfile {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  target_type: 'folder' | 'list';
+  template: CustomProfileTemplate;
+  version: number;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  role_access?: CustomProfileRoleAccess[];
+  user_access?: CustomProfileUserAccess[];
+  instance_count?: number;
+  outdated_instance_count?: number;
+}
+
+export interface CustomProfileTemplate {
+  default_view?: ListView;
+  lists?: { name: string; position: number; default_view?: ListView }[];
+}
+
+export interface CustomProfileRoleAccess {
+  id: string;
+  profile_id: string;
+  role_id: string;
+  created_at: string;
+  // Joined
+  role?: Role;
+}
+
+export interface CustomProfileUserAccess {
+  id: string;
+  profile_id: string;
   user_id: string;
   created_at: string;
   // Joined
