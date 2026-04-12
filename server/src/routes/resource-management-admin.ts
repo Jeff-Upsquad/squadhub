@@ -33,9 +33,9 @@ router.get('/', async (req: Request, res: Response) => {
     if (tab === 'spaces') {
       let query = supabaseAdmin
         .from('spaces')
-        .select('id, name, color, icon, workspace_id, status, is_locked, is_private, created_by, created_at', { count: 'exact' })
+        .select('id, name, color, icon, workspace_id, status, is_locked, is_private, created_by', { count: 'exact' })
         .is('deleted_at', null)
-        .order('created_at', { ascending: false })
+        .order('name')
         .range(offset, offset + limit - 1);
 
       if (search) query = query.ilike('name', `%${search}%`);
@@ -64,7 +64,6 @@ router.get('/', async (req: Request, res: Response) => {
         is_private: s.is_private,
         created_by: s.created_by,
         created_by_name: userMap.get(s.created_by) || 'Unknown',
-        created_at: s.created_at,
         member_count: memberCounts[s.id] || 0,
       }));
       total = count || 0;
@@ -72,9 +71,9 @@ router.get('/', async (req: Request, res: Response) => {
     } else if (tab === 'folders') {
       let query = supabaseAdmin
         .from('folders')
-        .select('id, name, space_id, status, is_locked, is_private, created_by, created_at', { count: 'exact' })
+        .select('id, name, space_id, status, is_locked, is_private, created_by', { count: 'exact' })
         .is('deleted_at', null)
-        .order('created_at', { ascending: false })
+        .order('name')
         .range(offset, offset + limit - 1);
 
       if (search) query = query.ilike('name', `%${search}%`);
@@ -104,7 +103,6 @@ router.get('/', async (req: Request, res: Response) => {
         is_private: f.is_private,
         created_by: f.created_by,
         created_by_name: userMap.get(f.created_by) || 'Unknown',
-        created_at: f.created_at,
         member_count: memberCounts[f.id] || 0,
       }));
       total = count || 0;
@@ -112,9 +110,9 @@ router.get('/', async (req: Request, res: Response) => {
     } else if (tab === 'lists') {
       let query = supabaseAdmin
         .from('lists')
-        .select('id, name, space_id, folder_id, status, is_locked, is_private, created_by, created_at', { count: 'exact' })
+        .select('id, name, space_id, folder_id, status, is_locked, is_private, created_by', { count: 'exact' })
         .is('deleted_at', null)
-        .order('created_at', { ascending: false })
+        .order('name')
         .range(offset, offset + limit - 1);
 
       if (search) query = query.ilike('name', `%${search}%`);
@@ -148,7 +146,6 @@ router.get('/', async (req: Request, res: Response) => {
         is_private: l.is_private,
         created_by: l.created_by,
         created_by_name: userMap.get(l.created_by) || 'Unknown',
-        created_at: l.created_at,
         member_count: memberCounts[l.id] || 0,
       }));
       total = count || 0;

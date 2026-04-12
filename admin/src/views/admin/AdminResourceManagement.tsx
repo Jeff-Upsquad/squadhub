@@ -12,7 +12,6 @@ type Resource = {
   is_private: boolean;
   created_by: string;
   created_by_name: string;
-  created_at: string;
   member_count: number;
   // Space fields
   color?: string;
