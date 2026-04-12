@@ -6,41 +6,106 @@ import TaskPriorityBadge from './TaskPriorityBadge';
 
 function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return null;
-  const d = new Date(dateStr);
-  const now = new Date();
-  const diff = d.getTime() - now.getTime();
-  const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-  const formatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  if (days < 0) return { text: formatted, color: 'text-red-500' };
-  if (days <= 1) return { text: days === 0 ? 'Today' : 'Tomorrow', color: 'text-yellow-600' };
-  return { text: formatted, color: 'text-[#666666]' };
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 // ---- Task card ----
-function TaskCard({ task, statuses }: { task: Task; statuses: SpaceStatus[] }) {
+function TaskCard({ task, statuses, listName }: { task: Task; statuses: SpaceStatus[]; listName: string }) {
   const { setActiveTask } = usePMStore();
+  const tags = (task as any).tags || [];
+  const subtasks = task.subtasks || [];
+  const completedSubtasks = subtasks.filter((s: any) => s.status === 'done' || (s as any).category === 'done').length;
   const due = formatDate(task.due_date);
+  const commentCount = task.comment_count || 0;
+  const attachmentCount = (task as any).attachment_count || 0;
 
   return (
     <div
       onClick={() => setActiveTask(task.id)}
-      className="mb-2 cursor-pointer rounded-lg border border-[#E2E8F0] bg-[#F1F5F9] p-3 transition hover:border-[#CAD5E2] hover:bg-[#F8FAFC]/60"
+      className="mb-2.5 cursor-pointer rounded-lg border border-[#E2E8F0] bg-white p-3 transition hover:border-[#CAD5E2] hover:shadow-sm"
     >
-      <p className="mb-2 text-sm text-[#0F172B]">{task.title}</p>
-      <div className="flex flex-wrap items-center gap-2">
-        <TaskPriorityBadge priority={task.priority} />
-        {due && <span className={`text-xs ${due.color}`}>{due.text}</span>}
+      {/* Top row: tags, priority flag, task progress */}
+      <div className="mb-2 flex items-center gap-1.5">
+        {tags.map((tag: any) => (
+          <span
+            key={tag.id || tag.name}
+            className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+            style={{
+              backgroundColor: `${tag.color || '#f97316'}20`,
+              color: tag.color || '#f97316',
+            }}
+          >
+            {tag.name}
+          </span>
+        ))}
+        <TaskPriorityBadge priority={task.priority} variant="flag" />
+        {subtasks.length > 0 && (
+          <span className="ml-auto flex items-center gap-1 text-[10px] text-[#999999]">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            Task {completedSubtasks}/{subtasks.length}
+          </span>
+        )}
+      </div>
+
+      {/* Title */}
+      <p className="mb-1.5 text-sm font-medium text-[#0F172B]">{task.title}</p>
+
+      {/* Project sub-line */}
+      {listName && (
+        <div className="mb-2.5 flex items-center gap-1 text-xs text-[#999999]">
+          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+          </svg>
+          {listName} Project
+        </div>
+      )}
+
+      {/* Bottom metadata row */}
+      <div className="flex items-center gap-3">
+        {/* Avatar stack */}
         {task.assignees && task.assignees.length > 0 && (
-          <div className="ml-auto flex -space-x-1">
+          <div className="flex -space-x-1">
             {task.assignees.slice(0, 3).map((u: any) => (
               <div
                 key={u.id}
-                className="flex h-5 w-5 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#0F172B] ring-1 ring-white"
+                className="flex h-6 w-6 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#0F172B] ring-1.5 ring-white"
                 title={u.display_name || u.email}
               >
                 {(u.display_name || u.email)?.[0]?.toUpperCase()}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Due date */}
+        {due && (
+          <div className="flex items-center gap-1 text-[11px] text-[#666666]">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {due}
+          </div>
+        )}
+
+        {/* Attachment count */}
+        {attachmentCount > 0 && (
+          <div className="flex items-center gap-1 text-[11px] text-[#666666]">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+            </svg>
+            {attachmentCount}
+          </div>
+        )}
+
+        {/* Comment count */}
+        {commentCount > 0 && (
+          <div className="flex items-center gap-1 text-[11px] text-[#666666]">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            {commentCount}
           </div>
         )}
       </div>
@@ -54,12 +119,14 @@ function BoardColumn({
   tasks,
   allStatuses,
   listId,
+  listName,
   onDrop,
 }: {
   status: SpaceStatus;
   tasks: Task[];
   allStatuses: SpaceStatus[];
   listId: string;
+  listName: string;
   onDrop: (taskId: string, statusId: string) => void;
 }) {
   const [addingTask, setAddingTask] = useState(false);
@@ -74,7 +141,6 @@ function BoardColumn({
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
-    // Only clear if leaving the column entirely (not entering a child)
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setIsDragOver(false);
     }
@@ -101,7 +167,7 @@ function BoardColumn({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={`flex w-72 shrink-0 flex-col rounded-lg transition-colors ${
-        isDragOver ? 'bg-[#E8F0FE] ring-2 ring-[#2962FF]/30' : 'bg-[#F1F5F9]/60'
+        isDragOver ? 'bg-[#E8F0FE] ring-2 ring-[#2962FF]/30' : 'bg-[#F8FAFC]'
       }`}
     >
       {/* Column header */}
@@ -110,10 +176,31 @@ function BoardColumn({
           className="h-2.5 w-2.5 rounded-full"
           style={{ backgroundColor: status.color }}
         />
-        <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#666666] font-[family-name:var(--font-mono)]">
+        <span className="text-sm font-semibold text-[#0F172B]">
           {status.name}
         </span>
         <span className="text-xs text-[#999999]">{tasks.length}</span>
+
+        <div className="flex-1" />
+
+        {/* Ellipsis */}
+        <button className="rounded p-0.5 text-[#CAD5E2] hover:bg-[#E2E8F0] hover:text-[#999999]">
+          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+            <circle cx="5" cy="12" r="1.5" />
+            <circle cx="12" cy="12" r="1.5" />
+            <circle cx="19" cy="12" r="1.5" />
+          </svg>
+        </button>
+
+        {/* Plus */}
+        <button
+          onClick={() => setAddingTask(true)}
+          className="rounded p-0.5 text-[#CAD5E2] hover:bg-[#E2E8F0] hover:text-[#999999]"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
       </div>
 
       {/* Cards */}
@@ -124,7 +211,7 @@ function BoardColumn({
             draggable
             onDragStart={(e) => e.dataTransfer.setData('text/plain', task.id)}
           >
-            <TaskCard task={task} statuses={allStatuses} />
+            <TaskCard task={task} statuses={allStatuses} listName={listName} />
           </div>
         ))}
 
@@ -141,13 +228,13 @@ function BoardColumn({
               }}
               onBlur={handleAdd}
               placeholder="Task name..."
-              className="w-full rounded-lg border border-[#CAD5E2] bg-[#F8FAFC] px-3 py-2 text-sm text-[#0F172B] placeholder-[#999999] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
+              className="w-full rounded-lg border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#999999] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
             />
           </div>
         ) : (
           <button
             onClick={() => setAddingTask(true)}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-[#999999] transition hover:bg-[#F8FAFC]/50 hover:text-[#0F172B]"
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-[#999999] transition hover:bg-white/60 hover:text-[#0F172B]"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -165,18 +252,24 @@ export default function BoardView({
   listId,
   statuses,
   filters,
+  listName = '',
+  searchQuery = '',
 }: {
   listId: string;
   statuses: SpaceStatus[];
   filters?: { status?: string; priority?: string; sort?: string };
+  listName?: string;
+  searchQuery?: string;
 }) {
   const { data: tasks, isLoading } = useTasks(listId, filters);
   const updateTask = useUpdateTask(listId);
 
-  const groups = useMemo(
-    () => groupTasksByStatus(tasks || [], statuses),
-    [tasks, statuses],
-  );
+  const groups = useMemo(() => {
+    const allTasks = (tasks || []).filter(
+      (t) => !searchQuery || t.title.toLowerCase().includes(searchQuery.toLowerCase()),
+    );
+    return groupTasksByStatus(allTasks, statuses);
+  }, [tasks, statuses, searchQuery]);
 
   const handleDrop = (taskId: string, statusId: string) => {
     updateTask.mutate({ id: taskId, status: statusId });
@@ -199,6 +292,7 @@ export default function BoardView({
           tasks={groupTasks}
           allStatuses={statuses}
           listId={listId}
+          listName={listName}
           onDrop={handleDrop}
         />
       ))}

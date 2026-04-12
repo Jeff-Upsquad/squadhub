@@ -19,15 +19,15 @@ export function DateSeparator({ date }: { date: string }) {
   return (
     <div className="relative h-[32px] w-full">
       {/* Horizontal line at y=15px */}
-      <div className="absolute left-0 top-[15px] h-px w-full bg-[#DDDDDD]" />
+      <div className="absolute left-0 top-[15px] h-px w-full bg-divider" />
       {/* Centered pill */}
-      <button className="absolute left-1/2 top-0 -translate-x-1/2 flex items-center justify-center gap-1 rounded-[100px] border border-[#DDDDDD] bg-white px-4 py-2 dark:border-divider dark:bg-surface">
-        <span className="font-[Lato] text-[12px] font-bold leading-[16px] text-[#1D1C1D] whitespace-nowrap">
+      <button className="absolute left-1/2 top-0 -translate-x-1/2 flex items-center justify-center gap-1 rounded-[100px] border border-divider bg-surface px-4 py-2">
+        <span className="font-[Lato] text-[12px] font-bold leading-[16px] text-foreground whitespace-nowrap">
           {date}
         </span>
         {/* Chevron arrow (4.56x8 rotated 90deg = dropdown) */}
         <svg className="h-[12.56px] w-[14px]" viewBox="0 0 14 12.56" fill="none">
-          <path d="M5 2L9.56 6.28L5 10.56" stroke="#1D1C1D" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" transform="rotate(90 7 6.28)" />
+          <path d="M5 2L9.56 6.28L5 10.56" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" transform="rotate(90 7 6.28)" />
         </svg>
       </button>
     </div>
@@ -39,7 +39,7 @@ function ReactionBadge({ emoji, count }: { emoji: string; count: number }) {
   return (
     <button className="box-border flex items-center gap-[6px] rounded-[100px] border-[0.5px] border-[#1264A3] bg-[rgba(18,100,163,0.1)] px-[6px] py-[4px] hover:bg-[rgba(18,100,163,0.15)] transition">
       <span className="h-4 w-4 text-[16px] leading-[16px]">{emoji}</span>
-      <span className="font-[Lato] text-[12px] font-normal leading-[16px] text-[#1D1C1D]">{count}</span>
+      <span className="font-[Lato] text-[12px] font-normal leading-[16px] text-foreground">{count}</span>
     </button>
   );
 }
@@ -47,12 +47,12 @@ function ReactionBadge({ emoji, count }: { emoji: string; count: number }) {
 // ---- Add reaction button (Component 1 - icon variant) ----
 function AddReactionButton() {
   return (
-    <button className="flex items-start rounded-[100px] bg-[#F8F8F8] px-[10px] py-[4px] hover:bg-[#ebebeb] transition dark:bg-surface-alt">
+    <button className="flex items-start rounded-[100px] bg-surface-alt px-[10px] py-[4px] hover:bg-divider transition">
       <svg className="h-4 w-[15.5px]" viewBox="0 0 15.5 16" fill="none">
-        <circle cx="7.75" cy="8" r="7" stroke="#616061" strokeWidth="1.2" />
-        <circle cx="5.5" cy="6.5" r="0.8" fill="#616061" />
-        <circle cx="10" cy="6.5" r="0.8" fill="#616061" />
-        <path d="M5 10c.8 1.2 2.2 2 3.75 2s2.95-.8 3.75-2" stroke="#616061" strokeWidth="1.1" strokeLinecap="round" fill="none" />
+        <circle cx="7.75" cy="8" r="7" stroke="currentColor" strokeWidth="1.2" />
+        <circle cx="5.5" cy="6.5" r="0.8" fill="currentColor" />
+        <circle cx="10" cy="6.5" r="0.8" fill="currentColor" />
+        <path d="M5 10c.8 1.2 2.2 2 3.75 2s2.95-.8 3.75-2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" fill="none" />
       </svg>
     </button>
   );
@@ -61,7 +61,7 @@ function AddReactionButton() {
 // ---- Thread reply bar (Frame 39) ----
 function ThreadReplyBar({ replyCount }: { replyCount: number }) {
   return (
-    <button className="flex w-full items-center justify-between rounded-[4px] border border-[#DDDDDD] bg-white px-[6px] py-[4px] hover:bg-gray-50 transition dark:border-divider dark:bg-surface">
+    <button className="flex w-full items-center justify-between rounded-[4px] border border-divider bg-surface px-[6px] py-[4px] hover:bg-surface-alt transition">
       <div className="flex items-center gap-[7px]">
         {/* Stacked avatars */}
         <div className="flex items-start gap-[4px]">
@@ -69,11 +69,11 @@ function ThreadReplyBar({ replyCount }: { replyCount: number }) {
           <div className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-[#FECACA] text-[10px] font-bold text-[#0F172B] overflow-hidden">B</div>
         </div>
         <span className="font-[Lato] text-[12px] font-normal leading-[16px] text-[#1364A3]">{replyCount} replies</span>
-        <span className="font-[Lato] text-[12px] font-normal leading-[16px] text-[#616061]">View thread</span>
+        <span className="font-[Lato] text-[12px] font-normal leading-[16px] text-foreground-muted">View thread</span>
       </div>
       {/* Right arrow (rotated 90deg from forward arrow) */}
       <svg className="h-[12.56px] w-[12px]" viewBox="0 0 12 12.56" fill="none">
-        <path d="M4 2L8.56 6.28L4 10.56" stroke="#1D1C1D" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M4 2L8.56 6.28L4 10.56" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </button>
   );
@@ -114,7 +114,7 @@ export default function MessageBubble({ message }: { message: Message }) {
   const hasMention = message.content?.includes('@');
 
   return (
-    <div className="group relative flex gap-[6px] px-[20px] py-[10px] hover:bg-[#f8f8f8] dark:hover:bg-white/[0.02]">
+    <div className="group relative flex gap-[6px] px-[20px] py-[10px] hover:bg-surface-alt">
       <HoverActions />
       {/* Avatar wrapper: padding 3px 0px */}
       <div className="flex items-center py-[3px]">
@@ -127,10 +127,10 @@ export default function MessageBubble({ message }: { message: Message }) {
         {/* Header row with name + time */}
         <div className="flex flex-col pr-[20px]">
           <div className="flex items-center gap-[10px]">
-            <span className="font-[Lato] text-[15px] font-black leading-[22px] text-[#1D1C1D]">
+            <span className="font-[Lato] text-[15px] font-black leading-[22px] text-foreground">
               {sender?.display_name || 'Unknown'}
             </span>
-            <span className="font-[Lato] text-[12px] font-normal leading-[16px] text-[#616061]">
+            <span className="font-[Lato] text-[12px] font-normal leading-[16px] text-foreground-muted">
               {time}
             </span>
           </div>
@@ -142,7 +142,7 @@ export default function MessageBubble({ message }: { message: Message }) {
               </span>
             )}
             {message.content && (
-              <p className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-[Lato] text-[15px] font-normal leading-[22px] text-[#1D1C1D]">
+              <p className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-[Lato] text-[15px] font-normal leading-[22px] text-foreground">
                 {hasMention ? message.content.replace(/@\w+\s*/g, '') : message.content}
               </p>
             )}
