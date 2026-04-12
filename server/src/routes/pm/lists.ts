@@ -88,14 +88,21 @@ router.get('/lists/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    // Get task count
-    const { count } = await supabaseAdmin
-      .from('tasks')
-      .select('*', { count: 'exact', head: true })
-      .eq('list_id', id)
-      .is('parent_task_id', null);
+    // Get task count and space statuses in parallel
+    const [{ count }, { data: spaceStatuses }] = await Promise.all([
+      supabaseAdmin
+        .from('tasks')
+        .select('*', { count: 'exact', head: true })
+        .eq('list_id', id)
+        .is('parent_task_id', null),
+      supabaseAdmin
+        .from('space_statuses')
+        .select('*')
+        .eq('space_id', list.space_id)
+        .order('position'),
+    ]);
 
-    res.json({ success: true, data: { ...list, task_count: count || 0, my_access_level: userLevel } });
+    res.json({ success: true, data: { ...list, task_count: count || 0, my_access_level: userLevel, space_statuses: spaceStatuses || [] } });
   } catch (err) {
     console.error('Get list error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });

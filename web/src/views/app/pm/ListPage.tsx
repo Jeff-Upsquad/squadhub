@@ -52,11 +52,11 @@ export default function ListPage() {
   });
 
   const statuses: SpaceStatus[] = useMemo(
-    () => spaceData?.space_statuses || spaceData?.statuses || [],
-    [spaceData],
+    () => spaceData?.space_statuses || spaceData?.statuses || listData?.space_statuses || [],
+    [spaceData, listData],
   );
 
-  const myAccess: AccessLevel | undefined = spaceData?.my_access_level;
+  const myAccess: AccessLevel | undefined = spaceData?.my_access_level || listData?.my_access_level;
   const isManager = canAtLeast(myAccess, 'manager');
   const canEdit = canAtLeast(myAccess, 'member');
 
