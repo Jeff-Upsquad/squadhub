@@ -229,7 +229,7 @@ router.get('/:type/:id/members', async (req: Request, res: Response) => {
 
     const { data, error } = await supabaseAdmin
       .from('resource_memberships')
-      .select('*, users(id, display_name, email, avatar_url)')
+      .select('*, users!resource_memberships_user_id_fkey(id, display_name, email, avatar_url)')
       .eq('resource_type', type)
       .eq('resource_id', id)
       .order('created_at');
@@ -276,7 +276,7 @@ router.post('/:type/:id/members', async (req: Request, res: Response) => {
         access_level: body.access_level,
         invited_by: req.userId,
       })
-      .select('*, users(id, display_name, email, avatar_url)')
+      .select('*, users!resource_memberships_user_id_fkey(id, display_name, email, avatar_url)')
       .single();
 
     if (error) {
@@ -315,7 +315,7 @@ router.put('/members/:id', async (req: Request, res: Response) => {
       .from('resource_memberships')
       .update({ access_level: body.access_level })
       .eq('id', id)
-      .select('*, users(id, display_name, email, avatar_url)')
+      .select('*, users!resource_memberships_user_id_fkey(id, display_name, email, avatar_url)')
       .single();
 
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
