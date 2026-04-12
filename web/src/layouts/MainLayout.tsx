@@ -21,22 +21,53 @@ import ThemeToggle from '../components/ThemeToggle';
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'more';
 export type HomeView = 'hub' | 'chat' | 'tasks' | 'checkin' | 'checkin-partners' | 'time-management';
 
-// ---- Figma icon assets (served by Figma MCP, valid 7 days) ----
-const ICON_ASSETS = {
-  home: 'https://www.figma.com/api/mcp/asset/00efe301-79b8-403a-9e0f-db91f3b1da16',
-  docs: 'https://www.figma.com/api/mcp/asset/8ed7ccc0-ee82-4317-88cd-810b7b230c28',
-  cal: 'https://www.figma.com/api/mcp/asset/2fa815f8-b1e9-4658-abd0-65716955c52e',
-  apps: 'https://www.figma.com/api/mcp/asset/25711e43-6613-4887-84ec-89582fed75d0',
-  more: 'https://www.figma.com/api/mcp/asset/69645b63-6fc3-4cab-b1f8-a9cd15a5ed2d',
-};
-
 // ---- Section definitions matching Figma icon bar (72px wide, 38x38 containers, 22x22 icons) ----
-const SECTIONS: { id: ActiveSection; label: string }[] = [
-  { id: 'home', label: 'Home' },
-  { id: 'docs', label: 'Docs' },
-  { id: 'cal', label: 'Cal' },
-  { id: 'apps', label: 'Apps' },
-  { id: 'more', label: 'More' },
+const SECTIONS: { id: ActiveSection; label: string; icon: React.ReactNode }[] = [
+  {
+    id: 'home',
+    label: 'Home',
+    icon: (
+      <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'docs',
+    label: 'Docs',
+    icon: (
+      <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'cal',
+    label: 'Cal',
+    icon: (
+      <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+      </svg>
+    ),
+  },
+  {
+    id: 'apps',
+    label: 'Apps',
+    icon: (
+      <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'more',
+    label: 'More',
+    icon: (
+      <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+      </svg>
+    ),
+  },
 ];
 
 const SECTION_TITLES: Record<ActiveSection, string> = {
@@ -166,11 +197,7 @@ export default function MainLayout() {
                   ? 'bg-white shadow-[0px_1px_3px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]'
                   : ''
               }`}>
-                <img
-                  alt={section.label}
-                  className="h-[22px] w-[22px]"
-                  src={ICON_ASSETS[section.id as keyof typeof ICON_ASSETS]}
-                />
+                {section.icon}
               </div>
               {/* Label: Inter Medium 11px, line-height 16.5px */}
               <span className={`font-[Inter] text-[11px] font-medium leading-[16.5px] tracking-[0.065px] text-center whitespace-nowrap ${
@@ -223,11 +250,11 @@ export default function MainLayout() {
             />
           ) : (
             <div className="flex flex-col">
-              <div className="border-b border-[rgba(29,28,29,0.13)] px-4 py-3">
-                <h3 className="text-sm font-semibold text-[#1D1C1D]">{SECTION_TITLES[activeSection]}</h3>
+              <div className="border-b border-divider px-4 py-3">
+                <h3 className="text-sm font-semibold text-foreground">{SECTION_TITLES[activeSection]}</h3>
               </div>
               <div className="flex flex-1 items-center justify-center px-4 py-12">
-                <p className="text-center text-[10px] uppercase tracking-[0.12em] text-[#616061]">Coming soon</p>
+                <p className="text-center text-[10px] uppercase tracking-[0.12em] text-foreground-muted">Coming soon</p>
               </div>
             </div>
           )}
@@ -240,52 +267,52 @@ export default function MainLayout() {
           homeView === 'chat' ? (
             <>
               {activeChannelId && (
-                <div className="flex flex-col border-b border-[rgba(29,28,29,0.13)]">
+                <div className="flex flex-col border-b border-divider">
                   <div className="flex items-center justify-between px-2 py-[7px]">
                     <div className="flex items-center gap-1 w-[360px]">
                       {/* Channel name with hashtag */}
                       <div className="flex items-center gap-1.5 rounded px-2 py-1 overflow-hidden">
-                        <svg className="h-4 w-4 shrink-0 text-[rgba(29,28,29,0.7)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="h-4 w-4 shrink-0 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
                         </svg>
-                        <span className="text-[18px] font-black leading-[26px] text-[#1D1C1D]">
+                        <span className="text-[18px] font-black leading-[26px] text-foreground">
                           {activeChannel?.name}
                         </span>
-                        <svg className="h-4 w-4 shrink-0 text-[rgba(29,28,29,0.7)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="h-4 w-4 shrink-0 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                       </div>
                       {activeChannel?.description && (
-                        <span className="text-[12px] leading-[16px] text-[rgba(29,28,29,0.7)] truncate flex-1">
+                        <span className="text-[12px] leading-[16px] text-foreground-muted truncate flex-1">
                           {activeChannel.description}
                         </span>
                       )}
                     </div>
                     <div className="flex items-center gap-2.5">
                       {/* Members pill */}
-                      <div className="flex items-center gap-2 rounded-[7px] border border-[rgba(29,28,29,0.13)] px-2 py-1.5">
-                        <span className="text-[12px] font-semibold leading-[16px] text-[rgba(29,28,29,0.7)]">
+                      <div className="flex items-center gap-2 rounded-[7px] border border-divider px-2 py-1.5">
+                        <span className="text-[12px] font-semibold leading-[16px] text-foreground-muted">
                           {channels.length}
                         </span>
                       </div>
                       {/* Huddle */}
-                      <div className="flex items-center gap-2 rounded-[7px] border border-[rgba(29,28,29,0.13)] px-2 py-1.5">
-                        <svg className="h-[22px] w-[22px] text-[rgba(29,28,29,0.7)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="flex items-center gap-2 rounded-[7px] border border-divider px-2 py-1.5">
+                        <svg className="h-[22px] w-[22px] text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
                         </svg>
                       </div>
                       {/* Canvas */}
-                      <div className="flex items-center gap-2 rounded-[7px] border border-[rgba(29,28,29,0.13)] px-2 py-1.5">
-                        <svg className="h-5 w-5 text-[rgba(29,28,29,0.7)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="flex items-center gap-2 rounded-[7px] border border-divider px-2 py-1.5">
+                        <svg className="h-5 w-5 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                         </svg>
-                        <span className="text-[12px] font-semibold leading-[16px] text-[rgba(29,28,29,0.7)]">Canvas</span>
+                        <span className="text-[12px] font-semibold leading-[16px] text-foreground-muted">Canvas</span>
                       </div>
                       {/* Settings */}
                       <button
                         onClick={() => setShowChannelSettings(!showChannelSettings)}
-                        className={`rounded-[7px] border border-[rgba(29,28,29,0.13)] p-1.5 transition ${
-                          showChannelSettings ? 'bg-surface-alt text-foreground' : 'text-[rgba(29,28,29,0.7)] hover:bg-surface-alt hover:text-foreground'
+                        className={`rounded-[7px] border border-divider p-1.5 transition ${
+                          showChannelSettings ? 'bg-surface-alt text-foreground' : 'text-foreground-muted hover:bg-surface-alt hover:text-foreground'
                         }`}
                         title="Channel settings"
                       >
