@@ -13,11 +13,13 @@ export default function TaskRow({
   statuses,
   onStatusChange,
   depth = 0,
+  canEdit = true,
 }: {
   task: Task;
   statuses: SpaceStatus[];
   onStatusChange: (taskId: string, statusId: string) => void;
   depth?: number;
+  canEdit?: boolean;
 }) {
   const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection } = usePMStore();
   const [expanded, setExpanded] = useState(false);
@@ -28,11 +30,11 @@ export default function TaskRow({
   return (
     <>
       <div
-        draggable
-        onDragStart={(e) => {
+        draggable={canEdit}
+        onDragStart={canEdit ? (e) => {
           e.dataTransfer.setData('text/plain', task.id);
           e.dataTransfer.effectAllowed = 'move';
-        }}
+        } : undefined}
         onClick={() => setActiveTask(task.id)}
         className={`group flex cursor-pointer items-center border-b border-[#E2E8F0]/50 px-4 py-2.5 transition hover:bg-[#F8FAFC] ${
           isActive ? 'bg-[#F1F5F9]' : ''
@@ -41,13 +43,15 @@ export default function TaskRow({
       >
         {/* Checkbox */}
         <div className="w-8 shrink-0 flex items-center justify-center">
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={(e) => { e.stopPropagation(); toggleTaskSelection(task.id); }}
-            onClick={(e) => e.stopPropagation()}
-            className="h-3.5 w-3.5 rounded border-[#CAD5E2] text-[#2962FF] focus:ring-[#2962FF] cursor-pointer"
-          />
+          {canEdit && (
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={(e) => { e.stopPropagation(); toggleTaskSelection(task.id); }}
+              onClick={(e) => e.stopPropagation()}
+              className="h-3.5 w-3.5 rounded border-[#CAD5E2] text-[#2962FF] focus:ring-[#2962FF] cursor-pointer"
+            />
+          )}
         </div>
 
         {/* Name task column */}
@@ -141,6 +145,7 @@ export default function TaskRow({
           statuses={statuses}
           onStatusChange={onStatusChange}
           depth={depth + 1}
+          canEdit={canEdit}
         />
       ))}
     </>

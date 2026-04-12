@@ -42,9 +42,11 @@ function formatSeconds(totalSeconds: number): string {
 export default function TaskDetailPanel({
   statuses,
   listId,
+  canEdit = true,
 }: {
   statuses: SpaceStatus[];
   listId: string;
+  canEdit?: boolean;
 }) {
   const { activeTaskId, setActiveTask, timer, startTimer: globalStartTimer, stopTimer: globalStopTimer } = usePMStore();
   const { data: task, isLoading } = useTask(activeTaskId);
@@ -172,16 +174,18 @@ export default function TaskDetailPanel({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
             </svg>
           </button>
-          <button
-            onClick={handleDelete}
-            className="rounded p-1.5 text-[#999999] hover:bg-[#F1F5F9] hover:text-red-500"
-          >
-            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-              <circle cx="5" cy="12" r="1.5" />
-              <circle cx="12" cy="12" r="1.5" />
-              <circle cx="19" cy="12" r="1.5" />
-            </svg>
-          </button>
+          {canEdit && (
+            <button
+              onClick={handleDelete}
+              className="rounded p-1.5 text-[#999999] hover:bg-[#F1F5F9] hover:text-red-500"
+            >
+              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="5" cy="12" r="1.5" />
+                <circle cx="12" cy="12" r="1.5" />
+                <circle cx="19" cy="12" r="1.5" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -200,8 +204,8 @@ export default function TaskDetailPanel({
             />
           ) : (
             <h2
-              onClick={() => { setEditing('title'); setEditValue(task.title); }}
-              className="mb-5 cursor-pointer text-xl font-bold text-[#0F172B] hover:text-[#0F172B]/80"
+              onClick={canEdit ? () => { setEditing('title'); setEditValue(task.title); } : undefined}
+              className={`mb-5 text-xl font-bold text-[#0F172B] ${canEdit ? 'cursor-pointer hover:text-[#0F172B]/80' : ''}`}
             >
               {task.title}
             </h2>
@@ -220,7 +224,8 @@ export default function TaskDetailPanel({
               <select
                 value={(task as any).status}
                 onChange={(e) => updateTask.mutate({ id: task.id, status: e.target.value })}
-                className="rounded border border-transparent px-2 py-1 text-sm text-[#0F172B] outline-none hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
+                disabled={!canEdit}
+                className={`rounded border border-transparent px-2 py-1 text-sm text-[#0F172B] outline-none ${canEdit ? 'hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]' : 'cursor-default opacity-70'}`}
                 style={status ? { color: status.color } : {}}
               >
                 {statuses.map((s) => (
@@ -274,7 +279,8 @@ export default function TaskDetailPanel({
                   <span className="text-[10px] text-[#999999] uppercase">Work</span>
                   <input
                     type="date"
-                    className="rounded border border-transparent px-1.5 py-0.5 text-xs text-[#0F172B] outline-none hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
+                    disabled={!canEdit}
+                    className={`rounded border border-transparent px-1.5 py-0.5 text-xs text-[#0F172B] outline-none ${canEdit ? 'hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]' : 'cursor-default opacity-70'}`}
                   />
                 </div>
                 <span className="text-[#CAD5E2]">|</span>
@@ -282,7 +288,8 @@ export default function TaskDetailPanel({
                   <span className="text-[10px] text-[#999999] uppercase">Start</span>
                   <input
                     type="date"
-                    className="rounded border border-transparent px-1.5 py-0.5 text-xs text-[#0F172B] outline-none hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
+                    disabled={!canEdit}
+                    className={`rounded border border-transparent px-1.5 py-0.5 text-xs text-[#0F172B] outline-none ${canEdit ? 'hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]' : 'cursor-default opacity-70'}`}
                   />
                 </div>
                 <span className="text-[#CAD5E2]">|</span>
@@ -291,8 +298,9 @@ export default function TaskDetailPanel({
                   <input
                     type="date"
                     value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
-                    onChange={(e) => updateTask.mutate({ id: task.id, due_date: e.target.value || null })}
-                    className="rounded border border-transparent px-1.5 py-0.5 text-xs text-[#0F172B] outline-none hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
+                    onChange={canEdit ? (e) => updateTask.mutate({ id: task.id, due_date: e.target.value || null }) : undefined}
+                    disabled={!canEdit}
+                    className={`rounded border border-transparent px-1.5 py-0.5 text-xs text-[#0F172B] outline-none ${canEdit ? 'hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]' : 'cursor-default opacity-70'}`}
                   />
                 </div>
               </div>
@@ -332,8 +340,8 @@ export default function TaskDetailPanel({
                     />
                   ) : (
                     <span
-                      onClick={() => { setEditingEstimate(true); setEstimateInput(formatMinutes(task.time_estimate)); }}
-                      className="cursor-pointer rounded px-1.5 py-0.5 text-xs text-[#0F172B] hover:bg-[#F1F5F9]"
+                      onClick={canEdit ? () => { setEditingEstimate(true); setEstimateInput(formatMinutes(task.time_estimate)); } : undefined}
+                      className={`rounded px-1.5 py-0.5 text-xs text-[#0F172B] ${canEdit ? 'cursor-pointer hover:bg-[#F1F5F9]' : ''}`}
                     >
                       {task.time_estimate ? formatMinutes(task.time_estimate) : <span className="text-[#CAD5E2]">&mdash;</span>}
                     </span>
@@ -351,7 +359,7 @@ export default function TaskDetailPanel({
                     }
                   </span>
                 </div>
-                {isTimerForThisTask ? (
+                {canEdit && (isTimerForThisTask ? (
                   <button
                     onClick={handleStopTimer}
                     className="flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-100"
@@ -371,7 +379,7 @@ export default function TaskDetailPanel({
                     </svg>
                     Track
                   </button>
-                )}
+                ))}
               </div>
             </div>
           </div>
@@ -391,10 +399,10 @@ export default function TaskDetailPanel({
               />
             ) : (
               <div
-                onClick={() => { setEditing('description'); setEditValue(task.description || ''); }}
-                className="min-h-[60px] cursor-pointer rounded-lg border border-[#E2E8F0] bg-[#FAFBFC] px-4 py-3 text-sm text-[#0F172B] transition hover:border-[#CAD5E2]"
+                onClick={canEdit ? () => { setEditing('description'); setEditValue(task.description || ''); } : undefined}
+                className={`min-h-[60px] rounded-lg border border-[#E2E8F0] bg-[#FAFBFC] px-4 py-3 text-sm text-[#0F172B] transition ${canEdit ? 'cursor-pointer hover:border-[#CAD5E2]' : ''}`}
               >
-                {task.description || <span className="text-[#CAD5E2]">Add a description...</span>}
+                {task.description || <span className="text-[#CAD5E2]">{canEdit ? 'Add a description...' : 'No description'}</span>}
               </div>
             )}
           </div>

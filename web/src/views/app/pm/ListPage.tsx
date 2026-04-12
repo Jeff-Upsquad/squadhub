@@ -200,6 +200,7 @@ export default function ListPage() {
             filters={filters}
             groupByStatus={groupByStatus}
             searchQuery={searchQuery}
+            canEdit={canEdit}
           />
         ) : (
           <BoardView
@@ -208,11 +209,12 @@ export default function ListPage() {
             filters={filters}
             listName={listData?.name || ''}
             searchQuery={searchQuery}
+            canEdit={canEdit}
           />
         )}
 
         {activeTaskId && !showSettings && (
-          <TaskDetailPanel statuses={statuses} listId={activeListId} />
+          <TaskDetailPanel statuses={statuses} listId={activeListId} canEdit={canEdit} />
         )}
 
         {showSettings && activeListId && (

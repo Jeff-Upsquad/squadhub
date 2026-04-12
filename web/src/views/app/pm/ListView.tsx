@@ -10,12 +10,14 @@ export default function ListView({
   filters,
   groupByStatus = true,
   searchQuery = '',
+  canEdit = true,
 }: {
   listId: string;
   statuses: SpaceStatus[];
   filters?: { status?: string; priority?: string; sort?: string };
   groupByStatus?: boolean;
   searchQuery?: string;
+  canEdit?: boolean;
 }) {
   const { data: tasks, isLoading } = useTasks(listId, filters);
   const updateTask = useUpdateTask(listId);
@@ -72,13 +74,14 @@ export default function ListView({
               onStatusChange={handleStatusChange}
               showHeader={groupByStatus}
               onDrop={handleStatusChange}
+              canEdit={canEdit}
             />
           ))}
         </div>
       </div>
 
       {/* Selection action bar */}
-      {selectedTasks.length > 0 && (
+      {canEdit && selectedTasks.length > 0 && (
         <div className="sticky bottom-0 z-30 flex items-center justify-center gap-3 border-t border-[#E2E8F0] bg-white px-4 py-2.5 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
           <span className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-medium text-white">
             {selectedTasks.length} Selected
@@ -135,6 +138,7 @@ function StatusGroup({
   onStatusChange,
   showHeader = true,
   onDrop,
+  canEdit = true,
 }: {
   status: SpaceStatus;
   tasks: Task[];
@@ -143,6 +147,7 @@ function StatusGroup({
   onStatusChange: (taskId: string, statusId: string) => void;
   showHeader?: boolean;
   onDrop?: (taskId: string, statusId: string) => void;
+  canEdit?: boolean;
 }) {
   const { collapsedGroups, toggleGroupCollapse } = usePMStore();
   const isCollapsed = collapsedGroups[status.id] || false;
@@ -225,6 +230,7 @@ function StatusGroup({
           task={task}
           statuses={allStatuses}
           onStatusChange={onStatusChange}
+          canEdit={canEdit}
         />
       ))}
     </div>

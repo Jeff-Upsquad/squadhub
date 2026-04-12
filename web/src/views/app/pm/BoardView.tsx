@@ -121,6 +121,7 @@ function BoardColumn({
   listId,
   listName,
   onDrop,
+  canEdit = true,
 }: {
   status: SpaceStatus;
   tasks: Task[];
@@ -128,6 +129,7 @@ function BoardColumn({
   listId: string;
   listName: string;
   onDrop: (taskId: string, statusId: string) => void;
+  canEdit?: boolean;
 }) {
   const [addingTask, setAddingTask] = useState(false);
   const [title, setTitle] = useState('');
@@ -193,14 +195,16 @@ function BoardColumn({
         </button>
 
         {/* Plus */}
-        <button
-          onClick={() => setAddingTask(true)}
-          className="rounded p-0.5 text-[#CAD5E2] hover:bg-[#E2E8F0] hover:text-[#999999]"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setAddingTask(true)}
+            className="rounded p-0.5 text-[#CAD5E2] hover:bg-[#E2E8F0] hover:text-[#999999]"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Cards */}
@@ -208,15 +212,15 @@ function BoardColumn({
         {tasks.map((task) => (
           <div
             key={task.id}
-            draggable
-            onDragStart={(e) => e.dataTransfer.setData('text/plain', task.id)}
+            draggable={canEdit}
+            onDragStart={canEdit ? (e) => e.dataTransfer.setData('text/plain', task.id) : undefined}
           >
             <TaskCard task={task} statuses={allStatuses} listName={listName} />
           </div>
         ))}
 
         {/* Quick add */}
-        {addingTask ? (
+        {canEdit && (addingTask ? (
           <div className="mb-2">
             <input
               autoFocus
@@ -241,7 +245,7 @@ function BoardColumn({
             </svg>
             Add task
           </button>
-        )}
+        ))}
       </div>
     </div>
   );
@@ -254,12 +258,14 @@ export default function BoardView({
   filters,
   listName = '',
   searchQuery = '',
+  canEdit = true,
 }: {
   listId: string;
   statuses: SpaceStatus[];
   filters?: { status?: string; priority?: string; sort?: string };
   listName?: string;
   searchQuery?: string;
+  canEdit?: boolean;
 }) {
   const { data: tasks, isLoading } = useTasks(listId, filters);
   const updateTask = useUpdateTask(listId);
@@ -272,6 +278,7 @@ export default function BoardView({
   }, [tasks, statuses, searchQuery]);
 
   const handleDrop = (taskId: string, statusId: string) => {
+    if (!canEdit) return;
     updateTask.mutate({ id: taskId, status: statusId });
   };
 
@@ -294,6 +301,7 @@ export default function BoardView({
           listId={listId}
           listName={listName}
           onDrop={handleDrop}
+          canEdit={canEdit}
         />
       ))}
     </div>
