@@ -51,7 +51,7 @@ export function useCreateTask(listId: string | null) {
 export function useUpdateTask(listId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...body }: { id: string; title?: string; status?: string; priority?: string; description?: string | null; due_date?: string | null }) => {
+    mutationFn: async ({ id, ...body }: { id: string; title?: string; status?: string; priority?: string; description?: string | null; due_date?: string | null; time_estimate?: number | null; time_tracked?: number }) => {
       const res = await api.put(`/pm/tasks/${id}`, body);
       return res.data.data;
     },

@@ -25,6 +25,8 @@ const updateSchema = z.object({
   status: z.string().optional(),
   priority: z.enum(['urgent', 'high', 'normal', 'low', 'none']).optional(),
   due_date: z.string().nullable().optional(),
+  time_estimate: z.number().int().min(0).nullable().optional(),
+  time_tracked: z.number().int().min(0).optional(),
 });
 
 // Helper to get list_id from a task

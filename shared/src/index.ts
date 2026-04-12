@@ -190,6 +190,8 @@ export interface Task {
   priority: TaskPriority;
   position: number;
   due_date: string | null;
+  time_estimate: number | null;
+  time_tracked: number;
   created_by: string;
   created_at: string;
   updated_at: string;

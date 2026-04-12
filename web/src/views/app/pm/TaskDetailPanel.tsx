@@ -1,7 +1,41 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { usePMStore } from '../../../stores/pmStore';
 import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment } from '../../../hooks/useTasks';
 import type { SpaceStatus } from '@squadhub/shared';
+
+function parseTimeInput(input: string): number | null {
+  const trimmed = input.trim().toLowerCase();
+  if (!trimmed) return null;
+  let totalMinutes = 0;
+  const hourMatch = trimmed.match(/(\d+)\s*h/);
+  const minMatch = trimmed.match(/(\d+)\s*m/);
+  if (hourMatch) totalMinutes += parseInt(hourMatch[1]) * 60;
+  if (minMatch) totalMinutes += parseInt(minMatch[1]);
+  if (!hourMatch && !minMatch) {
+    const num = parseFloat(trimmed);
+    if (!isNaN(num)) totalMinutes = Math.round(num * 60);
+    else return null;
+  }
+  return totalMinutes > 0 ? totalMinutes : null;
+}
+
+function formatMinutes(minutes: number | null | undefined): string {
+  if (!minutes) return '';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+}
+
+function formatSeconds(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (h) return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`;
+  if (m) return `${m}m ${s.toString().padStart(2, '0')}s`;
+  return `${s}s`;
+}
 
 export default function TaskDetailPanel({
   statuses,
@@ -21,6 +55,40 @@ export default function TaskDetailPanel({
   const [editValue, setEditValue] = useState('');
   const [commentText, setCommentText] = useState('');
   const [activeTab, setActiveTab] = useState<'activity' | 'comments'>('activity');
+  const [estimateInput, setEstimateInput] = useState('');
+  const [editingEstimate, setEditingEstimate] = useState(false);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [timerElapsed, setTimerElapsed] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerStartRef = useRef<number>(0);
+
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (timerElapsed > 0 && task) {
+      const newTracked = (task.time_tracked || 0) + timerElapsed;
+      updateTask.mutate({ id: task.id, time_tracked: newTracked });
+    }
+    setTimerRunning(false);
+    setTimerElapsed(0);
+  }, [timerElapsed, task, updateTask]);
+
+  const startTimer = useCallback(() => {
+    timerStartRef.current = Date.now();
+    setTimerElapsed(0);
+    setTimerRunning(true);
+    timerRef.current = setInterval(() => {
+      setTimerElapsed(Math.floor((Date.now() - timerStartRef.current) / 1000));
+    }, 1000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
   if (!activeTaskId) return null;
 
@@ -226,19 +294,69 @@ export default function TaskDetailPanel({
               <div className="flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] text-[#999999] uppercase">Estimate</span>
-                  <span className="text-xs text-[#CAD5E2]">&mdash;</span>
+                  {editingEstimate ? (
+                    <input
+                      autoFocus
+                      value={estimateInput}
+                      onChange={(e) => setEstimateInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const mins = parseTimeInput(estimateInput);
+                          updateTask.mutate({ id: task.id, time_estimate: mins });
+                          setEditingEstimate(false);
+                        }
+                        if (e.key === 'Escape') setEditingEstimate(false);
+                      }}
+                      onBlur={() => {
+                        const mins = parseTimeInput(estimateInput);
+                        updateTask.mutate({ id: task.id, time_estimate: mins });
+                        setEditingEstimate(false);
+                      }}
+                      placeholder="e.g. 2h 30m"
+                      className="w-20 rounded border border-[#2962FF] px-1.5 py-0.5 text-xs text-[#0F172B] outline-none focus:ring-1 focus:ring-[#2962FF]"
+                    />
+                  ) : (
+                    <span
+                      onClick={() => { setEditingEstimate(true); setEstimateInput(formatMinutes(task.time_estimate)); }}
+                      className="cursor-pointer rounded px-1.5 py-0.5 text-xs text-[#0F172B] hover:bg-[#F1F5F9]"
+                    >
+                      {task.time_estimate ? formatMinutes(task.time_estimate) : <span className="text-[#CAD5E2]">&mdash;</span>}
+                    </span>
+                  )}
                 </div>
                 <span className="text-[#CAD5E2]">|</span>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] text-[#999999] uppercase">Tracked</span>
-                  <span className="text-xs text-[#CAD5E2]">0h</span>
+                  <span className="text-xs text-[#0F172B]">
+                    {timerRunning
+                      ? formatSeconds((task.time_tracked || 0) + timerElapsed)
+                      : task.time_tracked
+                        ? formatSeconds(task.time_tracked)
+                        : <span className="text-[#CAD5E2]">0s</span>
+                    }
+                  </span>
                 </div>
-                <button className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100">
-                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  </svg>
-                  Track
-                </button>
+                {timerRunning ? (
+                  <button
+                    onClick={stopTimer}
+                    className="flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-100"
+                  >
+                    <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
+                      <rect x="6" y="6" width="12" height="12" rx="1" />
+                    </svg>
+                    Stop
+                  </button>
+                ) : (
+                  <button
+                    onClick={startTimer}
+                    className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100"
+                  >
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    </svg>
+                    Track
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -351,7 +469,7 @@ export default function TaskDetailPanel({
                       </p>
                       <p className="mt-1 rounded bg-[#FAFBFC] px-3 py-2 text-sm text-[#666666]">{c.content}</p>
                       <p className="mt-0.5 text-xs text-[#999999]">
-                        {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {formatDateTime(c.created_at).date} {formatDateTime(c.created_at).time}
                       </p>
                     </div>
                   </div>
@@ -371,7 +489,7 @@ export default function TaskDetailPanel({
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-[#0F172B]">{c.user?.display_name || c.user?.email}</span>
                           <span className="text-xs text-[#999999]">
-                            {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            {formatDateTime(c.created_at).date} {formatDateTime(c.created_at).time}
                           </span>
                         </div>
                         <p className="mt-1 text-sm text-[#666666] leading-relaxed">{c.content}</p>
