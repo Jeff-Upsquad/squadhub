@@ -33,7 +33,7 @@ router.get('/', async (req: Request, res: Response) => {
     if (tab === 'spaces') {
       let query = supabaseAdmin
         .from('spaces')
-        .select('id, name, color, icon, workspace_id, status, is_locked, is_private, created_by, created_at, users!spaces_created_by_fkey(display_name)', { count: 'exact' })
+        .select('id, name, color, icon, workspace_id, status, is_locked, is_private, created_by, created_at', { count: 'exact' })
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
@@ -45,9 +45,13 @@ router.get('/', async (req: Request, res: Response) => {
       const { data: spaces, count, error } = await query;
       if (error) { res.status(500).json({ success: false, error: error.message }); return; }
 
-      // Get member counts
       const ids = (spaces || []).map((s: any) => s.id);
-      const memberCounts = await getMemberCounts('space', ids);
+      const userIds = [...new Set((spaces || []).map((s: any) => s.created_by).filter(Boolean))];
+
+      const [memberCounts, userMap] = await Promise.all([
+        getMemberCounts('space', ids),
+        getUserNameMap(userIds),
+      ]);
 
       data = (spaces || []).map((s: any) => ({
         id: s.id,
@@ -59,7 +63,7 @@ router.get('/', async (req: Request, res: Response) => {
         is_locked: s.is_locked,
         is_private: s.is_private,
         created_by: s.created_by,
-        created_by_name: s.users?.display_name || 'Unknown',
+        created_by_name: userMap.get(s.created_by) || 'Unknown',
         created_at: s.created_at,
         member_count: memberCounts[s.id] || 0,
       }));
@@ -68,7 +72,7 @@ router.get('/', async (req: Request, res: Response) => {
     } else if (tab === 'folders') {
       let query = supabaseAdmin
         .from('folders')
-        .select('id, name, space_id, status, is_locked, is_private, created_by, created_at, users!folders_created_by_fkey(display_name), spaces!folders_space_id_fkey(name)', { count: 'exact' })
+        .select('id, name, space_id, status, is_locked, is_private, created_by, created_at', { count: 'exact' })
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
@@ -81,18 +85,25 @@ router.get('/', async (req: Request, res: Response) => {
       if (error) { res.status(500).json({ success: false, error: error.message }); return; }
 
       const ids = (folders || []).map((f: any) => f.id);
-      const memberCounts = await getMemberCounts('folder', ids);
+      const userIds = [...new Set((folders || []).map((f: any) => f.created_by).filter(Boolean))];
+      const spaceIds = [...new Set((folders || []).map((f: any) => f.space_id).filter(Boolean))];
+
+      const [memberCounts, userMap, spaceMap] = await Promise.all([
+        getMemberCounts('folder', ids),
+        getUserNameMap(userIds),
+        getNameMap('spaces', spaceIds),
+      ]);
 
       data = (folders || []).map((f: any) => ({
         id: f.id,
         name: f.name,
         space_id: f.space_id,
-        space_name: f.spaces?.name || 'Unknown',
+        space_name: spaceMap.get(f.space_id) || 'Unknown',
         status: f.status,
         is_locked: f.is_locked,
         is_private: f.is_private,
         created_by: f.created_by,
-        created_by_name: f.users?.display_name || 'Unknown',
+        created_by_name: userMap.get(f.created_by) || 'Unknown',
         created_at: f.created_at,
         member_count: memberCounts[f.id] || 0,
       }));
@@ -101,7 +112,7 @@ router.get('/', async (req: Request, res: Response) => {
     } else if (tab === 'lists') {
       let query = supabaseAdmin
         .from('lists')
-        .select('id, name, space_id, folder_id, status, is_locked, is_private, created_by, created_at, users!lists_created_by_fkey(display_name), spaces!lists_space_id_fkey(name), folders!lists_folder_id_fkey(name)', { count: 'exact' })
+        .select('id, name, space_id, folder_id, status, is_locked, is_private, created_by, created_at', { count: 'exact' })
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
@@ -114,20 +125,29 @@ router.get('/', async (req: Request, res: Response) => {
       if (error) { res.status(500).json({ success: false, error: error.message }); return; }
 
       const ids = (lists || []).map((l: any) => l.id);
-      const memberCounts = await getMemberCounts('list', ids);
+      const userIds = [...new Set((lists || []).map((l: any) => l.created_by).filter(Boolean))];
+      const spaceIds = [...new Set((lists || []).map((l: any) => l.space_id).filter(Boolean))];
+      const folderIds = [...new Set((lists || []).map((l: any) => l.folder_id).filter(Boolean))];
+
+      const [memberCounts, userMap, spaceMap, folderMap] = await Promise.all([
+        getMemberCounts('list', ids),
+        getUserNameMap(userIds),
+        getNameMap('spaces', spaceIds),
+        getNameMap('folders', folderIds),
+      ]);
 
       data = (lists || []).map((l: any) => ({
         id: l.id,
         name: l.name,
         space_id: l.space_id,
-        space_name: l.spaces?.name || 'Unknown',
+        space_name: spaceMap.get(l.space_id) || 'Unknown',
         folder_id: l.folder_id,
-        folder_name: l.folders?.name || null,
+        folder_name: folderMap.get(l.folder_id) || null,
         status: l.status,
         is_locked: l.is_locked,
         is_private: l.is_private,
         created_by: l.created_by,
-        created_by_name: l.users?.display_name || 'Unknown',
+        created_by_name: userMap.get(l.created_by) || 'Unknown',
         created_at: l.created_at,
         member_count: memberCounts[l.id] || 0,
       }));
@@ -343,6 +363,26 @@ router.delete('/members/:id', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
+
+// Helper: get user display names by IDs
+async function getUserNameMap(userIds: string[]): Promise<Map<string, string>> {
+  if (userIds.length === 0) return new Map();
+  const { data: users } = await supabaseAdmin
+    .from('users')
+    .select('id, display_name')
+    .in('id', userIds);
+  return new Map((users || []).map((u: any) => [u.id, u.display_name]));
+}
+
+// Helper: get names from a table (spaces, folders, lists) by IDs
+async function getNameMap(table: string, ids: string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const { data } = await supabaseAdmin
+    .from(table)
+    .select('id, name')
+    .in('id', ids);
+  return new Map((data || []).map((r: any) => [r.id, r.name]));
+}
 
 // Helper: get member counts for a batch of resource IDs
 async function getMemberCounts(resourceType: string, ids: string[]): Promise<Record<string, number>> {
