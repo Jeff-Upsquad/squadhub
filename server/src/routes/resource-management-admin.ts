@@ -43,7 +43,7 @@ router.get('/', async (req: Request, res: Response) => {
       if (lockFilter && lockFilter !== 'all') query = query.eq('is_locked', lockFilter === 'true');
 
       const { data: spaces, count, error } = await query;
-      if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+      if (error) { console.error('Spaces query error:', error); res.status(500).json({ success: false, error: error.message }); return; }
 
       const ids = (spaces || []).map((s: any) => s.id);
       const userIds = [...new Set((spaces || []).map((s: any) => s.created_by).filter(Boolean))];
@@ -82,7 +82,7 @@ router.get('/', async (req: Request, res: Response) => {
       if (lockFilter && lockFilter !== 'all') query = query.eq('is_locked', lockFilter === 'true');
 
       const { data: folders, count, error } = await query;
-      if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+      if (error) { console.error('Folders query error:', error); res.status(500).json({ success: false, error: error.message }); return; }
 
       const ids = (folders || []).map((f: any) => f.id);
       const userIds = [...new Set((folders || []).map((f: any) => f.created_by).filter(Boolean))];
@@ -122,7 +122,7 @@ router.get('/', async (req: Request, res: Response) => {
       if (lockFilter && lockFilter !== 'all') query = query.eq('is_locked', lockFilter === 'true');
 
       const { data: lists, count, error } = await query;
-      if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+      if (error) { console.error('Lists query error:', error); res.status(500).json({ success: false, error: error.message }); return; }
 
       const ids = (lists || []).map((l: any) => l.id);
       const userIds = [...new Set((lists || []).map((l: any) => l.created_by).filter(Boolean))];
