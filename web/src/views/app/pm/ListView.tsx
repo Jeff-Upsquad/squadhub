@@ -47,32 +47,34 @@ export default function ListView({
   }
 
   return (
-    <div className="relative flex flex-1 flex-col overflow-y-auto">
-      {/* Column headers */}
-      <div className="sticky top-0 z-20 flex items-center border-b border-[#E2E8F0] bg-[#FAFBFC] px-4 py-2 text-[11px] font-semibold text-[#999999]">
-        <div className="w-8 shrink-0" />
-        <div className="min-w-0 flex-1">Name task</div>
-        <div className="w-36 shrink-0 px-2">Assignee</div>
-        <div className="w-28 shrink-0 text-center">Start date</div>
-        <div className="w-28 shrink-0 text-center">Due date</div>
-        <div className="w-24 shrink-0 text-center">People</div>
-        <div className="w-28 shrink-0 text-center">Priority</div>
-      </div>
+    <div className="relative flex flex-1 flex-col overflow-auto">
+      <div className="min-w-fit">
+        {/* Column headers */}
+        <div className="sticky top-0 z-20 flex items-center border-b border-[#E2E8F0] bg-[#FAFBFC] px-4 py-2 text-[11px] font-semibold text-[#999999]">
+          <div className="w-8 shrink-0" />
+          <div className="min-w-[120px] flex-1">Name task</div>
+          <div className="w-36 shrink-0 px-2">Assignee</div>
+          <div className="w-28 shrink-0 text-center">Start date</div>
+          <div className="w-28 shrink-0 text-center">Due date</div>
+          <div className="w-24 shrink-0 text-center">People</div>
+          <div className="w-28 shrink-0 text-center">Priority</div>
+        </div>
 
-      {/* Status groups */}
-      <div className="flex-1">
-        {groups.map(({ status, tasks: groupTasks }) => (
-          <StatusGroup
-            key={status.id}
-            status={status}
-            tasks={groupTasks}
-            allStatuses={statuses}
-            listId={listId}
-            onStatusChange={handleStatusChange}
-            showHeader={groupByStatus}
-            onDrop={handleStatusChange}
-          />
-        ))}
+        {/* Status groups */}
+        <div className="flex-1">
+          {groups.map(({ status, tasks: groupTasks }) => (
+            <StatusGroup
+              key={status.id}
+              status={status}
+              tasks={groupTasks}
+              allStatuses={statuses}
+              listId={listId}
+              onStatusChange={handleStatusChange}
+              showHeader={groupByStatus}
+              onDrop={handleStatusChange}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Selection action bar */}

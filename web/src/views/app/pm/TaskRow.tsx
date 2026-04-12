@@ -51,7 +51,7 @@ export default function TaskRow({
         </div>
 
         {/* Name task column */}
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex min-w-[120px] flex-1 items-center gap-2">
           {/* Expand arrow for subtasks */}
           {hasSubtasks ? (
             <button
