@@ -14,7 +14,6 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
 export default function AdminCustomProfiles() {
   const queryClient = useQueryClient();
   const [selectedProfile, setSelectedProfile] = useState<CustomProfile | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
 
   const { data: profiles, isLoading } = useQuery<CustomProfile[]>({
     queryKey: ['admin-custom-profiles'],
@@ -32,46 +31,20 @@ export default function AdminCustomProfiles() {
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/admin/custom-profiles/${id}`).then((r) => r.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-custom-profiles'] });
-    },
-  });
-
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Custom Profiles</h1>
-          <p className="mt-1 text-sm text-[#62748E]">Manage folder and list templates for different workflows</p>
-        </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="rounded-lg bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:bg-[#1D293D]"
-        >
-          + New Profile
-        </button>
+      <div className="mb-6">
+        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Custom Lists</h1>
+        <p className="mt-1 text-sm text-[#62748E]">Enable or disable predefined folder and list templates, and control who can access them</p>
       </div>
-
-      {/* Create form */}
-      {showCreate && (
-        <CreateProfileForm
-          onClose={() => setShowCreate(false)}
-          onCreated={() => {
-            setShowCreate(false);
-            queryClient.invalidateQueries({ queryKey: ['admin-custom-profiles'] });
-          }}
-        />
-      )}
 
       {/* Profile list */}
       {isLoading ? (
         <p className="py-8 text-center text-sm text-[#90A1B9]">Loading...</p>
       ) : !profiles || profiles.length === 0 ? (
         <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-          <p className="text-sm text-[#90A1B9]">No custom profiles yet. Create one to get started.</p>
+          <p className="text-sm text-[#90A1B9]">No custom list types found.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -167,16 +140,6 @@ export default function AdminCustomProfiles() {
                     </svg>
                     Share
                   </button>
-                  <button
-                    onClick={() => {
-                      if (confirm(`Delete "${profile.name}"? This cannot be undone.`)) {
-                        deleteMutation.mutate(profile.id);
-                      }
-                    }}
-                    className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-xs font-medium text-red-500 transition hover:bg-red-50"
-                  >
-                    Delete
-                  </button>
                 </div>
               </div>
             );
@@ -191,108 +154,6 @@ export default function AdminCustomProfiles() {
           onClose={() => setSelectedProfile(null)}
         />
       )}
-    </div>
-  );
-}
-
-// ============================================================
-// Create Profile Form
-// ============================================================
-function CreateProfileForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('general');
-  const [targetType, setTargetType] = useState<'folder' | 'list'>('folder');
-  const [error, setError] = useState('');
-
-  const createMutation = useMutation({
-    mutationFn: (body: any) => api.post('/admin/custom-profiles', body).then((r) => r.data),
-    onSuccess: onCreated,
-    onError: (err: any) => {
-      setError(err?.response?.data?.error || err.message);
-    },
-  });
-
-  const handleNameChange = (val: string) => {
-    setName(val);
-    // Auto-generate slug from name
-    setSlug(val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
-  };
-
-  return (
-    <div className="mb-6 rounded-lg border border-[#E2E8F0] bg-white p-5">
-      <h3 className="mb-4 text-sm font-semibold text-[#0F172B]">New Custom Profile</h3>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-[#62748E]">Name</label>
-          <input
-            value={name}
-            onChange={(e) => handleNameChange(e.target.value)}
-            placeholder="e.g. Design Workflow"
-            className="w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-[#62748E]">Slug</label>
-          <input
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            placeholder="design-workflow"
-            className="w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm font-mono focus:border-[#0F172B] focus:outline-none"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-[#62748E]">Category</label>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
-          >
-            <option value="general">General</option>
-            <option value="design">Design</option>
-            <option value="video">Video</option>
-            <option value="development">Development</option>
-            <option value="marketing">Marketing</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-[#62748E]">Type</label>
-          <select
-            value={targetType}
-            onChange={(e) => setTargetType(e.target.value as 'folder' | 'list')}
-            className="w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
-          >
-            <option value="folder">Folder</option>
-            <option value="list">List</option>
-          </select>
-        </div>
-        <div className="col-span-2">
-          <label className="mb-1 block text-xs font-medium text-[#62748E]">Description</label>
-          <input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Brief description of what this profile is for"
-            className="w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
-          />
-        </div>
-      </div>
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-      <div className="mt-4 flex justify-end gap-2">
-        <button
-          onClick={onClose}
-          className="rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC]"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={() => createMutation.mutate({ name, slug, description, category, target_type: targetType })}
-          disabled={!name.trim() || !slug.trim() || createMutation.isPending}
-          className="rounded-lg bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:bg-[#1D293D] disabled:opacity-50"
-        >
-          {createMutation.isPending ? 'Creating...' : 'Create'}
-        </button>
-      </div>
     </div>
   );
 }
@@ -384,7 +245,7 @@ function SharingSlider({ profile, onClose }: { profile: CustomProfile; onClose: 
             <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">
               Share {app?.name}
             </h3>
-            <p className="mt-0.5 text-xs text-[#90A1B9]">Control who can use this profile</p>
+            <p className="mt-0.5 text-xs text-[#90A1B9]">Control who can use this template</p>
           </div>
           <button
             onClick={onClose}

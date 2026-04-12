@@ -8,11 +8,11 @@ interface Props {
   onBack: () => void;
 }
 
-type Tab = 'template' | 'roles' | 'users';
+type Tab = 'details' | 'roles' | 'users';
 
 export default function AdminCustomProfileDetail({ profileId, onBack }: Props) {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>('template');
+  const [tab, setTab] = useState<Tab>('details');
 
   const { data: profile, isLoading } = useQuery<CustomProfile>({
     queryKey: ['admin-custom-profile', profileId],
@@ -42,7 +42,7 @@ export default function AdminCustomProfileDetail({ profileId, onBack }: Props) {
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          Back to Custom Profiles
+          Back to Custom Lists
         </button>
         <div className="flex items-center gap-3">
           <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">{profile.name}</h1>
@@ -65,7 +65,7 @@ export default function AdminCustomProfileDetail({ profileId, onBack }: Props) {
 
       {/* Tabs */}
       <div className="mb-4 flex gap-1 border-b border-[#E2E8F0]">
-        {(['template', 'roles', 'users'] as Tab[]).map((t) => (
+        {(['details', 'roles', 'users'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -75,8 +75,8 @@ export default function AdminCustomProfileDetail({ profileId, onBack }: Props) {
                 : 'border-transparent text-[#62748E] hover:text-[#0F172B]'
             }`}
           >
-            {t === 'template'
-              ? 'Template'
+            {t === 'details'
+              ? 'Details'
               : t === 'roles'
                 ? `Roles (${(profile.role_access || []).length})`
                 : `Users (${(profile.user_access || []).length})`}
@@ -85,7 +85,7 @@ export default function AdminCustomProfileDetail({ profileId, onBack }: Props) {
       </div>
 
       {/* Tab content */}
-      {tab === 'template' ? (
+      {tab === 'details' ? (
         <TemplateTab profile={profile} onUpdate={invalidate} />
       ) : tab === 'roles' ? (
         <RoleAccessTab profile={profile} onUpdate={invalidate} />
@@ -96,26 +96,8 @@ export default function AdminCustomProfileDetail({ profileId, onBack }: Props) {
   );
 }
 
-// ---- Template Tab ----
+// ---- Details Tab ----
 function TemplateTab({ profile, onUpdate }: { profile: CustomProfile; onUpdate: () => void }) {
-  const [name, setName] = useState(profile.name);
-  const [description, setDescription] = useState(profile.description);
-  const [category, setCategory] = useState(profile.category);
-  const [icon, setIcon] = useState(profile.icon);
-  const [templateJson, setTemplateJson] = useState(JSON.stringify(profile.template, null, 2));
-  const [jsonError, setJsonError] = useState('');
-  const [saved, setSaved] = useState(false);
-
-  const updateMutation = useMutation({
-    mutationFn: (body: any) =>
-      api.put(`/admin/custom-profiles/${profile.id}`, body).then((r) => r.data),
-    onSuccess: () => {
-      onUpdate();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    },
-  });
-
   const propagateMutation = useMutation({
     mutationFn: () =>
       api.post(`/admin/custom-profiles/${profile.id}/propagate`).then((r) => r.data),
@@ -124,29 +106,6 @@ function TemplateTab({ profile, onUpdate }: { profile: CustomProfile; onUpdate: 
       alert(`Propagated to ${data.data.updated_count} instance(s).`);
     },
   });
-
-  const handleSave = () => {
-    setJsonError('');
-    let parsedTemplate;
-    try {
-      parsedTemplate = JSON.parse(templateJson);
-    } catch {
-      setJsonError('Invalid JSON');
-      return;
-    }
-
-    const updates: Record<string, unknown> = {};
-    if (name !== profile.name) updates.name = name;
-    if (description !== profile.description) updates.description = description;
-    if (category !== profile.category) updates.category = category;
-    if (icon !== profile.icon) updates.icon = icon;
-
-    const templateChanged = JSON.stringify(parsedTemplate) !== JSON.stringify(profile.template);
-    if (templateChanged) updates.template = parsedTemplate;
-
-    if (Object.keys(updates).length === 0) return;
-    updateMutation.mutate(updates);
-  };
 
   return (
     <div>
@@ -171,84 +130,52 @@ function TemplateTab({ profile, onUpdate }: { profile: CustomProfile; onUpdate: 
         </div>
       )}
 
-      {/* Metadata fields */}
+      {/* Read-only details */}
       <div className="rounded-lg border border-[#E2E8F0] bg-white p-5">
-        <h3 className="mb-4 text-sm font-semibold text-[#0F172B]">Profile Details</h3>
+        <h3 className="mb-4 text-sm font-semibold text-[#0F172B]">Template Details</h3>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="mb-1 block text-xs font-medium text-[#62748E]">Name</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-[#62748E]">Icon</label>
-            <input
-              value={icon}
-              onChange={(e) => setIcon(e.target.value)}
-              className="w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
-            />
+            <p className="text-sm text-[#0F172B]">{profile.name}</p>
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-[#62748E]">Category</label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
-            >
-              <option value="general">General</option>
-              <option value="design">Design</option>
-              <option value="video">Video</option>
-              <option value="development">Development</option>
-              <option value="marketing">Marketing</option>
-            </select>
+            <p className="text-sm text-[#0F172B] capitalize">{profile.category}</p>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-[#62748E]">Description</label>
-            <input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
-            />
+            <label className="mb-1 block text-xs font-medium text-[#62748E]">Type</label>
+            <p className="text-sm text-[#0F172B] capitalize">{profile.target_type}</p>
           </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[#62748E]">Version</label>
+            <p className="text-sm text-[#0F172B]">v{profile.version}</p>
+          </div>
+          {profile.description && (
+            <div className="col-span-2">
+              <label className="mb-1 block text-xs font-medium text-[#62748E]">Description</label>
+              <p className="text-sm text-[#0F172B]">{profile.description}</p>
+            </div>
+          )}
         </div>
 
-        {/* Template JSON editor */}
-        <div className="mt-4">
-          <label className="mb-1 block text-xs font-medium text-[#62748E]">
-            Template (JSON)
-            {profile.target_type === 'folder'
-              ? ' — define child lists to auto-create'
-              : ' — define default view and settings'}
-          </label>
-          <textarea
-            value={templateJson}
-            onChange={(e) => { setTemplateJson(e.target.value); setJsonError(''); }}
-            rows={8}
-            className="w-full rounded-md border border-[#E2E8F0] px-3 py-2 font-mono text-xs focus:border-[#0F172B] focus:outline-none"
-          />
-          {jsonError && <p className="mt-1 text-xs text-red-600">{jsonError}</p>}
-        </div>
-
-        <div className="mt-4 flex items-center justify-end gap-3">
-          {saved && <span className="text-xs text-emerald-600">Saved!</span>}
-          <button
-            onClick={handleSave}
-            disabled={updateMutation.isPending}
-            className="rounded-lg bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:bg-[#1D293D] disabled:opacity-50"
-          >
-            {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-          </button>
-        </div>
+        {/* Template preview */}
+        {profile.template && Object.keys(profile.template).length > 0 && (
+          <div className="mt-4">
+            <label className="mb-1 block text-xs font-medium text-[#62748E]">
+              Template Configuration
+            </label>
+            <pre className="rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 font-mono text-xs text-[#62748E] overflow-auto">
+              {JSON.stringify(profile.template, null, 2)}
+            </pre>
+          </div>
+        )}
       </div>
 
       {/* Instance info */}
       {(profile.instance_count || 0) > 0 && (
         <div className="mt-4 rounded-lg border border-[#E2E8F0] bg-white p-4">
           <p className="text-sm text-[#62748E]">
-            This profile has been used to create <span className="font-medium text-[#0F172B]">{profile.instance_count}</span> {profile.target_type === 'folder' ? 'folder' : 'list'}{profile.instance_count !== 1 ? 's' : ''} across the workspace.
+            This template has been used to create <span className="font-medium text-[#0F172B]">{profile.instance_count}</span> {profile.target_type === 'folder' ? 'folder' : 'list'}{profile.instance_count !== 1 ? 's' : ''} across the workspace.
           </p>
         </div>
       )}

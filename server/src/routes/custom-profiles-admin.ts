@@ -120,87 +120,18 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// POST /admin/custom-profiles — create profile
-const createSchema = z.object({
-  slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
-  name: z.string().min(1).max(100),
-  description: z.string().max(500).optional(),
-  icon: z.string().max(50).optional(),
-  category: z.string().max(50).optional(),
-  target_type: z.enum(['folder', 'list']),
-  template: z.record(z.unknown()).optional(),
-});
-
-router.post('/', async (req: Request, res: Response) => {
-  try {
-    const body = createSchema.parse(req.body);
-
-    const { data, error } = await supabaseAdmin
-      .from('custom_profiles')
-      .insert({
-        slug: body.slug,
-        name: body.name,
-        description: body.description || '',
-        icon: body.icon || 'folder',
-        category: body.category || 'general',
-        target_type: body.target_type,
-        template: body.template || {},
-      })
-      .select()
-      .single();
-
-    if (error) {
-      if (error.code === '23505') {
-        res.status(409).json({ success: false, error: 'A profile with this slug already exists' });
-        return;
-      }
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
-
-    res.status(201).json({ success: true, data });
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ success: false, error: err.errors[0].message });
-      return;
-    }
-    console.error('Create custom profile error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
-// PUT /admin/custom-profiles/:id — update profile
+// PUT /admin/custom-profiles/:id — update profile (enable/disable only)
 const updateSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  description: z.string().max(500).optional(),
-  icon: z.string().max(50).optional(),
-  category: z.string().max(50).optional(),
-  is_enabled: z.boolean().optional(),
-  template: z.record(z.unknown()).optional(),
+  is_enabled: z.boolean(),
 });
 
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const body = updateSchema.parse(req.body);
 
-    // If template is being updated, increment version
-    const updates: Record<string, unknown> = { ...body, updated_at: new Date().toISOString() };
-    if (body.template) {
-      // Fetch current version to increment
-      const { data: current } = await supabaseAdmin
-        .from('custom_profiles')
-        .select('version')
-        .eq('id', req.params.id)
-        .single();
-
-      if (current) {
-        updates.version = current.version + 1;
-      }
-    }
-
     const { data, error } = await supabaseAdmin
       .from('custom_profiles')
-      .update(updates)
+      .update({ is_enabled: body.is_enabled, updated_at: new Date().toISOString() })
       .eq('id', req.params.id)
       .select()
       .single();
@@ -217,26 +148,6 @@ router.put('/:id', async (req: Request, res: Response) => {
       return;
     }
     console.error('Update custom profile error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
-// DELETE /admin/custom-profiles/:id
-router.delete('/:id', async (req: Request, res: Response) => {
-  try {
-    const { error } = await supabaseAdmin
-      .from('custom_profiles')
-      .delete()
-      .eq('id', req.params.id);
-
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
-
-    res.json({ success: true, message: 'Custom profile deleted' });
-  } catch (err) {
-    console.error('Delete custom profile error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

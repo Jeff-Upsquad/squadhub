@@ -76,7 +76,7 @@ export default function CreateFolderListModal({
 
         {/* Profile selection */}
         <label className="mb-2 block text-sm font-medium text-[#666666] font-[family-name:var(--font-mono)] uppercase tracking-[0.12em]">
-          Template
+          Type
         </label>
 
         <div className="mb-5 grid grid-cols-2 gap-2">
