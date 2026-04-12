@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import ClientAccessModule from './ClientAccessModule';
+import PartnerAccessModule from './PartnerAccessModule';
 import EntriesModule from './EntriesModule';
 import ChecksModule from './ChecksModule';
 import ReviewQueueModule from './ReviewQueueModule';
 
-type Tab = 'client-access' | 'entries' | 'checks' | 'review';
+type Tab = 'client-access' | 'partner-access' | 'entries' | 'checks' | 'review';
 
 export default function AdminCashBook() {
   const [activeTab, setActiveTab] = useState<Tab>('client-access');
@@ -21,6 +22,7 @@ export default function AdminCashBook() {
 
   const tabs: { id: Tab; label: string; count: number }[] = [
     { id: 'client-access', label: 'Client Access', count: stats.enabled_clients },
+    { id: 'partner-access', label: 'Partner Access', count: 0 },
     { id: 'entries', label: 'All Entries', count: 0 },
     { id: 'checks', label: 'Checks', count: 0 },
     { id: 'review', label: 'Review Queue', count: stats.unposted_entries + stats.unposted_checks },
@@ -88,6 +90,7 @@ export default function AdminCashBook() {
       {/* Main content */}
       <div className="flex-1 overflow-auto bg-[#F8FAFC] p-6">
         {activeTab === 'client-access' && <ClientAccessModule />}
+        {activeTab === 'partner-access' && <PartnerAccessModule />}
         {activeTab === 'entries' && <EntriesModule />}
         {activeTab === 'checks' && <ChecksModule />}
         {activeTab === 'review' && <ReviewQueueModule />}

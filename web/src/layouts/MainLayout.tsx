@@ -19,11 +19,12 @@ import ThemeToggle from '../components/ThemeToggle';
 import ActiveTimer from '../components/ActiveTimer';
 import ClientDashboard from '../views/app/client/ClientDashboard';
 import PartnerDashboard from '../views/app/partner/PartnerDashboard';
+import PartnerCashBook from '../views/app/partner/PartnerCashBook';
 import { useUserType } from '../hooks/useUserType';
 
 // ---- Types (ORIGINAL) ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'checkin' | 'checkin-partners' | 'time-management';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'checkin' | 'checkin-partners' | 'time-management' | 'cashbook';
 
 // ---- Section definitions matching Figma icon bar (72px wide, 38x38 containers, 22x22 icons) ----
 const SECTIONS: { id: ActiveSection; label: string; icon: React.ReactNode }[] = [
@@ -370,6 +371,8 @@ export default function MainLayout() {
             <ClientDashboard />
           ) : homeView === 'hub' && userType === 'partner' ? (
             <PartnerDashboard />
+          ) : homeView === 'cashbook' && userType === 'partner' ? (
+            <PartnerCashBook />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center text-foreground-dim">
               <h3 className="font-[family-name:var(--font-display)] text-lg font-medium text-foreground-muted">Welcome to SquadHub</h3>

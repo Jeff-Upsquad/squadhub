@@ -674,6 +674,19 @@ export interface CashBookClientAccess {
   client?: Client;
 }
 
+export interface CashBookPartnerAccess {
+  id: string;
+  user_id: string;
+  client_id: string;
+  is_enabled: boolean;
+  enabled_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  user?: Pick<User, 'id' | 'display_name' | 'email'>;
+  client?: Pick<Client, 'id' | 'business_name'>;
+}
+
 export interface CashBookUser {
   id: string;
   user_id: string;

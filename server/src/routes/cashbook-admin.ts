@@ -446,4 +446,167 @@ router.get('/clients/:clientId/users', async (req: Request, res: Response) => {
   }
 });
 
+// ---- Partner Access Management ----
+
+// GET /admin/cashbook/partner-access - List all partner access records
+router.get('/partner-access', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('cash_book_partner_access')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      res.status(500).json({ success: false, error: 'Failed to fetch partner access' });
+      return;
+    }
+
+    // Enrich with user and client info
+    const userIds = [...new Set((data || []).map(r => r.user_id))];
+    const clientIds = [...new Set((data || []).map(r => r.client_id))];
+
+    const [{ data: users }, { data: clients }] = await Promise.all([
+      supabaseAdmin.from('users').select('id, display_name, email').in('id', userIds.length ? userIds : ['_']),
+      supabaseAdmin.from('clients').select('id, business_name').in('id', clientIds.length ? clientIds : ['_']),
+    ]);
+
+    const userMap = new Map((users || []).map(u => [u.id, u]));
+    const clientMap = new Map((clients || []).map(c => [c.id, c]));
+
+    const enriched = (data || []).map(r => ({
+      ...r,
+      user: userMap.get(r.user_id) || null,
+      client: clientMap.get(r.client_id) || null,
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    console.error('Partner access list error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /admin/cashbook/partner-access/partners - List all partner users for dropdown
+router.get('/partner-access/partners', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .select('id, display_name, email')
+      .eq('user_type', 'partner')
+      .order('display_name', { ascending: true });
+
+    if (error) {
+      res.status(500).json({ success: false, error: 'Failed to fetch partners' });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Partner list error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /admin/cashbook/partner-access - Grant partner access to clients
+router.post('/partner-access', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({
+      user_id: z.string().uuid(),
+      client_ids: z.array(z.string().uuid()).min(1),
+    });
+    const body = schema.parse(req.body);
+
+    // Verify user is a partner
+    const { data: user } = await supabaseAdmin
+      .from('users')
+      .select('id, user_type')
+      .eq('id', body.user_id)
+      .single();
+
+    if (!user || user.user_type !== 'partner') {
+      res.status(400).json({ success: false, error: 'User is not a partner' });
+      return;
+    }
+
+    // Upsert access rows (re-enable if previously disabled)
+    const rows = body.client_ids.map(client_id => ({
+      user_id: body.user_id,
+      client_id,
+      is_enabled: true,
+      enabled_by: req.userId!,
+      updated_at: new Date().toISOString(),
+    }));
+
+    const { error } = await supabaseAdmin
+      .from('cash_book_partner_access')
+      .upsert(rows, { onConflict: 'user_id,client_id' });
+
+    if (error) {
+      console.error('Grant partner access error:', error);
+      res.status(500).json({ success: false, error: 'Failed to grant partner access' });
+      return;
+    }
+
+    res.json({ success: true, message: `Access granted to ${body.client_ids.length} client(s)` });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Grant partner access error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /admin/cashbook/partner-access/:id/toggle - Toggle enabled/disabled
+router.put('/partner-access/:id/toggle', async (req: Request, res: Response) => {
+  try {
+    const { data: existing } = await supabaseAdmin
+      .from('cash_book_partner_access')
+      .select('id, is_enabled')
+      .eq('id', req.params.id)
+      .single();
+
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Access record not found' });
+      return;
+    }
+
+    const { error } = await supabaseAdmin
+      .from('cash_book_partner_access')
+      .update({ is_enabled: !existing.is_enabled, updated_at: new Date().toISOString() })
+      .eq('id', req.params.id);
+
+    if (error) {
+      res.status(500).json({ success: false, error: 'Failed to toggle access' });
+      return;
+    }
+
+    res.json({ success: true, is_enabled: !existing.is_enabled });
+  } catch (err) {
+    console.error('Toggle partner access error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /admin/cashbook/partner-access/:id - Revoke access
+router.delete('/partner-access/:id', async (req: Request, res: Response) => {
+  try {
+    const { error } = await supabaseAdmin
+      .from('cash_book_partner_access')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) {
+      res.status(500).json({ success: false, error: 'Failed to revoke access' });
+      return;
+    }
+
+    res.json({ success: true, message: 'Access revoked' });
+  } catch (err) {
+    console.error('Revoke partner access error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 export default router;
