@@ -7,7 +7,7 @@ import { requirePermission, checkResourceAccess, meetsAccessLevel, isWorkspaceAd
 
 const router = Router();
 router.use(requireAuth);
-router.use(requireUserType('internal', 'partner'));
+router.use(requireUserType('internal', 'partner', 'client'));
 
 const createSchema = z.object({
   space_id: z.string().uuid(),

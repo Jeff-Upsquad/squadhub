@@ -5,7 +5,7 @@ import { requireUserType } from '../../middleware/userType';
 
 const router = Router();
 router.use(requireAuth);
-router.use(requireUserType('internal', 'partner'));
+router.use(requireUserType('internal', 'partner', 'client'));
 
 // GET /pm/shared-with-me?workspace_id=xxx
 // Returns lists and folders the user has direct membership on
