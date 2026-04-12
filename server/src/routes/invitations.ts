@@ -16,7 +16,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     let query = supabaseAdmin
       .from('invitations')
-      .select('*, roles(id, name, color), clients(id, business_name)')
+      .select('*, clients(id, business_name)')
       .order('invited_at', { ascending: false });
 
     if (status && ['pending', 'accepted', 'expired'].includes(status)) {
@@ -30,6 +30,13 @@ router.get('/', async (req: Request, res: Response) => {
       return;
     }
 
+    // Attach role info
+    const roleIds = [...new Set((data || []).filter((i: any) => i.role_id).map((i: any) => i.role_id))];
+    const { data: roles } = roleIds.length > 0
+      ? await supabaseAdmin.from('roles').select('id, name, color').in('id', roleIds)
+      : { data: [] };
+    const roleMap = new Map((roles || []).map((r: any) => [r.id, r]));
+
     // Attach invited_by user info
     const inviterIds = [...new Set((data || []).map((i: any) => i.invited_by))];
     const { data: inviters } = await supabaseAdmin
@@ -41,8 +48,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     const enriched = (data || []).map((inv: any) => ({
       ...inv,
-      role: inv.roles,
-      roles: undefined,
+      role: roleMap.get(inv.role_id) || null,
       client: inv.clients || null,
       clients: undefined,
       invited_by_user: inviterMap.get(inv.invited_by) || null,
@@ -130,7 +136,7 @@ router.post('/', async (req: Request, res: Response) => {
         user_type: body.user_type,
         client_id: body.client_id || null,
       })
-      .select('*, roles(id, name, color)')
+      .select('*')
       .single();
 
     if (error) {
@@ -138,9 +144,19 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
+    let role = null;
+    if (data.role_id) {
+      const { data: roleData } = await supabaseAdmin
+        .from('roles')
+        .select('id, name, color')
+        .eq('id', data.role_id)
+        .single();
+      role = roleData;
+    }
+
     res.status(201).json({
       success: true,
-      data: { ...data, role: data.roles, roles: undefined },
+      data: { ...data, role },
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -169,7 +185,7 @@ router.put('/:id/resend', async (req: Request, res: Response) => {
       })
       .eq('id', id)
       .in('status', ['pending', 'expired'])
-      .select('*, roles(id, name, color)')
+      .select('*')
       .single();
 
     if (error) {
@@ -177,9 +193,19 @@ router.put('/:id/resend', async (req: Request, res: Response) => {
       return;
     }
 
+    let role = null;
+    if (data.role_id) {
+      const { data: roleData } = await supabaseAdmin
+        .from('roles')
+        .select('id, name, color')
+        .eq('id', data.role_id)
+        .single();
+      role = roleData;
+    }
+
     res.json({
       success: true,
-      data: { ...data, role: data.roles, roles: undefined },
+      data: { ...data, role },
     });
   } catch (err) {
     console.error('Resend invitation error:', err);
