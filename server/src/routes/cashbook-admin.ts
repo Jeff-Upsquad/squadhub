@@ -51,7 +51,7 @@ router.post('/clients/:clientId/enable', async (req: Request, res: Response) => 
     const enableSchema = z.object({
       admin_user_id: z.string().uuid().optional(),
     });
-    const body = enableSchema.parse(req.body);
+    const body = enableSchema.parse(req.body ?? {});
 
     const clientId = req.params.clientId;
 
