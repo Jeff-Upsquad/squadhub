@@ -59,4 +59,31 @@ router.put('/me', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+// GET /users/me/client-links — get current user's client assignments
+router.get('/me/client-links', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('partner_client_assignments')
+      .select('*, clients(id, business_name, contact_person, status)')
+      .eq('user_id', req.userId!)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const enriched = (data || []).map((a: any) => ({
+      ...a,
+      client: a.clients,
+      clients: undefined,
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    console.error('Get client links error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 export default router;

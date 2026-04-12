@@ -2,10 +2,12 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
+import { requireUserType } from '../../middleware/userType';
 import { requirePermission, checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
 
 const router = Router();
 router.use(requireAuth);
+router.use(requireUserType('internal', 'partner'));
 
 const createSchema = z.object({
   space_id: z.string().uuid(),

@@ -298,6 +298,15 @@ function UserRow({
         </div>
       </td>
       <td className="px-4 py-3">
+        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+          (user as any).user_type === 'client' ? 'bg-emerald-50 text-emerald-600' :
+          (user as any).user_type === 'partner' ? 'bg-purple-50 text-purple-600' :
+          'bg-blue-50 text-blue-600'
+        }`}>
+          {((user as any).user_type || 'internal').charAt(0).toUpperCase() + ((user as any).user_type || 'internal').slice(1)}
+        </span>
+      </td>
+      <td className="px-4 py-3">
         <span className={`inline-block rounded-full px-2.5 py-0.5 font-[family-name:var(--font-mono)] text-xs font-medium ${
           user.role === 'admin'
             ? 'bg-amber-50 text-amber-600'
@@ -373,14 +382,19 @@ export default function AdminUsers() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [userTypeFilter, setUserTypeFilter] = useState<string>('all');
   const [editingUser, setEditingUser] = useState<UserWithRole | null>(null);
 
   const authState = JSON.parse(localStorage.getItem('squadhub-admin-auth') || '{}');
   const currentUserId = authState?.state?.user?.id || '';
 
   const { data: usersRes, isLoading } = useQuery({
-    queryKey: ['admin-users', search, page],
-    queryFn: () => api.get(`/admin/users?search=${search}&page=${page}&limit=20`).then((r) => r.data),
+    queryKey: ['admin-users', search, page, userTypeFilter],
+    queryFn: () => {
+      const params = new URLSearchParams({ search, page: String(page), limit: '20' });
+      if (userTypeFilter !== 'all') params.set('user_type', userTypeFilter);
+      return api.get(`/admin/users?${params}`).then((r) => r.data);
+    },
   });
 
   const { data: rolesRes } = useQuery({
@@ -410,6 +424,23 @@ export default function AdminUsers() {
         />
       </div>
 
+      {/* User type filter */}
+      <div className="mb-4 flex gap-1">
+        {(['all', 'internal', 'client', 'partner'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => { setUserTypeFilter(tab); setPage(1); }}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+              userTypeFilter === tab
+                ? 'bg-[#0F172B] text-white'
+                : 'bg-white text-[#62748E] hover:bg-[#F1F5F9]'
+            }`}
+          >
+            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+          </button>
+        ))}
+      </div>
+
       <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
         {isLoading ? (
           <p className="py-8 text-center text-sm text-[#90A1B9]">Loading users...</p>
@@ -421,6 +452,7 @@ export default function AdminUsers() {
               <thead>
                 <tr className="border-b border-[#E2E8F0] bg-[#F1F5F9]">
                   <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">User</th>
+                  <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Type</th>
                   <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Platform</th>
                   <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Role</th>
                   <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Joined</th>

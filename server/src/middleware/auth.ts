@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabaseAuth } from '../supabase';
+import { supabaseAdmin } from '../supabase';
+import type { UserType } from '@squadhub/shared';
 
 // Extend Express Request to include user info
 declare global {
@@ -7,6 +9,7 @@ declare global {
     interface Request {
       userId?: string;
       userEmail?: string;
+      userType?: UserType;
     }
   }
 }
@@ -32,6 +35,16 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     req.userId = data.user.id;
     req.userEmail = data.user.email;
+
+    // Fetch user_type from users table
+    const { data: profile } = await supabaseAdmin
+      .from('users')
+      .select('user_type')
+      .eq('id', data.user.id)
+      .single();
+
+    req.userType = (profile?.user_type as UserType) || 'internal';
+
     next();
   } catch {
     res.status(401).json({ success: false, error: 'Invalid or expired token' });

@@ -16,7 +16,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     let query = supabaseAdmin
       .from('invitations')
-      .select('*, roles(id, name, color)')
+      .select('*, roles(id, name, color), clients(id, business_name)')
       .order('invited_at', { ascending: false });
 
     if (status && ['pending', 'accepted', 'expired'].includes(status)) {
@@ -43,6 +43,8 @@ router.get('/', async (req: Request, res: Response) => {
       ...inv,
       role: inv.roles,
       roles: undefined,
+      client: inv.clients || null,
+      clients: undefined,
       invited_by_user: inviterMap.get(inv.invited_by) || null,
     }));
 
@@ -57,6 +59,8 @@ router.get('/', async (req: Request, res: Response) => {
 const createSchema = z.object({
   email: z.string().email(),
   role_id: z.string().uuid().optional(),
+  user_type: z.enum(['internal', 'client', 'partner']).optional().default('internal'),
+  client_id: z.string().uuid().optional(),
 });
 
 router.post('/', async (req: Request, res: Response) => {
@@ -88,6 +92,20 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
+    // Validate client_id if provided
+    if (body.client_id) {
+      const { data: client } = await supabaseAdmin
+        .from('clients')
+        .select('id')
+        .eq('id', body.client_id)
+        .maybeSingle();
+
+      if (!client) {
+        res.status(400).json({ success: false, error: 'Client not found' });
+        return;
+      }
+    }
+
     // Determine role: use provided or fall back to default
     let roleId = body.role_id || null;
     if (!roleId) {
@@ -109,6 +127,8 @@ router.post('/', async (req: Request, res: Response) => {
         invited_by: req.userId,
         status: 'pending',
         expires_at: expiresAt,
+        user_type: body.user_type,
+        client_id: body.client_id || null,
       })
       .select('*, roles(id, name, color)')
       .single();

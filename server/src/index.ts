@@ -31,6 +31,7 @@ import clientsAdminRoutes from './routes/clients-admin';
 import timerRoutes from './routes/timer';
 import timerAdminRoutes from './routes/timer-admin';
 import invitationsRoutes from './routes/invitations';
+import adminPartnersRoutes from './routes/admin-partners';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimerCron } from './cron/timer-cron';
 
@@ -85,6 +86,7 @@ app.use('/admin/clients', clientsAdminRoutes);
 app.use('/timer', timerRoutes);
 app.use('/admin/timer', timerAdminRoutes);
 app.use('/admin/invitations', invitationsRoutes);
+app.use('/admin/partners', adminPartnersRoutes);
 
 // 404 handler
 app.use((_req, res) => {

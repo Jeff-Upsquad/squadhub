@@ -14,6 +14,7 @@ router.use(requireAdmin);
 router.get('/users', async (req: Request, res: Response) => {
   try {
     const search = (req.query.search as string) || '';
+    const userType = req.query.user_type as string | undefined;
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
     const offset = (page - 1) * limit;
@@ -26,6 +27,10 @@ router.get('/users', async (req: Request, res: Response) => {
 
     if (search) {
       query = query.or(`display_name.ilike.%${search}%,email.ilike.%${search}%`);
+    }
+
+    if (userType && ['internal', 'client', 'partner'].includes(userType)) {
+      query = query.eq('user_type', userType);
     }
 
     const { data: users, error, count } = await query;
@@ -72,12 +77,15 @@ router.get('/users', async (req: Request, res: Response) => {
 // GET /admin/stats — basic platform stats
 router.get('/stats', async (_req: Request, res: Response) => {
   try {
-    const [usersRes, workspacesRes, channelsRes, messagesRes, pendingRes] = await Promise.all([
+    const [usersRes, workspacesRes, channelsRes, messagesRes, pendingRes, internalRes, clientRes, partnerRes] = await Promise.all([
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('workspaces').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('channels').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('messages').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('user_type', 'internal'),
+      supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('user_type', 'client'),
+      supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('user_type', 'partner'),
     ]);
 
     res.json({
@@ -88,6 +96,11 @@ router.get('/stats', async (_req: Request, res: Response) => {
         total_channels: channelsRes.count || 0,
         total_messages: messagesRes.count || 0,
         pending_approvals: pendingRes.count || 0,
+        users_by_type: {
+          internal: internalRes.count || 0,
+          client: clientRes.count || 0,
+          partner: partnerRes.count || 0,
+        },
       },
     });
   } catch (err) {
@@ -300,6 +313,20 @@ router.put('/users/:id/role', async (req: Request, res: Response) => {
     if (id === req.userId && body.role !== 'admin') {
       res.status(400).json({ success: false, error: 'You cannot remove your own admin role' });
       return;
+    }
+
+    // Only internal users can be promoted to admin
+    if (body.role === 'admin') {
+      const { data: targetUser } = await supabaseAdmin
+        .from('users')
+        .select('user_type')
+        .eq('id', id)
+        .single();
+
+      if (targetUser?.user_type !== 'internal') {
+        res.status(400).json({ success: false, error: 'Only internal users can be promoted to admin' });
+        return;
+      }
     }
 
     const { data, error } = await supabaseAdmin

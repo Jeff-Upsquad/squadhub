@@ -7,6 +7,7 @@ import SpaceTree from './pm/SpaceTree';
 import CreateSpaceModal from './pm/CreateSpaceModal';
 import { useHasMiniApp } from '../../hooks/useMiniApps';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
+import { useIsInternal, useIsClient } from '../../hooks/useUserType';
 
 // ---- Props ----
 interface HomeSidebarProps {
@@ -31,7 +32,7 @@ const TABS: { id: HomeTab; label: string }[] = [
 
 // ---- Favorite icon helper ----
 function FavoriteIcon({ type }: { type: string }) {
-  const cls = 'h-4 w-4 shrink-0 text-[#616061]';
+  const cls = 'h-4 w-4 shrink-0 text-foreground-muted';
   switch (type) {
     case 'channel':
       return (
@@ -91,7 +92,7 @@ function SectionHeader({
           </svg>
         </button>
         <button onClick={onToggle} className="flex items-center rounded-md px-[5px] h-[28px]">
-          <span className="text-[15px] font-normal leading-[15px] text-black overflow-hidden text-ellipsis whitespace-nowrap">{title}</span>
+          <span className="text-[15px] font-normal leading-[15px] text-sidebar-text overflow-hidden text-ellipsis whitespace-nowrap">{title}</span>
         </button>
       </div>
       {action}
@@ -116,6 +117,8 @@ export default function HomeSidebar({
   const canCreateChannels = useHasPermission('can_create_channels');
   const canCreateSpaces = useHasPermission('can_create_spaces');
   const [showCreateSpace, setShowCreateSpace] = useState(false);
+  const isInternal = useIsInternal();
+  const isClient = useIsClient();
   const hasCheckin = useHasMiniApp('daily-checkin');
   const hasCheckinPartners = useHasMiniApp('daily-checkin-partners');
   const hasTimeManagement = useHasMiniApp('time-management');
@@ -140,22 +143,22 @@ export default function HomeSidebar({
   };
 
   return (
-    <div className="flex h-full w-full flex-col text-[#1D1C1D]">
+    <div className="flex h-full w-full flex-col text-sidebar-text">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[rgba(29,28,29,0.13)] px-4 py-3">
-        <button className="flex items-center gap-1 text-[18px] font-black leading-[26px] text-black hover:opacity-80 transition">
+      <div className="flex items-center justify-between border-b border-divider px-4 py-3">
+        <button className="flex items-center gap-1 text-[18px] font-black leading-[26px] text-sidebar-text hover:opacity-80 transition">
           {currentWorkspace?.name || 'Home'}
           <svg className="h-3.5 w-3.5 ml-0.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
         <div className="flex items-center gap-1">
-          <button className="rounded p-1 text-[#616061] hover:bg-black/5 hover:text-[#1D1C1D] transition" title="Filter">
+          <button className="rounded p-1 text-foreground-muted hover:bg-sidebar-hover hover:text-sidebar-text transition" title="Filter">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
             </svg>
           </button>
-          <button className="rounded p-1 text-[#616061] hover:bg-black/5 hover:text-[#1D1C1D] transition" title="New message">
+          <button className="rounded p-1 text-foreground-muted hover:bg-sidebar-hover hover:text-sidebar-text transition" title="New message">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
             </svg>
@@ -164,15 +167,15 @@ export default function HomeSidebar({
       </div>
 
       {/* Tab pills */}
-      <div className="flex gap-1.5 border-b border-[rgba(29,28,29,0.13)] px-4 py-2">
+      <div className="flex gap-1.5 border-b border-divider px-4 py-2">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => handleTabChange(tab.id)}
             className={`rounded-full px-3 py-1 text-xs font-medium transition ${
               activeTab === tab.id
-                ? 'bg-[#1D1C1D] text-white'
-                : 'bg-black/5 text-[#616061] hover:bg-black/10 hover:text-[#1D1C1D]'
+                ? 'bg-sidebar-text text-white'
+                : 'bg-sidebar-hover text-foreground-muted hover:bg-sidebar-hover hover:text-sidebar-text'
             }`}
           >
             {tab.label}
@@ -184,69 +187,69 @@ export default function HomeSidebar({
       <div className="flex-1 overflow-y-auto">
         {/* Navigation items */}
         <div className="px-2 py-2">
-          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-[#1D1C1D] transition hover:bg-black/5">
-            <svg className="h-4 w-4 shrink-0 text-[#616061]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-sidebar-text transition hover:bg-sidebar-hover">
+            <svg className="h-4 w-4 shrink-0 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859M12 3v8.25m0 0l-3-3m3 3l3-3" />
             </svg>
             Inbox
           </button>
 
-          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-[#1D1C1D] transition hover:bg-black/5">
-            <svg className="h-4 w-4 shrink-0 text-[#616061]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-sidebar-text transition hover:bg-sidebar-hover">
+            <svg className="h-4 w-4 shrink-0 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             New Tasks
           </button>
 
-          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-[#1D1C1D] transition hover:bg-black/5">
-            <svg className="h-4 w-4 shrink-0 text-[#616061]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-sidebar-text transition hover:bg-sidebar-hover">
+            <svg className="h-4 w-4 shrink-0 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
             </svg>
             Assigned Comments
           </button>
 
-          {hasCheckin && (
+          {isInternal && hasCheckin && (
             <button
               onClick={() => onChangeView('checkin')}
               className={`flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm transition ${
                 homeView === 'checkin'
                   ? 'bg-[#1264A3] text-white font-medium'
-                  : 'text-[#1D1C1D] hover:bg-black/5'
+                  : 'text-sidebar-text hover:bg-sidebar-hover'
               }`}
             >
-              <svg className={`h-4 w-4 shrink-0 ${homeView === 'checkin' ? 'text-white' : 'text-[#616061]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`h-4 w-4 shrink-0 ${homeView === 'checkin' ? 'text-white' : 'text-foreground-muted'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               Daily Check-In
             </button>
           )}
 
-          {hasCheckinPartners && (
+          {isInternal && hasCheckinPartners && (
             <button
               onClick={() => onChangeView('checkin-partners')}
               className={`flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm transition ${
                 homeView === 'checkin-partners'
                   ? 'bg-[#1264A3] text-white font-medium'
-                  : 'text-[#1D1C1D] hover:bg-black/5'
+                  : 'text-sidebar-text hover:bg-sidebar-hover'
               }`}
             >
-              <svg className={`h-4 w-4 shrink-0 ${homeView === 'checkin-partners' ? 'text-white' : 'text-[#616061]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`h-4 w-4 shrink-0 ${homeView === 'checkin-partners' ? 'text-white' : 'text-foreground-muted'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               Daily Check-In
             </button>
           )}
 
-          {hasTimeManagement && (
+          {isInternal && hasTimeManagement && (
             <button
               onClick={() => onChangeView('time-management')}
               className={`flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm transition ${
                 homeView === 'time-management'
                   ? 'bg-[#1264A3] text-white font-medium'
-                  : 'text-[#1D1C1D] hover:bg-black/5'
+                  : 'text-sidebar-text hover:bg-sidebar-hover'
               }`}
             >
-              <svg className={`h-4 w-4 shrink-0 ${homeView === 'time-management' ? 'text-white' : 'text-[#616061]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`h-4 w-4 shrink-0 ${homeView === 'time-management' ? 'text-white' : 'text-foreground-muted'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               Time Management
@@ -255,7 +258,7 @@ export default function HomeSidebar({
         </div>
 
         {/* Divider */}
-        <div className="mx-4 border-t border-[rgba(29,28,29,0.13)]" />
+        <div className="mx-4 border-t border-divider" />
 
         {/* Favorites section */}
         <div className="py-1">
@@ -267,22 +270,22 @@ export default function HomeSidebar({
           {expandedSections.favorites && (
             <div className="px-2 pb-1">
               {favoritesLoading && (
-                <p className="px-3 py-1.5 text-xs text-[rgba(29,28,29,0.3)]">Loading...</p>
+                <p className="px-3 py-1.5 text-xs text-foreground-dim">Loading...</p>
               )}
               {!favoritesLoading && (!favorites || favorites.length === 0) && (
-                <p className="px-3 py-2 text-center text-xs text-[rgba(29,28,29,0.3)]">
+                <p className="px-3 py-2 text-center text-xs text-foreground-dim">
                   Star items to pin them here
                 </p>
               )}
               {favorites?.map((fav) => (
                 <div key={fav.id} className="group flex items-center">
-                  <button className="flex flex-1 items-center gap-2 rounded-md px-3 py-1 text-left text-sm text-[#1D1C1D] transition hover:bg-black/5">
+                  <button className="flex flex-1 items-center gap-2 rounded-md px-3 py-1 text-left text-sm text-sidebar-text transition hover:bg-sidebar-hover">
                     <FavoriteIcon type={fav.item_type} />
                     <span className="truncate">{fav.item_name}</span>
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); removeFavorite.mutate(fav.id); }}
-                    className="mr-2 hidden rounded p-0.5 text-[#616061] transition hover:text-[#1D1C1D] group-hover:block"
+                    className="mr-2 hidden rounded p-0.5 text-foreground-muted transition hover:text-sidebar-text group-hover:block"
                     title="Remove"
                   >
                     <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -296,40 +299,44 @@ export default function HomeSidebar({
         </div>
 
         {/* Divider */}
-        <div className="mx-4 border-t border-[rgba(29,28,29,0.13)]" />
+        <div className="mx-4 border-t border-divider" />
 
-        {/* Spaces section */}
-        <div className="py-1">
-          <SectionHeader
-            title="Spaces"
-            expanded={expandedSections.spaces}
-            onToggle={() => toggleSection('spaces')}
-            action={
-              canCreateSpaces ? (
-                <button
-                  onClick={() => setShowCreateSpace(true)}
-                  className="text-[#616061] transition hover:text-[#1D1C1D]"
-                  title="Create space"
-                >
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
-                  </svg>
-                </button>
-              ) : undefined
-            }
-          />
-          {expandedSections.spaces && (
-            <div className="pb-1">
-              <SpaceTree workspaceId={workspaceId} onRequestCreate={() => setShowCreateSpace(true)} />
+        {/* Spaces section — hidden for client users */}
+        {!isClient && (
+          <>
+            <div className="py-1">
+              <SectionHeader
+                title="Spaces"
+                expanded={expandedSections.spaces}
+                onToggle={() => toggleSection('spaces')}
+                action={
+                  canCreateSpaces ? (
+                    <button
+                      onClick={() => setShowCreateSpace(true)}
+                      className="text-foreground-muted transition hover:text-sidebar-text"
+                      title="Create space"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+                      </svg>
+                    </button>
+                  ) : undefined
+                }
+              />
+              {expandedSections.spaces && (
+                <div className="pb-1">
+                  <SpaceTree workspaceId={workspaceId} onRequestCreate={() => setShowCreateSpace(true)} />
+                </div>
+              )}
+              {showCreateSpace && (
+                <CreateSpaceModal workspaceId={workspaceId} onClose={() => setShowCreateSpace(false)} />
+              )}
             </div>
-          )}
-          {showCreateSpace && (
-            <CreateSpaceModal workspaceId={workspaceId} onClose={() => setShowCreateSpace(false)} />
-          )}
-        </div>
 
-        {/* Divider */}
-        <div className="mx-4 border-t border-[rgba(29,28,29,0.13)]" />
+            {/* Divider */}
+            <div className="mx-4 border-t border-divider" />
+          </>
+        )}
 
         {/* Channels section */}
         <div className="py-1">
@@ -341,7 +348,7 @@ export default function HomeSidebar({
               canCreateChannels ? (
                 <button
                   onClick={onCreateChannel}
-                  className="text-[#616061] transition hover:text-[#1D1C1D]"
+                  className="text-foreground-muted transition hover:text-sidebar-text"
                   title="Create channel"
                 >
                   <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -354,7 +361,7 @@ export default function HomeSidebar({
           {expandedSections.channels && (
             <div className="px-2 pb-1">
               {channels.length === 0 ? (
-                <p className="px-3 py-2 text-center text-xs text-[rgba(29,28,29,0.3)]">No channels yet</p>
+                <p className="px-3 py-2 text-center text-xs text-foreground-dim">No channels yet</p>
               ) : (
                 channels.map((ch) => (
                   <button
@@ -363,10 +370,10 @@ export default function HomeSidebar({
                     className={`mb-0.5 flex w-full items-center rounded-md px-3 py-1 text-left text-sm transition ${
                       activeChannelId === ch.id && homeView === 'chat'
                         ? 'bg-[#1264A3] text-white font-medium'
-                        : 'text-[#1D1C1D] hover:bg-black/5'
+                        : 'text-sidebar-text hover:bg-sidebar-hover'
                     }`}
                   >
-                    <span className={`mr-2 ${activeChannelId === ch.id && homeView === 'chat' ? 'text-white/60' : 'text-[#616061]'}`}>#</span>
+                    <span className={`mr-2 ${activeChannelId === ch.id && homeView === 'chat' ? 'text-white/60' : 'text-foreground-muted'}`}>#</span>
                     <span className="truncate">{ch.name}</span>
                   </button>
                 ))
@@ -374,7 +381,7 @@ export default function HomeSidebar({
               {/* Add channels */}
               <button
                 onClick={onCreateChannel}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-1 text-left text-sm text-[rgba(29,28,29,0.3)] transition hover:bg-black/5 hover:text-[#1D1C1D]"
+                className="flex w-full items-center gap-2 rounded-md px-3 py-1 text-left text-sm text-foreground-dim transition hover:bg-sidebar-hover hover:text-sidebar-text"
               >
                 <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -386,7 +393,7 @@ export default function HomeSidebar({
         </div>
 
         {/* Divider */}
-        <div className="mx-4 border-t border-[rgba(29,28,29,0.13)]" />
+        <div className="mx-4 border-t border-divider" />
 
         {/* DMs section */}
         <div className="py-1">
@@ -397,7 +404,7 @@ export default function HomeSidebar({
           />
           {expandedSections.dms && (
             <div className="px-2 pb-1">
-              <p className="px-3 py-2 text-center text-xs text-[rgba(29,28,29,0.3)]">No direct messages yet</p>
+              <p className="px-3 py-2 text-center text-xs text-foreground-dim">No direct messages yet</p>
             </div>
           )}
         </div>

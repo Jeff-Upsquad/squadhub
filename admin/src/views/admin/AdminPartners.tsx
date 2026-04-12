@@ -1,0 +1,248 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '../../services/api';
+
+interface PartnerAssignment {
+  id: string;
+  user_id: string;
+  client_id: string;
+  role: string | null;
+  created_at: string;
+  client?: { id: string; business_name: string; status: string };
+}
+
+interface PartnerUser {
+  id: string;
+  email: string;
+  display_name: string;
+  avatar_url: string | null;
+  user_type: string;
+  status: string;
+  assignments: PartnerAssignment[];
+}
+
+interface ClientOption {
+  id: string;
+  business_name: string;
+}
+
+/* ─────────────────── Assign Client Modal ─────────────────── */
+function AssignClientModal({
+  partnerId,
+  partnerName,
+  existingClientIds,
+  onClose,
+}: {
+  partnerId: string;
+  partnerName: string;
+  existingClientIds: string[];
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [clientId, setClientId] = useState('');
+  const [role, setRole] = useState('');
+  const [error, setError] = useState('');
+
+  const { data: clientsRes } = useQuery({
+    queryKey: ['admin-clients-list'],
+    queryFn: () => api.get('/admin/clients').then((r) => r.data),
+  });
+
+  const clients: ClientOption[] = (clientsRes?.data || []).filter(
+    (c: ClientOption) => !existingClientIds.includes(c.id)
+  );
+
+  const assignMutation = useMutation({
+    mutationFn: (data: { client_id: string; role?: string }) =>
+      api.post(`/admin/partners/${partnerId}/assignments`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-partners'] });
+      onClose();
+    },
+    onError: (err: any) => {
+      setError(err?.response?.data?.error || 'Failed to assign client');
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clientId) { setError('Select a client'); return; }
+    assignMutation.mutate({ client_id: clientId, role: role || undefined });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold text-[#0F172B]">Assign Client to {partnerName}</h3>
+
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-[#62748E]">Client</label>
+            <select
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">Select a client...</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.business_name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[#62748E]">Role / Specialty</label>
+            <input
+              type="text"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              placeholder="e.g. Designer, Editor, Accountant"
+              className="mt-1 w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          {error && <p className="text-sm text-red-500">{error}</p>}
+
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC]">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={assignMutation.isPending}
+              className="rounded-lg bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {assignMutation.isPending ? 'Assigning...' : 'Assign'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────── Main Component ─────────────────── */
+export default function AdminPartners() {
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [assignModal, setAssignModal] = useState<{ partnerId: string; partnerName: string; existingClientIds: string[] } | null>(null);
+
+  const { data: partnersRes, isLoading } = useQuery({
+    queryKey: ['admin-partners', search],
+    queryFn: () => api.get(`/admin/partners?search=${encodeURIComponent(search)}`).then((r) => r.data),
+  });
+
+  const partners: PartnerUser[] = partnersRes?.data || [];
+
+  const removeMutation = useMutation({
+    mutationFn: ({ userId, assignmentId }: { userId: string; assignmentId: string }) =>
+      api.delete(`/admin/partners/${userId}/assignments/${assignmentId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-partners'] });
+    },
+  });
+
+  return (
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[#0F172B]">Partners</h1>
+          <p className="mt-1 text-sm text-[#62748E]">Manage partner users and their client assignments</p>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search partners..."
+          className="w-full max-w-sm rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder:text-[#90A1B9] focus:border-blue-500 focus:outline-none"
+        />
+      </div>
+
+      {/* Partners list */}
+      {isLoading ? (
+        <p className="text-sm text-[#62748E]">Loading...</p>
+      ) : partners.length === 0 ? (
+        <div className="rounded-xl border border-[#E2E8F0] bg-white p-12 text-center">
+          <p className="text-sm text-[#62748E]">No partner users found</p>
+          <p className="mt-1 text-xs text-[#90A1B9]">Invite partner users from the Invitations page with &quot;Partner&quot; user type</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {partners.map((partner) => (
+            <div key={partner.id} className="rounded-xl border border-[#E2E8F0] bg-white p-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-sm font-semibold text-purple-700">
+                    {partner.display_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-[#0F172B]">{partner.display_name}</h3>
+                    <p className="text-xs text-[#62748E]">{partner.email}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() =>
+                    setAssignModal({
+                      partnerId: partner.id,
+                      partnerName: partner.display_name,
+                      existingClientIds: partner.assignments.map((a) => a.client_id),
+                    })
+                  }
+                  className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-xs font-medium text-[#0F172B] hover:bg-[#F8FAFC]"
+                >
+                  + Assign Client
+                </button>
+              </div>
+
+              {/* Client assignments */}
+              {partner.assignments.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-wider text-[#90A1B9]">Assigned Clients</p>
+                  {partner.assignments.map((assignment) => (
+                    <div key={assignment.id} className="flex items-center justify-between rounded-lg bg-[#F8FAFC] px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-[#0F172B]">
+                          {assignment.client?.business_name || 'Unknown'}
+                        </span>
+                        {assignment.role && (
+                          <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-medium text-purple-600">
+                            {assignment.role}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => removeMutation.mutate({ userId: partner.id, assignmentId: assignment.id })}
+                        className="text-xs text-red-500 hover:text-red-700"
+                        disabled={removeMutation.isPending}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {partner.assignments.length === 0 && (
+                <p className="mt-3 text-xs text-[#90A1B9]">No clients assigned</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Assign modal */}
+      {assignModal && (
+        <AssignClientModal
+          partnerId={assignModal.partnerId}
+          partnerName={assignModal.partnerName}
+          existingClientIds={assignModal.existingClientIds}
+          onClose={() => setAssignModal(null)}
+        />
+      )}
+    </div>
+  );
+}

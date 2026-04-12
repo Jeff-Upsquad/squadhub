@@ -4,6 +4,8 @@
 // ============================================================
 
 // ---- Users ----
+export type UserType = 'internal' | 'client' | 'partner';
+
 export interface User {
   id: string;
   email: string;
@@ -11,6 +13,7 @@ export interface User {
   avatar_url: string | null;
   role: string;
   status: 'pending' | 'approved' | 'rejected';
+  user_type: UserType;
   created_at: string;
 }
 
@@ -491,6 +494,8 @@ export interface Invitation {
   role_id: string | null;
   invited_by: string;
   status: InvitationStatus;
+  user_type: UserType;
+  client_id: string | null;
   invited_at: string;
   expires_at: string;
   accepted_at: string | null;
@@ -498,6 +503,20 @@ export interface Invitation {
   // Joined
   role?: Role;
   invited_by_user?: Pick<User, 'id' | 'display_name'>;
+  client?: Pick<Client, 'id' | 'business_name'>;
+}
+
+// ---- Partner-Client Assignments ----
+export interface PartnerClientAssignment {
+  id: string;
+  user_id: string;
+  client_id: string;
+  role: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  user?: User;
+  client?: Client;
 }
 
 // ---- Clients Mini-App ----

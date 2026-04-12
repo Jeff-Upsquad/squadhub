@@ -1,11 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
+import { requireUserType } from '../middleware/userType';
 import { supabaseAdmin } from '../supabase';
 import { nowIST, todayIST, IST_OFFSET_MS } from '../utils/ist';
 
 const router = Router();
 router.use(requireAuth);
+router.use(requireUserType('internal'));
 
 // ---- Helpers ----
 

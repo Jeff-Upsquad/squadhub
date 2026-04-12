@@ -2,12 +2,14 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
+import { requireUserType } from '../../middleware/userType';
 import { requirePermission, isWorkspaceAdmin, checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
 
 const router = Router();
 
-// All PM routes require auth
+// All PM routes require auth and internal/partner user type
 router.use(requireAuth);
+router.use(requireUserType('internal', 'partner'));
 
 const createSchema = z.object({
   workspace_id: z.string().uuid(),

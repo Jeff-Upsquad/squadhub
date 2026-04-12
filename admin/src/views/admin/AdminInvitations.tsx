@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { Invitation, Role } from '@squadhub/shared';
+import type { Invitation, Role, UserType } from '@squadhub/shared';
 
 export default function AdminInvitations() {
   const queryClient = useQueryClient();
   const [email, setEmail] = useState('');
   const [roleId, setRoleId] = useState('');
+  const [userType, setUserType] = useState<UserType>('internal');
+  const [clientId, setClientId] = useState('');
   const [formError, setFormError] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'accepted' | 'expired'>('all');
 
@@ -23,16 +25,24 @@ export default function AdminInvitations() {
     queryFn: () => api.get('/admin/roles').then((r) => r.data),
   });
 
+  const { data: clientsRes } = useQuery({
+    queryKey: ['admin-clients-list'],
+    queryFn: () => api.get('/admin/clients').then((r) => r.data),
+  });
+
   const roles: Role[] = rolesRes?.data || [];
+  const clients: { id: string; business_name: string }[] = clientsRes?.data || [];
   const invitations: Invitation[] = res?.data || [];
 
   const createMutation = useMutation({
-    mutationFn: (body: { email: string; role_id?: string }) =>
+    mutationFn: (body: { email: string; role_id?: string; user_type: UserType; client_id?: string }) =>
       api.post('/admin/invitations', body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-invitations'] });
       setEmail('');
       setRoleId('');
+      setUserType('internal');
+      setClientId('');
       setFormError('');
     },
     onError: (err: any) => {
@@ -57,7 +67,12 @@ export default function AdminInvitations() {
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
-    createMutation.mutate({ email, role_id: roleId || undefined });
+    createMutation.mutate({
+      email,
+      role_id: roleId || undefined,
+      user_type: userType,
+      client_id: clientId || undefined,
+    });
   };
 
   const isExpired = (inv: Invitation) =>
@@ -106,6 +121,18 @@ export default function AdminInvitations() {
               className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
             />
           </div>
+          <div className="min-w-[140px]">
+            <label className="mb-1.5 block text-xs font-medium text-[#62748E]">User Type</label>
+            <select
+              value={userType}
+              onChange={(e) => { setUserType(e.target.value as UserType); setClientId(''); }}
+              className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] outline-none focus:border-[#2962FF]"
+            >
+              <option value="internal">Internal</option>
+              <option value="client">Client</option>
+              <option value="partner">Partner</option>
+            </select>
+          </div>
           <div className="min-w-[160px]">
             <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Role</label>
             <select
@@ -121,6 +148,21 @@ export default function AdminInvitations() {
               ))}
             </select>
           </div>
+          {(userType === 'client' || userType === 'partner') && (
+            <div className="min-w-[160px]">
+              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Client</label>
+              <select
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] outline-none focus:border-[#2962FF]"
+              >
+                <option value="">None</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.business_name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <button
             type="submit"
             disabled={createMutation.isPending}
@@ -167,6 +209,7 @@ export default function AdminInvitations() {
             <thead>
               <tr className="border-b border-[#E2E8F0] bg-[#F1F5F9]">
                 <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Email</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Type</th>
                 <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Role</th>
                 <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Invited By</th>
                 <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Status</th>
@@ -178,6 +221,15 @@ export default function AdminInvitations() {
               {invitations.map((inv) => (
                 <tr key={inv.id} className="border-b border-[#E2E8F0] last:border-b-0">
                   <td className="px-4 py-3 text-sm text-[#0F172B]">{inv.email}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      inv.user_type === 'internal' ? 'bg-blue-50 text-blue-600' :
+                      inv.user_type === 'client' ? 'bg-emerald-50 text-emerald-600' :
+                      'bg-purple-50 text-purple-600'
+                    }`}>
+                      {inv.user_type?.charAt(0).toUpperCase() + inv.user_type?.slice(1) || 'Internal'}
+                    </span>
+                  </td>
                   <td className="px-4 py-3">
                     {inv.role ? (
                       <span

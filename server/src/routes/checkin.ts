@@ -1,13 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
+import { requireUserType } from '../middleware/userType';
 import { supabaseAdmin } from '../supabase';
 import { nowIST, todayIST, formatTimeIST, isNonWorkingDay } from '../utils/ist';
 
 const router = Router();
 
-// All check-in routes require auth
+// All check-in routes require auth and internal user type
 router.use(requireAuth);
+router.use(requireUserType('internal'));
 
 // POST /checkin/submit — submit daily check-in
 const submitSchema = z.object({

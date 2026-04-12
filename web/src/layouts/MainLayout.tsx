@@ -16,6 +16,9 @@ import SettingsSlider from '../components/SettingsSlider';
 import CheckInWidget from '../views/app/checkin/CheckInWidget';
 import TimeManagementPage from '../views/app/time-management/TimeManagementPage';
 import ThemeToggle from '../components/ThemeToggle';
+import ClientDashboard from '../views/app/client/ClientDashboard';
+import PartnerDashboard from '../views/app/partner/PartnerDashboard';
+import { useUserType } from '../hooks/useUserType';
 
 // ---- Types (ORIGINAL) ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'more';
@@ -85,6 +88,7 @@ export default function MainLayout() {
   const logout = useAuthStore((s) => s.logout);
   const pmReset = usePMStore((s) => s.reset);
   const activeListId = usePMStore((s) => s.activeListId);
+  const userType = useUserType();
   const [activeSection, setActiveSection] = useState<ActiveSection>('home');
   const [homeView, setHomeView] = useState<HomeView>('hub');
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -360,6 +364,10 @@ export default function MainLayout() {
             <CheckInWidget title="Daily Check-In Partners" context="partners" />
           ) : homeView === 'time-management' ? (
             <TimeManagementPage />
+          ) : homeView === 'hub' && userType === 'client' ? (
+            <ClientDashboard />
+          ) : homeView === 'hub' && userType === 'partner' ? (
+            <PartnerDashboard />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center text-foreground-dim">
               <h3 className="font-[family-name:var(--font-display)] text-lg font-medium text-foreground-muted">Welcome to SquadHub</h3>

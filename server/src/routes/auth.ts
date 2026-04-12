@@ -9,6 +9,7 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   display_name: z.string().min(1).max(50),
+  user_type: z.enum(['internal', 'client', 'partner']).optional().default('internal'),
 });
 
 const loginSchema = z.object({
@@ -37,12 +38,15 @@ router.post('/register', async (req: Request, res: Response) => {
     // Check if this email has a pending, non-expired invitation
     const { data: invitation } = await supabaseAdmin
       .from('invitations')
-      .select('id, role_id, expires_at')
+      .select('id, role_id, user_type, client_id, expires_at')
       .eq('email', body.email)
       .eq('status', 'pending')
       .maybeSingle();
 
     const isInvited = invitation && new Date(invitation.expires_at) > new Date();
+
+    // User type comes from invitation (if invited) or request body
+    const userType = isInvited ? invitation.user_type : body.user_type;
 
     // Insert into our users table
     const { error: dbError } = await supabaseAdmin.from('users').insert({
@@ -51,6 +55,7 @@ router.post('/register', async (req: Request, res: Response) => {
       display_name: body.display_name,
       role: 'member',
       status: isInvited ? 'approved' : 'pending',
+      user_type: userType,
     });
 
     if (dbError) {
@@ -88,6 +93,14 @@ router.post('/register', async (req: Request, res: Response) => {
           user_id: authData.user.id,
           role: 'member',
           role_id: roleId,
+        });
+      }
+
+      // If invitation links to a client, create the partner-client assignment
+      if (invitation.client_id && (userType === 'partner' || userType === 'client')) {
+        await supabaseAdmin.from('partner_client_assignments').insert({
+          user_id: authData.user.id,
+          client_id: invitation.client_id,
         });
       }
 
