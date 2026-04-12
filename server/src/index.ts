@@ -20,6 +20,7 @@ import pmSpaceRoutes from './routes/pm/spaces';
 import pmFolderRoutes from './routes/pm/folders';
 import pmListRoutes from './routes/pm/lists';
 import pmTaskRoutes from './routes/pm/tasks';
+import pmSharedWithMeRoutes from './routes/pm/shared-with-me';
 import favoritesRoutes from './routes/favorites';
 import membershipsRoutes from './routes/memberships';
 import checkinRoutes from './routes/checkin';
@@ -35,6 +36,8 @@ import adminPartnersRoutes from './routes/admin-partners';
 import customProfilesRoutes from './routes/custom-profiles';
 import customProfilesAdminRoutes from './routes/custom-profiles-admin';
 import resourceManagementAdminRoutes from './routes/resource-management-admin';
+import cashbookRoutes from './routes/cashbook';
+import cashbookAdminRoutes from './routes/cashbook-admin';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimerCron } from './cron/timer-cron';
 
@@ -78,6 +81,7 @@ app.use('/pm', pmSpaceRoutes);
 app.use('/pm', pmFolderRoutes);
 app.use('/pm', pmListRoutes);
 app.use('/pm', pmTaskRoutes);
+app.use('/pm', pmSharedWithMeRoutes);
 app.use('/favorites', favoritesRoutes);
 app.use('/memberships', membershipsRoutes);
 app.use('/checkin', checkinRoutes);
@@ -93,6 +97,8 @@ app.use('/admin/partners', adminPartnersRoutes);
 app.use('/pm/custom-profiles', customProfilesRoutes);
 app.use('/admin/custom-profiles', customProfilesAdminRoutes);
 app.use('/admin/resources', resourceManagementAdminRoutes);
+app.use('/cashbook', cashbookRoutes);
+app.use('/admin/cashbook', cashbookAdminRoutes);
 
 // 404 handler
 app.use((_req, res) => {

@@ -38,7 +38,7 @@ router.post('/register', async (req: Request, res: Response) => {
     // Check if this email has a pending, non-expired invitation
     const { data: invitation } = await supabaseAdmin
       .from('invitations')
-      .select('id, role_id, user_type, client_id, expires_at')
+      .select('id, role_id, user_type, client_id, expires_at, invited_by')
       .eq('email', body.email)
       .eq('status', 'pending')
       .maybeSingle();
@@ -102,6 +102,31 @@ router.post('/register', async (req: Request, res: Response) => {
           user_id: authData.user.id,
           client_id: invitation.client_id,
         });
+      }
+
+      // If invitation links to a client with cash book access, create cash_book_users entry
+      if (invitation.client_id) {
+        const { data: cbAccess } = await supabaseAdmin
+          .from('cash_book_client_access')
+          .select('id')
+          .eq('client_id', invitation.client_id)
+          .eq('is_enabled', true)
+          .maybeSingle();
+
+        if (cbAccess) {
+          // Check if this is the first cash book user for the client
+          const { count } = await supabaseAdmin
+            .from('cash_book_users')
+            .select('*', { count: 'exact', head: true })
+            .eq('client_id', invitation.client_id);
+
+          await supabaseAdmin.from('cash_book_users').insert({
+            user_id: authData.user.id,
+            client_id: invitation.client_id,
+            role: (count === 0) ? 'client_admin' : 'staff',
+            invited_by: invitation.invited_by,
+          });
+        }
       }
 
       res.status(201).json({

@@ -2,7 +2,9 @@ import { useState } from 'react';
 import type { Channel } from '@squadhub/shared';
 import type { HomeView } from '../../layouts/MainLayout';
 import { useFavorites, useRemoveFavorite } from '../../hooks/useFavorites';
+import { useSharedWithMe } from '../../hooks/useSharedWithMe';
 import { useHasPermission } from '../../hooks/usePermissions';
+import { usePMStore } from '../../stores/pmStore';
 import SpaceTree from './pm/SpaceTree';
 import CreateSpaceModal from './pm/CreateSpaceModal';
 import { useHasMiniApp } from '../../hooks/useMiniApps';
@@ -113,7 +115,9 @@ export default function HomeSidebar({
 }: HomeSidebarProps) {
   const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
   const { data: favorites, isLoading: favoritesLoading } = useFavorites(workspaceId);
+  const { data: sharedItems, isLoading: sharedLoading } = useSharedWithMe(workspaceId);
   const removeFavorite = useRemoveFavorite(workspaceId);
+  const { setActiveSpace, setActiveList } = usePMStore();
   const canCreateChannels = useHasPermission('can_create_channels');
   const canCreateSpaces = useHasPermission('can_create_spaces');
   const [showCreateSpace, setShowCreateSpace] = useState(false);
@@ -126,6 +130,7 @@ export default function HomeSidebar({
   const [activeTab, setActiveTab] = useState<HomeTab>('unread');
   const [expandedSections, setExpandedSections] = useState({
     favorites: true,
+    sharedWithMe: true,
     spaces: true,
     channels: true,
     dms: true,
@@ -297,6 +302,44 @@ export default function HomeSidebar({
             </div>
           )}
         </div>
+
+        {/* Shared with me section — only show when there are shared items */}
+        {sharedItems && sharedItems.length > 0 && (
+          <>
+            {/* Divider */}
+            <div className="mx-4 border-t border-divider" />
+
+            <div className="py-1">
+              <SectionHeader
+                title="Shared with me"
+                expanded={expandedSections.sharedWithMe}
+                onToggle={() => toggleSection('sharedWithMe')}
+              />
+              {expandedSections.sharedWithMe && (
+                <div className="px-2 pb-1">
+                  {sharedLoading && (
+                    <p className="px-3 py-1.5 text-xs text-foreground-dim">Loading...</p>
+                  )}
+                  {sharedItems.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        if (item.resource_type === 'list') {
+                          setActiveSpace(item.space_id);
+                          setActiveList(item.resource_id);
+                        }
+                      }}
+                      className="flex w-full items-center gap-2 rounded-md px-3 py-1 text-left text-sm text-sidebar-text transition hover:bg-sidebar-hover"
+                    >
+                      <FavoriteIcon type={item.resource_type} />
+                      <span className="truncate">{item.resource_name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
         {/* Divider */}
         <div className="mx-4 border-t border-divider" />

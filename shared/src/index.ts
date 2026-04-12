@@ -294,6 +294,19 @@ export interface Favorite {
   item_name?: string;
 }
 
+// ---- Shared With Me ----
+export interface SharedWithMeItem {
+  id: string;
+  resource_type: 'list' | 'folder';
+  resource_id: string;
+  resource_name: string;
+  access_level: AccessLevel;
+  space_id: string;
+  folder_id: string | null;
+  invited_by: string | null;
+  created_at: string;
+}
+
 // ---- Socket.io Events ----
 export interface ServerToClientEvents {
   new_message: (message: Message) => void;
@@ -641,4 +654,172 @@ export interface ClientSubscription {
   updated_at: string;
   // Joined
   subscription?: Subscription;
+}
+
+// ---- Cash Book ----
+export type CashBookEntryType = 'cash_in' | 'cash_out';
+export type CashBookPaymentMode = 'cash' | 'upi' | 'bank_transfer' | 'cheque' | 'other';
+export type CashBookUserRole = 'client_admin' | 'staff';
+export type CheckType = 'collection' | 'deposit';
+export type CheckStatus = 'received' | 'deposited' | 'cleared' | 'bounced';
+
+export interface CashBookClientAccess {
+  id: string;
+  client_id: string;
+  is_enabled: boolean;
+  enabled_by: string;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  client?: Client;
+}
+
+export interface CashBookUser {
+  id: string;
+  user_id: string;
+  client_id: string;
+  role: CashBookUserRole;
+  is_active: boolean;
+  invited_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  user?: Pick<User, 'id' | 'display_name' | 'email'>;
+}
+
+export interface CashBookCategory {
+  id: string;
+  client_id: string;
+  name: string;
+  type: 'cash_in' | 'cash_out' | 'both';
+  is_active: boolean;
+  position: number;
+  created_at: string;
+}
+
+export interface CashBookEntry {
+  id: string;
+  client_id: string;
+  user_id: string;
+  local_id: string | null;
+  entry_type: CashBookEntryType;
+  amount: number;
+  entry_date: string;
+  description: string | null;
+  category_id: string | null;
+  party_name: string | null;
+  payment_mode: CashBookPaymentMode;
+  photo_url: string | null;
+  photo_key: string | null;
+  is_posted: boolean;
+  posted_by: string | null;
+  posted_at: string | null;
+  is_deleted: boolean;
+  version: number;
+  server_updated_at: string;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  user?: Pick<User, 'id' | 'display_name'>;
+  category?: CashBookCategory;
+}
+
+export interface CheckEntry {
+  id: string;
+  client_id: string;
+  user_id: string;
+  local_id: string | null;
+  check_type: CheckType;
+  check_number: string;
+  bank_name: string;
+  amount: number;
+  check_date: string;
+  party_name: string;
+  status: CheckStatus;
+  deposit_date: string | null;
+  clearance_date: string | null;
+  bounce_reason: string | null;
+  photo_url: string | null;
+  photo_key: string | null;
+  description: string | null;
+  is_posted: boolean;
+  posted_by: string | null;
+  posted_at: string | null;
+  is_deleted: boolean;
+  version: number;
+  server_updated_at: string;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  user?: Pick<User, 'id' | 'display_name'>;
+}
+
+export interface CashBookEntryAudit {
+  id: string;
+  entry_id: string;
+  entry_table: 'cash_book_entries' | 'check_entries';
+  changed_by: string;
+  action: 'create' | 'update' | 'delete' | 'post' | 'unpost';
+  changes: Record<string, { old: unknown; new: unknown }>;
+  created_at: string;
+}
+
+export interface CashBookDailyBalance {
+  client_id: string;
+  balance_date: string;
+  opening_balance: number;
+  total_cash_in: number;
+  total_cash_out: number;
+  closing_balance: number;
+  last_computed_at: string;
+}
+
+export interface CashBookDashboard {
+  date: string;
+  opening_balance: number;
+  total_cash_in: number;
+  total_cash_out: number;
+  closing_balance: number;
+  entry_count: number;
+}
+
+export interface CashBookSyncRequest {
+  last_synced_at: string | null;
+  push: {
+    entries: {
+      created: Partial<CashBookEntry>[];
+      updated: Partial<CashBookEntry>[];
+      deleted: { server_id: string; version: number }[];
+    };
+    checks: {
+      created: Partial<CheckEntry>[];
+      updated: Partial<CheckEntry>[];
+      deleted: { server_id: string; version: number }[];
+    };
+  };
+}
+
+export interface CashBookSyncPushResult {
+  created: { local_id: string; server_id: string; status: 'ok' | 'error'; error?: string }[];
+  updated: { server_id: string; status: 'ok' | 'conflict'; server_version?: unknown }[];
+  deleted: { server_id: string; status: 'ok' | 'error' }[];
+}
+
+export interface CashBookSyncResponse {
+  synced_at: string;
+  pull: {
+    entries: {
+      created_or_updated: CashBookEntry[];
+      deleted_ids: string[];
+    };
+    checks: {
+      created_or_updated: CheckEntry[];
+      deleted_ids: string[];
+    };
+    categories: CashBookCategory[];
+  };
+  push_results: {
+    entries: CashBookSyncPushResult;
+    checks: CashBookSyncPushResult;
+  };
 }

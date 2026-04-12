@@ -42,3 +42,26 @@ export async function generatePresignedUploadUrl(
 
   return { uploadUrl, objectKey, publicUrl };
 }
+
+// Generate a pre-signed URL for cash book receipt/check photo uploads
+export async function generateCashBookUploadUrl(
+  clientId: string,
+  entryType: string,
+  filename: string,
+  contentType: string,
+): Promise<{ uploadUrl: string; objectKey: string; publicUrl: string }> {
+  const timestamp = Date.now();
+  const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const objectKey = `cashbook/${clientId}/${entryType}/${timestamp}_${safeFilename}`;
+
+  const command = new PutObjectCommand({
+    Bucket: config.r2BucketName,
+    Key: objectKey,
+    ContentType: contentType,
+  });
+
+  const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 3600 });
+  const publicUrl = `${config.r2PublicUrl}/${objectKey}`;
+
+  return { uploadUrl, objectKey, publicUrl };
+}
