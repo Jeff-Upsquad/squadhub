@@ -3,15 +3,23 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useCreateTask } from '../../../hooks/useTasks';
-import type { SpaceStatus } from '@squadhub/shared';
+import type { SpaceStatus, AccessLevel } from '@squadhub/shared';
 import ListView from './ListView';
 import BoardView from './BoardView';
 import TaskDetailPanel from './TaskDetailPanel';
 import SettingsSlider from '../../../components/SettingsSlider';
+import ManageMembersModal from './ManageMembersModal';
+
+function canAtLeast(userLevel: AccessLevel | undefined, required: AccessLevel): boolean {
+  const levels: AccessLevel[] = ['viewer', 'commenter', 'member', 'manager'];
+  if (!userLevel) return false;
+  return levels.indexOf(userLevel) >= levels.indexOf(required);
+}
 
 export default function ListPage() {
   const { activeSpaceId, activeListId, activeTaskId, viewMode, setViewMode } = usePMStore();
   const [showSettings, setShowSettings] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const [groupByStatus] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [addingTask, setAddingTask] = useState(false);
@@ -47,6 +55,10 @@ export default function ListPage() {
     () => spaceData?.space_statuses || spaceData?.statuses || [],
     [spaceData],
   );
+
+  const myAccess: AccessLevel | undefined = spaceData?.my_access_level;
+  const isManager = canAtLeast(myAccess, 'manager');
+  const canEdit = canAtLeast(myAccess, 'member');
 
   const filters = useMemo(() => ({}), []);
 
@@ -113,7 +125,22 @@ export default function ListPage() {
             />
           </div>
 
-          <button
+          {/* Share button */}
+          {isManager && (
+            <button
+              onClick={() => setShowShare(true)}
+              className="rounded p-1.5 text-[#999999] transition hover:bg-[#F1F5F9] hover:text-[#0F172B]"
+              title="Share list"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+            </button>
+          )}
+
+          {/* Settings button - managers only */}
+          {isManager && (
+            <button
               onClick={() => setShowSettings(!showSettings)}
               className={`rounded p-1.5 transition ${
                 showSettings
@@ -127,8 +154,9 @@ export default function ListPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </button>
+          )}
 
-          {addingTask ? (
+          {canEdit && addingTask ? (
             <div className="flex items-center gap-1.5">
               <input
                 ref={addTaskInputRef}
@@ -149,7 +177,7 @@ export default function ListPage() {
                 className="w-44 rounded-md border border-[#2962FF] bg-white px-2.5 py-1.5 text-xs text-[#0F172B] placeholder-[#999999] outline-none focus:ring-1 focus:ring-[#2962FF]"
               />
             </div>
-          ) : (
+          ) : canEdit ? (
             <button
               onClick={() => setAddingTask(true)}
               className="flex items-center gap-1.5 rounded-md bg-[#2962FF] px-3.5 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-[#1E50E0]"
@@ -159,7 +187,7 @@ export default function ListPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -200,6 +228,15 @@ export default function ListPage() {
           />
         )}
       </div>
+
+      {showShare && activeListId && (
+        <ManageMembersModal
+          resourceType="list"
+          resourceId={activeListId}
+          resourceName={listData?.name || 'List'}
+          onClose={() => setShowShare(false)}
+        />
+      )}
     </div>
   );
 }

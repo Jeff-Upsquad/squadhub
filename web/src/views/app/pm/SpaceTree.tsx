@@ -156,31 +156,68 @@ const FolderIcon = (
 );
 
 // ---- List item ----
-function ListItem({ list, depth = 0 }: { list: List; depth?: number }) {
+function ListItem({ list, depth = 0, isManager = false }: { list: List; depth?: number; isManager?: boolean }) {
   const { activeListId, setActiveList, setActiveSpace } = usePMStore();
+  const [showShare, setShowShare] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const isActive = activeListId === list.id;
   const pl = 12 + depth * 20;
 
   return (
-    <button
-      onClick={() => { setActiveSpace(list.space_id); setActiveList(list.id); }}
-      className={`group flex w-full items-center gap-2 rounded-md py-[5px] text-left text-[13px] transition ${
-        isActive
-          ? 'bg-[#F0F0F0] text-[#0F172B] font-medium'
-          : 'text-[#555555] hover:bg-[#F5F5F5]'
-      }`}
-      style={{ paddingLeft: `${pl}px`, paddingRight: '8px' }}
-    >
-      {/* List bars icon */}
-      <svg className="h-4 w-4 shrink-0 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-      </svg>
-      <span className="flex-1 truncate">{list.name}</span>
-      {list.is_private && <LockIcon />}
-      {list.task_count != null && list.task_count > 0 && (
-        <span className="ml-auto text-xs text-[#999999] tabular-nums">{list.task_count}</span>
+    <>
+      <div
+        onClick={() => { setActiveSpace(list.space_id); setActiveList(list.id); }}
+        className={`group flex w-full cursor-pointer items-center gap-2 rounded-md py-[5px] text-left text-[13px] transition ${
+          isActive
+            ? 'bg-[#F0F0F0] text-[#0F172B] font-medium'
+            : 'text-[#555555] hover:bg-[#F5F5F5]'
+        }`}
+        style={{ paddingLeft: `${pl}px`, paddingRight: '8px' }}
+      >
+        {/* List bars icon */}
+        <svg className="h-4 w-4 shrink-0 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+        </svg>
+        <span className="flex-1 truncate">{list.name}</span>
+        {list.is_private && <LockIcon />}
+        <div className="flex items-center gap-0.5">
+          {isManager && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowShare(true); }}
+              className="rounded p-0.5 text-[#999999] opacity-0 transition hover:text-[#0F172B] group-hover:opacity-100"
+              title="Share list"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+            </button>
+          )}
+          {isManager && (
+            <EllipsisButton onClick={() => setShowSettings(true)} title="List settings" />
+          )}
+        </div>
+        {list.task_count != null && list.task_count > 0 && (
+          <span className="text-xs text-[#999999] tabular-nums">{list.task_count}</span>
+        )}
+      </div>
+
+      {showShare && (
+        <ManageMembersModal
+          resourceType="list"
+          resourceId={list.id}
+          resourceName={list.name}
+          onClose={() => setShowShare(false)}
+        />
       )}
-    </button>
+
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setShowSettings(false)}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <SettingsSlider type="list" id={list.id} name={list.name} spaceId={list.space_id} onClose={() => setShowSettings(false)} />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -223,10 +260,11 @@ function InlineInput({
 }
 
 // ---- Folder item ----
-function FolderItem({ folder, spaceId, canAdd, canDelete }: { folder: Folder; spaceId: string; canAdd: boolean; canDelete: boolean }) {
+function FolderItem({ folder, spaceId, canAdd, canDelete, isManager }: { folder: Folder; spaceId: string; canAdd: boolean; canDelete: boolean; isManager: boolean }) {
   const [open, setOpen] = useState(true);
   const [adding, setAdding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const createList = useCreateList(spaceId);
 
   return (
@@ -245,6 +283,17 @@ function FolderItem({ folder, spaceId, canAdd, canDelete }: { folder: Folder; sp
         </button>
         {folder.is_private && <LockIcon />}
         <div className="flex items-center gap-0.5">
+          {isManager && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowShare(true); }}
+              className="rounded p-0.5 text-[#999999] opacity-0 transition hover:text-[#0F172B] group-hover:opacity-100"
+              title="Share folder"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+            </button>
+          )}
           {canDelete && <EllipsisButton onClick={() => setShowSettings(true)} title="Folder settings" />}
           {canAdd && <AddButton onClick={() => setAdding(true)} title="Add list" />}
         </div>
@@ -253,7 +302,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete }: { folder: Folder; sp
       {open && (
         <div>
           {folder.lists?.map((list) => (
-            <ListItem key={list.id} list={list} depth={3} />
+            <ListItem key={list.id} list={list} depth={3} isManager={isManager} />
           ))}
           {adding && (
             <InlineInput
@@ -277,6 +326,15 @@ function FolderItem({ folder, spaceId, canAdd, canDelete }: { folder: Folder; sp
             <SettingsSlider type="folder" id={folder.id} name={folder.name} spaceId={spaceId} onClose={() => setShowSettings(false)} />
           </div>
         </div>
+      )}
+
+      {showShare && (
+        <ManageMembersModal
+          resourceType="folder"
+          resourceId={folder.id}
+          resourceName={folder.name}
+          onClose={() => setShowShare(false)}
+        />
       )}
     </div>
   );
@@ -364,12 +422,12 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
         <div>
           {/* Folders */}
           {space.folders?.map((folder) => (
-            <FolderItem key={folder.id} folder={folder} spaceId={spaceId} canAdd={canAddItems && canCreateLists} canDelete={isManager} />
+            <FolderItem key={folder.id} folder={folder} spaceId={spaceId} canAdd={canAddItems && canCreateLists} canDelete={isManager} isManager={isManager} />
           ))}
 
           {/* Root lists */}
           {space.lists?.map((list) => (
-            <ListItem key={list.id} list={list} depth={2} />
+            <ListItem key={list.id} list={list} depth={2} isManager={isManager} />
           ))}
 
           {/* Create folder/list modal */}

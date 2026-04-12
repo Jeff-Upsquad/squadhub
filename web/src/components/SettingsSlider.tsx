@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useMemberships } from '../hooks/useMemberships';
+import ManageMembersModal from '../views/app/pm/ManageMembersModal';
 import type { ResourceType } from '@squadhub/shared';
 
 type SettingsSliderProps = {
@@ -21,6 +23,8 @@ export default function SettingsSlider({ type, id, name, description, spaceId, o
   const [editDesc, setEditDesc] = useState(description || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [showMembers, setShowMembers] = useState(false);
+  const { data: members } = useMemberships(type, id);
 
   const endpoint = type === 'channel' ? `/channels/${id}` : `/pm/${type}s/${id}`;
 
@@ -143,6 +147,41 @@ export default function SettingsSlider({ type, id, name, description, spaceId, o
           <p className="text-xs text-red-600">{error}</p>
         )}
 
+        {/* Sharing */}
+        <div className="border-t border-[#E2E8F0] pt-4">
+          <p className="mb-2 text-xs font-medium text-[#666666] uppercase tracking-wide">Sharing</p>
+          <div className="mb-2 flex items-center gap-2">
+            <div className="flex -space-x-1.5">
+              {(members || []).slice(0, 5).map((m) => (
+                <div
+                  key={m.id}
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#0F172B] ring-2 ring-[#F8FAFC]"
+                  title={m.user?.display_name || m.user?.email}
+                >
+                  {(m.user?.display_name || m.user?.email)?.[0]?.toUpperCase() || '?'}
+                </div>
+              ))}
+              {(members || []).length > 5 && (
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#CAD5E2] text-[10px] font-medium text-[#0F172B] ring-2 ring-[#F8FAFC]">
+                  +{(members || []).length - 5}
+                </div>
+              )}
+            </div>
+            <span className="text-xs text-[#999999]">
+              {(members || []).length} {(members || []).length === 1 ? 'member' : 'members'}
+            </span>
+          </div>
+          <button
+            onClick={() => setShowMembers(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-xs font-medium text-[#0F172B] transition hover:border-[#2962FF] hover:text-[#2962FF]"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+            </svg>
+            Manage Members
+          </button>
+        </div>
+
         {/* Info */}
         <div className="border-t border-[#E2E8F0] pt-4">
           <p className="text-xs text-[#999999]">
@@ -153,6 +192,15 @@ export default function SettingsSlider({ type, id, name, description, spaceId, o
           </p>
         </div>
       </div>
+
+      {showMembers && (
+        <ManageMembersModal
+          resourceType={type}
+          resourceId={id}
+          resourceName={name}
+          onClose={() => setShowMembers(false)}
+        />
+      )}
 
       {/* Danger zone at bottom */}
       <div className="border-t border-[#E2E8F0] p-4">

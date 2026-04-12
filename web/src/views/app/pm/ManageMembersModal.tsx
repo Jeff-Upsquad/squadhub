@@ -6,9 +6,9 @@ import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import type { ResourceType, AccessLevel } from '@squadhub/shared';
 
 const ACCESS_LEVELS: { value: AccessLevel; label: string; description: string }[] = [
-  { value: 'viewer', label: 'Viewer', description: 'Read only' },
-  { value: 'commenter', label: 'Commenter', description: 'View and comment' },
-  { value: 'member', label: 'Member', description: 'View, comment, create and edit' },
+  { value: 'viewer', label: 'View Only', description: 'Can only view' },
+  { value: 'commenter', label: 'Comment Only', description: 'Can view and comment' },
+  { value: 'member', label: 'Full Access', description: 'Can create, edit and delete tasks' },
   { value: 'manager', label: 'Manager', description: 'Full control including settings' },
 ];
 
