@@ -20,6 +20,7 @@ import ActiveTimer from '../components/ActiveTimer';
 import ClientDashboard from '../views/app/client/ClientDashboard';
 import PartnerDashboard from '../views/app/partner/PartnerDashboard';
 import PartnerCashBook from '../views/app/partner/PartnerCashBook';
+import ClientCashBook from '../views/app/client/ClientCashBook';
 import { useUserType } from '../hooks/useUserType';
 
 // ---- Types (ORIGINAL) ----
@@ -373,6 +374,8 @@ export default function MainLayout() {
             <PartnerDashboard />
           ) : homeView === 'cashbook' && userType === 'partner' ? (
             <PartnerCashBook />
+          ) : homeView === 'cashbook' && userType === 'client' ? (
+            <ClientCashBook />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center text-foreground-dim">
               <h3 className="font-[family-name:var(--font-display)] text-lg font-medium text-foreground-muted">Welcome to SquadHub</h3>

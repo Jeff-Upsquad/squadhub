@@ -262,7 +262,7 @@ export default function HomeSidebar({
             </button>
           )}
 
-          {isPartner && (
+          {(isPartner || isClient) && (
             <button
               onClick={() => onChangeView('cashbook')}
               className={`flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm transition ${

@@ -26,6 +26,7 @@ const nextConfig = {
       { source: '/timer/:path*', destination: `${API_URL}/timer/:path*` },
       { source: '/admin/:path*', destination: `${API_URL}/admin/:path*` },
       { source: '/partner/:path*', destination: `${API_URL}/partner/:path*` },
+      { source: '/cashbook/:path*', destination: `${API_URL}/cashbook/:path*` },
     ],
   }),
 

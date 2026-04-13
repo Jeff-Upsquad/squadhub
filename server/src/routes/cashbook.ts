@@ -142,7 +142,7 @@ router.get('/entries', async (req: Request, res: Response) => {
       .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1);
 
-    if (req.cashBookRole === 'staff') {
+    if (req.cashBookRole === 'staff' || req.query.own_only === 'true') {
       query = query.eq('user_id', req.userId!);
     }
     if (date_from) query = query.gte('entry_date', date_from as string);
@@ -387,7 +387,7 @@ router.get('/checks', async (req: Request, res: Response) => {
       .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1);
 
-    if (req.cashBookRole === 'staff') {
+    if (req.cashBookRole === 'staff' || req.query.own_only === 'true') {
       query = query.eq('user_id', req.userId!);
     }
     if (date_from) query = query.gte('check_date', date_from as string);
