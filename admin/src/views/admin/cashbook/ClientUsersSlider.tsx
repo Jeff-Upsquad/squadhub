@@ -22,7 +22,7 @@ interface ClientUsersSliderProps {
 export default function ClientUsersSlider({ clientId, clientName, onClose }: ClientUsersSliderProps) {
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
-  const [formData, setFormData] = useState({ display_name: '', email: '', password: '' });
+  const [formData, setFormData] = useState({ display_name: '', email: '', password: '', role: 'staff' as 'client_admin' | 'staff' });
   const [formError, setFormError] = useState<string | null>(null);
 
   const { data: usersRes, isLoading } = useQuery({
@@ -41,7 +41,7 @@ export default function ClientUsersSlider({ clientId, clientName, onClose }: Cli
     onSuccess: () => {
       invalidateAll();
       setShowAddForm(false);
-      setFormData({ display_name: '', email: '', password: '' });
+      setFormData({ display_name: '', email: '', password: '', role: 'staff' });
       setFormError(null);
     },
     onError: (err: any) => {
@@ -51,6 +51,12 @@ export default function ClientUsersSlider({ clientId, clientName, onClose }: Cli
 
   const toggleMutation = useMutation({
     mutationFn: (userId: string) => api.put(`/admin/cashbook/clients/${clientId}/users/${userId}/toggle`),
+    onSuccess: () => invalidateAll(),
+  });
+
+  const roleMutation = useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: string }) =>
+      api.put(`/admin/cashbook/clients/${clientId}/users/${userId}/role`, { role }),
     onSuccess: () => invalidateAll(),
   });
 
@@ -102,7 +108,7 @@ export default function ClientUsersSlider({ clientId, clientName, onClose }: Cli
               className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
             />
           </div>
-          <div className="mb-4">
+          <div className="mb-3">
             <label className="mb-1 block text-xs font-medium text-[#475569]">Password</label>
             <input
               type="password"
@@ -111,6 +117,17 @@ export default function ClientUsersSlider({ clientId, clientName, onClose }: Cli
               placeholder="Min 8 characters"
               className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
             />
+          </div>
+          <div className="mb-4">
+            <label className="mb-1 block text-xs font-medium text-[#475569]">Role</label>
+            <select
+              value={formData.role}
+              onChange={(e) => setFormData({ ...formData, role: e.target.value as 'client_admin' | 'staff' })}
+              className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+            >
+              <option value="staff">Staff</option>
+              <option value="client_admin">Client Admin</option>
+            </select>
           </div>
           {formError && (
             <p className="mb-3 text-xs text-[#DC2626]">{formError}</p>
@@ -145,9 +162,18 @@ export default function ClientUsersSlider({ clientId, clientName, onClose }: Cli
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#64748B]">
+                <button
+                  onClick={() => roleMutation.mutate({ userId: u.id, role: u.role === 'client_admin' ? 'staff' : 'client_admin' })}
+                  disabled={roleMutation.isPending}
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors cursor-pointer ${
+                    u.role === 'client_admin'
+                      ? 'bg-[#EEF2FF] text-[#2962FF] hover:bg-[#DBEAFE]'
+                      : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'
+                  }`}
+                  title={`Click to change to ${u.role === 'client_admin' ? 'Staff' : 'Admin'}`}
+                >
                   {u.role === 'client_admin' ? 'Admin' : 'Staff'}
-                </span>
+                </button>
                 {u.is_active ? (
                   <span className="rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#16A34A]">Active</span>
                 ) : (

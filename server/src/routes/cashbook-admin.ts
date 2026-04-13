@@ -523,6 +523,7 @@ const createCashBookUserSchema = z.object({
   display_name: z.string().min(1).max(50),
   email: z.string().email(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
+  role: z.enum(['client_admin', 'staff']).default('staff'),
 });
 
 router.post('/clients/:clientId/users', async (req: Request, res: Response) => {
@@ -593,13 +594,7 @@ router.post('/clients/:clientId/users', async (req: Request, res: Response) => {
       });
     }
 
-    // Determine role: first user for this client gets client_admin
-    const { count } = await supabaseAdmin
-      .from('cash_book_users')
-      .select('id', { count: 'exact', head: true })
-      .eq('client_id', clientId);
-
-    const role = (count === 0) ? 'client_admin' : 'staff';
+    const role = body.role;
 
     // Insert cash_book_users row
     const { data: cbUser, error: cbError } = await supabaseAdmin
@@ -660,6 +655,33 @@ router.put('/clients/:clientId/users/:userId/toggle', async (req: Request, res: 
     res.json({ success: true, is_active: newStatus });
   } catch (err) {
     console.error('Toggle cash book user error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /admin/cashbook/clients/:clientId/users/:userId/role - Change user role
+router.put('/clients/:clientId/users/:userId/role', async (req: Request, res: Response) => {
+  try {
+    const { role } = z.object({ role: z.enum(['client_admin', 'staff']) }).parse(req.body ?? {});
+
+    const { error } = await supabaseAdmin
+      .from('cash_book_users')
+      .update({ role, updated_at: new Date().toISOString() })
+      .eq('id', req.params.userId)
+      .eq('client_id', req.params.clientId);
+
+    if (error) {
+      res.status(500).json({ success: false, error: 'Failed to update role' });
+      return;
+    }
+
+    res.json({ success: true, role });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Update cash book user role error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
