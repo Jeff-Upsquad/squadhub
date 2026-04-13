@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import ClientUsersSlider from './ClientUsersSlider';
@@ -16,13 +16,27 @@ interface AvailableClient {
   business_name: string;
   contact_person: string;
   email: string;
+  status: string;
 }
 
 export default function ClientAccessModule() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<{ id: string; name: string } | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const { data: accessRes, isLoading } = useQuery({
     queryKey: ['admin-cashbook-client-access'],
@@ -89,20 +103,74 @@ export default function ClientAccessModule() {
 
       {showForm && (
         <div className="mb-6 rounded-lg border border-[#E2E8F0] bg-white p-4">
-          <div className="mb-4">
+          <div className="mb-4" ref={dropdownRef}>
             <label className="mb-1 block text-xs font-medium text-[#475569]">Select Client</label>
-            <select
-              value={selectedClientId}
-              onChange={(e) => setSelectedClientId(e.target.value)}
-              className="w-full rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
-            >
-              <option value="">Choose a client...</option>
-              {availableClients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.business_name} ({c.contact_person})
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setDropdownOpen(true);
+                  if (!e.target.value) setSelectedClientId('');
+                }}
+                onFocus={() => setDropdownOpen(true)}
+                placeholder="Search clients..."
+                className="w-full rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+              />
+              {selectedClientId && (
+                <button
+                  type="button"
+                  onClick={() => { setSelectedClientId(''); setSearchQuery(''); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#64748B]"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+              {dropdownOpen && (
+                <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-[#E2E8F0] bg-white shadow-lg">
+                  {availableClients
+                    .filter((c) => {
+                      const q = searchQuery.toLowerCase();
+                      return !q || c.business_name.toLowerCase().includes(q) || c.contact_person.toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
+                    })
+                    .map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedClientId(c.id);
+                          setSearchQuery(`${c.business_name} (${c.contact_person})`);
+                          setDropdownOpen(false);
+                        }}
+                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-[#F1F5F9] transition-colors ${
+                          selectedClientId === c.id ? 'bg-[#EEF2FF]' : ''
+                        }`}
+                      >
+                        <div>
+                          <span className="font-medium text-[#0F172B]">{c.business_name}</span>
+                          <span className="ml-1 text-[#94A3B8]">({c.contact_person})</span>
+                        </div>
+                        {c.status !== 'active' && (
+                          <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
+                            c.status === 'paused' ? 'bg-[#FEF9C3] text-[#A16207]' : 'bg-[#FEF2F2] text-[#DC2626]'
+                          }`}>
+                            {c.status}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  {availableClients.filter((c) => {
+                    const q = searchQuery.toLowerCase();
+                    return !q || c.business_name.toLowerCase().includes(q) || c.contact_person.toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
+                  }).length === 0 && (
+                    <div className="px-3 py-3 text-center text-xs text-[#94A3B8]">No clients found</div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <button

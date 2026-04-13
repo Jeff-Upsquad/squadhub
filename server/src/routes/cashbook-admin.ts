@@ -77,11 +77,10 @@ router.get('/client-access/available', async (_req: Request, res: Response) => {
 
     const existingIds = (existing || []).map(r => r.client_id);
 
-    // Get active clients not in that list
+    // Get all clients not in that list
     let query = supabaseAdmin
       .from('clients')
-      .select('id, business_name, contact_person, email')
-      .eq('status', 'active')
+      .select('id, business_name, contact_person, email, status')
       .order('business_name', { ascending: true });
 
     if (existingIds.length > 0) {
