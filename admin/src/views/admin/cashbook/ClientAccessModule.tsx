@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
+import ClientUsersSlider from './ClientUsersSlider';
 
 interface ClientAccessRecord {
   id: string;
@@ -21,6 +22,7 @@ export default function ClientAccessModule() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState('');
+  const [selectedClient, setSelectedClient] = useState<{ id: string; name: string } | null>(null);
 
   const { data: accessRes, isLoading } = useQuery({
     queryKey: ['admin-cashbook-client-access'],
@@ -130,7 +132,12 @@ export default function ClientAccessModule() {
                     {(record.client?.business_name || '?')[0].toUpperCase()}
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-[#0F172B]">{record.client?.business_name || 'Unknown Client'}</p>
+                    <button
+                      onClick={() => setSelectedClient({ id: record.client_id, name: record.client?.business_name || 'Unknown' })}
+                      className="text-sm font-medium text-[#2962FF] hover:underline text-left"
+                    >
+                      {record.client?.business_name || 'Unknown Client'}
+                    </button>
                     <p className="text-[10px] text-[#94A3B8]">{record.client?.contact_person} &middot; {record.client?.email}</p>
                   </div>
                 </div>
@@ -173,6 +180,12 @@ export default function ClientAccessModule() {
           </div>
         </div>
       )}
+
+      <ClientUsersSlider
+        clientId={selectedClient?.id || null}
+        clientName={selectedClient?.name || ''}
+        onClose={() => setSelectedClient(null)}
+      />
     </div>
   );
 }

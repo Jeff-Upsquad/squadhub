@@ -518,6 +518,174 @@ router.get('/clients/:clientId/users', async (req: Request, res: Response) => {
   }
 });
 
+// POST /admin/cashbook/clients/:clientId/users - Create a new cash book user
+const createCashBookUserSchema = z.object({
+  display_name: z.string().min(1).max(50),
+  email: z.string().email(),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
+router.post('/clients/:clientId/users', async (req: Request, res: Response) => {
+  try {
+    const body = createCashBookUserSchema.parse(req.body ?? {});
+    const clientId = req.params.clientId as string;
+
+    // Verify client has cash book access enabled
+    const { data: access } = await supabaseAdmin
+      .from('cash_book_client_access')
+      .select('id')
+      .eq('client_id', clientId)
+      .eq('is_enabled', true)
+      .maybeSingle();
+
+    if (!access) {
+      res.status(404).json({ success: false, error: 'Client does not have Cash Book enabled' });
+      return;
+    }
+
+    // Check if email already exists in users table
+    const { data: existingUser } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('email', body.email)
+      .maybeSingle();
+
+    let userId: string;
+
+    if (existingUser) {
+      // Check if already a cash book user for this client
+      const { data: existingCbUser } = await supabaseAdmin
+        .from('cash_book_users')
+        .select('id')
+        .eq('user_id', existingUser.id)
+        .eq('client_id', clientId)
+        .maybeSingle();
+
+      if (existingCbUser) {
+        res.status(409).json({ success: false, error: 'User already exists for this client' });
+        return;
+      }
+      userId = existingUser.id;
+    } else {
+      // Create Supabase Auth user
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: body.email,
+        password: body.password,
+        email_confirm: true,
+        user_metadata: { display_name: body.display_name },
+      });
+
+      if (authError) {
+        res.status(400).json({ success: false, error: authError.message });
+        return;
+      }
+
+      userId = authData.user.id;
+
+      // Insert into users table
+      await supabaseAdmin.from('users').insert({
+        id: userId,
+        email: body.email,
+        display_name: body.display_name,
+        role: 'member',
+        status: 'approved',
+        user_type: 'client',
+      });
+    }
+
+    // Determine role: first user for this client gets client_admin
+    const { count } = await supabaseAdmin
+      .from('cash_book_users')
+      .select('id', { count: 'exact', head: true })
+      .eq('client_id', clientId);
+
+    const role = (count === 0) ? 'client_admin' : 'staff';
+
+    // Insert cash_book_users row
+    const { data: cbUser, error: cbError } = await supabaseAdmin
+      .from('cash_book_users')
+      .insert({
+        user_id: userId,
+        client_id: clientId,
+        role,
+        is_active: true,
+        invited_by: req.userId!,
+      })
+      .select('*, user:users!cash_book_users_user_id_fkey(id, display_name, email)')
+      .single();
+
+    if (cbError) {
+      console.error('Create cash book user error:', cbError);
+      res.status(500).json({ success: false, error: 'Failed to create user' });
+      return;
+    }
+
+    res.json({ success: true, data: cbUser });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Create cash book user error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /admin/cashbook/clients/:clientId/users/:userId/toggle - Suspend/unsuspend user
+router.put('/clients/:clientId/users/:userId/toggle', async (req: Request, res: Response) => {
+  try {
+    const { data: cbUser, error: fetchError } = await supabaseAdmin
+      .from('cash_book_users')
+      .select('id, is_active')
+      .eq('id', req.params.userId)
+      .eq('client_id', req.params.clientId)
+      .single();
+
+    if (fetchError || !cbUser) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+
+    const newStatus = !cbUser.is_active;
+    const { error: updateError } = await supabaseAdmin
+      .from('cash_book_users')
+      .update({ is_active: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', cbUser.id);
+
+    if (updateError) {
+      res.status(500).json({ success: false, error: 'Failed to update user' });
+      return;
+    }
+
+    res.json({ success: true, is_active: newStatus });
+  } catch (err) {
+    console.error('Toggle cash book user error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /admin/cashbook/clients/:clientId/users/:userId - Remove user from cash book
+router.delete('/clients/:clientId/users/:userId', async (req: Request, res: Response) => {
+  try {
+    const { error } = await supabaseAdmin
+      .from('cash_book_users')
+      .delete()
+      .eq('id', req.params.userId)
+      .eq('client_id', req.params.clientId);
+
+    if (error) {
+      console.error('Remove cash book user error:', error);
+      res.status(500).json({ success: false, error: 'Failed to remove user' });
+      return;
+    }
+
+    res.json({ success: true, message: 'User removed' });
+  } catch (err) {
+    console.error('Remove cash book user error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // ---- Partner Access Management ----
 
 // GET /admin/cashbook/partner-access - List all partner access records
