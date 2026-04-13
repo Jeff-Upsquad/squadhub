@@ -1,11 +1,20 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { config } from '../config';
 import { requireAuth } from '../middleware/auth';
 import { requireCashBookAccess, requireCashBookAdmin } from '../middleware/cashbook';
 import { supabaseAdmin } from '../supabase';
 import { generateCashBookUploadUrl } from '../r2';
 
 const router = Router();
+
+// Public — no auth required (mobile app checks this before login)
+router.get('/app-config', (_req: Request, res: Response) => {
+  res.json({
+    minVersion: config.cashbookMinVersion,
+    downloadUrl: config.cashbookDownloadUrl,
+  });
+});
 
 // All routes require auth + cash book access
 router.use(requireAuth, requireCashBookAccess);
