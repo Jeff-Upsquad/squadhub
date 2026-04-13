@@ -162,18 +162,15 @@ export default function ClientUsersSlider({ clientId, clientName, onClose }: Cli
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => roleMutation.mutate({ userId: u.id, role: u.role === 'client_admin' ? 'staff' : 'client_admin' })}
+                <select
+                  value={u.role}
+                  onChange={(e) => roleMutation.mutate({ userId: u.id, role: e.target.value })}
                   disabled={roleMutation.isPending}
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors cursor-pointer ${
-                    u.role === 'client_admin'
-                      ? 'bg-[#EEF2FF] text-[#2962FF] hover:bg-[#DBEAFE]'
-                      : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'
-                  }`}
-                  title={`Click to change to ${u.role === 'client_admin' ? 'Staff' : 'Admin'}`}
+                  className="rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-1.5 py-0.5 text-[11px] font-medium text-[#475569] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF] cursor-pointer"
                 >
-                  {u.role === 'client_admin' ? 'Admin' : 'Staff'}
-                </button>
+                  <option value="staff">Staff</option>
+                  <option value="client_admin">Admin</option>
+                </select>
                 {u.is_active ? (
                   <span className="rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#16A34A]">Active</span>
                 ) : (
