@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 
-type Tab = 'entries' | 'checks' | 'team';
+type Tab = 'entries' | 'checks' | 'expenses' | 'team';
 
 export default function ClientCashBook() {
   const [activeTab, setActiveTab] = useState<Tab>('entries');
@@ -57,8 +57,20 @@ export default function ClientCashBook() {
     enabled: !!profile && isAdmin && activeTab === 'team',
   });
 
+  // My expenses
+  const myExpensesParams = new URLSearchParams({ limit: '200' });
+  if (isAdmin) myExpensesParams.set('own_only', 'true');
+  if (filterType !== 'all' && activeTab === 'expenses') myExpensesParams.set('type', filterType);
+
+  const { data: expensesRes, isLoading: expensesLoading } = useQuery({
+    queryKey: ['cashbook-my-expenses', filterType],
+    queryFn: () => api.get(`/cashbook/expenses?${myExpensesParams}`).then((r) => r.data),
+    enabled: !!profile && activeTab === 'expenses',
+  });
+
   const entries = entriesRes?.data || [];
   const checks = checksRes?.data || [];
+  const expenses = expensesRes?.data || [];
   const teamEntries = teamRes?.data || [];
 
   const formatCurrency = (n: number) => Number(n).toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
@@ -142,6 +154,14 @@ export default function ClientCashBook() {
             >
               My Checks
             </button>
+            <button
+              onClick={() => { setActiveTab('expenses'); setFilterType('all'); }}
+              className={`rounded-md px-4 py-1.5 text-xs font-medium transition-colors ${
+                activeTab === 'expenses' ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted'
+              }`}
+            >
+              My Expenses
+            </button>
             {isAdmin && (
               <button
                 onClick={() => { setActiveTab('team'); setFilterType('all'); }}
@@ -154,16 +174,25 @@ export default function ClientCashBook() {
             )}
           </div>
 
-          {/* Type filter for entries/team */}
-          {(activeTab === 'entries' || activeTab === 'team') && (
+          {/* Type filter for entries/expenses/team */}
+          {(activeTab === 'entries' || activeTab === 'expenses' || activeTab === 'team') && (
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
               className="rounded-md border border-divider bg-surface-alt px-3 py-1.5 text-xs text-foreground focus:border-blue-500 focus:outline-none"
             >
               <option value="all">All Types</option>
-              <option value="cash_in">Cash In</option>
-              <option value="cash_out">Cash Out</option>
+              {activeTab === 'expenses' ? (
+                <>
+                  <option value="expense_out">Expense Out</option>
+                  <option value="expense_in">Reimbursement</option>
+                </>
+              ) : (
+                <>
+                  <option value="cash_in">Cash In</option>
+                  <option value="cash_out">Cash Out</option>
+                </>
+              )}
             </select>
           )}
         </div>
@@ -260,6 +289,56 @@ export default function ClientCashBook() {
                       </td>
                       <td className="px-4 py-2.5">
                         {check.is_posted ? (
+                          <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold text-green-400">Posted</span>
+                        ) : (
+                          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">Pending</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* My Expenses tab */}
+        {activeTab === 'expenses' && (
+          <div className="overflow-hidden rounded-lg border border-divider bg-surface-alt">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-divider bg-surface">
+                  <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Date</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Type</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Nature</th>
+                  <th className="px-4 py-2.5 text-right font-medium text-foreground-muted">Amount</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Mode</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Description</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expensesLoading ? (
+                  <tr><td colSpan={7} className="py-12 text-center text-foreground-dim">Loading...</td></tr>
+                ) : expenses.length === 0 ? (
+                  <tr><td colSpan={7} className="py-12 text-center text-foreground-dim">No expenses yet</td></tr>
+                ) : (
+                  expenses.map((expense: any) => (
+                    <tr key={expense.id} className="border-b border-divider hover:bg-surface">
+                      <td className="px-4 py-2.5 text-foreground">{expense.entry_date}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          expense.entry_type === 'expense_out' ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'
+                        }`}>
+                          {expense.entry_type === 'expense_out' ? 'Expense Out' : 'Reimbursement'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-foreground-muted">{expense.nature_of_expense || '-'}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-foreground">{formatCurrency(expense.amount)}</td>
+                      <td className="px-4 py-2.5 capitalize text-foreground-muted">{(expense.payment_mode || '').replace('_', ' ')}</td>
+                      <td className="px-4 py-2.5 text-foreground-muted">{expense.description || '-'}</td>
+                      <td className="px-4 py-2.5">
+                        {expense.is_posted ? (
                           <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold text-green-400">Posted</span>
                         ) : (
                           <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">Pending</span>

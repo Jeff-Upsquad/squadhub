@@ -10,9 +10,10 @@ interface Props {
 
 export default function PartnerCashBookDetail({ clientId, clientName, onBack }: Props) {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'entries' | 'checks'>('entries');
+  const [activeTab, setActiveTab] = useState<'entries' | 'checks' | 'expenses'>('entries');
   const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
   const [selectedChecks, setSelectedChecks] = useState<Set<string>>(new Set());
+  const [selectedExpenses, setSelectedExpenses] = useState<Set<string>>(new Set());
   const [filterPosted, setFilterPosted] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
 
@@ -21,7 +22,7 @@ export default function PartnerCashBookDetail({ clientId, clientName, onBack }: 
     queryKey: ['partner-cashbook-stats', clientId],
     queryFn: () => api.get(`/partner/cashbook/clients/${clientId}/stats`).then((r) => r.data),
   });
-  const stats = statsRes?.data || { total_cash_in: 0, total_cash_out: 0, balance: 0, unposted_entries: 0, unposted_checks: 0 };
+  const stats = statsRes?.data || { total_cash_in: 0, total_cash_out: 0, balance: 0, unposted_entries: 0, unposted_checks: 0, unposted_expenses: 0, total_expense_out: 0, total_expense_in: 0, expense_balance: 0 };
 
   // Entries
   const entriesQueryParams = new URLSearchParams({ limit: '100' });
@@ -41,8 +42,20 @@ export default function PartnerCashBookDetail({ clientId, clientName, onBack }: 
     enabled: activeTab === 'checks',
   });
 
+  // Expenses
+  const expensesQueryParams = new URLSearchParams({ limit: '100' });
+  if (filterPosted !== 'all') expensesQueryParams.set('is_posted', filterPosted === 'posted' ? 'true' : 'false');
+  if (filterType !== 'all') expensesQueryParams.set('type', filterType);
+
+  const { data: expensesRes, isLoading: expensesLoading } = useQuery({
+    queryKey: ['partner-cashbook-expenses', clientId, filterPosted, filterType],
+    queryFn: () => api.get(`/partner/cashbook/clients/${clientId}/expenses?${expensesQueryParams}`).then((r) => r.data),
+    enabled: activeTab === 'expenses',
+  });
+
   const entries = entriesRes?.data || [];
   const checks = checksRes?.data || [];
+  const expenses = expensesRes?.data || [];
 
   // Mutations
   const postEntriesMutation = useMutation({
@@ -85,6 +98,26 @@ export default function PartnerCashBookDetail({ clientId, clientName, onBack }: 
     },
   });
 
+  const postExpensesMutation = useMutation({
+    mutationFn: (ids: string[]) => api.post('/partner/cashbook/expenses/post', { expense_ids: ids }),
+    onSuccess: () => {
+      setSelectedExpenses(new Set());
+      queryClient.invalidateQueries({ queryKey: ['partner-cashbook-expenses', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['partner-cashbook-stats', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['partner-cashbook-clients'] });
+    },
+  });
+
+  const unpostExpensesMutation = useMutation({
+    mutationFn: (ids: string[]) => api.post('/partner/cashbook/expenses/unpost', { expense_ids: ids }),
+    onSuccess: () => {
+      setSelectedExpenses(new Set());
+      queryClient.invalidateQueries({ queryKey: ['partner-cashbook-expenses', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['partner-cashbook-stats', clientId] });
+      queryClient.invalidateQueries({ queryKey: ['partner-cashbook-clients'] });
+    },
+  });
+
   const toggleEntry = (id: string) => {
     const next = new Set(selectedEntries);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -107,11 +140,24 @@ export default function PartnerCashBookDetail({ clientId, clientName, onBack }: 
     else setSelectedChecks(new Set(checks.map((c: any) => c.id)));
   };
 
+  const toggleExpense = (id: string) => {
+    const next = new Set(selectedExpenses);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedExpenses(next);
+  };
+
+  const selectAllExpenses = () => {
+    if (selectedExpenses.size === expenses.length) setSelectedExpenses(new Set());
+    else setSelectedExpenses(new Set(expenses.map((e: any) => e.id)));
+  };
+
   // Check if all selected entries are posted or unposted
   const selectedEntriesPosted = entries.filter((e: any) => selectedEntries.has(e.id) && e.is_posted);
   const selectedEntriesUnposted = entries.filter((e: any) => selectedEntries.has(e.id) && !e.is_posted);
   const selectedChecksPosted = checks.filter((c: any) => selectedChecks.has(c.id) && c.is_posted);
   const selectedChecksUnposted = checks.filter((c: any) => selectedChecks.has(c.id) && !c.is_posted);
+  const selectedExpensesPosted = expenses.filter((e: any) => selectedExpenses.has(e.id) && e.is_posted);
+  const selectedExpensesUnposted = expenses.filter((e: any) => selectedExpenses.has(e.id) && !e.is_posted);
 
   const formatCurrency = (n: number) => Number(n).toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
 
@@ -126,32 +172,55 @@ export default function PartnerCashBookDetail({ clientId, clientName, onBack }: 
         </div>
 
         {/* Stats cards */}
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-lg border border-divider bg-surface-alt p-3">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Total Cash In</p>
-            <p className="mt-1 text-lg font-bold text-green-400">{formatCurrency(stats.total_cash_in)}</p>
+        {activeTab === 'expenses' ? (
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border border-divider bg-surface-alt p-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Total Expense Out</p>
+              <p className="mt-1 text-lg font-bold text-red-400">{formatCurrency(stats.total_expense_out)}</p>
+            </div>
+            <div className="rounded-lg border border-divider bg-surface-alt p-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Total Reimbursed</p>
+              <p className="mt-1 text-lg font-bold text-green-400">{formatCurrency(stats.total_expense_in)}</p>
+            </div>
+            <div className="rounded-lg border border-divider bg-surface-alt p-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Net Balance</p>
+              <p className={`mt-1 text-lg font-bold ${stats.expense_balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {formatCurrency(stats.expense_balance)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-divider bg-surface-alt p-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Pending Review</p>
+              <p className="mt-1 text-lg font-bold text-amber-400">{stats.unposted_expenses}</p>
+            </div>
           </div>
-          <div className="rounded-lg border border-divider bg-surface-alt p-3">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Total Cash Out</p>
-            <p className="mt-1 text-lg font-bold text-red-400">{formatCurrency(stats.total_cash_out)}</p>
+        ) : (
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border border-divider bg-surface-alt p-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Total Cash In</p>
+              <p className="mt-1 text-lg font-bold text-green-400">{formatCurrency(stats.total_cash_in)}</p>
+            </div>
+            <div className="rounded-lg border border-divider bg-surface-alt p-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Total Cash Out</p>
+              <p className="mt-1 text-lg font-bold text-red-400">{formatCurrency(stats.total_cash_out)}</p>
+            </div>
+            <div className="rounded-lg border border-divider bg-surface-alt p-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Balance</p>
+              <p className={`mt-1 text-lg font-bold ${stats.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {formatCurrency(stats.balance)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-divider bg-surface-alt p-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Pending Review</p>
+              <p className="mt-1 text-lg font-bold text-amber-400">{stats.unposted_entries + stats.unposted_checks}</p>
+            </div>
           </div>
-          <div className="rounded-lg border border-divider bg-surface-alt p-3">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Balance</p>
-            <p className={`mt-1 text-lg font-bold ${stats.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {formatCurrency(stats.balance)}
-            </p>
-          </div>
-          <div className="rounded-lg border border-divider bg-surface-alt p-3">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Pending Review</p>
-            <p className="mt-1 text-lg font-bold text-amber-400">{stats.unposted_entries + stats.unposted_checks}</p>
-          </div>
-        </div>
+        )}
 
         {/* Tab toggle + actions */}
         <div className="mb-4 flex items-center justify-between">
           <div className="flex gap-1 rounded-lg bg-surface-alt p-1">
             <button
-              onClick={() => { setActiveTab('entries'); setSelectedChecks(new Set()); }}
+              onClick={() => { setActiveTab('entries'); setSelectedChecks(new Set()); setSelectedExpenses(new Set()); }}
               className={`rounded-md px-4 py-1.5 text-xs font-medium transition-colors ${
                 activeTab === 'entries' ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted'
               }`}
@@ -159,12 +228,20 @@ export default function PartnerCashBookDetail({ clientId, clientName, onBack }: 
               Entries ({entries.length})
             </button>
             <button
-              onClick={() => { setActiveTab('checks'); setSelectedEntries(new Set()); }}
+              onClick={() => { setActiveTab('checks'); setSelectedEntries(new Set()); setSelectedExpenses(new Set()); }}
               className={`rounded-md px-4 py-1.5 text-xs font-medium transition-colors ${
                 activeTab === 'checks' ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted'
               }`}
             >
               Checks ({checks.length})
+            </button>
+            <button
+              onClick={() => { setActiveTab('expenses'); setSelectedEntries(new Set()); setSelectedChecks(new Set()); }}
+              className={`rounded-md px-4 py-1.5 text-xs font-medium transition-colors ${
+                activeTab === 'expenses' ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted'
+              }`}
+            >
+              Expenses ({expenses.length})
             </button>
           </div>
 
@@ -205,11 +282,29 @@ export default function PartnerCashBookDetail({ clientId, clientName, onBack }: 
                 Unmark {selectedChecksPosted.length}
               </button>
             )}
+            {activeTab === 'expenses' && selectedExpensesUnposted.length > 0 && (
+              <button
+                onClick={() => postExpensesMutation.mutate(selectedExpensesUnposted.map((e: any) => e.id))}
+                disabled={postExpensesMutation.isPending}
+                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                Mark {selectedExpensesUnposted.length} as Posted
+              </button>
+            )}
+            {activeTab === 'expenses' && selectedExpensesPosted.length > 0 && (
+              <button
+                onClick={() => unpostExpensesMutation.mutate(selectedExpensesPosted.map((e: any) => e.id))}
+                disabled={unpostExpensesMutation.isPending}
+                className="rounded-md border border-amber-500/30 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-500/10 disabled:opacity-50"
+              >
+                Unmark {selectedExpensesPosted.length}
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Filters for entries */}
-        {activeTab === 'entries' && (
+        {/* Filters for entries/expenses */}
+        {(activeTab === 'entries' || activeTab === 'expenses') && (
           <div className="mb-3 flex gap-2">
             <select
               value={filterPosted}
@@ -226,8 +321,17 @@ export default function PartnerCashBookDetail({ clientId, clientName, onBack }: 
               className="rounded-md border border-divider bg-surface-alt px-3 py-1.5 text-xs text-foreground focus:border-blue-500 focus:outline-none"
             >
               <option value="all">All Types</option>
-              <option value="cash_in">Cash In</option>
-              <option value="cash_out">Cash Out</option>
+              {activeTab === 'entries' ? (
+                <>
+                  <option value="cash_in">Cash In</option>
+                  <option value="cash_out">Cash Out</option>
+                </>
+              ) : (
+                <>
+                  <option value="expense_out">Expense Out</option>
+                  <option value="expense_in">Reimbursement</option>
+                </>
+              )}
             </select>
           </div>
         )}
@@ -338,6 +442,64 @@ export default function PartnerCashBookDetail({ clientId, clientName, onBack }: 
                       </td>
                       <td className="px-4 py-2.5">
                         {check.is_posted ? (
+                          <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold text-green-400">Posted</span>
+                        ) : (
+                          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">Pending</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Expenses table */}
+        {activeTab === 'expenses' && (
+          <div className="overflow-hidden rounded-lg border border-divider bg-surface-alt">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-divider bg-surface">
+                  <th className="px-4 py-2.5 text-left">
+                    <input type="checkbox" checked={expenses.length > 0 && selectedExpenses.size === expenses.length} onChange={selectAllExpenses} className="rounded border-divider" />
+                  </th>
+                  <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Date</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Type</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Nature</th>
+                  <th className="px-4 py-2.5 text-right font-medium text-foreground-muted">Amount</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Mode</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Staff</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Description</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Posted</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expensesLoading ? (
+                  <tr><td colSpan={9} className="py-12 text-center text-foreground-dim">Loading...</td></tr>
+                ) : expenses.length === 0 ? (
+                  <tr><td colSpan={9} className="py-12 text-center text-foreground-dim">No expenses found</td></tr>
+                ) : (
+                  expenses.map((expense: any) => (
+                    <tr key={expense.id} className={`border-b border-divider ${selectedExpenses.has(expense.id) ? 'bg-blue-500/5' : 'hover:bg-surface'}`}>
+                      <td className="px-4 py-2.5">
+                        <input type="checkbox" checked={selectedExpenses.has(expense.id)} onChange={() => toggleExpense(expense.id)} className="rounded border-divider" />
+                      </td>
+                      <td className="px-4 py-2.5 text-foreground">{expense.entry_date}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          expense.entry_type === 'expense_out' ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'
+                        }`}>
+                          {expense.entry_type === 'expense_out' ? 'Expense Out' : 'Reimbursement'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-foreground-muted">{expense.nature_of_expense || '-'}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-foreground">{formatCurrency(expense.amount)}</td>
+                      <td className="px-4 py-2.5 capitalize text-foreground-muted">{(expense.payment_mode || '').replace('_', ' ')}</td>
+                      <td className="px-4 py-2.5 text-foreground-muted">{expense.user?.display_name || '-'}</td>
+                      <td className="px-4 py-2.5 text-foreground-muted">{expense.description || '-'}</td>
+                      <td className="px-4 py-2.5">
+                        {expense.is_posted ? (
                           <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold text-green-400">Posted</span>
                         ) : (
                           <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400">Pending</span>

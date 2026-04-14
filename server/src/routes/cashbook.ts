@@ -410,6 +410,43 @@ router.get('/checks', async (req: Request, res: Response) => {
   }
 });
 
+// GET /cashbook/expenses
+router.get('/expenses', async (req: Request, res: Response) => {
+  try {
+    const { date_from, date_to, type, page = '1', limit = '50' } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    let query = supabaseAdmin
+      .from('cashbook_expense_entries')
+      .select('*, user:users!cashbook_expense_entries_user_id_fkey(id, display_name), category:cash_book_categories(id, name, type)', { count: 'exact' })
+      .eq('client_id', req.cashBookClientId!)
+      .eq('is_deleted', false)
+      .order('entry_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + Number(limit) - 1);
+
+    if (req.cashBookRole === 'staff' || req.query.own_only === 'true') {
+      query = query.eq('user_id', req.userId!);
+    }
+    if (date_from) query = query.gte('entry_date', date_from as string);
+    if (date_to) query = query.lte('entry_date', date_to as string);
+    if (type) query = query.eq('entry_type', type as string);
+
+    const { data, count, error } = await query;
+
+    if (error) {
+      console.error('Expenses fetch error:', error);
+      res.status(500).json({ success: false, error: 'Failed to fetch expenses' });
+      return;
+    }
+
+    res.json({ success: true, data, total: count });
+  } catch (err) {
+    console.error('Expenses error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // POST /cashbook/checks
 router.post('/checks', async (req: Request, res: Response) => {
   try {
@@ -734,7 +771,12 @@ router.post('/sync', async (req: Request, res: Response) => {
           updated: z.array(z.any()).default([]),
           deleted: z.array(z.object({ server_id: z.string(), version: z.number() })).default([]),
         }).default({ created: [], updated: [], deleted: [] }),
-      }).default({ entries: { created: [], updated: [], deleted: [] }, checks: { created: [], updated: [], deleted: [] } }),
+        expenses: z.object({
+          created: z.array(z.any()).default([]),
+          updated: z.array(z.any()).default([]),
+          deleted: z.array(z.object({ server_id: z.string(), version: z.number() })).default([]),
+        }).default({ created: [], updated: [], deleted: [] }),
+      }).default({ entries: { created: [], updated: [], deleted: [] }, checks: { created: [], updated: [], deleted: [] }, expenses: { created: [], updated: [], deleted: [] } }),
     });
 
     const body = syncSchema.parse(req.body);
@@ -744,6 +786,7 @@ router.post('/sync', async (req: Request, res: Response) => {
 
     const entryResults: { created: any[]; updated: any[]; deleted: any[] } = { created: [], updated: [], deleted: [] };
     const checkResults: { created: any[]; updated: any[]; deleted: any[] } = { created: [], updated: [], deleted: [] };
+    const expenseResults: { created: any[]; updated: any[]; deleted: any[] } = { created: [], updated: [], deleted: [] };
 
     // --- Process entry pushes ---
     for (const entry of body.push.entries.created) {
@@ -964,6 +1007,113 @@ router.post('/sync', async (req: Request, res: Response) => {
       }
     }
 
+    // --- Process expense pushes (same pattern as entries) ---
+    for (const expense of body.push.expenses.created) {
+      try {
+        if (expense.local_id) {
+          const { data: existing } = await supabaseAdmin
+            .from('cashbook_expense_entries')
+            .select('id')
+            .eq('local_id', expense.local_id)
+            .maybeSingle();
+
+          if (existing) {
+            expenseResults.created.push({ local_id: expense.local_id, server_id: existing.id, status: 'ok' });
+            continue;
+          }
+        }
+
+        const { data, error } = await supabaseAdmin
+          .from('cashbook_expense_entries')
+          .insert({
+            client_id: clientId,
+            user_id: userId,
+            local_id: expense.local_id,
+            entry_type: expense.entry_type,
+            amount: expense.amount,
+            entry_date: expense.entry_date,
+            nature_of_expense: expense.nature_of_expense,
+            description: expense.description,
+            category_id: expense.category_id,
+            payment_mode: expense.payment_mode || 'cash',
+            photo_url: expense.photo_url,
+            photo_key: expense.photo_key,
+            server_updated_at: now,
+          })
+          .select('id')
+          .single();
+
+        if (error) {
+          expenseResults.created.push({ local_id: expense.local_id, server_id: '', status: 'error', error: error.message });
+        } else {
+          expenseResults.created.push({ local_id: expense.local_id, server_id: data.id, status: 'ok' });
+        }
+      } catch {
+        expenseResults.created.push({ local_id: expense.local_id, server_id: '', status: 'error', error: 'Unexpected error' });
+      }
+    }
+
+    for (const expense of body.push.expenses.updated) {
+      try {
+        const { data: current } = await supabaseAdmin
+          .from('cashbook_expense_entries')
+          .select('version, is_posted')
+          .eq('id', expense.server_id)
+          .eq('client_id', clientId)
+          .single();
+
+        if (!current || current.is_posted) {
+          expenseResults.updated.push({ server_id: expense.server_id, status: 'conflict', server_version: current });
+          continue;
+        }
+
+        if (current.version > expense.version) {
+          const { data: full } = await supabaseAdmin
+            .from('cashbook_expense_entries')
+            .select('*')
+            .eq('id', expense.server_id)
+            .single();
+          expenseResults.updated.push({ server_id: expense.server_id, status: 'conflict', server_version: full });
+          continue;
+        }
+
+        const { server_id, version, local_id, ...updateFields } = expense;
+        await supabaseAdmin
+          .from('cashbook_expense_entries')
+          .update({ ...updateFields, version: current.version + 1, server_updated_at: now, updated_at: now })
+          .eq('id', server_id);
+
+        expenseResults.updated.push({ server_id, status: 'ok' });
+      } catch {
+        expenseResults.updated.push({ server_id: expense.server_id, status: 'conflict' });
+      }
+    }
+
+    for (const expense of body.push.expenses.deleted) {
+      try {
+        const { data: current } = await supabaseAdmin
+          .from('cashbook_expense_entries')
+          .select('version, is_posted')
+          .eq('id', expense.server_id)
+          .eq('client_id', clientId)
+          .single();
+
+        if (!current || current.is_posted) {
+          expenseResults.deleted.push({ server_id: expense.server_id, status: 'error' });
+          continue;
+        }
+
+        await supabaseAdmin
+          .from('cashbook_expense_entries')
+          .update({ is_deleted: true, deleted_at: now, deleted_by: userId, server_updated_at: now })
+          .eq('id', expense.server_id);
+
+        expenseResults.deleted.push({ server_id: expense.server_id, status: 'ok' });
+      } catch {
+        expenseResults.deleted.push({ server_id: expense.server_id, status: 'error' });
+      }
+    }
+
     // --- Pull changes since last sync ---
     const lastSyncedAt = body.last_synced_at || '1970-01-01T00:00:00Z';
 
@@ -979,20 +1129,29 @@ router.post('/sync', async (req: Request, res: Response) => {
       .eq('client_id', clientId)
       .gt('server_updated_at', lastSyncedAt);
 
+    let expensesQuery = supabaseAdmin
+      .from('cashbook_expense_entries')
+      .select('*')
+      .eq('client_id', clientId)
+      .gt('server_updated_at', lastSyncedAt);
+
     // Staff only sees own entries
     if (req.cashBookRole === 'staff') {
       entriesQuery = entriesQuery.eq('user_id', userId);
       checksQuery = checksQuery.eq('user_id', userId);
+      expensesQuery = expensesQuery.eq('user_id', userId);
     }
 
-    const [entriesRes, checksRes, categoriesRes] = await Promise.all([
+    const [entriesRes, checksRes, expensesRes, categoriesRes] = await Promise.all([
       entriesQuery,
       checksQuery,
+      expensesQuery,
       supabaseAdmin.from('cash_book_categories').select('*').eq('client_id', clientId).eq('is_active', true),
     ]);
 
     const pulledEntries = entriesRes.data || [];
     const pulledChecks = checksRes.data || [];
+    const pulledExpenses = expensesRes.data || [];
 
     // Recompute daily balances for dates affected by pushed entries (fire-and-forget)
     const affectedDates = new Set<string>();
@@ -1016,11 +1175,16 @@ router.post('/sync', async (req: Request, res: Response) => {
             created_or_updated: pulledChecks.filter(c => !c.is_deleted),
             deleted_ids: pulledChecks.filter(c => c.is_deleted).map(c => c.id),
           },
+          expenses: {
+            created_or_updated: pulledExpenses.filter(e => !e.is_deleted),
+            deleted_ids: pulledExpenses.filter(e => e.is_deleted).map(e => e.id),
+          },
           categories: categoriesRes.data || [],
         },
         push_results: {
           entries: entryResults,
           checks: checkResults,
+          expenses: expenseResults,
         },
       },
     });

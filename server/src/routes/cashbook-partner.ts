@@ -50,7 +50,7 @@ router.get('/clients', async (req: Request, res: Response) => {
 
     // Get unposted counts per client
     const statsPromises = clientIds.map(async (clientId) => {
-      const [{ count: unpostedEntries }, { count: unpostedChecks }, { count: totalEntries }] = await Promise.all([
+      const [{ count: unpostedEntries }, { count: unpostedChecks }, { count: unpostedExpenses }, { count: totalEntries }] = await Promise.all([
         supabaseAdmin
           .from('cash_book_entries')
           .select('*', { count: 'exact', head: true })
@@ -59,6 +59,12 @@ router.get('/clients', async (req: Request, res: Response) => {
           .eq('is_deleted', false),
         supabaseAdmin
           .from('check_entries')
+          .select('*', { count: 'exact', head: true })
+          .eq('client_id', clientId)
+          .eq('is_posted', false)
+          .eq('is_deleted', false),
+        supabaseAdmin
+          .from('cashbook_expense_entries')
           .select('*', { count: 'exact', head: true })
           .eq('client_id', clientId)
           .eq('is_posted', false)
@@ -73,6 +79,7 @@ router.get('/clients', async (req: Request, res: Response) => {
         client_id: clientId,
         unposted_entries: unpostedEntries || 0,
         unposted_checks: unpostedChecks || 0,
+        unposted_expenses: unpostedExpenses || 0,
         total_entries: totalEntries || 0,
       };
     });
@@ -179,6 +186,50 @@ router.get('/clients/:clientId/checks', async (req: Request, res: Response) => {
   }
 });
 
+// GET /partner/cashbook/clients/:clientId/expenses
+router.get('/clients/:clientId/expenses', async (req: Request, res: Response) => {
+  try {
+    if (!await verifyClientAccess(req.userId!, req.params.clientId as string)) {
+      res.status(403).json({ success: false, error: 'No access to this client' });
+      return;
+    }
+
+    const { type, is_posted, date_from, date_to, page = '1', limit = '50' } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    let query = supabaseAdmin
+      .from('cashbook_expense_entries')
+      .select(`
+        *,
+        user:users!cashbook_expense_entries_user_id_fkey(id, display_name),
+        category:cash_book_categories(id, name, type)
+      `, { count: 'exact' })
+      .eq('client_id', req.params.clientId)
+      .eq('is_deleted', false)
+      .order('entry_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + Number(limit) - 1);
+
+    if (type) query = query.eq('entry_type', type as string);
+    if (is_posted !== undefined) query = query.eq('is_posted', is_posted === 'true');
+    if (date_from) query = query.gte('entry_date', date_from as string);
+    if (date_to) query = query.lte('entry_date', date_to as string);
+
+    const { data, count, error } = await query;
+
+    if (error) {
+      console.error('Partner expenses fetch error:', error);
+      res.status(500).json({ success: false, error: 'Failed to fetch expenses' });
+      return;
+    }
+
+    res.json({ success: true, data, total: count });
+  } catch (err) {
+    console.error('Partner expenses error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // GET /partner/cashbook/clients/:clientId/stats
 router.get('/clients/:clientId/stats', async (req: Request, res: Response) => {
   try {
@@ -194,6 +245,8 @@ router.get('/clients/:clientId/stats', async (req: Request, res: Response) => {
       { data: cashOutData },
       { count: unpostedEntries },
       { count: unpostedChecks },
+      { count: unpostedExpenses },
+      { data: expenseData },
     ] = await Promise.all([
       supabaseAdmin.rpc('sum_entries_by_type', { p_client_id: clientId, p_type: 'cash_in' }).single(),
       supabaseAdmin.rpc('sum_entries_by_type', { p_client_id: clientId, p_type: 'cash_out' }).single(),
@@ -205,6 +258,15 @@ router.get('/clients/:clientId/stats', async (req: Request, res: Response) => {
         .from('check_entries')
         .select('*', { count: 'exact', head: true })
         .eq('client_id', clientId).eq('is_posted', false).eq('is_deleted', false),
+      supabaseAdmin
+        .from('cashbook_expense_entries')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_id', clientId).eq('is_posted', false).eq('is_deleted', false),
+      supabaseAdmin
+        .from('cashbook_expense_entries')
+        .select('entry_type, amount')
+        .eq('client_id', clientId)
+        .eq('is_deleted', false),
     ]);
 
     // Fallback: if RPC doesn't exist, compute via query
@@ -228,6 +290,13 @@ router.get('/clients/:clientId/stats', async (req: Request, res: Response) => {
       }
     }
 
+    let totalExpenseOut = 0;
+    let totalExpenseIn = 0;
+    for (const e of expenseData || []) {
+      if (e.entry_type === 'expense_out') totalExpenseOut += Number(e.amount);
+      else totalExpenseIn += Number(e.amount);
+    }
+
     res.json({
       success: true,
       data: {
@@ -236,6 +305,10 @@ router.get('/clients/:clientId/stats', async (req: Request, res: Response) => {
         balance: totalIn - totalOut,
         unposted_entries: unpostedEntries || 0,
         unposted_checks: unpostedChecks || 0,
+        unposted_expenses: unpostedExpenses || 0,
+        total_expense_out: totalExpenseOut,
+        total_expense_in: totalExpenseIn,
+        expense_balance: totalExpenseIn - totalExpenseOut,
       },
     });
   } catch (err) {
@@ -469,6 +542,120 @@ router.post('/checks/unpost', async (req: Request, res: Response) => {
       return;
     }
     console.error('Partner unpost checks error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /partner/cashbook/expenses/post - Batch mark expenses as posted
+router.post('/expenses/post', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({
+      expense_ids: z.array(z.string().uuid()).min(1),
+    });
+    const body = schema.parse(req.body);
+    const now = new Date().toISOString();
+
+    const { data: expenses } = await supabaseAdmin
+      .from('cashbook_expense_entries')
+      .select('id, client_id')
+      .in('id', body.expense_ids);
+
+    const clientIds = [...new Set((expenses || []).map(e => e.client_id))];
+    for (const clientId of clientIds) {
+      if (!await verifyClientAccess(req.userId!, clientId)) {
+        res.status(403).json({ success: false, error: 'No access to one or more clients' });
+        return;
+      }
+    }
+
+    const { error } = await supabaseAdmin
+      .from('cashbook_expense_entries')
+      .update({
+        is_posted: true,
+        posted_by: req.userId!,
+        posted_at: now,
+        server_updated_at: now,
+      })
+      .in('id', body.expense_ids);
+
+    if (error) {
+      res.status(500).json({ success: false, error: 'Failed to mark expenses as posted' });
+      return;
+    }
+
+    const auditRows = body.expense_ids.map(id => ({
+      entry_id: id,
+      entry_table: 'cashbook_expense_entries' as const,
+      changed_by: req.userId!,
+      action: 'post' as const,
+      changes: {},
+    }));
+    await supabaseAdmin.from('cash_book_entry_audit').insert(auditRows);
+
+    res.json({ success: true, message: `${body.expense_ids.length} expenses marked as posted` });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Partner post expenses error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /partner/cashbook/expenses/unpost - Batch unmark expenses
+router.post('/expenses/unpost', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({
+      expense_ids: z.array(z.string().uuid()).min(1),
+    });
+    const body = schema.parse(req.body);
+    const now = new Date().toISOString();
+
+    const { data: expenses } = await supabaseAdmin
+      .from('cashbook_expense_entries')
+      .select('id, client_id')
+      .in('id', body.expense_ids);
+
+    const clientIds = [...new Set((expenses || []).map(e => e.client_id))];
+    for (const clientId of clientIds) {
+      if (!await verifyClientAccess(req.userId!, clientId)) {
+        res.status(403).json({ success: false, error: 'No access to one or more clients' });
+        return;
+      }
+    }
+
+    const { error } = await supabaseAdmin
+      .from('cashbook_expense_entries')
+      .update({
+        is_posted: false,
+        posted_by: null,
+        posted_at: null,
+        server_updated_at: now,
+      })
+      .in('id', body.expense_ids);
+
+    if (error) {
+      res.status(500).json({ success: false, error: 'Failed to unpost expenses' });
+      return;
+    }
+
+    const auditRows = body.expense_ids.map(id => ({
+      entry_id: id,
+      entry_table: 'cashbook_expense_entries' as const,
+      changed_by: req.userId!,
+      action: 'unpost' as const,
+      changes: {},
+    }));
+    await supabaseAdmin.from('cash_book_entry_audit').insert(auditRows);
+
+    res.json({ success: true, message: `${body.expense_ids.length} expenses unmarked` });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Partner unpost expenses error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
