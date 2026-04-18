@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth';
+import { isWorkspaceAdmin } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 
 const router = Router();
@@ -7,19 +8,17 @@ const router = Router();
 router.use(requireAuth);
 
 // GET /client-spaces/available
-// Returns enabled templates the current user can instantiate (role-based OR direct user grant).
+// Returns all enabled templates. Only workspace admins can instantiate them
+// (sharing is admin-driven — managers then share the resulting folders with team users).
 router.get('/available', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
 
-    // Fetch user's role(s) in any workspace
-    const { data: memberRows } = await supabaseAdmin
-      .from('workspace_members')
-      .select('role_id')
-      .eq('user_id', userId);
-    const roleIds = Array.from(
-      new Set((memberRows || []).map((m: any) => m.role_id).filter(Boolean)),
-    );
+    const isAdmin = await isWorkspaceAdmin(userId);
+    if (!isAdmin) {
+      res.status(403).json({ success: false, error: 'Workspace admin access required' });
+      return;
+    }
 
     const { data: all, error } = await supabaseAdmin
       .from('client_space_templates')
@@ -31,32 +30,8 @@ router.get('/available', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
-    if (!all || all.length === 0) {
-      res.json({ success: true, data: [] });
-      return;
-    }
 
-    const ids = all.map((t) => t.id);
-
-    let roleGrants = new Set<string>();
-    if (roleIds.length > 0) {
-      const { data: rga } = await supabaseAdmin
-        .from('client_space_template_role_access')
-        .select('template_id')
-        .in('role_id', roleIds)
-        .in('template_id', ids);
-      (rga || []).forEach((r: any) => roleGrants.add(r.template_id));
-    }
-
-    const { data: uga } = await supabaseAdmin
-      .from('client_space_template_user_access')
-      .select('template_id')
-      .eq('user_id', userId)
-      .in('template_id', ids);
-    const userGrants = new Set((uga || []).map((u: any) => u.template_id));
-
-    const accessible = all.filter((t) => roleGrants.has(t.id) || userGrants.has(t.id));
-    res.json({ success: true, data: accessible });
+    res.json({ success: true, data: all || [] });
   } catch (err) {
     console.error('List available client-space templates error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });

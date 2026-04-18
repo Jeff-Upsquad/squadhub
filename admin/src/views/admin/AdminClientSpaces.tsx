@@ -1,7 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { ClientSpaceTemplate, Role, User } from '@squadhub/shared';
+import type { ClientSpaceTemplate } from '@squadhub/shared';
+
+interface ClientOption { id: string; business_name: string; status: string }
+interface WorkspaceOption { id: string; name: string }
+interface SpaceOption { id: string; name: string; workspace_id: string }
+interface TemplateInstance {
+  id: string;
+  name: string;
+  client_id: string;
+  client: { id: string; business_name: string } | null;
+  space: { id: string; name: string; workspace: { id: string; name: string } | null } | null;
+  created_at: string;
+}
 
 export default function AdminClientSpaces() {
   const queryClient = useQueryClient();
@@ -113,35 +125,12 @@ function TemplateRow({
             </p>
           )}
           <div className="mt-1.5 flex items-center gap-3">
-            {(template.role_access || []).length > 0 ? (
-              <div className="flex items-center gap-1">
-                {(template.role_access || []).map((ra) => (
-                  <span
-                    key={ra.id}
-                    className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                    style={{
-                      backgroundColor: ra.role?.color ? `${ra.role.color}15` : '#F1F5F9',
-                      color: ra.role?.color || '#62748E',
-                    }}
-                  >
-                    {ra.role?.name || 'Unknown'}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            {(template.user_access || []).length > 0 && (
+            {template.instance_count != null && template.instance_count > 0 ? (
               <span className="text-[10px] text-[#90A1B9]">
-                + {(template.user_access || []).length} direct user
-                {(template.user_access || []).length !== 1 ? 's' : ''}
+                Shared with {template.instance_count} {template.instance_count === 1 ? 'space' : 'spaces'}
               </span>
-            )}
-            {(template.role_access || []).length === 0 && (template.user_access || []).length === 0 && (
-              <span className="text-[10px] text-[#90A1B9]">No access assigned</span>
-            )}
-            {template.instance_count != null && template.instance_count > 0 && (
-              <span className="text-[10px] text-[#90A1B9]">
-                · {template.instance_count} folder{template.instance_count !== 1 ? 's' : ''} using this
-              </span>
+            ) : (
+              <span className="text-[10px] text-[#90A1B9]">Not shared yet</span>
             )}
           </div>
         </div>
@@ -161,58 +150,7 @@ function TemplateRow({
 
 function SharingSlider({ template, onClose }: { template: ClientSpaceTemplate; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<'roles' | 'users'>('roles');
-  const [userSearch, setUserSearch] = useState('');
-  const [showRoleAdd, setShowRoleAdd] = useState(false);
-  const [showUserAdd, setShowUserAdd] = useState(false);
-
-  const { data: cur } = useQuery<ClientSpaceTemplate>({
-    queryKey: ['admin-client-space', template.id],
-    queryFn: async () => {
-      const res = await api.get(`/admin/client-spaces/${template.id}`);
-      return res.data.data;
-    },
-    initialData: template,
-  });
-
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['admin-client-space', template.id] });
-    queryClient.invalidateQueries({ queryKey: ['admin-client-spaces'] });
-  };
-
-  const { data: allRoles } = useQuery<Role[]>({
-    queryKey: ['all-roles'],
-    queryFn: async () => {
-      const res = await api.get('/admin/roles');
-      return res.data.data;
-    },
-  });
-
-  const { data: allUsers } = useQuery<User[]>({
-    queryKey: ['all-users-for-access'],
-    queryFn: async () => {
-      const res = await api.get('/admin/users');
-      return res.data.data;
-    },
-    enabled: showUserAdd,
-  });
-
-  const addRole = useMutation({
-    mutationFn: (role_id: string) => api.post(`/admin/client-spaces/${template.id}/roles`, { role_id }),
-    onSuccess: () => { invalidate(); setShowRoleAdd(false); },
-  });
-  const removeRole = useMutation({
-    mutationFn: (roleId: string) => api.delete(`/admin/client-spaces/${template.id}/roles/${roleId}`),
-    onSuccess: invalidate,
-  });
-  const addUser = useMutation({
-    mutationFn: (user_id: string) => api.post(`/admin/client-spaces/${template.id}/users`, { user_id }),
-    onSuccess: invalidate,
-  });
-  const removeUser = useMutation({
-    mutationFn: (userId: string) => api.delete(`/admin/client-spaces/${template.id}/users/${userId}`),
-    onSuccess: invalidate,
-  });
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') onClose();
@@ -222,28 +160,52 @@ function SharingSlider({ template, onClose }: { template: ClientSpaceTemplate; o
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  const assignedRoleIds = new Set((cur?.role_access || []).map((ra) => ra.role_id));
-  const availableRoles = (allRoles || []).filter((r) => !assignedRoleIds.has(r.id));
-  const assignedUserIds = new Set((cur?.user_access || []).map((ua) => ua.user_id));
-  const filteredUsers = (allUsers || [])
-    .filter((u) => !assignedUserIds.has(u.id))
-    .filter(
-      (u) =>
-        !userSearch ||
-        u.display_name.toLowerCase().includes(userSearch.toLowerCase()) ||
-        u.email.toLowerCase().includes(userSearch.toLowerCase()),
-    );
+  const { data: instances = [], isLoading } = useQuery<TemplateInstance[]>({
+    queryKey: ['client-space-instances', template.id],
+    queryFn: async () => {
+      const res = await api.get(`/admin/client-spaces/${template.id}/usage`);
+      return res.data.data;
+    },
+  });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['client-space-instances', template.id] });
+    queryClient.invalidateQueries({ queryKey: ['admin-client-spaces'] });
+  };
+
+  const deleteInstance = useMutation({
+    mutationFn: (folderId: string) =>
+      api.delete(`/admin/client-spaces/${template.id}/instances/${folderId}`),
+    onSuccess: invalidate,
+  });
+
+  // Group instances by client
+  const grouped = useMemo(() => {
+    const map = new Map<string, TemplateInstance[]>();
+    for (const inst of instances) {
+      const key = inst.client_id;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(inst);
+    }
+    return Array.from(map.entries()).map(([clientId, items]) => ({
+      clientId,
+      clientName: items[0]?.client?.business_name || 'Unknown client',
+      items,
+    }));
+  }, [instances]);
 
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed right-0 top-0 z-50 flex h-full w-[400px] flex-col bg-white shadow-xl">
+      <div className="fixed right-0 top-0 z-50 flex h-full w-[440px] flex-col bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-4">
           <div>
             <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">
-              Share {cur?.name}
+              Share {template.name}
             </h3>
-            <p className="mt-0.5 text-xs text-[#90A1B9]">Control who can instantiate this template</p>
+            <p className="mt-0.5 text-xs text-[#90A1B9]">
+              Share this template with a client to create a space under them
+            </p>
           </div>
           <button onClick={onClose} className="rounded p-1 text-[#90A1B9] hover:bg-[#F1F5F9] hover:text-[#0F172B]">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -252,162 +214,72 @@ function SharingSlider({ template, onClose }: { template: ClientSpaceTemplate; o
           </button>
         </div>
 
-        <div className="flex border-b border-[#E2E8F0]">
-          {(['roles', 'users'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`flex-1 border-b-2 py-2.5 text-center text-xs font-medium transition ${
-                tab === t ? 'border-[#0F172B] text-[#0F172B]' : 'border-transparent text-[#62748E] hover:text-[#0F172B]'
-              }`}
-            >
-              {t === 'roles'
-                ? `Roles (${(cur?.role_access || []).length})`
-                : `Users (${(cur?.user_access || []).length})`}
-            </button>
-          ))}
-        </div>
-
         <div className="flex-1 overflow-y-auto p-4">
-          {tab === 'roles' ? (
-            <div>
-              {!showRoleAdd ? (
-                <button
-                  onClick={() => setShowRoleAdd(true)}
-                  className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2 text-xs font-medium text-[#62748E] transition hover:border-[#0F172B] hover:text-[#0F172B]"
-                >
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add Role
-                </button>
-              ) : (
-                <div className="mb-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-                  <p className="mb-2 text-xs font-medium text-[#62748E]">Select a role:</p>
-                  {availableRoles.length === 0 ? (
-                    <p className="text-xs text-[#90A1B9]">All roles already have access.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-1.5">
-                      {availableRoles.map((role) => (
-                        <button
-                          key={role.id}
-                          onClick={() => addRole.mutate(role.id)}
-                          disabled={addRole.isPending}
-                          className="rounded-full border border-[#E2E8F0] bg-white px-3 py-1 text-xs font-medium text-[#62748E] transition hover:bg-[#F1F5F9] hover:text-[#0F172B] disabled:opacity-50"
-                        >
-                          <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: role.color || '#90A1B9' }} />
-                          {role.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <button onClick={() => setShowRoleAdd(false)} className="mt-2 text-[10px] text-[#90A1B9] hover:text-[#0F172B]">
-                    Cancel
-                  </button>
-                </div>
-              )}
-
-              {(cur?.role_access || []).length === 0 ? (
-                <p className="py-6 text-center text-xs text-[#90A1B9]">No roles assigned yet</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {(cur?.role_access || []).map((ra) => (
-                    <div key={ra.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] px-3 py-2.5">
-                      <div className="flex items-center gap-2.5">
-                        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: ra.role?.color || '#90A1B9' }} />
-                        <span className="text-sm font-medium text-[#0F172B]">{ra.role?.name || 'Unknown'}</span>
-                      </div>
-                      <button
-                        onClick={() => removeRole.mutate(ra.role_id)}
-                        className="rounded p-1 text-[#90A1B9] transition hover:bg-red-50 hover:text-red-500"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          {showAddForm ? (
+            <AddInstanceForm
+              templateId={template.id}
+              templateName={template.name}
+              onCreated={() => {
+                invalidate();
+                setShowAddForm(false);
+              }}
+              onCancel={() => setShowAddForm(false)}
+            />
           ) : (
-            <div>
-              {!showUserAdd ? (
-                <button
-                  onClick={() => setShowUserAdd(true)}
-                  className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2 text-xs font-medium text-[#62748E] transition hover:border-[#0F172B] hover:text-[#0F172B]"
-                >
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add User
-                </button>
-              ) : (
-                <div className="mb-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-                  <input
-                    value={userSearch}
-                    onChange={(e) => setUserSearch(e.target.value)}
-                    placeholder="Search by name or email..."
-                    className="mb-2 w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs focus:border-[#0F172B] focus:outline-none"
-                  />
-                  <div className="max-h-36 space-y-1 overflow-y-auto">
-                    {filteredUsers.length === 0 ? (
-                      <p className="py-2 text-xs text-[#90A1B9]">No users found</p>
-                    ) : (
-                      filteredUsers.slice(0, 15).map((user) => (
-                        <button
-                          key={user.id}
-                          onClick={() => addUser.mutate(user.id)}
-                          disabled={addUser.isPending}
-                          className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition hover:bg-white disabled:opacity-50"
-                        >
-                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
-                            {user.display_name?.[0]?.toUpperCase() || '?'}
-                          </div>
-                          <div>
-                            <div className="text-xs font-medium text-[#0F172B]">{user.display_name}</div>
-                            <div className="text-[10px] text-[#90A1B9]">{user.email}</div>
-                          </div>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                  <button
-                    onClick={() => { setShowUserAdd(false); setUserSearch(''); }}
-                    className="mt-2 text-[10px] text-[#90A1B9] hover:text-[#0F172B]"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="mb-4 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2 text-xs font-medium text-[#62748E] transition hover:border-[#0F172B] hover:text-[#0F172B]"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Share with a client
+            </button>
+          )}
 
-              {(cur?.user_access || []).length === 0 ? (
-                <p className="py-6 text-center text-xs text-[#90A1B9]">No direct user access yet</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {(cur?.user_access || []).map((ua) => (
-                    <div key={ua.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] px-3 py-2.5">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
-                          {ua.user?.display_name?.[0]?.toUpperCase() || '?'}
+          <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">
+            Shared with ({instances.length} {instances.length === 1 ? 'space' : 'spaces'})
+          </div>
+
+          {isLoading ? (
+            <p className="py-6 text-center text-xs text-[#90A1B9]">Loading…</p>
+          ) : grouped.length === 0 ? (
+            <p className="py-6 text-center text-xs text-[#90A1B9]">Not shared with any clients yet.</p>
+          ) : (
+            <div className="mt-3 space-y-3">
+              {grouped.map((g) => (
+                <div key={g.clientId} className="rounded-lg border border-[#E2E8F0]">
+                  <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2">
+                    <div className="text-xs font-semibold text-[#0F172B]">{g.clientName}</div>
+                  </div>
+                  <div className="divide-y divide-[#E2E8F0]">
+                    {g.items.map((inst) => (
+                      <div key={inst.id} className="flex items-center justify-between px-3 py-2.5">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-[#0F172B]">{inst.name}</div>
+                          <div className="mt-0.5 truncate text-[10px] text-[#90A1B9]">
+                            {inst.space?.workspace?.name || '—'} · {inst.space?.name || '—'}
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-sm font-medium text-[#0F172B]">{ua.user?.display_name || 'Unknown'}</div>
-                          <div className="text-[10px] text-[#90A1B9]">{ua.user?.email || ''}</div>
-                        </div>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Remove "${inst.name}" from ${g.clientName}?`)) {
+                              deleteInstance.mutate(inst.id);
+                            }
+                          }}
+                          disabled={deleteInstance.isPending}
+                          className="ml-2 rounded p-1 text-[#90A1B9] transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                          title="Unshare"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
                       </div>
-                      <button
-                        onClick={() => removeUser.mutate(ua.user_id)}
-                        className="rounded p-1 text-[#90A1B9] transition hover:bg-red-50 hover:text-red-500"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           )}
         </div>
@@ -415,6 +287,152 @@ function SharingSlider({ template, onClose }: { template: ClientSpaceTemplate; o
     </>
   );
 }
+
+function AddInstanceForm({
+  templateId,
+  templateName,
+  onCreated,
+  onCancel,
+}: {
+  templateId: string;
+  templateName: string;
+  onCreated: () => void;
+  onCancel: () => void;
+}) {
+  const [clientId, setClientId] = useState('');
+  const [workspaceId, setWorkspaceId] = useState('');
+  const [spaceId, setSpaceId] = useState('');
+  const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: clients = [] } = useQuery<ClientOption[]>({
+    queryKey: ['admin-clients-list'],
+    queryFn: async () => {
+      const res = await api.get('/admin/clients');
+      return res.data.data;
+    },
+  });
+
+  const { data: workspacesRes } = useQuery({
+    queryKey: ['workspaces'],
+    queryFn: () => api.get('/workspaces').then((r) => r.data),
+  });
+  const workspaces: WorkspaceOption[] = workspacesRes?.data || [];
+
+  const { data: spaces = [] } = useQuery<SpaceOption[]>({
+    queryKey: ['spaces', workspaceId],
+    queryFn: async () => {
+      const res = await api.get(`/pm/spaces?workspace_id=${workspaceId}`);
+      return res.data.data;
+    },
+    enabled: !!workspaceId,
+  });
+
+  const canSubmit = clientId && workspaceId && spaceId && name.trim().length > 0;
+
+  const suggestedName = useMemo(() => {
+    const c = clients.find((x) => x.id === clientId);
+    if (!c) return '';
+    return `${templateName} — ${c.business_name}`;
+  }, [clients, clientId, templateName]);
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post(`/admin/client-spaces/${templateId}/instances`, {
+        client_id: clientId,
+        space_id: spaceId,
+        name: name.trim(),
+      });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      onCreated();
+    },
+    onError: (e: any) => {
+      setError(e?.response?.data?.error || e?.message || 'Failed to create space');
+    },
+  });
+
+  return (
+    <div className="mb-4 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+      <div className="mb-2 text-xs font-semibold text-[#0F172B]">Share with a client</div>
+
+      <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Client</label>
+      <select
+        value={clientId}
+        onChange={(e) => setClientId(e.target.value)}
+        className="mb-3 w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs outline-none focus:border-[#0F172B]"
+      >
+        <option value="">Select a client…</option>
+        {clients.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.business_name}
+          </option>
+        ))}
+      </select>
+
+      <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Workspace</label>
+      <select
+        value={workspaceId}
+        onChange={(e) => { setWorkspaceId(e.target.value); setSpaceId(''); }}
+        className="mb-3 w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs outline-none focus:border-[#0F172B]"
+      >
+        <option value="">Select a workspace…</option>
+        {workspaces.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.name}
+          </option>
+        ))}
+      </select>
+
+      <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Space</label>
+      <select
+        value={spaceId}
+        onChange={(e) => setSpaceId(e.target.value)}
+        disabled={!workspaceId}
+        className="mb-3 w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs outline-none focus:border-[#0F172B] disabled:bg-[#F1F5F9]"
+      >
+        <option value="">{workspaceId ? 'Select a space…' : 'Pick a workspace first'}</option>
+        {spaces.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}
+          </option>
+        ))}
+      </select>
+
+      <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Name</label>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder={suggestedName || 'Name this space'}
+        className="mb-3 w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs outline-none focus:border-[#0F172B]"
+      />
+
+      {error && (
+        <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] text-red-700">{error}</div>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded px-2 py-1 text-[10px] text-[#90A1B9] hover:text-[#0F172B]"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => createMutation.mutate()}
+          disabled={!canSubmit || createMutation.isPending}
+          className="rounded bg-[#0F172B] px-3 py-1 text-[10px] font-medium text-white hover:bg-[#1E293B] disabled:bg-[#CAD5E2]"
+        >
+          {createMutation.isPending ? 'Creating…' : 'Share'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 
 function CreateModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();

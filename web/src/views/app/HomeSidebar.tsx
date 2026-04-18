@@ -11,6 +11,7 @@ import { useHasMiniApp } from '../../hooks/useMiniApps';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useIsInternal, useIsClient, useIsPartner } from '../../hooks/useUserType';
 import { useMyClients, useClientFolders, type MyClientEntry } from '../../hooks/useMyClients';
+import { useIsWorkspaceAdmin } from '../../hooks/useIsWorkspaceAdmin';
 import AddClientSpaceModal from './clients/AddClientSpaceModal';
 
 // ---- Props ----
@@ -524,7 +525,7 @@ function ClientRow({
   const activeDesignFolderId = usePMStore((s) => s.activeDesignFolderId);
   const { data: foldersRes, isLoading } = useClientFolders(expanded ? entry.client_id : null);
   const folders = foldersRes?.folders || [];
-  const isAdmin = entry.access_level === 'admin';
+  const isWorkspaceAdmin = useIsWorkspaceAdmin();
 
   return (
     <div className="px-2">
@@ -551,7 +552,7 @@ function ClientRow({
           </span>
           <span className="truncate">{entry.client.business_name}</span>
         </button>
-        {isAdmin && (
+        {isWorkspaceAdmin && (
           <button
             onClick={onAddSpace}
             title="Add space"
@@ -570,7 +571,7 @@ function ClientRow({
           )}
           {!isLoading && folders.length === 0 && (
             <p className="px-2 py-1 text-[11px] text-foreground-dim">
-              {isAdmin ? 'No spaces yet' : 'No spaces yet.'}
+              {isWorkspaceAdmin ? 'No spaces yet. Click + to add.' : 'No spaces yet.'}
             </p>
           )}
           {folders.map((f) => {

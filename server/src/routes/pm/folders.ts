@@ -204,16 +204,11 @@ router.post('/folders', requirePermission('can_create_folders'), async (req: Req
       clientSpaceTemplate = tpl;
     }
 
-    // If a client is provided, require the user has admin-level client access
+    // If a client is provided, require workspace admin (sharing is admin-driven).
     if (body.client_id) {
-      const { data: access } = await supabaseAdmin
-        .from('client_user_access')
-        .select('access_level')
-        .eq('client_id', body.client_id)
-        .eq('user_id', req.userId!)
-        .single();
-      if (!access || access.access_level !== 'admin') {
-        res.status(403).json({ success: false, error: 'Admin client access required to add spaces' });
+      const wsAdmin = await isWorkspaceAdmin(req.userId!);
+      if (!wsAdmin) {
+        res.status(403).json({ success: false, error: 'Workspace admin access required to add client spaces' });
         return;
       }
     }

@@ -72,6 +72,139 @@ router.get('/', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /admin/client-spaces/:id/usage — folders created from this template, with client + space info
+router.get('/:id/usage', async (req: Request, res: Response) => {
+  try {
+    const { data: folders, error } = await supabaseAdmin
+      .from('folders')
+      .select('id, name, client_id, space_id, created_at, clients:client_id(id, business_name), spaces:space_id(id, name, workspace_id, workspaces:workspace_id(id, name))')
+      .eq('client_space_template_id', req.params.id)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const enriched = (folders || []).map((f: any) => ({
+      id: f.id,
+      name: f.name,
+      client_id: f.client_id,
+      client: f.clients,
+      space: f.spaces ? { id: f.spaces.id, name: f.spaces.name, workspace: f.spaces.workspaces } : null,
+      created_at: f.created_at,
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    console.error('List template usage error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /admin/client-spaces/:id/instances — create a folder for a client using this template
+const instantiateSchema = z.object({
+  client_id: z.string().uuid(),
+  space_id: z.string().uuid(),
+  name: z.string().min(1).max(100),
+});
+
+router.post('/:id/instances', async (req: Request, res: Response) => {
+  try {
+    const body = instantiateSchema.parse(req.body);
+    const templateId = req.params.id;
+
+    const { data: template } = await supabaseAdmin
+      .from('client_space_templates')
+      .select('*')
+      .eq('id', templateId)
+      .eq('is_enabled', true)
+      .single();
+    if (!template) {
+      res.status(400).json({ success: false, error: 'Template not found or disabled' });
+      return;
+    }
+
+    const { count } = await supabaseAdmin
+      .from('folders')
+      .select('*', { count: 'exact', head: true })
+      .eq('space_id', body.space_id);
+
+    const { data: folder, error: folderErr } = await supabaseAdmin
+      .from('folders')
+      .insert({
+        space_id: body.space_id,
+        name: body.name,
+        is_private: true,
+        created_by: req.userId!,
+        position: count || 0,
+        client_id: body.client_id,
+        client_space_template_id: template.id,
+        client_space_template_version: template.version,
+      })
+      .select()
+      .single();
+
+    if (folderErr || !folder) {
+      res.status(500).json({ success: false, error: folderErr?.message || 'Failed to create folder' });
+      return;
+    }
+
+    // Auto-create child lists from template
+    const templateLists = (template.template?.lists || []) as Array<{ name: string; position: number; default_view?: string }>;
+    for (const tl of templateLists) {
+      await supabaseAdmin.from('lists').insert({
+        space_id: body.space_id,
+        folder_id: folder.id,
+        name: tl.name,
+        position: tl.position || 0,
+        default_view: tl.default_view || 'list',
+        is_private: true,
+        created_by: req.userId!,
+      });
+    }
+
+    res.status(201).json({ success: true, data: folder });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Instantiate template error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /admin/client-spaces/:id/instances/:folderId — soft-delete a folder created from this template
+router.delete('/:id/instances/:folderId', async (req: Request, res: Response) => {
+  try {
+    const now = new Date().toISOString();
+    const { error } = await supabaseAdmin
+      .from('folders')
+      .update({ deleted_at: now })
+      .eq('id', req.params.folderId)
+      .eq('client_space_template_id', req.params.id);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    // Also soft-delete child lists
+    await supabaseAdmin
+      .from('lists')
+      .update({ deleted_at: now })
+      .eq('folder_id', req.params.folderId)
+      .is('deleted_at', null);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete template instance error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // GET /admin/client-spaces/:id
 router.get('/:id', async (req: Request, res: Response) => {
   try {
