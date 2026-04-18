@@ -42,7 +42,16 @@ export default function NewRequestModal({
   const createTask = useCreateTask(briefsListId);
 
   const estimate = priority === 'low' ? '~1h' : priority === 'high' ? '~4–6h' : '~2–3h';
-  const canSubmit = title.trim().length > 2 && brief.trim().length > 8 && !!briefsListId;
+  const hasTitle = title.trim().length > 0;
+  const hasBrief = brief.trim().length > 0;
+  const canSubmit = hasTitle && hasBrief && !!briefsListId;
+  const disabledReason = !hasTitle
+    ? 'Enter a title'
+    : !hasBrief
+      ? 'Enter a brief'
+      : !briefsListId
+        ? 'No "Briefs" list found in this folder'
+        : null;
 
   const handleSubmit = async () => {
     if (!canSubmit || !briefsListId) return;
@@ -284,7 +293,11 @@ export default function NewRequestModal({
 
           <div className="cd-modal-foot">
             <div className="estimate">
-              Est. <b>{estimate}</b> · will consume from your daily allotment
+              {disabledReason ? (
+                <span style={{ color: 'var(--cd-fg-2)' }}>{disabledReason}</span>
+              ) : (
+                <>Est. <b>{estimate}</b> · will consume from your daily allotment</>
+              )}
             </div>
             <button className="cd-btn" onClick={onClose} type="button">
               Cancel
@@ -294,6 +307,7 @@ export default function NewRequestModal({
               disabled={!canSubmit || submitting}
               onClick={handleSubmit}
               type="button"
+              title={disabledReason || undefined}
             >
               {submitting ? 'Submitting…' : 'Submit request'}
             </button>
