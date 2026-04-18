@@ -75,21 +75,17 @@ router.get('/', async (_req: Request, res: Response) => {
 // GET /admin/client-spaces/:id/usage — folders created from this template, with client + space info
 router.get('/:id/usage', async (req: Request, res: Response) => {
   try {
-    // Primary query; if it fails (e.g. deleted_at column variation on a given env),
-    // fall back to an unfiltered query and filter client-side.
-    let { data: folders, error } = await supabaseAdmin
+    const { data: folders, error } = await supabaseAdmin
       .from('folders')
-      .select('id, name, client_id, space_id, created_at, deleted_at')
+      .select('id, name, client_id, space_id, position, deleted_at')
       .eq('client_space_template_id', req.params.id)
-      .order('created_at', { ascending: false });
+      .order('position', { ascending: true });
 
     if (error) {
       console.error('[client-spaces-admin] usage select error:', error);
       res.status(500).json({ success: false, error: error.message });
       return;
     }
-
-    console.log(`[client-spaces-admin] usage: template ${req.params.id} → ${folders?.length || 0} folders (pre-filter)`);
 
     const list = (folders || []).filter((f: any) => !f.deleted_at);
     const clientIds = Array.from(new Set(list.map((f) => f.client_id).filter(Boolean) as string[]));
@@ -123,7 +119,7 @@ router.get('/:id/usage', async (req: Request, res: Response) => {
       (wsRows || []).forEach((w: any) => { wsMap[w.id] = w; });
     }
 
-    const enriched = list.map((f) => {
+    const enriched = list.map((f: any) => {
       const space = f.space_id ? spacesMap[f.space_id] : null;
       return {
         id: f.id,
@@ -133,7 +129,7 @@ router.get('/:id/usage', async (req: Request, res: Response) => {
         space: space
           ? { id: space.id, name: space.name, workspace: wsMap[space.workspace_id] || null }
           : null,
-        created_at: f.created_at,
+        created_at: null,
       };
     });
 
