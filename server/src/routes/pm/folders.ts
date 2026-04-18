@@ -33,13 +33,15 @@ router.get('/folders', async (req: Request, res: Response) => {
       return;
     }
 
-    // Non-admins only see active folders
+    // Non-admins only see active folders. Client-tagged folders appear in
+    // the Clients section only, so always exclude them here.
     const admin = await isWorkspaceAdmin(req.userId!);
     let query = supabaseAdmin
       .from('folders')
       .select('*, lists(*)')
       .eq('space_id', spaceId)
       .is('deleted_at', null)
+      .is('client_id', null)
       .order('position');
 
     if (!admin) query = query.eq('status', 'active');
@@ -75,27 +77,42 @@ router.get('/folders/by-client/:clientId', async (req: Request, res: Response) =
       return;
     }
 
-    const { data, error } = await supabaseAdmin
+    const { data: folderRows, error } = await supabaseAdmin
       .from('folders')
-      .select('id, name, space_id, position, client_id, client_space_template_id, client_space_template_version, created_at, client_space_templates:client_space_template_id(id, slug, name, icon)')
+      .select('id, name, space_id, position, client_id, client_space_template_id, client_space_template_version, deleted_at')
       .eq('client_id', clientId)
-      .is('deleted_at', null)
       .order('position');
 
     if (error) {
+      console.error('[pm/folders] by-client select error:', error);
       res.status(500).json({ success: false, error: error.message });
       return;
     }
 
+    const active = (folderRows || []).filter((f: any) => !f.deleted_at);
+
+    const templateIds = Array.from(
+      new Set(active.map((f: any) => f.client_space_template_id).filter(Boolean) as string[]),
+    );
+    const templatesMap: Record<string, { id: string; slug: string; name: string; icon: string }> = {};
+    if (templateIds.length > 0) {
+      const { data: tpls } = await supabaseAdmin
+        .from('client_space_templates')
+        .select('id, slug, name, icon')
+        .in('id', templateIds);
+      (tpls || []).forEach((t: any) => { templatesMap[t.id] = t; });
+    }
+
     // Filter to folders the user has access to
     const accessibleFolders = [] as any[];
-    for (const f of data || []) {
+    for (const f of active) {
       const level = await checkResourceAccess(req.userId!, 'folder', f.id);
       if (level) {
         accessibleFolders.push({
           ...f,
-          client_space_template: (f as any).client_space_templates,
-          client_space_templates: undefined,
+          client_space_template: f.client_space_template_id
+            ? templatesMap[f.client_space_template_id] || null
+            : null,
           my_access_level: level,
         });
       }

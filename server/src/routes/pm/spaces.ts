@@ -121,15 +121,19 @@ router.get('/spaces/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    // Fetch non-deleted folders
+    // Fetch non-deleted folders. Exclude folders tagged with a client —
+    // those appear in the Clients section, not under regular Spaces.
     const { data: folders } = await supabaseAdmin
       .from('folders')
       .select('*')
       .eq('space_id', id)
       .is('deleted_at', null)
+      .is('client_id', null)
       .order('position');
 
-    // Fetch all non-deleted lists in this space
+    const visibleFolderIds = new Set((folders || []).map((f: any) => f.id));
+
+    // Fetch all non-deleted lists in this space, then drop lists whose folder was filtered
     const { data: allLists } = await supabaseAdmin
       .from('lists')
       .select('*')
@@ -137,14 +141,18 @@ router.get('/spaces/:id', async (req: Request, res: Response) => {
       .is('deleted_at', null)
       .order('position');
 
+    const visibleLists = (allLists || []).filter(
+      (l: any) => !l.folder_id || visibleFolderIds.has(l.folder_id),
+    );
+
     // Attach lists to their folders
     const foldersWithLists = (folders || []).map((f: any) => ({
       ...f,
-      lists: (allLists || []).filter((l: any) => l.folder_id === f.id),
+      lists: visibleLists.filter((l: any) => l.folder_id === f.id),
     }));
 
     // Root lists (no folder)
-    const rootLists = (allLists || []).filter((l: any) => !l.folder_id);
+    const rootLists = visibleLists.filter((l: any) => !l.folder_id);
 
     res.json({
       success: true,
