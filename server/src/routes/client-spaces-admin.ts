@@ -141,7 +141,9 @@ router.post('/:id/instances', async (req: Request, res: Response) => {
       return;
     }
 
-    // Resolve workspace: admin's first workspace
+    // Resolve workspace — prefer the admin's first membership, fall back to
+    // the first workspace in the system (platform admins may not be
+    // workspace_members themselves).
     const { data: wsRow } = await supabaseAdmin
       .from('workspace_members')
       .select('workspace_id')
@@ -149,11 +151,22 @@ router.post('/:id/instances', async (req: Request, res: Response) => {
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle();
-    const workspaceId = wsRow?.workspace_id;
+    let workspaceId: string | undefined = wsRow?.workspace_id;
+
+    if (!workspaceId) {
+      const { data: firstWs } = await supabaseAdmin
+        .from('workspaces')
+        .select('id')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      workspaceId = firstWs?.id;
+    }
+
     if (!workspaceId) {
       res.status(400).json({
         success: false,
-        error: 'Admin must belong to at least one workspace to share templates',
+        error: 'No workspaces exist yet. Create one first.',
       });
       return;
     }
