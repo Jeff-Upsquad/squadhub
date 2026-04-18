@@ -162,6 +162,33 @@ router.post('/tasks', async (req: Request, res: Response) => {
       return;
     }
 
+    // If the list is under a client-tagged folder, assign a per-client
+    // sequential display_number. Non-client tasks get null.
+    let displayNumber: number | null = null;
+    const { data: parentList } = await supabaseAdmin
+      .from('lists')
+      .select('folder_id')
+      .eq('id', body.list_id)
+      .single();
+    if (parentList?.folder_id) {
+      const { data: parentFolder } = await supabaseAdmin
+        .from('folders')
+        .select('client_id')
+        .eq('id', parentList.folder_id)
+        .single();
+      if (parentFolder?.client_id) {
+        const { data: n, error: nErr } = await supabaseAdmin.rpc(
+          'increment_client_task_counter',
+          { p_client_id: parentFolder.client_id },
+        );
+        if (nErr) {
+          console.warn('[pm/tasks] increment_client_task_counter failed:', nErr);
+        } else if (typeof n === 'number') {
+          displayNumber = n;
+        }
+      }
+    }
+
     const insertData: Record<string, any> = {
       list_id: body.list_id,
       title: body.title,
@@ -173,6 +200,9 @@ router.post('/tasks', async (req: Request, res: Response) => {
       metadata: body.metadata || {},
       created_by: req.userId!,
     };
+    if (displayNumber != null) {
+      insertData.display_number = displayNumber;
+    }
 
     const { data: task, error } = await supabaseAdmin
       .from('tasks')
