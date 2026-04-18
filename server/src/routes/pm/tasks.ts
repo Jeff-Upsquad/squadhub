@@ -17,6 +17,7 @@ const createSchema = z.object({
   priority: z.enum(['urgent', 'high', 'normal', 'low', 'none']).optional(),
   due_date: z.string().optional(),
   assignee_ids: z.array(z.string().uuid()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 const updateSchema = z.object({
@@ -27,6 +28,7 @@ const updateSchema = z.object({
   due_date: z.string().nullable().optional(),
   time_estimate: z.number().int().min(0).nullable().optional(),
   time_tracked: z.number().int().min(0).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 // Helper to get list_id from a task
@@ -168,6 +170,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
       priority: body.priority || 'none',
       due_date: body.due_date || null,
       assignee_ids: body.assignee_ids || [],
+      metadata: body.metadata || {},
       created_by: req.userId!,
     };
 

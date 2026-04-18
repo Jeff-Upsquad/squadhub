@@ -1,16 +1,36 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../../stores/authStore';
+import { usePMStore } from '../../../stores/pmStore';
 import api from '../../../services/api';
+
+interface DesignFolder {
+  id: string;
+  name: string;
+  space_id: string;
+  space?: { id: string; name: string };
+  created_at: string;
+}
 
 export default function ClientDashboard() {
   const user = useAuthStore((s) => s.user);
+  const setActiveDesignFolder = usePMStore((s) => s.setActiveDesignFolder);
 
   const { data: assignmentsRes } = useQuery({
     queryKey: ['my-client-assignments'],
     queryFn: () => api.get('/users/me/client-links').then((r) => r.data),
   });
 
+  const { data: designFoldersRes } = useQuery({
+    queryKey: ['my-design-folders'],
+    queryFn: () => api.get('/users/me/design-folders').then((r) => r.data),
+  });
+
   const assignments = assignmentsRes?.data || [];
+  const designFolders: DesignFolder[] = designFoldersRes?.data || [];
+
+  const openDesignFolder = (folderId: string) => {
+    setActiveDesignFolder(folderId);
+  };
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto p-6">
@@ -19,6 +39,44 @@ export default function ClientDashboard() {
           Welcome, {user?.display_name}
         </h1>
         <p className="mt-1 text-sm text-foreground-muted">Client Portal</p>
+
+        {/* Design workspace */}
+        {designFolders.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground-muted">
+              Your design workspace
+            </h2>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {designFolders.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => openDesignFolder(f.id)}
+                  className="group flex items-start gap-3 rounded-lg border border-divider bg-surface-alt p-4 text-left transition hover:border-foreground/20 hover:bg-surface-alt/80"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-foreground text-surface">
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1.5}
+                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate font-medium text-foreground">{f.name}</h3>
+                    <p className="truncate text-xs text-foreground-muted">
+                      {f.space?.name || 'Design workspace'}
+                    </p>
+                    <p className="mt-2 text-xs text-foreground-muted opacity-0 transition group-hover:opacity-100">
+                      Open dashboard →
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Linked business info */}
         <div className="mt-8">

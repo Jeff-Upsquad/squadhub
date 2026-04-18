@@ -39,6 +39,9 @@ import resourceManagementAdminRoutes from './routes/resource-management-admin';
 import cashbookRoutes from './routes/cashbook';
 import cashbookAdminRoutes from './routes/cashbook-admin';
 import cashbookPartnerRoutes from './routes/cashbook-partner';
+import clientSpacesRoutes from './routes/client-spaces';
+import clientSpacesAdminRoutes from './routes/client-spaces-admin';
+import clientAccessAdminRoutes from './routes/client-access-admin';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimerCron } from './cron/timer-cron';
 
@@ -101,6 +104,9 @@ app.use('/admin/resources', resourceManagementAdminRoutes);
 app.use('/cashbook', cashbookRoutes);
 app.use('/admin/cashbook', cashbookAdminRoutes);
 app.use('/partner/cashbook', cashbookPartnerRoutes);
+app.use('/client-spaces', clientSpacesRoutes);
+app.use('/admin/client-spaces', clientSpacesAdminRoutes);
+app.use('/admin/client-access', clientAccessAdminRoutes);
 
 // 404 handler
 app.use((_req, res) => {

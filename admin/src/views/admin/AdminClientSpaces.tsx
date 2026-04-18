@@ -1,0 +1,527 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '../../services/api';
+import type { ClientSpaceTemplate, Role, User } from '@squadhub/shared';
+
+export default function AdminClientSpaces() {
+  const queryClient = useQueryClient();
+  const [selected, setSelected] = useState<ClientSpaceTemplate | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+
+  const { data: templates, isLoading } = useQuery<ClientSpaceTemplate[]>({
+    queryKey: ['admin-client-spaces'],
+    queryFn: async () => {
+      const res = await api.get('/admin/client-spaces');
+      return res.data.data;
+    },
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, is_enabled }: { id: string; is_enabled: boolean }) =>
+      api.put(`/admin/client-spaces/${id}`, { is_enabled }).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-client-spaces'] });
+    },
+  });
+
+  return (
+    <div>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Client Spaces</h1>
+          <p className="mt-1 text-sm text-[#62748E]">
+            Templates users can instantiate as folders under a client (e.g. Design Space)
+          </p>
+        </div>
+        <button
+          onClick={() => setShowCreate(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#0F172B] px-3.5 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-[#1E293B]"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          New Template
+        </button>
+      </div>
+
+      {isLoading ? (
+        <p className="py-8 text-center text-sm text-[#90A1B9]">Loading…</p>
+      ) : !templates || templates.length === 0 ? (
+        <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
+          <p className="text-sm text-[#90A1B9]">No client-space templates yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {templates.map((t) => (
+            <TemplateRow
+              key={t.id}
+              template={t}
+              onToggle={() => toggleMutation.mutate({ id: t.id, is_enabled: !t.is_enabled })}
+              onShare={() => setSelected(t)}
+            />
+          ))}
+        </div>
+      )}
+
+      {selected && <SharingSlider template={selected} onClose={() => setSelected(null)} />}
+      {showCreate && <CreateModal onClose={() => setShowCreate(false)} />}
+    </div>
+  );
+}
+
+function TemplateRow({
+  template,
+  onToggle,
+  onShare,
+}: {
+  template: ClientSpaceTemplate;
+  onToggle: () => void;
+  onShare: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 transition hover:shadow-sm">
+      <div className="flex items-center gap-4">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#F1F5F9]">
+          <svg className="h-5 w-5 text-[#9333ea]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+        </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-[#0F172B]">{template.name}</span>
+            <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
+              v{template.version}
+            </span>
+            <button
+              onClick={onToggle}
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition ${
+                template.is_enabled
+                  ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  : 'bg-red-50 text-red-600 hover:bg-red-100'
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${template.is_enabled ? 'bg-emerald-500' : 'bg-red-400'}`} />
+              {template.is_enabled ? 'Enabled' : 'Disabled'}
+            </button>
+          </div>
+          {template.description && (
+            <p className="mt-0.5 text-xs text-[#90A1B9]">{template.description}</p>
+          )}
+          {template.template?.lists && template.template.lists.length > 0 && (
+            <p className="mt-1 text-[10px] uppercase tracking-[0.08em] text-[#90A1B9]">
+              Creates: {template.template.lists.map((l) => l.name).join(' · ')}
+            </p>
+          )}
+          <div className="mt-1.5 flex items-center gap-3">
+            {(template.role_access || []).length > 0 ? (
+              <div className="flex items-center gap-1">
+                {(template.role_access || []).map((ra) => (
+                  <span
+                    key={ra.id}
+                    className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                    style={{
+                      backgroundColor: ra.role?.color ? `${ra.role.color}15` : '#F1F5F9',
+                      color: ra.role?.color || '#62748E',
+                    }}
+                  >
+                    {ra.role?.name || 'Unknown'}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {(template.user_access || []).length > 0 && (
+              <span className="text-[10px] text-[#90A1B9]">
+                + {(template.user_access || []).length} direct user
+                {(template.user_access || []).length !== 1 ? 's' : ''}
+              </span>
+            )}
+            {(template.role_access || []).length === 0 && (template.user_access || []).length === 0 && (
+              <span className="text-[10px] text-[#90A1B9]">No access assigned</span>
+            )}
+            {template.instance_count != null && template.instance_count > 0 && (
+              <span className="text-[10px] text-[#90A1B9]">
+                · {template.instance_count} folder{template.instance_count !== 1 ? 's' : ''} using this
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      <button
+        onClick={onShare}
+        className="flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-xs font-medium text-[#62748E] transition hover:bg-[#F8FAFC] hover:text-[#0F172B]"
+      >
+        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+        </svg>
+        Share
+      </button>
+    </div>
+  );
+}
+
+function SharingSlider({ template, onClose }: { template: ClientSpaceTemplate; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [tab, setTab] = useState<'roles' | 'users'>('roles');
+  const [userSearch, setUserSearch] = useState('');
+  const [showRoleAdd, setShowRoleAdd] = useState(false);
+  const [showUserAdd, setShowUserAdd] = useState(false);
+
+  const { data: cur } = useQuery<ClientSpaceTemplate>({
+    queryKey: ['admin-client-space', template.id],
+    queryFn: async () => {
+      const res = await api.get(`/admin/client-spaces/${template.id}`);
+      return res.data.data;
+    },
+    initialData: template,
+  });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-client-space', template.id] });
+    queryClient.invalidateQueries({ queryKey: ['admin-client-spaces'] });
+  };
+
+  const { data: allRoles } = useQuery<Role[]>({
+    queryKey: ['all-roles'],
+    queryFn: async () => {
+      const res = await api.get('/admin/roles');
+      return res.data.data;
+    },
+  });
+
+  const { data: allUsers } = useQuery<User[]>({
+    queryKey: ['all-users-for-access'],
+    queryFn: async () => {
+      const res = await api.get('/admin/users');
+      return res.data.data;
+    },
+    enabled: showUserAdd,
+  });
+
+  const addRole = useMutation({
+    mutationFn: (role_id: string) => api.post(`/admin/client-spaces/${template.id}/roles`, { role_id }),
+    onSuccess: () => { invalidate(); setShowRoleAdd(false); },
+  });
+  const removeRole = useMutation({
+    mutationFn: (roleId: string) => api.delete(`/admin/client-spaces/${template.id}/roles/${roleId}`),
+    onSuccess: invalidate,
+  });
+  const addUser = useMutation({
+    mutationFn: (user_id: string) => api.post(`/admin/client-spaces/${template.id}/users`, { user_id }),
+    onSuccess: invalidate,
+  });
+  const removeUser = useMutation({
+    mutationFn: (userId: string) => api.delete(`/admin/client-spaces/${template.id}/users/${userId}`),
+    onSuccess: invalidate,
+  });
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') onClose();
+  }, [onClose]);
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+
+  const assignedRoleIds = new Set((cur?.role_access || []).map((ra) => ra.role_id));
+  const availableRoles = (allRoles || []).filter((r) => !assignedRoleIds.has(r.id));
+  const assignedUserIds = new Set((cur?.user_access || []).map((ua) => ua.user_id));
+  const filteredUsers = (allUsers || [])
+    .filter((u) => !assignedUserIds.has(u.id))
+    .filter(
+      (u) =>
+        !userSearch ||
+        u.display_name.toLowerCase().includes(userSearch.toLowerCase()) ||
+        u.email.toLowerCase().includes(userSearch.toLowerCase()),
+    );
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
+      <div className="fixed right-0 top-0 z-50 flex h-full w-[400px] flex-col bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-4">
+          <div>
+            <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">
+              Share {cur?.name}
+            </h3>
+            <p className="mt-0.5 text-xs text-[#90A1B9]">Control who can instantiate this template</p>
+          </div>
+          <button onClick={onClose} className="rounded p-1 text-[#90A1B9] hover:bg-[#F1F5F9] hover:text-[#0F172B]">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="flex border-b border-[#E2E8F0]">
+          {(['roles', 'users'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`flex-1 border-b-2 py-2.5 text-center text-xs font-medium transition ${
+                tab === t ? 'border-[#0F172B] text-[#0F172B]' : 'border-transparent text-[#62748E] hover:text-[#0F172B]'
+              }`}
+            >
+              {t === 'roles'
+                ? `Roles (${(cur?.role_access || []).length})`
+                : `Users (${(cur?.user_access || []).length})`}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          {tab === 'roles' ? (
+            <div>
+              {!showRoleAdd ? (
+                <button
+                  onClick={() => setShowRoleAdd(true)}
+                  className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2 text-xs font-medium text-[#62748E] transition hover:border-[#0F172B] hover:text-[#0F172B]"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Role
+                </button>
+              ) : (
+                <div className="mb-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                  <p className="mb-2 text-xs font-medium text-[#62748E]">Select a role:</p>
+                  {availableRoles.length === 0 ? (
+                    <p className="text-xs text-[#90A1B9]">All roles already have access.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {availableRoles.map((role) => (
+                        <button
+                          key={role.id}
+                          onClick={() => addRole.mutate(role.id)}
+                          disabled={addRole.isPending}
+                          className="rounded-full border border-[#E2E8F0] bg-white px-3 py-1 text-xs font-medium text-[#62748E] transition hover:bg-[#F1F5F9] hover:text-[#0F172B] disabled:opacity-50"
+                        >
+                          <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: role.color || '#90A1B9' }} />
+                          {role.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button onClick={() => setShowRoleAdd(false)} className="mt-2 text-[10px] text-[#90A1B9] hover:text-[#0F172B]">
+                    Cancel
+                  </button>
+                </div>
+              )}
+
+              {(cur?.role_access || []).length === 0 ? (
+                <p className="py-6 text-center text-xs text-[#90A1B9]">No roles assigned yet</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {(cur?.role_access || []).map((ra) => (
+                    <div key={ra.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] px-3 py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: ra.role?.color || '#90A1B9' }} />
+                        <span className="text-sm font-medium text-[#0F172B]">{ra.role?.name || 'Unknown'}</span>
+                      </div>
+                      <button
+                        onClick={() => removeRole.mutate(ra.role_id)}
+                        className="rounded p-1 text-[#90A1B9] transition hover:bg-red-50 hover:text-red-500"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              {!showUserAdd ? (
+                <button
+                  onClick={() => setShowUserAdd(true)}
+                  className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2 text-xs font-medium text-[#62748E] transition hover:border-[#0F172B] hover:text-[#0F172B]"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add User
+                </button>
+              ) : (
+                <div className="mb-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                  <input
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    placeholder="Search by name or email..."
+                    className="mb-2 w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs focus:border-[#0F172B] focus:outline-none"
+                  />
+                  <div className="max-h-36 space-y-1 overflow-y-auto">
+                    {filteredUsers.length === 0 ? (
+                      <p className="py-2 text-xs text-[#90A1B9]">No users found</p>
+                    ) : (
+                      filteredUsers.slice(0, 15).map((user) => (
+                        <button
+                          key={user.id}
+                          onClick={() => addUser.mutate(user.id)}
+                          disabled={addUser.isPending}
+                          className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition hover:bg-white disabled:opacity-50"
+                        >
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
+                            {user.display_name?.[0]?.toUpperCase() || '?'}
+                          </div>
+                          <div>
+                            <div className="text-xs font-medium text-[#0F172B]">{user.display_name}</div>
+                            <div className="text-[10px] text-[#90A1B9]">{user.email}</div>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <button
+                    onClick={() => { setShowUserAdd(false); setUserSearch(''); }}
+                    className="mt-2 text-[10px] text-[#90A1B9] hover:text-[#0F172B]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+
+              {(cur?.user_access || []).length === 0 ? (
+                <p className="py-6 text-center text-xs text-[#90A1B9]">No direct user access yet</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {(cur?.user_access || []).map((ua) => (
+                    <div key={ua.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] px-3 py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
+                          {ua.user?.display_name?.[0]?.toUpperCase() || '?'}
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-[#0F172B]">{ua.user?.display_name || 'Unknown'}</div>
+                          <div className="text-[10px] text-[#90A1B9]">{ua.user?.email || ''}</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeUser.mutate(ua.user_id)}
+                        className="rounded p-1 text-[#90A1B9] transition hover:bg-red-50 hover:text-red-500"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function CreateModal({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
+  const [slug, setSlug] = useState('');
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('general');
+  const [listsText, setListsText] = useState('Briefs | list\nIn Progress | board\nReviews | board');
+  const [error, setError] = useState<string | null>(null);
+
+  const create = useMutation({
+    mutationFn: async () => {
+      const lists = listsText
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((line, i) => {
+          const [n, view = 'list'] = line.split('|').map((s) => s.trim());
+          return { name: n, position: i, default_view: view === 'board' ? 'board' : 'list' };
+        });
+      return api.post('/admin/client-spaces', {
+        slug,
+        name,
+        description,
+        category,
+        template: { lists },
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-client-spaces'] });
+      onClose();
+    },
+    onError: (e: any) => setError(e?.response?.data?.error || e?.message || 'Failed'),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError(null);
+          create.mutate();
+        }}
+        className="w-full max-w-lg rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-2xl"
+      >
+        <h2 className="mb-4 text-lg font-semibold text-[#0F172B]">New Client-Space Template</h2>
+
+        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Name</label>
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Design Space"
+          className="mb-3 w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm outline-none focus:border-[#0F172B]"
+        />
+
+        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Slug</label>
+        <input
+          value={slug}
+          onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+          placeholder="design-space"
+          className="mb-3 w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm outline-none focus:border-[#0F172B]"
+        />
+
+        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Description</label>
+        <input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Short description"
+          className="mb-3 w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm outline-none focus:border-[#0F172B]"
+        />
+
+        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Category</label>
+        <input
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          placeholder="design, video, general…"
+          className="mb-3 w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm outline-none focus:border-[#0F172B]"
+        />
+
+        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">
+          Lists (one per line, format: "Name | list|board")
+        </label>
+        <textarea
+          value={listsText}
+          onChange={(e) => setListsText(e.target.value)}
+          rows={5}
+          className="mb-3 w-full rounded-md border border-[#E2E8F0] px-3 py-2 font-mono text-xs outline-none focus:border-[#0F172B]"
+        />
+
+        {error && (
+          <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-md px-4 py-2 text-sm text-[#62748E] hover:bg-[#F1F5F9]">
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!slug || !name || create.isPending}
+            className="rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:bg-[#1E293B] disabled:bg-[#CAD5E2]"
+          >
+            {create.isPending ? 'Creating…' : 'Create'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

@@ -14,6 +14,8 @@ interface PMState {
   activeSpaceId: string | null;
   activeListId: string | null;
   activeTaskId: string | null;
+  activeDesignFolderId: string | null;
+  activeClientId: string | null;
   viewMode: ViewMode;
   collapsedGroups: Record<string, boolean>;
   selectedTasks: string[];
@@ -21,6 +23,8 @@ interface PMState {
   setActiveSpace: (id: string | null) => void;
   setActiveList: (id: string | null) => void;
   setActiveTask: (id: string | null) => void;
+  setActiveDesignFolder: (id: string | null) => void;
+  setActiveClient: (id: string | null) => void;
   setViewMode: (mode: ViewMode) => void;
   toggleGroupCollapse: (statusId: string) => void;
   toggleTaskSelection: (taskId: string) => void;
@@ -35,14 +39,18 @@ export const usePMStore = create<PMState>((set, get) => ({
   activeSpaceId: null,
   activeListId: null,
   activeTaskId: null,
+  activeDesignFolderId: null,
+  activeClientId: null,
   viewMode: 'list',
   collapsedGroups: {},
   selectedTasks: [],
   timer: null,
 
   setActiveSpace: (id) => set({ activeSpaceId: id }),
-  setActiveList: (id) => set({ activeListId: id, selectedTasks: [] }),
+  setActiveList: (id) => set({ activeListId: id, selectedTasks: [], activeDesignFolderId: null }),
   setActiveTask: (id) => set({ activeTaskId: id }),
+  setActiveDesignFolder: (id) => set({ activeDesignFolderId: id, activeListId: null, selectedTasks: [] }),
+  setActiveClient: (id) => set({ activeClientId: id }),
   setViewMode: (mode) => set({ viewMode: mode }),
   toggleGroupCollapse: (statusId) =>
     set((state) => ({
@@ -71,5 +79,5 @@ export const usePMStore = create<PMState>((set, get) => ({
     set({ timer: null });
     return prev;
   },
-  reset: () => set({ activeSpaceId: null, activeListId: null, activeTaskId: null, viewMode: 'list', collapsedGroups: {}, selectedTasks: [], timer: null }),
+  reset: () => set({ activeSpaceId: null, activeListId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, viewMode: 'list', collapsedGroups: {}, selectedTasks: [], timer: null }),
 }));

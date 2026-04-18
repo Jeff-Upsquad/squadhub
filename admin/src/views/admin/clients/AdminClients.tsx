@@ -4,8 +4,9 @@ import api from '../../../services/api';
 import SubscriptionsModule from './SubscriptionsModule';
 import NewClientsModule from './NewClientsModule';
 import ClientsModule from './ClientsModule';
+import ClientAccessModule from './ClientAccessModule';
 
-type Tab = 'new-clients' | 'clients' | 'subscriptions';
+type Tab = 'new-clients' | 'clients' | 'subscriptions' | 'client-access';
 
 const WEB_APP_URL = process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'production' ? 'https://squadhub.in' : 'http://localhost:3000');
 
@@ -45,6 +46,7 @@ export default function AdminClients() {
     { id: 'new-clients', label: 'New Clients', count: pendingCount },
     { id: 'clients', label: 'Clients', count: clientCount },
     { id: 'subscriptions', label: 'Subscriptions', count: subscriptionCount },
+    { id: 'client-access', label: 'Client Access', count: 0 },
   ];
 
   return (
@@ -101,6 +103,7 @@ export default function AdminClients() {
         {activeTab === 'subscriptions' && <SubscriptionsModule />}
         {activeTab === 'new-clients' && <NewClientsModule />}
         {activeTab === 'clients' && <ClientsModule />}
+        {activeTab === 'client-access' && <ClientAccessModule />}
       </div>
     </div>
   );

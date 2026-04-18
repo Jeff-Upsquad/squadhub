@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
-import type { Task, SpaceStatus, TaskComment } from '@squadhub/shared';
+import type { Task, SpaceStatus, TaskComment, TaskMetadata } from '@squadhub/shared';
 
 export function useTasks(listId: string | null, filters?: { status?: string; priority?: string; sort?: string }) {
   return useQuery<Task[]>({
@@ -38,12 +38,17 @@ export function useCreateTask(listId: string | null) {
       description?: string;
       due_date?: string;
       assignee_ids?: string[];
+      metadata?: TaskMetadata;
+      list_id?: string;
     }) => {
-      const res = await api.post('/pm/tasks', { ...body, list_id: listId });
+      const targetListId = body.list_id || listId;
+      const res = await api.post('/pm/tasks', { ...body, list_id: targetListId });
       return res.data.data;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tasks', listId] });
+    onSuccess: (_data, vars) => {
+      const targetListId = vars.list_id || listId;
+      qc.invalidateQueries({ queryKey: ['tasks', targetListId] });
+      qc.invalidateQueries({ queryKey: ['folder-tasks'] });
     },
   });
 }

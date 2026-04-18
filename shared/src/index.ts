@@ -161,9 +161,14 @@ export interface Folder {
   my_access_level?: AccessLevel;
   profile_id?: string | null;
   profile_version?: number | null;
+  client_id?: string | null;
+  client_space_template_id?: string | null;
+  client_space_template_version?: number | null;
   // Joined
   lists?: List[];
   profile?: CustomProfile;
+  client_space_template?: ClientSpaceTemplate;
+  client?: Client;
 }
 
 export interface List {
@@ -187,6 +192,16 @@ export interface List {
   profile?: CustomProfile;
 }
 
+export interface TaskMetadata {
+  format?: string;
+  audience?: string;
+  tone?: string;
+  category?: string;
+  references?: string[];
+  attachments?: { name: string; size: string }[];
+  [key: string]: unknown;
+}
+
 export interface Task {
   id: string;
   list_id: string;
@@ -199,6 +214,7 @@ export interface Task {
   due_date: string | null;
   time_estimate: number | null;
   time_tracked: number;
+  metadata: TaskMetadata;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -556,6 +572,59 @@ export interface CustomProfileUserAccess {
   // Joined
   user?: User;
 }
+
+// ---- Client Spaces ----
+export interface ClientSpaceTemplate {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  template: {
+    lists?: { name: string; position: number; default_view?: ListView }[];
+  };
+  version: number;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  role_access?: ClientSpaceTemplateRoleAccess[];
+  user_access?: ClientSpaceTemplateUserAccess[];
+  instance_count?: number;
+}
+
+export interface ClientSpaceTemplateRoleAccess {
+  id: string;
+  template_id: string;
+  role_id: string;
+  created_at: string;
+  role?: Role;
+}
+
+export interface ClientSpaceTemplateUserAccess {
+  id: string;
+  template_id: string;
+  user_id: string;
+  created_at: string;
+  user?: User;
+}
+
+export type ClientAccessLevel = 'member' | 'admin';
+
+export interface ClientUserAccess {
+  id: string;
+  client_id: string;
+  user_id: string;
+  access_level: ClientAccessLevel;
+  created_by: string;
+  created_at: string;
+  // Joined
+  user?: User;
+  client?: Client;
+}
+
+// Note: `Client` interface is defined in the Clients section below.
 
 // ---- Invitations ----
 export type InvitationStatus = 'pending' | 'accepted' | 'expired';
