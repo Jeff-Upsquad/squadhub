@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import api from '../services/api';
 import type { Client, ClientAccessLevel, ClientSpaceTemplate, Folder } from '@squadhub/shared';
 
@@ -45,23 +45,6 @@ export function useAvailableClientSpaceTemplates() {
     queryFn: async () => {
       const res = await api.get('/client-spaces/available');
       return res.data.data;
-    },
-  });
-}
-
-export function useCreateClientSpace(clientId: string | null) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (body: {
-      space_id: string;
-      name: string;
-      client_space_template_id: string;
-    }) => {
-      const res = await api.post('/pm/folders', { ...body, client_id: clientId });
-      return res.data.data as Folder;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['client-folders', clientId] });
     },
   });
 }

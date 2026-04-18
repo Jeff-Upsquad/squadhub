@@ -4,8 +4,6 @@ import api from '../../services/api';
 import type { ClientSpaceTemplate } from '@squadhub/shared';
 
 interface ClientOption { id: string; business_name: string; status: string }
-interface WorkspaceOption { id: string; name: string }
-interface SpaceOption { id: string; name: string; workspace_id: string }
 interface TemplateInstance {
   id: string;
   name: string;
@@ -290,7 +288,7 @@ function SharingSlider({ template, onClose }: { template: ClientSpaceTemplate; o
 
 function AddInstanceForm({
   templateId,
-  templateName,
+  templateName: _templateName,
   onCreated,
   onCancel,
 }: {
@@ -300,9 +298,6 @@ function AddInstanceForm({
   onCancel: () => void;
 }) {
   const [clientId, setClientId] = useState('');
-  const [workspaceId, setWorkspaceId] = useState('');
-  const [spaceId, setSpaceId] = useState('');
-  const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const { data: clients = [] } = useQuery<ClientOption[]>({
@@ -313,35 +308,12 @@ function AddInstanceForm({
     },
   });
 
-  const { data: workspacesRes } = useQuery({
-    queryKey: ['workspaces'],
-    queryFn: () => api.get('/workspaces').then((r) => r.data),
-  });
-  const workspaces: WorkspaceOption[] = workspacesRes?.data || [];
-
-  const { data: spaces = [] } = useQuery<SpaceOption[]>({
-    queryKey: ['spaces', workspaceId],
-    queryFn: async () => {
-      const res = await api.get(`/pm/spaces?workspace_id=${workspaceId}`);
-      return res.data.data;
-    },
-    enabled: !!workspaceId,
-  });
-
-  const canSubmit = clientId && workspaceId && spaceId && name.trim().length > 0;
-
-  const suggestedName = useMemo(() => {
-    const c = clients.find((x) => x.id === clientId);
-    if (!c) return '';
-    return `${templateName} — ${c.business_name}`;
-  }, [clients, clientId, templateName]);
+  const canSubmit = !!clientId;
 
   const createMutation = useMutation({
     mutationFn: async () => {
       const res = await api.post(`/admin/client-spaces/${templateId}/instances`, {
         client_id: clientId,
-        space_id: spaceId,
-        name: name.trim(),
       });
       return res.data.data;
     },
@@ -349,7 +321,7 @@ function AddInstanceForm({
       onCreated();
     },
     onError: (e: any) => {
-      setError(e?.response?.data?.error || e?.message || 'Failed to create space');
+      setError(e?.response?.data?.error || e?.message || 'Failed to share template');
     },
   });
 
@@ -371,43 +343,6 @@ function AddInstanceForm({
         ))}
       </select>
 
-      <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Workspace</label>
-      <select
-        value={workspaceId}
-        onChange={(e) => { setWorkspaceId(e.target.value); setSpaceId(''); }}
-        className="mb-3 w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs outline-none focus:border-[#0F172B]"
-      >
-        <option value="">Select a workspace…</option>
-        {workspaces.map((w) => (
-          <option key={w.id} value={w.id}>
-            {w.name}
-          </option>
-        ))}
-      </select>
-
-      <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Space</label>
-      <select
-        value={spaceId}
-        onChange={(e) => setSpaceId(e.target.value)}
-        disabled={!workspaceId}
-        className="mb-3 w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs outline-none focus:border-[#0F172B] disabled:bg-[#F1F5F9]"
-      >
-        <option value="">{workspaceId ? 'Select a space…' : 'Pick a workspace first'}</option>
-        {spaces.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-          </option>
-        ))}
-      </select>
-
-      <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Name</label>
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder={suggestedName || 'Name this space'}
-        className="mb-3 w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs outline-none focus:border-[#0F172B]"
-      />
-
       {error && (
         <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] text-red-700">{error}</div>
       )}
@@ -426,7 +361,7 @@ function AddInstanceForm({
           disabled={!canSubmit || createMutation.isPending}
           className="rounded bg-[#0F172B] px-3 py-1 text-[10px] font-medium text-white hover:bg-[#1E293B] disabled:bg-[#CAD5E2]"
         >
-          {createMutation.isPending ? 'Creating…' : 'Share'}
+          {createMutation.isPending ? 'Sharing…' : 'Share'}
         </button>
       </div>
     </div>

@@ -103,17 +103,21 @@ router.get('/:id/usage', async (req: Request, res: Response) => {
   }
 });
 
-// POST /admin/client-spaces/:id/instances — create a folder for a client using this template
+// POST /admin/client-spaces/:id/instances — share a template with a client.
+// Auto-resolves the target workspace + space (picks admin's first workspace,
+// and a default "Client Spaces" space within it, creating one if missing).
 const instantiateSchema = z.object({
   client_id: z.string().uuid(),
-  space_id: z.string().uuid(),
-  name: z.string().min(1).max(100),
+  name: z.string().min(1).max(100).optional(),
 });
+
+const DEFAULT_CLIENT_SPACE_NAME = 'Client Spaces';
 
 router.post('/:id/instances', async (req: Request, res: Response) => {
   try {
     const body = instantiateSchema.parse(req.body);
     const templateId = req.params.id;
+    const userId = req.userId!;
 
     const { data: template } = await supabaseAdmin
       .from('client_space_templates')
@@ -126,18 +130,78 @@ router.post('/:id/instances', async (req: Request, res: Response) => {
       return;
     }
 
+    // Verify the client exists
+    const { data: client } = await supabaseAdmin
+      .from('clients')
+      .select('id, business_name')
+      .eq('id', body.client_id)
+      .single();
+    if (!client) {
+      res.status(400).json({ success: false, error: 'Client not found' });
+      return;
+    }
+
+    // Resolve workspace: admin's first workspace
+    const { data: wsRow } = await supabaseAdmin
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const workspaceId = wsRow?.workspace_id;
+    if (!workspaceId) {
+      res.status(400).json({
+        success: false,
+        error: 'Admin must belong to at least one workspace to share templates',
+      });
+      return;
+    }
+
+    // Resolve space: reuse existing "Client Spaces" space, or create it
+    const { data: existingSpace } = await supabaseAdmin
+      .from('spaces')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .eq('name', DEFAULT_CLIENT_SPACE_NAME)
+      .limit(1)
+      .maybeSingle();
+
+    let spaceId = existingSpace?.id as string | undefined;
+    if (!spaceId) {
+      const { data: createdSpace, error: spaceErr } = await supabaseAdmin
+        .from('spaces')
+        .insert({
+          workspace_id: workspaceId,
+          name: DEFAULT_CLIENT_SPACE_NAME,
+          color: '#7c3aed',
+          icon: 'users',
+          description: 'Auto-created container for client spaces',
+          created_by: userId,
+        })
+        .select('id')
+        .single();
+      if (spaceErr || !createdSpace) {
+        res.status(500).json({ success: false, error: spaceErr?.message || 'Failed to create host space' });
+        return;
+      }
+      spaceId = createdSpace.id;
+    }
+
     const { count } = await supabaseAdmin
       .from('folders')
       .select('*', { count: 'exact', head: true })
-      .eq('space_id', body.space_id);
+      .eq('space_id', spaceId);
+
+    const folderName = body.name?.trim() || `${template.name} — ${client.business_name}`;
 
     const { data: folder, error: folderErr } = await supabaseAdmin
       .from('folders')
       .insert({
-        space_id: body.space_id,
-        name: body.name,
+        space_id: spaceId,
+        name: folderName,
         is_private: true,
-        created_by: req.userId!,
+        created_by: userId,
         position: count || 0,
         client_id: body.client_id,
         client_space_template_id: template.id,
@@ -155,13 +219,13 @@ router.post('/:id/instances', async (req: Request, res: Response) => {
     const templateLists = (template.template?.lists || []) as Array<{ name: string; position: number; default_view?: string }>;
     for (const tl of templateLists) {
       await supabaseAdmin.from('lists').insert({
-        space_id: body.space_id,
+        space_id: spaceId,
         folder_id: folder.id,
         name: tl.name,
         position: tl.position || 0,
         default_view: tl.default_view || 'list',
         is_private: true,
-        created_by: req.userId!,
+        created_by: userId,
       });
     }
 
