@@ -73,7 +73,9 @@
   background: none;
   border: 0;
   cursor: pointer;
-  padding: 0;
+  /* Do NOT reset padding here — specific button classes (.cd-tab, .cd-topbar-btn,
+     .cd-btn, etc.) set their own padding, and a descendant selector here would
+     win over those class selectors by specificity. */
 }
 
 .cd-root input,
@@ -785,6 +787,7 @@
   width: 24px; height: 24px;
   display: grid; place-items: center;
   color: var(--cd-fg-2); border-radius: 4px;
+  padding: 0;
 }
 .cd-modal-close:hover { background: var(--cd-bg-3); color: var(--cd-fg-0); }
 .cd-modal-body {
