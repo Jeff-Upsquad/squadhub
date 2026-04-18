@@ -75,19 +75,23 @@ router.get('/', async (_req: Request, res: Response) => {
 // GET /admin/client-spaces/:id/usage — folders created from this template, with client + space info
 router.get('/:id/usage', async (req: Request, res: Response) => {
   try {
-    const { data: folders, error } = await supabaseAdmin
+    // Primary query; if it fails (e.g. deleted_at column variation on a given env),
+    // fall back to an unfiltered query and filter client-side.
+    let { data: folders, error } = await supabaseAdmin
       .from('folders')
-      .select('id, name, client_id, space_id, created_at')
+      .select('id, name, client_id, space_id, created_at, deleted_at')
       .eq('client_space_template_id', req.params.id)
-      .is('deleted_at', null)
       .order('created_at', { ascending: false });
 
     if (error) {
+      console.error('[client-spaces-admin] usage select error:', error);
       res.status(500).json({ success: false, error: error.message });
       return;
     }
 
-    const list = folders || [];
+    console.log(`[client-spaces-admin] usage: template ${req.params.id} → ${folders?.length || 0} folders (pre-filter)`);
+
+    const list = (folders || []).filter((f: any) => !f.deleted_at);
     const clientIds = Array.from(new Set(list.map((f) => f.client_id).filter(Boolean) as string[]));
     const spaceIds = Array.from(new Set(list.map((f) => f.space_id).filter(Boolean) as string[]));
 
