@@ -56,7 +56,7 @@ BEGIN
       JOIN lists ON lists.id = tasks.list_id
       JOIN folders ON folders.id = lists.folder_id
       WHERE folders.client_id = c.client_id
-      ORDER BY tasks.position, tasks.id
+      ORDER BY tasks.created_at, tasks.id
     LOOP
       n := n + 1;
       UPDATE tasks SET display_number = n WHERE id = t.id;
