@@ -28,7 +28,7 @@ export default function NewRequestModal({
 }) {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('Poster');
-  const [priority, setPriority] = useState<TaskPriority>('normal');
+  const [priority, setPriority] = useState<TaskPriority>('none');
   const [brief, setBrief] = useState('');
   const [format, setFormat] = useState('');
   const [audience, setAudience] = useState('');
@@ -41,7 +41,10 @@ export default function NewRequestModal({
 
   const createTask = useCreateTask(briefsListId);
 
-  const estimate = priority === 'low' ? '~1h' : priority === 'high' ? '~4–6h' : '~2–3h';
+  const estimate =
+    priority === 'low' ? '~1h'
+      : priority === 'high' || priority === 'urgent' ? '~4–6h'
+        : '~2–3h'; // covers 'none' (treated as Normal) and 'normal'
   const hasTitle = title.trim().length > 0;
   const hasBrief = brief.trim().length > 0;
   const canSubmit = hasTitle && hasBrief && !!briefsListId;

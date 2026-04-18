@@ -32,6 +32,18 @@ export function seedFromId(id: string): number {
   return Math.abs(h);
 }
 
-export function shortRequestId(taskId: string): string {
-  return `REQ-${taskId.replace(/-/g, '').slice(-4).toUpperCase()}`;
+/**
+ * Human-friendly request ID.
+ * Prefers the sequential `tasks.display_number` (starting at 1000) when
+ * available; falls back to a last-4 slug of the UUID for legacy rows
+ * that haven't been backfilled yet.
+ */
+export function shortRequestId(taskOrId: { id: string; display_number?: number | null } | string): string {
+  if (typeof taskOrId === 'string') {
+    return `REQ-${taskOrId.replace(/-/g, '').slice(-4).toUpperCase()}`;
+  }
+  if (taskOrId.display_number != null) {
+    return `REQ-${taskOrId.display_number}`;
+  }
+  return `REQ-${taskOrId.id.replace(/-/g, '').slice(-4).toUpperCase()}`;
 }

@@ -289,7 +289,7 @@
 /* ---------- Request row ---------- */
 .cd-req-row {
   display: grid;
-  grid-template-columns: 14px 80px minmax(0, 1fr) 120px 90px 80px 26px;
+  grid-template-columns: 14px minmax(0, 1fr) 120px 90px 80px 26px;
   gap: 12px;
   align-items: center;
   padding: 10px 8px;
@@ -358,7 +358,7 @@
 }
 .cd-list-head-row {
   display: grid;
-  grid-template-columns: 14px 80px minmax(0, 1fr) 120px 90px 80px 26px;
+  grid-template-columns: 14px minmax(0, 1fr) 120px 90px 80px 26px;
   gap: 12px;
   padding: 6px 8px;
   font-family: var(--cd-font-mono);

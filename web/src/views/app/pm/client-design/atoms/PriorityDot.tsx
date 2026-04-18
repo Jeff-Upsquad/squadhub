@@ -17,7 +17,7 @@ const PRIO_LABEL: Record<string, string> = {
   high: 'High',
   normal: 'Normal',
   low: 'Low',
-  none: 'None',
+  none: 'Normal', // displayed as Normal in the client-design dashboard
 };
 
 export default function PriorityDot({
@@ -37,8 +37,10 @@ export default function PriorityDot({
   );
 }
 
+// Note: the DB's tasks_priority_check currently rejects 'normal', so we use
+// 'none' as the middle/default value and still label it "Normal" in the UI.
 export const PRIORITY_CHOICES: { label: string; value: TaskPriority; color: string }[] = [
   { label: 'Low', value: 'low', color: 'var(--cd-fg-3)' },
-  { label: 'Normal', value: 'normal', color: 'var(--cd-fg-2)' },
+  { label: 'Normal', value: 'none', color: 'var(--cd-fg-2)' },
   { label: 'High', value: 'high', color: 'var(--cd-review)' },
 ];

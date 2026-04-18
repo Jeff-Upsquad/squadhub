@@ -2,7 +2,6 @@ import type { Task } from '@squadhub/shared';
 import Avatar from './Avatar';
 import LiveTimer, { formatHours } from './LiveTimer';
 import { StatusDot } from './StatusPill';
-import { shortRequestId } from './CoverArt';
 import { IconMore } from './Icons';
 import { usePMStore } from '../../../../../stores/pmStore';
 import type { RequestStatus } from './StatusPill';
@@ -48,7 +47,6 @@ export default function RequestRow({
   return (
     <div className="cd-req-row" onClick={onClick} role="button">
       <StatusDot status={request._derivedStatus} />
-      <span className="cd-req-id">{shortRequestId(request.id)}</span>
       <span className="cd-req-title">
         {request.title}
         {category && <span className="tag">{category}</span>}

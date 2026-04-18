@@ -215,6 +215,7 @@ export interface Task {
   time_estimate: number | null;
   time_tracked: number;
   metadata: TaskMetadata;
+  display_number: number | null;
   created_by: string;
   created_at: string;
   updated_at: string;

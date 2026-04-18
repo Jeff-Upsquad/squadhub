@@ -104,7 +104,7 @@ function BoardCard({
         />
       )}
       <div className="cd-board-card-head">
-        <span className="cd-board-card-id">{shortRequestId(request.id)}</span>
+        <span className="cd-board-card-id">{shortRequestId(request)}</span>
         <PriorityDot priority={request.priority} showLabel={false} />
       </div>
       <div className="cd-board-card-title">{request.title}</div>

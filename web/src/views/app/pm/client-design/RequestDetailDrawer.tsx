@@ -31,7 +31,7 @@ export default function RequestDetailDrawer({
       <div className="cd-drawer-backdrop" onClick={onClose} />
       <div className="cd-drawer" onClick={(e) => e.stopPropagation()}>
         <div className="cd-drawer-head">
-          <span className="id">{shortRequestId(request.id)}</span>
+          <span className="id">{shortRequestId(request)}</span>
           <StatusPill status={request._derivedStatus} />
           <div className="spacer" />
           <button className="cd-topbar-btn" aria-label="Link">

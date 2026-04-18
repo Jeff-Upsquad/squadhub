@@ -134,7 +134,6 @@ export default function RequestsTab({
           </div>
           <div className="cd-list-head-row">
             <span />
-            <span>ID</span>
             <span>Title</span>
             <span>Assigned</span>
             <span>Timer</span>

@@ -143,7 +143,6 @@ export default function DashboardTab({
           {active.length > 0 && (
             <div className="cd-list-head-row">
               <span />
-              <span>ID</span>
               <span>Title</span>
               <span>Assigned</span>
               <span>Timer</span>
