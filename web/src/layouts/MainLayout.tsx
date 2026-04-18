@@ -22,13 +22,10 @@ import PartnerDashboard from '../views/app/partner/PartnerDashboard';
 import PartnerCashBook from '../views/app/partner/PartnerCashBook';
 import ClientCashBook from '../views/app/client/ClientCashBook';
 import ClientDesignDashboard from '../views/app/pm/client-design/ClientDesignDashboard';
-import ClientsSidebar from '../views/app/clients/ClientsSidebar';
-import AddClientSpaceModal from '../views/app/clients/AddClientSpaceModal';
-import { useMyClients } from '../hooks/useMyClients';
 import { useUserType } from '../hooks/useUserType';
 
 // ---- Types (ORIGINAL) ----
-type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'more';
+type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'more';
 export type HomeView = 'hub' | 'chat' | 'tasks' | 'checkin' | 'checkin-partners' | 'time-management' | 'cashbook';
 
 // ---- Section definitions matching Figma icon bar (72px wide, 38x38 containers, 22x22 icons) ----
@@ -70,15 +67,6 @@ const SECTIONS: { id: ActiveSection; label: string; icon: React.ReactNode }[] = 
     ),
   },
   {
-    id: 'clients',
-    label: 'Clients',
-    icon: (
-      <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 014-4h1m7-6a4 4 0 11-8 0 4 4 0 018 0zm4 3a3 3 0 100-6 3 3 0 000 6z" />
-      </svg>
-    ),
-  },
-  {
     id: 'more',
     label: 'More',
     icon: (
@@ -95,7 +83,6 @@ const SECTION_TITLES: Record<ActiveSection, string> = {
   docs: 'Documents',
   teams: 'Teams',
   apps: 'Apps',
-  clients: 'Clients',
   more: 'More',
 };
 
@@ -112,8 +99,6 @@ export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
-  const [addSpaceForClient, setAddSpaceForClient] = useState<string | null>(null);
-  const { data: myClients = [] } = useMyClients();
 
   // Auto-switch to tasks view when a list is selected
   useEffect(() => {
@@ -277,8 +262,6 @@ export default function MainLayout() {
               onCreateChannel={() => setShowCreateChannel(true)}
               onOpenSpaces={handleOpenSpaces}
             />
-          ) : activeSection === 'clients' ? (
-            <ClientsSidebar onAddSpace={(cid) => setAddSpaceForClient(cid)} />
           ) : (
             <div className="flex flex-col">
               <div className="border-b border-divider px-4 py-3">
@@ -385,7 +368,7 @@ export default function MainLayout() {
               </div>
             </>
           ) : homeView === 'tasks' ? (
-            userType === 'client' && activeDesignFolderId ? (
+            activeDesignFolderId ? (
               <ClientDesignDashboard folderId={activeDesignFolderId} />
             ) : (
               <ListPage />
@@ -410,20 +393,6 @@ export default function MainLayout() {
               <p className="mt-1 text-sm">Select a channel, space, or module to get started</p>
             </div>
           )
-        ) : activeSection === 'clients' ? (
-          activeDesignFolderId ? (
-            <ClientDesignDashboard folderId={activeDesignFolderId} />
-          ) : (
-            <div className="flex flex-1 flex-col items-center justify-center text-foreground-dim">
-              <div className="mb-4 opacity-20">
-                <svg className="h-[44px] w-[44px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 014-4h1m7-6a4 4 0 11-8 0 4 4 0 018 0zm4 3a3 3 0 100-6 3 3 0 000 6z" />
-                </svg>
-              </div>
-              <h3 className="font-[family-name:var(--font-display)] text-lg font-medium text-foreground-muted">Clients</h3>
-              <p className="mt-1 text-sm">{myClients.length > 0 ? 'Select a client space from the sidebar' : 'No clients shared with you yet'}</p>
-            </div>
-          )
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center text-foreground-dim">
             <div className="mb-4 opacity-20">
@@ -442,18 +411,6 @@ export default function MainLayout() {
           onClose={() => setShowCreateChannel(false)}
         />
       )}
-
-      {/* Add client space modal */}
-      {addSpaceForClient && (() => {
-        const entry = myClients.find((c) => c.client_id === addSpaceForClient);
-        return (
-          <AddClientSpaceModal
-            clientId={addSpaceForClient}
-            clientName={entry?.client?.business_name || 'Client'}
-            onClose={() => setAddSpaceForClient(null)}
-          />
-        );
-      })()}
     </div>
   );
 }

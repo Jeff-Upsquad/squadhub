@@ -10,6 +10,8 @@ import CreateSpaceModal from './pm/CreateSpaceModal';
 import { useHasMiniApp } from '../../hooks/useMiniApps';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useIsInternal, useIsClient, useIsPartner } from '../../hooks/useUserType';
+import { useMyClients, useClientFolders, type MyClientEntry } from '../../hooks/useMyClients';
+import AddClientSpaceModal from './clients/AddClientSpaceModal';
 
 // ---- Props ----
 interface HomeSidebarProps {
@@ -116,11 +118,13 @@ export default function HomeSidebar({
   const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
   const { data: favorites, isLoading: favoritesLoading } = useFavorites(workspaceId);
   const { data: sharedItems, isLoading: sharedLoading } = useSharedWithMe(workspaceId);
+  const { data: myClients } = useMyClients();
   const removeFavorite = useRemoveFavorite(workspaceId);
   const { setActiveSpace, setActiveList } = usePMStore();
   const canCreateChannels = useHasPermission('can_create_channels');
   const canCreateSpaces = useHasPermission('can_create_spaces');
   const [showCreateSpace, setShowCreateSpace] = useState(false);
+  const [addSpaceForClient, setAddSpaceForClient] = useState<MyClientEntry | null>(null);
   const isInternal = useIsInternal();
   const isClient = useIsClient();
   const isPartner = useIsPartner();
@@ -131,6 +135,7 @@ export default function HomeSidebar({
   const [activeTab, setActiveTab] = useState<HomeTab>('unread');
   const [expandedSections, setExpandedSections] = useState({
     favorites: true,
+    clients: true,
     sharedWithMe: true,
     spaces: true,
     channels: true,
@@ -320,6 +325,31 @@ export default function HomeSidebar({
           )}
         </div>
 
+        {/* Clients section — only show when user has at least one client access grant */}
+        {!isClient && myClients && myClients.length > 0 && (
+          <>
+            <div className="mx-4 border-t border-divider" />
+            <div className="py-1">
+              <SectionHeader
+                title="Clients"
+                expanded={expandedSections.clients}
+                onToggle={() => toggleSection('clients')}
+              />
+              {expandedSections.clients && (
+                <div className="pb-1">
+                  {myClients.map((entry) => (
+                    <ClientRow
+                      key={entry.id}
+                      entry={entry}
+                      onAddSpace={() => setAddSpaceForClient(entry)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
         {/* Shared with me section — only show when there are shared items */}
         {sharedItems && sharedItems.length > 0 && (
           <>
@@ -469,6 +499,110 @@ export default function HomeSidebar({
           )}
         </div>
       </div>
+
+      {addSpaceForClient && (
+        <AddClientSpaceModal
+          clientId={addSpaceForClient.client_id}
+          clientName={addSpaceForClient.client.business_name}
+          onClose={() => setAddSpaceForClient(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---- Client row (collapsible list of a client's spaces) ----
+function ClientRow({
+  entry,
+  onAddSpace,
+}: {
+  entry: MyClientEntry;
+  onAddSpace: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const setActiveDesignFolder = usePMStore((s) => s.setActiveDesignFolder);
+  const activeDesignFolderId = usePMStore((s) => s.activeDesignFolderId);
+  const { data: foldersRes, isLoading } = useClientFolders(expanded ? entry.client_id : null);
+  const folders = foldersRes?.folders || [];
+  const isAdmin = entry.access_level === 'admin';
+
+  return (
+    <div className="px-2">
+      <div className="group flex items-center">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-foreground-muted hover:text-sidebar-text"
+          aria-label={expanded ? 'Collapse' : 'Expand'}
+        >
+          <svg
+            className={`h-[14px] w-[14px] transition-transform ${expanded ? '' : '-rotate-90'}`}
+            viewBox="0 0 18 18"
+            fill="currentColor"
+          >
+            <path d="M5 7h8L9 11z" />
+          </svg>
+        </button>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm text-sidebar-text transition hover:bg-sidebar-hover"
+        >
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-sidebar-hover text-[9px] font-semibold uppercase text-sidebar-text">
+            {entry.client.business_name.slice(0, 2)}
+          </span>
+          <span className="truncate">{entry.client.business_name}</span>
+        </button>
+        {isAdmin && (
+          <button
+            onClick={onAddSpace}
+            title="Add space"
+            className="mr-2 hidden rounded p-0.5 text-foreground-muted transition hover:text-sidebar-text group-hover:block"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        )}
+      </div>
+      {expanded && (
+        <div className="pb-1 pl-8 pr-2">
+          {isLoading && (
+            <p className="px-2 py-1 text-[11px] text-foreground-dim">Loading…</p>
+          )}
+          {!isLoading && folders.length === 0 && (
+            <p className="px-2 py-1 text-[11px] text-foreground-dim">
+              {isAdmin ? 'No spaces yet' : 'No spaces yet.'}
+            </p>
+          )}
+          {folders.map((f) => {
+            const isActive = f.id === activeDesignFolderId;
+            const isDesign = (f.client_space_template as any)?.slug === 'design-space';
+            return (
+              <button
+                key={f.id}
+                onClick={() => setActiveDesignFolder(f.id)}
+                className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] ${
+                  isActive
+                    ? 'bg-[#1264A3] text-white'
+                    : 'text-sidebar-text hover:bg-sidebar-hover'
+                }`}
+              >
+                <span className={`shrink-0 ${isActive ? 'text-white/70' : 'text-foreground-muted'}`}>
+                  {isDesign ? (
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  ) : (
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                    </svg>
+                  )}
+                </span>
+                <span className="truncate">{f.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
