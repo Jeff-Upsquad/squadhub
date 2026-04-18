@@ -77,7 +77,7 @@ router.get('/:id/usage', async (req: Request, res: Response) => {
   try {
     const { data: folders, error } = await supabaseAdmin
       .from('folders')
-      .select('id, name, client_id, space_id, created_at, clients:client_id(id, business_name), spaces:space_id(id, name, workspace_id, workspaces:workspace_id(id, name))')
+      .select('id, name, client_id, space_id, created_at')
       .eq('client_space_template_id', req.params.id)
       .is('deleted_at', null)
       .order('created_at', { ascending: false });
@@ -87,14 +87,51 @@ router.get('/:id/usage', async (req: Request, res: Response) => {
       return;
     }
 
-    const enriched = (folders || []).map((f: any) => ({
-      id: f.id,
-      name: f.name,
-      client_id: f.client_id,
-      client: f.clients,
-      space: f.spaces ? { id: f.spaces.id, name: f.spaces.name, workspace: f.spaces.workspaces } : null,
-      created_at: f.created_at,
-    }));
+    const list = folders || [];
+    const clientIds = Array.from(new Set(list.map((f) => f.client_id).filter(Boolean) as string[]));
+    const spaceIds = Array.from(new Set(list.map((f) => f.space_id).filter(Boolean) as string[]));
+
+    const clientsMap: Record<string, { id: string; business_name: string }> = {};
+    if (clientIds.length > 0) {
+      const { data: clientRows } = await supabaseAdmin
+        .from('clients')
+        .select('id, business_name')
+        .in('id', clientIds);
+      (clientRows || []).forEach((c: any) => { clientsMap[c.id] = c; });
+    }
+
+    const spacesMap: Record<string, { id: string; name: string; workspace_id: string }> = {};
+    if (spaceIds.length > 0) {
+      const { data: spaceRows } = await supabaseAdmin
+        .from('spaces')
+        .select('id, name, workspace_id')
+        .in('id', spaceIds);
+      (spaceRows || []).forEach((s: any) => { spacesMap[s.id] = s; });
+    }
+
+    const wsIds = Array.from(new Set(Object.values(spacesMap).map((s) => s.workspace_id).filter(Boolean)));
+    const wsMap: Record<string, { id: string; name: string }> = {};
+    if (wsIds.length > 0) {
+      const { data: wsRows } = await supabaseAdmin
+        .from('workspaces')
+        .select('id, name')
+        .in('id', wsIds);
+      (wsRows || []).forEach((w: any) => { wsMap[w.id] = w; });
+    }
+
+    const enriched = list.map((f) => {
+      const space = f.space_id ? spacesMap[f.space_id] : null;
+      return {
+        id: f.id,
+        name: f.name,
+        client_id: f.client_id,
+        client: f.client_id ? clientsMap[f.client_id] || null : null,
+        space: space
+          ? { id: space.id, name: space.name, workspace: wsMap[space.workspace_id] || null }
+          : null,
+        created_at: f.created_at,
+      };
+    });
 
     res.json({ success: true, data: enriched });
   } catch (err) {
