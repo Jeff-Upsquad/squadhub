@@ -290,15 +290,17 @@ router.post('/folders', requirePermission('can_create_folders'), async (req: Req
     if (clientSpaceTemplate && clientSpaceTemplate.template?.lists) {
       const templateLists = clientSpaceTemplate.template.lists as Array<{ name: string; position: number; default_view?: string }>;
       for (const tl of templateLists) {
-        await supabaseAdmin.from('lists').insert({
+        const { error: listErr } = await supabaseAdmin.from('lists').insert({
           space_id: body.space_id,
           folder_id: data.id,
           name: tl.name,
           position: tl.position || 0,
-          default_view: tl.default_view || 'list',
           is_private: true,
           created_by: req.userId!,
         });
+        if (listErr) {
+          console.error('[pm/folders] child list insert failed:', listErr);
+        }
       }
     }
 

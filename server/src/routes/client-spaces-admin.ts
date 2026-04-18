@@ -268,15 +268,17 @@ router.post('/:id/instances', async (req: Request, res: Response) => {
     // Auto-create child lists from template
     const templateLists = (template.template?.lists || []) as Array<{ name: string; position: number; default_view?: string }>;
     for (const tl of templateLists) {
-      await supabaseAdmin.from('lists').insert({
+      const { error: listErr } = await supabaseAdmin.from('lists').insert({
         space_id: spaceId,
         folder_id: folder.id,
         name: tl.name,
         position: tl.position || 0,
-        default_view: tl.default_view || 'list',
         is_private: true,
         created_by: userId,
       });
+      if (listErr) {
+        console.error('[client-spaces-admin] child list insert failed:', listErr);
+      }
     }
 
     res.status(201).json({ success: true, data: folder });
