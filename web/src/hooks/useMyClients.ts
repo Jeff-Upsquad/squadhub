@@ -15,7 +15,7 @@ export function useMyClients() {
     queryKey: ['my-clients'],
     queryFn: async () => {
       const res = await api.get('/users/me/clients');
-      return res.data.data;
+      return res.data?.data ?? [];
     },
   });
 }
