@@ -260,59 +260,100 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
             </div>
           )}
 
-          {(cur?.user_access || []).length === 0 ? (
-            <p className="py-6 text-center text-xs text-[#90A1B9]">No users have access yet</p>
-          ) : (
-            <div className="space-y-1.5">
-              {(cur?.user_access || []).map((ua) => (
-                <div key={ua.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] px-3 py-2.5">
-                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
-                      {ua.user?.display_name?.[0]?.toUpperCase() || '?'}
+          {(() => {
+            const grouped = USER_TYPE_SECTIONS.map((s) => ({
+              ...s,
+              users: (cur?.user_access || []).filter((ua) => s.match(ua.user?.user_type)),
+            }));
+            const total = grouped.reduce((n, s) => n + s.users.length, 0);
+
+            if (total === 0) {
+              return <p className="py-6 text-center text-xs text-[#90A1B9]">No users have access yet</p>;
+            }
+
+            return (
+              <div className="space-y-5">
+                {grouped.map((section) => (
+                  <div key={section.key}>
+                    <div className="mb-2 flex items-center gap-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">
+                        {section.label}
+                      </p>
+                      <span className="rounded-full bg-[#F1F5F9] px-1.5 py-0.5 text-[10px] font-medium text-[#62748E]">
+                        {section.users.length}
+                      </span>
                     </div>
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-[#0F172B]">{ua.user?.display_name || 'Unknown'}</div>
-                      <div className="truncate text-[10px] text-[#90A1B9]">{ua.user?.email || ''}</div>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {ua.role && (
-                      <span
-                        className="inline-block h-2.5 w-2.5 rounded-full"
-                        style={{ background: ua.role.color }}
-                        title={ua.role.name}
-                      />
+                    {section.users.length === 0 ? (
+                      <p className="py-2 text-[10px] text-[#90A1B9]">No users</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {section.users.map((ua) => (
+                          <div key={ua.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] px-3 py-2.5">
+                            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
+                                {ua.user?.display_name?.[0]?.toUpperCase() || '?'}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium text-[#0F172B]">{ua.user?.display_name || 'Unknown'}</div>
+                                <div className="truncate text-[10px] text-[#90A1B9]">{ua.user?.email || ''}</div>
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              {ua.role && (
+                                <span
+                                  className="inline-block h-2.5 w-2.5 rounded-full"
+                                  style={{ background: ua.role.color }}
+                                  title={ua.role.name}
+                                />
+                              )}
+                              <select
+                                value={ua.role_id || ''}
+                                onChange={(e) =>
+                                  changeRole.mutate({
+                                    userId: ua.user_id,
+                                    role_id: e.target.value || null,
+                                  })
+                                }
+                                className="rounded border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-medium text-[#62748E] focus:border-[#0F172B] focus:outline-none"
+                              >
+                                <option value="">No role</option>
+                                {allRoles.map((r) => (
+                                  <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={() => removeUser.mutate(ua.user_id)}
+                                className="rounded p-1 text-[#90A1B9] transition hover:bg-red-50 hover:text-red-500"
+                              >
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
-                    <select
-                      value={ua.role_id || ''}
-                      onChange={(e) =>
-                        changeRole.mutate({
-                          userId: ua.user_id,
-                          role_id: e.target.value || null,
-                        })
-                      }
-                      className="rounded border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-medium text-[#62748E] focus:border-[#0F172B] focus:outline-none"
-                    >
-                      <option value="">No role</option>
-                      {allRoles.map((r) => (
-                        <option key={r.id} value={r.id}>{r.name}</option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={() => removeUser.mutate(ua.user_id)}
-                      className="rounded p-1 text-[#90A1B9] transition hover:bg-red-50 hover:text-red-500"
-                    >
-                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            );
+          })()}
         </div>
       </div>
     </>
   );
 }
+
+const KNOWN_USER_TYPES = ['client', 'client_staff', 'internal', 'partner'];
+const USER_TYPE_SECTIONS: {
+  key: string;
+  label: string;
+  match: (t: string | null | undefined) => boolean;
+}[] = [
+  { key: 'client',       label: 'Client User',   match: (t) => t === 'client' },
+  { key: 'client_staff', label: 'Client Staff',  match: (t) => t === 'client_staff' },
+  { key: 'internal',     label: 'Squad Manager', match: (t) => t === 'internal' },
+  { key: 'partner',      label: 'Partner Users', match: (t) => t === 'partner' },
+  { key: 'other',        label: 'Other Users',   match: (t) => !KNOWN_USER_TYPES.includes(t ?? '') },
+];
