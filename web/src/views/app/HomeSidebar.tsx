@@ -26,18 +26,9 @@ interface HomeSidebarProps {
   onOpenSpaces: () => void;
 }
 
-// ---- Tab pills ----
-type HomeTab = 'unread' | 'spaces' | 'chat';
-
-const TABS: { id: HomeTab; label: string }[] = [
-  { id: 'unread', label: 'Unread' },
-  { id: 'spaces', label: 'Spaces' },
-  { id: 'chat', label: 'Chat' },
-];
-
 // ---- Favorite icon helper ----
 function FavoriteIcon({ type }: { type: string }) {
-  const cls = 'h-4 w-4 shrink-0 text-foreground-muted';
+  const cls = 'h-[14px] w-[14px] shrink-0 text-[var(--sh-ink-3)]';
   switch (type) {
     case 'channel':
       return (
@@ -72,7 +63,51 @@ function FavoriteIcon({ type }: { type: string }) {
   }
 }
 
-// ---- Collapsible section header (Slack-style caret-down) ----
+// ---- Sidebar nav item (matches design's sb-item) ----
+function NavItem({
+  icon,
+  label,
+  active,
+  count,
+  unread,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  count?: number;
+  unread?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
+        active
+          ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+          : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+      }`}
+      style={active ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+    >
+      <span className={active ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}>{icon}</span>
+      <span className="flex-1 truncate">{label}</span>
+      {count != null && count > 0 && (
+        <span
+          className={`text-[10.5px] font-semibold rounded-full px-[6px] py-[1px] leading-none ${
+            unread
+              ? 'bg-[var(--sh-ink)] text-[var(--sidebar)]'
+              : 'bg-[var(--sh-hair-3)] text-[var(--sh-ink-3)]'
+          }`}
+          style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)' }}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// ---- Collapsible section header (monochrome eyebrow) ----
 function SectionHeader({
   title,
   expanded,
@@ -85,22 +120,33 @@ function SectionHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between pl-2 pr-4">
-      <div className="flex items-center">
-        <button onClick={onToggle} className="flex items-start p-1 rounded">
+    <div className="group flex items-center justify-between px-2 pt-3 pb-1">
+      <div className="flex items-center gap-1">
+        <button
+          onClick={onToggle}
+          className="flex items-center justify-center h-4 w-4 text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)] transition-colors"
+          aria-label={expanded ? 'Collapse' : 'Expand'}
+        >
           <svg
-            className={`h-[18px] w-[18px] transition-transform ${expanded ? '' : '-rotate-90'}`}
+            className={`h-3 w-3 transition-transform ${expanded ? '' : '-rotate-90'}`}
             viewBox="0 0 18 18"
             fill="currentColor"
           >
             <path d="M5 7h8L9 11z" />
           </svg>
         </button>
-        <button onClick={onToggle} className="flex items-center rounded-md px-[5px] h-[28px]">
-          <span className="text-[15px] font-normal leading-[15px] text-sidebar-text overflow-hidden text-ellipsis whitespace-nowrap">{title}</span>
+        <button
+          onClick={onToggle}
+          className="text-[10.5px] uppercase tracking-[0.08em] font-semibold text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)] whitespace-nowrap transition-colors"
+        >
+          {title}
         </button>
       </div>
-      {action}
+      {action && (
+        <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+          {action}
+        </span>
+      )}
     </div>
   );
 }
@@ -133,7 +179,6 @@ export default function HomeSidebar({
   const hasCheckinPartners = useHasMiniApp('daily-checkin-partners');
   const hasTimeManagement = useHasMiniApp('time-management');
 
-  const [activeTab, setActiveTab] = useState<HomeTab>('unread');
   const [expandedSections, setExpandedSections] = useState({
     favorites: true,
     clients: true,
@@ -147,90 +192,130 @@ export default function HomeSidebar({
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleTabChange = (tab: HomeTab) => {
-    setActiveTab(tab);
-    if (tab === 'spaces') onChangeView('tasks');
-    else if (tab === 'chat') onChangeView('chat');
-    else onChangeView('hub');
-  };
-
   return (
-    <div className="flex h-full w-full flex-col text-sidebar-text">
+    <div className="flex h-full w-full flex-col text-[var(--sh-ink-2)]">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-divider px-4 py-3">
-        <button className="flex items-center gap-1 text-[18px] font-black leading-[26px] text-sidebar-text hover:opacity-80 transition">
-          {currentWorkspace?.name || 'Home'}
-          <svg className="h-3.5 w-3.5 ml-0.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      <div className="flex items-center justify-between border-b border-[var(--sh-hair)] px-4 py-3">
+        <button className="flex items-center gap-2 hover:opacity-80 transition">
+          <span
+            className="grid h-[22px] w-[22px] place-items-center rounded-[6px] bg-[var(--sh-ink)] text-[var(--sidebar)]"
+            style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', fontSize: 12, fontWeight: 700 }}
+          >
+            {(currentWorkspace?.name || 'S').charAt(0).toUpperCase()}
+          </span>
+          <span className="text-[13.5px] font-semibold text-[var(--sh-ink)]">
+            {currentWorkspace?.name || 'Home'}
+          </span>
+          <svg className="h-3.5 w-3.5 text-[var(--sh-ink-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
-        <div className="flex items-center gap-1">
-          <button className="rounded p-1 text-foreground-muted hover:bg-sidebar-hover hover:text-sidebar-text transition" title="Filter">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="flex items-center gap-[2px]">
+          <button className="grid h-[26px] w-[26px] place-items-center rounded-[6px] text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition" title="Filter">
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
             </svg>
           </button>
-          <button className="rounded p-1 text-foreground-muted hover:bg-sidebar-hover hover:text-sidebar-text transition" title="New message">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button className="grid h-[26px] w-[26px] place-items-center rounded-[6px] text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition" title="New message">
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
             </svg>
           </button>
         </div>
       </div>
 
-      {/* Tab pills */}
-      <div className="flex gap-1.5 border-b border-divider px-4 py-2">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => handleTabChange(tab.id)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-              activeTab === tab.id
-                ? 'bg-sidebar-text text-white'
-                : 'bg-sidebar-hover text-foreground-muted hover:bg-sidebar-hover hover:text-sidebar-text'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Search */}
+      <div className="px-3 pt-2 pb-2 border-b border-[var(--sh-hair)] relative">
+        <svg className="absolute left-[20px] top-1/2 -translate-y-1/2 h-[13px] w-[13px] text-[var(--sh-ink-4)]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+        <input
+          className="w-full pl-[30px] pr-10 py-[7px] bg-[var(--surface)] border border-[var(--sh-hair)] rounded-lg text-[12.5px] text-[var(--sh-ink)] outline-none placeholder:text-[var(--sh-ink-4)] focus:border-[var(--sh-ink-4)]"
+          placeholder="Search or jump to…"
+        />
+        <span
+          className="absolute right-[18px] top-1/2 -translate-y-1/2 text-[10px] text-[var(--sh-ink-4)] bg-[var(--sh-hair-3)] border border-[var(--sh-hair)] rounded px-[4px] py-[1px]"
+          style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)' }}
+        >⌘K</span>
       </div>
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto">
-        {/* Navigation items */}
-        <div className="px-2 py-2">
-          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-sidebar-text transition hover:bg-sidebar-hover">
-            <svg className="h-4 w-4 shrink-0 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859M12 3v8.25m0 0l-3-3m3 3l3-3" />
-            </svg>
-            Inbox
-          </button>
-
-          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-sidebar-text transition hover:bg-sidebar-hover">
-            <svg className="h-4 w-4 shrink-0 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            New Tasks
-          </button>
-
-          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-sidebar-text transition hover:bg-sidebar-hover">
-            <svg className="h-4 w-4 shrink-0 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-            </svg>
-            Assigned Comments
-          </button>
+        {/* Navigation items — design's top list */}
+        <div className="px-2 pt-2 pb-1 flex flex-col gap-[1px]">
+          <NavItem
+            icon={
+              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1z" />
+              </svg>
+            }
+            label="Home"
+            active={homeView === 'hub'}
+            onClick={() => onChangeView('hub')}
+          />
+          <NavItem
+            icon={
+              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <path d="M3 13V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8" />
+                <path d="M3 13h5l2 3h4l2-3h5v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              </svg>
+            }
+            label="Inbox"
+            active={homeView === 'inbox'}
+            count={8}
+            unread
+            onClick={() => onChangeView('inbox')}
+          />
+          <NavItem
+            icon={
+              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="9" />
+                <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+              </svg>
+            }
+            label="My Tasks"
+            active={homeView === 'my-tasks'}
+            count={14}
+            onClick={() => onChangeView('my-tasks')}
+          />
+          <NavItem
+            icon={
+              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
+              </svg>
+            }
+            label="Mentions"
+            active={homeView === 'mentions'}
+            count={3}
+            unread
+            onClick={() => onChangeView('mentions')}
+          />
+          <NavItem
+            icon={
+              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+            }
+            label="Later"
+            active={homeView === 'later'}
+            onClick={() => onChangeView('later')}
+          />
 
           {isInternal && hasCheckin && (
             <button
               onClick={() => onChangeView('checkin')}
-              className={`flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm transition ${
+              className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
                 homeView === 'checkin'
-                  ? 'bg-[#1264A3] text-white font-medium'
-                  : 'text-sidebar-text hover:bg-sidebar-hover'
+                  ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+                  : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
               }`}
+              style={homeView === 'checkin' ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
             >
-              <svg className={`h-4 w-4 shrink-0 ${homeView === 'checkin' ? 'text-white' : 'text-foreground-muted'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg className={`h-[14px] w-[14px] shrink-0 ${homeView === 'checkin' ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               Daily Check-In
             </button>
@@ -239,14 +324,15 @@ export default function HomeSidebar({
           {isInternal && hasCheckinPartners && (
             <button
               onClick={() => onChangeView('checkin-partners')}
-              className={`flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm transition ${
+              className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
                 homeView === 'checkin-partners'
-                  ? 'bg-[#1264A3] text-white font-medium'
-                  : 'text-sidebar-text hover:bg-sidebar-hover'
+                  ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+                  : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
               }`}
+              style={homeView === 'checkin-partners' ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
             >
-              <svg className={`h-4 w-4 shrink-0 ${homeView === 'checkin-partners' ? 'text-white' : 'text-foreground-muted'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg className={`h-[14px] w-[14px] shrink-0 ${homeView === 'checkin-partners' ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               Daily Check-In
             </button>
@@ -255,14 +341,15 @@ export default function HomeSidebar({
           {isInternal && hasTimeManagement && (
             <button
               onClick={() => onChangeView('time-management')}
-              className={`flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm transition ${
+              className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
                 homeView === 'time-management'
-                  ? 'bg-[#1264A3] text-white font-medium'
-                  : 'text-sidebar-text hover:bg-sidebar-hover'
+                  ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+                  : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
               }`}
+              style={homeView === 'time-management' ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
             >
-              <svg className={`h-4 w-4 shrink-0 ${homeView === 'time-management' ? 'text-white' : 'text-foreground-muted'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg className={`h-[14px] w-[14px] shrink-0 ${homeView === 'time-management' ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               Time Management
             </button>
@@ -271,13 +358,14 @@ export default function HomeSidebar({
           {(isPartner || isClient) && (
             <button
               onClick={() => onChangeView('cashbook')}
-              className={`flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm transition ${
+              className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
                 homeView === 'cashbook'
-                  ? 'bg-[#1264A3] text-white font-medium'
-                  : 'text-sidebar-text hover:bg-sidebar-hover'
+                  ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+                  : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
               }`}
+              style={homeView === 'cashbook' ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
             >
-              <svg className={`h-4 w-4 shrink-0 ${homeView === 'cashbook' ? 'text-white' : 'text-foreground-muted'}`} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <svg className={`h-[14px] w-[14px] shrink-0 ${homeView === 'cashbook' ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`} fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
               </svg>
               Cash Book
@@ -286,7 +374,7 @@ export default function HomeSidebar({
         </div>
 
         {/* Divider */}
-        <div className="mx-4 border-t border-divider" />
+        <div className="mx-2 border-t border-[var(--sh-hair)]" />
 
         {/* Favorites section */}
         <div className="py-1">
@@ -298,22 +386,22 @@ export default function HomeSidebar({
           {expandedSections.favorites && (
             <div className="px-2 pb-1">
               {favoritesLoading && (
-                <p className="px-3 py-1.5 text-xs text-foreground-dim">Loading...</p>
+                <p className="px-2 py-[5px] text-[11.5px] text-[var(--sh-ink-4)]">Loading...</p>
               )}
               {!favoritesLoading && (!favorites || favorites.length === 0) && (
-                <p className="px-3 py-2 text-center text-xs text-foreground-dim">
+                <p className="px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">
                   Star items to pin them here
                 </p>
               )}
               {favorites?.map((fav) => (
                 <div key={fav.id} className="group flex items-center">
-                  <button className="flex flex-1 items-center gap-2 rounded-md px-3 py-1 text-left text-sm text-sidebar-text transition hover:bg-sidebar-hover">
+                  <button className="flex flex-1 items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]">
                     <FavoriteIcon type={fav.item_type} />
                     <span className="truncate">{fav.item_name}</span>
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); removeFavorite.mutate(fav.id); }}
-                    className="mr-2 hidden rounded p-0.5 text-foreground-muted transition hover:text-sidebar-text group-hover:block"
+                    className="mr-1 hidden rounded p-0.5 text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)] group-hover:block"
                     title="Remove"
                   >
                     <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -326,11 +414,11 @@ export default function HomeSidebar({
           )}
         </div>
 
-        {/* Clients section — only show when user has at least one client access grant */}
-        {!isClient && myClients && myClients.length > 0 && (
+        {/* Clients section — hidden for client users; otherwise always visible */}
+        {!isClient && (
           <>
-            <div className="mx-4 border-t border-divider" />
-            <div className="py-1">
+            <div className="mx-2 border-t border-[var(--sh-hair)]" />
+            <div className="pb-1">
               <SectionHeader
                 title="Clients"
                 expanded={expandedSections.clients}
@@ -338,13 +426,19 @@ export default function HomeSidebar({
               />
               {expandedSections.clients && (
                 <div className="pb-1">
-                  {myClients.map((entry) => (
-                    <ClientRow
-                      key={entry.id}
-                      entry={entry}
-                      onAddSpace={() => setAddSpaceForClient(entry)}
-                    />
-                  ))}
+                  {!myClients ? (
+                    <p className="px-3 py-[5px] text-[11.5px] text-[var(--sh-ink-4)]">Loading…</p>
+                  ) : myClients.length === 0 ? (
+                    <p className="px-3 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">No clients yet</p>
+                  ) : (
+                    myClients.map((entry) => (
+                      <ClientRow
+                        key={entry.id}
+                        entry={entry}
+                        onAddSpace={() => setAddSpaceForClient(entry)}
+                      />
+                    ))
+                  )}
                 </div>
               )}
             </div>
@@ -355,9 +449,9 @@ export default function HomeSidebar({
         {sharedItems && sharedItems.length > 0 && (
           <>
             {/* Divider */}
-            <div className="mx-4 border-t border-divider" />
+            <div className="mx-2 border-t border-[var(--sh-hair)]" />
 
-            <div className="py-1">
+            <div className="pb-1">
               <SectionHeader
                 title="Shared with me"
                 expanded={expandedSections.sharedWithMe}
@@ -366,7 +460,7 @@ export default function HomeSidebar({
               {expandedSections.sharedWithMe && (
                 <div className="px-2 pb-1">
                   {sharedLoading && (
-                    <p className="px-3 py-1.5 text-xs text-foreground-dim">Loading...</p>
+                    <p className="px-2 py-[5px] text-[11.5px] text-[var(--sh-ink-4)]">Loading...</p>
                   )}
                   {sharedItems.map((item) => (
                     <button
@@ -377,7 +471,7 @@ export default function HomeSidebar({
                           setActiveList(item.resource_id);
                         }
                       }}
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-1 text-left text-sm text-sidebar-text transition hover:bg-sidebar-hover"
+                      className="flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
                     >
                       <FavoriteIcon type={item.resource_type} />
                       <span className="truncate">{item.resource_name}</span>
@@ -390,12 +484,12 @@ export default function HomeSidebar({
         )}
 
         {/* Divider */}
-        <div className="mx-4 border-t border-divider" />
+        <div className="mx-2 border-t border-[var(--sh-hair)]" />
 
         {/* Spaces section — hidden for client users */}
         {!isClient && (
           <>
-            <div className="py-1">
+            <div className="pb-1">
               <SectionHeader
                 title="Spaces"
                 expanded={expandedSections.spaces}
@@ -404,11 +498,11 @@ export default function HomeSidebar({
                   canCreateSpaces ? (
                     <button
                       onClick={() => setShowCreateSpace(true)}
-                      className="text-foreground-muted transition hover:text-sidebar-text"
+                      className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
                       title="Create space"
                     >
-                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v16m8-8H4" />
                       </svg>
                     </button>
                   ) : undefined
@@ -425,12 +519,12 @@ export default function HomeSidebar({
             </div>
 
             {/* Divider */}
-            <div className="mx-4 border-t border-divider" />
+            <div className="mx-2 border-t border-[var(--sh-hair)]" />
           </>
         )}
 
         {/* Channels section */}
-        <div className="py-1">
+        <div className="pb-1">
           <SectionHeader
             title="Channels"
             expanded={expandedSections.channels}
@@ -439,11 +533,11 @@ export default function HomeSidebar({
               canCreateChannels ? (
                 <button
                   onClick={onCreateChannel}
-                  className="text-foreground-muted transition hover:text-sidebar-text"
+                  className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
                   title="Create channel"
                 >
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v16m8-8H4" />
                   </svg>
                 </button>
               ) : undefined
@@ -452,27 +546,31 @@ export default function HomeSidebar({
           {expandedSections.channels && (
             <div className="px-2 pb-1">
               {channels.length === 0 ? (
-                <p className="px-3 py-2 text-center text-xs text-foreground-dim">No channels yet</p>
+                <p className="px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">No channels yet</p>
               ) : (
-                channels.map((ch) => (
-                  <button
-                    key={ch.id}
-                    onClick={() => onSelectChannel(ch.id)}
-                    className={`mb-0.5 flex w-full items-center rounded-md px-3 py-1 text-left text-sm transition ${
-                      activeChannelId === ch.id && homeView === 'chat'
-                        ? 'bg-[#1264A3] text-white font-medium'
-                        : 'text-sidebar-text hover:bg-sidebar-hover'
-                    }`}
-                  >
-                    <span className={`mr-2 ${activeChannelId === ch.id && homeView === 'chat' ? 'text-white/60' : 'text-foreground-muted'}`}>#</span>
-                    <span className="truncate">{ch.name}</span>
-                  </button>
-                ))
+                channels.map((ch) => {
+                  const isActive = activeChannelId === ch.id && homeView === 'chat';
+                  return (
+                    <button
+                      key={ch.id}
+                      onClick={() => onSelectChannel(ch.id)}
+                      className={`mb-[1px] flex w-full items-center rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
+                        isActive
+                          ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+                          : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+                      }`}
+                      style={isActive ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+                    >
+                      <span className={`mr-[6px] ${isActive ? 'text-[var(--sh-ink-3)]' : 'text-[var(--sh-ink-4)]'}`}>#</span>
+                      <span className="truncate">{ch.name}</span>
+                    </button>
+                  );
+                })
               )}
               {/* Add channels */}
               <button
                 onClick={onCreateChannel}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-1 text-left text-sm text-foreground-dim transition hover:bg-sidebar-hover hover:text-sidebar-text"
+                className="flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-4)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
               >
                 <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -484,10 +582,10 @@ export default function HomeSidebar({
         </div>
 
         {/* Divider */}
-        <div className="mx-4 border-t border-divider" />
+        <div className="mx-2 border-t border-[var(--sh-hair)]" />
 
         {/* DMs section */}
-        <div className="py-1">
+        <div className="pb-1">
           <SectionHeader
             title="Direct Messages"
             expanded={expandedSections.dms}
@@ -495,7 +593,7 @@ export default function HomeSidebar({
           />
           {expandedSections.dms && (
             <div className="px-2 pb-1">
-              <p className="px-3 py-2 text-center text-xs text-foreground-dim">No direct messages yet</p>
+              <p className="px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">No direct messages yet</p>
             </div>
           )}
         </div>
@@ -532,11 +630,11 @@ function ClientRow({
       <div className="group flex items-center">
         <button
           onClick={() => setExpanded(!expanded)}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-foreground-muted hover:text-sidebar-text"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)]"
           aria-label={expanded ? 'Collapse' : 'Expand'}
         >
           <svg
-            className={`h-[14px] w-[14px] transition-transform ${expanded ? '' : '-rotate-90'}`}
+            className={`h-3 w-3 transition-transform ${expanded ? '' : '-rotate-90'}`}
             viewBox="0 0 18 18"
             fill="currentColor"
           >
@@ -545,9 +643,9 @@ function ClientRow({
         </button>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm text-sidebar-text transition hover:bg-sidebar-hover"
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-[6px] px-[5px] py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
         >
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-sidebar-hover text-[9px] font-semibold uppercase text-sidebar-text">
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] bg-[var(--sh-hair-3)] text-[9px] font-semibold uppercase text-[var(--sh-ink-2)]">
             {entry.client.business_name.slice(0, 2)}
           </span>
           <span className="truncate">{entry.client.business_name}</span>
@@ -556,9 +654,9 @@ function ClientRow({
           <button
             onClick={onAddSpace}
             title="Add space"
-            className="mr-2 hidden rounded p-0.5 text-foreground-muted transition hover:text-sidebar-text group-hover:block"
+            className="mr-1 hidden rounded p-0.5 text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)] group-hover:block"
           >
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
           </button>
@@ -567,10 +665,10 @@ function ClientRow({
       {expanded && (
         <div className="pb-1 pl-8 pr-2">
           {isLoading && (
-            <p className="px-2 py-1 text-[11px] text-foreground-dim">Loading…</p>
+            <p className="px-2 py-1 text-[11px] text-[var(--sh-ink-4)]">Loading…</p>
           )}
           {!isLoading && folders.length === 0 && (
-            <p className="px-2 py-1 text-[11px] text-foreground-dim">
+            <p className="px-2 py-1 text-[11px] text-[var(--sh-ink-4)]">
               {isWorkspaceAdmin ? 'No spaces yet. Click + to add.' : 'No spaces yet.'}
             </p>
           )}
@@ -581,13 +679,14 @@ function ClientRow({
               <button
                 key={f.id}
                 onClick={() => setActiveDesignFolder(f.id)}
-                className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] ${
+                className={`flex w-full items-center gap-2 rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
                   isActive
-                    ? 'bg-[#1264A3] text-white'
-                    : 'text-sidebar-text hover:bg-sidebar-hover'
+                    ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+                    : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
                 }`}
+                style={isActive ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
               >
-                <span className={`shrink-0 ${isActive ? 'text-white/70' : 'text-foreground-muted'}`}>
+                <span className={`shrink-0 ${isActive ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`}>
                   {isDesign ? (
                     <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
