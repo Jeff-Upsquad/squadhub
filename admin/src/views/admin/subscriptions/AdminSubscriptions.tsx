@@ -318,7 +318,10 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
 
   const plans: SubscriptionPlanRow[] = subscription.plans || [];
   const plansByTier: Record<SubscriptionTier, SubscriptionPlanRow[]> = { Junior: [], Pro: [], Elite: [] };
-  plans.forEach((p) => { plansByTier[p.tier].push(p); });
+  plans.forEach((p) => {
+    const tier: SubscriptionTier = p.tier && plansByTier[p.tier] ? p.tier : 'Junior';
+    plansByTier[tier].push(p);
+  });
   (Object.keys(plansByTier) as SubscriptionTier[]).forEach((t) => {
     plansByTier[t].sort((a, b) => PLAN_ORDER.indexOf(a.plan) - PLAN_ORDER.indexOf(b.plan));
   });
