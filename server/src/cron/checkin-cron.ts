@@ -17,14 +17,14 @@ export async function markMissingCheckIns(): Promise<void> {
   }
 
   try {
-    // Get all approved users
+    // Get all active users
     const { data: users } = await supabaseAdmin
       .from('users')
       .select('id')
-      .eq('status', 'approved');
+      .eq('status', 'active');
 
     if (!users || users.length === 0) {
-      console.log('[CheckIn Cron] No approved users found');
+      console.log('[CheckIn Cron] No active users found');
       return;
     }
 

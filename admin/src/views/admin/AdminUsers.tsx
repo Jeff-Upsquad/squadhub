@@ -7,6 +7,17 @@ interface UserWithRole extends User {
   custom_role?: { id: string; name: string; color: string } | null;
 }
 
+function accessLabelFor(user: Pick<User, 'is_admin' | 'status'>): 'admin' | 'member' | 'banned' {
+  if (user.status === 'banned') return 'banned';
+  if (user.is_admin) return 'admin';
+  return 'member';
+}
+
+function userTypeLabel(userType: string): string {
+  if (userType === 'client_staff') return 'Client Staff';
+  return userType.charAt(0).toUpperCase() + userType.slice(1);
+}
+
 /* ─────────────────────────── Edit Slider ─────────────────────────── */
 function EditUserSlider({
   user,
@@ -118,15 +129,20 @@ function EditUserSlider({
             <div>
               <p className="text-base font-medium text-[#0F172B]">{user.display_name}</p>
               <div className="mt-0.5 flex items-center gap-2">
-                <span className={`inline-block rounded-full px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] font-medium ${
-                  user.role === 'admin'
-                    ? 'bg-amber-50 text-amber-600'
-                    : user.role === 'banned'
-                    ? 'bg-red-50 text-red-600'
-                    : 'bg-[#F8FAFC] text-[#62748E]'
-                }`}>
-                  {user.role}
-                </span>
+                {(() => {
+                  const label = accessLabelFor(user);
+                  return (
+                    <span className={`inline-block rounded-full px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] font-medium ${
+                      label === 'admin'
+                        ? 'bg-amber-50 text-amber-600'
+                        : label === 'banned'
+                        ? 'bg-red-50 text-red-600'
+                        : 'bg-[#F8FAFC] text-[#62748E]'
+                    }`}>
+                      {label}
+                    </span>
+                  );
+                })()}
                 <span className="font-[family-name:var(--font-mono)] text-xs text-[#90A1B9]">
                   Joined {new Date(user.created_at).toLocaleDateString()}
                 </span>
@@ -194,21 +210,26 @@ function EditUserSlider({
               )}
             </div>
 
-            {/* Platform Role */}
+            {/* Platform Access */}
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Platform Access</label>
+              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Access</label>
               <div className="rounded-md border border-[#E2E8F0] bg-[#F1F5F9] px-3 py-2.5">
-                <span className={`inline-block rounded-full px-2.5 py-0.5 font-[family-name:var(--font-mono)] text-xs font-medium ${
-                  user.role === 'admin'
-                    ? 'bg-amber-50 text-amber-600'
-                    : user.role === 'banned'
-                    ? 'bg-red-50 text-red-600'
-                    : 'bg-[#F8FAFC] text-[#62748E]'
-                }`}>
-                  {user.role}
-                </span>
+                {(() => {
+                  const label = accessLabelFor(user);
+                  return (
+                    <span className={`inline-block rounded-full px-2.5 py-0.5 font-[family-name:var(--font-mono)] text-xs font-medium ${
+                      label === 'admin'
+                        ? 'bg-amber-50 text-amber-600'
+                        : label === 'banned'
+                        ? 'bg-red-50 text-red-600'
+                        : 'bg-[#F8FAFC] text-[#62748E]'
+                    }`}>
+                      {label}
+                    </span>
+                  );
+                })()}
                 <p className="mt-1 text-[11px] text-[#90A1B9]">
-                  Use the actions in the table to change platform role (admin/member) or ban/unban.
+                  Use the actions in the table to grant/revoke admin access or ban/unban.
                 </p>
               </div>
             </div>
@@ -259,10 +280,10 @@ function UserRow({
 }) {
   const queryClient = useQueryClient();
   const isSelf = user.id === currentUserId;
-  const isBanned = user.role === 'banned';
+  const isBanned = user.status === 'banned';
 
   const roleMutation = useMutation({
-    mutationFn: (role: string) => api.put(`/admin/users/${user.id}/role`, { role }),
+    mutationFn: (is_admin: boolean) => api.put(`/admin/users/${user.id}/role`, { is_admin }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-users'] }); onAction(); },
   });
 
@@ -298,24 +319,35 @@ function UserRow({
         </div>
       </td>
       <td className="px-4 py-3">
-        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
-          (user as any).user_type === 'client' ? 'bg-emerald-50 text-emerald-600' :
-          (user as any).user_type === 'partner' ? 'bg-purple-50 text-purple-600' :
-          'bg-blue-50 text-blue-600'
-        }`}>
-          {((user as any).user_type || 'internal').charAt(0).toUpperCase() + ((user as any).user_type || 'internal').slice(1)}
-        </span>
+        {(() => {
+          const ut = (user as any).user_type || 'internal';
+          const cls =
+            ut === 'client' ? 'bg-emerald-50 text-emerald-600' :
+            ut === 'client_staff' ? 'bg-teal-50 text-teal-600' :
+            ut === 'partner' ? 'bg-purple-50 text-purple-600' :
+            'bg-blue-50 text-blue-600';
+          return (
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${cls}`}>
+              {userTypeLabel(ut)}
+            </span>
+          );
+        })()}
       </td>
       <td className="px-4 py-3">
-        <span className={`inline-block rounded-full px-2.5 py-0.5 font-[family-name:var(--font-mono)] text-xs font-medium ${
-          user.role === 'admin'
-            ? 'bg-amber-50 text-amber-600'
-            : user.role === 'banned'
-            ? 'bg-red-50 text-red-600'
-            : 'bg-[#F8FAFC] text-[#62748E]'
-        }`}>
-          {user.role}
-        </span>
+        {(() => {
+          const label = accessLabelFor(user);
+          return (
+            <span className={`inline-block rounded-full px-2.5 py-0.5 font-[family-name:var(--font-mono)] text-xs font-medium ${
+              label === 'admin'
+                ? 'bg-amber-50 text-amber-600'
+                : label === 'banned'
+                ? 'bg-red-50 text-red-600'
+                : 'bg-[#F8FAFC] text-[#62748E]'
+            }`}>
+              {label}
+            </span>
+          );
+        })()}
       </td>
       <td className="px-4 py-3">
         {user.custom_role ? (
@@ -343,11 +375,11 @@ function UserRow({
             <>
               {!isBanned && (
                 <button
-                  onClick={() => roleMutation.mutate(user.role === 'admin' ? 'member' : 'admin')}
+                  onClick={() => roleMutation.mutate(!user.is_admin)}
                   disabled={roleMutation.isPending}
                   className="rounded-md border border-[#CAD5E2] bg-transparent px-2.5 py-1 text-xs text-[#62748E] hover:border-[#90A1B9] hover:text-[#0F172B] disabled:opacity-50"
                 >
-                  {user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
+                  {user.is_admin ? 'Remove Admin' : 'Make Admin'}
                 </button>
               )}
               <button
@@ -426,7 +458,7 @@ export default function AdminUsers() {
 
       {/* User type filter */}
       <div className="mb-4 flex gap-1">
-        {(['all', 'internal', 'client', 'partner'] as const).map((tab) => (
+        {(['all', 'internal', 'client', 'client_staff', 'partner'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => { setUserTypeFilter(tab); setPage(1); }}
@@ -436,7 +468,7 @@ export default function AdminUsers() {
                 : 'bg-white text-[#62748E] hover:bg-[#F1F5F9]'
             }`}
           >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {tab === 'all' ? 'All' : userTypeLabel(tab)}
           </button>
         ))}
       </div>
@@ -453,7 +485,7 @@ export default function AdminUsers() {
                 <tr className="border-b border-[#E2E8F0] bg-[#F1F5F9]">
                   <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">User</th>
                   <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Type</th>
-                  <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Platform</th>
+                  <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Access</th>
                   <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Role</th>
                   <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Joined</th>
                   <th className="px-4 py-3 font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Actions</th>

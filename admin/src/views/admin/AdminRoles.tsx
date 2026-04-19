@@ -260,7 +260,7 @@ export default function AdminRoles() {
   };
 
   const handleDelete = (role: RoleWithCount) => {
-    if (role.is_default) return;
+    if (role.is_default || role.is_system) return;
     if (window.confirm(`Delete the "${role.name}" role? ${role.member_count} user(s) will be moved to the default role.`)) {
       deleteMutation.mutate(role.id);
     }
@@ -341,6 +341,9 @@ export default function AdminRoles() {
                         {role.is_default && (
                           <span className="rounded-full bg-[#F8FAFC] px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] text-[#62748E]">Default</span>
                         )}
+                        {role.is_system && (
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] text-amber-600">System</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -367,7 +370,7 @@ export default function AdminRoles() {
                         >
                           Edit
                         </button>
-                        {!role.is_default && (
+                        {!role.is_default && !role.is_system && (
                           <button
                             onClick={() => handleDelete(role)}
                             disabled={deleteMutation.isPending}
@@ -427,9 +430,13 @@ export default function AdminRoles() {
                       onChange={(e) => setFormName(e.target.value)}
                       required
                       maxLength={30}
-                      className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
+                      disabled={!!editingRole?.is_system}
+                      className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF] disabled:cursor-not-allowed disabled:bg-[#F1F5F9] disabled:text-[#90A1B9]"
                       placeholder="e.g. Designer, Manager, Viewer"
                     />
+                    {editingRole?.is_system && (
+                      <p className="mt-1 text-[11px] text-[#90A1B9]">System role name is locked. Permissions and color can still be edited.</p>
+                    )}
                   </div>
 
                   {/* Role color */}

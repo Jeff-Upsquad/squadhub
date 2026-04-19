@@ -37,7 +37,7 @@ router.get('/roles', async (_req: Request, res: Response) => {
   try {
     const { data: roles, error } = await supabaseAdmin
       .from('roles')
-      .select('id, name, color, permissions, is_default, is_system, created_at, updated_at')
+      .select('id, name, color, permissions, is_default, is_system, system_key, created_at, updated_at')
       .order('created_at', { ascending: true });
 
     if (error) {
@@ -118,6 +118,25 @@ router.put('/roles/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
     const body = updateRoleSchema.parse(req.body);
+
+    // System roles may have their color and permissions edited,
+    // but not their name (the name is what the app and other seeded
+    // rows reference for display).
+    if (body.name !== undefined) {
+      const { data: existing } = await supabaseAdmin
+        .from('roles')
+        .select('is_system, name')
+        .eq('id', id)
+        .single();
+
+      if (existing?.is_system && body.name !== existing.name) {
+        res.status(400).json({
+          success: false,
+          error: `"${existing.name}" is a system role and cannot be renamed`,
+        });
+        return;
+      }
+    }
 
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (body.name !== undefined) updates.name = body.name;

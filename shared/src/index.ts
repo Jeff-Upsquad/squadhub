@@ -4,15 +4,15 @@
 // ============================================================
 
 // ---- Users ----
-export type UserType = 'internal' | 'client' | 'partner';
+export type UserType = 'internal' | 'client' | 'client_staff' | 'partner';
 
 export interface User {
   id: string;
   email: string;
   display_name: string;
   avatar_url: string | null;
-  role: string;
-  status: 'pending' | 'approved' | 'rejected';
+  is_admin: boolean;
+  status: 'active' | 'pending' | 'rejected' | 'banned';
   user_type: UserType;
   created_at: string;
 }
@@ -247,6 +247,8 @@ export interface TaskComment {
 }
 
 // ---- Roles & Permissions ----
+export type SystemRoleKey = 'member' | 'user' | 'guest';
+
 export interface Role {
   id: string;
   name: string;
@@ -254,6 +256,7 @@ export interface Role {
   permissions: RolePermissions;
   is_default: boolean;
   is_system?: boolean;
+  system_key?: SystemRoleKey | null;
   created_at: string;
   updated_at: string;
 }

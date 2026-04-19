@@ -200,9 +200,10 @@ const ACCESS_LEVELS: { value: AccessLevel; label: string }[] = [
 // Platform user type badge (Internal / Client / Partner).
 // Distinct from the client-access role — this is immutable per user.
 const USER_TYPE_STYLES: Record<string, { label: string; bg: string; fg: string }> = {
-  internal: { label: 'Internal', bg: '#EEF2FF', fg: '#3730A3' },
-  client:   { label: 'Client',   bg: '#ECFDF5', fg: '#065F46' },
-  partner:  { label: 'Partner',  bg: '#F5F3FF', fg: '#5B21B6' },
+  internal:     { label: 'Internal',     bg: '#EEF2FF', fg: '#3730A3' },
+  client:       { label: 'Client',       bg: '#ECFDF5', fg: '#065F46' },
+  client_staff: { label: 'Client Staff', bg: '#F0FDFA', fg: '#0F766E' },
+  partner:      { label: 'Partner',      bg: '#F5F3FF', fg: '#5B21B6' },
 };
 
 function UserTypeChip({ userType }: { userType?: string | null }) {

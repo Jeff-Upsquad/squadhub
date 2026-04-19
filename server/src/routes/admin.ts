@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
+import { getDefaultRoleIdForUserType } from '../utils/defaultRole';
+import type { UserType } from '@squadhub/shared';
 
 const router = Router();
 
@@ -29,7 +31,7 @@ router.get('/users', async (req: Request, res: Response) => {
       query = query.or(`display_name.ilike.%${search}%,email.ilike.%${search}%`);
     }
 
-    if (userType && ['internal', 'client', 'partner'].includes(userType)) {
+    if (userType && ['internal', 'client', 'client_staff', 'partner'].includes(userType)) {
       query = query.eq('user_type', userType);
     }
 
@@ -77,7 +79,7 @@ router.get('/users', async (req: Request, res: Response) => {
 // GET /admin/stats — basic platform stats
 router.get('/stats', async (_req: Request, res: Response) => {
   try {
-    const [usersRes, workspacesRes, channelsRes, messagesRes, pendingRes, internalRes, clientRes, partnerRes] = await Promise.all([
+    const [usersRes, workspacesRes, channelsRes, messagesRes, pendingRes, internalRes, clientRes, clientStaffRes, partnerRes] = await Promise.all([
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('workspaces').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('channels').select('*', { count: 'exact', head: true }),
@@ -85,6 +87,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('user_type', 'internal'),
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('user_type', 'client'),
+      supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('user_type', 'client_staff'),
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('user_type', 'partner'),
     ]);
 
@@ -99,6 +102,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
         users_by_type: {
           internal: internalRes.count || 0,
           client: clientRes.count || 0,
+          client_staff: clientStaffRes.count || 0,
           partner: partnerRes.count || 0,
         },
       },
@@ -136,10 +140,10 @@ router.put('/users/:id/approve', async (req: Request, res: Response) => {
     const id = req.params.id as string;
     const roleId = req.body?.role_id || null;
 
-    // 1. Set status to approved
+    // 1. Set status to active
     const { data, error } = await supabaseAdmin
       .from('users')
-      .update({ status: 'approved' })
+      .update({ status: 'active' })
       .eq('id', id)
       .select()
       .single();
@@ -157,15 +161,16 @@ router.put('/users/:id/approve', async (req: Request, res: Response) => {
       .single();
 
     if (workspace) {
-      // Determine which custom role to assign
+      // Determine which custom role to assign. If caller didn't pick one,
+      // fall back to the system default role for this user's user_type.
       let assignRoleId = roleId;
       if (!assignRoleId) {
-        const { data: defaultRole } = await supabaseAdmin
-          .from('roles')
-          .select('id')
-          .eq('is_default', true)
+        const { data: targetUser } = await supabaseAdmin
+          .from('users')
+          .select('user_type')
+          .eq('id', id)
           .single();
-        assignRoleId = defaultRole?.id || null;
+        assignRoleId = await getDefaultRoleIdForUserType((targetUser?.user_type ?? 'internal') as UserType);
       }
 
       // 3. Add user as member of the workspace
@@ -299,9 +304,9 @@ router.put('/users/:id/custom-role', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /admin/users/:id/role — change a user's platform role
+// PUT /admin/users/:id/role — grant or revoke platform admin privilege
 const updateRoleSchema = z.object({
-  role: z.enum(['admin', 'member']),
+  is_admin: z.boolean(),
 });
 
 router.put('/users/:id/role', async (req: Request, res: Response) => {
@@ -310,13 +315,13 @@ router.put('/users/:id/role', async (req: Request, res: Response) => {
     const body = updateRoleSchema.parse(req.body);
 
     // Prevent admin from demoting themselves
-    if (id === req.userId && body.role !== 'admin') {
+    if (id === req.userId && !body.is_admin) {
       res.status(400).json({ success: false, error: 'You cannot remove your own admin role' });
       return;
     }
 
     // Only internal users can be promoted to admin
-    if (body.role === 'admin') {
+    if (body.is_admin) {
       const { data: targetUser } = await supabaseAdmin
         .from('users')
         .select('user_type')
@@ -331,7 +336,7 @@ router.put('/users/:id/role', async (req: Request, res: Response) => {
 
     const { data, error } = await supabaseAdmin
       .from('users')
-      .update({ role: body.role })
+      .update({ is_admin: body.is_admin })
       .eq('id', id)
       .select()
       .single();
@@ -378,10 +383,17 @@ router.put('/users/:id/ban', async (req: Request, res: Response) => {
       return;
     }
 
-    // Update our users table
+    // Update our users table.
+    // On ban, also clear is_admin so unban doesn't silently restore admin rights.
+    const updates: Record<string, unknown> = {
+      status: body.banned ? 'banned' : 'active',
+    };
+    if (body.banned) {
+      updates.is_admin = false;
+    }
     const { data, error } = await supabaseAdmin
       .from('users')
-      .update({ role: body.banned ? 'banned' : 'member' })
+      .update(updates)
       .eq('id', id)
       .select()
       .single();

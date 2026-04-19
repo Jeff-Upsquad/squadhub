@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin, supabase } from '../supabase';
+import { getDefaultRoleIdForUserType } from '../utils/defaultRole';
+import type { UserType } from '@squadhub/shared';
 
 const router = Router();
 
@@ -9,7 +11,7 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   display_name: z.string().min(1).max(50),
-  user_type: z.enum(['internal', 'client', 'partner']).optional().default('internal'),
+  user_type: z.enum(['internal', 'client', 'client_staff', 'partner']).optional().default('internal'),
 });
 
 const loginSchema = z.object({
@@ -53,8 +55,7 @@ router.post('/register', async (req: Request, res: Response) => {
       id: authData.user.id,
       email: body.email,
       display_name: body.display_name,
-      role: 'member',
-      status: isInvited ? 'approved' : 'pending',
+      status: isInvited ? 'active' : 'pending',
       user_type: userType,
     });
 
@@ -80,12 +81,7 @@ router.post('/register', async (req: Request, res: Response) => {
       if (workspace) {
         let roleId = invitation.role_id;
         if (!roleId) {
-          const { data: defaultRole } = await supabaseAdmin
-            .from('roles')
-            .select('id')
-            .eq('is_default', true)
-            .single();
-          roleId = defaultRole?.id || null;
+          roleId = await getDefaultRoleIdForUserType(userType as UserType);
         }
 
         await supabaseAdmin.from('workspace_members').insert({
@@ -97,7 +93,7 @@ router.post('/register', async (req: Request, res: Response) => {
       }
 
       // If invitation links to a client, create the partner-client assignment
-      if (invitation.client_id && (userType === 'partner' || userType === 'client')) {
+      if (invitation.client_id && (userType === 'partner' || userType === 'client' || userType === 'client_staff')) {
         await supabaseAdmin.from('partner_client_assignments').insert({
           user_id: authData.user.id,
           client_id: invitation.client_id,
@@ -182,6 +178,10 @@ router.post('/login', async (req: Request, res: Response) => {
     }
     if (profile?.status === 'rejected') {
       res.status(403).json({ success: false, error: 'Your account has been rejected.' });
+      return;
+    }
+    if (profile?.status === 'banned') {
+      res.status(403).json({ success: false, error: 'Your account has been banned.' });
       return;
     }
 

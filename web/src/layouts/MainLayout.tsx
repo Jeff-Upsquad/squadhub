@@ -467,13 +467,13 @@ export default function MainLayout() {
             <CheckInWidget title="Daily Check-In Partners" context="partners" />
           ) : homeView === 'time-management' ? (
             <TimeManagementPage />
-          ) : homeView === 'hub' && userType === 'client' ? (
+          ) : homeView === 'hub' && (userType === 'client' || userType === 'client_staff') ? (
             <ClientDashboard />
           ) : homeView === 'hub' && userType === 'partner' ? (
             <PartnerDashboard />
           ) : homeView === 'cashbook' && userType === 'partner' ? (
             <PartnerCashBook />
-          ) : homeView === 'cashbook' && userType === 'client' ? (
+          ) : homeView === 'cashbook' && (userType === 'client' || userType === 'client_staff') ? (
             <ClientCashBook />
           ) : (
             <DashboardHome />

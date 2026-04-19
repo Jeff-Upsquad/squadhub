@@ -36,12 +36,16 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     req.userId = data.user.id;
     req.userEmail = data.user.email;
 
-    // Fetch user_type from users table
     const { data: profile } = await supabaseAdmin
       .from('users')
-      .select('user_type')
+      .select('user_type, status')
       .eq('id', data.user.id)
       .single();
+
+    if (profile?.status === 'banned') {
+      res.status(403).json({ success: false, error: 'Your account has been banned.' });
+      return;
+    }
 
     req.userType = (profile?.user_type as UserType) || 'internal';
 

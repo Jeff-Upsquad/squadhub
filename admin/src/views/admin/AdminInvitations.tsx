@@ -130,6 +130,7 @@ export default function AdminInvitations() {
             >
               <option value="internal">Internal</option>
               <option value="client">Client</option>
+              <option value="client_staff">Client Staff</option>
               <option value="partner">Partner</option>
             </select>
           </div>
@@ -148,7 +149,7 @@ export default function AdminInvitations() {
               ))}
             </select>
           </div>
-          {(userType === 'client' || userType === 'partner') && (
+          {(userType === 'client' || userType === 'client_staff' || userType === 'partner') && (
             <div className="min-w-[160px]">
               <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Client</label>
               <select
@@ -225,9 +226,11 @@ export default function AdminInvitations() {
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
                       inv.user_type === 'internal' ? 'bg-blue-50 text-blue-600' :
                       inv.user_type === 'client' ? 'bg-emerald-50 text-emerald-600' :
+                      inv.user_type === 'client_staff' ? 'bg-teal-50 text-teal-600' :
                       'bg-purple-50 text-purple-600'
                     }`}>
-                      {inv.user_type?.charAt(0).toUpperCase() + inv.user_type?.slice(1) || 'Internal'}
+                      {inv.user_type === 'client_staff' ? 'Client Staff' :
+                        (inv.user_type?.charAt(0).toUpperCase() + inv.user_type?.slice(1) || 'Internal')}
                     </span>
                   </td>
                   <td className="px-4 py-3">

@@ -74,11 +74,11 @@ router.get('/team-status', async (_req: Request, res: Response) => {
   try {
     const today = todayIST();
 
-    // Get all approved users
+    // Get all active users
     const { data: users } = await supabaseAdmin
       .from('users')
       .select('id, display_name, avatar_url')
-      .eq('status', 'approved');
+      .eq('status', 'active');
 
     if (!users || users.length === 0) {
       res.json({ success: true, data: [] });

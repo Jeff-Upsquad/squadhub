@@ -587,8 +587,7 @@ router.post('/clients/:clientId/users', async (req: Request, res: Response) => {
         id: userId,
         email: body.email,
         display_name: body.display_name,
-        role: 'member',
-        status: 'approved',
+        status: 'active',
         user_type: 'client',
       });
     }

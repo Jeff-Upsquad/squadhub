@@ -18,7 +18,7 @@ export default function LoginPage() {
       const { user, access_token, refresh_token } = res.data.data;
 
       // Only allow admin users into the admin panel
-      if (user.role !== 'admin') {
+      if (!user.is_admin) {
         setError('Access denied. Admin privileges required.');
         setLoading(false);
         return;

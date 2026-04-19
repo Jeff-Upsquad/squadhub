@@ -10,8 +10,14 @@ export function useIsInternal(): boolean {
   return useUserType() === 'internal';
 }
 
+// Returns true for both primary client contacts and client-side team members.
 export function useIsClient(): boolean {
-  return useUserType() === 'client';
+  const t = useUserType();
+  return t === 'client' || t === 'client_staff';
+}
+
+export function useIsClientStaff(): boolean {
+  return useUserType() === 'client_staff';
 }
 
 export function useIsPartner(): boolean {

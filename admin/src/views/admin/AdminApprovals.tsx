@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { User, Role } from '@squadhub/shared';
+import type { User, Role, UserType, SystemRoleKey } from '@squadhub/shared';
+
+function systemKeyForUserType(userType?: UserType | null): SystemRoleKey {
+  if (userType === 'internal') return 'member';
+  if (userType === 'client_staff') return 'guest';
+  return 'user';
+}
 
 export default function AdminApprovals() {
   const queryClient = useQueryClient();
@@ -19,7 +25,10 @@ export default function AdminApprovals() {
   });
 
   const roles: Role[] = rolesRes?.data || [];
-  const defaultRole = roles.find((r) => r.is_default);
+  const roleForUser = (u: User): Role | undefined => {
+    const key = systemKeyForUserType(u.user_type);
+    return roles.find((r) => r.system_key === key) ?? roles.find((r) => r.is_default);
+  };
 
   const approveMutation = useMutation({
     mutationFn: ({ id, role_id }: { id: string; role_id?: string }) =>
@@ -87,7 +96,7 @@ export default function AdminApprovals() {
                   </td>
                   <td className="px-4 py-3">
                     <select
-                      value={selectedRoles[user.id] || defaultRole?.id || ''}
+                      value={selectedRoles[user.id] || roleForUser(user)?.id || ''}
                       onChange={(e) =>
                         setSelectedRoles((prev) => ({ ...prev, [user.id]: e.target.value }))
                       }

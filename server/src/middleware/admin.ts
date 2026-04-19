@@ -16,11 +16,11 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
 
   const { data: user, error } = await supabaseAdmin
     .from('users')
-    .select('role')
+    .select('is_admin')
     .eq('id', req.userId)
     .single();
 
-  if (error || !user || user.role !== 'admin') {
+  if (error || !user || !user.is_admin) {
     res.status(403).json({ success: false, error: 'Admin access required' });
     return;
   }

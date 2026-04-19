@@ -72,7 +72,7 @@ router.get('/', async (req: Request, res: Response) => {
 const createSchema = z.object({
   email: z.string().email(),
   role_id: z.string().uuid().optional(),
-  user_type: z.enum(['internal', 'client', 'partner']).optional().default('internal'),
+  user_type: z.enum(['internal', 'client', 'client_staff', 'partner']).optional().default('internal'),
   client_id: z.string().uuid().optional(),
 });
 
@@ -100,7 +100,7 @@ router.post('/', async (req: Request, res: Response) => {
       .eq('email', body.email)
       .maybeSingle();
 
-    if (existingUser?.status === 'approved') {
+    if (existingUser?.status === 'active') {
       res.status(409).json({ success: false, error: 'A user with this email already exists and is approved' });
       return;
     }

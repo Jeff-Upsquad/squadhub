@@ -1326,7 +1326,7 @@ router.post('/staff/invite', requireCashBookAdmin, async (req: Request, res: Res
         .eq('id', existingUser.id)
         .single();
 
-      if (userProfile?.status === 'approved') {
+      if (userProfile?.status === 'active') {
         await supabaseAdmin.from('cash_book_users').insert({
           user_id: existingUser.id,
           client_id: req.cashBookClientId!,
