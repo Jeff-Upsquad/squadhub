@@ -6,7 +6,7 @@ import CreateSpaceModal from './CreateSpaceModal';
 import CreateFolderListModal from './CreateFolderListModal';
 import ManageMembersModal from './ManageMembersModal';
 import SettingsSlider from '../../../components/SettingsSlider';
-import type { Folder, List, AccessLevel } from '@squadhub/shared';
+import type { Folder, List, AccessLevel, Space } from '@squadhub/shared';
 
 // Access level check helper
 function canAtLeast(userLevel: AccessLevel | undefined, required: AccessLevel): boolean {
@@ -352,7 +352,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager }: { folder:
 }
 
 // ---- Space item ----
-function SpaceItem({ spaceId }: { spaceId: string }) {
+function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
   const { activeSpaceId, setActiveSpace, setActiveList } = usePMStore();
   const isActive = activeSpaceId === spaceId;
   const [open, setOpen] = useState(false);
@@ -362,7 +362,8 @@ function SpaceItem({ spaceId }: { spaceId: string }) {
   const canCreateFolders = useHasPermission('can_create_folders');
   const canCreateLists = useHasPermission('can_create_lists');
 
-  const { data: space } = useSpace(isActive || open ? spaceId : null);
+  const { data: fullSpace } = useSpace(isActive || open ? spaceId : null);
+  const space = fullSpace || initial;
 
   const myAccess = space?.my_access_level;
   const canAddItems = canAtLeast(myAccess, 'member');
@@ -504,7 +505,7 @@ export default function SpaceTree({ workspaceId, onRequestCreate }: { workspaceI
           </div>
         )}
         {spaces?.map((space) => (
-          <SpaceItem key={space.id} spaceId={space.id} />
+          <SpaceItem key={space.id} spaceId={space.id} initial={space} />
         ))}
       </div>
 
