@@ -12,17 +12,32 @@ const createWorkspaceSchema = z.object({
 // GET /workspaces — list workspaces the user belongs to
 router.get('/', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { data, error } = await supabaseAdmin
+    // Join with roles to include the user's home_view. If the home_view column
+    // is not yet present in the DB (migration 023 not applied), PostgREST
+    // rejects the select — fall back to the bare query and default home_view.
+    const withHomeView = await supabaseAdmin
       .from('workspace_members')
       .select('workspace_id, role, role_id, workspaces(*), roles:role_id(home_view, system_key, name)')
       .eq('user_id', req.userId!);
+
+    let data = withHomeView.data;
+    let error = withHomeView.error;
+
+    if (error && /home_view/.test(error.message || '')) {
+      const fallback = await supabaseAdmin
+        .from('workspace_members')
+        .select('workspace_id, role, workspaces(*)')
+        .eq('user_id', req.userId!);
+      data = fallback.data as typeof data;
+      error = fallback.error;
+    }
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
 
-    const workspaces = data.map((m: any) => ({
+    const workspaces = (data || []).map((m: any) => ({
       ...m.workspaces,
       my_role: m.role,
       my_home_view: m.roles?.home_view ?? 'user',

@@ -39,10 +39,20 @@ const updateRoleSchema = z.object({
 // GET /admin/roles — list all roles with member counts
 router.get('/roles', async (_req: Request, res: Response) => {
   try {
-    const { data: roles, error } = await supabaseAdmin
+    // Select with home_view; fall back to bare select if migration 023 isn't applied yet.
+    let { data: roles, error } = await supabaseAdmin
       .from('roles')
       .select('id, name, color, permissions, is_default, is_system, system_key, home_view, created_at, updated_at')
       .order('created_at', { ascending: true });
+
+    if (error && /home_view/.test(error.message || '')) {
+      const fallback = await supabaseAdmin
+        .from('roles')
+        .select('id, name, color, permissions, is_default, is_system, system_key, created_at, updated_at')
+        .order('created_at', { ascending: true });
+      roles = fallback.data as typeof roles;
+      error = fallback.error;
+    }
 
     if (error) {
       console.error('List roles DB error:', error);
@@ -86,7 +96,8 @@ router.post('/roles', async (req: Request, res: Response) => {
   try {
     const body = createRoleSchema.parse(req.body);
 
-    const { data, error } = await supabaseAdmin
+    // Try insert with home_view; fall back if column not yet present.
+    let insertResult = await supabaseAdmin
       .from('roles')
       .insert({
         name: body.name,
@@ -96,6 +107,20 @@ router.post('/roles', async (req: Request, res: Response) => {
       })
       .select()
       .single();
+
+    if (insertResult.error && /home_view/.test(insertResult.error.message || '')) {
+      insertResult = await supabaseAdmin
+        .from('roles')
+        .insert({
+          name: body.name,
+          color: body.color,
+          permissions: body.permissions,
+        })
+        .select()
+        .single();
+    }
+
+    const { data, error } = insertResult;
 
     if (error) {
       console.error('Create role DB error:', error);
@@ -149,12 +174,24 @@ router.put('/roles/:id', async (req: Request, res: Response) => {
     if (body.permissions !== undefined) updates.permissions = body.permissions;
     if (body.home_view !== undefined) updates.home_view = body.home_view;
 
-    const { data, error } = await supabaseAdmin
+    let updateResult = await supabaseAdmin
       .from('roles')
       .update(updates)
       .eq('id', id)
       .select()
       .single();
+
+    if (updateResult.error && /home_view/.test(updateResult.error.message || '')) {
+      const { home_view: _ignored, ...rest } = updates;
+      updateResult = await supabaseAdmin
+        .from('roles')
+        .update(rest)
+        .eq('id', id)
+        .select()
+        .single();
+    }
+
+    const { data, error } = updateResult;
 
     if (error) {
       console.error('Update role DB error:', error);

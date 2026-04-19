@@ -330,6 +330,7 @@ export default function AdminRoles() {
               <tr className="border-b border-[#E2E8F0] bg-[#F1F5F9]">
                 <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Role</th>
                 <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Members</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Home View</th>
                 <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Permissions</th>
                 <th className="px-4 py-3 text-right font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Actions</th>
               </tr>
@@ -357,6 +358,11 @@ export default function AdminRoles() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-sm text-[#62748E]">{role.member_count}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex rounded-full bg-[#F8FAFC] px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.08em] text-[#62748E]">
+                        {role.home_view ?? 'user'}
+                      </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
