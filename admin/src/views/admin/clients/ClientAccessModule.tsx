@@ -134,8 +134,14 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
     },
   });
 
-  // Default role suggestion: Squad Manager (admin "primarily" assigns this)
   const squadManagerRoleId = (allRoles.find((r) => r.name === 'Squad Manager') || {}).id || '';
+  const clientUserRoleId = (allRoles.find((r) => r.name === 'Client User') || {}).id || '';
+
+  const defaultRoleForUserType = (userType: string | null | undefined): string => {
+    if (userType === 'internal') return squadManagerRoleId;
+    if (userType === 'client' || userType === 'client_staff') return clientUserRoleId;
+    return '';
+  };
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['admin-client-access', client.id] });
@@ -218,7 +224,7 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
                   <p className="py-2 text-xs text-[#90A1B9]">No users found</p>
                 ) : (
                   filteredUsers.slice(0, 20).map((user) => {
-                    const selectedRoleId = pendingRoleByUser[user.id] || squadManagerRoleId;
+                    const selectedRoleId = pendingRoleByUser[user.id] ?? defaultRoleForUserType(user.user_type);
                     return (
                       <div key={user.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-white">
                         <div className="flex min-w-0 flex-1 items-center gap-2.5">
