@@ -78,9 +78,10 @@ router.get('/:id/members', requireAuth, async (req: Request, res: Response) => {
       .from('workspace_members')
       .select('*, users(id, email, display_name, avatar_url, created_at)')
       .eq('workspace_id', wsId)
-      .order('created_at');
+      .order('id');
 
     if (error) {
+      console.error('[workspaces] members select error:', error);
       res.status(500).json({ success: false, error: error.message });
       return;
     }
