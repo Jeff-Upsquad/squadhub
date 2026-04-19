@@ -5,6 +5,26 @@ import { supabaseAdmin } from '../supabase';
 const router = Router();
 
 // POST /clients/onboard — public onboarding form submission (no auth)
+// GET /clients/countries — public list of active countries (for onboarding form)
+router.get('/countries', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('countries')
+      .select('id, name, currency, sort_order')
+      .eq('is_active', true)
+      .order('sort_order');
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('List public countries error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 const onboardSchema = z.object({
   business_name: z.string().min(1).max(200),
   contact_person: z.string().min(1).max(200),
@@ -15,7 +35,7 @@ const onboardSchema = z.object({
   gst_registered: z.boolean(),
   gst_number: z.string().max(50).optional(),
   accounts_email: z.string().email().optional().or(z.literal('')),
-  country: z.enum(['India', 'International']).default('India'),
+  country_id: z.string().uuid(),
 });
 
 router.post('/onboard', async (req: Request, res: Response) => {
@@ -34,7 +54,7 @@ router.post('/onboard', async (req: Request, res: Response) => {
         gst_registered: body.gst_registered,
         gst_number: body.gst_registered ? (body.gst_number || null) : null,
         accounts_email: body.accounts_email || null,
-        country: body.country,
+        country_id: body.country_id,
       })
       .select()
       .single();

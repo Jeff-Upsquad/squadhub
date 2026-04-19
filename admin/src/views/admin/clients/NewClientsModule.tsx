@@ -3,13 +3,21 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import type {
   ClientSubmission,
+  Country,
   Subscription,
   SubscriptionPlanRow,
   SubscriptionPlan,
+  SubscriptionTier,
 } from '@squadhub/shared';
 import SliderPanel from './SliderPanel';
 
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
+const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Elite'];
+const TIER_COLOR: Record<SubscriptionTier, string> = {
+  Junior: 'bg-slate-100 text-slate-600',
+  Pro: 'bg-indigo-100 text-indigo-700',
+  Elite: 'bg-yellow-100 text-yellow-700',
+};
 
 export default function NewClientsModule() {
   const queryClient = useQueryClient();
@@ -29,6 +37,12 @@ export default function NewClientsModule() {
     queryFn: () => api.get('/admin/subscriptions').then((r) => r.data),
   });
   const catalog: Subscription[] = catalogRes?.data || [];
+
+  const { data: countriesRes } = useQuery({
+    queryKey: ['admin-countries'],
+    queryFn: () => api.get('/admin/countries').then((r) => r.data),
+  });
+  const countries: Country[] = countriesRes?.data || [];
 
   const approveMutation = useMutation({
     mutationFn: ({ id, plan_ids }: { id: string; plan_ids: string[] }) =>
@@ -69,7 +83,9 @@ export default function NewClientsModule() {
     s.contact_person.toLowerCase().includes(search.toLowerCase())
   );
 
-  const country = selectedSubmission?.country || 'India';
+  const selectedCountry = selectedSubmission
+    ? countries.find((c) => c.id === selectedSubmission.country_id) || null
+    : null;
 
   return (
     <div>
@@ -96,47 +112,49 @@ export default function NewClientsModule() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((sub) => (
-            <button
-              key={sub.id}
-              onClick={() => setSelectedSubmission(sub)}
-              className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 text-left transition hover:shadow-sm"
-            >
-              <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600 text-sm font-semibold">
-                  {sub.business_name.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-[#0F172B]">{sub.business_name}</p>
-                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">New</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                      sub.country === 'India' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
-                    }`}>
-                      {sub.country}
-                    </span>
+          {filtered.map((sub) => {
+            const countryName = countries.find((c) => c.id === sub.country_id)?.name;
+            return (
+              <button
+                key={sub.id}
+                onClick={() => setSelectedSubmission(sub)}
+                className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 text-left transition hover:shadow-sm"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600 text-sm font-semibold">
+                    {sub.business_name.charAt(0).toUpperCase()}
                   </div>
-                  <p className="mt-0.5 text-xs text-[#62748E]">
-                    {sub.contact_person}{sub.designation ? ` - ${sub.designation}` : ''}
-                  </p>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-[#0F172B]">{sub.business_name}</p>
+                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">New</span>
+                      {countryName && (
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                          {countryName}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-xs text-[#62748E]">
+                      {sub.contact_person}{sub.designation ? ` - ${sub.designation}` : ''}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <span className="text-xs text-[#90A1B9]">
-                {new Date(sub.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </span>
-            </button>
-          ))}
+                <span className="text-xs text-[#90A1B9]">
+                  {new Date(sub.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
 
-      {/* Detail Slider */}
       <SliderPanel open={!!selectedSubmission} onClose={closeSlider} title="Review Submission" width="w-[520px]">
         {selectedSubmission && (
           <div className="space-y-6">
             <div className="space-y-3">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Business Details</h4>
               <InfoRow label="Business Name" value={selectedSubmission.business_name} />
-              <InfoRow label="Country" value={selectedSubmission.country} />
+              <InfoRow label="Country" value={selectedCountry?.name || 'Not set'} />
               <InfoRow label="Contact Person" value={selectedSubmission.contact_person} />
               {selectedSubmission.designation && <InfoRow label="Designation" value={selectedSubmission.designation} />}
               <InfoRow label="Contact Number" value={selectedSubmission.contact_number} />
@@ -150,12 +168,12 @@ export default function NewClientsModule() {
 
             <div>
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">
-                Assign Plans ({country === 'India' ? 'INR' : 'USD'})
+                Assign Plans {selectedCountry ? `(${selectedCountry.currency} pricing for ${selectedCountry.name})` : ''}
               </h4>
 
               <PlanPicker
                 catalog={catalog}
-                country={country}
+                country={selectedCountry}
                 selectedPlanIds={selectedPlanIds}
                 onToggle={togglePlan}
               />
@@ -202,61 +220,87 @@ export default function NewClientsModule() {
   );
 }
 
+// ============================================================
+// Plan picker — groups by subscription then by tier, filters by country pricing
+// ============================================================
+
 export function PlanPicker({
   catalog, country, selectedPlanIds, onToggle,
 }: {
   catalog: Subscription[];
-  country: 'India' | 'International';
+  country: Country | null;
   selectedPlanIds: string[];
   onToggle: (planId: string) => void;
 }) {
-  const priceField: 'price_inr' | 'price_usd' = country === 'India' ? 'price_inr' : 'price_usd';
-  const sym = country === 'India' ? '\u20B9' : '$';
-
   const activeSubs = useMemo(() => catalog.filter((s) => s.is_active), [catalog]);
 
+  if (!country) {
+    return <p className="rounded-lg border border-[#E2E8F0] bg-white p-3 text-xs text-[#90A1B9]">Pick a country first.</p>;
+  }
   if (activeSubs.length === 0) {
     return <p className="rounded-lg border border-[#E2E8F0] bg-white p-3 text-xs text-[#90A1B9]">No active subscriptions.</p>;
   }
 
+  const sym = country.currency === 'INR' ? '\u20B9' : '$';
+  const locale = country.currency === 'INR' ? 'en-IN' : 'en-US';
+
   return (
-    <div className="max-h-72 overflow-y-auto rounded-lg border border-[#E2E8F0] bg-white p-2">
+    <div className="max-h-80 space-y-3 overflow-y-auto rounded-lg border border-[#E2E8F0] bg-white p-2">
       {activeSubs.map((sub) => {
-        const plans: SubscriptionPlanRow[] = (sub.plans || [])
-          .filter((p) => p.is_active && p[priceField] != null)
-          .sort((a, b) => PLAN_ORDER.indexOf(a.plan) - PLAN_ORDER.indexOf(b.plan));
+        const allPlans = (sub.plans || []).filter((p) => p.is_active);
+        const priced: SubscriptionPlanRow[] = allPlans.filter((p) =>
+          (p.pricing || []).some((pr) => pr.country_id === country.id),
+        );
+
+        if (priced.length === 0) {
+          return (
+            <div key={sub.id}>
+              <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">{sub.name}</p>
+              <p className="px-2 py-1 text-[11px] text-[#CBD5E1]">No plans priced for {country.name}.</p>
+            </div>
+          );
+        }
 
         return (
-          <div key={sub.id} className="mb-2">
+          <div key={sub.id}>
             <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">{sub.name}</p>
-            {plans.length === 0 ? (
-              <p className="px-2 py-1 text-[11px] text-[#CBD5E1]">No plans priced for {country}.</p>
-            ) : (
-              plans.map((p) => {
-                const price = p[priceField];
-                return (
-                  <label
-                    key={p.id}
-                    className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
-                      selectedPlanIds.includes(p.id) ? 'bg-blue-50' : 'hover:bg-[#F8FAFC]'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedPlanIds.includes(p.id)}
-                      onChange={() => onToggle(p.id)}
-                      className="rounded border-[#E2E8F0] text-[#2962FF] focus:ring-[#2962FF]"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[#0F172B]">{p.plan}</p>
-                      <p className="text-xs text-[#90A1B9]">
-                        {sym}{(price || 0).toLocaleString(country === 'India' ? 'en-IN' : 'en-US')}/mo
-                      </p>
-                    </div>
-                  </label>
-                );
-              })
-            )}
+            {TIERS.map((tier) => {
+              const inTier = priced
+                .filter((p) => p.tier === tier)
+                .sort((a, b) => PLAN_ORDER.indexOf(a.plan) - PLAN_ORDER.indexOf(b.plan));
+              if (inTier.length === 0) return null;
+              return (
+                <div key={tier} className="mb-1">
+                  <div className="flex items-center gap-1.5 px-2 pt-1">
+                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${TIER_COLOR[tier]}`}>{tier}</span>
+                  </div>
+                  {inTier.map((p) => {
+                    const price = (p.pricing || []).find((pr) => pr.country_id === country.id)?.price ?? 0;
+                    return (
+                      <label
+                        key={p.id}
+                        className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
+                          selectedPlanIds.includes(p.id) ? 'bg-blue-50' : 'hover:bg-[#F8FAFC]'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedPlanIds.includes(p.id)}
+                          onChange={() => onToggle(p.id)}
+                          className="rounded border-[#E2E8F0] text-[#2962FF] focus:ring-[#2962FF]"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-[#0F172B]">{p.plan}</p>
+                          <p className="text-xs text-[#90A1B9]">
+                            {sym}{price.toLocaleString(locale)}/mo
+                          </p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
         );
       })}

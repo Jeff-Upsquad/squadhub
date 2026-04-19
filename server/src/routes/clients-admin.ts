@@ -9,7 +9,7 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
-const countrySchema = z.enum(['India', 'International']);
+const countryIdSchema = z.string().uuid();
 
 // ============================================================
 // Helpers
@@ -76,6 +76,17 @@ async function assignPlansToClient(clientId: string, planIds: string[]) {
 }
 
 async function enrichClient(client: any) {
+  // Hydrate the country
+  let country: any = null;
+  if (client.country_id) {
+    const { data: c } = await supabaseAdmin
+      .from('countries')
+      .select('*')
+      .eq('id', client.country_id)
+      .single();
+    country = c;
+  }
+
   const { data: cs } = await supabaseAdmin
     .from('client_subscriptions')
     .select('*')
@@ -83,16 +94,17 @@ async function enrichClient(client: any) {
     .order('created_at');
 
   if (!cs || cs.length === 0) {
-    return { ...client, subscriptions: [] };
+    return { ...client, country, subscriptions: [] };
   }
 
   const subIds = Array.from(new Set(cs.map((c: any) => c.subscription_id)));
   const planIds = Array.from(new Set(cs.map((c: any) => c.plan_id)));
   const csIds = cs.map((c: any) => c.id);
 
-  const [{ data: subs }, { data: plans }, { data: delivs }] = await Promise.all([
+  const [{ data: subs }, { data: plans }, { data: pricing }, { data: delivs }] = await Promise.all([
     supabaseAdmin.from('subscriptions').select('*').in('id', subIds),
     supabaseAdmin.from('subscription_plans').select('*').in('id', planIds),
+    supabaseAdmin.from('subscription_plan_pricing').select('*').in('plan_id', planIds),
     supabaseAdmin.from('client_subscription_deliverables').select('*').in('client_subscription_id', csIds).order('sort_order'),
   ]);
 
@@ -100,6 +112,10 @@ async function enrichClient(client: any) {
   (subs || []).forEach((s: any) => { subsMap[s.id] = s; });
   const plansMap: Record<string, any> = {};
   (plans || []).forEach((p: any) => { plansMap[p.id] = p; });
+  const pricingByPlan: Record<string, any[]> = {};
+  (pricing || []).forEach((p: any) => {
+    (pricingByPlan[p.plan_id] = pricingByPlan[p.plan_id] || []).push(p);
+  });
   const delivsByCs: Record<string, any[]> = {};
   (delivs || []).forEach((d: any) => {
     (delivsByCs[d.client_subscription_id] = delivsByCs[d.client_subscription_id] || []).push(d);
@@ -107,10 +123,13 @@ async function enrichClient(client: any) {
 
   return {
     ...client,
+    country,
     subscriptions: cs.map((c: any) => ({
       ...c,
       subscription: subsMap[c.subscription_id] || null,
-      plan: plansMap[c.plan_id] || null,
+      plan: plansMap[c.plan_id]
+        ? { ...plansMap[c.plan_id], pricing: pricingByPlan[c.plan_id] || [] }
+        : null,
       deliverables: delivsByCs[c.id] || [],
     })),
   };
@@ -191,7 +210,7 @@ router.post('/submissions/:id/approve', async (req: Request, res: Response) => {
         gst_registered: submission.gst_registered,
         gst_number: submission.gst_number,
         accounts_email: submission.accounts_email,
-        country: submission.country || 'India',
+        country_id: submission.country_id,
       })
       .select()
       .single();
@@ -257,7 +276,7 @@ const createClientSchema = z.object({
   gst_registered: z.boolean(),
   gst_number: z.string().max(50).optional().or(z.literal('')),
   accounts_email: z.string().email().optional().or(z.literal('')),
-  country: countrySchema,
+  country_id: countryIdSchema,
   plan_ids: z.array(z.string().uuid()).min(1),
 });
 
@@ -278,7 +297,7 @@ router.post('/', async (req: Request, res: Response) => {
         gst_registered: body.gst_registered,
         gst_number: body.gst_number || null,
         accounts_email: body.accounts_email || null,
-        country: body.country,
+        country_id: body.country_id,
       })
       .select()
       .single();
@@ -374,7 +393,7 @@ const updateClientSchema = z.object({
   gst_registered: z.boolean().optional(),
   gst_number: z.string().max(50).optional(),
   accounts_email: z.string().email().optional().or(z.literal('')),
-  country: countrySchema.optional(),
+  country_id: countryIdSchema.optional(),
 });
 
 router.put('/:id', async (req: Request, res: Response) => {

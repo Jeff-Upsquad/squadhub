@@ -23,16 +23,24 @@ async function hydrateSubscription(subscriptionId: string) {
   if (!sub) return null;
 
   const planIds = (plans || []).map((p: any) => p.id);
-  let delivsByPlan: Record<string, any[]> = {};
+  const delivsByPlan: Record<string, any[]> = {};
+  const pricingByPlan: Record<string, any[]> = {};
+  let countriesById: Record<string, any> = {};
+
   if (planIds.length > 0) {
-    const { data: delivs } = await supabaseAdmin
-      .from('subscription_plan_deliverables')
-      .select('*')
-      .in('plan_id', planIds)
-      .order('sort_order');
+    const [{ data: delivs }, { data: pricing }, { data: countries }] = await Promise.all([
+      supabaseAdmin.from('subscription_plan_deliverables').select('*').in('plan_id', planIds).order('sort_order'),
+      supabaseAdmin.from('subscription_plan_pricing').select('*').in('plan_id', planIds),
+      supabaseAdmin.from('countries').select('*').order('sort_order'),
+    ]);
+
     (delivs || []).forEach((d: any) => {
       (delivsByPlan[d.plan_id] = delivsByPlan[d.plan_id] || []).push(d);
     });
+    (pricing || []).forEach((p: any) => {
+      (pricingByPlan[p.plan_id] = pricingByPlan[p.plan_id] || []).push(p);
+    });
+    (countries || []).forEach((c: any) => { countriesById[c.id] = c; });
   }
 
   const typeById: Record<string, any> = {};
@@ -42,6 +50,10 @@ async function hydrateSubscription(subscriptionId: string) {
     ...sub,
     plans: (plans || []).map((p: any) => ({
       ...p,
+      pricing: (pricingByPlan[p.id] || []).map((pr: any) => ({
+        ...pr,
+        country: countriesById[pr.country_id] || null,
+      })),
       deliverables: (delivsByPlan[p.id] || []).map((d: any) => ({
         ...d,
         deliverable_type: d.deliverable_type_id ? typeById[d.deliverable_type_id] || null : null,
@@ -124,13 +136,12 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// Plans: toggle + prices
+// Plans: toggle active + set tier
 // ============================================================
 
 const updatePlanSchema = z.object({
   is_active: z.boolean().optional(),
-  price_inr: z.number().int().min(0).nullable().optional(),
-  price_usd: z.number().int().min(0).nullable().optional(),
+  tier: z.enum(['Junior', 'Pro', 'Elite']).optional(),
 });
 
 router.put('/:id/plans/:planId', async (req: Request, res: Response) => {
@@ -155,6 +166,62 @@ router.put('/:id/plans/:planId', async (req: Request, res: Response) => {
       return;
     }
     console.error('Update plan error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// Plan pricing per country (upsert + delete)
+// ============================================================
+
+const upsertPricingSchema = z.object({
+  country_id: z.string().uuid(),
+  price: z.number().int().min(0),
+});
+
+router.post('/plans/:planId/pricing', async (req: Request, res: Response) => {
+  try {
+    const body = upsertPricingSchema.parse(req.body);
+
+    const { data, error } = await supabaseAdmin
+      .from('subscription_plan_pricing')
+      .upsert(
+        { plan_id: req.params.planId, country_id: body.country_id, price: body.price },
+        { onConflict: 'plan_id,country_id' },
+      )
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Upsert plan pricing error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+router.delete('/plans/:planId/pricing/:countryId', async (req: Request, res: Response) => {
+  try {
+    const { error } = await supabaseAdmin
+      .from('subscription_plan_pricing')
+      .delete()
+      .eq('plan_id', req.params.planId)
+      .eq('country_id', req.params.countryId);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete plan pricing error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+
+type OnboardCountry = { id: string; name: string; currency: 'INR' | 'USD'; sort_order: number };
 
 const COUNTRY_CODES = [
   { code: '+91', country: 'IN', flag: '🇮🇳' },
@@ -34,7 +36,7 @@ type FormData = {
   gst_registered: boolean;
   gst_number: string;
   accounts_email: string;
-  country: 'India' | 'International';
+  country_id: string;
 };
 
 const initialForm: FormData = {
@@ -48,7 +50,7 @@ const initialForm: FormData = {
   gst_registered: false,
   gst_number: '',
   accounts_email: '',
-  country: 'India',
+  country_id: '',
 };
 
 export default function OnboardPage() {
@@ -56,6 +58,20 @@ export default function OnboardPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+  const [countries, setCountries] = useState<OnboardCountry[]>([]);
+
+  useEffect(() => {
+    fetch('/clients/countries')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data)) {
+          setCountries(data.data);
+          const india = data.data.find((c: OnboardCountry) => c.name === 'India');
+          setForm((prev) => ({ ...prev, country_id: india?.id || data.data[0]?.id || '' }));
+        }
+      })
+      .catch(() => {/* non-fatal */});
+  }, []);
 
   function update(field: keyof FormData, value: string | boolean) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -140,26 +156,17 @@ export default function OnboardPage() {
           </Field>
 
           <Field label="Billing Country" required helper="India is billed in INR, everywhere else in USD">
-            <div className="flex gap-6">
-              <label className="flex items-center gap-2 text-sm text-[#222]">
-                <input
-                  type="radio"
-                  name="country"
-                  checked={form.country === 'India'}
-                  onChange={() => update('country', 'India')}
-                />
-                India
-              </label>
-              <label className="flex items-center gap-2 text-sm text-[#222]">
-                <input
-                  type="radio"
-                  name="country"
-                  checked={form.country === 'International'}
-                  onChange={() => update('country', 'International')}
-                />
-                International
-              </label>
-            </div>
+            <select
+              required
+              value={form.country_id}
+              onChange={(e) => update('country_id', e.target.value)}
+              className="input-field"
+            >
+              <option value="">Select a country</option>
+              {countries.map((c) => (
+                <option key={c.id} value={c.id}>{c.name} ({c.currency})</option>
+              ))}
+            </select>
           </Field>
 
           <Field label="Contact Person Name" required>

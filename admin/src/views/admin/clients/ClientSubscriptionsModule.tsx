@@ -7,15 +7,23 @@ import type {
   Client,
   ClientSubscription,
   ClientSubscriptionDeliverable,
+  Country,
   Subscription,
   SubscriptionDeliverableType,
   SubscriptionPlanRow,
   SubscriptionPlan,
+  SubscriptionTier,
   DeliverableKind,
 } from '@squadhub/shared';
 import SliderPanel from './SliderPanel';
 
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
+const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Elite'];
+const TIER_COLOR: Record<SubscriptionTier, string> = {
+  Junior: 'bg-slate-100 text-slate-600',
+  Pro: 'bg-indigo-100 text-indigo-700',
+  Elite: 'bg-yellow-100 text-yellow-700',
+};
 
 type InnerTab = 'active' | 'inactive';
 
@@ -29,7 +37,15 @@ export default function ClientSubscriptionsModule() {
     queryFn: () => api.get('/admin/clients').then((r) => r.data),
   });
 
+  const { data: countriesRes } = useQuery({
+    queryKey: ['admin-countries'],
+    queryFn: () => api.get('/admin/countries').then((r) => r.data),
+  });
+
   const clients: Client[] = clientsRes?.data || [];
+  const countries: Country[] = countriesRes?.data || [];
+  const countryById = new Map<string, Country>();
+  countries.forEach((c) => countryById.set(c.id, c));
 
   const filtered = useMemo(() => {
     return clients
@@ -89,7 +105,12 @@ export default function ClientSubscriptionsModule() {
       ) : (
         <div className="space-y-2">
           {filtered.map((client) => (
-            <ClientRow key={client.id} client={client} onOpen={() => setSelectedClient(client)} />
+            <ClientRow
+              key={client.id}
+              client={client}
+              country={countryById.get(client.country_id) || null}
+              onOpen={() => setSelectedClient(client)}
+            />
           ))}
         </div>
       )}
@@ -115,7 +136,9 @@ export default function ClientSubscriptionsModule() {
 // Client list row
 // ============================================================
 
-function ClientRow({ client, onOpen }: { client: Client; onOpen: () => void }) {
+function ClientRow({
+  client, country, onOpen,
+}: { client: Client; country: Country | null; onOpen: () => void }) {
   const activeSubs = (client.subscriptions || []).filter((cs) => cs.status === 'active').length;
   const totalSubs = (client.subscriptions || []).length;
 
@@ -134,10 +157,8 @@ function ClientRow({ client, onOpen }: { client: Client; onOpen: () => void }) {
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-          client.country === 'India' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
-        }`}>
-          {client.country}
+        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+          {country?.name || '—'}
         </span>
         <span className="text-xs text-[#90A1B9]">
           {activeSubs}/{totalSubs} active
@@ -155,12 +176,11 @@ function ClientRow({ client, onOpen }: { client: Client; onOpen: () => void }) {
 }
 
 // ============================================================
-// Detail slider — per-client subscriptions + deliverables
+// Detail slider
 // ============================================================
 
 function ClientSubscriptionsDetail({
-  clientId,
-  onUpdated,
+  clientId, onUpdated,
 }: {
   clientId: string;
   onUpdated: (c: Client) => void;
@@ -184,6 +204,12 @@ function ClientSubscriptionsDetail({
   });
   const catalog: Subscription[] = catalogRes?.data || [];
 
+  const { data: countriesRes } = useQuery({
+    queryKey: ['admin-countries'],
+    queryFn: () => api.get('/admin/countries').then((r) => r.data),
+  });
+  const countries: Country[] = countriesRes?.data || [];
+
   const statusMutation = useMutation({
     mutationFn: (status: string) => api.put(`/admin/clients/${clientId}/status`, { status }),
     onSuccess: () => {
@@ -196,6 +222,7 @@ function ClientSubscriptionsDetail({
 
   if (!client) return <p className="text-sm text-[#90A1B9]">Loading...</p>;
 
+  const country = client.country || countries.find((c) => c.id === client.country_id) || null;
   const assignedSubscriptionIds = new Set((client.subscriptions || []).map((cs) => cs.subscription_id));
 
   return (
@@ -203,10 +230,8 @@ function ClientSubscriptionsDetail({
       {/* Summary */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-            client.country === 'India' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
-          }`}>
-            {client.country}
+          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+            {country?.name || '—'}
           </span>
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${
             client.status === 'active' ? 'bg-emerald-100 text-emerald-700'
@@ -251,7 +276,7 @@ function ClientSubscriptionsDetail({
         {addOpen && (
           <AddSubscriptionInline
             clientId={client.id}
-            country={client.country}
+            country={country}
             catalog={catalog}
             excludeSubscriptionIds={assignedSubscriptionIds}
             onDone={() => {
@@ -271,7 +296,7 @@ function ClientSubscriptionsDetail({
                 key={cs.id}
                 clientId={client.id}
                 cs={cs}
-                country={client.country}
+                country={country}
                 catalog={catalog}
                 onRefetch={() => { refetch(); queryClient.invalidateQueries({ queryKey: ['admin-clients'] }); }}
               />
@@ -292,19 +317,19 @@ function ClientSubscriptionCard({
 }: {
   clientId: string;
   cs: ClientSubscription;
-  country: 'India' | 'International';
+  country: Country | null;
   catalog: Subscription[];
   onRefetch: () => void;
 }) {
-  const queryClient = useQueryClient();
   const subscription = catalog.find((s) => s.id === cs.subscription_id);
   const deliverableTypes = subscription?.deliverable_types?.filter((t) => t.is_active) || [];
-  const price = cs.plan
-    ? (country === 'India' ? cs.plan.price_inr : cs.plan.price_usd)
-    : null;
-  const priceLabel = price == null
-    ? 'No price set'
-    : `${country === 'India' ? '\u20B9' : '$'}${price.toLocaleString(country === 'India' ? 'en-IN' : 'en-US')}/mo`;
+
+  const pricing = cs.plan?.pricing?.find((p) => p.country_id === country?.id) || null;
+  const sym = country?.currency === 'USD' ? '$' : '\u20B9';
+  const locale = country?.currency === 'USD' ? 'en-US' : 'en-IN';
+  const priceLabel = pricing
+    ? `${sym}${pricing.price.toLocaleString(locale)}/mo`
+    : 'No price set';
 
   const statusMutation = useMutation({
     mutationFn: (status: string) => api.put(`/admin/clients/${clientId}/subscriptions/${cs.id}/status`, { status }),
@@ -326,9 +351,15 @@ function ClientSubscriptionCard({
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-medium text-[#0F172B]">{subscription?.name || 'Unknown'}</p>
-          <p className="mt-0.5 text-xs text-[#90A1B9]">
-            {cs.plan?.plan || '—'} · {priceLabel}
-          </p>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="text-xs text-[#90A1B9]">{cs.plan?.plan || '—'}</span>
+            {cs.plan?.tier && (
+              <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${TIER_COLOR[cs.plan.tier]}`}>
+                {cs.plan.tier}
+              </span>
+            )}
+            <span className="text-xs text-[#90A1B9]">· {priceLabel}</span>
+          </div>
         </div>
         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${
           cs.status === 'active' ? 'bg-emerald-100 text-emerald-700'
@@ -572,7 +603,7 @@ function AddSubscriptionInline({
   clientId, country, catalog, excludeSubscriptionIds, onDone,
 }: {
   clientId: string;
-  country: 'India' | 'International';
+  country: Country | null;
   catalog: Subscription[];
   excludeSubscriptionIds: Set<string>;
   onDone: () => void;
@@ -584,10 +615,9 @@ function AddSubscriptionInline({
   const selectedSub = catalog.find((s) => s.id === subscriptionId) || null;
 
   const availablePlans: SubscriptionPlanRow[] = useMemo(() => {
-    if (!selectedSub) return [];
-    const priceField: 'price_inr' | 'price_usd' = country === 'India' ? 'price_inr' : 'price_usd';
+    if (!selectedSub || !country) return [];
     return (selectedSub.plans || [])
-      .filter((p) => p.is_active && p[priceField] != null)
+      .filter((p) => p.is_active && (p.pricing || []).some((pr) => pr.country_id === country.id))
       .sort((a, b) => PLAN_ORDER.indexOf(a.plan) - PLAN_ORDER.indexOf(b.plan));
   }, [selectedSub, country]);
 
@@ -596,6 +626,9 @@ function AddSubscriptionInline({
     onSuccess: () => onDone(),
     onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed'),
   });
+
+  const sym = country?.currency === 'USD' ? '$' : '\u20B9';
+  const locale = country?.currency === 'USD' ? 'en-US' : 'en-IN';
 
   return (
     <div className="mb-3 space-y-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
@@ -614,9 +647,13 @@ function AddSubscriptionInline({
 
       {selectedSub && (
         <div>
-          <label className="mb-1 block text-xs font-medium text-[#62748E]">Plan ({country === 'India' ? 'INR' : 'USD'} prices only)</label>
+          <label className="mb-1 block text-xs font-medium text-[#62748E]">
+            Plan {country ? `(${country.currency} for ${country.name})` : ''}
+          </label>
           {availablePlans.length === 0 ? (
-            <p className="rounded-md bg-white px-2 py-1.5 text-xs text-[#90A1B9]">No plans priced for {country} yet.</p>
+            <p className="rounded-md bg-white px-2 py-1.5 text-xs text-[#90A1B9]">
+              No plans priced for {country?.name || 'this country'} yet.
+            </p>
           ) : (
             <select
               value={planId}
@@ -624,13 +661,20 @@ function AddSubscriptionInline({
               className="w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
             >
               <option value="">Select plan…</option>
-              {availablePlans.map((p) => {
-                const price = country === 'India' ? p.price_inr : p.price_usd;
-                const sym = country === 'India' ? '\u20B9' : '$';
+              {TIERS.map((tier) => {
+                const inTier = availablePlans.filter((p) => p.tier === tier);
+                if (inTier.length === 0) return null;
                 return (
-                  <option key={p.id} value={p.id}>
-                    {p.plan} — {sym}{(price || 0).toLocaleString(country === 'India' ? 'en-IN' : 'en-US')}/mo
-                  </option>
+                  <optgroup key={tier} label={tier}>
+                    {inTier.map((p) => {
+                      const price = (p.pricing || []).find((pr) => pr.country_id === country?.id)?.price ?? 0;
+                      return (
+                        <option key={p.id} value={p.id}>
+                          {p.plan} — {sym}{price.toLocaleString(locale)}/mo
+                        </option>
+                      );
+                    })}
+                  </optgroup>
                 );
               })}
             </select>

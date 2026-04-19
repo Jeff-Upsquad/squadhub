@@ -742,12 +742,23 @@ export interface PartnerClientAssignment {
 
 // ---- Clients Mini-App ----
 export type SubscriptionPlan = 'Starter' | 'Basic' | 'Plus' | 'Pro' | 'Personal';
+export type SubscriptionTier = 'Junior' | 'Pro' | 'Elite';
 export type SubscriptionSlug = 'designer' | 'video_editor';
 export type DeliverableKind = 'hours' | 'item';
-export type ClientCountry = 'India' | 'International';
+export type CurrencyCode = 'INR' | 'USD';
 export type ClientStatus = 'active' | 'paused' | 'cancelled';
 export type SubmissionStatus = 'pending' | 'approved' | 'rejected';
 export type ClientSubscriptionStatus = 'active' | 'paused' | 'cancelled';
+
+export interface Country {
+  id: string;
+  name: string;
+  currency: CurrencyCode;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface Subscription {
   id: string;
@@ -767,14 +778,25 @@ export interface SubscriptionPlanRow {
   id: string;
   subscription_id: string;
   plan: SubscriptionPlan;
+  tier: SubscriptionTier;
   is_active: boolean;
-  price_inr: number | null;
-  price_usd: number | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
   // Joined
+  pricing?: SubscriptionPlanPricing[];
   deliverables?: SubscriptionPlanDeliverable[];
+}
+
+export interface SubscriptionPlanPricing {
+  id: string;
+  plan_id: string;
+  country_id: string;
+  price: number;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  country?: Country;
 }
 
 export interface SubscriptionDeliverableType {
@@ -828,9 +850,11 @@ export interface ClientSubmission {
   gst_registered: boolean;
   gst_number: string | null;
   accounts_email: string | null;
-  country: ClientCountry;
+  country_id: string;
   status: SubmissionStatus;
   created_at: string;
+  // Joined
+  country?: Country;
 }
 
 export interface Client {
@@ -845,11 +869,12 @@ export interface Client {
   gst_registered: boolean;
   gst_number: string | null;
   accounts_email: string | null;
-  country: ClientCountry;
+  country_id: string;
   status: ClientStatus;
   created_at: string;
   updated_at: string;
   // Joined
+  country?: Country;
   subscriptions?: ClientSubscription[];
 }
 

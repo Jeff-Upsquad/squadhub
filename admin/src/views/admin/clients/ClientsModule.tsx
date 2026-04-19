@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
-import type { Client, Subscription, ClientStatus, ClientCountry } from '@squadhub/shared';
+import type { Client, Country, Subscription, ClientStatus } from '@squadhub/shared';
 import SliderPanel from './SliderPanel';
 import { PlanPicker } from './NewClientsModule';
 
@@ -9,11 +9,6 @@ const STATUS_BADGE: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700',
   paused: 'bg-amber-100 text-amber-700',
   cancelled: 'bg-red-100 text-red-700',
-};
-
-const COUNTRY_BADGE: Record<string, string> = {
-  India: 'bg-emerald-50 text-emerald-700',
-  International: 'bg-blue-50 text-blue-700',
 };
 
 const EMPTY_CREATE_FORM = {
@@ -26,7 +21,7 @@ const EMPTY_CREATE_FORM = {
   gst_registered: false,
   gst_number: '',
   accounts_email: '',
-  country: 'India' as ClientCountry,
+  country_id: '',
 };
 
 export default function ClientsModule() {
@@ -53,6 +48,20 @@ export default function ClientsModule() {
     queryFn: () => api.get('/admin/subscriptions').then((r) => r.data),
   });
   const catalog: Subscription[] = catalogRes?.data || [];
+
+  const { data: countriesRes } = useQuery({
+    queryKey: ['admin-countries'],
+    queryFn: () => api.get('/admin/countries').then((r) => r.data),
+  });
+  const countries: Country[] = countriesRes?.data || [];
+  const activeCountries = countries.filter((c) => c.is_active);
+
+  // Default create-form country to first active country once loaded
+  useEffect(() => {
+    if (!createForm.country_id && activeCountries.length > 0) {
+      setCreateForm((prev) => ({ ...prev, country_id: activeCountries[0].id }));
+    }
+  }, [activeCountries.length]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-clients'] });
@@ -123,7 +132,7 @@ export default function ClientsModule() {
   });
 
   function openCreate() {
-    setCreateForm(EMPTY_CREATE_FORM);
+    setCreateForm({ ...EMPTY_CREATE_FORM, country_id: activeCountries[0]?.id || '' });
     setCreatePlanIds([]);
     setCreateError(null);
     setCreateOpen(true);
@@ -131,7 +140,7 @@ export default function ClientsModule() {
 
   function closeCreate() {
     setCreateOpen(false);
-    setCreateForm(EMPTY_CREATE_FORM);
+    setCreateForm({ ...EMPTY_CREATE_FORM, country_id: activeCountries[0]?.id || '' });
     setCreatePlanIds([]);
     setCreateError(null);
   }
@@ -180,7 +189,7 @@ export default function ClientsModule() {
       gst_registered: selectedClient.gst_registered,
       gst_number: selectedClient.gst_number || '',
       accounts_email: selectedClient.accounts_email || '',
-      country: selectedClient.country,
+      country_id: selectedClient.country_id,
     });
     setEditing(true);
   }
@@ -189,6 +198,9 @@ export default function ClientsModule() {
     c.business_name.toLowerCase().includes(search.toLowerCase()) ||
     c.contact_person.toLowerCase().includes(search.toLowerCase())
   );
+
+  const createSelectedCountry = activeCountries.find((c) => c.id === createForm.country_id) || null;
+  const selectedClientCountry = selectedClient ? countries.find((c) => c.id === selectedClient.country_id) || null : null;
 
   const assignedSubscriptionIds = new Set((selectedClient?.subscriptions || []).map((cs) => cs.subscription_id));
   const addCatalog = catalog.filter((s) => s.is_active && !assignedSubscriptionIds.has(s.id));
@@ -226,36 +238,39 @@ export default function ClientsModule() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((client) => (
-            <button
-              key={client.id}
-              onClick={() => openClient(client)}
-              className={`flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 text-left transition hover:shadow-sm ${
-                client.status === 'cancelled' ? 'opacity-50' : ''
-              }`}
-            >
-              <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600 text-sm font-semibold">
-                  {client.business_name.charAt(0).toUpperCase()}
+          {filtered.map((client) => {
+            const countryName = client.country?.name || countries.find((c) => c.id === client.country_id)?.name || '—';
+            return (
+              <button
+                key={client.id}
+                onClick={() => openClient(client)}
+                className={`flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 text-left transition hover:shadow-sm ${
+                  client.status === 'cancelled' ? 'opacity-50' : ''
+                }`}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600 text-sm font-semibold">
+                    {client.business_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-[#0F172B]">{client.business_name}</p>
+                    <p className="mt-0.5 text-xs text-[#62748E]">{client.contact_person}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-[#0F172B]">{client.business_name}</p>
-                  <p className="mt-0.5 text-xs text-[#62748E]">{client.contact_person}</p>
+                <div className="flex items-center gap-3">
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                    {countryName}
+                  </span>
+                  <span className="text-xs text-[#90A1B9]">
+                    {client.subscriptions?.filter((s) => s.status === 'active').length || 0} active subs
+                  </span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[client.status]}`}>
+                    {client.status}
+                  </span>
                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${COUNTRY_BADGE[client.country] || 'bg-slate-100 text-slate-500'}`}>
-                  {client.country}
-                </span>
-                <span className="text-xs text-[#90A1B9]">
-                  {client.subscriptions?.filter((s) => s.status === 'active').length || 0} active subs
-                </span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[client.status]}`}>
-                  {client.status}
-                </span>
-              </div>
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -268,8 +283,8 @@ export default function ClientsModule() {
                 <span className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${STATUS_BADGE[selectedClient.status]}`}>
                   {selectedClient.status}
                 </span>
-                <span className={`rounded-full px-3 py-1 text-xs font-medium ${COUNTRY_BADGE[selectedClient.country]}`}>
-                  {selectedClient.country}
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                  {selectedClientCountry?.name || '—'}
                 </span>
               </div>
               <div className="flex gap-2">
@@ -291,7 +306,6 @@ export default function ClientsModule() {
               </div>
             </div>
 
-            {/* Client info */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Client Info</h4>
@@ -309,7 +323,11 @@ export default function ClientsModule() {
                   className="space-y-3"
                 >
                   <FormField label="Business Name" value={editForm.business_name} onChange={(v) => setEditForm({ ...editForm, business_name: v })} required />
-                  <CountryField value={editForm.country} onChange={(v) => setEditForm({ ...editForm, country: v })} />
+                  <CountryField
+                    countries={activeCountries}
+                    value={editForm.country_id}
+                    onChange={(v) => setEditForm({ ...editForm, country_id: v })}
+                  />
                   <FormField label="Contact Person" value={editForm.contact_person} onChange={(v) => setEditForm({ ...editForm, contact_person: v })} required />
                   <FormField label="Designation" value={editForm.designation} onChange={(v) => setEditForm({ ...editForm, designation: v })} />
                   <FormField label="Contact Number" value={editForm.contact_number} onChange={(v) => setEditForm({ ...editForm, contact_number: v })} required />
@@ -358,7 +376,7 @@ export default function ClientsModule() {
                 <div className="mb-3 space-y-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
                   <PlanPicker
                     catalog={addCatalog}
-                    country={selectedClient.country}
+                    country={selectedClientCountry}
                     selectedPlanIds={addPlanIds}
                     onToggle={(id) => togglePlanFor(addPlanIds, setAddPlanIds, id)}
                   />
@@ -377,10 +395,12 @@ export default function ClientsModule() {
               ) : (
                 <div className="space-y-2">
                   {selectedClient.subscriptions.map((cs) => {
-                    const price = cs.plan
-                      ? (selectedClient.country === 'India' ? cs.plan.price_inr : cs.plan.price_usd)
-                      : null;
-                    const sym = selectedClient.country === 'India' ? '\u20B9' : '$';
+                    const priceRow = cs.plan?.pricing?.find((p) => p.country_id === selectedClient.country_id);
+                    const sym = selectedClientCountry?.currency === 'USD' ? '$' : '\u20B9';
+                    const locale = selectedClientCountry?.currency === 'USD' ? 'en-US' : 'en-IN';
+                    const priceLabel = priceRow
+                      ? `${sym}${priceRow.price.toLocaleString(locale)}/mo`
+                      : 'No price set';
                     return (
                       <div
                         key={cs.id}
@@ -390,7 +410,7 @@ export default function ClientsModule() {
                           <div>
                             <p className="text-sm font-medium text-[#0F172B]">{cs.subscription?.name || 'Unknown'}</p>
                             <p className="mt-0.5 text-xs text-[#90A1B9]">
-                              {cs.plan?.plan || '—'} · {price == null ? 'No price set' : `${sym}${price.toLocaleString(selectedClient.country === 'India' ? 'en-IN' : 'en-US')}/mo`}
+                              {cs.plan?.plan || '—'} · {cs.plan?.tier || '—'} · {priceLabel}
                             </p>
                           </div>
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[cs.status]}`}>
@@ -431,7 +451,11 @@ export default function ClientsModule() {
           <div className="space-y-3">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Business Details</h4>
             <FormField label="Business Name" value={createForm.business_name} onChange={(v) => setCreateForm({ ...createForm, business_name: v })} required />
-            <CountryField value={createForm.country} onChange={(v) => { setCreateForm({ ...createForm, country: v }); setCreatePlanIds([]); }} />
+            <CountryField
+              countries={activeCountries}
+              value={createForm.country_id}
+              onChange={(v) => { setCreateForm({ ...createForm, country_id: v }); setCreatePlanIds([]); }}
+            />
             <FormField label="Contact Person" value={createForm.contact_person} onChange={(v) => setCreateForm({ ...createForm, contact_person: v })} required />
             <FormField label="Designation" value={createForm.designation} onChange={(v) => setCreateForm({ ...createForm, designation: v })} />
             <FormField label="Contact Number" value={createForm.contact_number} onChange={(v) => setCreateForm({ ...createForm, contact_number: v })} required />
@@ -477,11 +501,11 @@ export default function ClientsModule() {
 
           <div>
             <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">
-              Assign Plans ({createForm.country === 'India' ? 'INR' : 'USD'}) *
+              Assign Plans {createSelectedCountry ? `(${createSelectedCountry.currency} pricing for ${createSelectedCountry.name})` : ''} *
             </h4>
             <PlanPicker
               catalog={catalog}
-              country={createForm.country}
+              country={createSelectedCountry}
               selectedPlanIds={createPlanIds}
               onToggle={(id) => togglePlanFor(createPlanIds, setCreatePlanIds, id)}
             />
@@ -494,7 +518,7 @@ export default function ClientsModule() {
           <div className="flex gap-2 pt-2">
             <button
               type="submit"
-              disabled={createPlanIds.length === 0 || createClientMutation.isPending}
+              disabled={createPlanIds.length === 0 || !createForm.country_id || createClientMutation.isPending}
               className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50"
             >
               {createClientMutation.isPending ? 'Creating...' : `Create Client (${createPlanIds.length} plans)`}
@@ -539,30 +563,29 @@ function FormField({ label, value, onChange, type = 'text', required = false }: 
   );
 }
 
-function CountryField({ value, onChange }: { value: ClientCountry; onChange: (v: ClientCountry) => void }) {
+function CountryField({
+  countries, value, onChange,
+}: {
+  countries: Country[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <div>
       <label className="mb-1 block text-xs font-medium text-[#62748E]">Country *</label>
-      <div className="flex gap-4">
-        <label className="flex items-center gap-2 text-sm text-[#0F172B]">
-          <input
-            type="radio"
-            checked={value === 'India'}
-            onChange={() => onChange('India')}
-            className="text-[#2962FF] focus:ring-[#2962FF]"
-          />
-          India (INR pricing)
-        </label>
-        <label className="flex items-center gap-2 text-sm text-[#0F172B]">
-          <input
-            type="radio"
-            checked={value === 'International'}
-            onChange={() => onChange('International')}
-            className="text-[#2962FF] focus:ring-[#2962FF]"
-          />
-          International (USD pricing)
-        </label>
-      </div>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required
+        className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+      >
+        <option value="">Select a country…</option>
+        {countries.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name} ({c.currency})
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
