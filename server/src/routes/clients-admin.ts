@@ -282,6 +282,72 @@ async function enrichClient(client: any) {
   };
 }
 
+// POST /admin/clients — manually create a client (no submission)
+const createClientSchema = z.object({
+  business_name: z.string().min(1).max(200),
+  contact_person: z.string().min(1).max(200),
+  designation: z.string().max(200).optional().or(z.literal('')),
+  contact_number: z.string().min(1).max(20),
+  email: z.string().email(),
+  business_address: z.string().min(1).max(1000),
+  gst_registered: z.boolean(),
+  gst_number: z.string().max(50).optional().or(z.literal('')),
+  accounts_email: z.string().email().optional().or(z.literal('')),
+  subscription_ids: z.array(z.string().uuid()).min(1),
+});
+
+router.post('/', async (req: Request, res: Response) => {
+  try {
+    const body = createClientSchema.parse(req.body);
+
+    const { data: client, error: clientErr } = await supabaseAdmin
+      .from('clients')
+      .insert({
+        submission_id: null,
+        business_name: body.business_name,
+        contact_person: body.contact_person,
+        designation: body.designation ? body.designation : null,
+        contact_number: body.contact_number,
+        email: body.email,
+        business_address: body.business_address,
+        gst_registered: body.gst_registered,
+        gst_number: body.gst_number ? body.gst_number : null,
+        accounts_email: body.accounts_email ? body.accounts_email : null,
+      })
+      .select()
+      .single();
+
+    if (clientErr || !client) {
+      res.status(500).json({ success: false, error: clientErr?.message || 'Failed to create client' });
+      return;
+    }
+
+    const subInserts = body.subscription_ids.map((sid) => ({
+      client_id: client.id,
+      subscription_id: sid,
+    }));
+
+    const { error: assignErr } = await supabaseAdmin
+      .from('client_subscriptions')
+      .insert(subInserts);
+
+    if (assignErr) {
+      res.status(500).json({ success: false, error: assignErr.message });
+      return;
+    }
+
+    const enriched = await enrichClient(client);
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Create client error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // GET /admin/clients
 router.get('/', async (_req: Request, res: Response) => {
   try {

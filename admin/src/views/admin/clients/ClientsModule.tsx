@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import type { Client, Subscription, ClientStatus } from '@squadhub/shared';
@@ -10,6 +10,18 @@ const STATUS_BADGE: Record<string, string> = {
   cancelled: 'bg-red-100 text-red-700',
 };
 
+const EMPTY_CREATE_FORM = {
+  business_name: '',
+  contact_person: '',
+  designation: '',
+  contact_number: '',
+  email: '',
+  business_address: '',
+  gst_registered: false,
+  gst_number: '',
+  accounts_email: '',
+};
+
 export default function ClientsModule() {
   const queryClient = useQueryClient();
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -18,6 +30,10 @@ export default function ClientsModule() {
   const [editForm, setEditForm] = useState<any>({});
   const [addSubOpen, setAddSubOpen] = useState(false);
   const [newSubIds, setNewSubIds] = useState<string[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState<typeof EMPTY_CREATE_FORM>(EMPTY_CREATE_FORM);
+  const [createSubIds, setCreateSubIds] = useState<string[]>([]);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const { data: clientsRes, isLoading } = useQuery({
     queryKey: ['admin-clients'],
@@ -84,6 +100,44 @@ export default function ClientsModule() {
     },
   });
 
+  const createClientMutation = useMutation({
+    mutationFn: (data: any) => api.post('/admin/clients', data).then((r) => r.data),
+    onSuccess: (res) => {
+      if (res?.success === false) {
+        setCreateError(res.error || 'Failed to create client');
+        return;
+      }
+      invalidateAll();
+      closeCreate();
+    },
+    onError: (err: any) => {
+      setCreateError(err?.response?.data?.error || err?.message || 'Failed to create client');
+    },
+  });
+
+  function openCreate() {
+    setCreateForm(EMPTY_CREATE_FORM);
+    setCreateSubIds([]);
+    setCreateError(null);
+    setCreateOpen(true);
+  }
+
+  function closeCreate() {
+    setCreateOpen(false);
+    setCreateForm(EMPTY_CREATE_FORM);
+    setCreateSubIds([]);
+    setCreateError(null);
+  }
+
+  function submitCreate(e: FormEvent) {
+    e.preventDefault();
+    setCreateError(null);
+    createClientMutation.mutate({
+      ...createForm,
+      subscription_ids: createSubIds,
+    });
+  }
+
   async function refreshClient(id: string) {
     const res = await api.get(`/admin/clients/${id}`);
     if (res.data?.data) setSelectedClient(res.data.data);
@@ -128,9 +182,17 @@ export default function ClientsModule() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Clients</h1>
-        <p className="mt-1 text-sm text-[#62748E]">Manage active clients and their subscriptions</p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Clients</h1>
+          <p className="mt-1 text-sm text-[#62748E]">Manage active clients and their subscriptions</p>
+        </div>
+        <button
+          onClick={openCreate}
+          className="rounded-lg bg-[#0F172B] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E293B]"
+        >
+          + New Client
+        </button>
       </div>
 
       <div className="mb-4">
@@ -147,7 +209,7 @@ export default function ClientsModule() {
         <p className="py-8 text-center text-sm text-[#90A1B9]">Loading...</p>
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-          <p className="text-sm text-[#90A1B9]">{search ? 'No matching clients.' : 'No clients yet. Approve submissions to add clients.'}</p>
+          <p className="text-sm text-[#90A1B9]">{search ? 'No matching clients.' : 'No clients yet. Click + New Client to add one, or share the onboarding link.'}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -397,6 +459,136 @@ export default function ClientsModule() {
             </div>
           </div>
         )}
+      </SliderPanel>
+
+      {/* Create Client Slider */}
+      <SliderPanel open={createOpen} onClose={closeCreate} title="Create Client" width="w-[560px]">
+        <form onSubmit={submitCreate} className="space-y-6">
+          <div className="space-y-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Business Details</h4>
+            <FormField label="Business Name" value={createForm.business_name} onChange={(v) => setCreateForm({ ...createForm, business_name: v })} required />
+            <FormField label="Contact Person" value={createForm.contact_person} onChange={(v) => setCreateForm({ ...createForm, contact_person: v })} required />
+            <FormField label="Designation" value={createForm.designation} onChange={(v) => setCreateForm({ ...createForm, designation: v })} />
+            <FormField label="Contact Number" value={createForm.contact_number} onChange={(v) => setCreateForm({ ...createForm, contact_number: v })} required />
+            <FormField label="Email" value={createForm.email} onChange={(v) => setCreateForm({ ...createForm, email: v })} type="email" required />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-[#62748E]">Business Address *</label>
+              <textarea
+                value={createForm.business_address}
+                onChange={(e) => setCreateForm({ ...createForm, business_address: e.target.value })}
+                required
+                rows={2}
+                className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-[#62748E]">GST Registered *</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm text-[#0F172B]">
+                  <input
+                    type="radio"
+                    checked={createForm.gst_registered === true}
+                    onChange={() => setCreateForm({ ...createForm, gst_registered: true })}
+                    className="text-[#2962FF] focus:ring-[#2962FF]"
+                  />
+                  Yes
+                </label>
+                <label className="flex items-center gap-2 text-sm text-[#0F172B]">
+                  <input
+                    type="radio"
+                    checked={createForm.gst_registered === false}
+                    onChange={() => setCreateForm({ ...createForm, gst_registered: false, gst_number: '' })}
+                    className="text-[#2962FF] focus:ring-[#2962FF]"
+                  />
+                  No
+                </label>
+              </div>
+            </div>
+            {createForm.gst_registered && (
+              <FormField label="GST Number" value={createForm.gst_number} onChange={(v) => setCreateForm({ ...createForm, gst_number: v })} />
+            )}
+            <FormField label="Accounts Email" value={createForm.accounts_email} onChange={(v) => setCreateForm({ ...createForm, accounts_email: v })} type="email" />
+          </div>
+
+          <div>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Assign Subscriptions *</h4>
+
+            {createSubIds.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {createSubIds.map((id) => {
+                  const sub = allSubscriptions.find((s) => s.id === id);
+                  return sub ? (
+                    <span key={id} className="inline-flex items-center gap-1 rounded-full bg-[#0F172B] px-2.5 py-1 text-xs text-white">
+                      {sub.name}
+                      <button type="button" onClick={() => setCreateSubIds((p) => p.filter((s) => s !== id))} className="ml-0.5 hover:text-red-300">
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </span>
+                  ) : null;
+                })}
+              </div>
+            )}
+
+            <div className="max-h-64 overflow-y-auto rounded-lg border border-[#E2E8F0] p-2">
+              {allSubscriptions.length === 0 ? (
+                <p className="py-4 text-center text-xs text-[#90A1B9]">No subscriptions created yet. Create some first.</p>
+              ) : (
+                Object.entries(
+                  allSubscriptions.reduce<Record<string, typeof allSubscriptions>>((acc, sub) => {
+                    (acc[sub.squad] = acc[sub.squad] || []).push(sub);
+                    return acc;
+                  }, {})
+                ).map(([squad, subs]) => (
+                  <div key={squad} className="mb-2">
+                    <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">{squad}</p>
+                    {subs.map((sub) => (
+                      <label
+                        key={sub.id}
+                        className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
+                          createSubIds.includes(sub.id) ? 'bg-blue-50' : 'hover:bg-[#F8FAFC]'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={createSubIds.includes(sub.id)}
+                          onChange={() => setCreateSubIds((p) => p.includes(sub.id) ? p.filter((s) => s !== sub.id) : [...p, sub.id])}
+                          className="rounded border-[#E2E8F0] text-[#2962FF] focus:ring-[#2962FF]"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-[#0F172B]">{sub.name}</p>
+                          <p className="text-xs text-[#90A1B9]">{sub.level} · {sub.plan} · ₹{sub.price.toLocaleString('en-IN')}/mo</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {createError && (
+            <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{createError}</div>
+          )}
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="submit"
+              disabled={createSubIds.length === 0 || createClientMutation.isPending}
+              className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {createClientMutation.isPending ? 'Creating...' : `Create Client (${createSubIds.length} subscriptions)`}
+            </button>
+            <button
+              type="button"
+              onClick={closeCreate}
+              className="rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-medium text-[#62748E] transition hover:bg-[#F1F5F9]"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
       </SliderPanel>
     </div>
   );
