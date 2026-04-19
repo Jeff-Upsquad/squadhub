@@ -357,6 +357,53 @@ router.put('/users/:id/role', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /admin/users/:id/suspend — suspend or unsuspend a user.
+// Softer than /ban: app-level block only (login + auth middleware reject),
+// no Supabase Auth ban_duration applied, so it's reversible without re-issuing tokens.
+const suspendSchema = z.object({
+  suspended: z.boolean(),
+});
+
+router.put('/users/:id/suspend', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const body = suspendSchema.parse(req.body);
+
+    if (id === req.userId) {
+      res.status(400).json({ success: false, error: 'You cannot suspend yourself' });
+      return;
+    }
+
+    const updates: Record<string, unknown> = {
+      status: body.suspended ? 'suspended' : 'active',
+    };
+    if (body.suspended) {
+      updates.is_admin = false;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Admin suspend user error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // PUT /admin/users/:id/ban — ban or unban a user
 const banSchema = z.object({
   banned: z.boolean(),

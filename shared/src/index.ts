@@ -12,7 +12,7 @@ export interface User {
   display_name: string;
   avatar_url: string | null;
   is_admin: boolean;
-  status: 'active' | 'pending' | 'rejected' | 'banned';
+  status: 'active' | 'pending' | 'rejected' | 'banned' | 'suspended';
   user_type: UserType;
   created_at: string;
 }

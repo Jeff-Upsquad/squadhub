@@ -7,10 +7,20 @@ interface UserWithRole extends User {
   custom_role?: { id: string; name: string; color: string } | null;
 }
 
-function accessLabelFor(user: Pick<User, 'is_admin' | 'status'>): 'admin' | 'member' | 'banned' {
+type AccessLabel = 'admin' | 'active' | 'banned' | 'suspended';
+
+function accessLabelFor(user: Pick<User, 'is_admin' | 'status'>): AccessLabel {
   if (user.status === 'banned') return 'banned';
+  if (user.status === 'suspended') return 'suspended';
   if (user.is_admin) return 'admin';
-  return 'member';
+  return 'active';
+}
+
+function accessLabelClass(label: AccessLabel): string {
+  if (label === 'admin') return 'bg-amber-50 text-amber-600';
+  if (label === 'banned') return 'bg-red-50 text-red-600';
+  if (label === 'suspended') return 'bg-orange-50 text-orange-700';
+  return 'bg-[#F8FAFC] text-[#62748E]';
 }
 
 function userTypeLabel(userType: string): string {
@@ -132,13 +142,7 @@ function EditUserSlider({
                 {(() => {
                   const label = accessLabelFor(user);
                   return (
-                    <span className={`inline-block rounded-full px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] font-medium ${
-                      label === 'admin'
-                        ? 'bg-amber-50 text-amber-600'
-                        : label === 'banned'
-                        ? 'bg-red-50 text-red-600'
-                        : 'bg-[#F8FAFC] text-[#62748E]'
-                    }`}>
+                    <span className={`inline-block rounded-full px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] font-medium ${accessLabelClass(label)}`}>
                       {label}
                     </span>
                   );
@@ -217,13 +221,7 @@ function EditUserSlider({
                 {(() => {
                   const label = accessLabelFor(user);
                   return (
-                    <span className={`inline-block rounded-full px-2.5 py-0.5 font-[family-name:var(--font-mono)] text-xs font-medium ${
-                      label === 'admin'
-                        ? 'bg-amber-50 text-amber-600'
-                        : label === 'banned'
-                        ? 'bg-red-50 text-red-600'
-                        : 'bg-[#F8FAFC] text-[#62748E]'
-                    }`}>
+                    <span className={`inline-block rounded-full px-2.5 py-0.5 font-[family-name:var(--font-mono)] text-xs font-medium ${accessLabelClass(label)}`}>
                       {label}
                     </span>
                   );
@@ -281,6 +279,7 @@ function UserRow({
   const queryClient = useQueryClient();
   const isSelf = user.id === currentUserId;
   const isBanned = user.status === 'banned';
+  const isSuspended = user.status === 'suspended';
 
   const roleMutation = useMutation({
     mutationFn: (is_admin: boolean) => api.put(`/admin/users/${user.id}/role`, { is_admin }),
@@ -289,6 +288,11 @@ function UserRow({
 
   const banMutation = useMutation({
     mutationFn: (banned: boolean) => api.put(`/admin/users/${user.id}/ban`, { banned }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-users'] }); onAction(); },
+  });
+
+  const suspendMutation = useMutation({
+    mutationFn: (suspended: boolean) => api.put(`/admin/users/${user.id}/suspend`, { suspended }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-users'] }); onAction(); },
   });
 
@@ -337,13 +341,7 @@ function UserRow({
         {(() => {
           const label = accessLabelFor(user);
           return (
-            <span className={`inline-block rounded-full px-2.5 py-0.5 font-[family-name:var(--font-mono)] text-xs font-medium ${
-              label === 'admin'
-                ? 'bg-amber-50 text-amber-600'
-                : label === 'banned'
-                ? 'bg-red-50 text-red-600'
-                : 'bg-[#F8FAFC] text-[#62748E]'
-            }`}>
+            <span className={`inline-block rounded-full px-2.5 py-0.5 font-[family-name:var(--font-mono)] text-xs font-medium ${accessLabelClass(label)}`}>
               {label}
             </span>
           );
@@ -373,13 +371,26 @@ function UserRow({
           </button>
           {!isSelf && (
             <>
-              {!isBanned && (
+              {!isBanned && !isSuspended && (
                 <button
                   onClick={() => roleMutation.mutate(!user.is_admin)}
                   disabled={roleMutation.isPending}
                   className="rounded-md border border-[#CAD5E2] bg-transparent px-2.5 py-1 text-xs text-[#62748E] hover:border-[#90A1B9] hover:text-[#0F172B] disabled:opacity-50"
                 >
                   {user.is_admin ? 'Remove Admin' : 'Make Admin'}
+                </button>
+              )}
+              {!isBanned && (
+                <button
+                  onClick={() => suspendMutation.mutate(!isSuspended)}
+                  disabled={suspendMutation.isPending}
+                  className={`rounded-md px-2.5 py-1 text-xs disabled:opacity-50 ${
+                    isSuspended
+                      ? 'bg-green-50 text-green-600 hover:bg-green-100'
+                      : 'bg-orange-50 text-orange-700 hover:bg-orange-100'
+                  }`}
+                >
+                  {isSuspended ? 'Unsuspend' : 'Suspend'}
                 </button>
               )}
               <button

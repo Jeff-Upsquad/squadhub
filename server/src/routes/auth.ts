@@ -184,6 +184,10 @@ router.post('/login', async (req: Request, res: Response) => {
       res.status(403).json({ success: false, error: 'Your account has been banned.' });
       return;
     }
+    if (profile?.status === 'suspended') {
+      res.status(403).json({ success: false, error: 'Your account has been suspended.' });
+      return;
+    }
 
     res.json({
       success: true,

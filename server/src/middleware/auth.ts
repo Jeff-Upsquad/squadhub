@@ -46,6 +46,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       res.status(403).json({ success: false, error: 'Your account has been banned.' });
       return;
     }
+    if (profile?.status === 'suspended') {
+      res.status(403).json({ success: false, error: 'Your account has been suspended.' });
+      return;
+    }
 
     req.userType = (profile?.user_type as UserType) || 'internal';
 
