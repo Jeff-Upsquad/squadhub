@@ -16,6 +16,9 @@ const createSchema = z.object({
   status: z.string().optional(),
   priority: z.enum(['urgent', 'high', 'normal', 'low', 'none']).optional(),
   due_date: z.string().optional(),
+  work_date: z.string().nullable().optional(),
+  start_date: z.string().nullable().optional(),
+  task_type_id: z.string().uuid().nullable().optional(),
   assignee_ids: z.array(z.string().uuid()).optional(),
   metadata: z.record(z.string(), z.any()).optional(),
 });
@@ -26,6 +29,9 @@ const updateSchema = z.object({
   status: z.string().optional(),
   priority: z.enum(['urgent', 'high', 'normal', 'low', 'none']).optional(),
   due_date: z.string().nullable().optional(),
+  work_date: z.string().nullable().optional(),
+  start_date: z.string().nullable().optional(),
+  task_type_id: z.string().uuid().nullable().optional(),
   time_estimate: z.number().int().min(0).nullable().optional(),
   time_tracked: z.number().int().min(0).optional(),
   metadata: z.record(z.string(), z.any()).optional(),
@@ -36,6 +42,45 @@ async function getTaskListId(taskId: string): Promise<string | null> {
   const { data } = await supabaseAdmin.from('tasks').select('list_id').eq('id', taskId).single();
   return data?.list_id || null;
 }
+
+// GET /pm/task-types — list all task types with their custom fields (authenticated users)
+router.get('/task-types', async (_req: Request, res: Response) => {
+  try {
+    const { data: types, error: typesErr } = await supabaseAdmin
+      .from('task_types')
+      .select('*')
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (typesErr) {
+      res.status(500).json({ success: false, error: typesErr.message });
+      return;
+    }
+
+    const { data: fields, error: fieldsErr } = await supabaseAdmin
+      .from('task_type_fields')
+      .select('*')
+      .order('position', { ascending: true });
+
+    if (fieldsErr) {
+      res.status(500).json({ success: false, error: fieldsErr.message });
+      return;
+    }
+
+    const byType = new Map<string, any[]>();
+    for (const f of fields || []) {
+      const list = byType.get(f.task_type_id) || [];
+      list.push(f);
+      byType.set(f.task_type_id, list);
+    }
+
+    const result = (types || []).map((t: any) => ({ ...t, fields: byType.get(t.id) || [] }));
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('Get task types error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
 
 // GET /pm/tasks?list_id=xxx — requires viewer access on the list
 router.get('/tasks', async (req: Request, res: Response) => {
@@ -189,6 +234,17 @@ router.post('/tasks', async (req: Request, res: Response) => {
       }
     }
 
+    // Resolve task_type_id: use supplied value or fall back to the default type
+    let resolvedTypeId: string | null = body.task_type_id ?? null;
+    if (!resolvedTypeId) {
+      const { data: defaultType } = await supabaseAdmin
+        .from('task_types')
+        .select('id')
+        .eq('is_default', true)
+        .maybeSingle();
+      resolvedTypeId = (defaultType as any)?.id ?? null;
+    }
+
     const insertData: Record<string, any> = {
       list_id: body.list_id,
       title: body.title,
@@ -196,6 +252,9 @@ router.post('/tasks', async (req: Request, res: Response) => {
       status: body.status || 'todo',
       priority: body.priority || 'none',
       due_date: body.due_date || null,
+      work_date: body.work_date || null,
+      start_date: body.start_date || null,
+      task_type_id: resolvedTypeId,
       assignee_ids: body.assignee_ids || [],
       metadata: body.metadata || {},
       created_by: req.userId!,

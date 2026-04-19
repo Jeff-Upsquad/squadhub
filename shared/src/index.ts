@@ -199,7 +199,71 @@ export interface TaskMetadata {
   category?: string;
   references?: string[];
   attachments?: { name: string; size: string }[];
+  custom?: Record<string, unknown>;
   [key: string]: unknown;
+}
+
+export type TaskFieldType = 'text' | 'textarea' | 'select' | 'multi_select' | 'number' | 'date' | 'url' | 'checkbox';
+
+export interface TaskTypeFieldOption {
+  label: string;
+  value: string;
+  color?: string;
+}
+
+export interface TaskTypeField {
+  id: string;
+  task_type_id: string;
+  key: string;
+  label: string;
+  field_type: TaskFieldType;
+  options: TaskTypeFieldOption[];
+  is_required: boolean;
+  help_text: string | null;
+  placeholder: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskType {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  icon: string;
+  color: string;
+  position: number;
+  is_default: boolean;
+  is_system: boolean;
+  created_at: string;
+  updated_at: string;
+  fields?: TaskTypeField[];
+}
+
+export interface TaskChecklistItem {
+  id: string;
+  checklist_id: string;
+  content: string;
+  is_done: boolean;
+  position: number;
+  assigned_to: string | null;
+  due_date: string | null;
+  completed_at: string | null;
+  completed_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskChecklist {
+  id: string;
+  task_id: string;
+  title: string;
+  position: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  items?: TaskChecklistItem[];
 }
 
 export interface Task {
@@ -212,6 +276,9 @@ export interface Task {
   priority: TaskPriority;
   position: number;
   due_date: string | null;
+  work_date: string | null;
+  start_date: string | null;
+  task_type_id: string | null;
   time_estimate: number | null;
   time_tracked: number;
   metadata: TaskMetadata;
@@ -221,6 +288,7 @@ export interface Task {
   updated_at: string;
   // Joined
   status?: SpaceStatus;
+  task_type?: TaskType;
   assignees?: User[];
   tags?: TaskTag[];
   subtasks?: Task[];

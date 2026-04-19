@@ -1,9 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
 import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment } from '../../../hooks/useTasks';
+import { useTaskTypes } from '../../../hooks/useTaskTypes';
+import {
+  useChecklists,
+  useCreateChecklist,
+  useDeleteChecklist,
+  useCreateChecklistItem,
+  useUpdateChecklistItem,
+  useDeleteChecklistItem,
+} from '../../../hooks/useChecklists';
 import api from '../../../services/api';
-import type { SpaceStatus } from '@squadhub/shared';
+import type { SpaceStatus, TaskType, TaskTypeField, TaskMetadata } from '@squadhub/shared';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -51,9 +60,16 @@ export default function TaskDetailPanel({
   const { activeTaskId, setActiveTask, timer, startTimer: globalStartTimer, stopTimer: globalStopTimer } = usePMStore();
   const { data: task, isLoading } = useTask(activeTaskId);
   const { data: comments } = useTaskComments(activeTaskId);
+  const { data: taskTypes } = useTaskTypes();
+  const { data: checklists } = useChecklists(activeTaskId);
   const updateTask = useUpdateTask(listId);
   const deleteTask = useDeleteTask(listId);
   const addComment = useAddComment(activeTaskId);
+  const createChecklist = useCreateChecklist(activeTaskId);
+  const deleteChecklist = useDeleteChecklist(activeTaskId);
+  const createChecklistItem = useCreateChecklistItem(activeTaskId);
+  const updateChecklistItem = useUpdateChecklistItem(activeTaskId);
+  const deleteChecklistItem = useDeleteChecklistItem(activeTaskId);
   const qc = useQueryClient();
 
   const [editing, setEditing] = useState<'title' | 'description' | null>(null);
@@ -63,6 +79,23 @@ export default function TaskDetailPanel({
   const [estimateInput, setEstimateInput] = useState('');
   const [editingEstimate, setEditingEstimate] = useState(false);
   const [timerElapsed, setTimerElapsed] = useState(0);
+  const [typeMenuOpen, setTypeMenuOpen] = useState(false);
+  const [newItemDrafts, setNewItemDrafts] = useState<Record<string, string>>({});
+
+  const currentType = useMemo<TaskType | null>(() => {
+    if (!task || !taskTypes) return null;
+    return taskTypes.find((t) => t.id === (task as any).task_type_id) || null;
+  }, [task, taskTypes]);
+
+  const customFields: TaskTypeField[] = currentType?.fields || [];
+  const customValues = ((task?.metadata as TaskMetadata | undefined)?.custom || {}) as Record<string, unknown>;
+
+  function updateCustomField(key: string, value: unknown) {
+    if (!task) return;
+    const nextCustom = { ...customValues, [key]: value };
+    const nextMetadata: TaskMetadata = { ...(task.metadata || {}), custom: nextCustom };
+    updateTask.mutate({ id: task.id, metadata: nextMetadata });
+  }
 
   const isTimerForThisTask = timer?.taskId === activeTaskId;
 
@@ -213,6 +246,60 @@ export default function TaskDetailPanel({
 
           {/* Properties */}
           <div className="mb-6 space-y-0">
+            {/* Type */}
+            <div className="flex items-center py-2.5">
+              <div className="flex w-36 shrink-0 items-center gap-2.5 text-sm text-[#999999]">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                Type
+              </div>
+              <div className="relative">
+                <button
+                  onClick={canEdit ? () => setTypeMenuOpen((v) => !v) : undefined}
+                  disabled={!canEdit}
+                  className={`flex items-center gap-2 rounded border border-transparent px-2 py-1 text-sm text-[#0F172B] outline-none ${canEdit ? 'hover:border-[#E2E8F0]' : 'cursor-default opacity-70'}`}
+                >
+                  {currentType ? (
+                    <>
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: currentType.color }} />
+                      <span>{currentType.name}</span>
+                    </>
+                  ) : (
+                    <span className="text-[#CAD5E2]">Select type</span>
+                  )}
+                  {canEdit && (
+                    <svg className="h-3 w-3 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  )}
+                </button>
+                {typeMenuOpen && taskTypes && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setTypeMenuOpen(false)} />
+                    <div className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-lg border border-[#E2E8F0] bg-white shadow-lg">
+                      {taskTypes.map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => {
+                            updateTask.mutate({ id: task.id, task_type_id: t.id });
+                            setTypeMenuOpen(false);
+                          }}
+                          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[#F8FAFC] ${
+                            currentType?.id === t.id ? 'bg-[#F1F5F9]' : ''
+                          }`}
+                        >
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: t.color }} />
+                          <span className="flex-1 text-[#0F172B]">{t.name}</span>
+                          {t.is_default && <span className="text-[10px] text-[#90A1B9]">Default</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
             {/* Status */}
             <div className="flex items-center py-2.5">
               <div className="flex w-36 shrink-0 items-center gap-2.5 text-sm text-[#999999]">
@@ -279,6 +366,8 @@ export default function TaskDetailPanel({
                   <span className="text-[10px] text-[#999999] uppercase">Work</span>
                   <input
                     type="date"
+                    value={(task as any).work_date || ''}
+                    onChange={canEdit ? (e) => updateTask.mutate({ id: task.id, work_date: e.target.value || null }) : undefined}
                     disabled={!canEdit}
                     className={`rounded border border-transparent px-1.5 py-0.5 text-xs text-[#0F172B] outline-none ${canEdit ? 'hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]' : 'cursor-default opacity-70'}`}
                   />
@@ -288,6 +377,8 @@ export default function TaskDetailPanel({
                   <span className="text-[10px] text-[#999999] uppercase">Start</span>
                   <input
                     type="date"
+                    value={(task as any).start_date || ''}
+                    onChange={canEdit ? (e) => updateTask.mutate({ id: task.id, start_date: e.target.value || null }) : undefined}
                     disabled={!canEdit}
                     className={`rounded border border-transparent px-1.5 py-0.5 text-xs text-[#0F172B] outline-none ${canEdit ? 'hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]' : 'cursor-default opacity-70'}`}
                   />
@@ -384,6 +475,21 @@ export default function TaskDetailPanel({
             </div>
           </div>
 
+          {/* Custom fields (from task type) */}
+          {customFields.length > 0 && (
+            <div className="mb-6 space-y-0 border-t border-[#E2E8F0] pt-4">
+              {customFields.map((field) => (
+                <CustomFieldRow
+                  key={field.id}
+                  field={field}
+                  value={customValues[field.key]}
+                  onChange={(v) => updateCustomField(field.key, v)}
+                  canEdit={canEdit}
+                />
+              ))}
+            </div>
+          )}
+
           {/* Description */}
           <div className="mb-6">
             <h3 className="mb-2 text-sm font-semibold text-[#0F172B]">Description</h3>
@@ -404,6 +510,90 @@ export default function TaskDetailPanel({
               >
                 {task.description || <span className="text-[#CAD5E2]">{canEdit ? 'Add a description...' : 'No description'}</span>}
               </div>
+            )}
+          </div>
+
+          {/* Checklists */}
+          <div className="mb-6">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-[#0F172B]">Checklists</h3>
+              {canEdit && (
+                <button
+                  onClick={() => createChecklist.mutate(undefined)}
+                  className="rounded-md px-2 py-1 text-xs text-[#2962FF] hover:bg-[#F1F5F9]"
+                >
+                  + Add checklist
+                </button>
+              )}
+            </div>
+            {checklists && checklists.length > 0 ? (
+              <div className="space-y-3">
+                {checklists.map((cl) => {
+                  const items = cl.items || [];
+                  const done = items.filter((i) => i.is_done).length;
+                  return (
+                    <div key={cl.id} className="rounded-lg border border-[#E2E8F0] bg-[#FAFBFC] p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm font-medium text-[#0F172B]">
+                          <span>{cl.title}</span>
+                          <span className="text-xs text-[#999999]">{done}/{items.length}</span>
+                        </div>
+                        {canEdit && (
+                          <button
+                            onClick={() => { if (confirm(`Delete checklist "${cl.title}"?`)) deleteChecklist.mutate(cl.id); }}
+                            className="text-xs text-[#CAD5E2] hover:text-red-500"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                      <ul className="space-y-1">
+                        {items.map((item) => (
+                          <li key={item.id} className="group flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={item.is_done}
+                              onChange={(e) => updateChecklistItem.mutate({ id: item.id, is_done: e.target.checked })}
+                              disabled={!canEdit}
+                              className="h-3.5 w-3.5 cursor-pointer rounded border-[#CBD5E1]"
+                            />
+                            <span className={`flex-1 text-sm ${item.is_done ? 'text-[#999999] line-through' : 'text-[#0F172B]'}`}>
+                              {item.content}
+                            </span>
+                            {canEdit && (
+                              <button
+                                onClick={() => deleteChecklistItem.mutate(item.id)}
+                                className="text-xs text-[#CAD5E2] opacity-0 group-hover:opacity-100 hover:text-red-500"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      {canEdit && (
+                        <input
+                          placeholder="+ Add item"
+                          value={newItemDrafts[cl.id] || ''}
+                          onChange={(e) => setNewItemDrafts((prev) => ({ ...prev, [cl.id]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const val = (newItemDrafts[cl.id] || '').trim();
+                              if (val) {
+                                createChecklistItem.mutate({ checklistId: cl.id, content: val });
+                                setNewItemDrafts((prev) => ({ ...prev, [cl.id]: '' }));
+                              }
+                            }
+                          }}
+                          className="mt-2 w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-[#0F172B] placeholder-[#CAD5E2] outline-none focus:border-[#E2E8F0] focus:bg-white"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-[#CAD5E2]">{canEdit ? 'No checklists yet' : 'No checklists'}</p>
             )}
           </div>
 
@@ -550,6 +740,151 @@ export default function TaskDetailPanel({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CustomFieldRow({
+  field,
+  value,
+  onChange,
+  canEdit,
+}: {
+  field: TaskTypeField;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  canEdit: boolean;
+}) {
+  const baseInputCls = `rounded border border-transparent px-1.5 py-0.5 text-xs text-[#0F172B] outline-none ${canEdit ? 'hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]' : 'cursor-default opacity-70'}`;
+
+  let control: React.ReactNode = null;
+  const str = typeof value === 'string' ? value : value == null ? '' : String(value);
+
+  switch (field.field_type) {
+    case 'textarea':
+      control = (
+        <textarea
+          defaultValue={str}
+          placeholder={field.placeholder || ''}
+          disabled={!canEdit}
+          onBlur={(e) => e.target.value !== str && onChange(e.target.value || null)}
+          rows={2}
+          className={`${baseInputCls} w-full resize-none`}
+        />
+      );
+      break;
+    case 'select':
+      control = (
+        <select
+          value={str}
+          disabled={!canEdit}
+          onChange={(e) => onChange(e.target.value || null)}
+          className={baseInputCls}
+        >
+          <option value="">—</option>
+          {field.options.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      );
+      break;
+    case 'multi_select': {
+      const arr: string[] = Array.isArray(value) ? (value as string[]) : [];
+      control = (
+        <div className="flex flex-wrap gap-1.5">
+          {field.options.map((o) => {
+            const on = arr.includes(o.value);
+            return (
+              <button
+                key={o.value}
+                type="button"
+                disabled={!canEdit}
+                onClick={() => {
+                  const next = on ? arr.filter((v) => v !== o.value) : [...arr, o.value];
+                  onChange(next);
+                }}
+                className={`rounded-full px-2 py-0.5 text-[11px] ${
+                  on ? 'bg-[#2962FF] text-white' : 'bg-[#F1F5F9] text-[#62748E] hover:bg-[#E2E8F0]'
+                } ${canEdit ? '' : 'cursor-default opacity-70'}`}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      );
+      break;
+    }
+    case 'number':
+      control = (
+        <input
+          type="number"
+          defaultValue={str}
+          placeholder={field.placeholder || ''}
+          disabled={!canEdit}
+          onBlur={(e) => {
+            const v = e.target.value;
+            onChange(v === '' ? null : Number(v));
+          }}
+          className={baseInputCls}
+        />
+      );
+      break;
+    case 'date':
+      control = (
+        <input
+          type="date"
+          value={str}
+          disabled={!canEdit}
+          onChange={(e) => onChange(e.target.value || null)}
+          className={baseInputCls}
+        />
+      );
+      break;
+    case 'url':
+      control = (
+        <input
+          type="url"
+          defaultValue={str}
+          placeholder={field.placeholder || 'https://'}
+          disabled={!canEdit}
+          onBlur={(e) => e.target.value !== str && onChange(e.target.value || null)}
+          className={`${baseInputCls} min-w-[240px]`}
+        />
+      );
+      break;
+    case 'checkbox':
+      control = (
+        <input
+          type="checkbox"
+          checked={!!value}
+          disabled={!canEdit}
+          onChange={(e) => onChange(e.target.checked)}
+          className="h-3.5 w-3.5 cursor-pointer rounded border-[#CBD5E1]"
+        />
+      );
+      break;
+    case 'text':
+    default:
+      control = (
+        <input
+          type="text"
+          defaultValue={str}
+          placeholder={field.placeholder || ''}
+          disabled={!canEdit}
+          onBlur={(e) => e.target.value !== str && onChange(e.target.value || null)}
+          className={`${baseInputCls} min-w-[200px]`}
+        />
+      );
+  }
+
+  return (
+    <div className="flex items-start py-2.5">
+      <div className="flex w-36 shrink-0 items-center gap-2.5 pt-0.5 text-sm text-[#999999]">
+        <span className="truncate">{field.label}</span>
+        {field.is_required && <span className="text-red-500">*</span>}
+      </div>
+      <div className="min-w-0 flex-1">{control}</div>
     </div>
   );
 }

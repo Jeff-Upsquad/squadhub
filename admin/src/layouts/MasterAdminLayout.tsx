@@ -123,6 +123,16 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
           </div>
 
           <div className="!mt-4 border-t border-[#E2E8F0] pt-3">
+            <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Project Management</p>
+            <NavLink href="/admin/task-types">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Task Types
+            </NavLink>
+          </div>
+
+          <div className="!mt-4 border-t border-[#E2E8F0] pt-3">
             <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Check-In</p>
             <NavLink href="/admin/checkin-config">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
