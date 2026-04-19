@@ -30,7 +30,6 @@ export function useMyClients() {
 
 export interface ClientFoldersResult {
   folders: (Folder & { client_space_template?: { id: string; slug: string; name: string; icon: string } })[];
-  access_level: ClientAccessLevel | null;
 }
 
 export function useClientFolders(clientId: string | null) {
@@ -39,8 +38,7 @@ export function useClientFolders(clientId: string | null) {
     queryFn: async () => {
       const res = await api.get(`/pm/folders/by-client/${clientId}`);
       return {
-        folders: res.data.data,
-        access_level: res.data.client_access_level ?? null,
+        folders: res.data?.data ?? [],
       };
     },
     enabled: !!clientId,

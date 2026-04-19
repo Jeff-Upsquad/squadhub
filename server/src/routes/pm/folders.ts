@@ -68,10 +68,10 @@ router.get('/folders/by-client/:clientId', async (req: Request, res: Response) =
     // User must have any level of client access
     const { data: access } = await supabaseAdmin
       .from('client_user_access')
-      .select('access_level')
+      .select('id')
       .eq('client_id', clientId)
       .eq('user_id', req.userId!)
-      .single();
+      .maybeSingle();
     if (!access) {
       res.status(403).json({ success: false, error: 'No access to this client' });
       return;
@@ -118,7 +118,7 @@ router.get('/folders/by-client/:clientId', async (req: Request, res: Response) =
       }
     }
 
-    res.json({ success: true, data: accessibleFolders, client_access_level: access.access_level });
+    res.json({ success: true, data: accessibleFolders });
   } catch (err) {
     console.error('Get client folders error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
