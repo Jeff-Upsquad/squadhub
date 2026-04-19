@@ -27,6 +27,33 @@ const ACCESS_LEVELS: { value: AccessLevel; label: string }[] = [
   { value: 'manager', label: 'Manager' },
 ];
 
+// Platform user-type chip (Internal / Client / Partner)
+const USER_TYPE_STYLES: Record<string, { label: string; bg: string; fg: string }> = {
+  internal: { label: 'Internal', bg: '#EEF2FF', fg: '#3730A3' },
+  client: { label: 'Client', bg: '#ECFDF5', fg: '#065F46' },
+  partner: { label: 'Partner', bg: '#F5F3FF', fg: '#5B21B6' },
+};
+
+function UserTypeChip({ userType }: { userType?: string | null }) {
+  if (!userType) return null;
+  const s = USER_TYPE_STYLES[userType] || { label: userType, bg: 'var(--cd-bg-2)', fg: 'var(--cd-fg-2)' };
+  return (
+    <span
+      style={{
+        padding: '1px 6px',
+        borderRadius: 8,
+        background: s.bg,
+        color: s.fg,
+        fontSize: 9.5,
+        fontWeight: 600,
+      }}
+      title={`User type: ${s.label}`}
+    >
+      {s.label}
+    </span>
+  );
+}
+
 export default function SquadShareModal({
   folderId,
   folderName,
@@ -168,8 +195,18 @@ export default function SquadShareModal({
                           }}
                         >
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--cd-fg-0)' }}>
-                              {u.display_name}
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                fontSize: 12.5,
+                                fontWeight: 500,
+                                color: 'var(--cd-fg-0)',
+                              }}
+                            >
+                              <span>{u.display_name}</span>
+                              <UserTypeChip userType={u.user_type} />
                             </div>
                             <div style={{ fontSize: 10.5, color: 'var(--cd-fg-2)' }}>
                               {u.email}
@@ -184,6 +221,7 @@ export default function SquadShareModal({
                                     fontFamily: 'var(--cd-font-mono)',
                                     fontSize: 9.5,
                                   }}
+                                  title={`Client-access role: ${u.client_role.name}`}
                                 >
                                   {u.client_role.name}
                                 </span>
@@ -258,8 +296,18 @@ export default function SquadShareModal({
                     }}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--cd-fg-0)' }}>
-                        {m.user?.display_name || 'Unknown'}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          fontSize: 12.5,
+                          fontWeight: 500,
+                          color: 'var(--cd-fg-0)',
+                        }}
+                      >
+                        <span>{m.user?.display_name || 'Unknown'}</span>
+                        <UserTypeChip userType={(m.user as any)?.user_type} />
                       </div>
                       <div style={{ fontSize: 10.5, color: 'var(--cd-fg-2)' }}>{m.user?.email || ''}</div>
                     </div>

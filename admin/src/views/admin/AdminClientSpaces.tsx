@@ -188,7 +188,7 @@ export default function AdminClientSpaces() {
 }
 
 // ============================================================
-// Per-folder member management (admin's pool = all workspace members)
+// Per-folder member management
 // ============================================================
 const ACCESS_LEVELS: { value: AccessLevel; label: string }[] = [
   { value: 'viewer', label: 'View only' },
@@ -196,6 +196,28 @@ const ACCESS_LEVELS: { value: AccessLevel; label: string }[] = [
   { value: 'member', label: 'Full access' },
   { value: 'manager', label: 'Manager' },
 ];
+
+// Platform user type badge (Internal / Client / Partner).
+// Distinct from the client-access role — this is immutable per user.
+const USER_TYPE_STYLES: Record<string, { label: string; bg: string; fg: string }> = {
+  internal: { label: 'Internal', bg: '#EEF2FF', fg: '#3730A3' },
+  client:   { label: 'Client',   bg: '#ECFDF5', fg: '#065F46' },
+  partner:  { label: 'Partner',  bg: '#F5F3FF', fg: '#5B21B6' },
+};
+
+function UserTypeChip({ userType }: { userType?: string | null }) {
+  if (!userType) return null;
+  const style = USER_TYPE_STYLES[userType] || { label: userType, bg: '#F1F5F9', fg: '#62748E' };
+  return (
+    <span
+      className="ml-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-medium"
+      style={{ background: style.bg, color: style.fg }}
+      title={`User type: ${style.label}`}
+    >
+      {style.label}
+    </span>
+  );
+}
 
 function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: () => void }) {
   const qc = useQueryClient();
@@ -317,10 +339,12 @@ function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: (
                           <div className="min-w-0">
                             <div className="truncate text-xs font-medium text-[#0F172B]">
                               {u.display_name}
+                              <UserTypeChip userType={u.user_type} />
                               {u.client_role && (
                                 <span
                                   className="ml-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-medium"
                                   style={{ background: `${u.client_role.color}22`, color: u.client_role.color }}
+                                  title={`Client-access role: ${u.client_role.name}`}
                                 >
                                   {u.client_role.name}
                                 </span>
@@ -369,7 +393,10 @@ function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: (
                       {m.user?.display_name?.[0]?.toUpperCase() || '?'}
                     </div>
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-[#0F172B]">{m.user?.display_name || 'Unknown'}</div>
+                      <div className="flex items-center gap-1 truncate text-sm font-medium text-[#0F172B]">
+                        <span className="truncate">{m.user?.display_name || 'Unknown'}</span>
+                        <UserTypeChip userType={(m.user as any)?.user_type} />
+                      </div>
                       <div className="truncate text-[10px] text-[#90A1B9]">{m.user?.email || ''}</div>
                     </div>
                   </div>
