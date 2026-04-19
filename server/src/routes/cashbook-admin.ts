@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
+import { getDefaultRoleIdForUserType } from '../utils/defaultRole';
 
 const router = Router();
 
@@ -590,6 +591,37 @@ router.post('/clients/:clientId/users', async (req: Request, res: Response) => {
         status: 'active',
         user_type: 'client',
       });
+
+      // Add to the workspace so they have somewhere to land on first login.
+      // Without this row GET /workspaces returns empty and the app gets stuck
+      // on the "Welcome to SquadHub — workspace is being set up" screen.
+      const { data: workspace } = await supabaseAdmin
+        .from('workspaces')
+        .select('id')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .single();
+
+      const roleId = await getDefaultRoleIdForUserType('client');
+
+      if (workspace && roleId) {
+        const { error: memberError } = await supabaseAdmin
+          .from('workspace_members')
+          .upsert(
+            { workspace_id: workspace.id, user_id: userId, role: 'member', role_id: roleId },
+            { onConflict: 'workspace_id,user_id' }
+          );
+
+        if (memberError) {
+          console.error('Cash book user workspace membership insert failed:', memberError);
+          res.status(500).json({ success: false, error: `Failed to add user to workspace: ${memberError.message}` });
+          return;
+        }
+      } else {
+        console.error('Cash book user create: missing workspace or default client role', { hasWorkspace: !!workspace, hasRole: !!roleId });
+        res.status(500).json({ success: false, error: 'Could not assign user to a workspace' });
+        return;
+      }
     }
 
     const role = body.role;

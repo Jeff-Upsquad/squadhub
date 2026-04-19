@@ -153,33 +153,47 @@ router.put('/users/:id/approve', async (req: Request, res: Response) => {
       return;
     }
 
-    // 2. Find the workspace (there should be exactly one)
-    const { data: workspace } = await supabaseAdmin
+    // 2. Find the workspace (oldest one — stable pick when more than one exists)
+    const { data: workspace, error: wsError } = await supabaseAdmin
       .from('workspaces')
       .select('id')
+      .order('created_at', { ascending: true })
       .limit(1)
       .single();
 
-    if (workspace) {
-      // Determine which custom role to assign. If caller didn't pick one,
-      // fall back to the system default role for this user's user_type.
-      let assignRoleId = roleId;
-      if (!assignRoleId) {
-        const { data: targetUser } = await supabaseAdmin
-          .from('users')
-          .select('user_type')
-          .eq('id', id)
-          .single();
-        assignRoleId = await getDefaultRoleIdForUserType((targetUser?.user_type ?? 'internal') as UserType);
-      }
+    if (wsError || !workspace) {
+      res.status(500).json({ success: false, error: 'No workspace available to assign user to' });
+      return;
+    }
 
-      // 3. Add user as member of the workspace
-      await supabaseAdmin.from('workspace_members').insert({
-        workspace_id: workspace.id,
-        user_id: id,
-        role: 'member',
-        role_id: assignRoleId,
-      });
+    // Determine which custom role to assign. If caller didn't pick one,
+    // fall back to the system default role for this user's user_type.
+    let assignRoleId = roleId;
+    if (!assignRoleId) {
+      const { data: targetUser } = await supabaseAdmin
+        .from('users')
+        .select('user_type')
+        .eq('id', id)
+        .single();
+      assignRoleId = await getDefaultRoleIdForUserType((targetUser?.user_type ?? 'internal') as UserType);
+    }
+
+    if (!assignRoleId) {
+      res.status(500).json({ success: false, error: 'Could not resolve a role to assign — system roles may not be seeded' });
+      return;
+    }
+
+    // 3. Add user as member of the workspace (idempotent — re-approval is safe)
+    const { error: memberError } = await supabaseAdmin
+      .from('workspace_members')
+      .upsert(
+        { workspace_id: workspace.id, user_id: id, role: 'member', role_id: assignRoleId },
+        { onConflict: 'workspace_id,user_id' }
+      );
+
+    if (memberError) {
+      res.status(500).json({ success: false, error: `Failed to add user to workspace: ${memberError.message}` });
+      return;
     }
 
     res.json({ success: true, data });
