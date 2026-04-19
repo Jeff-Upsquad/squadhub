@@ -18,6 +18,8 @@ const nextConfig = {
       { source: '/api/workspaces/:path*', destination: `${API_URL}/workspaces/:path*` },
       { source: '/api/health/:path*', destination: `${API_URL}/health/:path*` },
       { source: '/api/clients/:path*', destination: `${API_URL}/clients/:path*` },
+      { source: '/api/pm/:path*', destination: `${API_URL}/pm/:path*` },
+      { source: '/api/memberships/:path*', destination: `${API_URL}/memberships/:path*` },
     ],
   }),
 
