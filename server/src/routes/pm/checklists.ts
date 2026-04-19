@@ -36,7 +36,7 @@ async function requireTaskAccess(userId: string, taskId: string, level: 'viewer'
 // GET /pm/tasks/:taskId/checklists — with nested items
 router.get('/tasks/:taskId/checklists', async (req: Request, res: Response) => {
   try {
-    const taskId = req.params.taskId;
+    const taskId = req.params.taskId as string;
     const listId = await requireTaskAccess(req.userId!, taskId, 'viewer');
     if (!listId) {
       res.status(403).json({ success: false, error: 'No access to this task' });
@@ -90,7 +90,7 @@ const createChecklistSchema = z.object({
 
 router.post('/tasks/:taskId/checklists', async (req: Request, res: Response) => {
   try {
-    const taskId = req.params.taskId;
+    const taskId = req.params.taskId as string;
     const body = createChecklistSchema.parse(req.body);
 
     const listId = await requireTaskAccess(req.userId!, taskId, 'member');
@@ -143,7 +143,7 @@ const updateChecklistSchema = z.object({
 
 router.put('/checklists/:id', async (req: Request, res: Response) => {
   try {
-    const id = req.params.id;
+    const id = req.params.id as string;
     const body = updateChecklistSchema.parse(req.body);
 
     const taskId = await getChecklistTaskId(id);
@@ -184,7 +184,7 @@ router.put('/checklists/:id', async (req: Request, res: Response) => {
 // DELETE /pm/checklists/:id
 router.delete('/checklists/:id', async (req: Request, res: Response) => {
   try {
-    const id = req.params.id;
+    const id = req.params.id as string;
     const taskId = await getChecklistTaskId(id);
     if (!taskId) {
       res.status(404).json({ success: false, error: 'Checklist not found' });
@@ -218,7 +218,7 @@ const createItemSchema = z.object({
 
 router.post('/checklists/:id/items', async (req: Request, res: Response) => {
   try {
-    const checklistId = req.params.id;
+    const checklistId = req.params.id as string;
     const body = createItemSchema.parse(req.body);
 
     const taskId = await getChecklistTaskId(checklistId);
@@ -281,7 +281,7 @@ const updateItemSchema = z.object({
 
 router.put('/checklist-items/:id', async (req: Request, res: Response) => {
   try {
-    const id = req.params.id;
+    const id = req.params.id as string;
     const body = updateItemSchema.parse(req.body);
 
     const checklistId = await getItemChecklistId(id);
@@ -338,7 +338,7 @@ router.put('/checklist-items/:id', async (req: Request, res: Response) => {
 // DELETE /pm/checklist-items/:id
 router.delete('/checklist-items/:id', async (req: Request, res: Response) => {
   try {
-    const id = req.params.id;
+    const id = req.params.id as string;
     const checklistId = await getItemChecklistId(id);
     if (!checklistId) {
       res.status(404).json({ success: false, error: 'Item not found' });
