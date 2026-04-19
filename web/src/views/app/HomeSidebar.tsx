@@ -165,7 +165,7 @@ export default function HomeSidebar({
   const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
   const { data: favorites, isLoading: favoritesLoading } = useFavorites(workspaceId);
   const { data: sharedItems, isLoading: sharedLoading } = useSharedWithMe(workspaceId);
-  const { data: myClients } = useMyClients();
+  const { data: myClients, isLoading: myClientsLoading, isError: myClientsError } = useMyClients();
   const removeFavorite = useRemoveFavorite(workspaceId);
   const { setActiveSpace, setActiveList } = usePMStore();
   const canCreateChannels = useHasPermission('can_create_channels');
@@ -426,9 +426,11 @@ export default function HomeSidebar({
               />
               {expandedSections.clients && (
                 <div className="pb-1">
-                  {!myClients ? (
+                  {myClientsLoading ? (
                     <p className="px-3 py-[5px] text-[11.5px] text-[var(--sh-ink-4)]">Loading…</p>
-                  ) : myClients.length === 0 ? (
+                  ) : myClientsError ? (
+                    <p className="px-3 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">Couldn't load clients</p>
+                  ) : !myClients || myClients.length === 0 ? (
                     <p className="px-3 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">No clients yet</p>
                   ) : (
                     myClients.map((entry) => (
