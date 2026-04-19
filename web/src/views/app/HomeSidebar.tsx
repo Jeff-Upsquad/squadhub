@@ -9,10 +9,19 @@ import SpaceTree from './pm/SpaceTree';
 import CreateSpaceModal from './pm/CreateSpaceModal';
 import { useHasMiniApp } from '../../hooks/useMiniApps';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
+import { useAuthStore } from '../../stores/authStore';
 import { useIsInternal, useIsClient, useIsPartner } from '../../hooks/useUserType';
 import { useMyClients, useClientFolders, type MyClientEntry } from '../../hooks/useMyClients';
 import { useIsWorkspaceAdmin } from '../../hooks/useIsWorkspaceAdmin';
 import AddClientSpaceModal from './clients/AddClientSpaceModal';
+
+// Testing allowlist for Home / Inbox / My Tasks / Mentions / Later nav.
+// Remove this gate once the new home is rolled out to everyone.
+const NEW_NAV_EMAIL_ALLOWLIST = new Set([
+  'jeff@upsquadconnect.com',
+  'john@squadhub.in',
+  'jeff@tagconnect.in',
+]);
 
 // ---- Props ----
 interface HomeSidebarProps {
@@ -178,6 +187,8 @@ export default function HomeSidebar({
   const hasCheckin = useHasMiniApp('daily-checkin');
   const hasCheckinPartners = useHasMiniApp('daily-checkin-partners');
   const hasTimeManagement = useHasMiniApp('time-management');
+  const currentEmail = useAuthStore((s) => s.user?.email?.toLowerCase() ?? '');
+  const canSeeNewNav = NEW_NAV_EMAIL_ALLOWLIST.has(currentEmail);
 
   const [expandedSections, setExpandedSections] = useState({
     favorites: true,
@@ -244,65 +255,69 @@ export default function HomeSidebar({
       <div className="flex-1 overflow-y-auto">
         {/* Navigation items — design's top list */}
         <div className="px-2 pt-2 pb-1 flex flex-col gap-[1px]">
-          <NavItem
-            icon={
-              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1z" />
-              </svg>
-            }
-            label="Home"
-            active={homeView === 'hub'}
-            onClick={() => onChangeView('hub')}
-          />
-          <NavItem
-            icon={
-              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <path d="M3 13V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8" />
-                <path d="M3 13h5l2 3h4l2-3h5v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              </svg>
-            }
-            label="Inbox"
-            active={homeView === 'inbox'}
-            count={8}
-            unread
-            onClick={() => onChangeView('inbox')}
-          />
-          <NavItem
-            icon={
-              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="9" />
-                <path d="m8.5 12.5 2.5 2.5 4.5-5" />
-              </svg>
-            }
-            label="My Tasks"
-            active={homeView === 'my-tasks'}
-            count={14}
-            onClick={() => onChangeView('my-tasks')}
-          />
-          <NavItem
-            icon={
-              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="4" />
-                <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
-              </svg>
-            }
-            label="Mentions"
-            active={homeView === 'mentions'}
-            count={3}
-            unread
-            onClick={() => onChangeView('mentions')}
-          />
-          <NavItem
-            icon={
-              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" />
-              </svg>
-            }
-            label="Later"
-            active={homeView === 'later'}
-            onClick={() => onChangeView('later')}
-          />
+          {canSeeNewNav && (
+            <>
+              <NavItem
+                icon={
+                  <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1z" />
+                  </svg>
+                }
+                label="Home"
+                active={homeView === 'hub'}
+                onClick={() => onChangeView('hub')}
+              />
+              <NavItem
+                icon={
+                  <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <path d="M3 13V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8" />
+                    <path d="M3 13h5l2 3h4l2-3h5v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                  </svg>
+                }
+                label="Inbox"
+                active={homeView === 'inbox'}
+                count={8}
+                unread
+                onClick={() => onChangeView('inbox')}
+              />
+              <NavItem
+                icon={
+                  <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+                  </svg>
+                }
+                label="My Tasks"
+                active={homeView === 'my-tasks'}
+                count={14}
+                onClick={() => onChangeView('my-tasks')}
+              />
+              <NavItem
+                icon={
+                  <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
+                  </svg>
+                }
+                label="Mentions"
+                active={homeView === 'mentions'}
+                count={3}
+                unread
+                onClick={() => onChangeView('mentions')}
+              />
+              <NavItem
+                icon={
+                  <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                }
+                label="Later"
+                active={homeView === 'later'}
+                onClick={() => onChangeView('later')}
+              />
+            </>
+          )}
 
           {isInternal && hasCheckin && (
             <button
