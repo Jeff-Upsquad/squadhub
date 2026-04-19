@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
-import SubscriptionsModule from './SubscriptionsModule';
 import NewClientsModule from './NewClientsModule';
 import ClientsModule from './ClientsModule';
 import ClientAccessModule from './ClientAccessModule';
+import ClientSubscriptionsModule from './ClientSubscriptionsModule';
 
-type Tab = 'new-clients' | 'clients' | 'subscriptions' | 'client-access';
+type Tab = 'new-clients' | 'clients' | 'client-subscriptions' | 'client-access';
 
 const WEB_APP_URL = process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'production' ? 'https://squadhub.in' : 'http://localhost:3000');
 
@@ -25,14 +25,9 @@ export default function AdminClients() {
     queryFn: () => api.get('/admin/clients/count').then((r) => r.data),
     refetchInterval: 30000,
   });
-  const { data: subscriptionsRes } = useQuery({
-    queryKey: ['admin-subscriptions'],
-    queryFn: () => api.get('/admin/clients/subscriptions').then((r) => r.data),
-  });
 
   const pendingCount = subCountRes?.data?.count || 0;
   const clientCount = clientCountRes?.data?.count || 0;
-  const subscriptionCount = (subscriptionsRes?.data || []).length;
 
   const onboardingLink = `${WEB_APP_URL}/onboard`;
 
@@ -45,7 +40,7 @@ export default function AdminClients() {
   const tabs: { id: Tab; label: string; count: number }[] = [
     { id: 'new-clients', label: 'New Clients', count: pendingCount },
     { id: 'clients', label: 'Clients', count: clientCount },
-    { id: 'subscriptions', label: 'Subscriptions', count: subscriptionCount },
+    { id: 'client-subscriptions', label: 'Client Subscriptions', count: 0 },
     { id: 'client-access', label: 'Client Access', count: 0 },
   ];
 
@@ -100,9 +95,9 @@ export default function AdminClients() {
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto bg-[#F1F5F9] p-6">
-        {activeTab === 'subscriptions' && <SubscriptionsModule />}
         {activeTab === 'new-clients' && <NewClientsModule />}
         {activeTab === 'clients' && <ClientsModule />}
+        {activeTab === 'client-subscriptions' && <ClientSubscriptionsModule />}
         {activeTab === 'client-access' && <ClientAccessModule />}
       </div>
     </div>

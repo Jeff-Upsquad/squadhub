@@ -81,6 +81,12 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
             </svg>
             Trash
           </NavLink>
+          <NavLink href="/admin/subscriptions">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 7.5a1.5 1.5 0 011.5-1.5h13.5a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-9zM8 10h8M8 14h5" />
+            </svg>
+            Subscriptions
+          </NavLink>
 
           <div className="!mt-4 border-t border-[#E2E8F0] pt-3">
             <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Mini Apps</p>

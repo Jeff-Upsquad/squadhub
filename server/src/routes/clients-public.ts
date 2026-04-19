@@ -15,6 +15,7 @@ const onboardSchema = z.object({
   gst_registered: z.boolean(),
   gst_number: z.string().max(50).optional(),
   accounts_email: z.string().email().optional().or(z.literal('')),
+  country: z.enum(['India', 'International']).default('India'),
 });
 
 router.post('/onboard', async (req: Request, res: Response) => {
@@ -33,6 +34,7 @@ router.post('/onboard', async (req: Request, res: Response) => {
         gst_registered: body.gst_registered,
         gst_number: body.gst_registered ? (body.gst_number || null) : null,
         accounts_email: body.accounts_email || null,
+        country: body.country,
       })
       .select()
       .single();

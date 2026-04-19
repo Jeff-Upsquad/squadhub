@@ -741,23 +741,80 @@ export interface PartnerClientAssignment {
 }
 
 // ---- Clients Mini-App ----
-export type SubscriptionSquad = 'Content Squad' | 'Accounts & Finance Squad' | 'Marketing Squad' | 'Tech Squad' | 'Legal Squad' | 'Hiring & HR Squad';
-export type SubscriptionLevel = 'Junior' | 'Pro' | 'Elite';
 export type SubscriptionPlan = 'Starter' | 'Basic' | 'Plus' | 'Pro' | 'Personal';
+export type SubscriptionSlug = 'designer' | 'video_editor';
+export type DeliverableKind = 'hours' | 'item';
+export type ClientCountry = 'India' | 'International';
 export type ClientStatus = 'active' | 'paused' | 'cancelled';
 export type SubmissionStatus = 'pending' | 'approved' | 'rejected';
 export type ClientSubscriptionStatus = 'active' | 'paused' | 'cancelled';
 
 export interface Subscription {
   id: string;
+  slug: SubscriptionSlug;
   name: string;
-  squad: SubscriptionSquad;
-  level: SubscriptionLevel;
-  plan: SubscriptionPlan;
-  price: number;
-  is_deleted: boolean;
+  description: string | null;
+  is_active: boolean;
+  sort_order: number;
   created_at: string;
   updated_at: string;
+  // Joined
+  plans?: SubscriptionPlanRow[];
+  deliverable_types?: SubscriptionDeliverableType[];
+}
+
+export interface SubscriptionPlanRow {
+  id: string;
+  subscription_id: string;
+  plan: SubscriptionPlan;
+  is_active: boolean;
+  price_inr: number | null;
+  price_usd: number | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  deliverables?: SubscriptionPlanDeliverable[];
+}
+
+export interface SubscriptionDeliverableType {
+  id: string;
+  subscription_id: string;
+  name: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SubscriptionPlanDeliverable {
+  id: string;
+  plan_id: string;
+  kind: DeliverableKind;
+  deliverable_type_id: string | null;
+  per_day: number;
+  per_week: number;
+  per_month: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  deliverable_type?: SubscriptionDeliverableType | null;
+}
+
+export interface ClientSubscriptionDeliverable {
+  id: string;
+  client_subscription_id: string;
+  kind: DeliverableKind;
+  deliverable_type_id: string | null;
+  per_day: number;
+  per_week: number;
+  per_month: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  deliverable_type?: SubscriptionDeliverableType | null;
 }
 
 export interface ClientSubmission {
@@ -771,6 +828,7 @@ export interface ClientSubmission {
   gst_registered: boolean;
   gst_number: string | null;
   accounts_email: string | null;
+  country: ClientCountry;
   status: SubmissionStatus;
   created_at: string;
 }
@@ -787,6 +845,7 @@ export interface Client {
   gst_registered: boolean;
   gst_number: string | null;
   accounts_email: string | null;
+  country: ClientCountry;
   status: ClientStatus;
   created_at: string;
   updated_at: string;
@@ -798,11 +857,14 @@ export interface ClientSubscription {
   id: string;
   client_id: string;
   subscription_id: string;
+  plan_id: string;
   status: ClientSubscriptionStatus;
   created_at: string;
   updated_at: string;
   // Joined
   subscription?: Subscription;
+  plan?: SubscriptionPlanRow;
+  deliverables?: ClientSubscriptionDeliverable[];
 }
 
 // ---- Cash Book ----

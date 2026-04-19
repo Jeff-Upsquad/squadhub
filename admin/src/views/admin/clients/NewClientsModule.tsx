@@ -1,13 +1,20 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
-import type { ClientSubmission, Subscription } from '@squadhub/shared';
+import type {
+  ClientSubmission,
+  Subscription,
+  SubscriptionPlanRow,
+  SubscriptionPlan,
+} from '@squadhub/shared';
 import SliderPanel from './SliderPanel';
+
+const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
 
 export default function NewClientsModule() {
   const queryClient = useQueryClient();
   const [selectedSubmission, setSelectedSubmission] = useState<ClientSubmission | null>(null);
-  const [selectedSubscriptionIds, setSelectedSubscriptionIds] = useState<string[]>([]);
+  const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [rejectConfirm, setRejectConfirm] = useState(false);
 
@@ -17,15 +24,15 @@ export default function NewClientsModule() {
   });
   const submissions: ClientSubmission[] = submissionsRes?.data || [];
 
-  const { data: subscriptionsRes } = useQuery({
-    queryKey: ['admin-subscriptions'],
-    queryFn: () => api.get('/admin/clients/subscriptions').then((r) => r.data),
+  const { data: catalogRes } = useQuery({
+    queryKey: ['admin-subs-catalog'],
+    queryFn: () => api.get('/admin/subscriptions').then((r) => r.data),
   });
-  const subscriptions: Subscription[] = subscriptionsRes?.data || [];
+  const catalog: Subscription[] = catalogRes?.data || [];
 
   const approveMutation = useMutation({
-    mutationFn: ({ id, subscription_ids }: { id: string; subscription_ids: string[] }) =>
-      api.post(`/admin/clients/submissions/${id}/approve`, { subscription_ids }),
+    mutationFn: ({ id, plan_ids }: { id: string; plan_ids: string[] }) =>
+      api.post(`/admin/clients/submissions/${id}/approve`, { plan_ids }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['admin-submissions-count'] });
@@ -33,6 +40,7 @@ export default function NewClientsModule() {
       queryClient.invalidateQueries({ queryKey: ['admin-clients-count'] });
       closeSlider();
     },
+    onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed to approve'),
   });
 
   const rejectMutation = useMutation({
@@ -46,24 +54,22 @@ export default function NewClientsModule() {
 
   function closeSlider() {
     setSelectedSubmission(null);
-    setSelectedSubscriptionIds([]);
+    setSelectedPlanIds([]);
     setRejectConfirm(false);
   }
 
-  function toggleSubscription(id: string) {
-    setSelectedSubscriptionIds((prev) =>
+  function togglePlan(id: string) {
+    setSelectedPlanIds((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
     );
-  }
-
-  function removeSubscription(id: string) {
-    setSelectedSubscriptionIds((prev) => prev.filter((s) => s !== id));
   }
 
   const filtered = submissions.filter((s) =>
     s.business_name.toLowerCase().includes(search.toLowerCase()) ||
     s.contact_person.toLowerCase().includes(search.toLowerCase())
   );
+
+  const country = selectedSubmission?.country || 'India';
 
   return (
     <div>
@@ -104,6 +110,11 @@ export default function NewClientsModule() {
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-[#0F172B]">{sub.business_name}</p>
                     <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">New</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      sub.country === 'India' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
+                    }`}>
+                      {sub.country}
+                    </span>
                   </div>
                   <p className="mt-0.5 text-xs text-[#62748E]">
                     {sub.contact_person}{sub.designation ? ` - ${sub.designation}` : ''}
@@ -122,10 +133,10 @@ export default function NewClientsModule() {
       <SliderPanel open={!!selectedSubmission} onClose={closeSlider} title="Review Submission" width="w-[520px]">
         {selectedSubmission && (
           <div className="space-y-6">
-            {/* Submitted data */}
             <div className="space-y-3">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Business Details</h4>
               <InfoRow label="Business Name" value={selectedSubmission.business_name} />
+              <InfoRow label="Country" value={selectedSubmission.country} />
               <InfoRow label="Contact Person" value={selectedSubmission.contact_person} />
               {selectedSubmission.designation && <InfoRow label="Designation" value={selectedSubmission.designation} />}
               <InfoRow label="Contact Number" value={selectedSubmission.contact_number} />
@@ -137,75 +148,26 @@ export default function NewClientsModule() {
               <InfoRow label="Submitted" value={new Date(selectedSubmission.created_at).toLocaleString('en-IN')} />
             </div>
 
-            {/* Assign subscriptions */}
             <div>
-              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Assign Subscriptions</h4>
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">
+                Assign Plans ({country === 'India' ? 'INR' : 'USD'})
+              </h4>
 
-              {/* Selected chips */}
-              {selectedSubscriptionIds.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-1.5">
-                  {selectedSubscriptionIds.map((id) => {
-                    const sub = subscriptions.find((s) => s.id === id);
-                    return sub ? (
-                      <span key={id} className="inline-flex items-center gap-1 rounded-full bg-[#0F172B] px-2.5 py-1 text-xs text-white">
-                        {sub.name}
-                        <button onClick={() => removeSubscription(id)} className="ml-0.5 hover:text-red-300">
-                          <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </span>
-                    ) : null;
-                  })}
-                </div>
-              )}
-
-              {/* Subscription list to pick from — grouped by squad */}
-              <div className="max-h-64 overflow-y-auto rounded-lg border border-[#E2E8F0] p-2">
-                {subscriptions.length === 0 ? (
-                  <p className="py-4 text-center text-xs text-[#90A1B9]">No subscriptions created yet. Create some first.</p>
-                ) : (
-                  Object.entries(
-                    subscriptions.reduce<Record<string, typeof subscriptions>>((acc, sub) => {
-                      (acc[sub.squad] = acc[sub.squad] || []).push(sub);
-                      return acc;
-                    }, {})
-                  ).map(([squad, subs]) => (
-                    <div key={squad} className="mb-2">
-                      <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">{squad}</p>
-                      {subs.map((sub) => (
-                        <label
-                          key={sub.id}
-                          className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
-                            selectedSubscriptionIds.includes(sub.id) ? 'bg-blue-50' : 'hover:bg-[#F8FAFC]'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedSubscriptionIds.includes(sub.id)}
-                            onChange={() => toggleSubscription(sub.id)}
-                            className="rounded border-[#E2E8F0] text-[#2962FF] focus:ring-[#2962FF]"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-[#0F172B]">{sub.name}</p>
-                            <p className="text-xs text-[#90A1B9]">{sub.level} · {sub.plan} · ₹{sub.price.toLocaleString('en-IN')}/mo</p>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  ))
-                )}
-              </div>
+              <PlanPicker
+                catalog={catalog}
+                country={country}
+                selectedPlanIds={selectedPlanIds}
+                onToggle={togglePlan}
+              />
             </div>
 
-            {/* Actions */}
             <div className="space-y-2 pt-2">
               <button
-                onClick={() => approveMutation.mutate({ id: selectedSubmission.id, subscription_ids: selectedSubscriptionIds })}
-                disabled={selectedSubscriptionIds.length === 0 || approveMutation.isPending}
+                onClick={() => approveMutation.mutate({ id: selectedSubmission.id, plan_ids: selectedPlanIds })}
+                disabled={selectedPlanIds.length === 0 || approveMutation.isPending}
                 className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50"
               >
-                {approveMutation.isPending ? 'Approving...' : `Approve & Move to Clients (${selectedSubscriptionIds.length} subscriptions)`}
+                {approveMutation.isPending ? 'Approving...' : `Approve & Move to Clients (${selectedPlanIds.length} plans)`}
               </button>
 
               {rejectConfirm ? (
@@ -236,6 +198,68 @@ export default function NewClientsModule() {
           </div>
         )}
       </SliderPanel>
+    </div>
+  );
+}
+
+export function PlanPicker({
+  catalog, country, selectedPlanIds, onToggle,
+}: {
+  catalog: Subscription[];
+  country: 'India' | 'International';
+  selectedPlanIds: string[];
+  onToggle: (planId: string) => void;
+}) {
+  const priceField: 'price_inr' | 'price_usd' = country === 'India' ? 'price_inr' : 'price_usd';
+  const sym = country === 'India' ? '\u20B9' : '$';
+
+  const activeSubs = useMemo(() => catalog.filter((s) => s.is_active), [catalog]);
+
+  if (activeSubs.length === 0) {
+    return <p className="rounded-lg border border-[#E2E8F0] bg-white p-3 text-xs text-[#90A1B9]">No active subscriptions.</p>;
+  }
+
+  return (
+    <div className="max-h-72 overflow-y-auto rounded-lg border border-[#E2E8F0] bg-white p-2">
+      {activeSubs.map((sub) => {
+        const plans: SubscriptionPlanRow[] = (sub.plans || [])
+          .filter((p) => p.is_active && p[priceField] != null)
+          .sort((a, b) => PLAN_ORDER.indexOf(a.plan) - PLAN_ORDER.indexOf(b.plan));
+
+        return (
+          <div key={sub.id} className="mb-2">
+            <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">{sub.name}</p>
+            {plans.length === 0 ? (
+              <p className="px-2 py-1 text-[11px] text-[#CBD5E1]">No plans priced for {country}.</p>
+            ) : (
+              plans.map((p) => {
+                const price = p[priceField];
+                return (
+                  <label
+                    key={p.id}
+                    className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
+                      selectedPlanIds.includes(p.id) ? 'bg-blue-50' : 'hover:bg-[#F8FAFC]'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedPlanIds.includes(p.id)}
+                      onChange={() => onToggle(p.id)}
+                      className="rounded border-[#E2E8F0] text-[#2962FF] focus:ring-[#2962FF]"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[#0F172B]">{p.plan}</p>
+                      <p className="text-xs text-[#90A1B9]">
+                        {sym}{(price || 0).toLocaleString(country === 'India' ? 'en-IN' : 'en-US')}/mo
+                      </p>
+                    </div>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -9,113 +9,117 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
+const countrySchema = z.enum(['India', 'International']);
+
 // ============================================================
-// Subscriptions CRUD
+// Helpers
 // ============================================================
 
-// GET /admin/clients/subscriptions
-router.get('/subscriptions', async (_req: Request, res: Response) => {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('subscriptions')
-      .select('*')
-      .eq('is_deleted', false)
-      .order('name');
+// Copy a plan's default deliverables into a new client_subscription
+async function copyPlanDeliverables(clientSubscriptionId: string, planId: string) {
+  const { data: planDelivs } = await supabaseAdmin
+    .from('subscription_plan_deliverables')
+    .select('*')
+    .eq('plan_id', planId)
+    .order('sort_order');
 
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
-    res.json({ success: true, data });
-  } catch (err) {
-    console.error('List subscriptions error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
+  if (!planDelivs || planDelivs.length === 0) return;
+
+  const rows = planDelivs.map((d: any) => ({
+    client_subscription_id: clientSubscriptionId,
+    kind: d.kind,
+    deliverable_type_id: d.deliverable_type_id,
+    per_day: d.per_day,
+    per_week: d.per_week,
+    per_month: d.per_month,
+    sort_order: d.sort_order,
+  }));
+
+  await supabaseAdmin.from('client_subscription_deliverables').insert(rows);
+}
+
+// Assign a set of plans to a client: inserts client_subscriptions rows
+// and copies plan defaults into client_subscription_deliverables.
+async function assignPlansToClient(clientId: string, planIds: string[]) {
+  if (planIds.length === 0) return { error: null };
+
+  // Look up subscription_id for each plan
+  const { data: plans, error: planErr } = await supabaseAdmin
+    .from('subscription_plans')
+    .select('id, subscription_id')
+    .in('id', planIds);
+
+  if (planErr) return { error: planErr.message };
+  if (!plans || plans.length !== planIds.length) {
+    return { error: 'One or more plans not found' };
   }
-});
 
-const subscriptionSchema = z.object({
-  name: z.string().min(1).max(200),
-  squad: z.enum(['Content Squad', 'Accounts & Finance Squad', 'Marketing Squad', 'Tech Squad', 'Legal Squad', 'Hiring & HR Squad']),
-  level: z.enum(['Junior', 'Pro', 'Elite']),
-  plan: z.enum(['Starter', 'Basic', 'Plus', 'Pro', 'Personal']),
-  price: z.number().int().min(0),
-});
+  const inserts = plans.map((p: any) => ({
+    client_id: clientId,
+    subscription_id: p.subscription_id,
+    plan_id: p.id,
+  }));
 
-// POST /admin/clients/subscriptions
-router.post('/subscriptions', async (req: Request, res: Response) => {
-  try {
-    const body = subscriptionSchema.parse(req.body);
-    const { data, error } = await supabaseAdmin
-      .from('subscriptions')
-      .insert(body)
-      .select()
-      .single();
+  const { data: cs, error: csErr } = await supabaseAdmin
+    .from('client_subscriptions')
+    .insert(inserts)
+    .select();
 
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
-    res.json({ success: true, data });
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ success: false, error: err.errors[0].message });
-      return;
-    }
-    console.error('Create subscription error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
+  if (csErr) return { error: csErr.message };
+
+  // Copy default deliverables for each new client subscription
+  await Promise.all(
+    (cs || []).map((row: any) => copyPlanDeliverables(row.id, row.plan_id)),
+  );
+
+  return { error: null };
+}
+
+async function enrichClient(client: any) {
+  const { data: cs } = await supabaseAdmin
+    .from('client_subscriptions')
+    .select('*')
+    .eq('client_id', client.id)
+    .order('created_at');
+
+  if (!cs || cs.length === 0) {
+    return { ...client, subscriptions: [] };
   }
-});
 
-// PUT /admin/clients/subscriptions/:id
-router.put('/subscriptions/:id', async (req: Request, res: Response) => {
-  try {
-    const body = subscriptionSchema.partial().parse(req.body);
-    const { data, error } = await supabaseAdmin
-      .from('subscriptions')
-      .update({ ...body, updated_at: new Date().toISOString() })
-      .eq('id', req.params.id)
-      .select()
-      .single();
+  const subIds = Array.from(new Set(cs.map((c: any) => c.subscription_id)));
+  const planIds = Array.from(new Set(cs.map((c: any) => c.plan_id)));
+  const csIds = cs.map((c: any) => c.id);
 
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
-    res.json({ success: true, data });
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ success: false, error: err.errors[0].message });
-      return;
-    }
-    console.error('Update subscription error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
+  const [{ data: subs }, { data: plans }, { data: delivs }] = await Promise.all([
+    supabaseAdmin.from('subscriptions').select('*').in('id', subIds),
+    supabaseAdmin.from('subscription_plans').select('*').in('id', planIds),
+    supabaseAdmin.from('client_subscription_deliverables').select('*').in('client_subscription_id', csIds).order('sort_order'),
+  ]);
 
-// DELETE /admin/clients/subscriptions/:id (soft delete)
-router.delete('/subscriptions/:id', async (req: Request, res: Response) => {
-  try {
-    const { error } = await supabaseAdmin
-      .from('subscriptions')
-      .update({ is_deleted: true, updated_at: new Date().toISOString() })
-      .eq('id', req.params.id);
+  const subsMap: Record<string, any> = {};
+  (subs || []).forEach((s: any) => { subsMap[s.id] = s; });
+  const plansMap: Record<string, any> = {};
+  (plans || []).forEach((p: any) => { plansMap[p.id] = p; });
+  const delivsByCs: Record<string, any[]> = {};
+  (delivs || []).forEach((d: any) => {
+    (delivsByCs[d.client_subscription_id] = delivsByCs[d.client_subscription_id] || []).push(d);
+  });
 
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
-    res.json({ success: true, message: 'Subscription deleted' });
-  } catch (err) {
-    console.error('Delete subscription error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
+  return {
+    ...client,
+    subscriptions: cs.map((c: any) => ({
+      ...c,
+      subscription: subsMap[c.subscription_id] || null,
+      plan: plansMap[c.plan_id] || null,
+      deliverables: delivsByCs[c.id] || [],
+    })),
+  };
+}
 
 // ============================================================
 // Client Submissions (New Clients)
 // ============================================================
 
-// GET /admin/clients/submissions
 router.get('/submissions', async (_req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin
@@ -135,7 +139,6 @@ router.get('/submissions', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /admin/clients/submissions/count
 router.get('/submissions/count', async (_req: Request, res: Response) => {
   try {
     const { count, error } = await supabaseAdmin
@@ -154,16 +157,15 @@ router.get('/submissions/count', async (_req: Request, res: Response) => {
   }
 });
 
-// POST /admin/clients/submissions/:id/approve — approve & move to clients
+// POST /admin/clients/submissions/:id/approve
 const approveSchema = z.object({
-  subscription_ids: z.array(z.string().uuid()).min(1),
+  plan_ids: z.array(z.string().uuid()).min(1),
 });
 
 router.post('/submissions/:id/approve', async (req: Request, res: Response) => {
   try {
     const body = approveSchema.parse(req.body);
 
-    // Get submission
     const { data: submission, error: subErr } = await supabaseAdmin
       .from('client_submissions')
       .select('*')
@@ -176,7 +178,6 @@ router.post('/submissions/:id/approve', async (req: Request, res: Response) => {
       return;
     }
 
-    // Create client
     const { data: client, error: clientErr } = await supabaseAdmin
       .from('clients')
       .insert({
@@ -190,6 +191,7 @@ router.post('/submissions/:id/approve', async (req: Request, res: Response) => {
         gst_registered: submission.gst_registered,
         gst_number: submission.gst_number,
         accounts_email: submission.accounts_email,
+        country: submission.country || 'India',
       })
       .select()
       .single();
@@ -199,22 +201,12 @@ router.post('/submissions/:id/approve', async (req: Request, res: Response) => {
       return;
     }
 
-    // Assign subscriptions
-    const subInserts = body.subscription_ids.map((sid) => ({
-      client_id: client.id,
-      subscription_id: sid,
-    }));
-
-    const { error: assignErr } = await supabaseAdmin
-      .from('client_subscriptions')
-      .insert(subInserts);
-
+    const { error: assignErr } = await assignPlansToClient(client.id, body.plan_ids);
     if (assignErr) {
-      res.status(500).json({ success: false, error: assignErr.message });
+      res.status(500).json({ success: false, error: assignErr });
       return;
     }
 
-    // Mark submission as approved
     await supabaseAdmin
       .from('client_submissions')
       .update({ status: 'approved' })
@@ -231,7 +223,6 @@ router.post('/submissions/:id/approve', async (req: Request, res: Response) => {
   }
 });
 
-// POST /admin/clients/submissions/:id/reject
 router.post('/submissions/:id/reject', async (req: Request, res: Response) => {
   try {
     const { error } = await supabaseAdmin
@@ -255,34 +246,7 @@ router.post('/submissions/:id/reject', async (req: Request, res: Response) => {
 // Clients Management
 // ============================================================
 
-// Helper: enrich client with subscriptions
-async function enrichClient(client: any) {
-  const { data: cs } = await supabaseAdmin
-    .from('client_subscriptions')
-    .select('*')
-    .eq('client_id', client.id)
-    .order('created_at');
-
-  const subIds = (cs || []).map((c: any) => c.subscription_id);
-  let subsMap: Record<string, any> = {};
-  if (subIds.length > 0) {
-    const { data: subs } = await supabaseAdmin
-      .from('subscriptions')
-      .select('*')
-      .in('id', subIds);
-    (subs || []).forEach((s: any) => { subsMap[s.id] = s; });
-  }
-
-  return {
-    ...client,
-    subscriptions: (cs || []).map((c: any) => ({
-      ...c,
-      subscription: subsMap[c.subscription_id] || null,
-    })),
-  };
-}
-
-// POST /admin/clients — manually create a client (no submission)
+// POST /admin/clients — manually create a client
 const createClientSchema = z.object({
   business_name: z.string().min(1).max(200),
   contact_person: z.string().min(1).max(200),
@@ -293,7 +257,8 @@ const createClientSchema = z.object({
   gst_registered: z.boolean(),
   gst_number: z.string().max(50).optional().or(z.literal('')),
   accounts_email: z.string().email().optional().or(z.literal('')),
-  subscription_ids: z.array(z.string().uuid()).min(1),
+  country: countrySchema,
+  plan_ids: z.array(z.string().uuid()).min(1),
 });
 
 router.post('/', async (req: Request, res: Response) => {
@@ -306,13 +271,14 @@ router.post('/', async (req: Request, res: Response) => {
         submission_id: null,
         business_name: body.business_name,
         contact_person: body.contact_person,
-        designation: body.designation ? body.designation : null,
+        designation: body.designation || null,
         contact_number: body.contact_number,
         email: body.email,
         business_address: body.business_address,
         gst_registered: body.gst_registered,
-        gst_number: body.gst_number ? body.gst_number : null,
-        accounts_email: body.accounts_email ? body.accounts_email : null,
+        gst_number: body.gst_number || null,
+        accounts_email: body.accounts_email || null,
+        country: body.country,
       })
       .select()
       .single();
@@ -322,17 +288,9 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const subInserts = body.subscription_ids.map((sid) => ({
-      client_id: client.id,
-      subscription_id: sid,
-    }));
-
-    const { error: assignErr } = await supabaseAdmin
-      .from('client_subscriptions')
-      .insert(subInserts);
-
+    const { error: assignErr } = await assignPlansToClient(client.id, body.plan_ids);
     if (assignErr) {
-      res.status(500).json({ success: false, error: assignErr.message });
+      res.status(500).json({ success: false, error: assignErr });
       return;
     }
 
@@ -348,7 +306,6 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// GET /admin/clients
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin
@@ -369,7 +326,6 @@ router.get('/', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /admin/clients/count
 router.get('/count', async (_req: Request, res: Response) => {
   try {
     const { count, error } = await supabaseAdmin
@@ -387,7 +343,6 @@ router.get('/count', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /admin/clients/:id
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin
@@ -409,7 +364,6 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /admin/clients/:id — update client info
 const updateClientSchema = z.object({
   business_name: z.string().min(1).max(200).optional(),
   contact_person: z.string().min(1).max(200).optional(),
@@ -420,6 +374,7 @@ const updateClientSchema = z.object({
   gst_registered: z.boolean().optional(),
   gst_number: z.string().max(50).optional(),
   accounts_email: z.string().email().optional().or(z.literal('')),
+  country: countrySchema.optional(),
 });
 
 router.put('/:id', async (req: Request, res: Response) => {
@@ -427,7 +382,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const body = updateClientSchema.parse(req.body);
     const { data, error } = await supabaseAdmin
       .from('clients')
-      .update({ ...body, updated_at: new Date().toISOString() })
+      .update(body)
       .eq('id', req.params.id)
       .select()
       .single();
@@ -447,7 +402,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /admin/clients/:id/status — change client status (pause/cancel/resume/reactivate)
+// PUT /admin/clients/:id/status — change client status
 const statusSchema = z.object({
   status: z.enum(['active', 'paused', 'cancelled']),
 });
@@ -456,10 +411,9 @@ router.put('/:id/status', async (req: Request, res: Response) => {
   try {
     const body = statusSchema.parse(req.body);
 
-    // Update client status
     const { data: client, error } = await supabaseAdmin
       .from('clients')
-      .update({ status: body.status, updated_at: new Date().toISOString() })
+      .update({ status: body.status })
       .eq('id', req.params.id)
       .select()
       .single();
@@ -469,20 +423,18 @@ router.put('/:id/status', async (req: Request, res: Response) => {
       return;
     }
 
-    // If pausing or cancelling, update all active subscriptions too
     if (body.status === 'paused' || body.status === 'cancelled') {
       await supabaseAdmin
         .from('client_subscriptions')
-        .update({ status: body.status, updated_at: new Date().toISOString() })
+        .update({ status: body.status })
         .eq('client_id', req.params.id)
         .eq('status', 'active');
     }
 
-    // If resuming (active from paused), reactivate paused subscriptions
     if (body.status === 'active') {
       await supabaseAdmin
         .from('client_subscriptions')
-        .update({ status: 'active', updated_at: new Date().toISOString() })
+        .update({ status: 'active' })
         .eq('client_id', req.params.id)
         .eq('status', 'paused');
     }
@@ -500,32 +452,22 @@ router.put('/:id/status', async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// Client Subscription Management
+// Client Subscription Management (add/remove plans + status)
 // ============================================================
 
-// POST /admin/clients/:id/subscriptions — add subscriptions
-const addSubsSchema = z.object({
-  subscription_ids: z.array(z.string().uuid()).min(1),
+const addPlansSchema = z.object({
+  plan_ids: z.array(z.string().uuid()).min(1),
 });
 
 router.post('/:id/subscriptions', async (req: Request, res: Response) => {
   try {
-    const body = addSubsSchema.parse(req.body);
-    const inserts = body.subscription_ids.map((sid) => ({
-      client_id: req.params.id,
-      subscription_id: sid,
-    }));
-
-    const { data, error } = await supabaseAdmin
-      .from('client_subscriptions')
-      .insert(inserts)
-      .select();
-
+    const body = addPlansSchema.parse(req.body);
+    const { error } = await assignPlansToClient(req.params.id as string, body.plan_ids);
     if (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error });
       return;
     }
-    res.json({ success: true, data });
+    res.json({ success: true });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
@@ -536,13 +478,12 @@ router.post('/:id/subscriptions', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /admin/clients/:clientId/subscriptions/:csId/status — change individual subscription status
 router.put('/:clientId/subscriptions/:csId/status', async (req: Request, res: Response) => {
   try {
     const body = statusSchema.parse(req.body);
     const { data, error } = await supabaseAdmin
       .from('client_subscriptions')
-      .update({ status: body.status, updated_at: new Date().toISOString() })
+      .update({ status: body.status })
       .eq('id', req.params.csId)
       .eq('client_id', req.params.clientId)
       .select()
@@ -563,7 +504,6 @@ router.put('/:clientId/subscriptions/:csId/status', async (req: Request, res: Re
   }
 });
 
-// DELETE /admin/clients/:clientId/subscriptions/:csId — remove subscription
 router.delete('/:clientId/subscriptions/:csId', async (req: Request, res: Response) => {
   try {
     const { error } = await supabaseAdmin
@@ -579,6 +519,169 @@ router.delete('/:clientId/subscriptions/:csId', async (req: Request, res: Respon
     res.json({ success: true, message: 'Subscription removed' });
   } catch (err) {
     console.error('Remove client subscription error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// Per-client deliverable overrides
+// ============================================================
+
+router.get('/:clientId/subscriptions/:csId/deliverables', async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('client_subscription_deliverables')
+      .select('*')
+      .eq('client_subscription_id', req.params.csId)
+      .order('sort_order');
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('List client deliverables error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+const createDeliverableSchema = z.object({
+  kind: z.enum(['hours', 'item']),
+  deliverable_type_id: z.string().uuid().nullable().optional(),
+  per_day: z.number().min(0).default(0),
+  per_week: z.number().min(0).default(0),
+  per_month: z.number().min(0).default(0),
+}).refine(
+  (v) => (v.kind === 'hours' ? !v.deliverable_type_id : !!v.deliverable_type_id),
+  { message: 'kind=hours requires no deliverable_type_id; kind=item requires one' },
+);
+
+router.post('/:clientId/subscriptions/:csId/deliverables', async (req: Request, res: Response) => {
+  try {
+    const body = createDeliverableSchema.parse(req.body);
+
+    const { data: existing } = await supabaseAdmin
+      .from('client_subscription_deliverables')
+      .select('sort_order')
+      .eq('client_subscription_id', req.params.csId)
+      .order('sort_order', { ascending: false })
+      .limit(1);
+    const nextSort = ((existing?.[0]?.sort_order as number) ?? 0) + 1;
+
+    const { data, error } = await supabaseAdmin
+      .from('client_subscription_deliverables')
+      .insert({
+        client_subscription_id: req.params.csId,
+        kind: body.kind,
+        deliverable_type_id: body.kind === 'item' ? body.deliverable_type_id! : null,
+        per_day: body.per_day,
+        per_week: body.per_week,
+        per_month: body.per_month,
+        sort_order: nextSort,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Create client deliverable error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+const updateDeliverableSchema = z.object({
+  deliverable_type_id: z.string().uuid().nullable().optional(),
+  per_day: z.number().min(0).optional(),
+  per_week: z.number().min(0).optional(),
+  per_month: z.number().min(0).optional(),
+});
+
+router.put('/:clientId/subscriptions/:csId/deliverables/:id', async (req: Request, res: Response) => {
+  try {
+    const body = updateDeliverableSchema.parse(req.body);
+    const { data, error } = await supabaseAdmin
+      .from('client_subscription_deliverables')
+      .update(body)
+      .eq('id', req.params.id)
+      .eq('client_subscription_id', req.params.csId)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Update client deliverable error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+router.delete('/:clientId/subscriptions/:csId/deliverables/:id', async (req: Request, res: Response) => {
+  try {
+    const { error } = await supabaseAdmin
+      .from('client_subscription_deliverables')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('client_subscription_id', req.params.csId);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, message: 'Deliverable removed' });
+  } catch (err) {
+    console.error('Delete client deliverable error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /admin/clients/:clientId/subscriptions/:csId/deliverables/reset
+// Wipes overrides and re-copies the plan's current defaults.
+router.post('/:clientId/subscriptions/:csId/deliverables/reset', async (req: Request, res: Response) => {
+  try {
+    const { data: cs, error: csErr } = await supabaseAdmin
+      .from('client_subscriptions')
+      .select('id, plan_id')
+      .eq('id', req.params.csId)
+      .eq('client_id', req.params.clientId)
+      .single();
+
+    if (csErr || !cs) {
+      res.status(404).json({ success: false, error: 'Client subscription not found' });
+      return;
+    }
+
+    await supabaseAdmin
+      .from('client_subscription_deliverables')
+      .delete()
+      .eq('client_subscription_id', cs.id);
+
+    await copyPlanDeliverables(cs.id, cs.plan_id);
+
+    const { data } = await supabaseAdmin
+      .from('client_subscription_deliverables')
+      .select('*')
+      .eq('client_subscription_id', cs.id)
+      .order('sort_order');
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Reset deliverables error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

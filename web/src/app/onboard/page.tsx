@@ -34,6 +34,7 @@ type FormData = {
   gst_registered: boolean;
   gst_number: string;
   accounts_email: string;
+  country: 'India' | 'International';
 };
 
 const initialForm: FormData = {
@@ -47,6 +48,7 @@ const initialForm: FormData = {
   gst_registered: false,
   gst_number: '',
   accounts_email: '',
+  country: 'India',
 };
 
 export default function OnboardPage() {
@@ -135,6 +137,29 @@ export default function OnboardPage() {
               onChange={(e) => update('business_name', e.target.value)}
               className="input-field"
             />
+          </Field>
+
+          <Field label="Billing Country" required helper="India is billed in INR, everywhere else in USD">
+            <div className="flex gap-6">
+              <label className="flex items-center gap-2 text-sm text-[#222]">
+                <input
+                  type="radio"
+                  name="country"
+                  checked={form.country === 'India'}
+                  onChange={() => update('country', 'India')}
+                />
+                India
+              </label>
+              <label className="flex items-center gap-2 text-sm text-[#222]">
+                <input
+                  type="radio"
+                  name="country"
+                  checked={form.country === 'International'}
+                  onChange={() => update('country', 'International')}
+                />
+                International
+              </label>
+            </div>
           </Field>
 
           <Field label="Contact Person Name" required>

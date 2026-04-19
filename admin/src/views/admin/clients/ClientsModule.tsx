@@ -1,13 +1,19 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
-import type { Client, Subscription, ClientStatus } from '@squadhub/shared';
+import type { Client, Subscription, ClientStatus, ClientCountry } from '@squadhub/shared';
 import SliderPanel from './SliderPanel';
+import { PlanPicker } from './NewClientsModule';
 
 const STATUS_BADGE: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700',
   paused: 'bg-amber-100 text-amber-700',
   cancelled: 'bg-red-100 text-red-700',
+};
+
+const COUNTRY_BADGE: Record<string, string> = {
+  India: 'bg-emerald-50 text-emerald-700',
+  International: 'bg-blue-50 text-blue-700',
 };
 
 const EMPTY_CREATE_FORM = {
@@ -20,6 +26,7 @@ const EMPTY_CREATE_FORM = {
   gst_registered: false,
   gst_number: '',
   accounts_email: '',
+  country: 'India' as ClientCountry,
 };
 
 export default function ClientsModule() {
@@ -29,10 +36,10 @@ export default function ClientsModule() {
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
   const [addSubOpen, setAddSubOpen] = useState(false);
-  const [newSubIds, setNewSubIds] = useState<string[]>([]);
+  const [addPlanIds, setAddPlanIds] = useState<string[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<typeof EMPTY_CREATE_FORM>(EMPTY_CREATE_FORM);
-  const [createSubIds, setCreateSubIds] = useState<string[]>([]);
+  const [createPlanIds, setCreatePlanIds] = useState<string[]>([]);
   const [createError, setCreateError] = useState<string | null>(null);
 
   const { data: clientsRes, isLoading } = useQuery({
@@ -41,11 +48,11 @@ export default function ClientsModule() {
   });
   const clients: Client[] = clientsRes?.data || [];
 
-  const { data: subscriptionsRes } = useQuery({
-    queryKey: ['admin-subscriptions'],
-    queryFn: () => api.get('/admin/clients/subscriptions').then((r) => r.data),
+  const { data: catalogRes } = useQuery({
+    queryKey: ['admin-subs-catalog'],
+    queryFn: () => api.get('/admin/subscriptions').then((r) => r.data),
   });
-  const allSubscriptions: Subscription[] = subscriptionsRes?.data || [];
+  const catalog: Subscription[] = catalogRes?.data || [];
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-clients'] });
@@ -54,10 +61,9 @@ export default function ClientsModule() {
 
   const updateClientMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => api.put(`/admin/clients/${id}`, data),
-    onSuccess: (res) => {
+    onSuccess: () => {
       invalidateAll();
       setEditing(false);
-      // Refresh selected client
       if (selectedClient) refreshClient(selectedClient.id);
     },
   });
@@ -72,14 +78,15 @@ export default function ClientsModule() {
   });
 
   const addSubsMutation = useMutation({
-    mutationFn: ({ clientId, subscription_ids }: { clientId: string; subscription_ids: string[] }) =>
-      api.post(`/admin/clients/${clientId}/subscriptions`, { subscription_ids }),
+    mutationFn: ({ clientId, plan_ids }: { clientId: string; plan_ids: string[] }) =>
+      api.post(`/admin/clients/${clientId}/subscriptions`, { plan_ids }),
     onSuccess: () => {
       invalidateAll();
       setAddSubOpen(false);
-      setNewSubIds([]);
+      setAddPlanIds([]);
       if (selectedClient) refreshClient(selectedClient.id);
     },
+    onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed to add'),
   });
 
   const subStatusMutation = useMutation({
@@ -117,7 +124,7 @@ export default function ClientsModule() {
 
   function openCreate() {
     setCreateForm(EMPTY_CREATE_FORM);
-    setCreateSubIds([]);
+    setCreatePlanIds([]);
     setCreateError(null);
     setCreateOpen(true);
   }
@@ -125,7 +132,7 @@ export default function ClientsModule() {
   function closeCreate() {
     setCreateOpen(false);
     setCreateForm(EMPTY_CREATE_FORM);
-    setCreateSubIds([]);
+    setCreatePlanIds([]);
     setCreateError(null);
   }
 
@@ -134,8 +141,12 @@ export default function ClientsModule() {
     setCreateError(null);
     createClientMutation.mutate({
       ...createForm,
-      subscription_ids: createSubIds,
+      plan_ids: createPlanIds,
     });
+  }
+
+  function togglePlanFor(list: string[], setList: (v: string[]) => void, id: string) {
+    setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   }
 
   async function refreshClient(id: string) {
@@ -147,12 +158,14 @@ export default function ClientsModule() {
     setSelectedClient(client);
     setEditing(false);
     setAddSubOpen(false);
+    setAddPlanIds([]);
   }
 
   function closeSlider() {
     setSelectedClient(null);
     setEditing(false);
     setAddSubOpen(false);
+    setAddPlanIds([]);
   }
 
   function startEdit() {
@@ -167,6 +180,7 @@ export default function ClientsModule() {
       gst_registered: selectedClient.gst_registered,
       gst_number: selectedClient.gst_number || '',
       accounts_email: selectedClient.accounts_email || '',
+      country: selectedClient.country,
     });
     setEditing(true);
   }
@@ -176,9 +190,8 @@ export default function ClientsModule() {
     c.contact_person.toLowerCase().includes(search.toLowerCase())
   );
 
-  const activeSubTotal = selectedClient?.subscriptions
-    ?.filter((cs) => cs.status === 'active')
-    .reduce((sum, cs) => sum + (cs.subscription?.price || 0), 0) || 0;
+  const assignedSubscriptionIds = new Set((selectedClient?.subscriptions || []).map((cs) => cs.subscription_id));
+  const addCatalog = catalog.filter((s) => s.is_active && !assignedSubscriptionIds.has(s.id));
 
   return (
     <div>
@@ -231,6 +244,9 @@ export default function ClientsModule() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${COUNTRY_BADGE[client.country] || 'bg-slate-100 text-slate-500'}`}>
+                  {client.country}
+                </span>
                 <span className="text-xs text-[#90A1B9]">
                   {client.subscriptions?.filter((s) => s.status === 'active').length || 0} active subs
                 </span>
@@ -247,11 +263,15 @@ export default function ClientsModule() {
       <SliderPanel open={!!selectedClient} onClose={closeSlider} title={selectedClient?.business_name || 'Client'} width="w-[560px]">
         {selectedClient && (
           <div className="space-y-6">
-            {/* Status badge & actions */}
             <div className="flex items-center justify-between">
-              <span className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${STATUS_BADGE[selectedClient.status]}`}>
-                {selectedClient.status}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${STATUS_BADGE[selectedClient.status]}`}>
+                  {selectedClient.status}
+                </span>
+                <span className={`rounded-full px-3 py-1 text-xs font-medium ${COUNTRY_BADGE[selectedClient.country]}`}>
+                  {selectedClient.country}
+                </span>
+              </div>
               <div className="flex gap-2">
                 {selectedClient.status === 'active' && (
                   <>
@@ -289,6 +309,7 @@ export default function ClientsModule() {
                   className="space-y-3"
                 >
                   <FormField label="Business Name" value={editForm.business_name} onChange={(v) => setEditForm({ ...editForm, business_name: v })} required />
+                  <CountryField value={editForm.country} onChange={(v) => setEditForm({ ...editForm, country: v })} />
                   <FormField label="Contact Person" value={editForm.contact_person} onChange={(v) => setEditForm({ ...editForm, contact_person: v })} required />
                   <FormField label="Designation" value={editForm.designation} onChange={(v) => setEditForm({ ...editForm, designation: v })} />
                   <FormField label="Contact Number" value={editForm.contact_number} onChange={(v) => setEditForm({ ...editForm, contact_number: v })} required />
@@ -333,127 +354,70 @@ export default function ClientsModule() {
                 </button>
               </div>
 
-              {/* Add subscription multi-select */}
               {addSubOpen && (
-                <div className="mb-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-                  {/* Selected chips */}
-                  {newSubIds.length > 0 && (
-                    <div className="mb-2 flex flex-wrap gap-1.5">
-                      {newSubIds.map((id) => {
-                        const sub = allSubscriptions.find((s) => s.id === id);
-                        return sub ? (
-                          <span key={id} className="inline-flex items-center gap-1 rounded-full bg-[#0F172B] px-2.5 py-1 text-xs text-white">
-                            {sub.name}
-                            <button onClick={() => setNewSubIds((p) => p.filter((s) => s !== id))} className="hover:text-red-300">
-                              <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </span>
-                        ) : null;
-                      })}
-                    </div>
-                  )}
-                  <div className="max-h-48 overflow-y-auto">
-                    {Object.entries(
-                      allSubscriptions
-                        .filter((s) => !selectedClient.subscriptions?.some((cs) => cs.subscription_id === s.id))
-                        .reduce<Record<string, typeof allSubscriptions>>((acc, sub) => {
-                          (acc[sub.squad] = acc[sub.squad] || []).push(sub);
-                          return acc;
-                        }, {})
-                    ).map(([squad, subs]) => (
-                      <div key={squad} className="mb-2">
-                        <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">{squad}</p>
-                        {subs.map((sub) => (
-                          <label key={sub.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-white">
-                            <input
-                              type="checkbox"
-                              checked={newSubIds.includes(sub.id)}
-                              onChange={() => setNewSubIds((p) => p.includes(sub.id) ? p.filter((s) => s !== sub.id) : [...p, sub.id])}
-                              className="rounded border-[#E2E8F0] text-[#2962FF] focus:ring-[#2962FF]"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-[#0F172B]">{sub.name}</p>
-                              <p className="text-xs text-[#90A1B9]">{sub.level} · {sub.plan} · ₹{sub.price.toLocaleString('en-IN')}/mo</p>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
+                <div className="mb-3 space-y-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                  <PlanPicker
+                    catalog={addCatalog}
+                    country={selectedClient.country}
+                    selectedPlanIds={addPlanIds}
+                    onToggle={(id) => togglePlanFor(addPlanIds, setAddPlanIds, id)}
+                  />
                   <button
-                    onClick={() => addSubsMutation.mutate({ clientId: selectedClient.id, subscription_ids: newSubIds })}
-                    disabled={newSubIds.length === 0 || addSubsMutation.isPending}
-                    className="mt-2 w-full rounded-lg bg-[#0F172B] px-3 py-2 text-xs font-medium text-white hover:bg-[#1E293B] disabled:opacity-50"
+                    onClick={() => addSubsMutation.mutate({ clientId: selectedClient.id, plan_ids: addPlanIds })}
+                    disabled={addPlanIds.length === 0 || addSubsMutation.isPending}
+                    className="w-full rounded-md bg-[#0F172B] px-3 py-2 text-xs font-medium text-white hover:bg-[#1E293B] disabled:opacity-50"
                   >
-                    {addSubsMutation.isPending ? 'Adding...' : `Add ${newSubIds.length} Subscription(s)`}
+                    {addSubsMutation.isPending ? 'Adding...' : `Add ${addPlanIds.length} Plan(s)`}
                   </button>
                 </div>
               )}
 
-              {/* Current subscriptions list */}
               {(!selectedClient.subscriptions || selectedClient.subscriptions.length === 0) ? (
                 <p className="py-4 text-center text-xs text-[#90A1B9]">No subscriptions assigned yet.</p>
               ) : (
-                <div className="space-y-4">
-                  {Object.entries(
-                    selectedClient.subscriptions.reduce<Record<string, typeof selectedClient.subscriptions>>((acc, cs) => {
-                      const squad = cs.subscription?.squad || 'Other';
-                      (acc[squad] = acc[squad] || []).push(cs);
-                      return acc;
-                    }, {})
-                  ).map(([squad, items]) => (
-                    <div key={squad}>
-                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">{squad}</p>
-                      <div className="space-y-2">
-                        {items.map((cs) => (
-                          <div
-                            key={cs.id}
-                            className={`rounded-lg border border-[#E2E8F0] bg-white px-4 py-3 ${cs.status === 'cancelled' ? 'opacity-50' : ''}`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="text-sm font-medium text-[#0F172B]">{cs.subscription?.name || 'Unknown'}</p>
-                                <p className="mt-0.5 text-xs text-[#90A1B9]">
-                                  {cs.subscription ? `${cs.subscription.level} · ${cs.subscription.plan} · ₹${cs.subscription.price.toLocaleString('en-IN')}/mo` : ''}
-                                </p>
-                              </div>
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[cs.status]}`}>
-                                {cs.status}
-                              </span>
-                            </div>
-                            <div className="mt-2 flex gap-1.5">
-                              {cs.status === 'active' && (
-                                <>
-                                  <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'paused' })} className="rounded bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100">Pause</button>
-                                  <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'cancelled' })} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
-                                </>
-                              )}
-                              {cs.status === 'paused' && (
-                                <>
-                                  <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'active' })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Resume</button>
-                                  <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'cancelled' })} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
-                                </>
-                              )}
-                              {cs.status === 'cancelled' && (
-                                <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'active' })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Reactivate</button>
-                              )}
-                              <button onClick={() => removeSubMutation.mutate({ clientId: selectedClient.id, csId: cs.id })} className="rounded bg-[#F1F5F9] px-2 py-1 text-[10px] font-medium text-[#62748E] hover:bg-[#E2E8F0]">Remove</button>
-                            </div>
+                <div className="space-y-2">
+                  {selectedClient.subscriptions.map((cs) => {
+                    const price = cs.plan
+                      ? (selectedClient.country === 'India' ? cs.plan.price_inr : cs.plan.price_usd)
+                      : null;
+                    const sym = selectedClient.country === 'India' ? '\u20B9' : '$';
+                    return (
+                      <div
+                        key={cs.id}
+                        className={`rounded-lg border border-[#E2E8F0] bg-white px-4 py-3 ${cs.status === 'cancelled' ? 'opacity-50' : ''}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-[#0F172B]">{cs.subscription?.name || 'Unknown'}</p>
+                            <p className="mt-0.5 text-xs text-[#90A1B9]">
+                              {cs.plan?.plan || '—'} · {price == null ? 'No price set' : `${sym}${price.toLocaleString(selectedClient.country === 'India' ? 'en-IN' : 'en-US')}/mo`}
+                            </p>
                           </div>
-                        ))}
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[cs.status]}`}>
+                            {cs.status}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex gap-1.5">
+                          {cs.status === 'active' && (
+                            <>
+                              <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'paused' })} className="rounded bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100">Pause</button>
+                              <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'cancelled' })} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
+                            </>
+                          )}
+                          {cs.status === 'paused' && (
+                            <>
+                              <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'active' })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Resume</button>
+                              <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'cancelled' })} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
+                            </>
+                          )}
+                          {cs.status === 'cancelled' && (
+                            <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'active' })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Reactivate</button>
+                          )}
+                          <button onClick={() => removeSubMutation.mutate({ clientId: selectedClient.id, csId: cs.id })} className="rounded bg-[#F1F5F9] px-2 py-1 text-[10px] font-medium text-[#62748E] hover:bg-[#E2E8F0]">Remove</button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Monthly total */}
-              {activeSubTotal > 0 && (
-                <div className="mt-3 flex items-center justify-between rounded-lg bg-[#F8FAFC] px-4 py-3">
-                  <span className="text-xs font-medium text-[#62748E]">Monthly Total (Active)</span>
-                  <span className="text-sm font-bold text-[#0F172B]">{'\u20B9'}{activeSubTotal.toLocaleString('en-IN')}/mo</span>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -467,6 +431,7 @@ export default function ClientsModule() {
           <div className="space-y-3">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Business Details</h4>
             <FormField label="Business Name" value={createForm.business_name} onChange={(v) => setCreateForm({ ...createForm, business_name: v })} required />
+            <CountryField value={createForm.country} onChange={(v) => { setCreateForm({ ...createForm, country: v }); setCreatePlanIds([]); }} />
             <FormField label="Contact Person" value={createForm.contact_person} onChange={(v) => setCreateForm({ ...createForm, contact_person: v })} required />
             <FormField label="Designation" value={createForm.designation} onChange={(v) => setCreateForm({ ...createForm, designation: v })} />
             <FormField label="Contact Number" value={createForm.contact_number} onChange={(v) => setCreateForm({ ...createForm, contact_number: v })} required />
@@ -511,61 +476,15 @@ export default function ClientsModule() {
           </div>
 
           <div>
-            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Assign Subscriptions *</h4>
-
-            {createSubIds.length > 0 && (
-              <div className="mb-3 flex flex-wrap gap-1.5">
-                {createSubIds.map((id) => {
-                  const sub = allSubscriptions.find((s) => s.id === id);
-                  return sub ? (
-                    <span key={id} className="inline-flex items-center gap-1 rounded-full bg-[#0F172B] px-2.5 py-1 text-xs text-white">
-                      {sub.name}
-                      <button type="button" onClick={() => setCreateSubIds((p) => p.filter((s) => s !== id))} className="ml-0.5 hover:text-red-300">
-                        <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </span>
-                  ) : null;
-                })}
-              </div>
-            )}
-
-            <div className="max-h-64 overflow-y-auto rounded-lg border border-[#E2E8F0] p-2">
-              {allSubscriptions.length === 0 ? (
-                <p className="py-4 text-center text-xs text-[#90A1B9]">No subscriptions created yet. Create some first.</p>
-              ) : (
-                Object.entries(
-                  allSubscriptions.reduce<Record<string, typeof allSubscriptions>>((acc, sub) => {
-                    (acc[sub.squad] = acc[sub.squad] || []).push(sub);
-                    return acc;
-                  }, {})
-                ).map(([squad, subs]) => (
-                  <div key={squad} className="mb-2">
-                    <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">{squad}</p>
-                    {subs.map((sub) => (
-                      <label
-                        key={sub.id}
-                        className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
-                          createSubIds.includes(sub.id) ? 'bg-blue-50' : 'hover:bg-[#F8FAFC]'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={createSubIds.includes(sub.id)}
-                          onChange={() => setCreateSubIds((p) => p.includes(sub.id) ? p.filter((s) => s !== sub.id) : [...p, sub.id])}
-                          className="rounded border-[#E2E8F0] text-[#2962FF] focus:ring-[#2962FF]"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-[#0F172B]">{sub.name}</p>
-                          <p className="text-xs text-[#90A1B9]">{sub.level} · {sub.plan} · ₹{sub.price.toLocaleString('en-IN')}/mo</p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                ))
-              )}
-            </div>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">
+              Assign Plans ({createForm.country === 'India' ? 'INR' : 'USD'}) *
+            </h4>
+            <PlanPicker
+              catalog={catalog}
+              country={createForm.country}
+              selectedPlanIds={createPlanIds}
+              onToggle={(id) => togglePlanFor(createPlanIds, setCreatePlanIds, id)}
+            />
           </div>
 
           {createError && (
@@ -575,10 +494,10 @@ export default function ClientsModule() {
           <div className="flex gap-2 pt-2">
             <button
               type="submit"
-              disabled={createSubIds.length === 0 || createClientMutation.isPending}
+              disabled={createPlanIds.length === 0 || createClientMutation.isPending}
               className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50"
             >
-              {createClientMutation.isPending ? 'Creating...' : `Create Client (${createSubIds.length} subscriptions)`}
+              {createClientMutation.isPending ? 'Creating...' : `Create Client (${createPlanIds.length} plans)`}
             </button>
             <button
               type="button"
@@ -616,6 +535,34 @@ function FormField({ label, value, onChange, type = 'text', required = false }: 
         required={required}
         className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
       />
+    </div>
+  );
+}
+
+function CountryField({ value, onChange }: { value: ClientCountry; onChange: (v: ClientCountry) => void }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-[#62748E]">Country *</label>
+      <div className="flex gap-4">
+        <label className="flex items-center gap-2 text-sm text-[#0F172B]">
+          <input
+            type="radio"
+            checked={value === 'India'}
+            onChange={() => onChange('India')}
+            className="text-[#2962FF] focus:ring-[#2962FF]"
+          />
+          India (INR pricing)
+        </label>
+        <label className="flex items-center gap-2 text-sm text-[#0F172B]">
+          <input
+            type="radio"
+            checked={value === 'International'}
+            onChange={() => onChange('International')}
+            className="text-[#2962FF] focus:ring-[#2962FF]"
+          />
+          International (USD pricing)
+        </label>
+      </div>
     </div>
   );
 }
