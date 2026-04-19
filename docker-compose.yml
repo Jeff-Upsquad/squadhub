@@ -12,6 +12,10 @@ services:
       - caddy_data:/data
       - caddy_config:/config
       - /var/www/profiles:/srv/profiles:ro
+      - /var/www/attendanceapp:/srv/attendanceapp:ro
+      - /var/www/cashbook-downloads:/srv/cashbook-downloads:ro
+      - /var/www/kia:/srv/kia:ro
+      - /var/www/cashbook-web:/srv/cashbook-web:ro
     dns:
       - 1.1.1.1
       - 8.8.8.8
