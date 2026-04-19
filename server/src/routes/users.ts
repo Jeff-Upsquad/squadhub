@@ -91,11 +91,12 @@ router.get('/me/clients', requireAuth, async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('client_user_access')
-      .select('id, client_id, access_level, created_at, clients:client_id(id, business_name, contact_person, status)')
+      .select('id, client_id, access_level, created_at, clients(id, business_name, contact_person, status)')
       .eq('user_id', req.userId!)
       .order('created_at', { ascending: false });
 
     if (error) {
+      console.error('Get my clients supabase error:', error);
       res.status(500).json({ success: false, error: error.message });
       return;
     }
