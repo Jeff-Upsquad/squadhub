@@ -141,7 +141,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 const updatePlanSchema = z.object({
   is_active: z.boolean().optional(),
-  tier: z.enum(['Junior', 'Pro', 'Elite']).optional(),
+  // tier is immutable: plans exist at all three tiers and are part of the row identity
 });
 
 router.put('/:id/plans/:planId', async (req: Request, res: Response) => {

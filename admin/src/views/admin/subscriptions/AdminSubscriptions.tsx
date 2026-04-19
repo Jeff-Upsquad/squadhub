@@ -434,16 +434,9 @@ function PlanRow({
 
         <div className="w-24 text-sm font-medium text-[#0F172B]">{plan.plan}</div>
 
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-[#90A1B9]">Tier</span>
-          <select
-            value={plan.tier}
-            onChange={(e) => updatePlan.mutate({ tier: e.target.value })}
-            className="rounded-md border border-[#E2E8F0] bg-white px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
-          >
-            {TIERS.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${TIER_COLOR[plan.tier] || TIER_COLOR.Junior}`}>
+          {plan.tier || 'Junior'}
+        </span>
 
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-[#90A1B9]">{pricedCount} price{pricedCount === 1 ? '' : 's'} · {delivs.length} deliverable{delivs.length === 1 ? '' : 's'}</span>
