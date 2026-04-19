@@ -106,7 +106,6 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
   const qc = useQueryClient();
   const [userSearch, setUserSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
-  const [pendingRoleByUser, setPendingRoleByUser] = useState<Record<string, string>>({});
 
   const { data: cur } = useQuery<ClientAccessEntry>({
     queryKey: ['admin-client-access', client.id],
@@ -151,14 +150,6 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
   const addUser = useMutation({
     mutationFn: (body: { user_id: string; role_id: string }) =>
       api.post(`/admin/client-access/${client.id}/users`, body),
-    onSuccess: () => {
-      invalidate();
-      setPendingRoleByUser({});
-    },
-  });
-  const changeRole = useMutation({
-    mutationFn: ({ userId, role_id }: { userId: string; role_id: string | null }) =>
-      api.put(`/admin/client-access/${client.id}/users/${userId}`, { role_id }),
     onSuccess: invalidate,
   });
   const removeUser = useMutation({
@@ -224,7 +215,8 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
                   <p className="py-2 text-xs text-[#90A1B9]">No users found</p>
                 ) : (
                   filteredUsers.slice(0, 20).map((user) => {
-                    const selectedRoleId = pendingRoleByUser[user.id] ?? defaultRoleForUserType(user.user_type);
+                    const roleId = defaultRoleForUserType(user.user_type);
+                    const role = allRoles.find((r) => r.id === roleId);
                     return (
                       <div key={user.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-white">
                         <div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -237,19 +229,18 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
-                          <select
-                            value={selectedRoleId}
-                            onChange={(e) => setPendingRoleByUser((prev) => ({ ...prev, [user.id]: e.target.value }))}
-                            className="rounded border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-medium text-[#62748E] focus:border-[#0F172B] focus:outline-none"
-                          >
-                            <option value="">No role</option>
-                            {allRoles.map((r) => (
-                              <option key={r.id} value={r.id}>{r.name}</option>
-                            ))}
-                          </select>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
+                            {role && (
+                              <span
+                                className="inline-block h-1.5 w-1.5 rounded-full"
+                                style={{ background: role.color }}
+                              />
+                            )}
+                            {role?.name || 'No role'}
+                          </span>
                           <button
                             disabled={addUser.isPending}
-                            onClick={() => addUser.mutate({ user_id: user.id, role_id: selectedRoleId })}
+                            onClick={() => addUser.mutate({ user_id: user.id, role_id: roleId })}
                             className="rounded bg-[#0F172B] px-2 py-1 text-[10px] font-medium text-white hover:bg-[#1E293B] disabled:opacity-50"
                           >
                             Add
@@ -305,28 +296,15 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
                               </div>
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
-                              {ua.role && (
-                                <span
-                                  className="inline-block h-2.5 w-2.5 rounded-full"
-                                  style={{ background: ua.role.color }}
-                                  title={ua.role.name}
-                                />
-                              )}
-                              <select
-                                value={ua.role_id || ''}
-                                onChange={(e) =>
-                                  changeRole.mutate({
-                                    userId: ua.user_id,
-                                    role_id: e.target.value || null,
-                                  })
-                                }
-                                className="rounded border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-medium text-[#62748E] focus:border-[#0F172B] focus:outline-none"
-                              >
-                                <option value="">No role</option>
-                                {allRoles.map((r) => (
-                                  <option key={r.id} value={r.id}>{r.name}</option>
-                                ))}
-                              </select>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
+                                {ua.role && (
+                                  <span
+                                    className="inline-block h-1.5 w-1.5 rounded-full"
+                                    style={{ background: ua.role.color }}
+                                  />
+                                )}
+                                {ua.role?.name || 'No role'}
+                              </span>
                               <button
                                 onClick={() => removeUser.mutate(ua.user_id)}
                                 className="rounded p-1 text-[#90A1B9] transition hover:bg-red-50 hover:text-red-500"
