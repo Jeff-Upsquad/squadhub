@@ -22,60 +22,70 @@ import PartnerDashboard from '../views/app/partner/PartnerDashboard';
 import PartnerCashBook from '../views/app/partner/PartnerCashBook';
 import ClientCashBook from '../views/app/client/ClientCashBook';
 import ClientDesignDashboard from '../views/app/pm/client-design/ClientDesignDashboard';
+import DashboardHome from '../views/app/DashboardHome';
+import InboxView from '../views/app/InboxView';
+import MyTasksView from '../views/app/MyTasksView';
 import { useUserType } from '../hooks/useUserType';
 
-// ---- Types (ORIGINAL) ----
-type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'checkin' | 'checkin-partners' | 'time-management' | 'cashbook';
+// ---- Types ----
+type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'more';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'cashbook';
 
-// ---- Section definitions matching Figma icon bar (72px wide, 38x38 containers, 22x22 icons) ----
-const SECTIONS: { id: ActiveSection; label: string; icon: React.ReactNode }[] = [
-  {
-    id: 'home',
-    label: 'Home',
-    icon: (
-      <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'docs',
-    label: 'Docs',
-    icon: (
-      <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'cal',
-    label: 'Cal',
-    icon: (
-      <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-      </svg>
-    ),
-  },
-  {
-    id: 'apps',
-    label: 'Apps',
-    icon: (
-      <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'more',
-    label: 'More',
-    icon: (
-      <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
-      </svg>
-    ),
-  },
-];
+// ---- Rail icons (stroke-1.6, 18x18) ----
+const ICON = {
+  home: (
+    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1z" />
+    </svg>
+  ),
+  inbox: (
+    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <path d="M3 13V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8" />
+      <path d="M3 13h5l2 3h4l2-3h5v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </svg>
+  ),
+  tasks: (
+    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+    </svg>
+  ),
+  docs: (
+    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <path d="M14 3v6h6M8 13h8M8 17h6" />
+    </svg>
+  ),
+  cal: (
+    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+    </svg>
+  ),
+  apps: (
+    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  ),
+  users: (
+    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <circle cx="9" cy="8" r="4" />
+      <path d="M2 21a7 7 0 0 1 14 0" />
+      <circle cx="17" cy="7" r="3" />
+      <path d="M22 18a5 5 0 0 0-7-4.6" />
+    </svg>
+  ),
+  more: (
+    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <circle cx="5" cy="12" r="1" />
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="19" cy="12" r="1" />
+    </svg>
+  ),
+} as const;
 
 const SECTION_TITLES: Record<ActiveSection, string> = {
   home: 'Home',
@@ -83,8 +93,46 @@ const SECTION_TITLES: Record<ActiveSection, string> = {
   docs: 'Documents',
   teams: 'Teams',
   apps: 'Apps',
+  clients: 'Clients',
   more: 'More',
 };
+
+// Single rail button — used in both nav groups
+function RailBtn({
+  icon,
+  label,
+  active,
+  badge,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  badge?: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      className={`relative grid h-10 w-10 place-items-center rounded-[9px] transition ${
+        active
+          ? 'border border-[var(--sh-hair)] bg-[var(--surface)] text-[var(--sh-ink)]'
+          : 'border border-transparent text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+      }`}
+      style={active ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+    >
+      {icon}
+      {badge != null && badge > 0 && (
+        <span
+          className="absolute top-[3px] right-[3px] grid min-w-[14px] h-[14px] place-items-center rounded-full bg-[var(--sh-ink)] text-[var(--sidebar)] text-[9px] font-semibold px-[3px] leading-none"
+        >
+          {badge}
+        </span>
+      )}
+    </button>
+  );
+}
 
 export default function MainLayout() {
   const { currentWorkspace, activeChannelId, setWorkspace, setChannels, setActiveChannel } = useWorkspaceStore();
@@ -193,92 +241,132 @@ export default function MainLayout() {
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
   return (
-    <div className="flex h-screen bg-[#0F172A] text-foreground">
-      {/* Far-left icon sidebar — Figma: 72px wide, bg #0F172A, gap 4px, top 23px */}
-      <div className="flex w-[72px] shrink-0 flex-col items-start gap-[4px] pt-[23px]">
-        {SECTIONS.map((section) => {
-          const isActive = activeSection === section.id;
-          return (
-            <button
-              key={section.id}
-              onClick={() => setActiveSection(section.id)}
-              className="flex h-[70.5px] w-[72px] flex-col items-center justify-center gap-[4px] py-[6px]"
-              title={SECTION_TITLES[section.id]}
-            >
-              {/* Icon container: 38x38, rounded-[14px] */}
-              <div className={`flex h-[38px] w-[38px] items-center justify-center rounded-[14px] px-[8px] transition ${
-                isActive
-                  ? 'bg-white text-[#0F172A] shadow-[0px_1px_3px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]'
-                  : 'text-[#99A1AF]'
-              }`}>
-                {section.icon}
-              </div>
-              {/* Label: Inter Medium 11px, line-height 16.5px */}
-              <span className={`font-[Inter] text-[11px] font-medium leading-[16.5px] tracking-[0.065px] text-center whitespace-nowrap ${
-                isActive ? 'text-white' : 'text-[#99A1AF]'
-              }`}>
-                {section.label}
-              </span>
-            </button>
-          );
-        })}
+    <div className="flex h-screen bg-[var(--sidebar)] text-foreground">
+      {/* Far-left monochrome rail — 64px wide, inset right shadow, light gray */}
+      <div
+        className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-[var(--sh-hair)] bg-[var(--icon-bar)] px-2 pt-[14px] pb-3 relative z-[1]"
+        style={{ boxShadow: 'var(--sh-rail-inset)' }}
+      >
+        {/* Serif "S" logo */}
+        <div
+          className="mb-[14px] grid h-9 w-9 place-items-center rounded-[10px] bg-[var(--sh-ink)] text-[var(--sidebar)]"
+          style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', fontSize: 22, letterSpacing: '-0.02em', boxShadow: 'var(--sh-shadow-sm)' }}
+          title="SquadHub"
+        >
+          S
+        </div>
 
-        {/* Spacer to push bottom actions down */}
+        {/* Main nav: Home / Inbox / Tasks / Docs / Cal / Apps */}
+        <div className="flex w-full flex-col items-center gap-[2px]">
+          <RailBtn
+            icon={ICON.home}
+            label="Home"
+            active={activeSection === 'home' && homeView === 'hub'}
+            onClick={() => { setActiveSection('home'); setHomeView('hub'); }}
+          />
+          <RailBtn
+            icon={ICON.inbox}
+            label="Inbox"
+            badge={8}
+            active={activeSection === 'home' && homeView === 'inbox'}
+            onClick={() => { setActiveSection('home'); setHomeView('inbox'); }}
+          />
+          <RailBtn
+            icon={ICON.tasks}
+            label="Tasks"
+            active={activeSection === 'home' && homeView === 'my-tasks'}
+            onClick={() => { setActiveSection('home'); setHomeView('my-tasks'); }}
+          />
+          <RailBtn icon={ICON.docs} label="Docs" active={activeSection === 'docs'} onClick={() => setActiveSection('docs')} />
+          <RailBtn icon={ICON.cal}  label="Cal"  active={activeSection === 'cal'}  onClick={() => setActiveSection('cal')} />
+          <RailBtn icon={ICON.apps} label="Apps" active={activeSection === 'apps'} onClick={() => setActiveSection('apps')} />
+        </div>
+
+        {/* Divider */}
+        <div className="h-px w-7 bg-[var(--sh-hair-2)] my-2" />
+
+        {/* Second nav: Clients / More */}
+        <div className="flex w-full flex-col items-center gap-[2px]">
+          <RailBtn icon={ICON.users} label="Clients" active={activeSection === 'clients'} onClick={() => setActiveSection('clients')} />
+          <RailBtn icon={ICON.more}  label="More"    active={activeSection === 'more'}    onClick={() => setActiveSection('more')} />
+        </div>
+
+        {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Settings & Theme toggle */}
-        <div className="flex flex-col items-center gap-[4px] pb-[16px] w-full">
-          <ThemeToggle />
+        {/* Bottom group: theme + logout + avatar */}
+        <div className="flex w-full flex-col items-center gap-[2px]">
+          <div className="grid h-10 w-10 place-items-center">
+            <ThemeToggle />
+          </div>
           <button
             onClick={() => {
               logout();
               pmReset();
             }}
-            className="flex h-[38px] w-[38px] items-center justify-center rounded-[14px] transition hover:bg-white/10"
+            className="grid h-10 w-10 place-items-center rounded-[9px] text-[var(--sh-ink-3)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
             title="Log out"
           >
-            <svg className="h-[22px] w-[22px] text-[#99A1AF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3-3h-9m9 0l-3-3m3 3l-3 3" />
+            <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3-3h-9m9 0l-3-3m3 3l-3 3" />
             </svg>
           </button>
+          <div
+            className="mt-1 grid h-8 w-8 place-items-center rounded-full bg-[var(--sh-ink)] text-[var(--sidebar)] text-[11px] font-semibold relative"
+            style={{ border: '2px solid var(--icon-bar)' }}
+            title={user?.display_name || user?.email || 'Me'}
+          >
+            {(user?.display_name || user?.email || 'ME').split(/[ @]/).slice(0, 2).map((s) => s.charAt(0).toUpperCase()).join('').slice(0, 2) || 'ME'}
+            <span className="absolute -right-[2px] -bottom-[2px] h-[10px] w-[10px] rounded-full bg-[var(--icon-bar)]" style={{ border: '2px solid var(--sh-ink)' }} />
+          </div>
         </div>
       </div>
 
-      {/* Module sidebar + content wrapper with rounded corners */}
+      {/* Module sidebar — always visible, flat edges, drop shadow to the right */}
       {currentWorkspace && (
         <div
-          className={`flex h-full shrink-0 flex-col bg-sidebar rounded-tl-[20px] rounded-bl-[20px] overflow-hidden transition-[width] duration-200 ease-in-out ${
+          className={`flex h-full shrink-0 flex-col overflow-hidden bg-[var(--sidebar)] border-r border-[var(--sh-hair)] relative z-[2] transition-[width] duration-200 ease-in-out ${
             sidebarOpen ? 'w-[280px]' : 'w-0'
           }`}
+          style={{ boxShadow: 'var(--sh-sidebar-drop)' }}
         >
-          {activeSection === 'home' ? (
-            <HomeSidebar
-              workspaceId={currentWorkspace.id}
-              channels={channels}
-              activeChannelId={activeChannelId}
-              homeView={homeView}
-              onChangeView={setHomeView}
-              onSelectChannel={handleSelectChannel}
-              onCreateChannel={() => setShowCreateChannel(true)}
-              onOpenSpaces={handleOpenSpaces}
-            />
-          ) : (
-            <div className="flex flex-col">
-              <div className="border-b border-divider px-4 py-3">
-                <h3 className="text-sm font-semibold text-foreground">{SECTION_TITLES[activeSection]}</h3>
-              </div>
-              <div className="flex flex-1 items-center justify-center px-4 py-12">
-                <p className="text-center text-[10px] uppercase tracking-[0.12em] text-foreground-muted">Coming soon</p>
-              </div>
-            </div>
-          )}
+          <HomeSidebar
+            workspaceId={currentWorkspace.id}
+            channels={channels}
+            activeChannelId={activeChannelId}
+            homeView={homeView}
+            onChangeView={(v) => { setActiveSection('home'); setHomeView(v); }}
+            onSelectChannel={handleSelectChannel}
+            onCreateChannel={() => setShowCreateChannel(true)}
+            onOpenSpaces={handleOpenSpaces}
+          />
         </div>
       )}
 
       {/* Main content area */}
       <div className="flex flex-1 flex-col overflow-hidden bg-surface">
         <ActiveTimer />
-        {activeSection === 'home' ? (
+        {activeSection !== 'home' ? (
+          <div className="sh-view flex flex-1 flex-col items-center justify-center">
+            <div className="mb-4 opacity-20 text-[var(--sh-ink-3)]">{ICON[(activeSection === 'clients' ? 'users' : activeSection) as keyof typeof ICON]}</div>
+            <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', letterSpacing: '-0.01em' }}>{SECTION_TITLES[activeSection]}</h3>
+            <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Coming soon</p>
+          </div>
+        ) : homeView === 'inbox' ? (
+          <InboxView />
+        ) : homeView === 'my-tasks' ? (
+          <MyTasksView />
+        ) : homeView === 'mentions' ? (
+          <div className="sh-view flex flex-1 flex-col items-center justify-center">
+            <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', letterSpacing: '-0.01em' }}>Mentions</h3>
+            <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Coming soon</p>
+          </div>
+        ) : homeView === 'later' ? (
+          <div className="sh-view flex flex-1 flex-col items-center justify-center">
+            <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', letterSpacing: '-0.01em' }}>Later</h3>
+            <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Coming soon</p>
+          </div>
+        ) : (
           homeView === 'chat' ? (
             <>
               {activeChannelId && (
@@ -388,19 +476,8 @@ export default function MainLayout() {
           ) : homeView === 'cashbook' && userType === 'client' ? (
             <ClientCashBook />
           ) : (
-            <div className="flex flex-1 flex-col items-center justify-center text-foreground-dim">
-              <h3 className="font-[family-name:var(--font-display)] text-lg font-medium text-foreground-muted">Welcome to SquadHub</h3>
-              <p className="mt-1 text-sm">Select a channel, space, or module to get started</p>
-            </div>
+            <DashboardHome />
           )
-        ) : (
-          <div className="flex flex-1 flex-col items-center justify-center text-foreground-dim">
-            <div className="mb-4 opacity-20">
-              {(SECTIONS.find((s) => s.id === activeSection) as any)?.icon}
-            </div>
-            <h3 className="font-[family-name:var(--font-display)] text-lg font-medium text-foreground-muted">{SECTION_TITLES[activeSection]}</h3>
-            <p className="mt-1 text-sm">Coming soon</p>
-          </div>
         )}
       </div>
 
