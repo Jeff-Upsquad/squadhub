@@ -28,7 +28,7 @@ router.get('/', async (_req: Request, res: Response) => {
     const clientIds = clients.map((c) => c.id);
     const { data: access } = await supabaseAdmin
       .from('client_user_access')
-      .select('id, client_id, user_id, access_level, created_at')
+      .select('id, client_id, user_id, role_id, created_at')
       .in('client_id', clientIds);
 
     const userIds = Array.from(new Set((access || []).map((a: any) => a.user_id)));
@@ -41,11 +41,22 @@ router.get('/', async (_req: Request, res: Response) => {
       (users || []).forEach((u: any) => { usersMap[u.id] = u; });
     }
 
+    const roleIds = Array.from(new Set((access || []).map((a: any) => a.role_id).filter(Boolean)));
+    const rolesMap: Record<string, any> = {};
+    if (roleIds.length > 0) {
+      const { data: roles } = await supabaseAdmin
+        .from('roles')
+        .select('id, name, color, is_system')
+        .in('id', roleIds);
+      (roles || []).forEach((r: any) => { rolesMap[r.id] = r; });
+    }
+
     const byClient: Record<string, any[]> = {};
     for (const a of access || []) {
       (byClient[a.client_id] = byClient[a.client_id] || []).push({
         ...a,
         user: usersMap[a.user_id] || null,
+        role: a.role_id ? rolesMap[a.role_id] || null : null,
       });
     }
 
@@ -77,7 +88,7 @@ router.get('/:clientId', async (req: Request, res: Response) => {
 
     const { data: access } = await supabaseAdmin
       .from('client_user_access')
-      .select('id, client_id, user_id, access_level, created_at')
+      .select('id, client_id, user_id, role_id, created_at')
       .eq('client_id', client.id);
 
     const userIds = (access || []).map((a: any) => a.user_id);
@@ -90,11 +101,25 @@ router.get('/:clientId', async (req: Request, res: Response) => {
       (users || []).forEach((u: any) => { usersMap[u.id] = u; });
     }
 
+    const roleIds = Array.from(new Set((access || []).map((a: any) => a.role_id).filter(Boolean)));
+    const rolesMap: Record<string, any> = {};
+    if (roleIds.length > 0) {
+      const { data: roles } = await supabaseAdmin
+        .from('roles')
+        .select('id, name, color, is_system')
+        .in('id', roleIds);
+      (roles || []).forEach((r: any) => { rolesMap[r.id] = r; });
+    }
+
     res.json({
       success: true,
       data: {
         ...client,
-        user_access: (access || []).map((a: any) => ({ ...a, user: usersMap[a.user_id] || null })),
+        user_access: (access || []).map((a: any) => ({
+          ...a,
+          user: usersMap[a.user_id] || null,
+          role: a.role_id ? rolesMap[a.role_id] || null : null,
+        })),
       },
     });
   } catch (err) {
@@ -103,22 +128,34 @@ router.get('/:clientId', async (req: Request, res: Response) => {
   }
 });
 
-// POST /admin/client-access/:clientId/users — grant a user access
+// POST /admin/client-access/:clientId/users — grant a user access at a specific role
 const addSchema = z.object({
   user_id: z.string().uuid(),
-  access_level: z.enum(['member', 'admin']).optional(),
+  role_id: z.string().uuid().optional(),
 });
 
 router.post('/:clientId/users', async (req: Request, res: Response) => {
   try {
     const body = addSchema.parse(req.body);
 
+    // Default role if none provided: the seeded 'Client User' role
+    let roleId: string | null = body.role_id || null;
+    if (!roleId) {
+      const { data: defaultRole } = await supabaseAdmin
+        .from('roles')
+        .select('id')
+        .eq('name', 'Client User')
+        .limit(1)
+        .maybeSingle();
+      roleId = defaultRole?.id || null;
+    }
+
     const { data, error } = await supabaseAdmin
       .from('client_user_access')
       .insert({
         client_id: req.params.clientId,
         user_id: body.user_id,
-        access_level: body.access_level || 'member',
+        role_id: roleId,
         created_by: req.userId!,
       })
       .select()
@@ -139,7 +176,17 @@ router.post('/:clientId/users', async (req: Request, res: Response) => {
       .eq('id', body.user_id)
       .single();
 
-    res.status(201).json({ success: true, data: { ...data, user } });
+    let role = null;
+    if (roleId) {
+      const { data: r } = await supabaseAdmin
+        .from('roles')
+        .select('id, name, color, is_system')
+        .eq('id', roleId)
+        .single();
+      role = r;
+    }
+
+    res.status(201).json({ success: true, data: { ...data, user, role } });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
@@ -150,15 +197,15 @@ router.post('/:clientId/users', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /admin/client-access/:clientId/users/:userId — change access level
-const levelSchema = z.object({ access_level: z.enum(['member', 'admin']) });
+// PUT /admin/client-access/:clientId/users/:userId — change role
+const updateSchema = z.object({ role_id: z.string().uuid().nullable() });
 
 router.put('/:clientId/users/:userId', async (req: Request, res: Response) => {
   try {
-    const body = levelSchema.parse(req.body);
+    const body = updateSchema.parse(req.body);
     const { data, error } = await supabaseAdmin
       .from('client_user_access')
-      .update({ access_level: body.access_level })
+      .update({ role_id: body.role_id })
       .eq('client_id', req.params.clientId)
       .eq('user_id', req.params.userId)
       .select()
@@ -173,7 +220,7 @@ router.put('/:clientId/users/:userId', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: err.errors[0].message });
       return;
     }
-    console.error('Update access level error:', err);
+    console.error('Update client role error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

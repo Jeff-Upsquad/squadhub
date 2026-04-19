@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { ClientSpaceTemplate } from '@squadhub/shared';
+import type { ClientSpaceTemplate, AccessLevel, User } from '@squadhub/shared';
+
+type Tab = 'templates' | 'spaces';
 
 interface ClientOption { id: string; business_name: string; status: string }
 interface TemplateInstance {
@@ -13,10 +15,29 @@ interface TemplateInstance {
   created_at: string;
 }
 
+interface ActiveSpace {
+  id: string;
+  name: string;
+  client_id: string;
+  client: { id: string; business_name: string } | null;
+  template: { id: string; name: string; icon: string } | null;
+  space: { id: string; name: string; workspace: { id: string; name: string } | null } | null;
+  member_count: number;
+}
+
+interface FolderMember {
+  id: string;
+  user_id: string;
+  access_level: AccessLevel;
+  user?: User;
+}
+
 export default function AdminClientSpaces() {
   const queryClient = useQueryClient();
+  const [tab, setTab] = useState<Tab>('templates');
   const [selected, setSelected] = useState<ClientSpaceTemplate | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [activeSpace, setActiveSpace] = useState<ActiveSpace | null>(null);
 
   const { data: templates, isLoading } = useQuery<ClientSpaceTemplate[]>({
     queryKey: ['admin-client-spaces'],
@@ -24,6 +45,15 @@ export default function AdminClientSpaces() {
       const res = await api.get('/admin/client-spaces');
       return res.data.data;
     },
+  });
+
+  const { data: activeSpaces, isLoading: loadingSpaces } = useQuery<ActiveSpace[]>({
+    queryKey: ['admin-client-space-instances'],
+    queryFn: async () => {
+      const res = await api.get('/admin/client-spaces/spaces');
+      return res.data.data;
+    },
+    enabled: tab === 'spaces',
   });
 
   const toggleMutation = useMutation({
@@ -36,46 +66,319 @@ export default function AdminClientSpaces() {
 
   return (
     <div>
-      <div className="mb-6 flex items-start justify-between">
+      <div className="mb-4 flex items-start justify-between">
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Client Spaces</h1>
           <p className="mt-1 text-sm text-[#62748E]">
-            Templates users can instantiate as folders under a client (e.g. Design Space)
+            {tab === 'templates'
+              ? 'Templates users can instantiate as folders under a client (e.g. Design Space)'
+              : 'Spaces created from a template — manage who has access to each one'}
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#0F172B] px-3.5 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-[#1E293B]"
-        >
-          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          New Template
-        </button>
+        {tab === 'templates' && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#0F172B] px-3.5 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-[#1E293B]"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            New Template
+          </button>
+        )}
       </div>
 
-      {isLoading ? (
-        <p className="py-8 text-center text-sm text-[#90A1B9]">Loading…</p>
-      ) : !templates || templates.length === 0 ? (
-        <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-          <p className="text-sm text-[#90A1B9]">No client-space templates yet.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {templates.map((t) => (
-            <TemplateRow
-              key={t.id}
-              template={t}
-              onToggle={() => toggleMutation.mutate({ id: t.id, is_enabled: !t.is_enabled })}
-              onShare={() => setSelected(t)}
-            />
-          ))}
-        </div>
-      )}
+      {/* Tabs */}
+      <div className="mb-4 flex gap-1 border-b border-[#E2E8F0]">
+        {(['templates', 'spaces'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`-mb-px border-b-2 px-3 py-2 text-xs font-medium transition ${
+              tab === t
+                ? 'border-[#0F172B] text-[#0F172B]'
+                : 'border-transparent text-[#62748E] hover:text-[#0F172B]'
+            }`}
+          >
+            {t === 'templates' ? 'Templates' : 'Active Spaces'}
+            {t === 'spaces' && activeSpaces && (
+              <span className="ml-1.5 rounded-full bg-[#F1F5F9] px-1.5 py-0.5 text-[10px] text-[#62748E]">
+                {activeSpaces.length}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'templates' &&
+        (isLoading ? (
+          <p className="py-8 text-center text-sm text-[#90A1B9]">Loading…</p>
+        ) : !templates || templates.length === 0 ? (
+          <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
+            <p className="text-sm text-[#90A1B9]">No client-space templates yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {templates.map((t) => (
+              <TemplateRow
+                key={t.id}
+                template={t}
+                onToggle={() => toggleMutation.mutate({ id: t.id, is_enabled: !t.is_enabled })}
+                onShare={() => setSelected(t)}
+              />
+            ))}
+          </div>
+        ))}
+
+      {tab === 'spaces' &&
+        (loadingSpaces ? (
+          <p className="py-8 text-center text-sm text-[#90A1B9]">Loading…</p>
+        ) : !activeSpaces || activeSpaces.length === 0 ? (
+          <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
+            <p className="text-sm text-[#90A1B9]">No active client spaces yet. Share a template with a client to create one.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {activeSpaces.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setActiveSpace(s)}
+                className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 text-left transition hover:shadow-sm"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#9333ea]/10 text-[#9333ea]">
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-[#0F172B]">{s.name}</div>
+                    <div className="mt-0.5 text-[11px] text-[#90A1B9]">
+                      {s.client?.business_name || '—'} · {s.template?.name || '—'} · {s.space?.workspace?.name || '—'} / {s.space?.name || '—'}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-[#62748E]">
+                  <span>
+                    {s.member_count} member{s.member_count !== 1 ? 's' : ''}
+                  </span>
+                  <span className="text-[#0F172B]">→</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        ))}
 
       {selected && <SharingSlider template={selected} onClose={() => setSelected(null)} />}
       {showCreate && <CreateModal onClose={() => setShowCreate(false)} />}
+      {activeSpace && (
+        <SpaceMembersSlider space={activeSpace} onClose={() => setActiveSpace(null)} />
+      )}
     </div>
+  );
+}
+
+// ============================================================
+// Per-folder member management (admin's pool = all workspace members)
+// ============================================================
+const ACCESS_LEVELS: { value: AccessLevel; label: string }[] = [
+  { value: 'viewer', label: 'View only' },
+  { value: 'commenter', label: 'Comment only' },
+  { value: 'member', label: 'Full access' },
+  { value: 'manager', label: 'Manager' },
+];
+
+function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [showAdd, setShowAdd] = useState(false);
+  const [search, setSearch] = useState('');
+  const [pendingLevel, setPendingLevel] = useState<Record<string, AccessLevel>>({});
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const { data: members = [] } = useQuery<FolderMember[]>({
+    queryKey: ['folder-members', space.id],
+    queryFn: async () => {
+      const res = await api.get(`/memberships?resource_type=folder&resource_id=${space.id}`);
+      return res.data.data;
+    },
+  });
+
+  // Workspace member pool — admin can pick anyone in any workspace this space lives under
+  const wsId = space.space?.workspace?.id;
+  const { data: wsMembers = [] } = useQuery<any[]>({
+    queryKey: ['workspace-members-admin', wsId],
+    queryFn: async () => {
+      const res = await api.get(`/workspaces/${wsId}/members`);
+      return res.data.data;
+    },
+    enabled: !!wsId && showAdd,
+  });
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['folder-members', space.id] });
+    qc.invalidateQueries({ queryKey: ['admin-client-space-instances'] });
+  };
+
+  const addMember = useMutation({
+    mutationFn: (body: { user_id: string; access_level: AccessLevel }) =>
+      api.post('/memberships', {
+        resource_type: 'folder',
+        resource_id: space.id,
+        ...body,
+      }),
+    onSuccess: () => { invalidate(); setPendingLevel({}); },
+  });
+
+  const updateMember = useMutation({
+    mutationFn: ({ id, access_level }: { id: string; access_level: AccessLevel }) =>
+      api.put(`/memberships/${id}`, { access_level }),
+    onSuccess: invalidate,
+  });
+
+  const removeMember = useMutation({
+    mutationFn: (id: string) => api.delete(`/memberships/${id}`),
+    onSuccess: invalidate,
+  });
+
+  const memberUserIds = new Set(members.map((m) => m.user_id));
+  const candidatePool = (wsMembers || [])
+    .filter((wm: any) => !memberUserIds.has(wm.user_id))
+    .filter(
+      (wm: any) =>
+        !search ||
+        wm.user?.display_name?.toLowerCase().includes(search.toLowerCase()) ||
+        wm.user?.email?.toLowerCase().includes(search.toLowerCase()),
+    );
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
+      <div className="fixed right-0 top-0 z-50 flex h-full w-[480px] flex-col bg-white shadow-xl">
+        <div className="border-b border-[#E2E8F0] px-5 py-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">{space.name}</h3>
+            <button onClick={onClose} className="rounded p-1 text-[#90A1B9] hover:bg-[#F1F5F9] hover:text-[#0F172B]">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-[#90A1B9]">
+            {space.client?.business_name || '—'} · primarily share with a Squad Manager who can re-invite teammates
+          </p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          {!showAdd ? (
+            <button
+              onClick={() => setShowAdd(true)}
+              className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2 text-xs font-medium text-[#62748E] transition hover:border-[#0F172B] hover:text-[#0F172B]"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add user
+            </button>
+          ) : (
+            <div className="mb-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search workspace members…"
+                className="mb-2 w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs focus:border-[#0F172B] focus:outline-none"
+              />
+              <div className="max-h-56 space-y-1 overflow-y-auto">
+                {candidatePool.length === 0 ? (
+                  <p className="py-2 text-xs text-[#90A1B9]">No matching members.</p>
+                ) : (
+                  candidatePool.slice(0, 20).map((wm: any) => {
+                    const level = pendingLevel[wm.user_id] || 'manager';
+                    return (
+                      <div key={wm.user_id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-white">
+                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
+                            {wm.user?.display_name?.[0]?.toUpperCase() || '?'}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-xs font-medium text-[#0F172B]">{wm.user?.display_name}</div>
+                            <div className="truncate text-[10px] text-[#90A1B9]">{wm.user?.email}</div>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <select
+                            value={level}
+                            onChange={(e) => setPendingLevel((p) => ({ ...p, [wm.user_id]: e.target.value as AccessLevel }))}
+                            className="rounded border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-medium text-[#62748E] focus:border-[#0F172B] focus:outline-none"
+                          >
+                            {ACCESS_LEVELS.map((l) => (
+                              <option key={l.value} value={l.value}>{l.label}</option>
+                            ))}
+                          </select>
+                          <button
+                            disabled={addMember.isPending}
+                            onClick={() => addMember.mutate({ user_id: wm.user_id, access_level: level })}
+                            className="rounded bg-[#0F172B] px-2 py-1 text-[10px] font-medium text-white hover:bg-[#1E293B] disabled:opacity-50"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              <button onClick={() => { setShowAdd(false); setSearch(''); }} className="mt-2 text-[10px] text-[#90A1B9] hover:text-[#0F172B]">
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {members.length === 0 ? (
+            <p className="py-6 text-center text-xs text-[#90A1B9]">Nobody added yet.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {members.map((m) => (
+                <div key={m.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] px-3 py-2.5">
+                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
+                      {m.user?.display_name?.[0]?.toUpperCase() || '?'}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-[#0F172B]">{m.user?.display_name || 'Unknown'}</div>
+                      <div className="truncate text-[10px] text-[#90A1B9]">{m.user?.email || ''}</div>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <select
+                      value={m.access_level}
+                      onChange={(e) => updateMember.mutate({ id: m.id, access_level: e.target.value as AccessLevel })}
+                      className="rounded border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-medium text-[#62748E] focus:border-[#0F172B] focus:outline-none"
+                    >
+                      {ACCESS_LEVELS.map((l) => (
+                        <option key={l.value} value={l.value}>{l.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => removeMember.mutate(m.id)}
+                      className="rounded p-1 text-[#90A1B9] transition hover:bg-red-50 hover:text-red-500"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   );
 }
 

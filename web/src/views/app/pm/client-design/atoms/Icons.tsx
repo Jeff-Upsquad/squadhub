@@ -110,3 +110,11 @@ export const IconKeyboard = (p: IconProps) => (
     <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12" />
   </Base>
 );
+export const IconShare = (p: IconProps) => (
+  <Base {...p}>
+    <circle cx={18} cy={5} r={3} />
+    <circle cx={6} cy={12} r={3} />
+    <circle cx={18} cy={19} r={3} />
+    <path d="M8.59 13.51l6.83 3.98M15.41 6.51L8.59 10.49" />
+  </Base>
+);

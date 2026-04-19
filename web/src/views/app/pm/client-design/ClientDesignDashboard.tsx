@@ -9,7 +9,8 @@ import ReportsTab from './tabs/ReportsTab';
 import CompletedTab from './tabs/CompletedTab';
 import NewRequestModal from './NewRequestModal';
 import RequestDetailDrawer from './RequestDetailDrawer';
-import { IconPlus, IconSearch, IconKeyboard } from './atoms/Icons';
+import SquadShareModal from './SquadShareModal';
+import { IconPlus, IconSearch, IconKeyboard, IconShare } from './atoms/Icons';
 import type { RequestRowData } from './atoms/RequestRow';
 
 type TabKey = 'dashboard' | 'requests' | 'board' | 'reports' | 'completed';
@@ -23,6 +24,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
   });
   const [openRequest, setOpenRequest] = useState<RequestRowData | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   const { folder, requests, byStatus, listByStatus, isLoading } = useFolderTasks(folderId);
   const plan = useClientDesignPlan();
@@ -72,6 +74,17 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
           <IconSearch size={14} />
           <input placeholder="Search requests…" />
         </div>
+        {(folder?.my_access_level === 'manager') && (
+          <button
+            className="cd-topbar-btn"
+            style={{ border: '1px solid var(--cd-br-1)' }}
+            onClick={() => setShowShare(true)}
+            title="Share this space"
+          >
+            <IconShare size={13} />
+            Share
+          </button>
+        )}
         <button className="cd-topbar-btn primary" onClick={() => setShowNew(true)}>
           <IconPlus size={14} />
           New Request
@@ -150,6 +163,13 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
       )}
       {openRequest && (
         <RequestDetailDrawer request={openRequest} onClose={() => setOpenRequest(null)} />
+      )}
+      {showShare && folder && (
+        <SquadShareModal
+          folderId={folder.id}
+          folderName={folder.name}
+          onClose={() => setShowShare(false)}
+        />
       )}
     </div>
   );

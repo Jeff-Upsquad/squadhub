@@ -125,6 +125,86 @@ router.get('/folders/by-client/:clientId', async (req: Request, res: Response) =
   }
 });
 
+// GET /pm/folders/:folderId/squad-pool — users from this folder's client_user_access
+// list, filtered to those NOT already members of the folder. Used by Squad Managers
+// to invite teammates to their assigned space.
+router.get('/folders/:folderId/squad-pool', async (req: Request, res: Response) => {
+  try {
+    const folderId = req.params.folderId as string;
+
+    const userLevel = await checkResourceAccess(req.userId!, 'folder', folderId);
+    if (!userLevel || userLevel !== 'manager') {
+      res.status(403).json({ success: false, error: 'Manager access required' });
+      return;
+    }
+
+    const { data: folder } = await supabaseAdmin
+      .from('folders')
+      .select('client_id')
+      .eq('id', folderId)
+      .single();
+
+    if (!folder?.client_id) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const { data: access } = await supabaseAdmin
+      .from('client_user_access')
+      .select('user_id, role_id')
+      .eq('client_id', folder.client_id);
+
+    const accessUserIds = Array.from(new Set((access || []).map((a: any) => a.user_id)));
+    if (accessUserIds.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    // Folder-level members already added
+    const { data: existing } = await supabaseAdmin
+      .from('resource_memberships')
+      .select('user_id')
+      .eq('resource_type', 'folder')
+      .eq('resource_id', folderId);
+    const existingIds = new Set((existing || []).map((e: any) => e.user_id));
+
+    const candidateIds = accessUserIds.filter((id) => !existingIds.has(id));
+    if (candidateIds.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const { data: users } = await supabaseAdmin
+      .from('users')
+      .select('id, display_name, email, avatar_url, user_type')
+      .in('id', candidateIds);
+
+    const roleIds = Array.from(new Set((access || []).map((a: any) => a.role_id).filter(Boolean)));
+    const rolesMap: Record<string, any> = {};
+    if (roleIds.length > 0) {
+      const { data: roles } = await supabaseAdmin
+        .from('roles')
+        .select('id, name, color')
+        .in('id', roleIds);
+      (roles || []).forEach((r: any) => { rolesMap[r.id] = r; });
+    }
+    const roleByUser = new Map<string, any>();
+    for (const a of access || []) {
+      roleByUser.set(a.user_id, a.role_id ? rolesMap[a.role_id] || null : null);
+    }
+
+    const enriched = (users || []).map((u: any) => ({
+      ...u,
+      client_role: roleByUser.get(u.id) || null,
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    console.error('Get squad pool error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // GET /pm/folders/:id — requires viewer access on folder
 router.get('/folders/:id', async (req: Request, res: Response) => {
   try {

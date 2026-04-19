@@ -37,7 +37,7 @@ router.get('/roles', async (_req: Request, res: Response) => {
   try {
     const { data: roles, error } = await supabaseAdmin
       .from('roles')
-      .select('id, name, color, permissions, is_default, created_at, updated_at')
+      .select('id, name, color, permissions, is_default, is_system, created_at, updated_at')
       .order('created_at', { ascending: true });
 
     if (error) {
@@ -157,15 +157,22 @@ router.delete('/roles/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
 
-    // Check if it's the default role
+    // Check if it's the default or a seeded system role
     const { data: role } = await supabaseAdmin
       .from('roles')
-      .select('is_default')
+      .select('is_default, is_system, name')
       .eq('id', id)
       .single();
 
     if (role?.is_default) {
       res.status(400).json({ success: false, error: 'Cannot delete the default role' });
+      return;
+    }
+    if (role?.is_system) {
+      res.status(400).json({
+        success: false,
+        error: `"${role.name}" is a system role and cannot be deleted`,
+      });
       return;
     }
 

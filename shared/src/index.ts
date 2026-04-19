@@ -253,6 +253,7 @@ export interface Role {
   color: string;
   permissions: RolePermissions;
   is_default: boolean;
+  is_system?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -611,18 +612,23 @@ export interface ClientSpaceTemplateUserAccess {
   user?: User;
 }
 
+/**
+ * @deprecated replaced by role_id in migration 020. Kept as a type
+ * alias so older callers type-check while we finish the rollout.
+ */
 export type ClientAccessLevel = 'member' | 'admin';
 
 export interface ClientUserAccess {
   id: string;
   client_id: string;
   user_id: string;
-  access_level: ClientAccessLevel;
+  role_id: string | null;
   created_by: string;
   created_at: string;
   // Joined
   user?: User;
   client?: Client;
+  role?: Role;
 }
 
 // Note: `Client` interface is defined in the Clients section below.

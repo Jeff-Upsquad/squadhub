@@ -1,7 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
-import type { User } from '@squadhub/shared';
+import type { User, Role } from '@squadhub/shared';
+
+interface ClientUserAccessRow {
+  id: string;
+  user_id: string;
+  role_id: string | null;
+  user: {
+    id: string;
+    display_name: string;
+    email: string;
+    avatar_url: string | null;
+    user_type: string;
+  } | null;
+  role: { id: string; name: string; color: string; is_system?: boolean } | null;
+}
 
 interface ClientAccessEntry {
   id: string;
@@ -9,18 +23,7 @@ interface ClientAccessEntry {
   contact_person: string | null;
   status: string;
   user_access_count: number;
-  user_access: Array<{
-    id: string;
-    user_id: string;
-    access_level: 'member' | 'admin';
-    user: {
-      id: string;
-      display_name: string;
-      email: string;
-      avatar_url: string | null;
-      user_type: string;
-    } | null;
-  }>;
+  user_access: ClientUserAccessRow[];
 }
 
 export default function ClientAccessModule() {
@@ -39,7 +42,7 @@ export default function ClientAccessModule() {
       <div className="mb-6">
         <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Client Access</h1>
         <p className="mt-1 text-sm text-[#62748E]">
-          Share clients with users so they show up under the Clients module
+          Share clients with users so they show up under the Clients module. The role you pick comes from the Roles module.
         </p>
       </div>
 
@@ -103,6 +106,7 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
   const qc = useQueryClient();
   const [userSearch, setUserSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
+  const [pendingRoleByUser, setPendingRoleByUser] = useState<Record<string, string>>({});
 
   const { data: cur } = useQuery<ClientAccessEntry>({
     queryKey: ['admin-client-access', client.id],
@@ -122,19 +126,33 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
     enabled: showAdd,
   });
 
+  const { data: allRoles = [] } = useQuery<Role[]>({
+    queryKey: ['all-roles'],
+    queryFn: async () => {
+      const res = await api.get('/admin/roles');
+      return res.data.data;
+    },
+  });
+
+  // Default role suggestion: Squad Manager (admin "primarily" assigns this)
+  const squadManagerRoleId = (allRoles.find((r) => r.name === 'Squad Manager') || {}).id || '';
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['admin-client-access', client.id] });
     qc.invalidateQueries({ queryKey: ['admin-client-access'] });
   };
 
   const addUser = useMutation({
-    mutationFn: (body: { user_id: string; access_level: 'member' | 'admin' }) =>
+    mutationFn: (body: { user_id: string; role_id: string }) =>
       api.post(`/admin/client-access/${client.id}/users`, body),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      setPendingRoleByUser({});
+    },
   });
-  const changeLevel = useMutation({
-    mutationFn: ({ userId, access_level }: { userId: string; access_level: 'member' | 'admin' }) =>
-      api.put(`/admin/client-access/${client.id}/users/${userId}`, { access_level }),
+  const changeRole = useMutation({
+    mutationFn: ({ userId, role_id }: { userId: string; role_id: string | null }) =>
+      api.put(`/admin/client-access/${client.id}/users/${userId}`, { role_id }),
     onSuccess: invalidate,
   });
   const removeUser = useMutation({
@@ -161,7 +179,7 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed right-0 top-0 z-50 flex h-full w-[440px] flex-col bg-white shadow-xl">
+      <div className="fixed right-0 top-0 z-50 flex h-full w-[480px] flex-col bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-4">
           <div>
             <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">
@@ -195,37 +213,45 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
                 placeholder="Search by name or email…"
                 className="mb-2 w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs focus:border-[#0F172B] focus:outline-none"
               />
-              <div className="max-h-48 space-y-1 overflow-y-auto">
+              <div className="max-h-56 space-y-1 overflow-y-auto">
                 {filteredUsers.length === 0 ? (
                   <p className="py-2 text-xs text-[#90A1B9]">No users found</p>
                 ) : (
-                  filteredUsers.slice(0, 20).map((user) => (
-                    <div key={user.id} className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-white">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
-                          {user.display_name?.[0]?.toUpperCase() || '?'}
+                  filteredUsers.slice(0, 20).map((user) => {
+                    const selectedRoleId = pendingRoleByUser[user.id] || squadManagerRoleId;
+                    return (
+                      <div key={user.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-white">
+                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
+                            {user.display_name?.[0]?.toUpperCase() || '?'}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-xs font-medium text-[#0F172B]">{user.display_name}</div>
+                            <div className="truncate text-[10px] text-[#90A1B9]">{user.email}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-xs font-medium text-[#0F172B]">{user.display_name}</div>
-                          <div className="text-[10px] text-[#90A1B9]">{user.email}</div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <select
+                            value={selectedRoleId}
+                            onChange={(e) => setPendingRoleByUser((prev) => ({ ...prev, [user.id]: e.target.value }))}
+                            className="rounded border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-medium text-[#62748E] focus:border-[#0F172B] focus:outline-none"
+                          >
+                            <option value="">No role</option>
+                            {allRoles.map((r) => (
+                              <option key={r.id} value={r.id}>{r.name}</option>
+                            ))}
+                          </select>
+                          <button
+                            disabled={addUser.isPending}
+                            onClick={() => addUser.mutate({ user_id: user.id, role_id: selectedRoleId })}
+                            className="rounded bg-[#0F172B] px-2 py-1 text-[10px] font-medium text-white hover:bg-[#1E293B] disabled:opacity-50"
+                          >
+                            Add
+                          </button>
                         </div>
                       </div>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => addUser.mutate({ user_id: user.id, access_level: 'member' })}
-                          className="rounded border border-[#E2E8F0] bg-white px-2 py-0.5 text-[10px] text-[#62748E] hover:bg-[#F1F5F9] hover:text-[#0F172B]"
-                        >
-                          Member
-                        </button>
-                        <button
-                          onClick={() => addUser.mutate({ user_id: user.id, access_level: 'admin' })}
-                          className="rounded bg-[#0F172B] px-2 py-0.5 text-[10px] text-white hover:bg-[#1E293B]"
-                        >
-                          Admin
-                        </button>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
               <button onClick={() => { setShowAdd(false); setUserSearch(''); }} className="mt-2 text-[10px] text-[#90A1B9] hover:text-[#0F172B]">
@@ -240,28 +266,37 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
             <div className="space-y-1.5">
               {(cur?.user_access || []).map((ua) => (
                 <div key={ua.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] px-3 py-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
+                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
                       {ua.user?.display_name?.[0]?.toUpperCase() || '?'}
                     </div>
-                    <div>
-                      <div className="text-sm font-medium text-[#0F172B]">{ua.user?.display_name || 'Unknown'}</div>
-                      <div className="text-[10px] text-[#90A1B9]">{ua.user?.email || ''}</div>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-[#0F172B]">{ua.user?.display_name || 'Unknown'}</div>
+                      <div className="truncate text-[10px] text-[#90A1B9]">{ua.user?.email || ''}</div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
+                    {ua.role && (
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full"
+                        style={{ background: ua.role.color }}
+                        title={ua.role.name}
+                      />
+                    )}
                     <select
-                      value={ua.access_level}
+                      value={ua.role_id || ''}
                       onChange={(e) =>
-                        changeLevel.mutate({
+                        changeRole.mutate({
                           userId: ua.user_id,
-                          access_level: e.target.value as 'member' | 'admin',
+                          role_id: e.target.value || null,
                         })
                       }
                       className="rounded border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-medium text-[#62748E] focus:border-[#0F172B] focus:outline-none"
                     >
-                      <option value="member">Member</option>
-                      <option value="admin">Admin</option>
+                      <option value="">No role</option>
+                      {allRoles.map((r) => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
                     </select>
                     <button
                       onClick={() => removeUser.mutate(ua.user_id)}

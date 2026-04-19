@@ -52,6 +52,101 @@ async function enrichTemplate(t: any) {
   };
 }
 
+// GET /admin/client-spaces/spaces — flat list of every instantiated client space
+// (folders with a client_space_template_id). Used by the Active Spaces admin tab.
+router.get('/spaces', async (_req: Request, res: Response) => {
+  try {
+    const { data: folders, error } = await supabaseAdmin
+      .from('folders')
+      .select('id, name, client_id, space_id, client_space_template_id, deleted_at')
+      .not('client_space_template_id', 'is', null);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const list = (folders || []).filter((f: any) => !f.deleted_at);
+
+    const clientIds = Array.from(new Set(list.map((f: any) => f.client_id).filter(Boolean) as string[]));
+    const spaceIds = Array.from(new Set(list.map((f: any) => f.space_id).filter(Boolean) as string[]));
+    const templateIds = Array.from(
+      new Set(list.map((f: any) => f.client_space_template_id).filter(Boolean) as string[]),
+    );
+
+    const clientsMap: Record<string, { id: string; business_name: string }> = {};
+    if (clientIds.length > 0) {
+      const { data: cs } = await supabaseAdmin
+        .from('clients')
+        .select('id, business_name')
+        .in('id', clientIds);
+      (cs || []).forEach((c: any) => { clientsMap[c.id] = c; });
+    }
+
+    const spacesMap: Record<string, { id: string; name: string; workspace_id: string }> = {};
+    if (spaceIds.length > 0) {
+      const { data: ss } = await supabaseAdmin
+        .from('spaces')
+        .select('id, name, workspace_id')
+        .in('id', spaceIds);
+      (ss || []).forEach((s: any) => { spacesMap[s.id] = s; });
+    }
+
+    const wsIds = Array.from(new Set(Object.values(spacesMap).map((s) => s.workspace_id).filter(Boolean)));
+    const wsMap: Record<string, { id: string; name: string }> = {};
+    if (wsIds.length > 0) {
+      const { data: ws } = await supabaseAdmin
+        .from('workspaces')
+        .select('id, name')
+        .in('id', wsIds);
+      (ws || []).forEach((w: any) => { wsMap[w.id] = w; });
+    }
+
+    const templatesMap: Record<string, { id: string; name: string; icon: string }> = {};
+    if (templateIds.length > 0) {
+      const { data: tpls } = await supabaseAdmin
+        .from('client_space_templates')
+        .select('id, name, icon')
+        .in('id', templateIds);
+      (tpls || []).forEach((t: any) => { templatesMap[t.id] = t; });
+    }
+
+    // Member counts via resource_memberships
+    const folderIds = list.map((f: any) => f.id);
+    const memberCount: Record<string, number> = {};
+    if (folderIds.length > 0) {
+      const { data: members } = await supabaseAdmin
+        .from('resource_memberships')
+        .select('resource_id')
+        .eq('resource_type', 'folder')
+        .in('resource_id', folderIds);
+      (members || []).forEach((m: any) => {
+        memberCount[m.resource_id] = (memberCount[m.resource_id] || 0) + 1;
+      });
+    }
+
+    const enriched = list.map((f: any) => {
+      const space = f.space_id ? spacesMap[f.space_id] : null;
+      return {
+        id: f.id,
+        name: f.name,
+        client_id: f.client_id,
+        client: f.client_id ? clientsMap[f.client_id] || null : null,
+        template: f.client_space_template_id ? templatesMap[f.client_space_template_id] || null : null,
+        space: space
+          ? { id: space.id, name: space.name, workspace: wsMap[space.workspace_id] || null }
+          : null,
+        member_count: memberCount[f.id] || 0,
+      };
+    });
+
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    console.error('List client-space instances error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // GET /admin/client-spaces
 router.get('/', async (_req: Request, res: Response) => {
   try {
