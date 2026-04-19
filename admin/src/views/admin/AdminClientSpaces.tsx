@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { ClientSpaceTemplate, AccessLevel, User } from '@squadhub/shared';
+import type { ClientSpaceTemplate, AccessLevel } from '@squadhub/shared';
 
 type Tab = 'templates' | 'spaces';
 
@@ -29,7 +29,16 @@ interface FolderMember {
   id: string;
   user_id: string;
   access_level: AccessLevel;
-  user?: User;
+  user?: { id: string; display_name: string; email: string; avatar_url: string | null };
+}
+
+interface SquadPoolUser {
+  id: string;
+  display_name: string;
+  email: string;
+  avatar_url: string | null;
+  user_type: string;
+  client_role: { id: string; name: string; color: string } | null;
 }
 
 export default function AdminClientSpaces() {
@@ -208,15 +217,16 @@ function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: (
     },
   });
 
-  // Workspace member pool — admin can pick anyone in any workspace this space lives under
-  const wsId = space.space?.workspace?.id;
-  const { data: wsMembers = [] } = useQuery<any[]>({
-    queryKey: ['workspace-members-admin', wsId],
+  // Pool is restricted to users who already have access to this space's client
+  // (from client_user_access). Admin first grants client access in Client Access,
+  // then picks from that pool here.
+  const { data: pool = [] } = useQuery<SquadPoolUser[]>({
+    queryKey: ['folder-squad-pool-admin', space.id],
     queryFn: async () => {
-      const res = await api.get(`/workspaces/${wsId}/members`);
+      const res = await api.get(`/pm/folders/${space.id}/squad-pool`);
       return res.data.data;
     },
-    enabled: !!wsId && showAdd,
+    enabled: showAdd,
   });
 
   const invalidate = () => {
@@ -245,15 +255,13 @@ function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: (
     onSuccess: invalidate,
   });
 
-  const memberUserIds = new Set(members.map((m) => m.user_id));
-  const candidatePool = (wsMembers || [])
-    .filter((wm: any) => !memberUserIds.has(wm.user_id))
-    .filter(
-      (wm: any) =>
-        !search ||
-        wm.user?.display_name?.toLowerCase().includes(search.toLowerCase()) ||
-        wm.user?.email?.toLowerCase().includes(search.toLowerCase()),
-    );
+  // squad-pool already excludes folder members, just apply the search filter
+  const candidatePool = pool.filter(
+    (u) =>
+      !search ||
+      u.display_name.toLowerCase().includes(search.toLowerCase()) ||
+      u.email.toLowerCase().includes(search.toLowerCase()),
+  );
 
   return (
     <>
@@ -269,7 +277,7 @@ function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: (
             </button>
           </div>
           <p className="mt-1 text-xs text-[#90A1B9]">
-            {space.client?.business_name || '—'} · primarily share with a Squad Manager who can re-invite teammates
+            {space.client?.business_name || '—'} · picks from this client's user pool — grant client access first
           </p>
         </div>
 
@@ -289,30 +297,42 @@ function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: (
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search workspace members…"
+                placeholder="Search users with client access…"
                 className="mb-2 w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs focus:border-[#0F172B] focus:outline-none"
               />
               <div className="max-h-56 space-y-1 overflow-y-auto">
                 {candidatePool.length === 0 ? (
-                  <p className="py-2 text-xs text-[#90A1B9]">No matching members.</p>
+                  <p className="py-2 text-xs text-[#90A1B9]">
+                    No users left to add. Grant access to this client in Client Access first.
+                  </p>
                 ) : (
-                  candidatePool.slice(0, 20).map((wm: any) => {
-                    const level = pendingLevel[wm.user_id] || 'manager';
+                  candidatePool.slice(0, 20).map((u) => {
+                    const level = pendingLevel[u.id] || 'manager';
                     return (
-                      <div key={wm.user_id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-white">
+                      <div key={u.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-white">
                         <div className="flex min-w-0 flex-1 items-center gap-2.5">
                           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
-                            {wm.user?.display_name?.[0]?.toUpperCase() || '?'}
+                            {u.display_name?.[0]?.toUpperCase() || '?'}
                           </div>
                           <div className="min-w-0">
-                            <div className="truncate text-xs font-medium text-[#0F172B]">{wm.user?.display_name}</div>
-                            <div className="truncate text-[10px] text-[#90A1B9]">{wm.user?.email}</div>
+                            <div className="truncate text-xs font-medium text-[#0F172B]">
+                              {u.display_name}
+                              {u.client_role && (
+                                <span
+                                  className="ml-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-medium"
+                                  style={{ background: `${u.client_role.color}22`, color: u.client_role.color }}
+                                >
+                                  {u.client_role.name}
+                                </span>
+                              )}
+                            </div>
+                            <div className="truncate text-[10px] text-[#90A1B9]">{u.email}</div>
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
                           <select
                             value={level}
-                            onChange={(e) => setPendingLevel((p) => ({ ...p, [wm.user_id]: e.target.value as AccessLevel }))}
+                            onChange={(e) => setPendingLevel((p) => ({ ...p, [u.id]: e.target.value as AccessLevel }))}
                             className="rounded border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-medium text-[#62748E] focus:border-[#0F172B] focus:outline-none"
                           >
                             {ACCESS_LEVELS.map((l) => (
@@ -321,7 +341,7 @@ function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: (
                           </select>
                           <button
                             disabled={addMember.isPending}
-                            onClick={() => addMember.mutate({ user_id: wm.user_id, access_level: level })}
+                            onClick={() => addMember.mutate({ user_id: u.id, access_level: level })}
                             className="rounded bg-[#0F172B] px-2 py-1 text-[10px] font-medium text-white hover:bg-[#1E293B] disabled:opacity-50"
                           >
                             Add
