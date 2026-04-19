@@ -2,10 +2,18 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../services/api';
 import type { Client, ClientAccessLevel, ClientSpaceTemplate, Folder } from '@squadhub/shared';
 
+export interface MyClientRole {
+  id: string;
+  name: string;
+  color: string;
+  is_system: boolean;
+}
+
 export interface MyClientEntry {
   id: string;
   client_id: string;
-  access_level: ClientAccessLevel;
+  role_id: string | null;
+  role: MyClientRole | null;
   created_at: string;
   client: Client;
 }

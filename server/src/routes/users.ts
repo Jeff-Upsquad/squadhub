@@ -91,7 +91,7 @@ router.get('/me/clients', requireAuth, async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('client_user_access')
-      .select('id, client_id, access_level, created_at, clients(id, business_name, contact_person, status)')
+      .select('id, client_id, role_id, created_at, clients(id, business_name, contact_person, status)')
       .eq('user_id', req.userId!)
       .order('created_at', { ascending: false });
 
@@ -101,12 +101,23 @@ router.get('/me/clients', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
+    const roleIds = Array.from(new Set((data || []).map((a: any) => a.role_id).filter(Boolean)));
+    const rolesMap: Record<string, any> = {};
+    if (roleIds.length > 0) {
+      const { data: roles } = await supabaseAdmin
+        .from('roles')
+        .select('id, name, color, is_system')
+        .in('id', roleIds);
+      (roles || []).forEach((r: any) => { rolesMap[r.id] = r; });
+    }
+
     const enriched = (data || [])
       .filter((a: any) => a.clients) // filter out deleted clients
       .map((a: any) => ({
         id: a.id,
         client_id: a.client_id,
-        access_level: a.access_level,
+        role_id: a.role_id,
+        role: a.role_id ? rolesMap[a.role_id] || null : null,
         created_at: a.created_at,
         client: a.clients,
       }));
