@@ -14,7 +14,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('workspace_members')
-      .select('workspace_id, role, workspaces(*)')
+      .select('workspace_id, role, role_id, workspaces(*), roles:role_id(home_view, system_key, name)')
       .eq('user_id', req.userId!);
 
     if (error) {
@@ -25,6 +25,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
     const workspaces = data.map((m: any) => ({
       ...m.workspaces,
       my_role: m.role,
+      my_home_view: m.roles?.home_view ?? 'user',
     }));
 
     res.json({ success: true, data: workspaces });

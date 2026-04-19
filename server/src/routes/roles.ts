@@ -20,16 +20,20 @@ const permissionsSchema = z.object({
   can_manage_workspace: z.boolean(),
 });
 
+const homeViewSchema = z.enum(['member', 'user', 'guest']);
+
 const createRoleSchema = z.object({
   name: z.string().min(1).max(30),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   permissions: permissionsSchema,
+  home_view: homeViewSchema.optional(),
 });
 
 const updateRoleSchema = z.object({
   name: z.string().min(1).max(30).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   permissions: permissionsSchema.optional(),
+  home_view: homeViewSchema.optional(),
 });
 
 // GET /admin/roles — list all roles with member counts
@@ -37,7 +41,7 @@ router.get('/roles', async (_req: Request, res: Response) => {
   try {
     const { data: roles, error } = await supabaseAdmin
       .from('roles')
-      .select('id, name, color, permissions, is_default, is_system, system_key, created_at, updated_at')
+      .select('id, name, color, permissions, is_default, is_system, system_key, home_view, created_at, updated_at')
       .order('created_at', { ascending: true });
 
     if (error) {
@@ -88,6 +92,7 @@ router.post('/roles', async (req: Request, res: Response) => {
         name: body.name,
         color: body.color,
         permissions: body.permissions,
+        home_view: body.home_view ?? 'user',
       })
       .select()
       .single();
@@ -142,6 +147,7 @@ router.put('/roles/:id', async (req: Request, res: Response) => {
     if (body.name !== undefined) updates.name = body.name;
     if (body.color !== undefined) updates.color = body.color;
     if (body.permissions !== undefined) updates.permissions = body.permissions;
+    if (body.home_view !== undefined) updates.home_view = body.home_view;
 
     const { data, error } = await supabaseAdmin
       .from('roles')

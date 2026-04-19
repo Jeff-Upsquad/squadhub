@@ -1,11 +1,13 @@
 import { create } from 'zustand';
-import type { Workspace, Channel } from '@squadhub/shared';
+import type { Workspace, Channel, RoleHomeView } from '@squadhub/shared';
+
+type WorkspaceWithMembership = Workspace & { my_role?: string; my_home_view?: RoleHomeView };
 
 interface WorkspaceState {
-  currentWorkspace: (Workspace & { my_role?: string }) | null;
+  currentWorkspace: WorkspaceWithMembership | null;
   channels: Channel[];
   activeChannelId: string | null;
-  setWorkspace: (workspace: Workspace & { my_role?: string }) => void;
+  setWorkspace: (workspace: WorkspaceWithMembership) => void;
   setChannels: (channels: Channel[]) => void;
   setActiveChannel: (channelId: string | null) => void;
   reset: () => void;

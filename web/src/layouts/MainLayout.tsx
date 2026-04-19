@@ -6,7 +6,7 @@ const ADMIN_APP_URL = process.env.NEXT_PUBLIC_ADMIN_URL || (process.env.NODE_ENV
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useAuthStore } from '../stores/authStore';
 import { usePMStore } from '../stores/pmStore';
-import type { Workspace, Channel } from '@squadhub/shared';
+import type { Workspace, Channel, RoleHomeView } from '@squadhub/shared';
 import { connectSocket, disconnectSocket } from '../services/socket';
 import ChatPanel from '../views/app/chat/ChatPanel';
 import CreateChannelModal from '../views/app/chat/CreateChannelModal';
@@ -22,7 +22,9 @@ import PartnerDashboard from '../views/app/partner/PartnerDashboard';
 import PartnerCashBook from '../views/app/partner/PartnerCashBook';
 import ClientCashBook from '../views/app/client/ClientCashBook';
 import ClientDesignDashboard from '../views/app/pm/client-design/ClientDesignDashboard';
-import DashboardHome from '../views/app/DashboardHome';
+import MemberHome from '../views/app/home/MemberHome';
+import UserHome from '../views/app/home/UserHome';
+import GuestHome from '../views/app/home/GuestHome';
 import InboxView from '../views/app/InboxView';
 import MyTasksView from '../views/app/MyTasksView';
 import { useUserType } from '../hooks/useUserType';
@@ -136,6 +138,7 @@ function RailBtn({
 
 export default function MainLayout() {
   const { currentWorkspace, activeChannelId, setWorkspace, setChannels, setActiveChannel } = useWorkspaceStore();
+  const myHomeView: RoleHomeView = currentWorkspace?.my_home_view ?? 'user';
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const pmReset = usePMStore((s) => s.reset);
@@ -164,7 +167,7 @@ export default function MainLayout() {
     queryFn: () => api.get('/workspaces').then((r) => r.data),
   });
 
-  const workspaces: (Workspace & { my_role?: string })[] = useMemo(() => workspacesRes?.data || [], [workspacesRes]);
+  const workspaces: (Workspace & { my_role?: string; my_home_view?: RoleHomeView })[] = useMemo(() => workspacesRes?.data || [], [workspacesRes]);
 
   // Auto-select first workspace
   useEffect(() => {
@@ -476,7 +479,9 @@ export default function MainLayout() {
           ) : homeView === 'cashbook' && (userType === 'client' || userType === 'client_staff') ? (
             <ClientCashBook />
           ) : (
-            <DashboardHome />
+            myHomeView === 'member' ? <MemberHome /> :
+            myHomeView === 'guest' ? <GuestHome /> :
+            <UserHome />
           )
         )}
       </div>

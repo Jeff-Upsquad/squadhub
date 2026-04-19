@@ -248,6 +248,7 @@ export interface TaskComment {
 
 // ---- Roles & Permissions ----
 export type SystemRoleKey = 'member' | 'user' | 'guest';
+export type RoleHomeView = 'member' | 'user' | 'guest';
 
 export interface Role {
   id: string;
@@ -257,6 +258,7 @@ export interface Role {
   is_default: boolean;
   is_system?: boolean;
   system_key?: SystemRoleKey | null;
+  home_view: RoleHomeView;
   created_at: string;
   updated_at: string;
 }

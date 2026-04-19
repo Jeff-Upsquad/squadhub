@@ -138,6 +138,7 @@ body {
 .sh-view { font-family: 'Inter', system-ui, sans-serif; color: var(--sh-ink); }
 .sh-view .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--sh-ink-4); font-weight: 500; }
 .sh-view .serif { font-family: 'Instrument Serif', serif; letter-spacing: -0.01em; }
+.sh-view .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
 .sh-view .card { background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 14px; overflow: hidden; }
 .sh-view .card-head { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--sh-hair); }
 .sh-view .card-head h3 { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--sh-ink); }
@@ -145,13 +146,13 @@ body {
 .sh-view .card-head .link:hover { color: var(--sh-ink); }
 
 /* Dashboard */
-.sh-view .dash { max-width: 1180px; margin: 0 auto; padding: 34px 44px 80px; }
-.sh-view .dash-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 28px; border-bottom: 1px solid var(--sh-hair); margin-bottom: 28px; }
-.sh-view .dash-hero .greeting { font-family: 'Instrument Serif', serif; font-size: 52px; line-height: 1; letter-spacing: -0.02em; color: var(--sh-ink); margin: 0; }
+.sh-view .dash { max-width: 1180px; margin: 0 auto; padding: 22px 44px 80px; }
+.sh-view .dash-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 18px; border-bottom: 1px solid var(--sh-hair); margin-bottom: 22px; }
+.sh-view .dash-hero .greeting { font-family: 'Instrument Serif', serif; font-size: 38px; line-height: 1.05; letter-spacing: -0.015em; color: var(--sh-ink); margin: 0; }
 .sh-view .dash-hero .greeting em { font-style: italic; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 6px; text-decoration-color: var(--sh-ink-4); }
-.sh-view .dash-hero .sub { color: var(--sh-ink-3); font-size: 14px; margin-top: 10px; }
+.sh-view .dash-hero .sub { color: var(--sh-ink-3); font-size: 13px; margin-top: 6px; }
 .sh-view .dash-hero .date { text-align: right; color: var(--sh-ink-3); font-size: 12.5px; }
-.sh-view .dash-hero .date .big { font-family: 'Instrument Serif', serif; font-size: 22px; color: var(--sh-ink); display: block; line-height: 1; margin-top: 4px; }
+.sh-view .dash-hero .date .big { font-family: 'Instrument Serif', serif; font-size: 18px; color: var(--sh-ink); display: block; line-height: 1; margin-top: 4px; }
 
 .sh-view .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--sh-hair); border: 1px solid var(--sh-hair); border-radius: 14px; overflow: hidden; margin-bottom: 28px; }
 .sh-view .stat { background: var(--surface); padding: 16px 18px; cursor: pointer; transition: background .14s; }
