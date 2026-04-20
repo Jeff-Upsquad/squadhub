@@ -530,6 +530,14 @@ function DeliverableInlineRow({
   onUpdate: (body: any) => void;
   onDelete: () => void;
 }) {
+  const isLinked = deliverable.source_plan_deliverable_id != null;
+  const isActive = deliverable.is_active !== false;
+
+  const typeName = deliverable.kind === 'hours'
+    ? 'Hours'
+    : (deliverableTypes.find((t) => t.id === deliverable.deliverable_type_id)?.name || 'Unknown type');
+
+  // Custom-row local state for value editing
   const [perDay, setPerDay] = useState(String(deliverable.per_day));
   const [perWeek, setPerWeek] = useState(String(deliverable.per_week));
   const [perMonth, setPerMonth] = useState(String(deliverable.per_month));
@@ -540,11 +548,7 @@ function DeliverableInlineRow({
     setPerMonth(String(deliverable.per_month));
   }, [deliverable.per_day, deliverable.per_week, deliverable.per_month]);
 
-  const typeName = deliverable.kind === 'hours'
-    ? 'Hours'
-    : (deliverableTypes.find((t) => t.id === deliverable.deliverable_type_id)?.name || 'Unknown type');
-
-  function save() {
+  function saveValues() {
     onUpdate({
       per_day: parseFloat(perDay) || 0,
       per_week: parseFloat(perWeek) || 0,
@@ -553,23 +557,59 @@ function DeliverableInlineRow({
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-md bg-[#F8FAFC] px-3 py-1.5">
+    <div className={`flex items-center gap-2 rounded-md bg-[#F8FAFC] px-3 py-1.5 ${isActive ? '' : 'opacity-50'}`}>
       <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
         deliverable.kind === 'hours' ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'
       }`}>
         {deliverable.kind === 'hours' ? 'Hours' : 'Item'}
       </span>
       <span className="text-xs text-[#0F172B]">{typeName}</span>
+      {!isLinked && (
+        <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700">Custom</span>
+      )}
       <div className="ml-auto flex items-center gap-2">
-        <NumInline label="/d" value={perDay} onChange={setPerDay} onBlur={save} compact />
-        <NumInline label="/w" value={perWeek} onChange={setPerWeek} onBlur={save} compact />
-        <NumInline label="/m" value={perMonth} onChange={setPerMonth} onBlur={save} compact />
-        <button onClick={onDelete} className="rounded-md p-1 text-[#90A1B9] hover:bg-red-50 hover:text-red-500">
-          <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
+        {isLinked ? (
+          <>
+            <ReadOnlyValue label="/d" value={deliverable.per_day} />
+            <ReadOnlyValue label="/w" value={deliverable.per_week} />
+            <ReadOnlyValue label="/m" value={deliverable.per_month} />
+          </>
+        ) : (
+          <>
+            <NumInline label="/d" value={perDay} onChange={setPerDay} onBlur={saveValues} compact />
+            <NumInline label="/w" value={perWeek} onChange={setPerWeek} onBlur={saveValues} compact />
+            <NumInline label="/m" value={perMonth} onChange={setPerMonth} onBlur={saveValues} compact />
+          </>
+        )}
+        <button
+          onClick={() => onUpdate({ is_active: !isActive })}
+          className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+            isActive
+              ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+          }`}
+        >
+          {isActive ? 'Active' : 'Inactive'}
         </button>
+        {!isLinked && (
+          <button onClick={onDelete} className="rounded-md p-1 text-[#90A1B9] hover:bg-red-50 hover:text-red-500" aria-label="Delete custom deliverable">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        )}
       </div>
+    </div>
+  );
+}
+
+function ReadOnlyValue({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="min-w-[2.5rem] rounded-md border border-transparent bg-white px-2 py-0.5 text-right text-xs text-[#475569]">
+        {value}
+      </span>
+      <span className="text-[10px] text-[#90A1B9]">{label}</span>
     </div>
   );
 }

@@ -834,6 +834,7 @@ export interface ClientSubscriptionDeliverable {
   per_week: number;
   per_month: number;
   sort_order: number;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
   // Joined

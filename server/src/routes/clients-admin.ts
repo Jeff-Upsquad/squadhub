@@ -623,15 +623,45 @@ const updateDeliverableSchema = z.object({
   per_day: z.number().min(0).optional(),
   per_week: z.number().min(0).optional(),
   per_month: z.number().min(0).optional(),
+  is_active: z.boolean().optional(),
 });
 
 router.put('/:clientId/subscriptions/:csId/deliverables/:id', async (req: Request, res: Response) => {
   try {
     const body = updateDeliverableSchema.parse(req.body);
-    // Editing the row untethers it from the plan — it's now a customization.
+
+    // Linked rows (source_plan_deliverable_id set) follow the plan — only is_active is editable here.
+    const { data: existing, error: fetchErr } = await supabaseAdmin
+      .from('client_subscription_deliverables')
+      .select('source_plan_deliverable_id')
+      .eq('id', req.params.id)
+      .eq('client_subscription_id', req.params.csId)
+      .single();
+
+    if (fetchErr || !existing) {
+      res.status(404).json({ success: false, error: 'Deliverable not found' });
+      return;
+    }
+
+    const patch: Record<string, any> = {};
+    if (body.is_active !== undefined) patch.is_active = body.is_active;
+
+    if (existing.source_plan_deliverable_id == null) {
+      // Custom row: values are editable too
+      if (body.deliverable_type_id !== undefined) patch.deliverable_type_id = body.deliverable_type_id;
+      if (body.per_day !== undefined) patch.per_day = body.per_day;
+      if (body.per_week !== undefined) patch.per_week = body.per_week;
+      if (body.per_month !== undefined) patch.per_month = body.per_month;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      res.json({ success: true, data: null });
+      return;
+    }
+
     const { data, error } = await supabaseAdmin
       .from('client_subscription_deliverables')
-      .update({ ...body, source_plan_deliverable_id: null })
+      .update(patch)
       .eq('id', req.params.id)
       .eq('client_subscription_id', req.params.csId)
       .select()
