@@ -9,7 +9,6 @@ import type {
   SubscriptionPlanRow,
   SubscriptionDeliverableType,
   SubscriptionPlanDeliverable,
-  SubscriptionPlanPricing,
   SubscriptionTier,
   DeliverableKind,
   Country,
@@ -327,6 +326,16 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
   });
 
   const activeCountries = countries.filter((c) => c.is_active);
+  const [selectedCountryId, setSelectedCountryId] = useState<string>('');
+
+  useEffect(() => {
+    if (!selectedCountryId && activeCountries.length > 0) {
+      const india = activeCountries.find((c) => c.name === 'India');
+      setSelectedCountryId((india || activeCountries[0]).id);
+    }
+  }, [activeCountries, selectedCountryId]);
+
+  const selectedCountry = activeCountries.find((c) => c.id === selectedCountryId) || null;
 
   return (
     <div className="space-y-6">
@@ -357,7 +366,22 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
 
       {/* Plans, grouped by tier */}
       <section>
-        <h2 className="mb-3 font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">Plans</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">Plans</h2>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-[#62748E]">Pricing for</label>
+            <select
+              value={selectedCountryId}
+              onChange={(e) => setSelectedCountryId(e.target.value)}
+              className="rounded-md border border-[#E2E8F0] bg-white px-2 py-1 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+            >
+              {activeCountries.length === 0 && <option value="">No active countries</option>}
+              {activeCountries.map((c) => (
+                <option key={c.id} value={c.id}>{c.name} ({c.currency})</option>
+              ))}
+            </select>
+          </div>
+        </div>
         <div className="space-y-4">
           {TIERS.map((tier) => (
             <div key={tier}>
@@ -368,7 +392,7 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
               <div className="space-y-2">
                 {plansByTier[tier].length === 0 ? (
                   <p className="rounded-lg border border-dashed border-[#CBD5E1] bg-white px-4 py-3 text-xs text-[#90A1B9]">
-                    No plans assigned to {tier} tier. Move a plan into this tier below.
+                    No plans at {tier} tier yet. Run migration 027 to seed them.
                   </p>
                 ) : plansByTier[tier].map((p) => (
                   <PlanRow
@@ -376,7 +400,7 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
                     subscriptionId={subscription.id}
                     plan={p}
                     deliverableTypes={subscription.deliverable_types || []}
-                    countries={activeCountries}
+                    selectedCountry={selectedCountry}
                   />
                 ))}
               </div>
@@ -395,16 +419,16 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
 }
 
 // ============================================================
-// Plan Row: tier picker + per-country pricing + expand to deliverables
+// Plan Row: tier tag + inline price input for the selected country
 // ============================================================
 
 function PlanRow({
-  subscriptionId, plan, deliverableTypes, countries,
+  subscriptionId, plan, deliverableTypes, selectedCountry,
 }: {
   subscriptionId: string;
   plan: SubscriptionPlanRow;
   deliverableTypes: SubscriptionDeliverableType[];
-  countries: Country[];
+  selectedCountry: Country | null;
 }) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
@@ -417,7 +441,9 @@ function PlanRow({
 
   const delivs = plan.deliverables || [];
   const pricing = plan.pricing || [];
-  const pricedCount = pricing.length;
+  const currentPriceRow = selectedCountry
+    ? pricing.find((p) => p.country_id === selectedCountry.id) || null
+    : null;
 
   return (
     <div className={`rounded-lg border border-[#E2E8F0] bg-white ${plan.is_active ? '' : 'opacity-60'}`}>
@@ -438,8 +464,14 @@ function PlanRow({
           {plan.tier || 'Junior'}
         </span>
 
+        <InlinePriceInput
+          planId={plan.id}
+          country={selectedCountry}
+          current={currentPriceRow?.price ?? null}
+        />
+
         <div className="ml-auto flex items-center gap-3">
-          <span className="text-xs text-[#90A1B9]">{pricedCount} price{pricedCount === 1 ? '' : 's'} · {delivs.length} deliverable{delivs.length === 1 ? '' : 's'}</span>
+          <span className="text-xs text-[#90A1B9]">{delivs.length} deliverable{delivs.length === 1 ? '' : 's'}</span>
           <button
             onClick={() => updatePlan.mutate({ is_active: !plan.is_active })}
             className={`rounded-md px-3 py-1 text-xs font-medium ${
@@ -454,20 +486,14 @@ function PlanRow({
       </div>
 
       {expanded && (
-        <div className="space-y-4 border-t border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3">
-          <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#90A1B9]">Pricing per country</p>
-            <PlanPricingEditor planId={plan.id} pricing={pricing} countries={countries} />
-          </div>
-          <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#90A1B9]">Default deliverables</p>
-            <PlanDeliverablesEditor
-              subscriptionId={subscriptionId}
-              planId={plan.id}
-              deliverables={delivs}
-              deliverableTypes={deliverableTypes.filter((t) => t.is_active)}
-            />
-          </div>
+        <div className="space-y-2 border-t border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#90A1B9]">Default deliverables</p>
+          <PlanDeliverablesEditor
+            subscriptionId={subscriptionId}
+            planId={plan.id}
+            deliverables={delivs}
+            deliverableTypes={deliverableTypes.filter((t) => t.is_active)}
+          />
         </div>
       )}
     </div>
@@ -475,81 +501,49 @@ function PlanRow({
 }
 
 // ============================================================
-// Plan Pricing Editor (per country)
+// Inline Price Input — one number per plan, for the selected country
 // ============================================================
 
-function PlanPricingEditor({
-  planId, pricing, countries,
+function InlinePriceInput({
+  planId, country, current,
 }: {
   planId: string;
-  pricing: SubscriptionPlanPricing[];
-  countries: Country[];
+  country: Country | null;
+  current: number | null;
 }) {
   const queryClient = useQueryClient();
+  const [value, setValue] = useState<string>(current == null ? '' : String(current));
+
+  useEffect(() => setValue(current == null ? '' : String(current)), [current, country?.id]);
 
   const upsertPrice = useMutation({
-    mutationFn: (body: { country_id: string; price: number }) => api.post(`/admin/subscriptions/plans/${planId}/pricing`, body),
+    mutationFn: (body: { country_id: string; price: number }) =>
+      api.post(`/admin/subscriptions/plans/${planId}/pricing`, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-subs-catalog'] }),
     onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed'),
   });
 
   const deletePrice = useMutation({
-    mutationFn: (countryId: string) => api.delete(`/admin/subscriptions/plans/${planId}/pricing/${countryId}`),
+    mutationFn: (countryId: string) =>
+      api.delete(`/admin/subscriptions/plans/${planId}/pricing/${countryId}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-subs-catalog'] }),
   });
 
-  const priceByCountry = new Map<string, SubscriptionPlanPricing>();
-  pricing.forEach((p) => priceByCountry.set(p.country_id, p));
-
-  return (
-    <div className="rounded-md border border-[#E2E8F0] bg-white">
-      <div className="divide-y divide-[#F1F5F9]">
-        {countries.map((c) => {
-          const existing = priceByCountry.get(c.id);
-          return (
-            <PriceRow
-              key={c.id}
-              country={c}
-              current={existing?.price ?? null}
-              onSave={(price) => upsertPrice.mutate({ country_id: c.id, price })}
-              onClear={() => existing && deletePrice.mutate(c.id)}
-              hasExisting={!!existing}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function PriceRow({
-  country, current, onSave, onClear, hasExisting,
-}: {
-  country: Country;
-  current: number | null;
-  onSave: (price: number) => void;
-  onClear: () => void;
-  hasExisting: boolean;
-}) {
-  const [value, setValue] = useState<string>(current == null ? '' : String(current));
-
-  useEffect(() => setValue(current == null ? '' : String(current)), [current]);
-
   function commit() {
+    if (!country) return;
     if (value.trim() === '') {
-      if (hasExisting) onClear();
+      if (current != null) deletePrice.mutate(country.id);
       return;
     }
     const n = parseInt(value, 10);
     if (isNaN(n) || n < 0) return;
     if (current === n) return;
-    onSave(n);
+    upsertPrice.mutate({ country_id: country.id, price: n });
   }
 
   return (
-    <div className="flex items-center gap-3 px-3 py-1.5">
-      <span className="w-40 text-xs text-[#0F172B]">{country.name}</span>
-      <span className="text-[11px] text-[#90A1B9]">{currencySymbol(country.currency)}</span>
+    <div className="flex items-center gap-1.5">
+      <span className="text-[11px] text-[#90A1B9]">{currencySymbol(country?.currency)}</span>
       <input
         type="number"
         min={0}
@@ -557,20 +551,10 @@ function PriceRow({
         onChange={(e) => setValue(e.target.value)}
         onBlur={commit}
         placeholder="—"
-        className="w-28 rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+        disabled={!country}
+        className="w-24 rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none disabled:cursor-not-allowed disabled:bg-[#F8FAFC]"
       />
       <span className="text-[10px] text-[#CBD5E1]">/ mo</span>
-      {hasExisting && (
-        <button
-          onClick={onClear}
-          className="ml-auto rounded-md p-1 text-[#90A1B9] hover:bg-red-50 hover:text-red-500"
-          aria-label="Clear price"
-        >
-          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      )}
     </div>
   );
 }
