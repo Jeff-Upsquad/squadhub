@@ -66,10 +66,10 @@ export default function ListPage() {
     return (
       <div className="flex flex-1 items-center justify-center">
         <div className="text-center">
-          <svg className="mx-auto mb-3 h-12 w-12 text-[#CAD5E2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="mx-auto mb-3 h-12 w-12 text-[var(--sh-ink-4)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
-          <p className="text-sm text-[#999999]">Select a list to view tasks</p>
+          <p className="text-sm text-[var(--sh-ink-3)]">Select a list to view tasks</p>
         </div>
       </div>
     );
@@ -78,15 +78,15 @@ export default function ListPage() {
   return (
     <div className="flex flex-1 flex-col">
       {/* View Tabs Bar */}
-      <div className="flex items-center justify-between border-b border-[#E2E8F0] bg-white px-4">
+      <div className="flex items-center justify-between border-b border-[var(--sh-hair)] bg-[var(--surface)] px-4">
         {/* Left: tabs */}
         <div className="flex items-center gap-0">
           <button
             onClick={() => setViewMode('list')}
             className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium transition ${
               viewMode === 'list'
-                ? 'border-[#2962FF] text-[#0F172B]'
-                : 'border-transparent text-[#999999] hover:text-[#666666]'
+                ? 'border-[var(--sh-ink)] text-[var(--sh-ink)]'
+                : 'border-transparent text-[var(--sh-ink-3)] hover:text-[var(--sh-ink-2)]'
             }`}
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -99,8 +99,8 @@ export default function ListPage() {
             onClick={() => setViewMode('board')}
             className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium transition ${
               viewMode === 'board'
-                ? 'border-[#2962FF] text-[#0F172B]'
-                : 'border-transparent text-[#999999] hover:text-[#666666]'
+                ? 'border-[var(--sh-ink)] text-[var(--sh-ink)]'
+                : 'border-transparent text-[var(--sh-ink-3)] hover:text-[var(--sh-ink-2)]'
             }`}
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -113,15 +113,15 @@ export default function ListPage() {
         {/* Right: actions */}
         <div className="flex items-center gap-2">
           {/* Search input */}
-          <div className="flex items-center gap-1.5 rounded border border-[#E2E8F0] bg-white px-2.5 py-1">
-            <svg className="h-3.5 w-3.5 text-[#CAD5E2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex items-center gap-1.5 rounded border border-[var(--sh-hair)] bg-[var(--surface)] px-2.5 py-1">
+            <svg className="h-3.5 w-3.5 text-[var(--sh-ink-4)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search tasks..."
-              className="w-32 bg-transparent text-xs text-[#0F172B] placeholder-[#CAD5E2] outline-none"
+              className="w-32 bg-transparent text-xs text-[var(--sh-ink)] placeholder-[var(--sh-ink-4)] outline-none"
             />
           </div>
 
@@ -129,7 +129,7 @@ export default function ListPage() {
           {isManager && (
             <button
               onClick={() => setShowShare(true)}
-              className="rounded p-1.5 text-[#999999] transition hover:bg-[#F1F5F9] hover:text-[#0F172B]"
+              className="rounded p-1.5 text-[var(--sh-ink-3)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
               title="Share list"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -144,8 +144,8 @@ export default function ListPage() {
               onClick={() => setShowSettings(!showSettings)}
               className={`rounded p-1.5 transition ${
                 showSettings
-                  ? 'bg-[#F1F5F9] text-[#0F172B]'
-                  : 'text-[#999999] hover:bg-[#F1F5F9] hover:text-[#0F172B]'
+                  ? 'bg-[var(--sh-hair-3)] text-[var(--sh-ink)]'
+                  : 'text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
               }`}
               title="List settings"
             >
@@ -173,19 +173,21 @@ export default function ListPage() {
                 onBlur={() => {
                   if (!newTaskTitle.trim()) { setAddingTask(false); setNewTaskTitle(''); }
                 }}
-                placeholder="Task name..."
-                className="w-44 rounded-md border border-[#2962FF] bg-white px-2.5 py-1.5 text-xs text-[#0F172B] placeholder-[#999999] outline-none focus:ring-1 focus:ring-[#2962FF]"
+                placeholder="Task name…"
+                className="w-48 rounded-full border bg-transparent px-3.5 py-1.5 text-xs outline-none"
+                style={{ borderColor: 'var(--sh-ink)', color: 'var(--sh-ink)' }}
               />
             </div>
           ) : canEdit ? (
             <button
               onClick={() => setAddingTask(true)}
-              className="flex items-center gap-1.5 rounded-md bg-[#2962FF] px-3.5 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-[#1E50E0]"
+              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition"
+              style={{ background: 'var(--sh-ink)', color: 'var(--surface)' }}
             >
-              Add Task
-              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24">
+                <path d="M12 5v14M5 12h14" />
               </svg>
+              New task
             </button>
           ) : null}
         </div>

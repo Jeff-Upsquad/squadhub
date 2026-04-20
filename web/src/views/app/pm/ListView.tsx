@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { SpaceStatus, Task } from '@squadhub/shared';
-import { useTasks, useUpdateTask, groupTasksByStatus } from '../../../hooks/useTasks';
+import { useTasks, useUpdateTask, useCreateTask, groupTasksByStatus } from '../../../hooks/useTasks';
 import { usePMStore } from '../../../stores/pmStore';
 import TaskRow from './TaskRow';
 
@@ -31,7 +31,7 @@ export default function ListView({
       return groupTasksByStatus(allTasks, statuses);
     }
     return [{
-      status: { id: 'all', name: 'All Tasks', color: '#6b7280', position: 0, space_id: '', is_default: false, category: 'active' as const },
+      status: { id: 'all', name: 'All tasks', color: '#6b7280', position: 0, space_id: '', is_default: false, category: 'active' as const },
       tasks: allTasks,
     }];
   }, [tasks, statuses, groupByStatus, searchQuery]);
@@ -43,28 +43,22 @@ export default function ListView({
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-[#999999]">Loading tasks...</p>
+        <p className="text-sm text-[color:var(--sh-ink-3)]">Loading tasks…</p>
       </div>
     );
   }
 
+  const totalVisible = groups.reduce((n, g) => n + g.tasks.length, 0);
+
   return (
     <div className="relative flex flex-1 flex-col overflow-auto">
-      <div className="min-w-fit">
-        {/* Column headers */}
-        <div className="sticky top-0 z-20 flex items-center border-b border-[#E2E8F0] bg-[#FAFBFC] px-4 py-2 text-[11px] font-semibold text-[#999999]">
-          <div className="w-8 shrink-0" />
-          <div className="min-w-[120px] flex-1">Name task</div>
-          <div className="w-36 shrink-0 px-2">Assignee</div>
-          <div className="w-28 shrink-0 text-center">Start date</div>
-          <div className="w-28 shrink-0 text-center">Due date</div>
-          <div className="w-24 shrink-0 text-center">People</div>
-          <div className="w-28 shrink-0 text-center">Priority</div>
-        </div>
-
-        {/* Status groups */}
-        <div className="flex-1">
-          {groups.map(({ status, tasks: groupTasks }) => (
+      <div className="lv-wrap">
+        {totalVisible === 0 ? (
+          <div className="lv-empty">
+            {searchQuery ? `No tasks match “${searchQuery}”.` : 'No tasks yet. Press + to add one.'}
+          </div>
+        ) : (
+          groups.map(({ status, tasks: groupTasks }) => (
             <StatusGroup
               key={status.id}
               status={status}
@@ -76,56 +70,47 @@ export default function ListView({
               onDrop={handleStatusChange}
               canEdit={canEdit}
             />
-          ))}
-        </div>
+          ))
+        )}
+
+        {/* Bulk action bar — floating pill */}
+        {canEdit && selectedTasks.length > 0 && (
+          <div className="lv-bulk-bar">
+            <span className="count">{selectedTasks.length} SELECTED</span>
+            <button className="lv-bulk-btn" onClick={(e) => e.stopPropagation()}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5" />
+                <path d="M18.586 2.586a2 2 0 112.828 2.828L12 15l-4 1 1-4 9.586-9.414z" />
+              </svg>
+              Rename
+            </button>
+            <button className="lv-bulk-btn" onClick={(e) => e.stopPropagation()}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <rect x="9" y="9" width="11" height="11" rx="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+              </svg>
+              Duplicate
+            </button>
+            <button className="lv-bulk-btn" onClick={(e) => e.stopPropagation()}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M5 12h14M13 5l7 7-7 7" />
+              </svg>
+              Move
+            </button>
+            <button className="lv-bulk-btn danger" onClick={(e) => { e.stopPropagation(); clearSelection(); }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+              </svg>
+              Delete
+            </button>
+            <button className="lv-bulk-btn" onClick={clearSelection} aria-label="Clear selection">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
-
-      {/* Selection action bar */}
-      {canEdit && selectedTasks.length > 0 && (
-        <div className="sticky bottom-0 z-30 flex items-center justify-center gap-3 border-t border-[#E2E8F0] bg-white px-4 py-2.5 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
-          <span className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-medium text-white">
-            {selectedTasks.length} Selected
-          </span>
-
-          <button className="flex items-center gap-1.5 rounded px-3 py-1.5 text-xs text-[#666666] hover:bg-[#F1F5F9]">
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-            Rename
-          </button>
-
-          <button className="flex items-center gap-1.5 rounded px-3 py-1.5 text-xs text-[#666666] hover:bg-[#F1F5F9]">
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-            Duplicate
-          </button>
-
-          <button className="flex items-center gap-1.5 rounded px-3 py-1.5 text-xs text-[#666666] hover:bg-[#F1F5F9]">
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-            </svg>
-            Add Favorites
-          </button>
-
-          <button className="flex items-center gap-1.5 rounded px-3 py-1.5 text-xs text-[#666666] hover:bg-[#F1F5F9]">
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-            </svg>
-            Move
-          </button>
-
-          <button
-            onClick={clearSelection}
-            className="flex items-center gap-1.5 rounded bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-            Clear task
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -152,19 +137,17 @@ function StatusGroup({
   const { collapsedGroups, toggleGroupCollapse } = usePMStore();
   const isCollapsed = collapsedGroups[status.id] || false;
   const [isDragOver, setIsDragOver] = useState(false);
+  const [addTitle, setAddTitle] = useState<string | null>(null);
+  const createTask = useCreateTask(listId);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setIsDragOver(true);
   };
-
   const handleDragLeave = (e: React.DragEvent) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setIsDragOver(false);
-    }
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false);
   };
-
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
@@ -174,65 +157,88 @@ function StatusGroup({
 
   return (
     <div
-      className={`mb-0 transition-colors ${isDragOver ? 'bg-[#E8F0FE]/50' : ''}`}
+      className="lv-group"
+      data-dragover={isDragOver}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Status header */}
       {showHeader && (
         <div
-          className="sticky top-[33px] z-10 flex cursor-pointer items-center gap-2 border-b border-[#E2E8F0] bg-white px-4 py-2.5 transition hover:bg-[#FAFBFC]"
+          className="lv-group-head"
+          data-collapsed={isCollapsed}
           onClick={() => toggleGroupCollapse(status.id)}
         >
-          <svg
-            className={`h-3.5 w-3.5 text-[#999999] transition-transform ${isCollapsed ? '' : 'rotate-90'}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-
-          <span
-            className="h-2.5 w-2.5 rounded-full"
-            style={{ backgroundColor: status.color }}
-          />
-
-          <span className="text-sm font-semibold text-[#0F172B]">
-            {status.name}
-          </span>
-
-          <span className="text-xs text-[#999999]">
-            {tasks.length}
-          </span>
-
-          {/* Ellipsis */}
-          <button
-            onClick={(e) => e.stopPropagation()}
-            className="ml-1 rounded p-0.5 text-[#CAD5E2] hover:bg-[#F1F5F9] hover:text-[#999999]"
-          >
-            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-              <circle cx="5" cy="12" r="1.5" />
-              <circle cx="12" cy="12" r="1.5" />
-              <circle cx="19" cy="12" r="1.5" />
+          <span className="caret">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M9 5l7 7-7 7" />
             </svg>
-          </button>
-
-          <div className="flex-1" />
+          </span>
+          <span className="status-dot" style={{ backgroundColor: status.color }} />
+          <span className="title">{status.name}</span>
+          <span className="count">· {tasks.length}</span>
         </div>
       )}
 
-      {/* Tasks */}
-      {!isCollapsed && tasks.map((task) => (
-        <TaskRow
-          key={task.id}
-          task={task}
-          statuses={allStatuses}
-          onStatusChange={onStatusChange}
-          canEdit={canEdit}
-        />
-      ))}
+      {!isCollapsed && (
+        <div className="lv-group-body">
+          {tasks.map((task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              statuses={allStatuses}
+              onStatusChange={onStatusChange}
+              canEdit={canEdit}
+              listId={listId}
+            />
+          ))}
+
+          {/* Inline add-task row */}
+          {canEdit && addTitle !== null ? (
+            <div className="lv-add">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              <input
+                autoFocus
+                value={addTitle}
+                placeholder="Task title, Enter to add · Esc to cancel"
+                onChange={(e) => setAddTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const val = addTitle.trim();
+                    if (val) {
+                      createTask.mutate(
+                        { title: val, status: status.category, list_id: listId },
+                        { onSuccess: () => setAddTitle('') }
+                      );
+                    } else setAddTitle(null);
+                  } else if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    setAddTitle(null);
+                  }
+                }}
+                onBlur={() => {
+                  const val = addTitle.trim();
+                  if (val) {
+                    createTask.mutate(
+                      { title: val, status: status.category, list_id: listId },
+                      { onSuccess: () => setAddTitle(null) }
+                    );
+                  } else setAddTitle(null);
+                }}
+              />
+            </div>
+          ) : canEdit && !isCollapsed ? (
+            <div className="lv-add" onClick={() => setAddTitle('')}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              <span>Add task</span>
+            </div>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

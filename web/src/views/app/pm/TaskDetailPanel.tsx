@@ -144,7 +144,6 @@ export default function TaskDetailPanel({
   const [newSubtaskTitle, setNewSubtaskTitle] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
-  // Enter animation: mount, then flip "open" on next frame
   useEffect(() => {
     if (activeTaskId) {
       const id = requestAnimationFrame(() => setMounted(true));
@@ -154,7 +153,6 @@ export default function TaskDetailPanel({
     return undefined;
   }, [activeTaskId]);
 
-  // ESC to close — but not when focus is in an input/textarea (let the field handle it)
   useEffect(() => {
     if (!activeTaskId) return undefined;
     const onKey = (e: KeyboardEvent) => {
@@ -262,7 +260,6 @@ export default function TaskDetailPanel({
       setNewSubtaskTitle(null);
       return;
     }
-    // Optimistic: prepend a temp subtask so it shows instantly
     const tempId = `temp-${Date.now()}`;
     qc.setQueryData(['task', task.id], (prev: any) => {
       if (!prev) return prev;
@@ -274,7 +271,6 @@ export default function TaskDetailPanel({
       { title: val, parent_task_id: task.id, list_id: task.list_id },
       {
         onError: () => {
-          // Rollback: strip the temp subtask
           qc.setQueryData(['task', task.id], (prev: any) => {
             if (!prev) return prev;
             return { ...prev, subtasks: (prev.subtasks || []).filter((s: any) => s.id !== tempId) };
@@ -300,7 +296,6 @@ export default function TaskDetailPanel({
   const subtasks = task?.subtasks || [];
   const subtaskDone = subtasks.filter((s: any) => s.status === 'done' || s.status === 'closed').length;
 
-  // Build a simple activity feed from what we know
   const activityItems: { icon: string; body: React.ReactNode; t: string }[] = task ? [
     ...(comments || []).map((c) => ({
       icon: '○',
@@ -321,85 +316,65 @@ export default function TaskDetailPanel({
 
   return (
     <div className="fixed inset-0 z-[90]">
-      {/* Backdrop */}
+      {/* Backdrop — no blur, subtle dark tint only */}
       <div
-        className="absolute inset-0 bg-black/10 transition-opacity duration-300"
-        style={{ opacity: mounted ? 1 : 0 }}
+        className="absolute inset-0 transition-opacity duration-300"
+        style={{
+          opacity: mounted ? 1 : 0,
+          background: 'rgba(10,10,10,0.18)',
+        }}
         onClick={() => setActiveTask(null)}
       />
 
-      {/* Drawer */}
+      {/* Floating drawer */}
       <aside
         onClick={(e) => e.stopPropagation()}
-        className="td-panel absolute top-0 right-0 bottom-0 w-[min(620px,94vw)] flex flex-col border-l"
+        className="td-panel td-panel-luma apple absolute flex flex-col"
         style={{
           background: 'var(--surface)',
-          borderLeftColor: 'var(--sh-hair)',
-          boxShadow: '-24px 0 48px -16px rgba(0,0,0,0.12)',
-          transform: mounted ? 'translateX(0)' : 'translateX(102%)',
-          transition: 'transform .32s cubic-bezier(0.22, 0.8, 0.3, 1)',
+          transform: mounted ? 'translateX(0)' : 'translateX(calc(100% + 24px))',
+          transition: 'transform .42s cubic-bezier(0.23, 1, 0.32, 1), opacity .3s ease',
+          opacity: mounted ? 1 : 0,
         }}
       >
-        {/* Header */}
-        <div
-          className="td-head flex items-center gap-2.5 px-5 py-3.5 shrink-0 border-b"
-          style={{ borderBottomColor: 'var(--sh-hair-3)' }}
-        >
-          <span className="td-mono text-[11px] tracking-[0.06em] text-[color:var(--sh-ink-4)]">
-            SQ-{String(task?.display_number ?? 0).padStart(3, '0')}
-          </span>
-          {spaceName && (
-            <span
-              className="text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded"
-              style={{
-                background: spaceColor || 'var(--sh-ink)',
-                color: 'var(--surface)',
-                fontFamily: "'Instrument Serif', serif",
-                letterSpacing: '0.03em',
-              }}
-            >
-              {spaceName}
-            </span>
-          )}
-          {priorityLabel && (
-            <span className="td-mono text-[11px] text-[color:var(--sh-ink-3)]">{priorityLabel}</span>
-          )}
-          <div className="flex-1" />
+        {/* Top bar — pill buttons */}
+        <div className="td-head td-head-luma flex items-center gap-2 shrink-0">
           <button
             type="button"
-            title="Copy link"
-            onClick={handleCopyLink}
-            className="td-icon-btn"
+            onClick={() => setActiveTask(null)}
+            className="td-nav-btn"
+            title="Close"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M13 17l5-5-5-5M6 17l5-5-5-5" />
+            </svg>
+          </button>
+          <button type="button" onClick={handleCopyLink} className="td-pill-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
               <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
             </svg>
+            Copy Link
           </button>
           <div className="relative">
-            <button
-              type="button"
-              title="More"
-              onClick={() => setMoreMenuOpen((v) => !v)}
-              className="td-icon-btn"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="5" cy="12" r="1.5" />
-                <circle cx="12" cy="12" r="1.5" />
-                <circle cx="19" cy="12" r="1.5" />
+            <button type="button" onClick={() => setMoreMenuOpen((v) => !v)} className="td-pill-btn">
+              More
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M6 9l6 6 6-6" />
               </svg>
             </button>
             {moreMenuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setMoreMenuOpen(false)} />
                 <div
-                  className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-lg border bg-white shadow-lg"
-                  style={{ borderColor: 'var(--sh-hair)' }}
+                  className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border shadow-lg"
+                  style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
                 >
                   {canEdit && (
                     <button
                       onClick={() => { handleDelete(); setMoreMenuOpen(false); }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[color:var(--sh-hair-3)] text-[color:var(--sh-ink-2)]"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[color:var(--sh-hair-3)]"
+                      style={{ color: 'oklch(0.55 0.18 25)' }}
                     >
                       Delete task
                     </button>
@@ -408,31 +383,67 @@ export default function TaskDetailPanel({
               </>
             )}
           </div>
-          <button
-            type="button"
-            title="Close"
-            onClick={() => setActiveTask(null)}
-            className="td-icon-btn"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex-1" />
+          {task && canEdit && (
+            isTimerForThisTask ? (
+              <button type="button" onClick={handleStopTimer} className="td-pill-btn" title="Stop timer">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="6" width="12" height="12" rx="1" />
+                </svg>
+                {formatSeconds((task.time_tracked || 0) + timerElapsed)}
+              </button>
+            ) : (
+              <button type="button" onClick={handleStartTimer} className="td-pill-btn" title="Start timer">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M10 8l6 4-6 4V8z" fill="currentColor" stroke="none" />
+                </svg>
+                {task.time_estimate ? formatMinutes(task.time_estimate) : 'Start'}
+              </button>
+            )
+          )}
+          {task && (
+            <button
+              type="button"
+              onClick={handleToggleDone}
+              disabled={!canEdit}
+              className="td-pill-btn"
+              style={isDone ? undefined : { background: 'var(--sh-ink)', color: 'var(--surface)', borderColor: 'var(--sh-ink)' }}
+              title={isDone ? 'Reopen task' : 'Mark complete'}
+            >
+              {isDone ? (
+                <>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M3 12a9 9 0 1018 0 9 9 0 00-18 0z" />
+                    <path d="M9 4l-5 5M20 15l-5 5" />
+                  </svg>
+                  Reopen
+                </>
+              ) : (
+                <>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M5 12l5 5 9-11" />
+                  </svg>
+                  Mark complete
+                </>
+              )}
+            </button>
+          )}
         </div>
 
         {/* Scrollable body */}
-        <div className="td-scroll flex-1 overflow-y-auto px-6 pt-5 pb-20">
+        <div className="td-scroll flex-1 overflow-y-auto px-6 pt-3 pb-8">
           {(!task || isLoading) ? (
             <div className="flex items-center justify-center py-20 text-[color:var(--sh-ink-3)] text-sm">Loading…</div>
           ) : (
             <>
               {/* Title row */}
-              <div className="flex items-start gap-3 mb-5">
+              <div className="flex items-start gap-3 mb-3">
                 <button
                   type="button"
                   onClick={handleToggleDone}
                   disabled={!canEdit}
-                  className="mt-[6px] td-checkbox shrink-0"
+                  className="mt-[6px] td-checkbox-lg shrink-0 td-focus"
                   data-done={isDone ? 'true' : 'false'}
                   aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
                 />
@@ -446,162 +457,221 @@ export default function TaskDetailPanel({
                       if (e.key === 'Escape') setEditing(null);
                     }}
                     onBlur={() => handleSave('title')}
-                    className="flex-1 bg-transparent border-b outline-none text-[28px] leading-[1.15] tracking-[-0.01em] text-[color:var(--sh-ink)] py-1"
-                    style={{ fontFamily: "'Instrument Serif', serif", fontWeight: 400, borderColor: 'var(--sh-ink)' }}
+                    className="flex-1 bg-transparent border-b outline-none text-[26px] leading-[1.2] tracking-[-0.018em] font-semibold text-[color:var(--sh-ink)]"
+                    style={{ borderColor: 'var(--sh-ink)', fontFamily: 'Inter, system-ui, sans-serif' }}
                   />
                 ) : (
-                  <h2
+                  <h1
                     onClick={canEdit ? () => { setEditing('title'); setEditValue(task.title); } : undefined}
-                    className={`flex-1 text-[28px] leading-[1.15] tracking-[-0.01em] text-[color:var(--sh-ink)] m-0 ${canEdit ? 'cursor-text' : ''}`}
-                    style={{ fontFamily: "'Instrument Serif', serif", fontWeight: 400 }}
+                    className={`flex-1 text-[26px] font-semibold leading-[1.2] tracking-[-0.018em] text-[color:var(--sh-ink)] m-0 ${canEdit ? 'cursor-text' : ''} ${isDone ? 'line-through opacity-60' : ''}`}
+                    style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
                   >
                     {task.title}
-                  </h2>
+                  </h1>
                 )}
               </div>
 
-              {/* Meta grid */}
-              <div
-                className="td-meta grid grid-cols-1 mb-5 border-t"
-                style={{ borderTopColor: 'var(--sh-hair-3)' }}
-              >
-                <MetaRow k="Assignee">
-                  {assignee ? (
-                    <>
-                      <span className="td-ava-xs" style={{ background: avatarColor(assignee.id || assignee.email) }}>
-                        {initialOf(assignee.display_name || assignee.email)}
-                      </span>
-                      <span>{assignee.display_name || assignee.email}</span>
-                    </>
-                  ) : (
-                    <span className="text-[color:var(--sh-ink-3)]">Unassigned</span>
-                  )}
-                </MetaRow>
-
-                <MetaRow k="Due">
-                  <input
-                    type="date"
-                    value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
-                    onChange={canEdit ? (e) => updateTask.mutate({ id: task.id, due_date: e.target.value || null }) : undefined}
-                    disabled={!canEdit}
-                    className={`td-mono text-[12px] bg-transparent outline-none ${due.accent && task.due_date ? 'font-semibold text-[color:var(--sh-ink)]' : 'text-[color:var(--sh-ink-2)]'}`}
-                  />
-                  {task.due_date && (
-                    <span className="td-mono text-[11px] text-[color:var(--sh-ink-3)]">· {due.text}</span>
-                  )}
-                </MetaRow>
-
-                <MetaRow k="Status">
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={canEdit ? () => setStatusMenuOpen((v) => !v) : undefined}
-                      className="inline-flex items-center gap-2 text-[12.5px] text-[color:var(--sh-ink)] px-1 py-0.5 rounded hover:bg-[color:var(--sh-hair-3)] transition"
-                    >
-                      <span className="td-dot" style={{ background: status?.color || 'var(--sh-ink-4)' }} />
-                      {status?.name || taskStatusCategory || 'No status'}
-                    </button>
-                    {statusMenuOpen && (
-                      <>
-                        <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
-                        <div
-                          className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border bg-white shadow-lg"
-                          style={{ borderColor: 'var(--sh-hair)' }}
-                        >
-                          {statuses.map((s) => (
-                            <button
-                              key={s.id}
-                              onClick={() => {
-                                updateTask.mutate({ id: task.id, status: s.category } as any);
-                                setStatusMenuOpen(false);
-                              }}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)]"
-                            >
-                              <span className="td-dot" style={{ background: s.color }} />
-                              {s.name}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </MetaRow>
-
+              {/* Subtitle row: Space + SQ-ID + priority */}
+              <div className="flex items-center gap-2.5 mb-5 flex-wrap">
                 {spaceName && (
-                  <MetaRow k="Space">
-                    <span
-                      className="td-space-emblem-xs"
-                      style={{ background: spaceColor || 'var(--sh-ink)' }}
-                    >
+                  <span className="td-host-chip td-focus" tabIndex={0}>
+                    <span className="logo" style={{ background: spaceColor || 'var(--sh-ink)' }}>
                       {initialOf(spaceName)[0]}
                     </span>
                     <span>{spaceName}</span>
-                  </MetaRow>
+                    <svg className="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                      <path d="M9 5l7 7-7 7" />
+                    </svg>
+                  </span>
                 )}
-
-                <MetaRow k="Reporter">
-                  {task.creator ? (
-                    <>
-                      <span className="td-ava-xs" style={{ background: avatarColor(task.creator.id || task.creator.email) }}>
-                        {initialOf(task.creator.display_name || task.creator.email)}
-                      </span>
-                      <span>{task.creator.display_name || task.creator.email}</span>
-                    </>
-                  ) : (
-                    <span className="text-[color:var(--sh-ink-3)]">—</span>
-                  )}
-                </MetaRow>
-
-                <MetaRow k="Estimate">
-                  {editingEstimate ? (
-                    <input
-                      autoFocus
-                      value={estimateInput}
-                      onChange={(e) => setEstimateInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          const mins = parseTimeInput(estimateInput);
-                          updateTask.mutate({ id: task.id, time_estimate: mins });
-                          setEditingEstimate(false);
-                        }
-                        if (e.key === 'Escape') setEditingEstimate(false);
-                      }}
-                      onBlur={() => {
-                        const mins = parseTimeInput(estimateInput);
-                        updateTask.mutate({ id: task.id, time_estimate: mins });
-                        setEditingEstimate(false);
-                      }}
-                      placeholder="e.g. 2h 30m"
-                      className="td-mono text-[12px] bg-transparent border-b outline-none w-28"
-                      style={{ borderColor: 'var(--sh-ink)' }}
-                    />
-                  ) : (
-                    <span
-                      onClick={canEdit ? () => { setEditingEstimate(true); setEstimateInput(formatMinutes(task.time_estimate)); } : undefined}
-                      className={`td-mono text-[12px] text-[color:var(--sh-ink-2)] ${canEdit ? 'cursor-pointer' : ''}`}
-                    >
-                      {task.time_estimate ? formatMinutes(task.time_estimate) : '—'}
-                      {task.time_tracked ? ` · logged ${formatTracked(isTimerForThisTask ? (task.time_tracked + timerElapsed) : task.time_tracked)}` : ''}
-                    </span>
-                  )}
-                </MetaRow>
-
-                {task.tags && task.tags.length > 0 && (
-                  <MetaRow k="Labels">
-                    <span className="flex flex-wrap gap-1">
-                      {task.tags.map((t) => (
-                        <span key={t.id} className="td-label">{t.name}</span>
-                      ))}
-                    </span>
-                  </MetaRow>
+                <span className="text-[11.5px] text-[color:var(--sh-ink-4)] font-medium tracking-[0.01em]">
+                  SQ-{String(task.display_number ?? 0).padStart(3, '0')}
+                </span>
+                {priorityLabel && (priorityLabel === 'P0' || priorityLabel === 'P1') && (
+                  <span className="td-pri-chip" data-level={priorityLabel.toLowerCase()}>
+                    <span className="dot" />
+                    {priorityLabel === 'P0' ? 'Urgent' : 'High'}
+                  </span>
+                )}
+                {priorityLabel && priorityLabel !== 'P0' && priorityLabel !== 'P1' && (
+                  <span className="text-[11.5px] text-[color:var(--sh-ink-3)]">· {priorityLabel}</span>
                 )}
               </div>
 
-              {/* Tabs */}
-              <div
-                className="flex gap-0.5 mb-4 border-b"
-                style={{ borderBottomColor: 'var(--sh-hair-3)' }}
-              >
+              {/* Meta — macOS Settings-style grouped card */}
+              <div className="td-eyebrow">Details</div>
+              <div className="td-settings-card">
+                <div className="td-settings-row">
+                  <span className="k">{META_ICONS.Assignee}Assignee</span>
+                  <span className="v">
+                    {assignee ? (
+                      <>
+                        <span className="td-ava-xs" style={{ background: avatarColor(assignee.id || assignee.email) }}>
+                          {initialOf(assignee.display_name || assignee.email)}
+                        </span>
+                        <span>{assignee.display_name || assignee.email}</span>
+                      </>
+                    ) : (
+                      <span className="muted">Unassigned</span>
+                    )}
+                  </span>
+                </div>
+
+                <div className="td-settings-row" style={{ cursor: canEdit ? 'pointer' : 'default' }}>
+                  <span className="k">{META_ICONS.Due}Due</span>
+                  <span className="v">
+                    {task.due_date ? (
+                      <span className={due.accent ? 'font-medium' : ''}>
+                        {due.text}
+                      </span>
+                    ) : (
+                      <span className="muted">No due date</span>
+                    )}
+                    <input
+                      type="date"
+                      value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
+                      onChange={canEdit ? (e) => updateTask.mutate({ id: task.id, due_date: e.target.value || null }) : undefined}
+                      disabled={!canEdit}
+                      className="sr-only"
+                      id={`due-${task.id}`}
+                    />
+                    {canEdit && (
+                      <label
+                        htmlFor={`due-${task.id}`}
+                        className="text-[11.5px] text-[color:var(--sh-ink-4)] cursor-pointer hover:text-[color:var(--sh-ink-2)] ml-1"
+                      >
+                        {task.due_date ? 'Change' : 'Set'}
+                      </label>
+                    )}
+                  </span>
+                </div>
+
+                <div className="td-settings-row">
+                  <span className="k">{META_ICONS.Status}Status</span>
+                  <span className="v">
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={canEdit ? () => setStatusMenuOpen((v) => !v) : undefined}
+                        className="inline-flex items-center gap-2 px-2 py-0.5 rounded-full hover:bg-[color:var(--sh-hair-3)] transition td-focus"
+                      >
+                        <span className="td-dot" style={{ background: status?.color || 'var(--sh-ink-4)' }} />
+                        {status?.name || taskStatusCategory || 'No status'}
+                        {canEdit && (
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-[color:var(--sh-ink-4)]">
+                            <path d="M6 9l6 6 6-6" />
+                          </svg>
+                        )}
+                      </button>
+                      {statusMenuOpen && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
+                          <div
+                            className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-xl border shadow-lg"
+                            style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
+                          >
+                            {statuses.map((s) => (
+                              <button
+                                key={s.id}
+                                onClick={() => {
+                                  updateTask.mutate({ id: task.id, status: s.category } as any);
+                                  setStatusMenuOpen(false);
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)]"
+                              >
+                                <span className="td-dot" style={{ background: s.color }} />
+                                {s.name}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </span>
+                </div>
+
+                {spaceName && (
+                  <div className="td-settings-row">
+                    <span className="k">{META_ICONS.Space}Space</span>
+                    <span className="v">
+                      <span
+                        className="td-space-emblem-xs"
+                        style={{ background: spaceColor || 'var(--sh-ink)' }}
+                      >
+                        {initialOf(spaceName)[0]}
+                      </span>
+                      <span>{spaceName}</span>
+                    </span>
+                  </div>
+                )}
+
+                <div className="td-settings-row">
+                  <span className="k">{META_ICONS.Reporter}Reporter</span>
+                  <span className="v">
+                    {task.creator ? (
+                      <>
+                        <span className="td-ava-xs" style={{ background: avatarColor(task.creator.id || task.creator.email) }}>
+                          {initialOf(task.creator.display_name || task.creator.email)}
+                        </span>
+                        <span>{task.creator.display_name || task.creator.email}</span>
+                      </>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </span>
+                </div>
+
+                <div className="td-settings-row">
+                  <span className="k">{META_ICONS.Estimate}Estimate</span>
+                  <span className="v">
+                    {editingEstimate ? (
+                      <input
+                        autoFocus
+                        value={estimateInput}
+                        onChange={(e) => setEstimateInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const mins = parseTimeInput(estimateInput);
+                            updateTask.mutate({ id: task.id, time_estimate: mins });
+                            setEditingEstimate(false);
+                          }
+                          if (e.key === 'Escape') setEditingEstimate(false);
+                        }}
+                        onBlur={() => {
+                          const mins = parseTimeInput(estimateInput);
+                          updateTask.mutate({ id: task.id, time_estimate: mins });
+                          setEditingEstimate(false);
+                        }}
+                        placeholder="e.g. 2h 30m"
+                        className="text-[13.5px] bg-transparent border-b outline-none w-28"
+                        style={{ borderColor: 'var(--sh-ink)' }}
+                      />
+                    ) : (
+                      <span
+                        onClick={canEdit ? () => { setEditingEstimate(true); setEstimateInput(formatMinutes(task.time_estimate)); } : undefined}
+                        className={canEdit ? 'cursor-pointer' : ''}
+                      >
+                        {task.time_estimate ? formatMinutes(task.time_estimate) : <span className="muted">Set an estimate</span>}
+                        {task.time_tracked ? <span className="muted"> · logged {formatTracked(isTimerForThisTask ? (task.time_tracked + timerElapsed) : task.time_tracked)}</span> : null}
+                      </span>
+                    )}
+                  </span>
+                </div>
+
+                {task.tags && task.tags.length > 0 && (
+                  <div className="td-settings-row">
+                    <span className="k">{META_ICONS.Labels}Labels</span>
+                    <span className="v" style={{ flexWrap: 'wrap', gap: 6 }}>
+                      {task.tags.map((t) => (
+                        <span key={t.id} className="td-hashtag">#{t.name}</span>
+                      ))}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Pill tabs */}
+              <div className="td-tabs-pill">
                 {([
                   { id: 'overview', l: 'Overview' },
                   { id: 'comments', l: `Comments · ${comments?.length ?? 0}` },
@@ -612,7 +682,7 @@ export default function TaskDetailPanel({
                     key={t.id}
                     onClick={() => setTab(t.id as any)}
                     data-active={tab === t.id}
-                    className="td-tab px-3.5 py-2.5 text-[12.5px] cursor-pointer transition"
+                    className="td-tab-pill"
                   >
                     {t.l}
                   </button>
@@ -622,17 +692,17 @@ export default function TaskDetailPanel({
               {/* Tab content */}
               {tab === 'overview' && (
                 <div>
-                  {/* Task Type picker — only show if task types exist */}
+                  {/* Task Type picker */}
                   {taskTypes && taskTypes.length > 0 && (
-                    <div className="mb-4">
-                      <div className="td-h4">Type</div>
+                    <div className="mb-5">
+                      <div className="td-section-label">Type</div>
                       <div className="relative inline-block">
                         <button
                           type="button"
                           onClick={canEdit ? () => setTypeMenuOpen((v) => !v) : undefined}
                           disabled={!canEdit}
-                          className="inline-flex items-center gap-2 text-[13px] text-[color:var(--sh-ink)] px-2 py-1 rounded border"
-                          style={{ borderColor: 'var(--sh-hair)' }}
+                          className="inline-flex items-center gap-2 text-[13px] text-[color:var(--sh-ink)] px-3 py-1.5 rounded-full border"
+                          style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
                         >
                           {currentType ? (
                             <>
@@ -647,8 +717,8 @@ export default function TaskDetailPanel({
                           <>
                             <div className="fixed inset-0 z-10" onClick={() => setTypeMenuOpen(false)} />
                             <div
-                              className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-lg border bg-white shadow-lg"
-                              style={{ borderColor: 'var(--sh-hair)' }}
+                              className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-lg border shadow-lg"
+                              style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
                             >
                               {taskTypes.map((t) => (
                                 <button
@@ -688,115 +758,112 @@ export default function TaskDetailPanel({
                     </div>
                   )}
 
-                  <div className="td-h4">Description</div>
-                  {editing === 'description' ? (
-                    <textarea
-                      autoFocus
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onBlur={() => handleSave('description')}
-                      onKeyDown={(e) => { if (e.key === 'Escape') setEditing(null); }}
-                      rows={6}
-                      className="td-desc w-full resize-none bg-transparent outline-none rounded border p-2"
-                      style={{ borderColor: 'var(--sh-hair)' }}
-                    />
-                  ) : (
-                    <div
-                      onClick={canEdit ? () => { setEditing('description'); setEditValue(task.description || ''); } : undefined}
-                      className={`td-desc whitespace-pre-wrap ${canEdit ? 'cursor-text' : ''}`}
-                    >
-                      {task.description || (
-                        <span className="text-[color:var(--sh-ink-3)]">{canEdit ? 'Add a description…' : 'No description'}</span>
+                  {/* Description */}
+                  <div className="td-eyebrow">Description</div>
+                  <div className="td-lcard apple" style={{ marginBottom: 4 }}>
+                    <div className="td-lcard-body">
+                      {editing === 'description' ? (
+                        <textarea
+                          autoFocus
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onBlur={() => handleSave('description')}
+                          onKeyDown={(e) => { if (e.key === 'Escape') setEditing(null); }}
+                          rows={6}
+                          className="td-about w-full resize-none bg-transparent outline-none"
+                        />
+                      ) : (
+                        <div
+                          onClick={canEdit ? () => { setEditing('description'); setEditValue(task.description || ''); } : undefined}
+                          className={`td-about ${!task.description ? 'empty' : ''} ${canEdit ? 'cursor-text' : ''}`}
+                        >
+                          {task.description || 'No description. Click to add one.'}
+                        </div>
                       )}
                     </div>
-                  )}
+                  </div>
 
                   {/* Subtasks */}
-                  <div className="mt-6">
-                    <div className="td-h4 flex items-center gap-2">
-                      Subtasks
+                  <div className="td-eyebrow">
+                    Subtasks
+                    {subtasks.length > 0 && <span className="muted">· {subtaskDone}/{subtasks.length}</span>}
+                    {canEdit && newSubtaskTitle === null && (
+                      <button className="action" onClick={() => setNewSubtaskTitle('')}>+ Add</button>
+                    )}
+                  </div>
+                  <div className="td-lcard apple" style={{ marginBottom: 4 }}>
+                    <div className="td-lcard-body tight">
                       {subtasks.length > 0 && (
-                        <span className="td-mono text-[11px] text-[color:var(--sh-ink-4)] font-normal normal-case tracking-normal">
-                          {subtaskDone} / {subtasks.length}
-                        </span>
+                        <div className="flex flex-col">
+                          {subtasks.map((st: any, i) => {
+                            const stDone = st.status === 'done' || st.status === 'closed';
+                            return (
+                              <div
+                                key={st.id}
+                                className={`flex items-center gap-3 py-2 ${i > 0 ? 'border-t' : ''}`}
+                                style={i > 0 ? { borderTopColor: 'var(--sh-hair-3)' } : undefined}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!canEdit) return;
+                                    updateTask.mutate({ id: st.id, status: stDone ? 'todo' : 'done' } as any);
+                                  }}
+                                  className="td-checkbox shrink-0"
+                                  data-done={stDone ? 'true' : 'false'}
+                                  aria-label="Toggle subtask"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveTask(st.id)}
+                                  className={`flex-1 text-left text-[13.5px] truncate ${stDone ? 'line-through text-[color:var(--sh-ink-3)]' : 'text-[color:var(--sh-ink)]'}`}
+                                >
+                                  {st.title}
+                                </button>
+                                {st.due_date && (
+                                  <span className="text-[11.5px] text-[color:var(--sh-ink-4)]">
+                                    {new Date(st.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
-                      {canEdit && newSubtaskTitle === null && (
-                        <button
-                          onClick={() => setNewSubtaskTitle('')}
-                          className="ml-auto text-[11px] text-[color:var(--sh-ink-3)] hover:text-[color:var(--sh-ink)] normal-case tracking-normal"
-                        >
-                          + Add
-                        </button>
+                      {canEdit && newSubtaskTitle !== null && (
+                        <input
+                          autoFocus
+                          value={newSubtaskTitle}
+                          onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              addSubtask(newSubtaskTitle, true);
+                            } else if (e.key === 'Escape') {
+                              e.stopPropagation();
+                              setNewSubtaskTitle(null);
+                            }
+                          }}
+                          onBlur={() => addSubtask(newSubtaskTitle, false)}
+                          placeholder="Subtask title, Enter to add"
+                          className="mt-2 w-full bg-transparent px-1 py-1.5 text-[13.5px] outline-none border-b"
+                          style={{ borderBottomColor: 'var(--sh-hair-3)' }}
+                        />
+                      )}
+                      {subtasks.length === 0 && newSubtaskTitle === null && (
+                        <div className="text-[13px] text-[color:var(--sh-ink-4)] py-1">No subtasks yet.</div>
                       )}
                     </div>
-                    {subtasks.length > 0 && (
-                      <div className="flex flex-col gap-1.5">
-                        {subtasks.map((st: any) => {
-                          const stDone = st.status === 'done' || st.status === 'closed';
-                          return (
-                            <div key={st.id} className="td-sub">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (!canEdit) return;
-                                  updateTask.mutate({ id: st.id, status: stDone ? 'todo' : 'done' } as any);
-                                }}
-                                className="td-checkbox shrink-0"
-                                data-done={stDone ? 'true' : 'false'}
-                                aria-label="Toggle subtask"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setActiveTask(st.id)}
-                                className={`flex-1 text-left text-[13px] truncate ${stDone ? 'line-through text-[color:var(--sh-ink-3)]' : 'text-[color:var(--sh-ink)]'}`}
-                              >
-                                {st.title}
-                              </button>
-                              {st.due_date && (
-                                <span className="td-mono text-[11px] text-[color:var(--sh-ink-4)]">
-                                  {new Date(st.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {canEdit && newSubtaskTitle !== null && (
-                      <input
-                        autoFocus
-                        value={newSubtaskTitle}
-                        onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            addSubtask(newSubtaskTitle, true);
-                          } else if (e.key === 'Escape') {
-                            e.stopPropagation();
-                            setNewSubtaskTitle(null);
-                          }
-                        }}
-                        onBlur={() => addSubtask(newSubtaskTitle, false)}
-                        placeholder="Subtask title, Enter to add"
-                        className="mt-2 w-full rounded border bg-transparent px-2 py-1 text-[13px] outline-none"
-                        style={{ borderColor: 'var(--sh-hair)' }}
-                      />
-                    )}
                   </div>
 
                   {/* Checklists */}
-                  {(checklists && checklists.length > 0) || (canEdit && newChecklistTitle !== null) ? (
-                    <div className="mt-6">
-                      <div className="td-h4 flex items-center gap-2">
+                  {((checklists && checklists.length > 0) || (canEdit && newChecklistTitle !== null)) ? (
+                    <div className="mb-6">
+                      <div className="td-eyebrow">
                         Checklists
                         {canEdit && newChecklistTitle === null && (
-                          <button
-                            onClick={() => setNewChecklistTitle('')}
-                            className="ml-auto text-[11px] text-[color:var(--sh-ink-3)] hover:text-[color:var(--sh-ink)] normal-case tracking-normal"
-                          >
-                            + Add
-                          </button>
+                          <button className="action" onClick={() => setNewChecklistTitle('')}>+ Add</button>
                         )}
                       </div>
                       {canEdit && newChecklistTitle !== null && (
@@ -817,7 +884,7 @@ export default function TaskDetailPanel({
                             else setNewChecklistTitle(null);
                           }}
                           placeholder="Checklist name, Enter to create"
-                          className="mb-2 w-full rounded border bg-transparent px-2 py-1 text-[13px] outline-none"
+                          className="mb-2 w-full rounded-lg border bg-transparent px-3 py-1.5 text-[13px] outline-none"
                           style={{ borderColor: 'var(--sh-hair)' }}
                         />
                       )}
@@ -826,7 +893,7 @@ export default function TaskDetailPanel({
                           const items = cl.items || [];
                           const done = items.filter((i) => i.is_done).length;
                           return (
-                            <div key={cl.id} className="rounded-md border p-3" style={{ borderColor: 'var(--sh-hair-3)' }}>
+                            <div key={cl.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--sh-hair-3)' }}>
                               <div className="mb-2 flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-[13px] font-medium text-[color:var(--sh-ink)]">
                                   <span>{cl.title}</span>
@@ -850,7 +917,7 @@ export default function TaskDetailPanel({
                                       disabled={!canEdit}
                                       className="td-checkbox shrink-0"
                                       data-done={item.is_done ? 'true' : 'false'}
-                                      aria-label="Toggle checklist item"
+                                      aria-label="Toggle item"
                                     />
                                     <span className={`flex-1 text-[13px] ${item.is_done ? 'line-through text-[color:var(--sh-ink-3)]' : 'text-[color:var(--sh-ink)]'}`}>
                                       {item.content}
@@ -890,10 +957,10 @@ export default function TaskDetailPanel({
                       </div>
                     </div>
                   ) : canEdit ? (
-                    <div className="mt-6">
+                    <div className="mb-6">
                       <button
                         onClick={() => setNewChecklistTitle('')}
-                        className="td-h4 hover:text-[color:var(--sh-ink)]"
+                        className="td-section-label hover:text-[color:var(--sh-ink)]"
                         style={{ cursor: 'pointer' }}
                       >
                         + Add checklist
@@ -905,26 +972,45 @@ export default function TaskDetailPanel({
 
               {tab === 'comments' && (
                 <div className="flex flex-col gap-4">
+                  {/* Reply input at top */}
+                  <div className="flex gap-2 mb-1">
+                    <input
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
+                      placeholder="Write a comment…"
+                      className="flex-1 rounded-full border bg-transparent px-4 py-2 text-[13px] outline-none"
+                      style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface-alt)' }}
+                    />
+                    <button
+                      onClick={handleAddComment}
+                      disabled={!commentText.trim()}
+                      className="td-pill-btn"
+                      style={commentText.trim() ? { background: 'var(--sh-ink)', color: 'var(--surface)', borderColor: 'var(--sh-ink)' } : undefined}
+                    >
+                      Send
+                    </button>
+                  </div>
                   {comments && comments.length > 0 ? comments.map((c) => (
                     <div key={c.id} className="td-comment flex gap-3">
                       <span
                         className="td-ava-sm shrink-0"
-                        style={{ background: avatarColor(c.user?.id || c.user?.email) }}
+                        style={{ background: avatarColor(c.user?.id || c.user?.email), borderRadius: '50%' }}
                       >
                         {initialOf(c.user?.display_name || c.user?.email)}
                       </span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2.5">
-                          <b className="text-[13px] text-[color:var(--sh-ink)]">{c.user?.display_name || c.user?.email}</b>
+                          <b className="text-[13.5px] text-[color:var(--sh-ink)] font-medium">{c.user?.display_name || c.user?.email}</b>
                           <span className="td-mono text-[11px] text-[color:var(--sh-ink-4)]">
                             {new Date(c.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                           </span>
                         </div>
-                        <div className="text-[13px] leading-[1.5] text-[color:var(--sh-ink-2)] mt-1 whitespace-pre-wrap">{c.content}</div>
+                        <div className="text-[13.5px] leading-[1.55] text-[color:var(--sh-ink-2)] mt-1 whitespace-pre-wrap">{c.content}</div>
                       </div>
                     </div>
                   )) : (
-                    <div className="text-[13px] text-[color:var(--sh-ink-3)]">No comments yet.</div>
+                    <div className="text-[13px] text-[color:var(--sh-ink-3)] py-4">No comments yet.</div>
                   )}
                 </div>
               )}
@@ -944,24 +1030,24 @@ export default function TaskDetailPanel({
               )}
 
               {tab === 'files' && (
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col gap-2">
                   {attachments.length > 0 ? attachments.map((f, i) => {
                     const ext = (f.name || '').split('.').pop()?.toUpperCase() || 'FILE';
                     return (
                       <div
                         key={i}
-                        className="td-file flex items-center gap-3 p-2.5 rounded-md border"
-                        style={{ borderColor: 'var(--sh-hair-3)', background: 'var(--surface-alt)' }}
+                        className="td-file flex items-center gap-3 p-3 rounded-xl border"
+                        style={{ borderColor: 'var(--sh-hair-3)' }}
                       >
                         <div className="td-doc-icon">{ext}</div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-[13px] font-medium text-[color:var(--sh-ink)] truncate">{f.name || 'untitled'}</div>
-                          {f.size && <div className="text-[11px] text-[color:var(--sh-ink-3)]">{f.size}</div>}
+                          <div className="text-[13.5px] font-medium text-[color:var(--sh-ink)] truncate">{f.name || 'untitled'}</div>
+                          {f.size && <div className="text-[11.5px] text-[color:var(--sh-ink-3)] mt-0.5">{f.size}</div>}
                         </div>
                       </div>
                     );
                   }) : (
-                    <div className="td-mono text-[12px] text-[color:var(--sh-ink-3)] py-4">No files yet.</div>
+                    <div className="text-[13px] text-[color:var(--sh-ink-3)] py-4">No files yet.</div>
                   )}
                 </div>
               )}
@@ -969,58 +1055,66 @@ export default function TaskDetailPanel({
           )}
         </div>
 
-        {/* Footer */}
-        {task && (
-          <div
-            className="td-foot shrink-0 border-t px-5 py-3 flex gap-2 items-center"
-            style={{ borderTopColor: 'var(--sh-hair)', background: 'var(--surface)' }}
-          >
-            <button
-              type="button"
-              onClick={handleToggleDone}
-              disabled={!canEdit}
-              className="td-btn"
-            >
-              {isDone ? 'Reopen' : 'Mark complete'}
-            </button>
-            {isTimerForThisTask ? (
-              <button type="button" onClick={handleStopTimer} className="td-btn">
-                Stop timer · {formatSeconds((task.time_tracked || 0) + timerElapsed)}
-              </button>
-            ) : (
-              <button type="button" onClick={handleStartTimer} disabled={!canEdit} className="td-btn">
-                Start timer
-              </button>
-            )}
-            <div className="flex-1" />
-            {/* Comment quick input on comments tab, otherwise hidden */}
-            {tab === 'comments' && (
-              <input
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
-                placeholder="Reply or @mention someone…"
-                className="flex-1 rounded-md border bg-transparent px-3 py-1.5 text-[13px] outline-none"
-                style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface-alt)' }}
-              />
-            )}
-          </div>
-        )}
       </aside>
     </div>
   );
 }
 
+const META_ICONS: Record<string, React.ReactNode> = {
+  Assignee: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21a8 8 0 0116 0" />
+    </svg>
+  ),
+  Due: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+    </svg>
+  ),
+  Status: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  ),
+  Space: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+    </svg>
+  ),
+  Reporter: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4h12l4 4v12H4z" />
+      <path d="M8 8h8M8 12h6" />
+    </svg>
+  ),
+  Estimate: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  ),
+  Labels: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 12L12 20a2 2 0 01-2.83 0L3 13.83V4h9.83L20 11.17a2 2 0 010 2.83z" />
+      <circle cx="7.5" cy="7.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  ),
+};
+
 function MetaRow({ k, children }: { k: string; children: React.ReactNode }) {
   return (
     <div
-      className="td-meta-row grid py-2.5 border-b items-center text-[13px]"
-      style={{ gridTemplateColumns: '120px 1fr', borderBottomColor: 'var(--sh-hair-3)' }}
+      className="td-meta-row grid py-2.5 items-center"
+      style={{ gridTemplateColumns: '128px 1fr' }}
     >
-      <span className="td-meta-k td-mono text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--sh-ink-4)] font-medium">
+      <span className="td-meta-k-nice">
+        {META_ICONS[k]}
         {k}
       </span>
-      <span className="td-meta-v flex items-center gap-2 text-[color:var(--sh-ink)]">
+      <span className="td-meta-v-nice">
         {children}
       </span>
     </div>
@@ -1038,7 +1132,7 @@ function CustomFieldRow({
   onChange: (v: unknown) => void;
   canEdit: boolean;
 }) {
-  const baseInputCls = `rounded border bg-transparent px-2 py-1 text-[12.5px] outline-none ${canEdit ? '' : 'cursor-default opacity-70'}`;
+  const baseInputCls = `rounded-lg border bg-transparent px-3 py-1.5 text-[13px] outline-none ${canEdit ? '' : 'cursor-default opacity-70'}`;
   const baseStyle: React.CSSProperties = { borderColor: 'var(--sh-hair)' };
 
   let control: React.ReactNode = null;
@@ -1089,7 +1183,7 @@ function CustomFieldRow({
                   const next = on ? arr.filter((v) => v !== o.value) : [...arr, o.value];
                   onChange(next);
                 }}
-                className={`rounded-full px-2 py-0.5 text-[11px] ${
+                className={`rounded-full px-3 py-1 text-[12px] ${
                   on ? 'bg-[color:var(--sh-ink)] text-[color:var(--surface)]' : 'bg-[color:var(--sh-hair-3)] text-[color:var(--sh-ink-2)]'
                 } ${canEdit ? '' : 'cursor-default opacity-70'}`}
               >
@@ -1149,7 +1243,7 @@ function CustomFieldRow({
           checked={!!value}
           disabled={!canEdit}
           onChange={(e) => onChange(e.target.checked)}
-          className="h-3.5 w-3.5 cursor-pointer rounded"
+          className="h-4 w-4 cursor-pointer rounded"
         />
       );
       break;
@@ -1169,7 +1263,7 @@ function CustomFieldRow({
   }
 
   return (
-    <div className="td-meta-row grid py-2.5 border-b items-start text-[13px]" style={{ gridTemplateColumns: '120px 1fr', borderBottomColor: 'var(--sh-hair-3)' }}>
+    <div className="td-meta-row grid py-2 items-start text-[13px]" style={{ gridTemplateColumns: '112px 1fr' }}>
       <span className="td-meta-k td-mono text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--sh-ink-4)] font-medium pt-1">
         {field.label}
         {field.is_required && <span className="text-red-500">*</span>}
