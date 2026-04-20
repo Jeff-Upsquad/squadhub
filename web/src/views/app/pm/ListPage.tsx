@@ -214,7 +214,13 @@ export default function ListPage() {
         )}
 
         {activeTaskId && !showSettings && (
-          <TaskDetailPanel statuses={statuses} listId={activeListId} canEdit={canEdit} />
+          <TaskDetailPanel
+            statuses={statuses}
+            listId={activeListId}
+            canEdit={canEdit}
+            spaceName={spaceData?.name || listData?.name}
+            spaceColor={spaceData?.color || null}
+          />
         )}
 
         {showSettings && activeListId && (

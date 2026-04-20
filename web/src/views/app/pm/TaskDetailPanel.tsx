@@ -12,7 +12,7 @@ import {
   useDeleteChecklistItem,
 } from '../../../hooks/useChecklists';
 import api from '../../../services/api';
-import type { SpaceStatus, TaskType, TaskTypeField, TaskMetadata } from '@squadhub/shared';
+import type { SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority } from '@squadhub/shared';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -39,6 +39,15 @@ function formatMinutes(minutes: number | null | undefined): string {
   return `${m}m`;
 }
 
+function formatTracked(seconds: number | null | undefined): string {
+  if (!seconds) return '';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+}
+
 function formatSeconds(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
@@ -48,14 +57,61 @@ function formatSeconds(totalSeconds: number): string {
   return `${s}s`;
 }
 
+const PRIORITY_LABEL: Record<TaskPriority, string | null> = {
+  urgent: 'P0',
+  high: 'P1',
+  normal: 'P2',
+  low: 'P3',
+  none: null,
+};
+
+function hashHue(input: string): number {
+  let h = 0;
+  for (let i = 0; i < input.length; i++) h = (h * 31 + input.charCodeAt(i)) | 0;
+  return Math.abs(h) % 360;
+}
+
+function avatarColor(seed: string | undefined | null): string {
+  if (!seed) return 'oklch(0.6 0.1 260)';
+  return `oklch(0.6 0.12 ${hashHue(seed)})`;
+}
+
+function initialOf(name: string | undefined | null): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map(p => p[0]?.toUpperCase() || '').join('') || '?';
+}
+
+function formatDueRelative(iso: string | null | undefined): { text: string; accent: boolean } {
+  if (!iso) return { text: 'No due date', accent: false };
+  const d = new Date(iso);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const that = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const delta = Math.round((that - today) / 86_400_000);
+  const time = d.getHours() === 0 && d.getMinutes() === 0 ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  let prefix = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  if (delta === 0) prefix = 'Today';
+  else if (delta === 1) prefix = 'Tomorrow';
+  else if (delta === -1) prefix = 'Yesterday';
+  const text = time ? `${prefix} · ${time}` : prefix;
+  return { text, accent: delta <= 0 };
+}
+
+type AttachmentLike = { name?: string; size?: string | number };
+
 export default function TaskDetailPanel({
   statuses,
   listId,
   canEdit = true,
+  spaceName,
+  spaceColor,
 }: {
   statuses: SpaceStatus[];
   listId: string;
   canEdit?: boolean;
+  spaceName?: string;
+  spaceColor?: string | null;
 }) {
   const { activeTaskId, setActiveTask, timer, startTimer: globalStartTimer, stopTimer: globalStopTimer } = usePMStore();
   const { data: task, isLoading } = useTask(activeTaskId);
@@ -76,14 +132,41 @@ export default function TaskDetailPanel({
   const [editing, setEditing] = useState<'title' | 'description' | null>(null);
   const [editValue, setEditValue] = useState('');
   const [commentText, setCommentText] = useState('');
-  const [activeTab, setActiveTab] = useState<'activity' | 'comments'>('activity');
+  const [tab, setTab] = useState<'overview' | 'comments' | 'activity' | 'files'>('overview');
   const [estimateInput, setEstimateInput] = useState('');
   const [editingEstimate, setEditingEstimate] = useState(false);
   const [timerElapsed, setTimerElapsed] = useState(0);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [newItemDrafts, setNewItemDrafts] = useState<Record<string, string>>({});
   const [newChecklistTitle, setNewChecklistTitle] = useState<string | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Enter animation: mount, then flip "open" on next frame
+  useEffect(() => {
+    if (activeTaskId) {
+      const id = requestAnimationFrame(() => setMounted(true));
+      return () => cancelAnimationFrame(id);
+    }
+    setMounted(false);
+    return undefined;
+  }, [activeTaskId]);
+
+  // ESC to close — but not when focus is in an input/textarea (let the field handle it)
+  useEffect(() => {
+    if (!activeTaskId) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const el = document.activeElement as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+      setActiveTask(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activeTaskId, setActiveTask]);
 
   const currentType = useMemo<TaskType | null>(() => {
     if (!task || !taskTypes) return null;
@@ -102,7 +185,6 @@ export default function TaskDetailPanel({
 
   const isTimerForThisTask = timer?.taskId === activeTaskId;
 
-  // Tick the display when this task's timer is running
   useEffect(() => {
     if (!isTimerForThisTask || !timer) { setTimerElapsed(0); return; }
     const tick = () => setTimerElapsed(Math.floor((Date.now() - timer.startedAt) / 1000));
@@ -113,10 +195,8 @@ export default function TaskDetailPanel({
 
   const handleStartTimer = async () => {
     if (!task) return;
-    // Starting a new timer auto-stops the previous one
     const prev = globalStartTimer(task.id, task.title, listId, task.time_tracked || 0);
     if (prev) {
-      // Save the previous timer's tracked time
       const elapsedSecs = Math.floor((Date.now() - prev.startedAt) / 1000);
       const newTracked = prev.baseTracked + elapsedSecs;
       try {
@@ -145,17 +225,12 @@ export default function TaskDetailPanel({
 
   if (!activeTaskId) return null;
 
-  if (isLoading || !task) {
-    return (
-      <div className="flex w-[520px] items-center justify-center border-l border-[#E2E8F0] bg-white">
-        <p className="text-sm text-[#999999]">Loading...</p>
-      </div>
-    );
-  }
-
-  const status = statuses.find((s) => s.category === (task as any).status);
+  const status = task ? statuses.find((s) => s.category === (task as any).status) : undefined;
+  const taskStatusCategory = task ? (task as any).status as string | undefined : undefined;
+  const isDone = taskStatusCategory === 'done' || taskStatusCategory === 'closed';
 
   const handleSave = (field: 'title' | 'description') => {
+    if (!task) return;
     if (field === 'title' && editValue.trim()) {
       updateTask.mutate({ id: task.id, title: editValue.trim() });
     } else if (field === 'description') {
@@ -165,252 +240,319 @@ export default function TaskDetailPanel({
   };
 
   const handleDelete = () => {
-    deleteTask.mutate(task.id, {
-      onSuccess: () => setActiveTask(null),
-    });
+    if (!task) return;
+    deleteTask.mutate(task.id, { onSuccess: () => setActiveTask(null) });
   };
 
   const handleAddComment = () => {
     if (!commentText.trim()) return;
-    addComment.mutate(commentText.trim(), {
-      onSuccess: () => setCommentText(''),
+    addComment.mutate(commentText.trim(), { onSuccess: () => setCommentText('') });
+  };
+
+  const handleToggleDone = () => {
+    if (!task || !canEdit) return;
+    const next = isDone ? 'todo' : 'done';
+    updateTask.mutate({ id: task.id, status: next } as any);
+  };
+
+  const addSubtask = (rawTitle: string, keepInputOpen: boolean) => {
+    if (!task) return;
+    const val = rawTitle.trim();
+    if (!val) {
+      setNewSubtaskTitle(null);
+      return;
+    }
+    // Optimistic: prepend a temp subtask so it shows instantly
+    const tempId = `temp-${Date.now()}`;
+    qc.setQueryData(['task', task.id], (prev: any) => {
+      if (!prev) return prev;
+      const nextSubtasks = [...(prev.subtasks || []), { id: tempId, title: val, status: 'todo', _optimistic: true }];
+      return { ...prev, subtasks: nextSubtasks };
     });
+    setNewSubtaskTitle(keepInputOpen ? '' : null);
+    createTask.mutate(
+      { title: val, parent_task_id: task.id, list_id: task.list_id },
+      {
+        onError: () => {
+          // Rollback: strip the temp subtask
+          qc.setQueryData(['task', task.id], (prev: any) => {
+            if (!prev) return prev;
+            return { ...prev, subtasks: (prev.subtasks || []).filter((s: any) => s.id !== tempId) };
+          });
+        },
+      }
+    );
   };
 
-  const formatDateTime = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return {
-      date: d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-      time: d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-    };
+  const handleCopyLink = async () => {
+    if (!task) return;
+    try {
+      await navigator.clipboard.writeText(
+        `${window.location.origin}${window.location.pathname}?task=${task.id}`
+      );
+    } catch { /* noop */ }
   };
 
-  const created = formatDateTime(task.created_at);
+  const priorityLabel = task ? PRIORITY_LABEL[(task.priority || 'none') as TaskPriority] : null;
+  const assignee = task?.assignees?.[0];
+  const due = formatDueRelative(task?.due_date);
+  const attachments: AttachmentLike[] = (task?.metadata as TaskMetadata | undefined)?.attachments || [];
+  const subtasks = task?.subtasks || [];
+  const subtaskDone = subtasks.filter((s: any) => s.status === 'done' || s.status === 'closed').length;
+
+  // Build a simple activity feed from what we know
+  const activityItems: { icon: string; body: React.ReactNode; t: string }[] = task ? [
+    ...(comments || []).map((c) => ({
+      icon: '○',
+      body: <><b>{c.user?.display_name || c.user?.email}</b> <span className="text-[color:var(--sh-ink-3)]">commented</span></>,
+      t: c.created_at,
+    })),
+    ...(status ? [{
+      icon: '●',
+      body: <><span className="text-[color:var(--sh-ink-3)]">status is</span> <b>{status.name}</b></>,
+      t: task.updated_at,
+    }] : []),
+    {
+      icon: '○',
+      body: <><b>{task.creator?.display_name || task.creator?.email || 'Someone'}</b> <span className="text-[color:var(--sh-ink-3)]">created the task</span></>,
+      t: task.created_at,
+    },
+  ] : [];
 
   return (
-    <div className="flex w-[520px] shrink-0 flex-col border-l border-[#E2E8F0] bg-white">
-      {/* Header bar */}
-      <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-3">
-        <button
-          onClick={() => setActiveTask(null)}
-          className="rounded p-1 text-[#666666] hover:bg-[#F1F5F9] hover:text-[#0F172B]"
+    <div className="fixed inset-0 z-[90]">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/10 transition-opacity duration-300"
+        style={{ opacity: mounted ? 1 : 0 }}
+        onClick={() => setActiveTask(null)}
+      />
+
+      {/* Drawer */}
+      <aside
+        onClick={(e) => e.stopPropagation()}
+        className="td-panel absolute top-0 right-0 bottom-0 w-[min(620px,94vw)] flex flex-col border-l"
+        style={{
+          background: 'var(--surface)',
+          borderLeftColor: 'var(--sh-hair)',
+          boxShadow: '-24px 0 48px -16px rgba(0,0,0,0.12)',
+          transform: mounted ? 'translateX(0)' : 'translateX(102%)',
+          transition: 'transform .32s cubic-bezier(0.22, 0.8, 0.3, 1)',
+        }}
+      >
+        {/* Header */}
+        <div
+          className="td-head flex items-center gap-2.5 px-5 py-3.5 shrink-0 border-b"
+          style={{ borderBottomColor: 'var(--sh-hair-3)' }}
         >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-        <div className="flex items-center gap-2">
-          <button className="rounded p-1.5 text-[#999999] hover:bg-[#F1F5F9] hover:text-[#0F172B]">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </button>
-          <button className="rounded p-1.5 text-[#999999] hover:bg-[#F1F5F9] hover:text-yellow-500">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-            </svg>
-          </button>
-          {canEdit && (
-            <button
-              onClick={handleDelete}
-              className="rounded p-1.5 text-[#999999] hover:bg-[#F1F5F9] hover:text-red-500"
+          <span className="td-mono text-[11px] tracking-[0.06em] text-[color:var(--sh-ink-4)]">
+            SQ-{String(task?.display_number ?? 0).padStart(3, '0')}
+          </span>
+          {spaceName && (
+            <span
+              className="text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded"
+              style={{
+                background: spaceColor || 'var(--sh-ink)',
+                color: 'var(--surface)',
+                fontFamily: "'Instrument Serif', serif",
+                letterSpacing: '0.03em',
+              }}
             >
-              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+              {spaceName}
+            </span>
+          )}
+          {priorityLabel && (
+            <span className="td-mono text-[11px] text-[color:var(--sh-ink-3)]">{priorityLabel}</span>
+          )}
+          <div className="flex-1" />
+          <button
+            type="button"
+            title="Copy link"
+            onClick={handleCopyLink}
+            className="td-icon-btn"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+            </svg>
+          </button>
+          <div className="relative">
+            <button
+              type="button"
+              title="More"
+              onClick={() => setMoreMenuOpen((v) => !v)}
+              className="td-icon-btn"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="5" cy="12" r="1.5" />
                 <circle cx="12" cy="12" r="1.5" />
                 <circle cx="19" cy="12" r="1.5" />
               </svg>
             </button>
-          )}
-        </div>
-      </div>
-
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="px-6 py-5">
-          {/* Task Title */}
-          {editing === 'title' ? (
-            <input
-              autoFocus
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleSave('title'); if (e.key === 'Escape') setEditing(null); }}
-              onBlur={() => handleSave('title')}
-              className="mb-5 w-full rounded border border-[#CAD5E2] px-2 py-1.5 text-xl font-bold text-[#0F172B] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
-            />
-          ) : (
-            <h2
-              onClick={canEdit ? () => { setEditing('title'); setEditValue(task.title); } : undefined}
-              className={`mb-5 text-xl font-bold text-[#0F172B] ${canEdit ? 'cursor-pointer hover:text-[#0F172B]/80' : ''}`}
-            >
-              {task.title}
-            </h2>
-          )}
-
-          {/* Properties */}
-          <div className="mb-6 space-y-0">
-            {/* Type */}
-            <div className="flex items-center py-2.5">
-              <div className="flex w-36 shrink-0 items-center gap-2.5 text-sm text-[#999999]">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                </svg>
-                Type
-              </div>
-              <div className="relative">
-                <button
-                  onClick={canEdit ? () => setTypeMenuOpen((v) => !v) : undefined}
-                  disabled={!canEdit}
-                  className={`flex items-center gap-2 rounded border border-transparent px-2 py-1 text-sm text-[#0F172B] outline-none ${canEdit ? 'hover:border-[#E2E8F0]' : 'cursor-default opacity-70'}`}
+            {moreMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMoreMenuOpen(false)} />
+                <div
+                  className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-lg border bg-white shadow-lg"
+                  style={{ borderColor: 'var(--sh-hair)' }}
                 >
-                  {currentType ? (
+                  {canEdit && (
+                    <button
+                      onClick={() => { handleDelete(); setMoreMenuOpen(false); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[color:var(--sh-hair-3)] text-[color:var(--sh-ink-2)]"
+                    >
+                      Delete task
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+          <button
+            type="button"
+            title="Close"
+            onClick={() => setActiveTask(null)}
+            className="td-icon-btn"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="td-scroll flex-1 overflow-y-auto px-6 pt-5 pb-20">
+          {(!task || isLoading) ? (
+            <div className="flex items-center justify-center py-20 text-[color:var(--sh-ink-3)] text-sm">Loading…</div>
+          ) : (
+            <>
+              {/* Title row */}
+              <div className="flex items-start gap-3 mb-5">
+                <button
+                  type="button"
+                  onClick={handleToggleDone}
+                  disabled={!canEdit}
+                  className="mt-[6px] td-checkbox shrink-0"
+                  data-done={isDone ? 'true' : 'false'}
+                  aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
+                />
+                {editing === 'title' ? (
+                  <input
+                    autoFocus
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSave('title');
+                      if (e.key === 'Escape') setEditing(null);
+                    }}
+                    onBlur={() => handleSave('title')}
+                    className="flex-1 bg-transparent border-b outline-none text-[28px] leading-[1.15] tracking-[-0.01em] text-[color:var(--sh-ink)] py-1"
+                    style={{ fontFamily: "'Instrument Serif', serif", fontWeight: 400, borderColor: 'var(--sh-ink)' }}
+                  />
+                ) : (
+                  <h2
+                    onClick={canEdit ? () => { setEditing('title'); setEditValue(task.title); } : undefined}
+                    className={`flex-1 text-[28px] leading-[1.15] tracking-[-0.01em] text-[color:var(--sh-ink)] m-0 ${canEdit ? 'cursor-text' : ''}`}
+                    style={{ fontFamily: "'Instrument Serif', serif", fontWeight: 400 }}
+                  >
+                    {task.title}
+                  </h2>
+                )}
+              </div>
+
+              {/* Meta grid */}
+              <div
+                className="td-meta grid grid-cols-1 mb-5 border-t"
+                style={{ borderTopColor: 'var(--sh-hair-3)' }}
+              >
+                <MetaRow k="Assignee">
+                  {assignee ? (
                     <>
-                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: currentType.color }} />
-                      <span>{currentType.name}</span>
+                      <span className="td-ava-xs" style={{ background: avatarColor(assignee.id || assignee.email) }}>
+                        {initialOf(assignee.display_name || assignee.email)}
+                      </span>
+                      <span>{assignee.display_name || assignee.email}</span>
                     </>
                   ) : (
-                    <span className="text-[#CAD5E2]">Select type</span>
+                    <span className="text-[color:var(--sh-ink-3)]">Unassigned</span>
                   )}
-                  {canEdit && (
-                    <svg className="h-3 w-3 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  )}
-                </button>
-                {typeMenuOpen && taskTypes && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setTypeMenuOpen(false)} />
-                    <div className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-lg border border-[#E2E8F0] bg-white shadow-lg">
-                      {taskTypes.map((t) => (
-                        <button
-                          key={t.id}
-                          onClick={() => {
-                            updateTask.mutate({ id: task.id, task_type_id: t.id });
-                            setTypeMenuOpen(false);
-                          }}
-                          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[#F8FAFC] ${
-                            currentType?.id === t.id ? 'bg-[#F1F5F9]' : ''
-                          }`}
-                        >
-                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: t.color }} />
-                          <span className="flex-1 text-[#0F172B]">{t.name}</span>
-                          {t.is_default && <span className="text-[10px] text-[#90A1B9]">Default</span>}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
+                </MetaRow>
 
-            {/* Status */}
-            <div className="flex items-center py-2.5">
-              <div className="flex w-36 shrink-0 items-center gap-2.5 text-sm text-[#999999]">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Status
-              </div>
-              <select
-                value={(task as any).status}
-                onChange={(e) => updateTask.mutate({ id: task.id, status: e.target.value })}
-                disabled={!canEdit}
-                className={`rounded border border-transparent px-2 py-1 text-sm text-[#0F172B] outline-none ${canEdit ? 'hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]' : 'cursor-default opacity-70'}`}
-                style={status ? { color: status.color } : {}}
-              >
-                {statuses.map((s) => (
-                  <option key={s.id} value={s.category}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Assignee */}
-            <div className="flex items-center py-2.5">
-              <div className="flex w-36 shrink-0 items-center gap-2.5 text-sm text-[#999999]">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                Assignee
-              </div>
-              <div className="flex items-center gap-2">
-                {task.assignees && task.assignees.length > 0 ? (
-                  <div className="flex items-center gap-2">
-                    <div className="flex -space-x-1.5">
-                      {task.assignees.map((u: any) => (
-                        <div
-                          key={u.id}
-                          className="flex h-7 w-7 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#0F172B] ring-2 ring-white"
-                          title={u.display_name || u.email}
-                        >
-                          {(u.display_name || u.email)?.[0]?.toUpperCase()}
-                        </div>
-                      ))}
-                    </div>
-                    <span className="text-sm text-[#0F172B]">
-                      {task.assignees.map((u: any) => u.display_name || u.email).join(', ')}
-                    </span>
-                  </div>
-                ) : (
-                  <span className="text-sm text-[#CAD5E2]">Unassigned</span>
-                )}
-              </div>
-            </div>
-
-            {/* Dates row: Work date, Start date, Due date */}
-            <div className="flex items-center py-2.5">
-              <div className="flex w-36 shrink-0 items-center gap-2.5 text-sm text-[#999999]">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Dates
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-[#999999] uppercase">Work</span>
-                  <input
-                    type="date"
-                    value={(task as any).work_date || ''}
-                    onChange={canEdit ? (e) => updateTask.mutate({ id: task.id, work_date: e.target.value || null }) : undefined}
-                    disabled={!canEdit}
-                    className={`rounded border border-transparent px-1.5 py-0.5 text-xs text-[#0F172B] outline-none ${canEdit ? 'hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]' : 'cursor-default opacity-70'}`}
-                  />
-                </div>
-                <span className="text-[#CAD5E2]">|</span>
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-[#999999] uppercase">Start</span>
-                  <input
-                    type="date"
-                    value={(task as any).start_date || ''}
-                    onChange={canEdit ? (e) => updateTask.mutate({ id: task.id, start_date: e.target.value || null }) : undefined}
-                    disabled={!canEdit}
-                    className={`rounded border border-transparent px-1.5 py-0.5 text-xs text-[#0F172B] outline-none ${canEdit ? 'hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]' : 'cursor-default opacity-70'}`}
-                  />
-                </div>
-                <span className="text-[#CAD5E2]">|</span>
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-[#999999] uppercase">Due</span>
+                <MetaRow k="Due">
                   <input
                     type="date"
                     value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
                     onChange={canEdit ? (e) => updateTask.mutate({ id: task.id, due_date: e.target.value || null }) : undefined}
                     disabled={!canEdit}
-                    className={`rounded border border-transparent px-1.5 py-0.5 text-xs text-[#0F172B] outline-none ${canEdit ? 'hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]' : 'cursor-default opacity-70'}`}
+                    className={`td-mono text-[12px] bg-transparent outline-none ${due.accent && task.due_date ? 'font-semibold text-[color:var(--sh-ink)]' : 'text-[color:var(--sh-ink-2)]'}`}
                   />
-                </div>
-              </div>
-            </div>
+                  {task.due_date && (
+                    <span className="td-mono text-[11px] text-[color:var(--sh-ink-3)]">· {due.text}</span>
+                  )}
+                </MetaRow>
 
-            {/* Time estimate & Time tracked */}
-            <div className="flex items-center py-2.5">
-              <div className="flex w-36 shrink-0 items-center gap-2.5 text-sm text-[#999999]">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Time
-              </div>
-              <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-[#999999] uppercase">Estimate</span>
+                <MetaRow k="Status">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={canEdit ? () => setStatusMenuOpen((v) => !v) : undefined}
+                      className="inline-flex items-center gap-2 text-[12.5px] text-[color:var(--sh-ink)] px-1 py-0.5 rounded hover:bg-[color:var(--sh-hair-3)] transition"
+                    >
+                      <span className="td-dot" style={{ background: status?.color || 'var(--sh-ink-4)' }} />
+                      {status?.name || taskStatusCategory || 'No status'}
+                    </button>
+                    {statusMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
+                        <div
+                          className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border bg-white shadow-lg"
+                          style={{ borderColor: 'var(--sh-hair)' }}
+                        >
+                          {statuses.map((s) => (
+                            <button
+                              key={s.id}
+                              onClick={() => {
+                                updateTask.mutate({ id: task.id, status: s.category } as any);
+                                setStatusMenuOpen(false);
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)]"
+                            >
+                              <span className="td-dot" style={{ background: s.color }} />
+                              {s.name}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </MetaRow>
+
+                {spaceName && (
+                  <MetaRow k="Space">
+                    <span
+                      className="td-space-emblem-xs"
+                      style={{ background: spaceColor || 'var(--sh-ink)' }}
+                    >
+                      {initialOf(spaceName)[0]}
+                    </span>
+                    <span>{spaceName}</span>
+                  </MetaRow>
+                )}
+
+                <MetaRow k="Reporter">
+                  {task.creator ? (
+                    <>
+                      <span className="td-ava-xs" style={{ background: avatarColor(task.creator.id || task.creator.email) }}>
+                        {initialOf(task.creator.display_name || task.creator.email)}
+                      </span>
+                      <span>{task.creator.display_name || task.creator.email}</span>
+                    </>
+                  ) : (
+                    <span className="text-[color:var(--sh-ink-3)]">—</span>
+                  )}
+                </MetaRow>
+
+                <MetaRow k="Estimate">
                   {editingEstimate ? (
                     <input
                       autoFocus
@@ -430,430 +572,457 @@ export default function TaskDetailPanel({
                         setEditingEstimate(false);
                       }}
                       placeholder="e.g. 2h 30m"
-                      className="w-20 rounded border border-[#2962FF] px-1.5 py-0.5 text-xs text-[#0F172B] outline-none focus:ring-1 focus:ring-[#2962FF]"
+                      className="td-mono text-[12px] bg-transparent border-b outline-none w-28"
+                      style={{ borderColor: 'var(--sh-ink)' }}
                     />
                   ) : (
                     <span
                       onClick={canEdit ? () => { setEditingEstimate(true); setEstimateInput(formatMinutes(task.time_estimate)); } : undefined}
-                      className={`rounded px-1.5 py-0.5 text-xs text-[#0F172B] ${canEdit ? 'cursor-pointer hover:bg-[#F1F5F9]' : ''}`}
+                      className={`td-mono text-[12px] text-[color:var(--sh-ink-2)] ${canEdit ? 'cursor-pointer' : ''}`}
                     >
-                      {task.time_estimate ? formatMinutes(task.time_estimate) : <span className="text-[#CAD5E2]">&mdash;</span>}
+                      {task.time_estimate ? formatMinutes(task.time_estimate) : '—'}
+                      {task.time_tracked ? ` · logged ${formatTracked(isTimerForThisTask ? (task.time_tracked + timerElapsed) : task.time_tracked)}` : ''}
                     </span>
                   )}
-                </div>
-                <span className="text-[#CAD5E2]">|</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-[#999999] uppercase">Tracked</span>
-                  <span className="text-xs text-[#0F172B]">
-                    {isTimerForThisTask
-                      ? formatSeconds((task.time_tracked || 0) + timerElapsed)
-                      : task.time_tracked
-                        ? formatSeconds(task.time_tracked)
-                        : <span className="text-[#CAD5E2]">0s</span>
-                    }
-                  </span>
-                </div>
-                {canEdit && (isTimerForThisTask ? (
+                </MetaRow>
+
+                {task.tags && task.tags.length > 0 && (
+                  <MetaRow k="Labels">
+                    <span className="flex flex-wrap gap-1">
+                      {task.tags.map((t) => (
+                        <span key={t.id} className="td-label">{t.name}</span>
+                      ))}
+                    </span>
+                  </MetaRow>
+                )}
+              </div>
+
+              {/* Tabs */}
+              <div
+                className="flex gap-0.5 mb-4 border-b"
+                style={{ borderBottomColor: 'var(--sh-hair-3)' }}
+              >
+                {([
+                  { id: 'overview', l: 'Overview' },
+                  { id: 'comments', l: `Comments · ${comments?.length ?? 0}` },
+                  { id: 'activity', l: 'Activity' },
+                  { id: 'files', l: `Files · ${attachments.length}` },
+                ] as const).map((t) => (
                   <button
-                    onClick={handleStopTimer}
-                    className="flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-100"
+                    key={t.id}
+                    onClick={() => setTab(t.id as any)}
+                    data-active={tab === t.id}
+                    className="td-tab px-3.5 py-2.5 text-[12.5px] cursor-pointer transition"
                   >
-                    <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
-                      <rect x="6" y="6" width="12" height="12" rx="1" />
-                    </svg>
-                    Stop
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleStartTimer}
-                    className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100"
-                  >
-                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                    </svg>
-                    Track
+                    {t.l}
                   </button>
                 ))}
               </div>
-            </div>
-          </div>
 
-          {/* Custom fields (from task type) */}
-          {customFields.length > 0 && (
-            <div className="mb-6 space-y-0 border-t border-[#E2E8F0] pt-4">
-              {customFields.map((field) => (
-                <CustomFieldRow
-                  key={field.id}
-                  field={field}
-                  value={customValues[field.key]}
-                  onChange={(v) => updateCustomField(field.key, v)}
-                  canEdit={canEdit}
-                />
-              ))}
-            </div>
-          )}
+              {/* Tab content */}
+              {tab === 'overview' && (
+                <div>
+                  {/* Task Type picker — only show if task types exist */}
+                  {taskTypes && taskTypes.length > 0 && (
+                    <div className="mb-4">
+                      <div className="td-h4">Type</div>
+                      <div className="relative inline-block">
+                        <button
+                          type="button"
+                          onClick={canEdit ? () => setTypeMenuOpen((v) => !v) : undefined}
+                          disabled={!canEdit}
+                          className="inline-flex items-center gap-2 text-[13px] text-[color:var(--sh-ink)] px-2 py-1 rounded border"
+                          style={{ borderColor: 'var(--sh-hair)' }}
+                        >
+                          {currentType ? (
+                            <>
+                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: currentType.color }} />
+                              {currentType.name}
+                            </>
+                          ) : (
+                            <span className="text-[color:var(--sh-ink-3)]">Select type</span>
+                          )}
+                        </button>
+                        {typeMenuOpen && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setTypeMenuOpen(false)} />
+                            <div
+                              className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-lg border bg-white shadow-lg"
+                              style={{ borderColor: 'var(--sh-hair)' }}
+                            >
+                              {taskTypes.map((t) => (
+                                <button
+                                  key={t.id}
+                                  onClick={() => {
+                                    updateTask.mutate({ id: task.id, task_type_id: t.id });
+                                    setTypeMenuOpen(false);
+                                  }}
+                                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)] ${
+                                    currentType?.id === t.id ? 'bg-[color:var(--sh-hair-3)]' : ''
+                                  }`}
+                                >
+                                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: t.color }} />
+                                  <span className="flex-1 text-[color:var(--sh-ink)]">{t.name}</span>
+                                  {t.is_default && <span className="text-[10px] text-[color:var(--sh-ink-4)]">Default</span>}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
-          {/* Description */}
-          <div className="mb-6">
-            <h3 className="mb-2 text-sm font-semibold text-[#0F172B]">Description</h3>
-            {editing === 'description' ? (
-              <textarea
-                autoFocus
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onBlur={() => handleSave('description')}
-                onKeyDown={(e) => { if (e.key === 'Escape') setEditing(null); }}
-                rows={5}
-                className="w-full resize-none rounded-lg border border-[#CAD5E2] bg-[#FAFBFC] px-3 py-2.5 text-sm text-[#0F172B] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
-              />
-            ) : (
-              <div
-                onClick={canEdit ? () => { setEditing('description'); setEditValue(task.description || ''); } : undefined}
-                className={`min-h-[60px] rounded-lg border border-[#E2E8F0] bg-[#FAFBFC] px-4 py-3 text-sm text-[#0F172B] transition ${canEdit ? 'cursor-pointer hover:border-[#CAD5E2]' : ''}`}
-              >
-                {task.description || <span className="text-[#CAD5E2]">{canEdit ? 'Add a description...' : 'No description'}</span>}
-              </div>
-            )}
-          </div>
+                  {/* Custom fields */}
+                  {customFields.length > 0 && (
+                    <div className="mb-5">
+                      {customFields.map((field) => (
+                        <CustomFieldRow
+                          key={field.id}
+                          field={field}
+                          value={customValues[field.key]}
+                          onChange={(v) => updateCustomField(field.key, v)}
+                          canEdit={canEdit}
+                        />
+                      ))}
+                    </div>
+                  )}
 
-          {/* Subtasks */}
-          <div className="mb-6">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[#0F172B]">Subtasks</h3>
-              {canEdit && newSubtaskTitle === null && (
-                <button
-                  onClick={() => setNewSubtaskTitle('')}
-                  className="rounded-md px-2 py-1 text-xs text-[#2962FF] hover:bg-[#F1F5F9]"
-                >
-                  + Add subtask
-                </button>
-              )}
-            </div>
-            {task.subtasks && task.subtasks.length > 0 ? (
-              <ul className="space-y-1">
-                {task.subtasks.map((st) => {
-                  const done = (st as any).status === 'done' || (st as any).status === 'closed';
-                  return (
-                    <li key={st.id} className="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-[#F8FAFC]">
-                      <input
-                        type="checkbox"
-                        checked={done}
-                        onChange={(e) => updateTask.mutate({ id: st.id, status: e.target.checked ? 'done' : 'todo' })}
-                        disabled={!canEdit}
-                        onClick={(e) => e.stopPropagation()}
-                        className="h-3.5 w-3.5 cursor-pointer rounded border-[#CBD5E1]"
-                      />
-                      <button
-                        onClick={() => setActiveTask(st.id)}
-                        className={`flex-1 truncate text-left text-sm ${done ? 'text-[#999999] line-through' : 'text-[#0F172B] hover:text-[#2962FF]'}`}
-                      >
-                        {st.title}
-                      </button>
-                      {st.due_date && (
-                        <span className="text-[10px] text-[#999999]">
-                          {new Date(st.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  <div className="td-h4">Description</div>
+                  {editing === 'description' ? (
+                    <textarea
+                      autoFocus
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => handleSave('description')}
+                      onKeyDown={(e) => { if (e.key === 'Escape') setEditing(null); }}
+                      rows={6}
+                      className="td-desc w-full resize-none bg-transparent outline-none rounded border p-2"
+                      style={{ borderColor: 'var(--sh-hair)' }}
+                    />
+                  ) : (
+                    <div
+                      onClick={canEdit ? () => { setEditing('description'); setEditValue(task.description || ''); } : undefined}
+                      className={`td-desc whitespace-pre-wrap ${canEdit ? 'cursor-text' : ''}`}
+                    >
+                      {task.description || (
+                        <span className="text-[color:var(--sh-ink-3)]">{canEdit ? 'Add a description…' : 'No description'}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Subtasks */}
+                  <div className="mt-6">
+                    <div className="td-h4 flex items-center gap-2">
+                      Subtasks
+                      {subtasks.length > 0 && (
+                        <span className="td-mono text-[11px] text-[color:var(--sh-ink-4)] font-normal normal-case tracking-normal">
+                          {subtaskDone} / {subtasks.length}
                         </span>
                       )}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : newSubtaskTitle === null ? (
-              <p className="text-xs text-[#CAD5E2]">{canEdit ? 'No subtasks yet' : 'No subtasks'}</p>
-            ) : null}
-            {canEdit && newSubtaskTitle !== null && (
-              <input
-                autoFocus
-                value={newSubtaskTitle}
-                onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const val = newSubtaskTitle.trim();
-                    if (val) {
-                      createTask.mutate(
-                        { title: val, parent_task_id: task.id, list_id: task.list_id },
-                        { onSuccess: () => setNewSubtaskTitle('') },
-                      );
-                    } else {
-                      setNewSubtaskTitle(null);
-                    }
-                  } else if (e.key === 'Escape') {
-                    setNewSubtaskTitle(null);
-                  }
-                }}
-                onBlur={() => {
-                  const val = newSubtaskTitle.trim();
-                  if (val) {
-                    createTask.mutate(
-                      { title: val, parent_task_id: task.id, list_id: task.list_id },
-                      { onSuccess: () => setNewSubtaskTitle(null) },
-                    );
-                  } else {
-                    setNewSubtaskTitle(null);
-                  }
-                }}
-                placeholder="Subtask title, press Enter to add"
-                className="mt-1 w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1 text-sm text-[#0F172B] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
-              />
-            )}
-          </div>
+                      {canEdit && newSubtaskTitle === null && (
+                        <button
+                          onClick={() => setNewSubtaskTitle('')}
+                          className="ml-auto text-[11px] text-[color:var(--sh-ink-3)] hover:text-[color:var(--sh-ink)] normal-case tracking-normal"
+                        >
+                          + Add
+                        </button>
+                      )}
+                    </div>
+                    {subtasks.length > 0 && (
+                      <div className="flex flex-col gap-1.5">
+                        {subtasks.map((st: any) => {
+                          const stDone = st.status === 'done' || st.status === 'closed';
+                          return (
+                            <div key={st.id} className="td-sub">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!canEdit) return;
+                                  updateTask.mutate({ id: st.id, status: stDone ? 'todo' : 'done' } as any);
+                                }}
+                                className="td-checkbox shrink-0"
+                                data-done={stDone ? 'true' : 'false'}
+                                aria-label="Toggle subtask"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setActiveTask(st.id)}
+                                className={`flex-1 text-left text-[13px] truncate ${stDone ? 'line-through text-[color:var(--sh-ink-3)]' : 'text-[color:var(--sh-ink)]'}`}
+                              >
+                                {st.title}
+                              </button>
+                              {st.due_date && (
+                                <span className="td-mono text-[11px] text-[color:var(--sh-ink-4)]">
+                                  {new Date(st.due_date).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {canEdit && newSubtaskTitle !== null && (
+                      <input
+                        autoFocus
+                        value={newSubtaskTitle}
+                        onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addSubtask(newSubtaskTitle, true);
+                          } else if (e.key === 'Escape') {
+                            e.stopPropagation();
+                            setNewSubtaskTitle(null);
+                          }
+                        }}
+                        onBlur={() => addSubtask(newSubtaskTitle, false)}
+                        placeholder="Subtask title, Enter to add"
+                        className="mt-2 w-full rounded border bg-transparent px-2 py-1 text-[13px] outline-none"
+                        style={{ borderColor: 'var(--sh-hair)' }}
+                      />
+                    )}
+                  </div>
 
-          {/* Checklists */}
-          <div className="mb-6">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[#0F172B]">Checklists</h3>
-              {canEdit && newChecklistTitle === null && (
-                <button
-                  onClick={() => setNewChecklistTitle('')}
-                  className="rounded-md px-2 py-1 text-xs text-[#2962FF] hover:bg-[#F1F5F9]"
-                >
-                  + Add checklist
-                </button>
-              )}
-            </div>
-            {canEdit && newChecklistTitle !== null && (
-              <input
-                autoFocus
-                value={newChecklistTitle}
-                onChange={(e) => setNewChecklistTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const title = newChecklistTitle.trim();
-                    if (title) {
-                      createChecklist.mutate(title, { onSuccess: () => setNewChecklistTitle(null) });
-                    } else {
-                      setNewChecklistTitle(null);
-                    }
-                  } else if (e.key === 'Escape') {
-                    setNewChecklistTitle(null);
-                  }
-                }}
-                onBlur={() => {
-                  const title = newChecklistTitle.trim();
-                  if (title) {
-                    createChecklist.mutate(title, { onSuccess: () => setNewChecklistTitle(null) });
-                  } else {
-                    setNewChecklistTitle(null);
-                  }
-                }}
-                placeholder="Checklist name, press Enter to create"
-                className="mb-2 w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1 text-sm text-[#0F172B] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
-              />
-            )}
-            {checklists && checklists.length > 0 ? (
-              <div className="space-y-3">
-                {checklists.map((cl) => {
-                  const items = cl.items || [];
-                  const done = items.filter((i) => i.is_done).length;
-                  return (
-                    <div key={cl.id} className="rounded-lg border border-[#E2E8F0] bg-[#FAFBFC] p-3">
-                      <div className="mb-2 flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-sm font-medium text-[#0F172B]">
-                          <span>{cl.title}</span>
-                          <span className="text-xs text-[#999999]">{done}/{items.length}</span>
-                        </div>
-                        {canEdit && (
+                  {/* Checklists */}
+                  {(checklists && checklists.length > 0) || (canEdit && newChecklistTitle !== null) ? (
+                    <div className="mt-6">
+                      <div className="td-h4 flex items-center gap-2">
+                        Checklists
+                        {canEdit && newChecklistTitle === null && (
                           <button
-                            onClick={() => { if (confirm(`Delete checklist "${cl.title}"?`)) deleteChecklist.mutate(cl.id); }}
-                            className="text-xs text-[#CAD5E2] hover:text-red-500"
+                            onClick={() => setNewChecklistTitle('')}
+                            className="ml-auto text-[11px] text-[color:var(--sh-ink-3)] hover:text-[color:var(--sh-ink)] normal-case tracking-normal"
                           >
-                            ×
+                            + Add
                           </button>
                         )}
                       </div>
-                      <ul className="space-y-1">
-                        {items.map((item) => (
-                          <li key={item.id} className="group flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={item.is_done}
-                              onChange={(e) => updateChecklistItem.mutate({ id: item.id, is_done: e.target.checked })}
-                              disabled={!canEdit}
-                              className="h-3.5 w-3.5 cursor-pointer rounded border-[#CBD5E1]"
-                            />
-                            <span className={`flex-1 text-sm ${item.is_done ? 'text-[#999999] line-through' : 'text-[#0F172B]'}`}>
-                              {item.content}
-                            </span>
-                            {canEdit && (
-                              <button
-                                onClick={() => deleteChecklistItem.mutate(item.id)}
-                                className="text-xs text-[#CAD5E2] opacity-0 group-hover:opacity-100 hover:text-red-500"
-                              >
-                                ×
-                              </button>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                      {canEdit && (
+                      {canEdit && newChecklistTitle !== null && (
                         <input
-                          placeholder="+ Add item"
-                          value={newItemDrafts[cl.id] || ''}
-                          onChange={(e) => setNewItemDrafts((prev) => ({ ...prev, [cl.id]: e.target.value }))}
+                          autoFocus
+                          value={newChecklistTitle}
+                          onChange={(e) => setNewChecklistTitle(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
-                              const val = (newItemDrafts[cl.id] || '').trim();
-                              if (val) {
-                                createChecklistItem.mutate({ checklistId: cl.id, content: val });
-                                setNewItemDrafts((prev) => ({ ...prev, [cl.id]: '' }));
-                              }
-                            }
+                              const t = newChecklistTitle.trim();
+                              if (t) createChecklist.mutate(t, { onSuccess: () => setNewChecklistTitle(null) });
+                              else setNewChecklistTitle(null);
+                            } else if (e.key === 'Escape') setNewChecklistTitle(null);
                           }}
-                          className="mt-2 w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-[#0F172B] placeholder-[#CAD5E2] outline-none focus:border-[#E2E8F0] focus:bg-white"
+                          onBlur={() => {
+                            const t = newChecklistTitle.trim();
+                            if (t) createChecklist.mutate(t, { onSuccess: () => setNewChecklistTitle(null) });
+                            else setNewChecklistTitle(null);
+                          }}
+                          placeholder="Checklist name, Enter to create"
+                          className="mb-2 w-full rounded border bg-transparent px-2 py-1 text-[13px] outline-none"
+                          style={{ borderColor: 'var(--sh-hair)' }}
                         />
                       )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-[#CAD5E2]">{canEdit ? 'No checklists yet' : 'No checklists'}</p>
-            )}
-          </div>
-
-          {/* Tabs: Activity / Comments */}
-          <div className="border-b border-[#E2E8F0]">
-            <div className="flex gap-0">
-              <button
-                onClick={() => setActiveTab('activity')}
-                className={`border-b-2 px-4 py-2 text-sm font-medium transition ${
-                  activeTab === 'activity'
-                    ? 'border-[#2962FF] text-[#0F172B]'
-                    : 'border-transparent text-[#999999] hover:text-[#666666]'
-                }`}
-              >
-                Activity
-              </button>
-              <button
-                onClick={() => setActiveTab('comments')}
-                className={`border-b-2 px-4 py-2 text-sm font-medium transition ${
-                  activeTab === 'comments'
-                    ? 'border-[#2962FF] text-[#0F172B]'
-                    : 'border-transparent text-[#999999] hover:text-[#666666]'
-                }`}
-              >
-                Comments
-                {comments && comments.length > 0 && (
-                  <span className="ml-1.5 text-xs text-[#999999]">{comments.length}</span>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Tab content */}
-          <div className="py-4">
-            {activeTab === 'activity' && (
-              <div className="space-y-4">
-                {/* Created entry */}
-                <div className="flex gap-3">
-                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#0F172B]">
-                    {(task.creator?.display_name || task.creator?.email || 'U')?.[0]?.toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm text-[#666666]">
-                      <span className="font-medium text-[#0F172B]">{task.creator?.display_name || 'You'}</span>
-                      {' '}created this task
-                    </p>
-                    <p className="mt-0.5 text-xs text-[#999999]">{created.date} {created.time}</p>
-                  </div>
-                </div>
-
-                {/* Status change */}
-                {status && (
-                  <div className="flex gap-3">
-                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#0F172B]">
-                      {(task.creator?.display_name || task.creator?.email || 'U')?.[0]?.toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm text-[#666666]">
-                        <span className="font-medium text-[#0F172B]">{task.creator?.display_name || 'You'}</span>
-                        {' '}changed the status to{' '}
-                        <span
-                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium"
-                          style={{ backgroundColor: `${status.color}18`, color: status.color }}
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: status.color }} />
-                          {status.name}
-                        </span>
-                      </p>
-                      <p className="mt-0.5 text-xs text-[#999999]">
-                        {formatDateTime(task.updated_at).date} {formatDateTime(task.updated_at).time}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Comments shown in activity */}
-                {comments?.map((c) => (
-                  <div key={c.id} className="flex gap-3">
-                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#0F172B]">
-                      {(c.user?.display_name || c.user?.email)?.[0]?.toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm text-[#666666]">
-                        <span className="font-medium text-[#0F172B]">{c.user?.display_name || c.user?.email}</span>
-                        {' '}added a comment
-                      </p>
-                      <p className="mt-1 rounded bg-[#FAFBFC] px-3 py-2 text-sm text-[#666666]">{c.content}</p>
-                      <p className="mt-0.5 text-xs text-[#999999]">
-                        {formatDateTime(c.created_at).date} {formatDateTime(c.created_at).time}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {activeTab === 'comments' && (
-              <div className="space-y-4">
-                {comments && comments.length > 0 ? (
-                  comments.map((c) => (
-                    <div key={c.id} className="flex gap-3">
-                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#0F172B]">
-                        {(c.user?.display_name || c.user?.email)?.[0]?.toUpperCase()}
+                      <div className="flex flex-col gap-3">
+                        {checklists?.map((cl) => {
+                          const items = cl.items || [];
+                          const done = items.filter((i) => i.is_done).length;
+                          return (
+                            <div key={cl.id} className="rounded-md border p-3" style={{ borderColor: 'var(--sh-hair-3)' }}>
+                              <div className="mb-2 flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-[13px] font-medium text-[color:var(--sh-ink)]">
+                                  <span>{cl.title}</span>
+                                  <span className="td-mono text-[11px] text-[color:var(--sh-ink-4)]">{done}/{items.length}</span>
+                                </div>
+                                {canEdit && (
+                                  <button
+                                    onClick={() => { if (confirm(`Delete checklist "${cl.title}"?`)) deleteChecklist.mutate(cl.id); }}
+                                    className="text-[color:var(--sh-ink-4)] hover:text-[color:var(--sh-ink)] text-sm"
+                                  >
+                                    ×
+                                  </button>
+                                )}
+                              </div>
+                              <ul className="flex flex-col gap-1">
+                                {items.map((item) => (
+                                  <li key={item.id} className="group flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => updateChecklistItem.mutate({ id: item.id, is_done: !item.is_done })}
+                                      disabled={!canEdit}
+                                      className="td-checkbox shrink-0"
+                                      data-done={item.is_done ? 'true' : 'false'}
+                                      aria-label="Toggle checklist item"
+                                    />
+                                    <span className={`flex-1 text-[13px] ${item.is_done ? 'line-through text-[color:var(--sh-ink-3)]' : 'text-[color:var(--sh-ink)]'}`}>
+                                      {item.content}
+                                    </span>
+                                    {canEdit && (
+                                      <button
+                                        onClick={() => deleteChecklistItem.mutate(item.id)}
+                                        className="text-[color:var(--sh-ink-4)] opacity-0 group-hover:opacity-100 hover:text-[color:var(--sh-ink)]"
+                                      >
+                                        ×
+                                      </button>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                              {canEdit && (
+                                <input
+                                  placeholder="+ Add item"
+                                  value={newItemDrafts[cl.id] || ''}
+                                  onChange={(e) => setNewItemDrafts((prev) => ({ ...prev, [cl.id]: e.target.value }))}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      const val = (newItemDrafts[cl.id] || '').trim();
+                                      if (val) {
+                                        createChecklistItem.mutate({ checklistId: cl.id, content: val });
+                                        setNewItemDrafts((prev) => ({ ...prev, [cl.id]: '' }));
+                                      }
+                                    }
+                                  }}
+                                  className="mt-2 w-full bg-transparent px-1 py-0.5 text-[12px] outline-none border-b"
+                                  style={{ borderBottomColor: 'transparent' }}
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-[#0F172B]">{c.user?.display_name || c.user?.email}</span>
-                          <span className="text-xs text-[#999999]">
-                            {formatDateTime(c.created_at).date} {formatDateTime(c.created_at).time}
+                    </div>
+                  ) : canEdit ? (
+                    <div className="mt-6">
+                      <button
+                        onClick={() => setNewChecklistTitle('')}
+                        className="td-h4 hover:text-[color:var(--sh-ink)]"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        + Add checklist
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              {tab === 'comments' && (
+                <div className="flex flex-col gap-4">
+                  {comments && comments.length > 0 ? comments.map((c) => (
+                    <div key={c.id} className="td-comment flex gap-3">
+                      <span
+                        className="td-ava-sm shrink-0"
+                        style={{ background: avatarColor(c.user?.id || c.user?.email) }}
+                      >
+                        {initialOf(c.user?.display_name || c.user?.email)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2.5">
+                          <b className="text-[13px] text-[color:var(--sh-ink)]">{c.user?.display_name || c.user?.email}</b>
+                          <span className="td-mono text-[11px] text-[color:var(--sh-ink-4)]">
+                            {new Date(c.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                           </span>
                         </div>
-                        <p className="mt-1 text-sm text-[#666666] leading-relaxed">{c.content}</p>
+                        <div className="text-[13px] leading-[1.5] text-[color:var(--sh-ink-2)] mt-1 whitespace-pre-wrap">{c.content}</div>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-[#CAD5E2]">No comments yet</p>
-                )}
-              </div>
+                  )) : (
+                    <div className="text-[13px] text-[color:var(--sh-ink-3)]">No comments yet.</div>
+                  )}
+                </div>
+              )}
+
+              {tab === 'activity' && (
+                <div className="flex flex-col gap-3.5">
+                  {activityItems.map((a, i) => (
+                    <div key={i} className="td-act-item grid items-baseline" style={{ gridTemplateColumns: 'auto 1fr auto', gap: 12 }}>
+                      <div className="text-[color:var(--sh-ink-3)] text-[10px] w-3 text-center">{a.icon}</div>
+                      <div className="text-[13px] text-[color:var(--sh-ink-2)]">{a.body}</div>
+                      <div className="td-mono text-[11px] text-[color:var(--sh-ink-4)]">
+                        {new Date(a.t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {tab === 'files' && (
+                <div className="flex flex-col gap-0.5">
+                  {attachments.length > 0 ? attachments.map((f, i) => {
+                    const ext = (f.name || '').split('.').pop()?.toUpperCase() || 'FILE';
+                    return (
+                      <div
+                        key={i}
+                        className="td-file flex items-center gap-3 p-2.5 rounded-md border"
+                        style={{ borderColor: 'var(--sh-hair-3)', background: 'var(--surface-alt)' }}
+                      >
+                        <div className="td-doc-icon">{ext}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[13px] font-medium text-[color:var(--sh-ink)] truncate">{f.name || 'untitled'}</div>
+                          {f.size && <div className="text-[11px] text-[color:var(--sh-ink-3)]">{f.size}</div>}
+                        </div>
+                      </div>
+                    );
+                  }) : (
+                    <div className="td-mono text-[12px] text-[color:var(--sh-ink-3)] py-4">No files yet.</div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        {task && (
+          <div
+            className="td-foot shrink-0 border-t px-5 py-3 flex gap-2 items-center"
+            style={{ borderTopColor: 'var(--sh-hair)', background: 'var(--surface)' }}
+          >
+            <button
+              type="button"
+              onClick={handleToggleDone}
+              disabled={!canEdit}
+              className="td-btn"
+            >
+              {isDone ? 'Reopen' : 'Mark complete'}
+            </button>
+            {isTimerForThisTask ? (
+              <button type="button" onClick={handleStopTimer} className="td-btn">
+                Stop timer · {formatSeconds((task.time_tracked || 0) + timerElapsed)}
+              </button>
+            ) : (
+              <button type="button" onClick={handleStartTimer} disabled={!canEdit} className="td-btn">
+                Start timer
+              </button>
+            )}
+            <div className="flex-1" />
+            {/* Comment quick input on comments tab, otherwise hidden */}
+            {tab === 'comments' && (
+              <input
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
+                placeholder="Reply or @mention someone…"
+                className="flex-1 rounded-md border bg-transparent px-3 py-1.5 text-[13px] outline-none"
+                style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface-alt)' }}
+              />
             )}
           </div>
-        </div>
-      </div>
+        )}
+      </aside>
+    </div>
+  );
+}
 
-      {/* Comment input (always visible at bottom) */}
-      <div className="border-t border-[#E2E8F0] px-5 py-3">
-        <div className="flex gap-2">
-          <textarea
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
-            placeholder="Write a comment..."
-            rows={1}
-            className="flex-1 resize-none rounded-lg border border-[#E2E8F0] bg-[#FAFBFC] px-3 py-2 text-sm text-[#0F172B] placeholder-[#CAD5E2] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
-          />
-          <button
-            onClick={handleAddComment}
-            disabled={!commentText.trim() || addComment.isPending}
-            className="rounded-lg bg-[#2962FF] px-3 py-2 text-white transition hover:bg-[#1E50E0] disabled:opacity-40"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
-          </button>
-        </div>
-      </div>
+function MetaRow({ k, children }: { k: string; children: React.ReactNode }) {
+  return (
+    <div
+      className="td-meta-row grid py-2.5 border-b items-center text-[13px]"
+      style={{ gridTemplateColumns: '120px 1fr', borderBottomColor: 'var(--sh-hair-3)' }}
+    >
+      <span className="td-meta-k td-mono text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--sh-ink-4)] font-medium">
+        {k}
+      </span>
+      <span className="td-meta-v flex items-center gap-2 text-[color:var(--sh-ink)]">
+        {children}
+      </span>
     </div>
   );
 }
@@ -869,7 +1038,8 @@ function CustomFieldRow({
   onChange: (v: unknown) => void;
   canEdit: boolean;
 }) {
-  const baseInputCls = `rounded border border-transparent px-1.5 py-0.5 text-xs text-[#0F172B] outline-none ${canEdit ? 'hover:border-[#E2E8F0] focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]' : 'cursor-default opacity-70'}`;
+  const baseInputCls = `rounded border bg-transparent px-2 py-1 text-[12.5px] outline-none ${canEdit ? '' : 'cursor-default opacity-70'}`;
+  const baseStyle: React.CSSProperties = { borderColor: 'var(--sh-hair)' };
 
   let control: React.ReactNode = null;
   const str = typeof value === 'string' ? value : value == null ? '' : String(value);
@@ -884,6 +1054,7 @@ function CustomFieldRow({
           onBlur={(e) => e.target.value !== str && onChange(e.target.value || null)}
           rows={2}
           className={`${baseInputCls} w-full resize-none`}
+          style={baseStyle}
         />
       );
       break;
@@ -894,6 +1065,7 @@ function CustomFieldRow({
           disabled={!canEdit}
           onChange={(e) => onChange(e.target.value || null)}
           className={baseInputCls}
+          style={baseStyle}
         >
           <option value="">—</option>
           {field.options.map((o) => (
@@ -918,7 +1090,7 @@ function CustomFieldRow({
                   onChange(next);
                 }}
                 className={`rounded-full px-2 py-0.5 text-[11px] ${
-                  on ? 'bg-[#2962FF] text-white' : 'bg-[#F1F5F9] text-[#62748E] hover:bg-[#E2E8F0]'
+                  on ? 'bg-[color:var(--sh-ink)] text-[color:var(--surface)]' : 'bg-[color:var(--sh-hair-3)] text-[color:var(--sh-ink-2)]'
                 } ${canEdit ? '' : 'cursor-default opacity-70'}`}
               >
                 {o.label}
@@ -941,6 +1113,7 @@ function CustomFieldRow({
             onChange(v === '' ? null : Number(v));
           }}
           className={baseInputCls}
+          style={baseStyle}
         />
       );
       break;
@@ -952,6 +1125,7 @@ function CustomFieldRow({
           disabled={!canEdit}
           onChange={(e) => onChange(e.target.value || null)}
           className={baseInputCls}
+          style={baseStyle}
         />
       );
       break;
@@ -964,6 +1138,7 @@ function CustomFieldRow({
           disabled={!canEdit}
           onBlur={(e) => e.target.value !== str && onChange(e.target.value || null)}
           className={`${baseInputCls} min-w-[240px]`}
+          style={baseStyle}
         />
       );
       break;
@@ -974,7 +1149,7 @@ function CustomFieldRow({
           checked={!!value}
           disabled={!canEdit}
           onChange={(e) => onChange(e.target.checked)}
-          className="h-3.5 w-3.5 cursor-pointer rounded border-[#CBD5E1]"
+          className="h-3.5 w-3.5 cursor-pointer rounded"
         />
       );
       break;
@@ -988,16 +1163,17 @@ function CustomFieldRow({
           disabled={!canEdit}
           onBlur={(e) => e.target.value !== str && onChange(e.target.value || null)}
           className={`${baseInputCls} min-w-[200px]`}
+          style={baseStyle}
         />
       );
   }
 
   return (
-    <div className="flex items-start py-2.5">
-      <div className="flex w-36 shrink-0 items-center gap-2.5 pt-0.5 text-sm text-[#999999]">
-        <span className="truncate">{field.label}</span>
+    <div className="td-meta-row grid py-2.5 border-b items-start text-[13px]" style={{ gridTemplateColumns: '120px 1fr', borderBottomColor: 'var(--sh-hair-3)' }}>
+      <span className="td-meta-k td-mono text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--sh-ink-4)] font-medium pt-1">
+        {field.label}
         {field.is_required && <span className="text-red-500">*</span>}
-      </div>
+      </span>
       <div className="min-w-0 flex-1">{control}</div>
     </div>
   );
