@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User } from '@squadhub/shared';
@@ -36,3 +37,20 @@ export const useAuthStore = create<AuthState>()(
     },
   ),
 );
+
+// Returns true once the persisted auth has been loaded from localStorage.
+// Use this to gate route guards so a refresh doesn't flash through the
+// "not authenticated" state and kick the user back to the dashboard.
+export function useHasAuthHydrated(): boolean {
+  // Start false so SSR / first client render agree. useAuthStore.persist is
+  // undefined on the server, so we must only touch it inside useEffect.
+  const [hasHydrated, setHasHydrated] = useState(false);
+
+  useEffect(() => {
+    setHasHydrated(useAuthStore.persist.hasHydrated());
+    const unsubFinish = useAuthStore.persist.onFinishHydration(() => setHasHydrated(true));
+    return () => { unsubFinish(); };
+  }, []);
+
+  return hasHydrated;
+}
