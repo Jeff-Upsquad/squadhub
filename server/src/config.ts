@@ -30,6 +30,10 @@ export const config = {
   // Cash Book App Versioning
   cashbookMinVersion: process.env.CASHBOOK_MIN_VERSION || '1.0.0',
   cashbookDownloadUrl: process.env.CASHBOOK_DOWNLOAD_URL || '',
+
+  // Partner App Versioning
+  partnerAppMinVersion: process.env.PARTNER_APP_MIN_VERSION || '1.0.0',
+  partnerAppDownloadUrl: process.env.PARTNER_APP_DOWNLOAD_URL || '',
 } as const;
 
 // Validate required env vars at startup

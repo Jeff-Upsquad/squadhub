@@ -59,3 +59,13 @@ out/
 
 # Testing
 coverage/
+
+# Claude
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+
+# Graphify output (regenerated from /graphify)
+graphify-out/
+
+# Supabase CLI temp
+supabase/.temp/

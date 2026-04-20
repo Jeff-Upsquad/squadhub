@@ -136,6 +136,63 @@ router.get('/tasks', async (req: Request, res: Response) => {
   }
 });
 
+// GET /pm/tasks/my — returns the logged-in user's assigned tasks
+// bucketed by due-date in the requested timezone.
+// Used by the partner mobile app's Tasks tab.
+router.get('/tasks/my', async (req: Request, res: Response) => {
+  try {
+    const tz = (req.query.tz as string) || 'Asia/Kolkata';
+    const includeDone = req.query.include_done === 'true';
+
+    let query = supabaseAdmin
+      .from('tasks')
+      .select('*')
+      .contains('assignee_ids', [req.userId!])
+      .is('parent_task_id', null);
+
+    if (!includeDone) {
+      query = query.not('status', 'in', '(done,closed)');
+    }
+
+    const { data, error } = await query.order('due_date', { ascending: true, nullsFirst: false });
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const tasks = data || [];
+
+    // Compute day boundaries in user's timezone
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    });
+    const now = new Date();
+    const todayStr = fmt.format(now);
+    const dayMs = 24 * 60 * 60 * 1000;
+    const tomorrowStr = fmt.format(new Date(now.getTime() + dayMs));
+    const upcomingCutoffStr = fmt.format(new Date(now.getTime() + 7 * dayMs));
+
+    const buckets: Record<'overdue' | 'today' | 'tomorrow' | 'upcoming' | 'later', any[]> = {
+      overdue: [], today: [], tomorrow: [], upcoming: [], later: [],
+    };
+
+    for (const t of tasks) {
+      if (!t.due_date) { buckets.later.push(t); continue; }
+      const dueStr = fmt.format(new Date(t.due_date));
+      if (dueStr < todayStr) buckets.overdue.push(t);
+      else if (dueStr === todayStr) buckets.today.push(t);
+      else if (dueStr === tomorrowStr) buckets.tomorrow.push(t);
+      else if (dueStr <= upcomingCutoffStr) buckets.upcoming.push(t);
+      else buckets.later.push(t);
+    }
+
+    res.json({ success: true, data: buckets });
+  } catch (err) {
+    console.error('Get my tasks error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // GET /pm/tasks/:id — requires viewer access on parent list
 router.get('/tasks/:id', async (req: Request, res: Response) => {
   try {

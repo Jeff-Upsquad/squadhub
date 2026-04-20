@@ -31,6 +31,8 @@ const nextConfig = {
       { source: '/admin/:path*', destination: `${API_URL}/admin/:path*` },
       { source: '/partner/:path*', destination: `${API_URL}/partner/:path*` },
       { source: '/cashbook/:path*', destination: `${API_URL}/cashbook/:path*` },
+      { source: '/partner-app/:path+', destination: `${API_URL}/partner-app/:path+` },
+      { source: '/notifications/:path*', destination: `${API_URL}/notifications/:path*` },
     ],
   }),
 

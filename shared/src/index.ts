@@ -361,6 +361,9 @@ export type NotificationType =
   | 'dm_received'
   | 'task_assigned'
   | 'task_updated'
+  | 'task_commented'
+  | 'task_due_soon'
+  | 'mention'
   | 'reaction_added';
 
 export interface Notification {
@@ -368,6 +371,11 @@ export interface Notification {
   user_id: string;
   type: NotificationType;
   reference_id: string;
+  reference_type: string;
+  actor_id: string | null;
+  title: string;
+  body: string | null;
+  metadata: Record<string, unknown>;
   is_read: boolean;
   created_at: string;
 }
