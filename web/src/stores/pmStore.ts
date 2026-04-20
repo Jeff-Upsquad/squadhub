@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 export type ViewMode = 'list' | 'board';
 
@@ -35,49 +36,59 @@ interface PMState {
   reset: () => void;
 }
 
-export const usePMStore = create<PMState>((set, get) => ({
-  activeSpaceId: null,
-  activeListId: null,
-  activeTaskId: null,
-  activeDesignFolderId: null,
-  activeClientId: null,
-  viewMode: 'list',
-  collapsedGroups: {},
-  selectedTasks: [],
-  timer: null,
+export const usePMStore = create<PMState>()(
+  persist(
+    (set, get) => ({
+      activeSpaceId: null,
+      activeListId: null,
+      activeTaskId: null,
+      activeDesignFolderId: null,
+      activeClientId: null,
+      viewMode: 'list',
+      collapsedGroups: {},
+      selectedTasks: [],
+      timer: null,
 
-  setActiveSpace: (id) => set({ activeSpaceId: id }),
-  setActiveList: (id) => set({ activeListId: id, selectedTasks: [], activeDesignFolderId: null }),
-  setActiveTask: (id) => set({ activeTaskId: id }),
-  setActiveDesignFolder: (id) => set({ activeDesignFolderId: id, activeListId: null, selectedTasks: [] }),
-  setActiveClient: (id) => set({ activeClientId: id }),
-  setViewMode: (mode) => set({ viewMode: mode }),
-  toggleGroupCollapse: (statusId) =>
-    set((state) => ({
-      collapsedGroups: {
-        ...state.collapsedGroups,
-        [statusId]: !state.collapsedGroups[statusId],
+      setActiveSpace: (id) => set({ activeSpaceId: id }),
+      setActiveList: (id) => set({ activeListId: id, selectedTasks: [], activeDesignFolderId: null }),
+      setActiveTask: (id) => set({ activeTaskId: id }),
+      setActiveDesignFolder: (id) => set({ activeDesignFolderId: id, activeListId: null, selectedTasks: [] }),
+      setActiveClient: (id) => set({ activeClientId: id }),
+      setViewMode: (mode) => set({ viewMode: mode }),
+      toggleGroupCollapse: (statusId) =>
+        set((state) => ({
+          collapsedGroups: {
+            ...state.collapsedGroups,
+            [statusId]: !state.collapsedGroups[statusId],
+          },
+        })),
+      toggleTaskSelection: (taskId) =>
+        set((state) => ({
+          selectedTasks: state.selectedTasks.includes(taskId)
+            ? state.selectedTasks.filter((id) => id !== taskId)
+            : [...state.selectedTasks, taskId],
+        })),
+      selectAllTasks: (taskIds) => set({ selectedTasks: taskIds }),
+      clearSelection: () => set({ selectedTasks: [] }),
+      startTimer: (taskId, taskTitle, listId, baseTracked) => {
+        const prev = get().timer;
+        set({
+          timer: { taskId, taskTitle, listId, startedAt: Date.now(), baseTracked },
+        });
+        return prev;
       },
-    })),
-  toggleTaskSelection: (taskId) =>
-    set((state) => ({
-      selectedTasks: state.selectedTasks.includes(taskId)
-        ? state.selectedTasks.filter((id) => id !== taskId)
-        : [...state.selectedTasks, taskId],
-    })),
-  selectAllTasks: (taskIds) => set({ selectedTasks: taskIds }),
-  clearSelection: () => set({ selectedTasks: [] }),
-  startTimer: (taskId, taskTitle, listId, baseTracked) => {
-    const prev = get().timer;
-    set({
-      timer: { taskId, taskTitle, listId, startedAt: Date.now(), baseTracked },
-    });
-    return prev;
-  },
-  stopTimer: () => {
-    const prev = get().timer;
-    set({ timer: null });
-    return prev;
-  },
-  reset: () => set({ activeSpaceId: null, activeListId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, viewMode: 'list', collapsedGroups: {}, selectedTasks: [], timer: null }),
-}));
+      stopTimer: () => {
+        const prev = get().timer;
+        set({ timer: null });
+        return prev;
+      },
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, viewMode: 'list', collapsedGroups: {}, selectedTasks: [], timer: null }),
+    }),
+    {
+      name: 'squadhub-pm',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ timer: state.timer }),
+      version: 1,
+    }
+  )
+);
