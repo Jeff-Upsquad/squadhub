@@ -19,6 +19,7 @@ const createSchema = z.object({
   work_date: z.string().nullable().optional(),
   start_date: z.string().nullable().optional(),
   task_type_id: z.string().uuid().nullable().optional(),
+  parent_task_id: z.string().uuid().nullable().optional(),
   assignee_ids: z.array(z.string().uuid()).optional(),
   metadata: z.record(z.string(), z.any()).optional(),
 });
@@ -106,6 +107,11 @@ router.get('/tasks', async (req: Request, res: Response) => {
     if (req.query.status) query = query.eq('status', req.query.status as string);
     if (req.query.priority) query = query.eq('priority', req.query.priority as string);
 
+    // Subtasks are shown inside their parent's detail panel, not in the list
+    if (req.query.include_subtasks !== 'true') {
+      query = query.is('parent_task_id', null);
+    }
+
     // Sort
     const sort = (req.query.sort as string) || 'created_at';
     if (sort === 'due_date') {
@@ -175,11 +181,18 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
       .eq('id', task.created_by)
       .single();
 
+    // Fetch subtasks (direct children)
+    const { data: subtasks } = await supabaseAdmin
+      .from('tasks')
+      .select('id, title, status, priority, due_date, assignee_ids, created_at')
+      .eq('parent_task_id', id)
+      .order('created_at', { ascending: true });
+
     res.json({
       success: true,
       data: {
         ...task,
-        subtasks: [],
+        subtasks: subtasks || [],
         comment_count: commentCount,
         creator,
       },
@@ -255,6 +268,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
       work_date: body.work_date || null,
       start_date: body.start_date || null,
       task_type_id: resolvedTypeId,
+      parent_task_id: body.parent_task_id || null,
       assignee_ids: body.assignee_ids || [],
       metadata: body.metadata || {},
       created_by: req.userId!,

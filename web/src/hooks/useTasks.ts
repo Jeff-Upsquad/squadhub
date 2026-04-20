@@ -40,6 +40,8 @@ export function useCreateTask(listId: string | null) {
       assignee_ids?: string[];
       metadata?: TaskMetadata;
       list_id?: string;
+      parent_task_id?: string | null;
+      task_type_id?: string | null;
     }) => {
       const targetListId = body.list_id || listId;
       const res = await api.post('/pm/tasks', { ...body, list_id: targetListId });
@@ -49,6 +51,9 @@ export function useCreateTask(listId: string | null) {
       const targetListId = vars.list_id || listId;
       qc.invalidateQueries({ queryKey: ['tasks', targetListId] });
       qc.invalidateQueries({ queryKey: ['folder-tasks'] });
+      if (vars.parent_task_id) {
+        qc.invalidateQueries({ queryKey: ['task', vars.parent_task_id] });
+      }
     },
   });
 }

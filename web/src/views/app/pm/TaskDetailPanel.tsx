@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
-import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment } from '../../../hooks/useTasks';
+import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask } from '../../../hooks/useTasks';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import {
   useChecklists,
@@ -64,6 +64,7 @@ export default function TaskDetailPanel({
   const { data: checklists } = useChecklists(activeTaskId);
   const updateTask = useUpdateTask(listId);
   const deleteTask = useDeleteTask(listId);
+  const createTask = useCreateTask(listId);
   const addComment = useAddComment(activeTaskId);
   const createChecklist = useCreateChecklist(activeTaskId);
   const deleteChecklist = useDeleteChecklist(activeTaskId);
@@ -81,6 +82,8 @@ export default function TaskDetailPanel({
   const [timerElapsed, setTimerElapsed] = useState(0);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
   const [newItemDrafts, setNewItemDrafts] = useState<Record<string, string>>({});
+  const [newChecklistTitle, setNewChecklistTitle] = useState<string | null>(null);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState<string | null>(null);
 
   const currentType = useMemo<TaskType | null>(() => {
     if (!task || !taskTypes) return null;
@@ -513,19 +516,130 @@ export default function TaskDetailPanel({
             )}
           </div>
 
+          {/* Subtasks */}
+          <div className="mb-6">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-[#0F172B]">Subtasks</h3>
+              {canEdit && newSubtaskTitle === null && (
+                <button
+                  onClick={() => setNewSubtaskTitle('')}
+                  className="rounded-md px-2 py-1 text-xs text-[#2962FF] hover:bg-[#F1F5F9]"
+                >
+                  + Add subtask
+                </button>
+              )}
+            </div>
+            {task.subtasks && task.subtasks.length > 0 ? (
+              <ul className="space-y-1">
+                {task.subtasks.map((st) => {
+                  const done = (st as any).status === 'done' || (st as any).status === 'closed';
+                  return (
+                    <li key={st.id} className="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-[#F8FAFC]">
+                      <input
+                        type="checkbox"
+                        checked={done}
+                        onChange={(e) => updateTask.mutate({ id: st.id, status: e.target.checked ? 'done' : 'todo' })}
+                        disabled={!canEdit}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-3.5 w-3.5 cursor-pointer rounded border-[#CBD5E1]"
+                      />
+                      <button
+                        onClick={() => setActiveTask(st.id)}
+                        className={`flex-1 truncate text-left text-sm ${done ? 'text-[#999999] line-through' : 'text-[#0F172B] hover:text-[#2962FF]'}`}
+                      >
+                        {st.title}
+                      </button>
+                      {st.due_date && (
+                        <span className="text-[10px] text-[#999999]">
+                          {new Date(st.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : newSubtaskTitle === null ? (
+              <p className="text-xs text-[#CAD5E2]">{canEdit ? 'No subtasks yet' : 'No subtasks'}</p>
+            ) : null}
+            {canEdit && newSubtaskTitle !== null && (
+              <input
+                autoFocus
+                value={newSubtaskTitle}
+                onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const val = newSubtaskTitle.trim();
+                    if (val) {
+                      createTask.mutate(
+                        { title: val, parent_task_id: task.id, list_id: task.list_id },
+                        { onSuccess: () => setNewSubtaskTitle('') },
+                      );
+                    } else {
+                      setNewSubtaskTitle(null);
+                    }
+                  } else if (e.key === 'Escape') {
+                    setNewSubtaskTitle(null);
+                  }
+                }}
+                onBlur={() => {
+                  const val = newSubtaskTitle.trim();
+                  if (val) {
+                    createTask.mutate(
+                      { title: val, parent_task_id: task.id, list_id: task.list_id },
+                      { onSuccess: () => setNewSubtaskTitle(null) },
+                    );
+                  } else {
+                    setNewSubtaskTitle(null);
+                  }
+                }}
+                placeholder="Subtask title, press Enter to add"
+                className="mt-1 w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1 text-sm text-[#0F172B] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
+              />
+            )}
+          </div>
+
           {/* Checklists */}
           <div className="mb-6">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-[#0F172B]">Checklists</h3>
-              {canEdit && (
+              {canEdit && newChecklistTitle === null && (
                 <button
-                  onClick={() => createChecklist.mutate(undefined)}
+                  onClick={() => setNewChecklistTitle('')}
                   className="rounded-md px-2 py-1 text-xs text-[#2962FF] hover:bg-[#F1F5F9]"
                 >
                   + Add checklist
                 </button>
               )}
             </div>
+            {canEdit && newChecklistTitle !== null && (
+              <input
+                autoFocus
+                value={newChecklistTitle}
+                onChange={(e) => setNewChecklistTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const title = newChecklistTitle.trim();
+                    if (title) {
+                      createChecklist.mutate(title, { onSuccess: () => setNewChecklistTitle(null) });
+                    } else {
+                      setNewChecklistTitle(null);
+                    }
+                  } else if (e.key === 'Escape') {
+                    setNewChecklistTitle(null);
+                  }
+                }}
+                onBlur={() => {
+                  const title = newChecklistTitle.trim();
+                  if (title) {
+                    createChecklist.mutate(title, { onSuccess: () => setNewChecklistTitle(null) });
+                  } else {
+                    setNewChecklistTitle(null);
+                  }
+                }}
+                placeholder="Checklist name, press Enter to create"
+                className="mb-2 w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1 text-sm text-[#0F172B] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
+              />
+            )}
             {checklists && checklists.length > 0 ? (
               <div className="space-y-3">
                 {checklists.map((cl) => {
