@@ -367,6 +367,27 @@ router.post('/:id/plans/:planId/deliverables', async (req: Request, res: Respons
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    // Fan out: add a linked mirror to every client already on this plan.
+    const { data: clientSubs } = await supabaseAdmin
+      .from('client_subscriptions')
+      .select('id')
+      .eq('plan_id', req.params.planId);
+
+    if (clientSubs && clientSubs.length > 0) {
+      const mirrors = clientSubs.map((cs: any) => ({
+        client_subscription_id: cs.id,
+        source_plan_deliverable_id: data.id,
+        kind: data.kind,
+        deliverable_type_id: data.deliverable_type_id,
+        per_day: data.per_day,
+        per_week: data.per_week,
+        per_month: data.per_month,
+        sort_order: data.sort_order,
+      }));
+      await supabaseAdmin.from('client_subscription_deliverables').insert(mirrors);
+    }
+
     res.json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -399,6 +420,20 @@ router.put('/plan-deliverables/:id', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    // Propagate to every linked (non-customized) client mirror.
+    const mirrorPatch: Record<string, any> = {};
+    if (body.deliverable_type_id !== undefined) mirrorPatch.deliverable_type_id = body.deliverable_type_id;
+    if (body.per_day  !== undefined) mirrorPatch.per_day  = body.per_day;
+    if (body.per_week !== undefined) mirrorPatch.per_week = body.per_week;
+    if (body.per_month !== undefined) mirrorPatch.per_month = body.per_month;
+    if (Object.keys(mirrorPatch).length > 0) {
+      await supabaseAdmin
+        .from('client_subscription_deliverables')
+        .update(mirrorPatch)
+        .eq('source_plan_deliverable_id', req.params.id);
+    }
+
     res.json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) {

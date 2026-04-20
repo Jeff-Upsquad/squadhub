@@ -27,6 +27,7 @@ async function copyPlanDeliverables(clientSubscriptionId: string, planId: string
 
   const rows = planDelivs.map((d: any) => ({
     client_subscription_id: clientSubscriptionId,
+    source_plan_deliverable_id: d.id,
     kind: d.kind,
     deliverable_type_id: d.deliverable_type_id,
     per_day: d.per_day,
@@ -627,9 +628,10 @@ const updateDeliverableSchema = z.object({
 router.put('/:clientId/subscriptions/:csId/deliverables/:id', async (req: Request, res: Response) => {
   try {
     const body = updateDeliverableSchema.parse(req.body);
+    // Editing the row untethers it from the plan — it's now a customization.
     const { data, error } = await supabaseAdmin
       .from('client_subscription_deliverables')
-      .update(body)
+      .update({ ...body, source_plan_deliverable_id: null })
       .eq('id', req.params.id)
       .eq('client_subscription_id', req.params.csId)
       .select()

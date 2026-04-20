@@ -827,6 +827,7 @@ export interface SubscriptionPlanDeliverable {
 export interface ClientSubscriptionDeliverable {
   id: string;
   client_subscription_id: string;
+  source_plan_deliverable_id: string | null;
   kind: DeliverableKind;
   deliverable_type_id: string | null;
   per_day: number;
