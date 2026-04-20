@@ -247,7 +247,7 @@ export default function MainLayout() {
     <div className="flex h-screen bg-[var(--sidebar)] text-foreground">
       {/* Far-left monochrome rail — 64px wide, inset right shadow, light gray */}
       <div
-        className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-[var(--sh-hair)] bg-[var(--icon-bar)] px-2 pt-[14px] pb-3 relative z-[1]"
+        className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-[var(--sh-hair)] bg-[var(--icon-bar)] px-2 pt-[14px] pb-3 relative z-[3]"
         style={{ boxShadow: 'var(--sh-rail-inset)' }}
       >
         {/* Serif "S" logo */}

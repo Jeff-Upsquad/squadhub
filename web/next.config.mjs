@@ -9,6 +9,10 @@ const API_URL = process.env.INTERNAL_API_URL || 'http://localhost:4000';
 const nextConfig = {
   reactStrictMode: true,
 
+  devIndicators: {
+    position: 'bottom-right',
+  },
+
   rewrites: async () => ({
     beforeFiles: [
       { source: '/auth/:path*', destination: `${API_URL}/auth/:path*` },
