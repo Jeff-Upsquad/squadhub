@@ -768,6 +768,26 @@ body {
 }
 .td-hashtag:hover { background: var(--sh-hair-3); color: var(--sh-ink-2); }
 
+.td-time-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  margin-right: 6px;
+  white-space: nowrap;
+}
+.td-time-chip.cursor-pointer:hover { background: var(--sh-hair-3); }
+.td-time-chip-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sh-ink-3);
+}
+.td-time-chip-value { color: var(--sh-ink); font-variant-numeric: tabular-nums; }
+
 /* About section — prose-like */
 .td-about {
   font-size: 13.5px;

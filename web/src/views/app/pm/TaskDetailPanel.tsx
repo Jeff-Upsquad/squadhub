@@ -712,12 +712,22 @@ export default function TaskDetailPanel({
                     ) : (
                       <span
                         onClick={canEdit ? () => { setEditingEstimate(true); setEstimateInput(formatMinutes(task.time_estimate)); } : undefined}
-                        className={canEdit ? 'cursor-pointer' : ''}
+                        className={canEdit ? 'td-time-chip cursor-pointer' : 'td-time-chip'}
                       >
-                        {task.time_estimate ? formatMinutes(task.time_estimate) : <span className="muted">Set an estimate</span>}
-                        {task.time_tracked ? <span className="muted"> · logged {formatTracked(isTimerForThisTask ? (task.time_tracked + timerElapsed) : task.time_tracked)}</span> : null}
+                        <span className="td-time-chip-label">Estimate</span>
+                        <span className="td-time-chip-value">
+                          {task.time_estimate ? formatMinutes(task.time_estimate) : <span className="muted">—</span>}
+                        </span>
                       </span>
                     )}
+                    {(task.time_tracked || isTimerForThisTask) ? (
+                      <span className="td-time-chip">
+                        <span className="td-time-chip-label">Logged</span>
+                        <span className="td-time-chip-value">
+                          {formatTracked(isTimerForThisTask ? ((task.time_tracked || 0) + timerElapsed) : task.time_tracked) || '0m'}
+                        </span>
+                      </span>
+                    ) : null}
                   </span>
                 </div>
 
