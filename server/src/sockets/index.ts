@@ -2,13 +2,23 @@ import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
-import type { ServerToClientEvents, ClientToServerEvents } from '@squadhub/shared';
+import { supabaseAdmin } from '../supabase';
+import type {
+  ServerToClientEvents,
+  ClientToServerEvents,
+  ChatServerToClientEvents,
+  ChatClientToServerEvents,
+} from '@squadhub/shared';
+
+// Socket.io type intersections so one connection handles workspace + chat events.
+type AllServerToClient = ServerToClientEvents & ChatServerToClientEvents;
+type AllClientToServer = ClientToServerEvents & ChatClientToServerEvents;
 
 // Track online users: userId -> Set of socket IDs
 const onlineUsers = new Map<string, Set<string>>();
 
 export function setupSocketIO(httpServer: HttpServer) {
-  const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
+  const io = new Server<AllClientToServer, AllServerToClient>(httpServer, {
     cors: {
       origin: config.nodeEnv === 'production'
         ? [config.clientUrl, config.adminUrl].filter(Boolean)
@@ -34,34 +44,52 @@ export function setupSocketIO(httpServer: HttpServer) {
     }
   });
 
-  io.on('connection', (socket: Socket) => {
+  io.on('connection', async (socket: Socket) => {
     const userId = (socket as any).userId as string;
     console.log(`Socket connected: ${userId} (${socket.id})`);
 
     // Track online status
     if (!onlineUsers.has(userId)) {
       onlineUsers.set(userId, new Set());
-      // First connection — broadcast online status
       io.emit('user_online', { user_id: userId });
     }
     onlineUsers.get(userId)!.add(socket.id);
 
-    // Join workspace room
+    // Always join a user-scoped room for cross-device fanout.
+    socket.join(`chat_user:${userId}`);
+
+    // Auto-join every chat group the user is a member of.
+    try {
+      const { data: groups } = await supabaseAdmin
+        .from('chat_group_members')
+        .select('group_id')
+        .eq('user_id', userId);
+      for (const m of groups || []) socket.join(`chat_group:${m.group_id}`);
+    } catch (e) {
+      console.error('[socket] auto-join groups failed:', e);
+    }
+
+    // Auto-join every DM conversation the user is in.
+    try {
+      const { data: convs } = await supabaseAdmin
+        .from('chat_dm_conversations')
+        .select('id')
+        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
+      for (const c of convs || []) socket.join(`chat_dm:${c.id}`);
+    } catch (e) {
+      console.error('[socket] auto-join dms failed:', e);
+    }
+
+    // ---- Existing workspace events ----
     socket.on('join_workspace', (workspaceId: string) => {
       socket.join(`workspace:${workspaceId}`);
     });
-
-    // Join a channel room
     socket.on('join_channel', (channelId: string) => {
       socket.join(channelId);
     });
-
-    // Leave a channel room
     socket.on('leave_channel', (channelId: string) => {
       socket.leave(channelId);
     });
-
-    // Typing indicators
     socket.on('typing', (data) => {
       const room = data.channel_id || data.dm_conversation_id;
       if (room) {
@@ -72,7 +100,6 @@ export function setupSocketIO(httpServer: HttpServer) {
         });
       }
     });
-
     socket.on('stop_typing', (data) => {
       const room = data.channel_id || data.dm_conversation_id;
       if (room) {
@@ -84,7 +111,75 @@ export function setupSocketIO(httpServer: HttpServer) {
       }
     });
 
-    // Disconnect
+    // ---- Squad Chat events ----
+    socket.on('chat_typing', (data) => {
+      const room = data.conversation_type === 'group'
+        ? `chat_group:${data.conversation_id}`
+        : `chat_dm:${data.conversation_id}`;
+      socket.to(room).emit('chat_typing_start', {
+        user_id: userId,
+        conversation_type: data.conversation_type,
+        conversation_id: data.conversation_id,
+      });
+    });
+    socket.on('chat_stop_typing', (data) => {
+      const room = data.conversation_type === 'group'
+        ? `chat_group:${data.conversation_id}`
+        : `chat_dm:${data.conversation_id}`;
+      socket.to(room).emit('chat_typing_stop', {
+        user_id: userId,
+        conversation_type: data.conversation_type,
+        conversation_id: data.conversation_id,
+      });
+    });
+
+    // chat_mark_read mirrors POST /chat/receipts/read but avoids a round-trip.
+    socket.on('chat_mark_read', async (data) => {
+      try {
+        const { data: cutoff } = await supabaseAdmin
+          .from('chat_messages')
+          .select('created_at')
+          .eq('id', data.up_to_message_id)
+          .maybeSingle();
+        if (!cutoff) return;
+
+        let q = supabaseAdmin
+          .from('chat_messages')
+          .select('id, sender_id')
+          .lte('created_at', cutoff.created_at);
+        if (data.conversation_type === 'group') q = q.eq('group_id', data.conversation_id);
+        else q = q.eq('dm_conversation_id', data.conversation_id);
+        const { data: candidates } = await q;
+        if (!candidates || candidates.length === 0) return;
+
+        const now = new Date().toISOString();
+        const { data: updated } = await supabaseAdmin
+          .from('chat_message_receipts')
+          .update({ delivered_at: now, read_at: now })
+          .in('message_id', candidates.map((c) => c.id))
+          .eq('user_id', userId)
+          .is('read_at', null)
+          .select('message_id, user_id, delivered_at, read_at');
+
+        if (data.conversation_type === 'group') {
+          await supabaseAdmin
+            .from('chat_group_members')
+            .update({ last_read_at: now })
+            .eq('group_id', data.conversation_id)
+            .eq('user_id', userId);
+        }
+
+        const senderByMsg = new Map(candidates.map((c) => [c.id, c.sender_id]));
+        for (const row of updated || []) {
+          const senderId = senderByMsg.get(row.message_id);
+          if (senderId) io.to(`chat_user:${senderId}`).emit('chat_receipt_update', row);
+        }
+      } catch (e) {
+        console.error('[socket chat_mark_read] failed:', e);
+      }
+    });
+
+    // ---- Disconnect ----
     socket.on('disconnect', () => {
       console.log(`Socket disconnected: ${userId} (${socket.id})`);
       const userSockets = onlineUsers.get(userId);
@@ -92,7 +187,6 @@ export function setupSocketIO(httpServer: HttpServer) {
         userSockets.delete(socket.id);
         if (userSockets.size === 0) {
           onlineUsers.delete(userId);
-          // Last connection gone — broadcast offline
           io.emit('user_offline', { user_id: userId });
         }
       }
