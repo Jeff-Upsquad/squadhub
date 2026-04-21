@@ -197,7 +197,8 @@ router.get('/tasks', async (req: Request, res: Response) => {
 });
 
 // GET /pm/tasks/my — returns the logged-in user's assigned tasks
-// bucketed by due-date in the requested timezone.
+// bucketed by due-date in the requested timezone. Today and Tomorrow
+// buckets also match on work_date and start_date (DATE columns, no TZ).
 // Used by the partner mobile app's Tasks tab.
 router.get('/tasks/my', async (req: Request, res: Response) => {
   try {
@@ -237,12 +238,31 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       overdue: [], today: [], tomorrow: [], upcoming: [], later: [],
     };
 
+    // work_date and start_date are DATE columns — stored as 'YYYY-MM-DD' strings.
+    // due_date is TIMESTAMPTZ — format into the user's timezone first.
+    const dateOnly = (v: unknown): string | null => {
+      if (!v) return null;
+      if (typeof v === 'string') return v.slice(0, 10);
+      return fmt.format(new Date(v as string));
+    };
+
     for (const t of tasks) {
-      if (!t.due_date) { buckets.later.push(t); continue; }
-      const dueStr = fmt.format(new Date(t.due_date));
+      const dueStr = t.due_date ? fmt.format(new Date(t.due_date)) : null;
+      const workStr = dateOnly(t.work_date);
+      const startStr = dateOnly(t.start_date);
+      const dateStrs = [dueStr, workStr, startStr].filter(Boolean) as string[];
+
+      const hasToday = dateStrs.includes(todayStr);
+      const hasTomorrow = dateStrs.includes(tomorrowStr);
+
+      // Today and tomorrow take priority — so a task with work_date today but
+      // due_date yesterday shows up on the user's Today list, not Overdue.
+      if (hasToday) { buckets.today.push(t); continue; }
+      if (hasTomorrow) { buckets.tomorrow.push(t); continue; }
+
+      // Everything else still buckets by due_date only.
+      if (!dueStr) { buckets.later.push(t); continue; }
       if (dueStr < todayStr) buckets.overdue.push(t);
-      else if (dueStr === todayStr) buckets.today.push(t);
-      else if (dueStr === tomorrowStr) buckets.tomorrow.push(t);
       else if (dueStr <= upcomingCutoffStr) buckets.upcoming.push(t);
       else buckets.later.push(t);
     }
