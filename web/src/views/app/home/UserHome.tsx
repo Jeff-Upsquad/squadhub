@@ -1,14 +1,10 @@
 import { useMemo } from 'react';
 import { useAuthStore } from '../../../stores/authStore';
+import { getDailyQuote } from '../../../lib/dailyQuote';
 import TodayList from './TodayList';
+import DashboardStatRow from './DashboardStatRow';
 
-const icoProps = {
-  width: 12, height: 12, fill: 'none', stroke: 'currentColor',
-  strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const,
-  viewBox: '0 0 24 24',
-};
-
-export default function UserHome() {
+export default function UserHome({ onOpenInbox }: { onOpenInbox: () => void }) {
   const user = useAuthStore((s) => s.user);
 
   const { day, date, week, firstName } = useMemo(() => {
@@ -21,6 +17,8 @@ export default function UserHome() {
     return { day: d, date: dt, week: `Week ${weekNum}`, firstName: name.charAt(0).toUpperCase() + name.slice(1) };
   }, [user]);
 
+  const quote = useMemo(() => getDailyQuote(), []);
+
   return (
     <div className="sh-view h-full overflow-y-auto">
       <div className="dash">
@@ -28,7 +26,7 @@ export default function UserHome() {
           <div>
             <div className="eyebrow" style={{ marginBottom: 10 }}>Welcome back, {firstName}</div>
             <h1 className="greeting">Three items need <em>your eye today.</em></h1>
-            <div className="sub">Your squad shipped 2 things yesterday. Nothing is blocking you right now — but three approvals are waiting.</div>
+            <div className="sub">{quote}</div>
           </div>
           <div className="date">
             {day.toUpperCase()}
@@ -37,40 +35,7 @@ export default function UserHome() {
           </div>
         </div>
 
-        <div className="stat-row">
-          <div className="stat">
-            <div className="lbl">
-              <svg {...icoProps}><path d="M3 13V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8" /><path d="M3 13h5l2 3h4l2-3h5v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
-              Inbox
-            </div>
-            <div className="val">5<span className="tiny">unread</span></div>
-            <div className="delta">2 from your squad</div>
-          </div>
-          <div className="stat">
-            <div className="lbl">
-              <svg {...icoProps}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></svg>
-              Today
-            </div>
-            <div className="val">3<span className="tiny">items</span></div>
-            <div className="delta">1 approval · 2 reviews</div>
-          </div>
-          <div className="stat">
-            <div className="lbl">
-              <svg {...icoProps}><circle cx="12" cy="12" r="9" /><path d="m8.5 12.5 2.5 2.5 4.5-5" /></svg>
-              Overdue
-            </div>
-            <div className="val">1</div>
-            <div className="delta">Q2 launch copy sign-off</div>
-          </div>
-          <div className="stat">
-            <div className="lbl">
-              <svg {...icoProps}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></svg>
-              Tomorrow
-            </div>
-            <div className="val">4<span className="tiny">items</span></div>
-            <div className="delta">2 meetings · 2 approvals</div>
-          </div>
-        </div>
+        <DashboardStatRow onOpenInbox={onOpenInbox} />
 
         <TodayList />
       </div>

@@ -25,6 +25,7 @@ import ClientDesignDashboard from '../views/app/pm/client-design/ClientDesignDas
 import MemberHome from '../views/app/home/MemberHome';
 import UserHome from '../views/app/home/UserHome';
 import GuestHome from '../views/app/home/GuestHome';
+import GlobalTaskDetailPanel from '../views/app/home/GlobalTaskDetailPanel';
 import InboxView from '../views/app/InboxView';
 import MyTasksView from '../views/app/MyTasksView';
 import LearningShell from '../views/app/learning/LearningShell';
@@ -489,12 +490,15 @@ export default function MainLayout() {
           ) : homeView === 'cashbook' && (userType === 'client' || userType === 'client_staff') ? (
             <ClientCashBook />
           ) : (
-            myHomeView === 'member' ? <MemberHome /> :
-            myHomeView === 'guest' ? <GuestHome /> :
-            <UserHome />
+            myHomeView === 'member' ? <MemberHome onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} /> :
+            myHomeView === 'guest' ? <GuestHome onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} /> :
+            <UserHome onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} />
           )
         )}
       </div>
+
+      {/* Global task detail panel — opens from any view when activeTaskId is set */}
+      <GlobalTaskDetailPanel />
 
       {/* Create channel modal */}
       {showCreateChannel && currentWorkspace && (

@@ -8,12 +8,11 @@ import { canAtLeast } from '../../../lib/access';
 import type { SpaceStatus, AccessLevel } from '@squadhub/shared';
 import ListView from './ListView';
 import BoardView from './BoardView';
-import TaskDetailPanel from './TaskDetailPanel';
 import SettingsSlider from '../../../components/SettingsSlider';
 import ManageMembersModal from './ManageMembersModal';
 
 export default function ListPage() {
-  const { activeSpaceId, activeListId, activeTaskId, viewMode, setViewMode } = usePMStore();
+  const { activeSpaceId, activeListId, viewMode, setViewMode, setActiveTask } = usePMStore();
   const [showSettings, setShowSettings] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [groupByStatus] = useState(true);
@@ -139,7 +138,11 @@ export default function ListPage() {
           {/* Settings button - list managers + workspace admins */}
           {canAccessSettings && (
             <button
-              onClick={() => setShowSettings(!showSettings)}
+              onClick={() => {
+                const next = !showSettings;
+                setShowSettings(next);
+                if (next) setActiveTask(null);
+              }}
               className={`rounded p-1.5 transition ${
                 showSettings
                   ? 'bg-[var(--sh-hair-3)] text-[var(--sh-ink)]'
@@ -210,16 +213,6 @@ export default function ListPage() {
             listName={listData?.name || ''}
             searchQuery={searchQuery}
             canEdit={canEdit}
-          />
-        )}
-
-        {activeTaskId && !showSettings && (
-          <TaskDetailPanel
-            statuses={statuses}
-            listId={activeListId}
-            canEdit={canEdit}
-            spaceName={spaceData?.name || listData?.name}
-            spaceColor={spaceData?.color || null}
           />
         )}
 
