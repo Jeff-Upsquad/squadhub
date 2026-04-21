@@ -290,19 +290,21 @@ router.put('/users/:id/profile', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /admin/users/:id/custom-role — change a user's primary role and (optionally) secondary roles
+// PUT /admin/users/:id/custom-role — change a user's primary role and/or secondary roles.
+// Both fields are optional; at least one must be present. Sending only secondary_role_ids
+// leaves the existing primary untouched (which is useful for users whose primary is null).
 router.put('/users/:id/custom-role', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     const { role_id, secondary_role_ids } = z
       .object({
-        role_id: z.string().uuid(),
+        role_id: z.string().uuid().optional(),
         secondary_role_ids: z.array(z.string().uuid()).optional(),
       })
       .parse(req.body);
 
-    if (secondary_role_ids && secondary_role_ids.includes(role_id)) {
-      res.status(400).json({ success: false, error: 'A secondary role cannot match the primary role' });
+    if (role_id === undefined && secondary_role_ids === undefined) {
+      res.status(400).json({ success: false, error: 'Provide role_id and/or secondary_role_ids' });
       return;
     }
 
@@ -317,30 +319,63 @@ router.put('/users/:id/custom-role', async (req: Request, res: Response) => {
       return;
     }
 
-    const { data: member, error: updateErr } = await supabaseAdmin
+    // Load the existing member row (primary may be null; that's fine).
+    const { data: existing, error: existErr } = await supabaseAdmin
       .from('workspace_members')
-      .update({ role_id })
+      .select('id, role_id')
       .eq('user_id', id)
       .eq('workspace_id', workspace.id)
-      .select('*, roles(id, name, color)')
       .single();
 
-    if (updateErr || !member) {
-      res.status(500).json({ success: false, error: updateErr?.message || 'Failed to update primary role' });
+    if (existErr || !existing) {
+      res.status(404).json({ success: false, error: 'Workspace member not found for user' });
       return;
     }
 
-    // Secondary roles: if the caller sent the field, treat it as the full desired set.
-    // If omitted, leave existing secondaries alone (but still dedupe against the new primary).
+    const effectivePrimary = role_id !== undefined ? role_id : (existing.role_id as string | null);
+
+    if (secondary_role_ids && effectivePrimary && secondary_role_ids.includes(effectivePrimary)) {
+      res.status(400).json({ success: false, error: 'A secondary role cannot match the primary role' });
+      return;
+    }
+
+    // Update primary only if explicitly provided.
+    let member: any;
+    if (role_id !== undefined) {
+      const { data, error: updateErr } = await supabaseAdmin
+        .from('workspace_members')
+        .update({ role_id })
+        .eq('id', existing.id)
+        .select('*, roles(id, name, color)')
+        .single();
+      if (updateErr || !data) {
+        res.status(500).json({ success: false, error: updateErr?.message || 'Failed to update primary role' });
+        return;
+      }
+      member = data;
+    } else {
+      const { data } = await supabaseAdmin
+        .from('workspace_members')
+        .select('*, roles(id, name, color)')
+        .eq('id', existing.id)
+        .single();
+      member = data;
+    }
+
+    // Replace the full secondary set when the caller sends the field.
     if (secondary_role_ids !== undefined) {
-      await supabaseAdmin
+      const { error: delErr } = await supabaseAdmin
         .from('workspace_member_secondary_roles')
         .delete()
-        .eq('workspace_member_id', (member as any).id);
+        .eq('workspace_member_id', member.id);
+      if (delErr) {
+        res.status(500).json({ success: false, error: delErr.message });
+        return;
+      }
 
       const rows = secondary_role_ids
-        .filter((rid) => rid !== role_id)
-        .map((rid) => ({ workspace_member_id: (member as any).id, role_id: rid }));
+        .filter((rid) => rid !== effectivePrimary)
+        .map((rid) => ({ workspace_member_id: member.id, role_id: rid }));
 
       if (rows.length > 0) {
         const { error: insertErr } = await supabaseAdmin
@@ -351,19 +386,20 @@ router.put('/users/:id/custom-role', async (req: Request, res: Response) => {
           return;
         }
       }
-    } else {
-      // Remove any stale secondary that now duplicates the new primary.
+    } else if (role_id !== undefined) {
+      // Primary changed and caller didn't re-send secondaries: drop any stale secondary
+      // that now duplicates the new primary.
       await supabaseAdmin
         .from('workspace_member_secondary_roles')
         .delete()
-        .eq('workspace_member_id', (member as any).id)
+        .eq('workspace_member_id', member.id)
         .eq('role_id', role_id);
     }
 
     const { data: secRows } = await supabaseAdmin
       .from('workspace_member_secondary_roles')
       .select('roles(id, name, color)')
-      .eq('workspace_member_id', (member as any).id);
+      .eq('workspace_member_id', member.id);
 
     const secondary_roles = (secRows || [])
       .map((r: any) => r.roles)
@@ -371,7 +407,7 @@ router.put('/users/:id/custom-role', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      data: { ...(member as any), secondary_roles },
+      data: { ...member, secondary_roles },
     });
   } catch (err) {
     if (err instanceof z.ZodError) {

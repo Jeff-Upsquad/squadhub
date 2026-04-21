@@ -71,7 +71,7 @@ function EditUserSlider({
   });
 
   const customRoleMutation = useMutation({
-    mutationFn: (payload: { role_id: string; secondary_role_ids: string[] }) =>
+    mutationFn: (payload: { role_id?: string; secondary_role_ids: string[] }) =>
       api.put(`/admin/users/${user.id}/custom-role`, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
@@ -98,11 +98,12 @@ function EditUserSlider({
       if (Object.keys(profileUpdates).length > 0) {
         await profileMutation.mutateAsync(profileUpdates);
       }
-      if (roleId && rolesChanged) {
-        await customRoleMutation.mutateAsync({
-          role_id: roleId,
+      if (rolesChanged) {
+        const payload: { role_id?: string; secondary_role_ids: string[] } = {
           secondary_role_ids: secondaryRoleIds.filter((id) => id !== roleId),
-        });
+        };
+        if (roleId) payload.role_id = roleId;
+        await customRoleMutation.mutateAsync(payload);
       }
       close();
     } catch {
