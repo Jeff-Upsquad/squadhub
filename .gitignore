@@ -63,6 +63,7 @@ coverage/
 # Claude
 .claude/scheduled_tasks.lock
 .claude/worktrees/
+.claude/settings.local.json
 
 # Graphify output (regenerated from /graphify)
 graphify-out/
