@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import type { User } from '@squadhub/shared';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
@@ -105,6 +106,68 @@ router.get('/lists/:id', async (req: Request, res: Response) => {
     res.json({ success: true, data: { ...list, task_count: count || 0, my_access_level: userLevel, space_statuses: spaceStatuses || [] } });
   } catch (err) {
     console.error('Get list error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /pm/lists/:id/assignable-users — viewer+ members of the list, its parent
+// folder, or its parent space. Same semantics as the task-scoped variant, but
+// addressable by list id so the task-creation slide can populate its assignee
+// picker before a task exists.
+router.get('/lists/:id/assignable-users', async (req: Request, res: Response) => {
+  try {
+    const listId = req.params.id as string;
+
+    const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this list' });
+      return;
+    }
+
+    const resourceFilters: Array<{ type: string; id: string }> = [
+      { type: 'list', id: listId },
+    ];
+
+    const { data: list } = await supabaseAdmin
+      .from('lists')
+      .select('folder_id, space_id')
+      .eq('id', listId)
+      .single();
+    if ((list as any)?.folder_id) {
+      resourceFilters.push({ type: 'folder', id: (list as any).folder_id });
+    }
+    if ((list as any)?.space_id) {
+      resourceFilters.push({ type: 'space', id: (list as any).space_id });
+    }
+
+    const orClauses = resourceFilters
+      .map(f => `and(resource_type.eq.${f.type},resource_id.eq.${f.id})`)
+      .join(',');
+
+    const { data: memberships, error } = await supabaseAdmin
+      .from('resource_memberships')
+      .select('user_id, users!resource_memberships_user_id_fkey(id, display_name, email, avatar_url, user_type, is_admin, status, created_at)')
+      .or(orClauses);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const seen = new Set<string>();
+    const users: User[] = [];
+    for (const m of (memberships || []) as any[]) {
+      if (!m.users || seen.has(m.user_id)) continue;
+      if (m.users.status && m.users.status !== 'active') continue;
+      seen.add(m.user_id);
+      users.push(m.users as User);
+    }
+
+    users.sort((a, b) => (a.display_name || a.email).localeCompare(b.display_name || b.email));
+
+    res.json({ success: true, data: users });
+  } catch (err) {
+    console.error('Get list assignable users error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

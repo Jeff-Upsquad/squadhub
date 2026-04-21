@@ -12,3 +12,14 @@ export function useAssignableUsers(taskId: string | null) {
     enabled: !!taskId,
   });
 }
+
+export function useAssignableUsersByList(listId: string | null) {
+  return useQuery<User[]>({
+    queryKey: ['assignable-users-by-list', listId],
+    queryFn: async () => {
+      const res = await api.get(`/pm/lists/${listId}/assignable-users`);
+      return res.data.data;
+    },
+    enabled: !!listId,
+  });
+}
