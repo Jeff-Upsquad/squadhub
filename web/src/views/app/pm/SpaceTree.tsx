@@ -27,18 +27,38 @@ function AdminLockIcon() {
   );
 }
 
-// ---- Chevron icon ----
-function ChevronIcon({ open }: { open: boolean }) {
+// ---- Vertical chevron (space/folder rows) — points down when closed, up when open ----
+function ChevronVertical({ open }: { open: boolean }) {
   return (
     <svg
-      className={`h-3 w-3 shrink-0 text-[#999999] transition-transform ${open ? 'rotate-90' : ''}`}
+      className={`h-3.5 w-3.5 shrink-0 text-[#999999] transition-transform ${open ? 'rotate-180' : ''}`}
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
     >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  );
+}
+
+// ---- Right chevron (list rows — decorative) ----
+function ChevronRight() {
+  return (
+    <svg
+      className="h-3 w-3 shrink-0 text-[#B0B0B0]"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden
+    >
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
     </svg>
   );
+}
+
+// ---- Small horizontal tree branch stub ----
+function TreeBranch() {
+  return <span className="pointer-events-none absolute left-0 top-1/2 h-px w-2 -translate-y-1/2 bg-[#E5E5E5]" aria-hidden />;
 }
 
 // ---- Ellipsis menu button ----
@@ -159,27 +179,22 @@ const FolderIcon = (
 );
 
 // ---- List item ----
-function ListItem({ list, depth = 0, isManager = false, myAccess }: { list: List; depth?: number; isManager?: boolean; myAccess?: AccessLevel | null }) {
+function ListItem({ list, isManager = false, myAccess }: { list: List; isManager?: boolean; myAccess?: AccessLevel | null }) {
   const { activeListId, setActiveList, setActiveSpace } = usePMStore();
   const [showSettings, setShowSettings] = useState(false);
   const isActive = activeListId === list.id;
-  const pl = 12 + depth * 20;
 
   return (
     <>
       <div
         onClick={() => { setActiveSpace(list.space_id); setActiveList(list.id); }}
-        className={`group flex w-full cursor-pointer items-center gap-2 rounded-md py-[5px] text-left text-[13px] transition ${
+        className={`group relative flex w-full cursor-pointer items-center gap-2 rounded-md py-[5px] pl-3 pr-2 text-left text-[13px] transition ${
           isActive
-            ? 'bg-[#F0F0F0] text-[#0F172B] font-medium'
+            ? 'bg-white text-[#0F172B] font-medium shadow-[0_1px_3px_rgba(15,23,43,0.08),0_0_0_1px_rgba(15,23,43,0.06)]'
             : 'text-[#555555] hover:bg-[#F5F5F5]'
         }`}
-        style={{ paddingLeft: `${pl}px`, paddingRight: '8px' }}
       >
-        {/* List bars icon */}
-        <svg className="h-4 w-4 shrink-0 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-        </svg>
+        <TreeBranch />
         <span className="flex-1 truncate">{list.name}</span>
         {list.is_locked && <AdminLockIcon />}
         {list.is_private && !list.is_locked && <LockIcon />}
@@ -189,8 +204,11 @@ function ListItem({ list, depth = 0, isManager = false, myAccess }: { list: List
           )}
         </div>
         {list.task_count != null && list.task_count > 0 && (
-          <span className="text-xs text-[#999999] tabular-nums">{list.task_count}</span>
+          <span className="rounded-full bg-[#F1F1F1] px-1.5 py-[1px] text-[10.5px] font-medium leading-none text-[#666666] tabular-nums">
+            {list.task_count}
+          </span>
         )}
+        <ChevronRight />
       </div>
 
       {showSettings && (
@@ -209,16 +227,13 @@ function InlineInput({
   placeholder,
   onSubmit,
   onCancel,
-  depth = 0,
 }: {
   placeholder: string;
   onSubmit: (name: string) => void;
   onCancel: () => void;
-  depth?: number;
 }) {
   const [value, setValue] = useState('');
   const submitted = useRef(false);
-  const pl = 12 + depth * 20;
 
   const handleSubmit = useCallback(() => {
     if (submitted.current) return;
@@ -228,7 +243,7 @@ function InlineInput({
   }, [value, onSubmit, onCancel]);
 
   return (
-    <div style={{ paddingLeft: `${pl}px`, paddingRight: '8px' }} className="py-1">
+    <div className="py-1 pl-3 pr-2">
       <input
         autoFocus
         value={value}
@@ -251,12 +266,12 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
 
   return (
     <div>
-      <div className="group flex items-center rounded-md py-[5px] hover:bg-[#F5F5F5]" style={{ paddingLeft: '32px', paddingRight: '8px' }}>
+      <div className="group relative flex items-center rounded-md py-[5px] pl-3 pr-2 hover:bg-[#F5F5F5]">
+        <TreeBranch />
         <button
           onClick={() => setOpen(!open)}
           className="flex flex-1 items-center gap-2 text-left text-[13px] text-[#555555]"
         >
-          <ChevronIcon open={open} />
           {/* Folder icon */}
           <svg className="h-4 w-4 shrink-0 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -269,17 +284,23 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
           {canDelete && !folder.is_locked && <EllipsisButton onClick={() => setShowSettings(true)} title="Folder settings" />}
           {canAdd && !folder.is_locked && <AddButton onClick={() => setAdding(true)} title="Add list" />}
         </div>
+        <button
+          onClick={() => setOpen(!open)}
+          className="ml-1 flex items-center"
+          aria-label={open ? 'Collapse folder' : 'Expand folder'}
+        >
+          <ChevronVertical open={open} />
+        </button>
       </div>
 
       {open && (
-        <div>
+        <div className="relative ml-3 border-l border-[#E5E5E5]">
           {folder.lists?.map((list) => (
-            <ListItem key={list.id} list={list} depth={3} isManager={isManager} myAccess={myAccess} />
+            <ListItem key={list.id} list={list} isManager={isManager} myAccess={myAccess} />
           ))}
           {adding && (
             <InlineInput
               placeholder="List name..."
-              depth={3}
               onSubmit={(name) => {
                 createList.mutate({ name, folder_id: folder.id }, {
                   onSuccess: () => setAdding(false),
@@ -334,16 +355,16 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
     <div className="mb-0.5">
       {/* Space row */}
       <div
-        className={`group flex items-center rounded-md py-[6px] transition ${
-          isActive && open ? 'bg-[#EAEAEA]' : 'hover:bg-[#F5F5F5]'
+        className={`group flex items-center rounded-md py-[6px] pl-3 pr-2 transition ${
+          isActive && open
+            ? 'bg-white shadow-[0_1px_3px_rgba(15,23,43,0.08),0_0_0_1px_rgba(15,23,43,0.06)]'
+            : 'hover:bg-[#F5F5F5]'
         }`}
-        style={{ paddingLeft: '12px', paddingRight: '8px' }}
       >
         <button
           onClick={() => { setOpen(!open); if (!open) handleSelect(); }}
           className="flex flex-1 items-center gap-2 text-left"
         >
-          <ChevronIcon open={open} />
           {/* Color badge */}
           <span
             className="flex h-[22px] w-[22px] items-center justify-center rounded text-[11px] font-bold text-white"
@@ -380,11 +401,19 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
             />
           )}
         </div>
+
+        <button
+          onClick={() => { setOpen(!open); if (!open) handleSelect(); }}
+          className="ml-1 flex items-center"
+          aria-label={open ? 'Collapse space' : 'Expand space'}
+        >
+          <ChevronVertical open={open} />
+        </button>
       </div>
 
       {/* Expanded children */}
       {open && space && (
-        <div>
+        <div className="relative ml-[22px] border-l border-[#E5E5E5]">
           {/* Folders */}
           {space.folders?.map((folder) => (
             <FolderItem key={folder.id} folder={folder} spaceId={spaceId} canAdd={canAddItems && canCreateLists} canDelete={isManager} isManager={isManager} myAccess={myAccess} />
@@ -392,7 +421,7 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
 
           {/* Root lists */}
           {space.lists?.map((list) => (
-            <ListItem key={list.id} list={list} depth={2} isManager={isManager} myAccess={myAccess} />
+            <ListItem key={list.id} list={list} isManager={isManager} myAccess={myAccess} />
           ))}
 
           {/* Create folder/list modal */}
