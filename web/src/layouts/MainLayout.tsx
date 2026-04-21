@@ -27,10 +27,11 @@ import UserHome from '../views/app/home/UserHome';
 import GuestHome from '../views/app/home/GuestHome';
 import InboxView from '../views/app/InboxView';
 import MyTasksView from '../views/app/MyTasksView';
+import LearningShell from '../views/app/learning/LearningShell';
 import { useUserType } from '../hooks/useUserType';
 
 // ---- Types ----
-type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'more';
+type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'learning' | 'more';
 export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'cashbook';
 
 // ---- Rail icons (stroke-1.6, 18x18) ----
@@ -72,6 +73,11 @@ const ICON = {
       <rect x="14" y="14" width="7" height="7" rx="1" />
     </svg>
   ),
+  learning: (
+    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+    </svg>
+  ),
   users: (
     <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
       <circle cx="9" cy="8" r="4" />
@@ -96,6 +102,7 @@ const SECTION_TITLES: Record<ActiveSection, string> = {
   teams: 'Teams',
   apps: 'Apps',
   clients: 'Clients',
+  learning: 'Learning',
   more: 'More',
 };
 
@@ -283,6 +290,7 @@ export default function MainLayout() {
           <RailBtn icon={ICON.docs} label="Docs" active={activeSection === 'docs'} onClick={() => setActiveSection('docs')} />
           <RailBtn icon={ICON.cal}  label="Cal"  active={activeSection === 'cal'}  onClick={() => setActiveSection('cal')} />
           <RailBtn icon={ICON.apps} label="Apps" active={activeSection === 'apps'} onClick={() => setActiveSection('apps')} />
+          <RailBtn icon={ICON.learning} label="Learning" active={activeSection === 'learning'} onClick={() => setActiveSection('learning')} />
         </div>
 
         {/* Divider */}
@@ -326,7 +334,7 @@ export default function MainLayout() {
       </div>
 
       {/* Module sidebar — always visible, flat edges, drop shadow to the right */}
-      {currentWorkspace && (
+      {currentWorkspace && activeSection !== 'learning' && (
         <div
           className={`flex h-full shrink-0 flex-col overflow-hidden bg-[var(--sidebar)] border-r border-[var(--sh-hair)] relative z-[2] transition-[width] duration-200 ease-in-out ${
             sidebarOpen ? 'w-[280px]' : 'w-0'
@@ -349,7 +357,9 @@ export default function MainLayout() {
       {/* Main content area */}
       <div className="flex flex-1 flex-col overflow-hidden bg-surface">
         <ActiveTimer />
-        {activeSection !== 'home' ? (
+        {activeSection === 'learning' ? (
+          <LearningShell />
+        ) : activeSection !== 'home' ? (
           <div className="sh-view flex flex-1 flex-col items-center justify-center">
             <div className="mb-4 opacity-20 text-[var(--sh-ink-3)]">{ICON[(activeSection === 'clients' ? 'users' : activeSection) as keyof typeof ICON]}</div>
             <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', letterSpacing: '-0.01em' }}>{SECTION_TITLES[activeSection]}</h3>

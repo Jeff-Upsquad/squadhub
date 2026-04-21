@@ -1082,3 +1082,133 @@ export interface CashBookSyncResponse {
     checks: CashBookSyncPushResult;
   };
 }
+
+// ============================================================
+// Learning Management System
+// ============================================================
+
+export type LmsItemKind = 'post' | 'course';
+export type LmsItemStatus = 'draft' | 'published' | 'archived';
+export type LmsAssignmentStatus = 'not_started' | 'in_progress' | 'completed';
+export type LmsBlockType =
+  | 'text'
+  | 'image'
+  | 'video_upload'
+  | 'video_embed'
+  | 'audio'
+  | 'pdf'
+  | 'quiz';
+
+export interface LmsCategory {
+  id: string;
+  name: string;
+  slug: string;
+  color: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LmsItem {
+  id: string;
+  kind: LmsItemKind;
+  title: string;
+  slug: string;
+  summary: string | null;
+  cover_image_url: string | null;
+  category_id: string | null;
+  status: LmsItemStatus;
+  published_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined (populated by API as needed)
+  category?: LmsCategory | null;
+  lessons?: LmsLesson[];
+  audience_types?: UserType[];
+  audience_user_ids?: string[];
+  assignment_count?: number;
+}
+
+export interface LmsLesson {
+  id: string;
+  item_id: string;
+  title: string;
+  summary: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+  blocks?: LmsContentBlock[];
+}
+
+export interface LmsContentBlock {
+  id: string;
+  lesson_id: string;
+  type: LmsBlockType;
+  position: number;
+  text_content: unknown | null;   // Tiptap JSON doc
+  file_url: string | null;
+  file_name: string | null;
+  file_size: number | null;
+  mime_type: string | null;
+  embed_url: string | null;
+  embed_provider: string | null;
+  caption: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  // Only for quiz blocks
+  quiz_questions?: LmsQuizQuestion[];
+}
+
+export interface LmsQuizOption {
+  id: string;
+  text: string;
+}
+
+export interface LmsQuizQuestion {
+  id: string;
+  block_id: string;
+  position: number;
+  prompt: string;
+  options: LmsQuizOption[];
+  correct_option_id: string;
+  explanation: string | null;
+}
+
+export interface LmsAssignment {
+  id: string;
+  item_id: string;
+  user_id: string;
+  status: LmsAssignmentStatus;
+  progress_percent: number;
+  assigned_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  // Joined
+  item?: LmsItem;
+  user?: User;
+  completed_lesson_ids?: string[];
+}
+
+export interface LmsLessonProgress {
+  assignment_id: string;
+  lesson_id: string;
+  completed_at: string;
+}
+
+export interface LmsQuizAttempt {
+  id: string;
+  assignment_id: string;
+  block_id: string;
+  answers: Record<string, string>;
+  score_percent: number;
+  passed: boolean;
+  submitted_at: string;
+}
+
+// Payload shapes for admin audience PUT
+export interface LmsAudienceInput {
+  user_types: UserType[];
+  user_ids: string[];
+}

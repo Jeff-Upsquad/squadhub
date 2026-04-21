@@ -48,6 +48,8 @@ import taskTypesAdminRoutes from './routes/task-types-admin';
 import pmChecklistsRoutes from './routes/pm/checklists';
 import notificationsRoutes from './routes/notifications';
 import partnerAppRoutes from './routes/partner-app';
+import lmsRoutes from './routes/lms';
+import lmsAdminRoutes from './routes/lms-admin';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimerCron } from './cron/timer-cron';
 
@@ -119,6 +121,8 @@ app.use('/admin/task-types', taskTypesAdminRoutes);
 app.use('/pm', pmChecklistsRoutes);
 app.use('/notifications', notificationsRoutes);
 app.use('/partner-app', partnerAppRoutes);
+app.use('/lms', lmsRoutes);
+app.use('/admin/lms', lmsAdminRoutes);
 
 // 404 handler
 app.use((_req, res) => {

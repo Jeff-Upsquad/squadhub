@@ -1,0 +1,405 @@
+import { Router, Request, Response } from 'express';
+import { z } from 'zod';
+import { requireAuth } from '../middleware/auth';
+import { supabaseAdmin } from '../supabase';
+
+const router = Router();
+router.use(requireAuth);
+
+// ------------------------------------------------------------
+// GET /lms/my-items — assignments for the current user
+// ------------------------------------------------------------
+router.get('/my-items', async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('lms_assignments')
+      .select(`
+        id, status, progress_percent, assigned_at, started_at, completed_at,
+        item:lms_items(
+          id, kind, title, slug, summary, cover_image_url, status, published_at,
+          category:lms_categories(id, name, slug, color)
+        )
+      `)
+      .eq('user_id', req.userId!)
+      .order('assigned_at', { ascending: false });
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    // Filter out assignments whose item has been unpublished/archived
+    const visible = (data || []).filter((a: any) => a.item && a.item.status === 'published');
+    res.json({ success: true, data: visible });
+  } catch (err) {
+    console.error('List my LMS items error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ------------------------------------------------------------
+// GET /lms/categories — for filter chips in the UI
+// ------------------------------------------------------------
+router.get('/categories', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('lms_categories')
+      .select('*')
+      .order('position', { ascending: true });
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data: data || [] });
+  } catch (err) {
+    console.error('List categories error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ------------------------------------------------------------
+// GET /lms/items/:id — full item with lessons + blocks
+// Only accessible if user is assigned OR is admin.
+// ------------------------------------------------------------
+router.get('/items/:id', async (req: Request, res: Response) => {
+  try {
+    const itemId = req.params.id;
+
+    // Check access: either there's an assignment or the user is admin
+    const { data: assignment } = await supabaseAdmin
+      .from('lms_assignments')
+      .select('id, status, progress_percent, started_at, completed_at')
+      .eq('item_id', itemId)
+      .eq('user_id', req.userId!)
+      .maybeSingle();
+
+    let isAdmin = false;
+    if (!assignment) {
+      const { data: profile } = await supabaseAdmin
+        .from('users')
+        .select('is_admin')
+        .eq('id', req.userId!)
+        .single();
+      isAdmin = !!(profile as any)?.is_admin;
+      if (!isAdmin) {
+        res.status(403).json({ success: false, error: 'Not assigned to this content' });
+        return;
+      }
+    }
+
+    const { data: item, error: itemErr } = await supabaseAdmin
+      .from('lms_items')
+      .select(`
+        id, kind, title, slug, summary, cover_image_url, status, published_at, created_at, updated_at,
+        category:lms_categories(id, name, slug, color)
+      `)
+      .eq('id', itemId)
+      .single();
+
+    if (itemErr || !item) {
+      res.status(404).json({ success: false, error: 'Not found' });
+      return;
+    }
+
+    if ((item as any).status !== 'published' && !isAdmin) {
+      res.status(403).json({ success: false, error: 'Not published' });
+      return;
+    }
+
+    const { data: lessons } = await supabaseAdmin
+      .from('lms_lessons')
+      .select('*')
+      .eq('item_id', itemId)
+      .order('position', { ascending: true });
+
+    const lessonIds = (lessons || []).map((l: any) => l.id);
+    const { data: blocks } = lessonIds.length
+      ? await supabaseAdmin
+          .from('lms_content_blocks')
+          .select('*')
+          .in('lesson_id', lessonIds)
+          .order('position', { ascending: true })
+      : { data: [] };
+
+    const quizBlockIds = (blocks || []).filter((b: any) => b.type === 'quiz').map((b: any) => b.id);
+    const { data: quizQuestions } = quizBlockIds.length
+      ? await supabaseAdmin
+          .from('lms_quiz_questions')
+          .select('*')
+          .in('block_id', quizBlockIds)
+          .order('position', { ascending: true })
+      : { data: [] };
+
+    // Strip correct_option_id from client payload — grading happens server-side
+    const sanitizedQuestions = (quizQuestions || []).map((q: any) => ({
+      id: q.id,
+      block_id: q.block_id,
+      position: q.position,
+      prompt: q.prompt,
+      options: q.options,
+      explanation: null, // only revealed after attempt
+    }));
+
+    const questionsByBlock = new Map<string, any[]>();
+    for (const q of sanitizedQuestions) {
+      const list = questionsByBlock.get(q.block_id) || [];
+      list.push(q);
+      questionsByBlock.set(q.block_id, list);
+    }
+
+    const blocksByLesson = new Map<string, any[]>();
+    for (const b of blocks || []) {
+      const list = blocksByLesson.get(b.lesson_id) || [];
+      const block = b.type === 'quiz'
+        ? { ...b, quiz_questions: questionsByBlock.get(b.id) || [] }
+        : b;
+      list.push(block);
+      blocksByLesson.set(b.lesson_id, list);
+    }
+
+    const fullLessons = (lessons || []).map((l: any) => ({
+      ...l,
+      blocks: blocksByLesson.get(l.id) || [],
+    }));
+
+    // Completed-lesson ids for this user's assignment
+    let completedLessonIds: string[] = [];
+    if (assignment) {
+      const { data: progress } = await supabaseAdmin
+        .from('lms_lesson_progress')
+        .select('lesson_id')
+        .eq('assignment_id', (assignment as any).id);
+      completedLessonIds = (progress || []).map((p: any) => p.lesson_id);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        item: { ...item, lessons: fullLessons },
+        assignment: assignment ? { ...assignment, completed_lesson_ids: completedLessonIds } : null,
+      },
+    });
+  } catch (err) {
+    console.error('Get LMS item error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ------------------------------------------------------------
+// POST /lms/assignments/:id/start — mark in_progress
+// ------------------------------------------------------------
+router.post('/assignments/:id/start', async (req: Request, res: Response) => {
+  try {
+    const { data: assignment, error: fetchErr } = await supabaseAdmin
+      .from('lms_assignments')
+      .select('*')
+      .eq('id', req.params.id)
+      .eq('user_id', req.userId!)
+      .single();
+
+    if (fetchErr || !assignment) {
+      res.status(404).json({ success: false, error: 'Assignment not found' });
+      return;
+    }
+
+    if ((assignment as any).status === 'completed') {
+      res.json({ success: true, data: assignment });
+      return;
+    }
+
+    const patch: Record<string, any> = {
+      status: 'in_progress',
+      started_at: (assignment as any).started_at ?? new Date().toISOString(),
+    };
+
+    const { data, error } = await supabaseAdmin
+      .from('lms_assignments')
+      .update(patch)
+      .eq('id', (assignment as any).id)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Start assignment error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ------------------------------------------------------------
+// POST /lms/assignments/:id/lessons/:lessonId/complete
+// Upserts lesson progress, recomputes progress_percent + status.
+// ------------------------------------------------------------
+router.post('/assignments/:id/lessons/:lessonId/complete', async (req: Request, res: Response) => {
+  try {
+    const { id: assignmentId, lessonId } = req.params;
+
+    const { data: assignment } = await supabaseAdmin
+      .from('lms_assignments')
+      .select('*')
+      .eq('id', assignmentId)
+      .eq('user_id', req.userId!)
+      .single();
+
+    if (!assignment) {
+      res.status(404).json({ success: false, error: 'Assignment not found' });
+      return;
+    }
+
+    // Verify lesson belongs to this assignment's item
+    const { data: lesson } = await supabaseAdmin
+      .from('lms_lessons')
+      .select('id, item_id')
+      .eq('id', lessonId)
+      .single();
+
+    if (!lesson || (lesson as any).item_id !== (assignment as any).item_id) {
+      res.status(400).json({ success: false, error: 'Lesson does not belong to this assignment' });
+      return;
+    }
+
+    // Upsert progress row
+    const { error: upsertErr } = await supabaseAdmin
+      .from('lms_lesson_progress')
+      .upsert(
+        { assignment_id: assignmentId, lesson_id: lessonId, completed_at: new Date().toISOString() },
+        { onConflict: 'assignment_id,lesson_id' },
+      );
+
+    if (upsertErr) {
+      res.status(500).json({ success: false, error: upsertErr.message });
+      return;
+    }
+
+    // Recompute progress
+    const [{ count: totalLessons }, { count: completedLessons }] = await Promise.all([
+      supabaseAdmin
+        .from('lms_lessons')
+        .select('*', { count: 'exact', head: true })
+        .eq('item_id', (assignment as any).item_id),
+      supabaseAdmin
+        .from('lms_lesson_progress')
+        .select('*', { count: 'exact', head: true })
+        .eq('assignment_id', assignmentId),
+    ]);
+
+    const total = totalLessons || 1;
+    const done = completedLessons || 0;
+    const percent = Math.round((done / total) * 100);
+    const isComplete = done >= total;
+
+    const patch: Record<string, any> = {
+      progress_percent: percent,
+      status: isComplete ? 'completed' : 'in_progress',
+      started_at: (assignment as any).started_at ?? new Date().toISOString(),
+      completed_at: isComplete ? ((assignment as any).completed_at ?? new Date().toISOString()) : null,
+    };
+
+    const { data: updated, error: updateErr } = await supabaseAdmin
+      .from('lms_assignments')
+      .update(patch)
+      .eq('id', assignmentId)
+      .select()
+      .single();
+
+    if (updateErr) {
+      res.status(500).json({ success: false, error: updateErr.message });
+      return;
+    }
+
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    console.error('Complete lesson error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ------------------------------------------------------------
+// POST /lms/assignments/:id/quiz/:blockId/submit
+// Grades a quiz and stores the attempt.
+// ------------------------------------------------------------
+const quizSubmitSchema = z.object({
+  answers: z.record(z.string(), z.string()),
+});
+
+router.post('/assignments/:id/quiz/:blockId/submit', async (req: Request, res: Response) => {
+  try {
+    const { id: assignmentId, blockId } = req.params;
+    const { answers } = quizSubmitSchema.parse(req.body);
+
+    const { data: assignment } = await supabaseAdmin
+      .from('lms_assignments')
+      .select('id, item_id, user_id')
+      .eq('id', assignmentId)
+      .eq('user_id', req.userId!)
+      .single();
+
+    if (!assignment) {
+      res.status(404).json({ success: false, error: 'Assignment not found' });
+      return;
+    }
+
+    const { data: questions } = await supabaseAdmin
+      .from('lms_quiz_questions')
+      .select('id, correct_option_id, explanation')
+      .eq('block_id', blockId);
+
+    if (!questions || questions.length === 0) {
+      res.status(404).json({ success: false, error: 'Quiz has no questions' });
+      return;
+    }
+
+    let correct = 0;
+    const per: Record<string, { is_correct: boolean; correct_option_id: string; explanation: string | null }> = {};
+    for (const q of questions as any[]) {
+      const given = answers[q.id];
+      const ok = given === q.correct_option_id;
+      if (ok) correct += 1;
+      per[q.id] = { is_correct: ok, correct_option_id: q.correct_option_id, explanation: q.explanation };
+    }
+
+    const scorePercent = Math.round((correct / questions.length) * 100);
+    const passed = scorePercent >= 70; // default pass bar; per-block metadata may override later
+
+    const { data: attempt, error: insertErr } = await supabaseAdmin
+      .from('lms_quiz_attempts')
+      .insert({
+        assignment_id: assignmentId,
+        block_id: blockId,
+        answers,
+        score_percent: scorePercent,
+        passed,
+      })
+      .select()
+      .single();
+
+    if (insertErr) {
+      res.status(500).json({ success: false, error: insertErr.message });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        attempt,
+        score_percent: scorePercent,
+        passed,
+        questions: per,
+      },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Submit quiz error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+export default router;

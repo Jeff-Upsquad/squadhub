@@ -43,6 +43,30 @@ export async function generatePresignedUploadUrl(
   return { uploadUrl, objectKey, publicUrl };
 }
 
+// Generate a pre-signed URL for LMS content-block media uploads.
+// Path: lms/<item_id>/<lesson_id>/<timestamp>_<filename>
+export async function generateLmsUploadUrl(
+  itemId: string,
+  lessonId: string,
+  filename: string,
+  contentType: string,
+): Promise<{ uploadUrl: string; objectKey: string; publicUrl: string }> {
+  const timestamp = Date.now();
+  const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const objectKey = `lms/${itemId}/${lessonId}/${timestamp}_${safeFilename}`;
+
+  const command = new PutObjectCommand({
+    Bucket: config.r2BucketName,
+    Key: objectKey,
+    ContentType: contentType,
+  });
+
+  const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 3600 });
+  const publicUrl = `${config.r2PublicUrl}/${objectKey}`;
+
+  return { uploadUrl, objectKey, publicUrl };
+}
+
 // Generate a pre-signed URL for cash book receipt/check photo uploads
 export async function generateCashBookUploadUrl(
   clientId: string,
