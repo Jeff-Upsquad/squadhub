@@ -35,6 +35,7 @@ CREATE TRIGGER trg_user_office_timing_updated_at
 
 ALTER TABLE user_office_timing ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view own office timing" ON user_office_timing;
 CREATE POLICY "Users can view own office timing"
   ON user_office_timing FOR SELECT
   USING (auth.uid() = user_id);
