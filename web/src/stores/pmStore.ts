@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
 export type ViewMode = 'list' | 'board';
+export type DashboardTab = 'today' | 'overdue' | 'tomorrow';
 
 interface TimerState {
   taskId: string;
@@ -17,6 +18,7 @@ interface PMState {
   activeTaskId: string | null;
   activeDesignFolderId: string | null;
   activeClientId: string | null;
+  activeDashboardTab: DashboardTab | null;
   viewMode: ViewMode;
   collapsedGroups: Record<string, boolean>;
   selectedTasks: string[];
@@ -26,6 +28,7 @@ interface PMState {
   setActiveTask: (id: string | null) => void;
   setActiveDesignFolder: (id: string | null) => void;
   setActiveClient: (id: string | null) => void;
+  setActiveDashboardTab: (tab: DashboardTab | null) => void;
   setViewMode: (mode: ViewMode) => void;
   toggleGroupCollapse: (statusId: string) => void;
   toggleTaskSelection: (taskId: string) => void;
@@ -44,6 +47,7 @@ export const usePMStore = create<PMState>()(
       activeTaskId: null,
       activeDesignFolderId: null,
       activeClientId: null,
+      activeDashboardTab: null,
       viewMode: 'list',
       collapsedGroups: {},
       selectedTasks: [],
@@ -54,6 +58,7 @@ export const usePMStore = create<PMState>()(
       setActiveTask: (id) => set({ activeTaskId: id }),
       setActiveDesignFolder: (id) => set({ activeDesignFolderId: id, activeListId: null, selectedTasks: [] }),
       setActiveClient: (id) => set({ activeClientId: id }),
+      setActiveDashboardTab: (tab) => set({ activeDashboardTab: tab }),
       setViewMode: (mode) => set({ viewMode: mode }),
       toggleGroupCollapse: (statusId) =>
         set((state) => ({
@@ -82,7 +87,7 @@ export const usePMStore = create<PMState>()(
         set({ timer: null });
         return prev;
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, viewMode: 'list', collapsedGroups: {}, selectedTasks: [], timer: null }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, viewMode: 'list', collapsedGroups: {}, selectedTasks: [], timer: null }),
     }),
     {
       name: 'squadhub-pm',
