@@ -297,6 +297,8 @@ export interface Task {
   subtasks?: Task[];
   comment_count?: number;
   creator?: User;
+  list?: { id: string; name: string } | null;
+  space?: { id: string; name: string } | null;
 }
 
 export interface TaskTag {

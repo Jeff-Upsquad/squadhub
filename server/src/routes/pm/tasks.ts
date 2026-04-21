@@ -69,6 +69,40 @@ async function hydrateAssignees<T extends { assignee_ids?: string[] | null }>(
   }));
 }
 
+// Attach `list: { id, name }` and `space: { id, name }` to each task so the
+// frontend can show the task's parent list/space without a second round-trip.
+async function hydrateLists<T extends { list_id: string }>(
+  tasks: T[],
+): Promise<(T & { list: { id: string; name: string } | null; space: { id: string; name: string } | null })[]> {
+  const listIds = Array.from(new Set(tasks.map(t => t.list_id).filter(Boolean)));
+  if (listIds.length === 0) {
+    return tasks.map(t => ({ ...t, list: null, space: null }));
+  }
+  const { data: lists } = await supabaseAdmin
+    .from('lists')
+    .select('id, name, space_id')
+    .in('id', listIds);
+  const spaceIds = Array.from(new Set((lists || []).map((l: any) => l.space_id).filter(Boolean)));
+  const { data: spaces } = spaceIds.length
+    ? await supabaseAdmin.from('spaces').select('id, name').in('id', spaceIds)
+    : { data: [] as any[] };
+  const listById = new Map<string, { id: string; name: string; space_id: string | null }>(
+    (lists || []).map((l: any) => [l.id, l]),
+  );
+  const spaceById = new Map<string, { id: string; name: string }>(
+    (spaces || []).map((s: any) => [s.id, s]),
+  );
+  return tasks.map(t => {
+    const l = listById.get(t.list_id);
+    const s = l?.space_id ? spaceById.get(l.space_id) : null;
+    return {
+      ...t,
+      list: l ? { id: l.id, name: l.name } : null,
+      space: s ? { id: s.id, name: s.name } : null,
+    };
+  });
+}
+
 // GET /pm/task-types — list all task types with their custom fields (authenticated users)
 router.get('/task-types', async (_req: Request, res: Response) => {
   try {
@@ -186,7 +220,8 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       return;
     }
 
-    const tasks = await hydrateAssignees(data || []);
+    const withAssignees = await hydrateAssignees(data || []);
+    const tasks = await hydrateLists(withAssignees);
 
     // Compute day boundaries in user's timezone
     const fmt = new Intl.DateTimeFormat('en-CA', {
