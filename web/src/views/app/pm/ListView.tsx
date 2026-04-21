@@ -53,6 +53,15 @@ export default function ListView({
   return (
     <div className="relative flex flex-1 flex-col overflow-auto">
       <div className="lv-wrap">
+        {/* Column headers — aligned with .lv-row grid */}
+        <div className="lv-header" role="row" aria-label="Column headers">
+          <span aria-hidden="true" />
+          <span className="lv-header-cell lv-header-cell--title">Task</span>
+          <span className="lv-header-cell lv-header-cell--assignee">Assignee</span>
+          <span className="lv-header-cell lv-header-cell--date">Work date</span>
+          <span className="lv-header-cell lv-header-cell--date">Due date</span>
+        </div>
+
         {totalVisible === 0 ? (
           <div className="lv-empty">
             {searchQuery ? `No tasks match “${searchQuery}”.` : 'No tasks yet. Press + to add one.'}

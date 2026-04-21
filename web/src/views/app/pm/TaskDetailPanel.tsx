@@ -50,6 +50,18 @@ function formatTracked(seconds: number | null | undefined): string {
   return `${m}m`;
 }
 
+function formatCreatedAt(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const sameYear = d.getFullYear() === now.getFullYear();
+  const date = d.toLocaleDateString([], sameYear
+    ? { month: 'short', day: 'numeric' }
+    : { month: 'short', day: 'numeric', year: 'numeric' });
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${date} · ${time}`;
+}
+
 function formatSeconds(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
@@ -669,7 +681,7 @@ export default function TaskDetailPanel({
                 )}
 
                 <div className="td-settings-row">
-                  <span className="k">{META_ICONS.Reporter}Reporter</span>
+                  <span className="k">{META_ICONS.Reporter}Created by</span>
                   <span className="v">
                     {task.creator ? (
                       <>
@@ -677,6 +689,9 @@ export default function TaskDetailPanel({
                           {initialOf(task.creator.display_name || task.creator.email)}
                         </span>
                         <span>{task.creator.display_name || task.creator.email}</span>
+                        {task.created_at && (
+                          <span className="muted"> · {formatCreatedAt(task.created_at)}</span>
+                        )}
                       </>
                     ) : (
                       <span className="muted">—</span>

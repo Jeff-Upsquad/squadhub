@@ -1190,7 +1190,8 @@ body {
 
 .lv-row {
   display: grid;
-  grid-template-columns: 28px 1fr auto;
+  /* checkbox | title | assignee | work date | due date */
+  grid-template-columns: 28px 1fr 96px 112px 112px;
   gap: 12px;
   align-items: center;
   padding: 10px 20px;
@@ -1285,14 +1286,63 @@ body {
   background: var(--sh-hair-3);
   color: var(--sh-ink-2);
 }
-.lv-meta .lv-due--overdue {
+.lv-due--overdue {
   color: oklch(0.5 0.17 25);
   font-weight: 500;
 }
-.lv-meta .lv-due--today {
+.lv-due--today {
   color: var(--sh-ink);
   font-weight: 500;
 }
+
+/* Column headers (sticky) above list rows — same grid as .lv-row */
+.lv-header {
+  display: grid;
+  grid-template-columns: 28px 1fr 96px 112px 112px;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 20px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sh-ink-4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--sh-hair-3);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.lv-header-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lv-header-cell--title { padding-left: 0; }
+.lv-header-cell--assignee { text-align: left; padding-left: 8px; }
+.lv-header-cell--date { text-align: right; padding-right: 8px; }
+
+/* Inline-editable cells in list row (assignee, work date, due date) */
+.lv-cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--sh-ink-3);
+  transition: background 100ms ease, color 100ms ease;
+  user-select: none;
+}
+.lv-cell:hover { background: var(--sh-hair-3); color: var(--sh-ink-2); }
+.lv-cell--assignee { justify-content: flex-start; }
+.lv-cell--date { justify-content: flex-end; }
+.lv-cell-value {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lv-cell[data-empty="true"] .lv-cell-value { color: var(--sh-ink-4); }
 
 /* Priority mini-indicator next to title — subtle dot only for urgent/high */
 .lv-priority-dot {

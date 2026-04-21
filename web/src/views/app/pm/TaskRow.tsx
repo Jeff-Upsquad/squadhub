@@ -3,6 +3,8 @@ import type { Task, SpaceStatus } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
 import { avatarColor, initialOf, formatWhen } from './taskHelpers';
+import AssigneePicker from './AssigneePicker';
+import DatePicker from './DatePicker';
 
 const PRIORITY_LEVEL: Record<string, string | null> = {
   urgent: 'p0',
@@ -31,18 +33,21 @@ export default function TaskRow({
   const updateTask = useUpdateTask(listId);
   const [expanded, setExpanded] = useState(false);
 
+  // Inline picker anchors — null = closed, DOMRect = open & positioned
+  const [assigneeAnchor, setAssigneeAnchor] = useState<DOMRect | null>(null);
+  const [workDateAnchor, setWorkDateAnchor] = useState<DOMRect | null>(null);
+  const [dueDateAnchor, setDueDateAnchor] = useState<DOMRect | null>(null);
+
   const hasSubtasks = !!(task.subtasks && task.subtasks.length > 0);
   const isActive = activeTaskId === task.id;
   const isSelected = selectedTasks.includes(task.id);
 
   const statusCategory = (task as any).status as string | undefined;
   const isDone = statusCategory === 'done' || statusCategory === 'closed';
-  const matchedStatus = statuses.find(s => s.category === statusCategory);
   const priorityLevel = PRIORITY_LEVEL[task.priority || 'none'];
-  const when = formatWhen(task.due_date);
+  const workWhen = formatWhen(task.work_date);
+  const dueWhen = formatWhen(task.due_date);
   const assignees = task.assignees || [];
-  const tags = task.tags || [];
-  const spaceLabel = (task as any).space?.name || matchedStatus?.name;
 
   const handleGlyphClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -50,6 +55,22 @@ export default function TaskRow({
     const next = isDone ? 'todo' : 'done';
     updateTask.mutate({ id: task.id, status: next } as any);
   };
+
+  const openPicker = (
+    e: React.MouseEvent,
+    setter: (r: DOMRect | null) => void,
+  ) => {
+    e.stopPropagation();
+    if (!canEdit) return;
+    setter((e.currentTarget as HTMLElement).getBoundingClientRect());
+  };
+
+  const dueValueClass =
+    dueWhen.state === 'overdue'
+      ? 'lv-cell-value lv-due--overdue'
+      : dueWhen.state === 'today'
+        ? 'lv-cell-value lv-due--today'
+        : 'lv-cell-value';
 
   return (
     <>
@@ -83,7 +104,7 @@ export default function TaskRow({
           aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
         />
 
-        {/* Title + meta stack */}
+        {/* Title only — meta line (space · due · tags) removed; dedicated columns below */}
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             {priorityLevel && (priorityLevel === 'p0' || priorityLevel === 'p1') && (
@@ -112,47 +133,62 @@ export default function TaskRow({
             )}
             <span className="lv-title">{task.title}</span>
           </div>
-          <div className="lv-meta">
-            {spaceLabel && <span className="lv-tag">{spaceLabel}</span>}
-            {when.text && (
-              <>
-                {spaceLabel && <span className="sep">·</span>}
-                <span
-                  className={when.state === 'overdue' ? 'lv-due--overdue' : when.state === 'today' ? 'lv-due--today' : ''}
-                >
-                  {when.text}
-                </span>
-              </>
-            )}
-            {tags.length > 0 && (
-              <>
-                {(spaceLabel || when.text) && <span className="sep">·</span>}
-                <span className="truncate">{tags.slice(0, 2).map(t => `#${t.name}`).join(' ')}{tags.length > 2 ? ` +${tags.length - 2}` : ''}</span>
-              </>
-            )}
-          </div>
         </div>
 
-        {/* Assignee avatars */}
-        {assignees.length > 0 ? (
-          <span className="av-stack" aria-label={`${assignees.length} assignee${assignees.length === 1 ? '' : 's'}`}>
-            {assignees.slice(0, 2).map((u) => (
-              <span
-                key={u.id}
-                className="lv-ava"
-                style={{ background: avatarColor(u.id || u.email) }}
-                title={u.display_name || u.email}
-              >
-                {initialOf(u.display_name || u.email)}
-              </span>
-            ))}
-            {assignees.length > 2 && (
-              <span className="av-more" title={`${assignees.length - 2} more`}>+{assignees.length - 2}</span>
-            )}
+        {/* Assignee cell — clickable, opens AssigneePicker */}
+        <div
+          className="lv-cell lv-cell--assignee"
+          data-empty={assignees.length === 0}
+          onClick={canEdit ? (e) => openPicker(e, setAssigneeAnchor) : undefined}
+          style={{ cursor: canEdit ? 'pointer' : 'default' }}
+          title={canEdit ? 'Change assignees' : undefined}
+        >
+          {assignees.length > 0 ? (
+            <span className="av-stack" aria-label={`${assignees.length} assignee${assignees.length === 1 ? '' : 's'}`}>
+              {assignees.slice(0, 2).map((u) => (
+                <span
+                  key={u.id}
+                  className="lv-ava"
+                  style={{ background: avatarColor(u.id || u.email) }}
+                  title={u.display_name || u.email}
+                >
+                  {initialOf(u.display_name || u.email)}
+                </span>
+              ))}
+              {assignees.length > 2 && (
+                <span className="av-more" title={`${assignees.length - 2} more`}>+{assignees.length - 2}</span>
+              )}
+            </span>
+          ) : (
+            <span className="lv-ava lv-ava--empty" title="Unassigned">–</span>
+          )}
+        </div>
+
+        {/* Work date cell — clickable, opens DatePicker (datetime) */}
+        <div
+          className="lv-cell lv-cell--date"
+          data-empty={!task.work_date}
+          onClick={canEdit ? (e) => openPicker(e, setWorkDateAnchor) : undefined}
+          style={{ cursor: canEdit ? 'pointer' : 'default' }}
+          title={canEdit ? 'Set work date' : undefined}
+        >
+          <span className="lv-cell-value">
+            {task.work_date ? workWhen.text : '—'}
           </span>
-        ) : (
-          <span className="lv-ava lv-ava--empty" title="Unassigned">–</span>
-        )}
+        </div>
+
+        {/* Due date cell — clickable, opens DatePicker (datetime) */}
+        <div
+          className="lv-cell lv-cell--date"
+          data-empty={!task.due_date}
+          onClick={canEdit ? (e) => openPicker(e, setDueDateAnchor) : undefined}
+          style={{ cursor: canEdit ? 'pointer' : 'default' }}
+          title={canEdit ? 'Set due date' : undefined}
+        >
+          <span className={dueValueClass}>
+            {task.due_date ? dueWhen.text : '—'}
+          </span>
+        </div>
       </div>
 
       {expanded && hasSubtasks && task.subtasks!.map((sub) => (
@@ -166,6 +202,36 @@ export default function TaskRow({
           listId={listId}
         />
       ))}
+
+      {assigneeAnchor && (
+        <AssigneePicker
+          taskId={task.id}
+          currentAssigneeIds={assignees.map(u => u.id)}
+          anchorRect={assigneeAnchor}
+          onChange={(ids) => updateTask.mutate({ id: task.id, assignee_ids: ids } as any)}
+          onClose={() => setAssigneeAnchor(null)}
+        />
+      )}
+
+      {workDateAnchor && (
+        <DatePicker
+          anchorRect={workDateAnchor}
+          value={task.work_date}
+          mode="datetime"
+          onChange={(next) => updateTask.mutate({ id: task.id, work_date: next } as any)}
+          onClose={() => setWorkDateAnchor(null)}
+        />
+      )}
+
+      {dueDateAnchor && (
+        <DatePicker
+          anchorRect={dueDateAnchor}
+          value={task.due_date}
+          mode="datetime"
+          onChange={(next) => updateTask.mutate({ id: task.id, due_date: next } as any)}
+          onClose={() => setDueDateAnchor(null)}
+        />
+      )}
     </>
   );
 }
