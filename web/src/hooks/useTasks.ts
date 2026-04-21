@@ -17,6 +17,26 @@ export function useTasks(listId: string | null, filters?: { status?: string; pri
   });
 }
 
+export type MyTasksBuckets = {
+  overdue: Task[];
+  today: Task[];
+  tomorrow: Task[];
+  upcoming: Task[];
+  later: Task[];
+};
+
+export function useMyTasks() {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return useQuery<MyTasksBuckets>({
+    queryKey: ['my-tasks', tz],
+    queryFn: async () => {
+      const res = await api.get(`/pm/tasks/my?tz=${encodeURIComponent(tz)}`);
+      return res.data.data;
+    },
+    staleTime: 30_000,
+  });
+}
+
 export function useTask(taskId: string | null) {
   return useQuery<Task>({
     queryKey: ['task', taskId],
@@ -82,6 +102,7 @@ export function useUpdateTask(listId: string | null) {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['tasks', listId] });
       qc.invalidateQueries({ queryKey: ['task', vars.id] });
+      qc.invalidateQueries({ queryKey: ['my-tasks'] });
     },
   });
 }

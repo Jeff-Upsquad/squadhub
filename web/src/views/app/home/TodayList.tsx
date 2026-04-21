@@ -1,27 +1,12 @@
-import { useState } from 'react';
-
-type Task = {
-  id: number;
-  title: string;
-  space: string;
-  when: string;
-  tag: 'client' | 'ops' | 'eng' | 'design' | 'space';
-  done: boolean;
-  who: string;
-  color: string;
-};
-
-const INITIAL_TASKS: Task[] = [
-  { id: 1, title: 'Review Arbor Co homepage comps', space: 'Arbor Co', when: '10:00 AM', tag: 'client', done: false, who: 'LS', color: 'oklch(0.62 0.13 320)' },
-  { id: 2, title: 'Sign off Q2 launch copy — brand voice', space: 'Q2 Launch', when: 'Due today', tag: 'ops', done: false, who: 'MH', color: 'oklch(0.58 0.12 60)' },
-  { id: 3, title: 'Lumen partnership — draft MSA v3', space: 'Lumen', when: 'Due tomorrow', tag: 'client', done: false, who: 'NI', color: 'oklch(0.62 0.12 100)' },
-  { id: 4, title: 'Pair with Dev on auth migration', space: 'Engineering', when: '2:30 PM', tag: 'eng', done: false, who: 'DK', color: 'oklch(0.6 0.13 150)' },
-  { id: 5, title: 'Daily check-in', space: 'Team', when: 'Completed 09:02', tag: 'space', done: true, who: 'AM', color: 'oklch(0.6 0.12 30)' },
-];
+import type { Task } from '@squadhub/shared';
+import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
+import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
 
 export default function TodayList() {
-  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
-  const toggle = (id: number) => setTasks((t) => t.map((x) => (x.id === id ? { ...x, done: !x.done } : x)));
+  const { data, isLoading, isError, refetch } = useMyTasks();
+  const updateTask = useUpdateTask(null);
+
+  const tasks: Task[] = data ? [...data.overdue, ...data.today] : [];
 
   return (
     <div className="card" style={{ marginBottom: 28 }}>
@@ -30,24 +15,94 @@ export default function TodayList() {
         <span className="link">Reorder</span>
       </div>
       <div className="today-list">
-        {tasks.map((t) => (
-          <div key={t.id} className="today-item" data-done={t.done}>
-            <div
-              className="checkbox"
-              data-done={t.done}
-              onClick={(e) => { e.stopPropagation(); toggle(t.id); }}
-            />
-            <div>
-              <div className="ti-title">{t.title}</div>
-              <div className="ti-meta">
-                <span className={`tag ${t.tag}`}>{t.space}</span>
-                <span>·</span>
-                <span>{t.when}</span>
+        {isLoading && (
+          <>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="today-item" style={{ opacity: 0.5 }}>
+                <div className="checkbox" />
+                <div>
+                  <div className="ti-title" style={{ background: 'var(--sh-ink-6, #eee)', height: 12, borderRadius: 4, width: '60%' }} />
+                  <div className="ti-meta" style={{ marginTop: 6 }}>
+                    <span style={{ background: 'var(--sh-ink-6, #eee)', height: 10, borderRadius: 4, width: 80, display: 'inline-block' }} />
+                  </div>
+                </div>
+                <div className="ava" style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--sh-ink-6, #eee)' }} />
               </div>
-            </div>
-            <div className="ava" style={{ width: 22, height: 22, borderRadius: '50%', background: t.color, fontSize: 9.5 }}>{t.who}</div>
+            ))}
+          </>
+        )}
+
+        {isError && !isLoading && (
+          <div style={{ padding: '18px 4px', textAlign: 'center', color: 'var(--sh-ink-4)' }}>
+            Couldn't load today's list.{' '}
+            <span className="link" style={{ cursor: 'pointer' }} onClick={() => refetch()}>Retry</span>
           </div>
-        ))}
+        )}
+
+        {!isLoading && !isError && tasks.length === 0 && (
+          <div style={{ padding: '18px 4px', textAlign: 'center', color: 'var(--sh-ink-4)' }}>
+            Nothing on the list for today.
+          </div>
+        )}
+
+        {!isLoading && tasks.map((t) => {
+          const when = formatWhen(t.due_date);
+          const assignee = t.assignees?.[0];
+          const label = t.list?.name || t.space?.name || '';
+          return (
+            <div key={t.id} className="today-item">
+              <div
+                className="checkbox"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  updateTask.mutate({ id: t.id, status: 'done' });
+                }}
+              />
+              <div>
+                <div className="ti-title">{t.title}</div>
+                <div className="ti-meta">
+                  {label && <span className="tag">{label}</span>}
+                  {label && when.text && <span>·</span>}
+                  {when.text && (
+                    <span style={when.state === 'overdue' ? { color: 'var(--sh-danger, #c43)' } : undefined}>
+                      {when.text}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {assignee ? (
+                <div
+                  className="ava"
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: '50%',
+                    background: avatarColor(assignee.id || assignee.email),
+                    fontSize: 9.5,
+                  }}
+                  title={assignee.display_name || assignee.email}
+                >
+                  {initialOf(assignee.display_name || assignee.email)}
+                </div>
+              ) : (
+                <div
+                  className="ava"
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: '50%',
+                    background: 'var(--sh-ink-6, #eee)',
+                    color: 'var(--sh-ink-4)',
+                    fontSize: 9.5,
+                  }}
+                  title="Unassigned"
+                >
+                  –
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
