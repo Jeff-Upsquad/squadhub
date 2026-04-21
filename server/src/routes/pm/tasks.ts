@@ -198,7 +198,7 @@ router.get('/tasks', async (req: Request, res: Response) => {
 
 // GET /pm/tasks/my — returns the logged-in user's assigned tasks
 // bucketed by due-date in the requested timezone. Today and Tomorrow
-// buckets also match on work_date and start_date (DATE columns, no TZ).
+// buckets also match on work_date and start_date.
 // Used by the partner mobile app's Tasks tab.
 router.get('/tasks/my', async (req: Request, res: Response) => {
   try {
@@ -238,18 +238,19 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       overdue: [], today: [], tomorrow: [], upcoming: [], later: [],
     };
 
-    // work_date and start_date are DATE columns — stored as 'YYYY-MM-DD' strings.
-    // due_date is TIMESTAMPTZ — format into the user's timezone first.
-    const dateOnly = (v: unknown): string | null => {
+    // All three date fields are TIMESTAMPTZ (migration 034 promoted
+    // work_date and start_date from DATE). Format each into the user's
+    // timezone before comparing — the naive YYYY-MM-DD slice off the raw
+    // UTC timestamp drops a full day for users east of UTC.
+    const toTzDay = (v: unknown): string | null => {
       if (!v) return null;
-      if (typeof v === 'string') return v.slice(0, 10);
       return fmt.format(new Date(v as string));
     };
 
     for (const t of tasks) {
-      const dueStr = t.due_date ? fmt.format(new Date(t.due_date)) : null;
-      const workStr = dateOnly(t.work_date);
-      const startStr = dateOnly(t.start_date);
+      const dueStr = toTzDay(t.due_date);
+      const workStr = toTzDay(t.work_date);
+      const startStr = toTzDay(t.start_date);
       const dateStrs = [dueStr, workStr, startStr].filter(Boolean) as string[];
 
       const hasToday = dateStrs.includes(todayStr);
