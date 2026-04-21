@@ -410,7 +410,24 @@ export default function HomeSidebar({
               )}
               {favorites?.map((fav) => (
                 <div key={fav.id} className="group flex items-center">
-                  <button className="flex flex-1 items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]">
+                  <button
+                    onClick={() => {
+                      if (fav.item_type === 'channel') {
+                        onSelectChannel(fav.item_id);
+                        return;
+                      }
+                      if (fav.item_type === 'list') {
+                        if (fav.space_id) setActiveSpace(fav.space_id);
+                        setActiveList(fav.item_id);
+                      } else if (fav.item_type === 'space') {
+                        setActiveSpace(fav.item_id);
+                      } else if (fav.item_type === 'folder') {
+                        if (fav.space_id) setActiveSpace(fav.space_id);
+                      }
+                      onChangeView('tasks');
+                    }}
+                    className="flex flex-1 items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+                  >
                     <FavoriteIcon type={fav.item_type} />
                     <span className="truncate">{fav.item_name}</span>
                   </button>

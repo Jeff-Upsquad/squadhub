@@ -29,7 +29,7 @@ router.get('/', async (req: Request, res: Response) => {
       return;
     }
 
-    // Enrich with item names
+    // Enrich with item names (and space_id for list/folder so clicking can navigate)
     const enriched = await Promise.all(
       (data || []).map(async (fav) => {
         const table =
@@ -41,13 +41,22 @@ router.get('/', async (req: Request, res: Response) => {
             ? 'folders'
             : 'spaces';
 
+        const select =
+          fav.item_type === 'list' || fav.item_type === 'folder'
+            ? 'id, name, space_id'
+            : 'id, name';
+
         const { data: item } = await supabaseAdmin
           .from(table)
-          .select('id, name')
+          .select(select)
           .eq('id', fav.item_id)
           .single();
 
-        return { ...fav, item_name: item?.name || 'Unknown' };
+        return {
+          ...fav,
+          item_name: (item as any)?.name || 'Unknown',
+          space_id: (item as any)?.space_id ?? null,
+        };
       })
     );
 
