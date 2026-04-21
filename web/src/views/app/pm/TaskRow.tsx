@@ -74,7 +74,7 @@ export default function TaskRow({
   const matchedStatus = statuses.find(s => s.category === statusCategory);
   const priorityLevel = PRIORITY_LEVEL[task.priority || 'none'];
   const when = formatWhen(task.due_date);
-  const assignee = task.assignees?.[0];
+  const assignees = task.assignees || [];
   const tags = task.tags || [];
   const spaceLabel = (task as any).space?.name || matchedStatus?.name;
 
@@ -167,14 +167,22 @@ export default function TaskRow({
           </div>
         </div>
 
-        {/* Assignee avatar */}
-        {assignee ? (
-          <span
-            className="lv-ava"
-            style={{ background: avatarColor(assignee.id || assignee.email) }}
-            title={assignee.display_name || assignee.email}
-          >
-            {initialOf(assignee.display_name || assignee.email)}
+        {/* Assignee avatars */}
+        {assignees.length > 0 ? (
+          <span className="av-stack" aria-label={`${assignees.length} assignee${assignees.length === 1 ? '' : 's'}`}>
+            {assignees.slice(0, 2).map((u) => (
+              <span
+                key={u.id}
+                className="lv-ava"
+                style={{ background: avatarColor(u.id || u.email) }}
+                title={u.display_name || u.email}
+              >
+                {initialOf(u.display_name || u.email)}
+              </span>
+            ))}
+            {assignees.length > 2 && (
+              <span className="av-more" title={`${assignees.length - 2} more`}>+{assignees.length - 2}</span>
+            )}
           </span>
         ) : (
           <span className="lv-ava lv-ava--empty" title="Unassigned">–</span>

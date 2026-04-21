@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import type { User } from '@squadhub/shared';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
@@ -35,6 +36,7 @@ const updateSchema = z.object({
   task_type_id: z.string().uuid().nullable().optional(),
   time_estimate: z.number().int().min(0).nullable().optional(),
   time_tracked: z.number().int().min(0).optional(),
+  assignee_ids: z.array(z.string().uuid()).optional(),
   metadata: z.record(z.string(), z.any()).optional(),
 });
 
@@ -42,6 +44,29 @@ const updateSchema = z.object({
 async function getTaskListId(taskId: string): Promise<string | null> {
   const { data } = await supabaseAdmin.from('tasks').select('list_id').eq('id', taskId).single();
   return data?.list_id || null;
+}
+
+// Helper to attach hydrated assignees to one or more task rows.
+// Tasks are stored with `assignee_ids: UUID[]`; the frontend expects
+// `assignees: User[]` on each task.
+async function hydrateAssignees<T extends { assignee_ids?: string[] | null }>(
+  tasks: T[],
+): Promise<(T & { assignees: User[] })[]> {
+  const allIds = Array.from(new Set(tasks.flatMap(t => t.assignee_ids || [])));
+  if (allIds.length === 0) {
+    return tasks.map(t => ({ ...t, assignees: [] as User[] }));
+  }
+  const { data: users } = await supabaseAdmin
+    .from('users')
+    .select('id, display_name, email, avatar_url, user_type, is_admin, status, created_at')
+    .in('id', allIds);
+  const byId = new Map<string, User>((users || []).map((u: any) => [u.id, u as User]));
+  return tasks.map(t => ({
+    ...t,
+    assignees: (t.assignee_ids || [])
+      .map(id => byId.get(id))
+      .filter((u): u is User => !!u),
+  }));
 }
 
 // GET /pm/task-types — list all task types with their custom fields (authenticated users)
@@ -129,7 +154,8 @@ router.get('/tasks', async (req: Request, res: Response) => {
       return;
     }
 
-    res.json({ success: true, data: data || [] });
+    const hydrated = await hydrateAssignees(data || []);
+    res.json({ success: true, data: hydrated });
   } catch (err) {
     console.error('Get tasks error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -160,7 +186,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       return;
     }
 
-    const tasks = data || [];
+    const tasks = await hydrateAssignees(data || []);
 
     // Compute day boundaries in user's timezone
     const fmt = new Intl.DateTimeFormat('en-CA', {
@@ -245,11 +271,14 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
       .eq('parent_task_id', id)
       .order('created_at', { ascending: true });
 
+    const [hydratedTask] = await hydrateAssignees([task]);
+    const hydratedSubtasks = await hydrateAssignees(subtasks || []);
+
     res.json({
       success: true,
       data: {
-        ...task,
-        subtasks: subtasks || [],
+        ...hydratedTask,
+        subtasks: hydratedSubtasks,
         comment_count: commentCount,
         creator,
       },
@@ -345,7 +374,8 @@ router.post('/tasks', async (req: Request, res: Response) => {
       return;
     }
 
-    res.status(201).json({ success: true, data: task });
+    const [hydratedTask] = await hydrateAssignees([task]);
+    res.status(201).json({ success: true, data: hydratedTask });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
@@ -392,7 +422,8 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    res.json({ success: true, data });
+    const [hydratedTask] = await hydrateAssignees([data]);
+    res.json({ success: true, data: hydratedTask });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
@@ -440,11 +471,12 @@ router.delete('/tasks/:id', async (req: Request, res: Response) => {
   }
 });
 
-// POST /pm/tasks/:id/assignees — requires member access
-router.post('/tasks/:id/assignees', async (req: Request, res: Response) => {
+// GET /pm/tasks/:id/assignable-users — users with viewer+ access to the
+// task's parent list (direct membership on list, or inherited from the
+// parent folder / space). Used by the assignee picker in the UI.
+router.get('/tasks/:id/assignable-users', async (req: Request, res: Response) => {
   try {
     const taskId = req.params.id as string;
-    const { user_id } = req.body;
 
     const listId = await getTaskListId(taskId);
     if (!listId) {
@@ -453,59 +485,60 @@ router.post('/tasks/:id/assignees', async (req: Request, res: Response) => {
     }
 
     const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
-    if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
-      res.status(403).json({ success: false, error: 'Member access required to assign users' });
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this task' });
       return;
     }
 
-    const { error } = await supabaseAdmin
-      .from('task_assignees')
-      .insert({ task_id: taskId, user_id });
+    // Resolve the chain of resources that grant access to this list:
+    // list → folder → space. A user who is a member of any of those
+    // is an assignable candidate.
+    const resourceFilters: Array<{ type: string; id: string }> = [
+      { type: 'list', id: listId },
+    ];
+
+    const { data: list } = await supabaseAdmin
+      .from('lists')
+      .select('folder_id, space_id')
+      .eq('id', listId)
+      .single();
+    if ((list as any)?.folder_id) {
+      resourceFilters.push({ type: 'folder', id: (list as any).folder_id });
+    }
+    if ((list as any)?.space_id) {
+      resourceFilters.push({ type: 'space', id: (list as any).space_id });
+    }
+
+    // Union-query across the (type, id) pairs.
+    const orClauses = resourceFilters
+      .map(f => `and(resource_type.eq.${f.type},resource_id.eq.${f.id})`)
+      .join(',');
+
+    const { data: memberships, error } = await supabaseAdmin
+      .from('resource_memberships')
+      .select('user_id, users!resource_memberships_user_id_fkey(id, display_name, email, avatar_url, user_type, is_admin, status, created_at)')
+      .or(orClauses);
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
 
-    res.status(201).json({ success: true });
+    // Dedupe by user_id, drop inactive users.
+    const seen = new Set<string>();
+    const users: User[] = [];
+    for (const m of (memberships || []) as any[]) {
+      if (!m.users || seen.has(m.user_id)) continue;
+      if (m.users.status && m.users.status !== 'active') continue;
+      seen.add(m.user_id);
+      users.push(m.users as User);
+    }
+
+    users.sort((a, b) => (a.display_name || a.email).localeCompare(b.display_name || b.email));
+
+    res.json({ success: true, data: users });
   } catch (err) {
-    console.error('Assign user error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
-// DELETE /pm/tasks/:taskId/assignees/:userId — requires member access
-router.delete('/tasks/:taskId/assignees/:userId', async (req: Request, res: Response) => {
-  try {
-    const taskId = req.params.taskId as string;
-    const userId = req.params.userId as string;
-
-    const listId = await getTaskListId(taskId);
-    if (!listId) {
-      res.status(404).json({ success: false, error: 'Task not found' });
-      return;
-    }
-
-    const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
-    if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
-      res.status(403).json({ success: false, error: 'Member access required to unassign users' });
-      return;
-    }
-
-    const { error } = await supabaseAdmin
-      .from('task_assignees')
-      .delete()
-      .eq('task_id', taskId)
-      .eq('user_id', userId);
-
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Unassign user error:', err);
+    console.error('Get assignable users error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

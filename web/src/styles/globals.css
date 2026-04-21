@@ -1290,6 +1290,117 @@ body {
   color: var(--sh-ink-4);
 }
 
+/* Stacked avatars — shared pattern for task rows and detail panel */
+.av-stack {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+.av-stack .lv-ava,
+.av-stack .td-ava-xs {
+  border: 1.5px solid var(--surface);
+  box-sizing: content-box;
+}
+.av-stack > * + * { margin-left: -6px; }
+.av-stack .av-more {
+  display: grid; place-items: center;
+  height: 22px; min-width: 22px; padding: 0 5px;
+  border-radius: 11px;
+  background: var(--sh-hair-3);
+  color: var(--sh-ink-3);
+  font-size: 10px; font-weight: 600;
+  border: 1.5px solid var(--surface);
+  box-sizing: content-box;
+}
+
+/* Assignee picker popover */
+.ap-panel {
+  position: fixed;
+  z-index: 60;
+  max-height: 360px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 0.5px solid var(--sh-hair);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+.ap-search {
+  padding: 8px;
+  border-bottom: 0.5px solid var(--sh-hair);
+}
+.ap-input {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--sh-ink);
+  background: var(--sh-hair-3);
+  border: 0.5px solid transparent;
+  border-radius: 6px;
+  outline: none;
+}
+.ap-input:focus { border-color: var(--sh-hair); background: var(--surface); }
+.ap-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+}
+.ap-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  color: var(--sh-ink);
+}
+.ap-row:hover { background: var(--sh-hair-3); }
+.ap-row[data-selected="true"] { background: color-mix(in oklch, var(--sh-hair-3) 80%, transparent); }
+.ap-ava {
+  width: 24px; height: 24px; border-radius: 50%;
+  color: #fff;
+  display: grid; place-items: center;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.02em;
+  flex: none;
+}
+.ap-label {
+  display: flex; flex-direction: column;
+  min-width: 0; flex: 1;
+}
+.ap-name {
+  font-size: 13px;
+  color: var(--sh-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ap-email {
+  font-size: 11px;
+  color: var(--sh-ink-4);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ap-check { color: var(--sh-ink-2); flex: none; }
+.ap-empty {
+  padding: 16px 12px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--sh-ink-4);
+}
+.ap-clear {
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: var(--sh-ink-3);
+  background: transparent;
+  border: 0;
+  border-top: 0.5px solid var(--sh-hair);
+  text-align: left;
+  cursor: pointer;
+}
+.ap-clear:hover { color: var(--sh-ink); background: var(--sh-hair-3); }
+
 /* Hover-only multi-select checkbox (rendered on far left, replaces glyph) */
 .lv-select {
   position: absolute;

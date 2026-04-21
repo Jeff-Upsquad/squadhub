@@ -13,6 +13,7 @@ import {
 } from '../../../hooks/useChecklists';
 import api from '../../../services/api';
 import type { SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority } from '@squadhub/shared';
+import AssigneePicker from './AssigneePicker';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -139,6 +140,8 @@ export default function TaskDetailPanel({
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
+  const [assigneeAnchorRect, setAssigneeAnchorRect] = useState<DOMRect | null>(null);
   const [newItemDrafts, setNewItemDrafts] = useState<Record<string, string>>({});
   const [newChecklistTitle, setNewChecklistTitle] = useState<string | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState<string | null>(null);
@@ -290,7 +293,7 @@ export default function TaskDetailPanel({
   };
 
   const priorityLabel = task ? PRIORITY_LABEL[(task.priority || 'none') as TaskPriority] : null;
-  const assignee = task?.assignees?.[0];
+  const assignees = task?.assignees || [];
   const due = formatDueRelative(task?.due_date);
   const attachments: AttachmentLike[] = (task?.metadata as TaskMetadata | undefined)?.attachments || [];
   const subtasks = task?.subtasks || [];
@@ -501,15 +504,38 @@ export default function TaskDetailPanel({
               {/* Meta — macOS Settings-style grouped card */}
               <div className="td-eyebrow">Details</div>
               <div className="td-settings-card">
-                <div className="td-settings-row">
+                <div
+                  className="td-settings-row"
+                  style={{ cursor: canEdit ? 'pointer' : 'default' }}
+                  onClick={canEdit ? (e) => {
+                    setAssigneeAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
+                    setAssigneePickerOpen(v => !v);
+                  } : undefined}
+                >
                   <span className="k">{META_ICONS.Assignee}Assignee</span>
                   <span className="v">
-                    {assignee ? (
+                    {assignees.length > 0 ? (
                       <>
-                        <span className="td-ava-xs" style={{ background: avatarColor(assignee.id || assignee.email) }}>
-                          {initialOf(assignee.display_name || assignee.email)}
+                        <span className="av-stack">
+                          {assignees.slice(0, 3).map((u) => (
+                            <span
+                              key={u.id}
+                              className="td-ava-xs"
+                              style={{ background: avatarColor(u.id || u.email) }}
+                              title={u.display_name || u.email}
+                            >
+                              {initialOf(u.display_name || u.email)}
+                            </span>
+                          ))}
+                          {assignees.length > 3 && (
+                            <span className="av-more" aria-label={`${assignees.length - 3} more`}>+{assignees.length - 3}</span>
+                          )}
                         </span>
-                        <span>{assignee.display_name || assignee.email}</span>
+                        <span style={{ marginLeft: 4 }}>
+                          {assignees.length === 1
+                            ? (assignees[0].display_name || assignees[0].email)
+                            : `${assignees.length} assignees`}
+                        </span>
                       </>
                     ) : (
                       <span className="muted">Unassigned</span>
@@ -1056,6 +1082,16 @@ export default function TaskDetailPanel({
         </div>
 
       </aside>
+
+      {assigneePickerOpen && task && (
+        <AssigneePicker
+          taskId={task.id}
+          currentAssigneeIds={assignees.map(u => u.id)}
+          anchorRect={assigneeAnchorRect}
+          onChange={(ids) => updateTask.mutate({ id: task.id, assignee_ids: ids })}
+          onClose={() => setAssigneePickerOpen(false)}
+        />
+      )}
     </div>
   );
 }

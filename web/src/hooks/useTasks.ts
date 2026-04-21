@@ -73,6 +73,7 @@ export function useUpdateTask(listId: string | null) {
       task_type_id?: string | null;
       time_estimate?: number | null;
       time_tracked?: number;
+      assignee_ids?: string[];
       metadata?: TaskMetadata;
     }) => {
       const res = await api.put(`/pm/tasks/${id}`, body);
