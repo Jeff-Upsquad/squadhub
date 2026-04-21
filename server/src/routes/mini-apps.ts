@@ -1,28 +1,20 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../supabase';
+import { getUserRoleIds } from '../utils/roles';
 
 const router = Router();
 
 router.use(requireAuth);
 
 // GET /mini-apps/my — get mini apps the current user can access
-// Access = (role-based via workspace_members.role_id) OR (direct user grant)
+// Access = (role-based via any of the user's roles — primary or secondary) OR (direct user grant)
 // Only returns enabled mini apps
 router.get('/my', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
+    const roleIds = await getUserRoleIds(userId);
 
-    // Get user's role_id from workspace_members
-    const { data: memberRows } = await supabaseAdmin
-      .from('workspace_members')
-      .select('role_id')
-      .eq('user_id', userId)
-      .limit(1);
-
-    const roleId = memberRows?.[0]?.role_id || null;
-
-    // Get all enabled mini apps
     const { data: allApps, error } = await supabaseAdmin
       .from('mini_apps')
       .select('id, slug, name, description, icon, is_enabled')
@@ -41,13 +33,12 @@ router.get('/my', async (req: Request, res: Response) => {
 
     const appIds = allApps.map((a) => a.id);
 
-    // Get role-based access for user's role
     let roleAccessAppIds = new Set<string>();
-    if (roleId) {
+    if (roleIds.length > 0) {
       const { data: roleAccess } = await supabaseAdmin
         .from('mini_app_role_access')
         .select('mini_app_id')
-        .eq('role_id', roleId)
+        .in('role_id', roleIds)
         .in('mini_app_id', appIds);
 
       (roleAccess || []).forEach((ra: any) => roleAccessAppIds.add(ra.mini_app_id));

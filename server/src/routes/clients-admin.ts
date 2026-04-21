@@ -88,6 +88,21 @@ async function enrichClient(client: any) {
     country = c;
   }
 
+  // Hydrate sales persons
+  const spIds = [client.primary_sales_person_id, client.secondary_sales_person_id].filter(Boolean);
+  let primary_sales_person: any = null;
+  let secondary_sales_person: any = null;
+  if (spIds.length > 0) {
+    const { data: sps } = await supabaseAdmin
+      .from('users')
+      .select('id, display_name, email, avatar_url')
+      .in('id', spIds);
+    const map: Record<string, any> = {};
+    (sps || []).forEach((u: any) => { map[u.id] = u; });
+    primary_sales_person = client.primary_sales_person_id ? map[client.primary_sales_person_id] || null : null;
+    secondary_sales_person = client.secondary_sales_person_id ? map[client.secondary_sales_person_id] || null : null;
+  }
+
   const { data: cs } = await supabaseAdmin
     .from('client_subscriptions')
     .select('*')
@@ -95,7 +110,7 @@ async function enrichClient(client: any) {
     .order('created_at');
 
   if (!cs || cs.length === 0) {
-    return { ...client, country, subscriptions: [] };
+    return { ...client, country, primary_sales_person, secondary_sales_person, subscriptions: [] };
   }
 
   const subIds = Array.from(new Set(cs.map((c: any) => c.subscription_id)));
@@ -125,6 +140,8 @@ async function enrichClient(client: any) {
   return {
     ...client,
     country,
+    primary_sales_person,
+    secondary_sales_person,
     subscriptions: cs.map((c: any) => ({
       ...c,
       subscription: subsMap[c.subscription_id] || null,
@@ -140,6 +157,26 @@ async function enrichClient(client: any) {
 // Client Submissions (New Clients)
 // ============================================================
 
+async function hydrateSalesPeopleOn<T extends { primary_sales_person_id?: string | null; secondary_sales_person_id?: string | null }>(rows: T[]): Promise<Array<T & { primary_sales_person?: any; secondary_sales_person?: any }>> {
+  const ids = new Set<string>();
+  rows.forEach((r) => {
+    if (r.primary_sales_person_id) ids.add(r.primary_sales_person_id);
+    if (r.secondary_sales_person_id) ids.add(r.secondary_sales_person_id);
+  });
+  if (ids.size === 0) return rows;
+  const { data } = await supabaseAdmin
+    .from('users')
+    .select('id, display_name, email, avatar_url')
+    .in('id', Array.from(ids));
+  const map: Record<string, any> = {};
+  (data || []).forEach((u: any) => { map[u.id] = u; });
+  return rows.map((r) => ({
+    ...r,
+    primary_sales_person: r.primary_sales_person_id ? map[r.primary_sales_person_id] || null : null,
+    secondary_sales_person: r.secondary_sales_person_id ? map[r.secondary_sales_person_id] || null : null,
+  }));
+}
+
 router.get('/submissions', async (_req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin
@@ -152,9 +189,89 @@ router.get('/submissions', async (_req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
-    res.json({ success: true, data });
+    const enriched = await hydrateSalesPeopleOn(data || []);
+    res.json({ success: true, data: enriched });
   } catch (err) {
     console.error('List submissions error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PATCH /admin/clients/submissions/:id/sales-people — admin can add/change SPs
+const updateSubmissionSpSchema = z.object({
+  primary_sales_person_id: z.string().uuid().nullable().optional(),
+  secondary_sales_person_id: z.string().uuid().nullable().optional(),
+});
+
+router.patch('/submissions/:id/sales-people', async (req: Request, res: Response) => {
+  try {
+    const body = updateSubmissionSpSchema.parse(req.body);
+    const patch: Record<string, any> = {};
+    if (body.primary_sales_person_id !== undefined) patch.primary_sales_person_id = body.primary_sales_person_id;
+    if (body.secondary_sales_person_id !== undefined) patch.secondary_sales_person_id = body.secondary_sales_person_id;
+
+    if (Object.keys(patch).length === 0) {
+      res.json({ success: true, data: null });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('client_submissions')
+      .update(patch)
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const [enriched] = await hydrateSalesPeopleOn([data]);
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Update submission SPs error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PATCH /admin/clients/:id/sales-people — admin can add/change SPs on approved clients
+router.patch('/:id/sales-people', async (req: Request, res: Response) => {
+  try {
+    const body = updateSubmissionSpSchema.parse(req.body);
+    const patch: Record<string, any> = {};
+    if (body.primary_sales_person_id !== undefined) patch.primary_sales_person_id = body.primary_sales_person_id;
+    if (body.secondary_sales_person_id !== undefined) patch.secondary_sales_person_id = body.secondary_sales_person_id;
+
+    if (Object.keys(patch).length === 0) {
+      res.json({ success: true, data: null });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('clients')
+      .update(patch)
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const [enriched] = await hydrateSalesPeopleOn([data]);
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Update client SPs error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
@@ -212,6 +329,8 @@ router.post('/submissions/:id/approve', async (req: Request, res: Response) => {
         gst_number: submission.gst_number,
         accounts_email: submission.accounts_email,
         country_id: submission.country_id,
+        primary_sales_person_id: submission.primary_sales_person_id || null,
+        secondary_sales_person_id: submission.secondary_sales_person_id || null,
       })
       .select()
       .single();

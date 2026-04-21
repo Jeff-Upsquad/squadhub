@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { requireUserType } from '../middleware/userType';
 import { supabaseAdmin } from '../supabase';
 import { nowIST, todayIST, formatTimeIST, isNonWorkingDay } from '../utils/ist';
+import { getUserRoleIds } from '../utils/roles';
 
 const router = Router();
 
@@ -63,7 +64,7 @@ router.post('/submit', async (req: Request, res: Response) => {
     // Get user's deadline time (office timing takes precedence over per-user settings)
     const deadlineTime = await resolveDeadlineTime(userId);
 
-    // Get user's role
+    // Get user's primary role (for audit snapshot saved on the checkin row)
     const { data: members } = await supabaseAdmin
       .from('workspace_members')
       .select('role_id')
@@ -71,23 +72,28 @@ router.post('/submit', async (req: Request, res: Response) => {
       .limit(1);
     const member = members?.[0] || null;
 
-    // Validate required items
-    if (member?.role_id) {
+    // Validate required items across ALL roles (primary + secondary), deduped by item id
+    const roleIds = await getUserRoleIds(userId);
+    if (roleIds.length > 0) {
       const { data: configRows } = await supabaseAdmin
         .from('checkin_configs')
         .select('items')
-        .eq('role_id', member.role_id)
-        .limit(1);
-      const config = configRows?.[0] || null;
+        .in('role_id', roleIds);
 
-      if (config?.items) {
-        const items = config.items as any[];
-        const requiredIds = items.filter((i: any) => i.isRequired).map((i: any) => i.id);
-        const missing = requiredIds.filter((id: string) => !body.completed_items.includes(id));
-        if (missing.length > 0) {
-          res.status(400).json({ success: false, error: 'All required items must be completed' });
-          return;
+      const seenIds = new Set<string>();
+      const requiredIds: string[] = [];
+      for (const cfg of configRows || []) {
+        for (const item of ((cfg.items as any[]) || [])) {
+          if (item.isRequired && !seenIds.has(item.id)) {
+            seenIds.add(item.id);
+            requiredIds.push(item.id);
+          }
         }
+      }
+      const missing = requiredIds.filter((id) => !body.completed_items.includes(id));
+      if (missing.length > 0) {
+        res.status(400).json({ success: false, error: 'All required items must be completed' });
+        return;
       }
     }
 
@@ -141,7 +147,7 @@ router.get('/today', async (req: Request, res: Response) => {
       .limit(1);
     const checkin = checkinRows?.[0] || null;
 
-    // Get user's config (checklist items for their role)
+    // Get user's primary role (surfaced on the UI for role name/id)
     const { data: memberRows } = await supabaseAdmin
       .from('workspace_members')
       .select('role_id, roles(id, name)')
@@ -149,15 +155,24 @@ router.get('/today', async (req: Request, res: Response) => {
       .limit(1);
     const member = memberRows?.[0] || null;
 
+    // Checklist items are the UNION across primary + secondary roles (deduped by item id)
+    const roleIds = await getUserRoleIds(userId);
     let checklistItems: any[] = [];
-    if (member?.role_id) {
+    if (roleIds.length > 0) {
       const { data: configRows } = await supabaseAdmin
         .from('checkin_configs')
         .select('items')
-        .eq('role_id', member.role_id)
-        .limit(1);
+        .in('role_id', roleIds);
 
-      checklistItems = (configRows?.[0]?.items as any[]) || [];
+      const seenIds = new Set<string>();
+      for (const cfg of configRows || []) {
+        for (const item of ((cfg.items as any[]) || [])) {
+          if (!seenIds.has(item.id)) {
+            seenIds.add(item.id);
+            checklistItems.push(item);
+          }
+        }
+      }
     }
 
     // Get user's deadline (office timing takes precedence over per-user settings)

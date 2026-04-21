@@ -5,14 +5,12 @@ import NewClientsModule from './NewClientsModule';
 import ClientsModule from './ClientsModule';
 import ClientAccessModule from './ClientAccessModule';
 import ClientSubscriptionsModule from './ClientSubscriptionsModule';
+import OnboardingLinksModule from './OnboardingLinksModule';
 
-type Tab = 'new-clients' | 'clients' | 'client-subscriptions' | 'client-access';
-
-const WEB_APP_URL = process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'production' ? 'https://squadhub.in' : 'http://localhost:3000');
+type Tab = 'new-clients' | 'clients' | 'invite-links' | 'client-subscriptions' | 'client-access';
 
 export default function AdminClients() {
   const [activeTab, setActiveTab] = useState<Tab>('new-clients');
-  const [copiedLink, setCopiedLink] = useState(false);
 
   // Counts for badges
   const { data: subCountRes } = useQuery({
@@ -29,17 +27,10 @@ export default function AdminClients() {
   const pendingCount = subCountRes?.data?.count || 0;
   const clientCount = clientCountRes?.data?.count || 0;
 
-  const onboardingLink = `${WEB_APP_URL}/onboard`;
-
-  const copyLink = () => {
-    navigator.clipboard.writeText(onboardingLink);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
-  };
-
   const tabs: { id: Tab; label: string; count: number }[] = [
     { id: 'new-clients', label: 'New Clients', count: pendingCount },
     { id: 'clients', label: 'Clients', count: clientCount },
+    { id: 'invite-links', label: 'Invite Links', count: 0 },
     { id: 'client-subscriptions', label: 'Client Subscriptions', count: 0 },
     { id: 'client-access', label: 'Client Access', count: 0 },
   ];
@@ -80,23 +71,13 @@ export default function AdminClients() {
             </button>
           ))}
         </nav>
-        <div className="border-t border-[#E2E8F0] p-3">
-          <button
-            onClick={copyLink}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC] hover:text-[#0F172B] transition"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-3.397a4.5 4.5 0 00-1.242-7.244l-4.5-4.5a4.5 4.5 0 00-6.364 6.364L4.34 8.374" />
-            </svg>
-            {copiedLink ? 'Link Copied!' : 'Copy Onboarding Link'}
-          </button>
-        </div>
       </div>
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto bg-[#F1F5F9] p-6">
         {activeTab === 'new-clients' && <NewClientsModule />}
         {activeTab === 'clients' && <ClientsModule />}
+        {activeTab === 'invite-links' && <OnboardingLinksModule />}
         {activeTab === 'client-subscriptions' && <ClientSubscriptionsModule />}
         {activeTab === 'client-access' && <ClientAccessModule />}
       </div>

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../supabase';
+import { getUserRoleIds } from '../utils/roles';
 
 const router = Router();
 
@@ -18,14 +19,7 @@ router.get('/available', async (req: Request, res: Response) => {
       return;
     }
 
-    // Get user's role_id from workspace_members
-    const { data: memberRows } = await supabaseAdmin
-      .from('workspace_members')
-      .select('role_id')
-      .eq('user_id', userId)
-      .limit(1);
-
-    const roleId = memberRows?.[0]?.role_id || null;
+    const roleIds = await getUserRoleIds(userId);
 
     // Get all enabled profiles
     let query = supabaseAdmin
@@ -52,13 +46,13 @@ router.get('/available', async (req: Request, res: Response) => {
 
     const profileIds = allProfiles.map((p) => p.id);
 
-    // Get role-based access
+    // Get role-based access across primary + secondary roles
     let roleAccessProfileIds = new Set<string>();
-    if (roleId) {
+    if (roleIds.length > 0) {
       const { data: roleAccess } = await supabaseAdmin
         .from('custom_profile_role_access')
         .select('profile_id')
-        .eq('role_id', roleId)
+        .in('role_id', roleIds)
         .in('profile_id', profileIds);
 
       (roleAccess || []).forEach((ra: any) => roleAccessProfileIds.add(ra.profile_id));

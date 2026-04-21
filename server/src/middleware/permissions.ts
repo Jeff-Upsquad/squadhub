@@ -38,18 +38,22 @@ export function meetsAccessLevel(userLevel: AccessLevel, requiredLevel: AccessLe
 }
 
 /**
- * Fetch effective permissions for a user based on their workspace role + custom role.
+ * Fetch effective permissions for a user based on their workspace role + custom roles.
  * Explicit-allow only: any missing key defaults to false.
  * Admins/super_admins get all-true.
+ *
+ * Multi-role: a user has one primary role (`workspace_members.role_id`) and zero or
+ * more secondary roles (`workspace_member_secondary_roles`). The effective permissions
+ * are the UNION across primary + all secondaries. Default-role fallback applies only
+ * when the primary is null (secondaries never trigger fallback).
  */
 export async function getUserPermissions(userId: string): Promise<{
   permissions: RolePermissions;
   workspaceRole: string;
 }> {
-  // Get workspace membership and custom role
   const { data: membership } = await supabaseAdmin
     .from('workspace_members')
-    .select('role, role_id, roles(permissions)')
+    .select('id, role, role_id, roles(permissions)')
     .eq('user_id', userId)
     .single();
 
@@ -59,31 +63,37 @@ export async function getUserPermissions(userId: string): Promise<{
 
   const workspaceRole = membership.role as string;
 
-  // Admins and super_admins bypass all permission checks
   if (workspaceRole === 'admin' || workspaceRole === 'super_admin') {
     return { permissions: ALL_TRUE_PERMISSIONS, workspaceRole };
   }
 
-  // For members and guests: start from all-false, overlay only explicit true from custom role
-  let customPerms = (membership as any).roles?.permissions as Record<string, boolean> | undefined;
+  const permSets: Record<string, boolean>[] = [];
 
-  // Fallback: if no custom role linked, use the default role's permissions
-  if (!customPerms) {
+  let primaryPerms = (membership as any).roles?.permissions as Record<string, boolean> | undefined;
+  if (!primaryPerms) {
     const { data: defaultRole } = await supabaseAdmin
       .from('roles')
       .select('permissions')
       .eq('is_default', true)
       .single();
-    customPerms = defaultRole?.permissions as Record<string, boolean> | undefined;
+    primaryPerms = defaultRole?.permissions as Record<string, boolean> | undefined;
+  }
+  if (primaryPerms) permSets.push(primaryPerms);
+
+  const { data: secondaryRows } = await supabaseAdmin
+    .from('workspace_member_secondary_roles')
+    .select('roles(permissions)')
+    .eq('workspace_member_id', (membership as any).id);
+
+  for (const row of (secondaryRows || []) as any[]) {
+    const perms = row.roles?.permissions as Record<string, boolean> | undefined;
+    if (perms) permSets.push(perms);
   }
 
   const effective: RolePermissions = { ...ALL_FALSE_PERMISSIONS };
-
-  if (customPerms) {
+  for (const perms of permSets) {
     for (const key of Object.keys(ALL_FALSE_PERMISSIONS)) {
-      if (customPerms[key] === true) {
-        (effective as any)[key] = true;
-      }
+      if (perms[key] === true) (effective as any)[key] = true;
     }
   }
 

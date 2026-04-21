@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import type {
@@ -8,6 +8,7 @@ import type {
   SubscriptionPlanRow,
   SubscriptionPlan,
   SubscriptionTier,
+  SalesPerson,
 } from '@squadhub/shared';
 import SliderPanel from './SliderPanel';
 
@@ -43,6 +44,29 @@ export default function NewClientsModule() {
     queryFn: () => api.get('/admin/countries').then((r) => r.data),
   });
   const countries: Country[] = countriesRes?.data || [];
+
+  const { data: peopleRes } = useQuery({
+    queryKey: ['admin-sales-people'],
+    queryFn: () => api.get('/admin/onboarding-links/sales-people').then((r) => r.data),
+  });
+  const salesPeople: SalesPerson[] = peopleRes?.data || [];
+
+  const [editPrimary, setEditPrimary] = useState<string>('');
+  const [editSecondary, setEditSecondary] = useState<string>('');
+
+  useEffect(() => {
+    setEditPrimary(selectedSubmission?.primary_sales_person_id || '');
+    setEditSecondary(selectedSubmission?.secondary_sales_person_id || '');
+  }, [selectedSubmission?.id]);
+
+  const updateSpMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: any }) =>
+      api.patch(`/admin/clients/submissions/${id}/sales-people`, payload).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-submissions'] });
+    },
+    onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed to update sales person'),
+  });
 
   const approveMutation = useMutation({
     mutationFn: ({ id, plan_ids }: { id: string; plan_ids: string[] }) =>
@@ -164,6 +188,50 @@ export default function NewClientsModule() {
               {selectedSubmission.gst_number && <InfoRow label="GST Number" value={selectedSubmission.gst_number} />}
               {selectedSubmission.accounts_email && <InfoRow label="Accounts Email" value={selectedSubmission.accounts_email} />}
               <InfoRow label="Submitted" value={new Date(selectedSubmission.created_at).toLocaleString('en-IN')} />
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Sales Attribution</h4>
+              <div>
+                <label className="mb-1 block text-xs text-[#62748E]">Primary Sales Person</label>
+                <select
+                  value={editPrimary}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setEditPrimary(v);
+                    updateSpMutation.mutate({
+                      id: selectedSubmission.id,
+                      payload: { primary_sales_person_id: v || null },
+                    });
+                  }}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+                >
+                  <option value="">— Not assigned —</option>
+                  {salesPeople.map((p) => (
+                    <option key={p.id} value={p.id}>{p.display_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[#62748E]">Secondary Sales Person</label>
+                <select
+                  value={editSecondary}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setEditSecondary(v);
+                    updateSpMutation.mutate({
+                      id: selectedSubmission.id,
+                      payload: { secondary_sales_person_id: v || null },
+                    });
+                  }}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+                >
+                  <option value="">— None —</option>
+                  {salesPeople.filter((p) => p.id !== editPrimary).map((p) => (
+                    <option key={p.id} value={p.id}>{p.display_name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div>

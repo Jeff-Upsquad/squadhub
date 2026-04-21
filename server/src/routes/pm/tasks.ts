@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
+import { getUserRoleIds } from '../../utils/roles';
 
 const router = Router();
 router.use(requireAuth);
@@ -135,13 +136,8 @@ router.get('/task-types', async (req: Request, res: Response) => {
     let visible = types || [];
 
     if (!isAdmin) {
-      // Caller's workspace role
-      const { data: memberRows } = await supabaseAdmin
-        .from('workspace_members')
-        .select('role_id')
-        .eq('user_id', userId)
-        .limit(1);
-      const roleId = memberRows?.[0]?.role_id || null;
+      // Caller's workspace roles (primary + secondary)
+      const roleIds = await getUserRoleIds(userId);
 
       // Access row sets (pulled once for all types)
       let accessibleTypeIds = new Set<string>();
@@ -152,11 +148,11 @@ router.get('/task-types', async (req: Request, res: Response) => {
         .eq('user_id', userId);
       (userAccess || []).forEach((ua: any) => accessibleTypeIds.add(ua.task_type_id));
 
-      if (roleId) {
+      if (roleIds.length > 0) {
         const { data: roleAccess } = await supabaseAdmin
           .from('task_type_role_access')
           .select('task_type_id')
-          .eq('role_id', roleId);
+          .in('role_id', roleIds);
         (roleAccess || []).forEach((ra: any) => accessibleTypeIds.add(ra.task_type_id));
       }
 

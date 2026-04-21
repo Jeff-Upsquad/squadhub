@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../supabase';
 import { todayIST, nowIST } from '../utils/ist';
+import { getUserRoleIds } from '../utils/roles';
 
 const router = Router();
 router.use(requireAuth);
@@ -38,20 +39,15 @@ async function requireTimeManagementAccess(req: Request, res: Response, next: Fu
       return;
     }
 
-    // Check role-based access
-    const { data: member } = await supabaseAdmin
-      .from('workspace_members')
-      .select('role_id')
-      .eq('user_id', userId)
-      .limit(1)
-      .single();
+    // Check role-based access across primary + secondary roles
+    const roleIds = await getUserRoleIds(userId);
 
-    if (member?.role_id) {
+    if (roleIds.length > 0) {
       const { data: roleAccess } = await supabaseAdmin
         .from('mini_app_role_access')
         .select('id')
         .eq('mini_app_id', app.id)
-        .eq('role_id', member.role_id)
+        .in('role_id', roleIds)
         .limit(1);
 
       if (roleAccess && roleAccess.length > 0) {
