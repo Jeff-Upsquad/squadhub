@@ -59,8 +59,10 @@ async function requireSalesLeadsAccess(req: Request, res: Response, next: NextFu
 
 // Return IDs of users eligible to be sales persons — mirrors the gate for the
 // sales-leads mini app: any user reachable through ANY role granted access to
-// the app (primary or secondary role), PLUS any direct user grant.
-async function getEligibleSalesUserIds(): Promise<string[]> {
+// the app (primary or secondary role), PLUS any direct user grant. If
+// `includeUserId` is passed, that user is always added — guarantees the
+// creator of a link can pick themselves even if role/grant lookups miss them.
+async function getEligibleSalesUserIds(includeUserId?: string): Promise<string[]> {
   const { data: app } = await supabaseAdmin
     .from('mini_apps')
     .select('id')
@@ -86,6 +88,8 @@ async function getEligibleSalesUserIds(): Promise<string[]> {
     .select('user_id')
     .eq('mini_app_id', app.id);
   (directGrants || []).forEach((g: any) => g.user_id && ids.add(g.user_id));
+
+  if (includeUserId) ids.add(includeUserId);
 
   return Array.from(ids);
 }
@@ -128,9 +132,9 @@ function buildOnboardUrl(token: string) {
 // ============================================================
 // GET /onboarding-links/sales-people — list eligible sales people
 // ============================================================
-router.get('/sales-people', requireSalesLeadsAccess, async (_req: Request, res: Response) => {
+router.get('/sales-people', requireSalesLeadsAccess, async (req: Request, res: Response) => {
   try {
-    const ids = await getEligibleSalesUserIds();
+    const ids = await getEligibleSalesUserIds(req.userId!);
     const people = await fetchSalesPeople(ids);
     res.json({ success: true, data: people });
   } catch (err) {
@@ -152,7 +156,7 @@ router.post('/', requireSalesLeadsAccess, async (req: Request, res: Response) =>
     const body = createLinkSchema.parse(req.body);
     const userId = req.userId!;
 
-    const eligibleIds = new Set(await getEligibleSalesUserIds());
+    const eligibleIds = new Set(await getEligibleSalesUserIds(userId));
 
     const primaryId = body.primary_sales_person_id || userId;
     if (!eligibleIds.has(primaryId)) {
