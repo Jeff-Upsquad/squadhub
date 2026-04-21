@@ -7,9 +7,27 @@ import { nowIST, todayIST, formatTimeIST, isNonWorkingDay } from '../utils/ist';
 
 const router = Router();
 
-// All check-in routes require auth and internal user type
+// All check-in routes require auth and a user type in scope
 router.use(requireAuth);
-router.use(requireUserType('internal'));
+router.use(requireUserType('internal', 'partner'));
+
+/** Resolve the on-time deadline for a user: office_timing.from_time → user_checkin_settings.deadline_time → '10:00' */
+async function resolveDeadlineTime(userId: string): Promise<string> {
+  const { data: officeTiming } = await supabaseAdmin
+    .from('user_office_timing')
+    .select('from_time')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (officeTiming?.from_time) return officeTiming.from_time;
+
+  const { data: settingsRows } = await supabaseAdmin
+    .from('user_checkin_settings')
+    .select('deadline_time')
+    .eq('user_id', userId)
+    .limit(1);
+  return settingsRows?.[0]?.deadline_time || '10:00';
+}
 
 // POST /checkin/submit — submit daily check-in
 const submitSchema = z.object({
@@ -42,14 +60,8 @@ router.post('/submit', async (req: Request, res: Response) => {
       return;
     }
 
-    // Get user's deadline time
-    const { data: settingsRows } = await supabaseAdmin
-      .from('user_checkin_settings')
-      .select('deadline_time')
-      .eq('user_id', userId)
-      .limit(1);
-
-    const deadlineTime = settingsRows?.[0]?.deadline_time || '10:00';
+    // Get user's deadline time (office timing takes precedence over per-user settings)
+    const deadlineTime = await resolveDeadlineTime(userId);
 
     // Get user's role
     const { data: members } = await supabaseAdmin
@@ -148,13 +160,8 @@ router.get('/today', async (req: Request, res: Response) => {
       checklistItems = (configRows?.[0]?.items as any[]) || [];
     }
 
-    // Get user's deadline
-    const { data: settingsRows } = await supabaseAdmin
-      .from('user_checkin_settings')
-      .select('deadline_time')
-      .eq('user_id', userId)
-      .limit(1);
-    const settings = settingsRows?.[0] || null;
+    // Get user's deadline (office timing takes precedence over per-user settings)
+    const deadlineTime = await resolveDeadlineTime(userId);
 
     res.json({
       success: true,
@@ -162,7 +169,7 @@ router.get('/today', async (req: Request, res: Response) => {
         checkin: checkin || null,
         is_holiday: isHoliday,
         checklist_items: checklistItems,
-        deadline_time: settings?.deadline_time || '10:00',
+        deadline_time: deadlineTime,
         role: member?.roles || null,
         already_checked_in: !!(checkin && checkin.status !== 'no_checkin'),
       },

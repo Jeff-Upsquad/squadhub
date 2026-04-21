@@ -521,6 +521,28 @@ export interface WorkingDaysConfig {
   updated_at: string;
 }
 
+export interface UserOfficeTiming {
+  id: string;
+  user_id: string;
+  label: string;
+  from_time: string; // 'HH:MM'
+  to_time: string;   // 'HH:MM'
+  working_days: number[];
+  max_break_minutes: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OfficeTimingSummary {
+  label: string;
+  from_time: string;
+  to_time: string;
+  working_days: number[];
+  max_break_minutes: number;
+  office_hours_total_seconds: number;
+}
+
 export interface CheckInDashboardDay {
   date: string;
   status: CheckInStatus | 'holiday';
@@ -575,6 +597,7 @@ export interface TimeStatsResponse {
   today: DailyTimeSummary | null;
   active_timer: TimerSession | null;
   week_summaries: DailyTimeSummary[];
+  office_timing?: OfficeTimingSummary | null;
 }
 
 export interface TeamTimerStatus {
