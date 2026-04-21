@@ -28,7 +28,8 @@
       "Bash(lsof -iTCP -sTCP:LISTEN -P)",
       "Read(//Users/jeffzeena/squadhub/**)",
       "Bash(claude plugin:*)",
-      "WebFetch(domain:www.figma.com)"
+      "WebFetch(domain:www.figma.com)",
+      "Bash(git checkout *)"
     ]
   }
 }
