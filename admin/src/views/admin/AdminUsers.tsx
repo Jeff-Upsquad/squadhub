@@ -5,6 +5,7 @@ import type { User, Role } from '@squadhub/shared';
 
 interface UserWithRole extends User {
   custom_role?: { id: string; name: string; color: string } | null;
+  secondary_roles?: { id: string; name: string; color: string }[];
 }
 
 type AccessLabel = 'admin' | 'active' | 'banned' | 'suspended';
@@ -42,6 +43,9 @@ function EditUserSlider({
   const [name, setName] = useState(user.display_name);
   const [email, setEmail] = useState(user.email);
   const [roleId, setRoleId] = useState(user.custom_role?.id || '');
+  const [secondaryRoleIds, setSecondaryRoleIds] = useState<string[]>(
+    (user.secondary_roles || []).map((r) => r.id),
+  );
   const [error, setError] = useState('');
   const [visible, setVisible] = useState(false);
 
@@ -67,8 +71,8 @@ function EditUserSlider({
   });
 
   const customRoleMutation = useMutation({
-    mutationFn: (role_id: string) =>
-      api.put(`/admin/users/${user.id}/custom-role`, { role_id }),
+    mutationFn: (payload: { role_id: string; secondary_role_ids: string[] }) =>
+      api.put(`/admin/users/${user.id}/custom-role`, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     },
@@ -79,6 +83,11 @@ function EditUserSlider({
 
   const isSaving = profileMutation.isPending || customRoleMutation.isPending;
 
+  const originalSecondaryIds = (user.secondary_roles || []).map((r) => r.id).sort().join(',');
+  const currentSecondaryIds = [...secondaryRoleIds].sort().join(',');
+  const rolesChanged =
+    roleId !== (user.custom_role?.id || '') || currentSecondaryIds !== originalSecondaryIds;
+
   const handleSave = async () => {
     setError('');
     const profileUpdates: { display_name?: string; email?: string } = {};
@@ -86,18 +95,32 @@ function EditUserSlider({
     if (email.trim() !== user.email) profileUpdates.email = email.trim();
 
     try {
-      // Update profile if changed
       if (Object.keys(profileUpdates).length > 0) {
         await profileMutation.mutateAsync(profileUpdates);
       }
-      // Update custom role if changed
-      if (roleId && roleId !== (user.custom_role?.id || '')) {
-        await customRoleMutation.mutateAsync(roleId);
+      if (roleId && rolesChanged) {
+        await customRoleMutation.mutateAsync({
+          role_id: roleId,
+          secondary_role_ids: secondaryRoleIds.filter((id) => id !== roleId),
+        });
       }
       close();
     } catch {
       // Error is handled in onError
     }
+  };
+
+  const toggleSecondary = (id: string) => {
+    if (id === roleId) return;
+    setSecondaryRoleIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const handleSetPrimary = (newPrimaryId: string) => {
+    // If the chosen primary was previously a secondary, drop it from secondaries.
+    setSecondaryRoleIds((prev) => prev.filter((x) => x !== newPrimaryId));
+    setRoleId(newPrimaryId);
   };
 
   return (
@@ -178,16 +201,16 @@ function EditUserSlider({
               />
             </div>
 
-            {/* Custom Role */}
+            {/* Primary Role */}
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Role</label>
+              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Primary role</label>
               {roles.length > 0 ? (
                 <div className="space-y-1.5">
                   {roles.map((role) => (
                     <button
                       key={role.id}
                       type="button"
-                      onClick={() => setRoleId(role.id)}
+                      onClick={() => handleSetPrimary(role.id)}
                       className={`flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left text-sm transition ${
                         roleId === role.id
                           ? 'border-[#2962FF] bg-[#F8FAFC] text-[#0F172B]'
@@ -213,6 +236,44 @@ function EditUserSlider({
                 </p>
               )}
             </div>
+
+            {/* Secondary Roles */}
+            {roles.length > 0 && (
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-[#62748E]">
+                  Secondary roles
+                  <span className="ml-1.5 font-normal text-[#90A1B9]">
+                    (extra permissions — unioned with primary)
+                  </span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {roles
+                    .filter((r) => r.id !== roleId)
+                    .map((role) => {
+                      const selected = secondaryRoleIds.includes(role.id);
+                      return (
+                        <button
+                          key={role.id}
+                          type="button"
+                          onClick={() => toggleSecondary(role.id)}
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition ${
+                            selected
+                              ? 'border-[#2962FF] bg-[#F8FAFC] text-[#0F172B]'
+                              : 'border-[#E2E8F0] bg-white text-[#62748E] hover:border-[#CAD5E2] hover:text-[#0F172B]'
+                          }`}
+                        >
+                          <span
+                            className="inline-block h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: role.color }}
+                          />
+                          <span className="font-medium">{role.name}</span>
+                          {selected && <span className="text-[#2962FF]">✓</span>}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
 
             {/* Platform Access */}
             <div>
@@ -349,12 +410,27 @@ function UserRow({
       </td>
       <td className="px-4 py-3">
         {user.custom_role ? (
-          <div className="flex items-center gap-1.5">
-            <span
-              className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: user.custom_role.color }}
-            />
-            <span className="text-xs text-[#0F172B]">{user.custom_role.name}</span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 rounded bg-[#F8FAFC] px-1.5 py-0.5">
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: user.custom_role.color }}
+              />
+              <span className="text-xs text-[#0F172B]">{user.custom_role.name}</span>
+            </span>
+            {(user.secondary_roles || []).map((sr) => (
+              <span
+                key={sr.id}
+                className="inline-flex items-center gap-1 rounded border border-dashed border-[#CAD5E2] px-1.5 py-0.5"
+                title="Secondary role"
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ backgroundColor: sr.color }}
+                />
+                <span className="text-[10px] text-[#62748E]">{sr.name}</span>
+              </span>
+            ))}
           </div>
         ) : (
           <span className="text-xs text-[#90A1B9]">{user.status === 'pending' ? 'Pending' : '—'}</span>

@@ -187,6 +187,7 @@ export default function HomeSidebar({
   const hasCheckin = useHasMiniApp('daily-checkin');
   const hasCheckinPartners = useHasMiniApp('daily-checkin-partners');
   const hasTimeManagement = useHasMiniApp('time-management');
+  const hasSalesLeads = useHasMiniApp('sales-leads');
   const currentEmail = useAuthStore((s) => s.user?.email?.toLowerCase() ?? '');
   const canSeeNewNav = NEW_NAV_EMAIL_ALLOWLIST.has(currentEmail);
 
@@ -367,6 +368,23 @@ export default function HomeSidebar({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               Time Management
+            </button>
+          )}
+
+          {isInternal && hasSalesLeads && (
+            <button
+              onClick={() => onChangeView('sales-leads')}
+              className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
+                homeView === 'sales-leads'
+                  ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+                  : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+              }`}
+              style={homeView === 'sales-leads' ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+            >
+              <svg className={`h-[14px] w-[14px] shrink-0 ${homeView === 'sales-leads' ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`} fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+              Sales Leads
             </button>
           )}
 

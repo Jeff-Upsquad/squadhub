@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
-import type { Client, Country, Subscription, ClientStatus } from '@squadhub/shared';
+import type { Client, Country, Subscription, ClientStatus, SalesPerson } from '@squadhub/shared';
 import SliderPanel from './SliderPanel';
 import { PlanPicker } from './NewClientsModule';
 
@@ -55,6 +55,22 @@ export default function ClientsModule() {
   });
   const countries: Country[] = countriesRes?.data || [];
   const activeCountries = countries.filter((c) => c.is_active);
+
+  const { data: peopleRes } = useQuery({
+    queryKey: ['admin-sales-people'],
+    queryFn: () => api.get('/admin/onboarding-links/sales-people').then((r) => r.data),
+  });
+  const salesPeople: SalesPerson[] = peopleRes?.data || [];
+
+  const updateSpMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: any }) =>
+      api.patch(`/admin/clients/${id}/sales-people`, payload).then((r) => r.data),
+    onSuccess: () => {
+      invalidateAll();
+      if (selectedClient) refreshClient(selectedClient.id);
+    },
+    onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed to update sales person'),
+  });
 
   // Default create-form country to first active country once loaded
   useEffect(() => {
@@ -258,6 +274,11 @@ export default function ClientsModule() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
+                  {client.primary_sales_person && (
+                    <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-700">
+                      SP: {client.primary_sales_person.display_name}
+                    </span>
+                  )}
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
                     {countryName}
                   </span>
@@ -361,6 +382,45 @@ export default function ClientsModule() {
                   {selectedClient.accounts_email && <InfoRow label="Accounts Email" value={selectedClient.accounts_email} />}
                 </div>
               )}
+            </div>
+
+            {/* Sales Attribution */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Sales Attribution</h4>
+              <div>
+                <label className="mb-1 block text-xs text-[#62748E]">Primary Sales Person</label>
+                <select
+                  value={selectedClient.primary_sales_person_id || ''}
+                  onChange={(e) => updateSpMutation.mutate({
+                    id: selectedClient.id,
+                    payload: { primary_sales_person_id: e.target.value || null },
+                  })}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+                >
+                  <option value="">— Not assigned —</option>
+                  {salesPeople.map((p) => (
+                    <option key={p.id} value={p.id}>{p.display_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[#62748E]">Secondary Sales Person</label>
+                <select
+                  value={selectedClient.secondary_sales_person_id || ''}
+                  onChange={(e) => updateSpMutation.mutate({
+                    id: selectedClient.id,
+                    payload: { secondary_sales_person_id: e.target.value || null },
+                  })}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+                >
+                  <option value="">— None —</option>
+                  {salesPeople
+                    .filter((p) => p.id !== selectedClient.primary_sales_person_id)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>{p.display_name}</option>
+                    ))}
+                </select>
+              </div>
             </div>
 
             {/* Subscriptions */}

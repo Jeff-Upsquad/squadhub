@@ -18,6 +18,7 @@ export interface User {
   // Optional workspace-scoped joins (only present on specific endpoints).
   workspace_role?: 'super_admin' | 'admin' | 'member' | 'guest' | null;
   custom_role?: { id: string; name: string; color: string } | null;
+  secondary_roles?: { id: string; name: string; color: string }[];
 }
 
 // ---- Workspaces ----
@@ -37,6 +38,7 @@ export interface WorkspaceMember {
   role_id: string | null;
   // Joined fields
   custom_role?: Role;
+  secondary_roles?: Role[];
 }
 
 // ---- Channels ----
@@ -897,6 +899,13 @@ export interface ClientSubscriptionDeliverable {
   deliverable_type?: SubscriptionDeliverableType | null;
 }
 
+export interface SalesPerson {
+  id: string;
+  display_name: string;
+  email: string;
+  avatar_url: string | null;
+}
+
 export interface ClientSubmission {
   id: string;
   business_name: string;
@@ -911,8 +920,13 @@ export interface ClientSubmission {
   country_id: string;
   status: SubmissionStatus;
   created_at: string;
+  primary_sales_person_id: string | null;
+  secondary_sales_person_id: string | null;
+  onboarding_link_id: string | null;
   // Joined
   country?: Country;
+  primary_sales_person?: SalesPerson | null;
+  secondary_sales_person?: SalesPerson | null;
 }
 
 export interface Client {
@@ -931,9 +945,33 @@ export interface Client {
   status: ClientStatus;
   created_at: string;
   updated_at: string;
+  primary_sales_person_id: string | null;
+  secondary_sales_person_id: string | null;
   // Joined
   country?: Country;
   subscriptions?: ClientSubscription[];
+  primary_sales_person?: SalesPerson | null;
+  secondary_sales_person?: SalesPerson | null;
+}
+
+export type OnboardingLinkStatus = 'active' | 'used' | 'expired';
+
+export interface OnboardingLink {
+  id: string;
+  created_by: string;
+  primary_sales_person_id: string;
+  secondary_sales_person_id: string | null;
+  submission_id: string | null;
+  expires_at: string;
+  created_at: string;
+  // Derived
+  status?: OnboardingLinkStatus;
+  url?: string;
+  // Joined
+  created_by_user?: SalesPerson | null;
+  primary_sales_person?: SalesPerson | null;
+  secondary_sales_person?: SalesPerson | null;
+  submission?: ClientSubmission | null;
 }
 
 export interface ClientSubscription {

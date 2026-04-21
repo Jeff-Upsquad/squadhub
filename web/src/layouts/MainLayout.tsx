@@ -15,6 +15,7 @@ import HomeSidebar from '../views/app/HomeSidebar';
 import SettingsSlider from '../components/SettingsSlider';
 import CheckInWidget from '../views/app/checkin/CheckInWidget';
 import TimeManagementPage from '../views/app/time-management/TimeManagementPage';
+import SalesLeadsPage from '../views/app/sales/SalesLeadsPage';
 import ThemeToggle from '../components/ThemeToggle';
 import ActiveTimer from '../components/ActiveTimer';
 import ClientDashboard from '../views/app/client/ClientDashboard';
@@ -33,7 +34,7 @@ import { useUserType } from '../hooks/useUserType';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'cashbook';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook';
 
 // ---- Rail icons (stroke-1.6, 18x18) ----
 const ICON = {
@@ -481,6 +482,8 @@ export default function MainLayout() {
             <CheckInWidget title="Daily Check-In Partners" context="partners" />
           ) : homeView === 'time-management' ? (
             <TimeManagementPage />
+          ) : homeView === 'sales-leads' ? (
+            <SalesLeadsPage />
           ) : homeView === 'hub' && (userType === 'client' || userType === 'client_staff') ? (
             <ClientDashboard />
           ) : homeView === 'hub' && userType === 'partner' ? (

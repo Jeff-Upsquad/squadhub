@@ -279,12 +279,12 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// GET /memberships/my-permissions — get current user's workspace permissions
+// GET /memberships/my-permissions — get current user's workspace permissions (unioned across primary + secondary roles)
 router.get('/my-permissions', async (req: Request, res: Response) => {
   try {
     const { data: membership } = await supabaseAdmin
       .from('workspace_members')
-      .select('role, role_id, roles(permissions)')
+      .select('id, role, role_id, roles(permissions)')
       .eq('user_id', req.userId!)
       .single();
 
@@ -294,36 +294,6 @@ router.get('/my-permissions', async (req: Request, res: Response) => {
     }
 
     const workspaceRole = membership.role as string;
-
-    // Admins get all permissions
-    if (workspaceRole === 'admin' || workspaceRole === 'super_admin') {
-      const allTrue: Record<string, boolean> = {};
-      const keys = [
-        'can_create_channels', 'can_create_lists', 'can_create_folders', 'can_create_spaces',
-        'can_archive_lists', 'can_archive_spaces', 'can_archive_folders',
-        'can_delete_messages', 'can_edit_messages', 'can_send_dms',
-        'can_manage_channels', 'can_manage_members', 'can_manage_tasks', 'can_manage_roles',
-        'can_view_admin_panel', 'can_manage_workspace',
-      ];
-      keys.forEach((k) => { allTrue[k] = true; });
-      res.json({ success: true, data: { permissions: allTrue, workspaceRole } });
-      return;
-    }
-
-    // Explicit-allow: start with all-false, overlay custom role permissions
-    let customPerms = (membership as any).roles?.permissions as Record<string, boolean> | undefined;
-
-    // Fallback: if no custom role linked, use the default role's permissions
-    if (!customPerms) {
-      const { data: defaultRole } = await supabaseAdmin
-        .from('roles')
-        .select('permissions')
-        .eq('is_default', true)
-        .single();
-      customPerms = defaultRole?.permissions as Record<string, boolean> | undefined;
-    }
-
-    const effective: Record<string, boolean> = {};
     const keys = [
       'can_create_channels', 'can_create_lists', 'can_create_folders', 'can_create_spaces',
       'can_archive_lists', 'can_archive_spaces', 'can_archive_folders',
@@ -331,8 +301,40 @@ router.get('/my-permissions', async (req: Request, res: Response) => {
       'can_manage_channels', 'can_manage_members', 'can_manage_tasks', 'can_manage_roles',
       'can_view_admin_panel', 'can_manage_workspace',
     ];
+
+    if (workspaceRole === 'admin' || workspaceRole === 'super_admin') {
+      const allTrue: Record<string, boolean> = {};
+      keys.forEach((k) => { allTrue[k] = true; });
+      res.json({ success: true, data: { permissions: allTrue, workspaceRole } });
+      return;
+    }
+
+    const permSets: Record<string, boolean>[] = [];
+
+    let primaryPerms = (membership as any).roles?.permissions as Record<string, boolean> | undefined;
+    if (!primaryPerms) {
+      const { data: defaultRole } = await supabaseAdmin
+        .from('roles')
+        .select('permissions')
+        .eq('is_default', true)
+        .single();
+      primaryPerms = defaultRole?.permissions as Record<string, boolean> | undefined;
+    }
+    if (primaryPerms) permSets.push(primaryPerms);
+
+    const { data: secondaryRows } = await supabaseAdmin
+      .from('workspace_member_secondary_roles')
+      .select('roles(permissions)')
+      .eq('workspace_member_id', (membership as any).id);
+
+    for (const row of (secondaryRows || []) as any[]) {
+      const perms = row.roles?.permissions as Record<string, boolean> | undefined;
+      if (perms) permSets.push(perms);
+    }
+
+    const effective: Record<string, boolean> = {};
     keys.forEach((k) => {
-      effective[k] = customPerms?.[k] === true;
+      effective[k] = permSets.some((p) => p[k] === true);
     });
 
     res.json({ success: true, data: { permissions: effective, workspaceRole } });
