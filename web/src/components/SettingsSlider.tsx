@@ -4,6 +4,7 @@ import api from '../services/api';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useAuthStore } from '../stores/authStore';
 import { useMemberships, useUpdateMemberAccess, useRemoveMember } from '../hooks/useMemberships';
+import { useFavorites, useAddFavorite, useRemoveFavorite } from '../hooks/useFavorites';
 import { useIsAdmin } from '../hooks/usePermissions';
 import { canAtLeast } from '../lib/access';
 import ManageMembersModal from '../views/app/pm/ManageMembersModal';
@@ -47,6 +48,22 @@ export default function SettingsSlider({ type, id, name, description, spaceId, m
   const { data: members } = useMemberships(type, id);
   const updateAccess = useUpdateMemberAccess(type, id);
   const removeMember = useRemoveMember(type, id);
+
+  const { data: favorites } = useFavorites(workspaceId);
+  const addFavorite = useAddFavorite(workspaceId);
+  const removeFavorite = useRemoveFavorite(workspaceId);
+  const favorite = favorites?.find((f) => f.item_type === type && f.item_id === id);
+  const isFavorited = !!favorite;
+  const favoritePending = addFavorite.isPending || removeFavorite.isPending;
+
+  const toggleFavorite = () => {
+    if (favoritePending) return;
+    if (isFavorited && favorite) {
+      removeFavorite.mutate(favorite.id);
+    } else {
+      addFavorite.mutate({ item_type: type, item_id: id });
+    }
+  };
 
   const canManage = canAtLeast(myAccess ?? undefined, 'manager') || isAdmin;
 
@@ -136,6 +153,33 @@ export default function SettingsSlider({ type, id, name, description, spaceId, m
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Favorite toggle */}
+        <button
+          onClick={toggleFavorite}
+          disabled={favoritePending}
+          className={`flex w-full items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition disabled:opacity-50 ${
+            isFavorited
+              ? 'border-[#FDE68A] bg-[#FFFBEB] text-[#92400E] hover:bg-[#FEF3C7]'
+              : 'border-[#CAD5E2] bg-white text-[#0F172B] hover:bg-[#F1F5F9]'
+          }`}
+          aria-pressed={isFavorited}
+        >
+          <svg
+            className="h-4 w-4 shrink-0"
+            viewBox="0 0 24 24"
+            fill={isFavorited ? '#F59E0B' : 'none'}
+            stroke={isFavorited ? '#F59E0B' : 'currentColor'}
+            strokeWidth={isFavorited ? 0 : 1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+          </svg>
+          <span className="flex-1 text-left">
+            {isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+          </span>
+        </button>
+
         {/* Name */}
         <div>
           <label className="mb-1 block text-xs font-medium text-[#666666] uppercase tracking-wide">Name</label>

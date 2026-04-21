@@ -394,6 +394,7 @@ export interface Favorite {
   item_id: string;
   created_at: string;
   item_name?: string;
+  space_id?: string | null;
 }
 
 // ---- Shared With Me ----

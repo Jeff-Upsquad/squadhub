@@ -161,7 +161,6 @@ const FolderIcon = (
 // ---- List item ----
 function ListItem({ list, depth = 0, isManager = false, myAccess }: { list: List; depth?: number; isManager?: boolean; myAccess?: AccessLevel | null }) {
   const { activeListId, setActiveList, setActiveSpace } = usePMStore();
-  const [showShare, setShowShare] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const isActive = activeListId === list.id;
   const pl = 12 + depth * 20;
@@ -186,17 +185,6 @@ function ListItem({ list, depth = 0, isManager = false, myAccess }: { list: List
         {list.is_private && !list.is_locked && <LockIcon />}
         <div className="flex items-center gap-0.5">
           {isManager && !list.is_locked && (
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowShare(true); }}
-              className="rounded p-0.5 text-[#999999] opacity-0 transition hover:text-[#0F172B] group-hover:opacity-100"
-              title="Share list"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-              </svg>
-            </button>
-          )}
-          {isManager && !list.is_locked && (
             <EllipsisButton onClick={() => setShowSettings(true)} title="List settings" />
           )}
         </div>
@@ -204,15 +192,6 @@ function ListItem({ list, depth = 0, isManager = false, myAccess }: { list: List
           <span className="text-xs text-[#999999] tabular-nums">{list.task_count}</span>
         )}
       </div>
-
-      {showShare && (
-        <ManageMembersModal
-          resourceType="list"
-          resourceId={list.id}
-          resourceName={list.name}
-          onClose={() => setShowShare(false)}
-        />
-      )}
 
       {showSettings && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setShowSettings(false)}>
@@ -268,7 +247,6 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
   const [open, setOpen] = useState(true);
   const [adding, setAdding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showShare, setShowShare] = useState(false);
   const createList = useCreateList(spaceId);
 
   return (
@@ -288,17 +266,6 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
         {folder.is_locked && <AdminLockIcon />}
         {folder.is_private && !folder.is_locked && <LockIcon />}
         <div className="flex items-center gap-0.5">
-          {isManager && !folder.is_locked && (
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowShare(true); }}
-              className="rounded p-0.5 text-[#999999] opacity-0 transition hover:text-[#0F172B] group-hover:opacity-100"
-              title="Share folder"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-              </svg>
-            </button>
-          )}
           {canDelete && !folder.is_locked && <EllipsisButton onClick={() => setShowSettings(true)} title="Folder settings" />}
           {canAdd && !folder.is_locked && <AddButton onClick={() => setAdding(true)} title="Add list" />}
         </div>
@@ -331,15 +298,6 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
             <SettingsSlider type="folder" id={folder.id} name={folder.name} spaceId={spaceId} myAccess={myAccess} onClose={() => setShowSettings(false)} />
           </div>
         </div>
-      )}
-
-      {showShare && (
-        <ManageMembersModal
-          resourceType="folder"
-          resourceId={folder.id}
-          resourceName={folder.name}
-          onClose={() => setShowShare(false)}
-        />
       )}
     </div>
   );
