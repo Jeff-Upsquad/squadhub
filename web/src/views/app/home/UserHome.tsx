@@ -27,7 +27,7 @@ export default function UserHome() {
         <div className="dash-hero">
           <div>
             <div className="eyebrow" style={{ marginBottom: 10 }}>Welcome back, {firstName}</div>
-            <h1 className="greeting">Three items need<br /><em>your eye today.</em></h1>
+            <h1 className="greeting">Three items need <em>your eye today.</em></h1>
             <div className="sub">Your squad shipped 2 things yesterday. Nothing is blocking you right now — but three approvals are waiting.</div>
           </div>
           <div className="date">
