@@ -519,6 +519,31 @@ export default function TaskDetailPanel({
                 )}
               </div>
 
+              {/* Description */}
+              <div className="td-eyebrow">Description</div>
+              <div className="td-lcard apple" style={{ marginBottom: 16 }}>
+                <div className="td-lcard-body">
+                  {editing === 'description' ? (
+                    <textarea
+                      autoFocus
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => handleSave('description')}
+                      onKeyDown={(e) => { if (e.key === 'Escape') setEditing(null); }}
+                      rows={6}
+                      className="td-about w-full resize-none bg-transparent outline-none"
+                    />
+                  ) : (
+                    <div
+                      onClick={canEdit ? () => { setEditing('description'); setEditValue(task.description || ''); } : undefined}
+                      className={`td-about ${!task.description ? 'empty' : ''} ${canEdit ? 'cursor-text' : ''}`}
+                    >
+                      {task.description || 'No description. Click to add one.'}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Subtitle row — priority only (space + SQ moved to top bar) */}
               {priorityLabel && (
                 <div className="flex items-center gap-2.5 mb-5 flex-wrap">
@@ -830,31 +855,6 @@ export default function TaskDetailPanel({
                       ))}
                     </div>
                   )}
-
-                  {/* Description */}
-                  <div className="td-eyebrow">Description</div>
-                  <div className="td-lcard apple" style={{ marginBottom: 4 }}>
-                    <div className="td-lcard-body">
-                      {editing === 'description' ? (
-                        <textarea
-                          autoFocus
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onBlur={() => handleSave('description')}
-                          onKeyDown={(e) => { if (e.key === 'Escape') setEditing(null); }}
-                          rows={6}
-                          className="td-about w-full resize-none bg-transparent outline-none"
-                        />
-                      ) : (
-                        <div
-                          onClick={canEdit ? () => { setEditing('description'); setEditValue(task.description || ''); } : undefined}
-                          className={`td-about ${!task.description ? 'empty' : ''} ${canEdit ? 'cursor-text' : ''}`}
-                        >
-                          {task.description || 'No description. Click to add one.'}
-                        </div>
-                      )}
-                    </div>
-                  </div>
 
                   {/* Subtasks */}
                   <div className="td-eyebrow">
