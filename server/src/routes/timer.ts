@@ -7,7 +7,7 @@ import { nowIST, todayIST, IST_OFFSET_MS } from '../utils/ist';
 
 const router = Router();
 router.use(requireAuth);
-router.use(requireUserType('internal'));
+router.use(requireUserType('internal', 'partner'));
 
 // ---- Helpers ----
 
@@ -307,12 +307,43 @@ router.get('/stats', async (req: Request, res: Response) => {
       .lte('date', today)
       .order('date', { ascending: true });
 
+    // Office timing (drives the progress bar denominator)
+    const { data: timing } = await supabaseAdmin
+      .from('user_office_timing')
+      .select('label, from_time, to_time, working_days, max_break_minutes, is_active')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    let officeTiming: null | {
+      label: string;
+      from_time: string;
+      to_time: string;
+      working_days: number[];
+      max_break_minutes: number;
+      office_hours_total_seconds: number;
+    } = null;
+    if (timing) {
+      const [fh, fm] = timing.from_time.split(':').map(Number);
+      const [th, tm] = timing.to_time.split(':').map(Number);
+      const totalSeconds = Math.max(0, ((th * 60 + tm) - (fh * 60 + fm)) * 60);
+      officeTiming = {
+        label: timing.label,
+        from_time: timing.from_time,
+        to_time: timing.to_time,
+        working_days: timing.working_days,
+        max_break_minutes: timing.max_break_minutes,
+        office_hours_total_seconds: totalSeconds,
+      };
+    }
+
     res.json({
       success: true,
       data: {
         today: todaySummary || null,
         active_timer: activeSessions?.[0] || null,
         week_summaries: weekSummaries || [],
+        office_timing: officeTiming,
       },
     });
   } catch (err) {

@@ -4,6 +4,14 @@ import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import TimerDisplay from './TimerDisplay';
 import TodayTimeSummary from './TodayTimeSummary';
 
+function formatOfficeHours(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+}
+
 const TIMER_CONFIG: { type: TimerType; label: string; icon: string; color: string; activeColor: string; activeBg: string }[] = [
   {
     type: 'work',
@@ -43,9 +51,15 @@ export default function TimerTab({ context = 'default' }: { context?: string }) 
   const activeType = activeSession?.timer_type as TimerType | undefined;
   const stats = statsRes?.data;
   const todaySummary = stats?.today;
+  const officeTiming = stats?.office_timing;
 
   // Weekly chart data
   const weekSummaries = stats?.week_summaries || [];
+  const weekMaxSeconds = officeTiming?.office_hours_total_seconds ?? 10 * 3600;
+
+  const officeHoursLabel = officeTiming
+    ? formatOfficeHours(officeTiming.office_hours_total_seconds)
+    : null;
 
   const handleTimerClick = (type: TimerType) => {
     if (activeType === type) {
@@ -61,6 +75,21 @@ export default function TimerTab({ context = 'default' }: { context?: string }) 
 
   return (
     <div className="space-y-5 p-5">
+      {officeTiming && (
+        <div className="rounded-xl border border-[#E2E8F0] bg-white px-4 py-3">
+          <div className="flex items-center gap-2">
+            <svg className="h-4 w-4 text-[#62748E]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="text-sm font-medium text-[#0F172B]">{officeTiming.label}</div>
+          </div>
+          <div className="mt-0.5 text-xs text-[#62748E]">
+            {officeTiming.from_time} – {officeTiming.to_time}
+            {officeHoursLabel && <> · <span className="text-[#0F172B]">{officeHoursLabel}</span></>}
+          </div>
+        </div>
+      )}
+
       {/* Timer buttons */}
       <div className="space-y-2">
         {TIMER_CONFIG.map((cfg) => {
@@ -101,6 +130,8 @@ export default function TimerTab({ context = 'default' }: { context?: string }) 
         workSeconds={todaySummary?.total_work_seconds || 0}
         breakSeconds={todaySummary?.total_break_seconds || 0}
         noWorkSeconds={todaySummary?.total_no_work_seconds || 0}
+        officeHoursTotalSeconds={officeTiming?.office_hours_total_seconds}
+        maxBreakMinutes={officeTiming?.max_break_minutes}
       />
 
       {/* Weekly mini chart */}
@@ -110,7 +141,7 @@ export default function TimerTab({ context = 'default' }: { context?: string }) 
           <div className="flex items-end gap-1.5" style={{ height: 80 }}>
             {weekSummaries.map((day: any) => {
               const total = day.total_work_seconds + day.total_break_seconds + day.total_no_work_seconds;
-              const maxHours = 10 * 3600; // 10h max for scaling
+              const maxHours = weekMaxSeconds; // office-hours if configured, else 10h fallback
               const heightPct = Math.min((total / maxHours) * 100, 100);
               const date = new Date(day.date + 'T00:00:00Z');
               const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getUTCDay()];
