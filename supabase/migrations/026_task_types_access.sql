@@ -36,6 +36,11 @@ VALUES
   ('video_edit_task', 'Video Edit Task', 'Video editing deliverables',  'video',   '#ef4444', TRUE, TRUE, 2)
 ON CONFLICT (key) DO NOTHING;
 
+-- 3a. Promote any pre-existing rows with these keys to system status (idempotent)
+UPDATE public.task_types
+  SET is_system = TRUE, is_enabled = TRUE
+  WHERE key IN ('design_task', 'video_edit_task') AND is_system = FALSE;
+
 -- 4. Seed fields for Design Task (idempotent via UNIQUE(task_type_id, key))
 INSERT INTO public.task_type_fields (task_type_id, key, label, field_type, options, is_required, position)
 SELECT id, 'design_format', 'Format', 'select',
