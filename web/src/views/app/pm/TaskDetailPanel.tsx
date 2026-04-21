@@ -14,6 +14,7 @@ import {
 import api from '../../../services/api';
 import type { SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority } from '@squadhub/shared';
 import AssigneePicker from './AssigneePicker';
+import DatePicker from './DatePicker';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -85,12 +86,22 @@ function initialOf(name: string | undefined | null): string {
 
 function formatDueRelative(iso: string | null | undefined): { text: string; accent: boolean } {
   if (!iso) return { text: 'No due date', accent: false };
-  const d = new Date(iso);
+  // Date-only strings ("YYYY-MM-DD") must be parsed as LOCAL dates — otherwise
+  // new Date(...) interprets them as UTC midnight and shifts them by the local
+  // timezone offset (e.g. in IST they render as 05:30 the same day).
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  const d = dateOnlyMatch
+    ? new Date(Number(dateOnlyMatch[1]), Number(dateOnlyMatch[2]) - 1, Number(dateOnlyMatch[3]))
+    : new Date(iso);
+  const isDateOnly = !!dateOnlyMatch;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const that = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const delta = Math.round((that - today) / 86_400_000);
-  const time = d.getHours() === 0 && d.getMinutes() === 0 ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  const hasTime = !isDateOnly && !(d.getHours() === 0 && d.getMinutes() === 0);
+  const time = hasTime
+    ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+    : '';
   let prefix = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   if (delta === 0) prefix = 'Today';
   else if (delta === 1) prefix = 'Tomorrow';
@@ -142,6 +153,12 @@ export default function TaskDetailPanel({
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   const [assigneeAnchorRect, setAssigneeAnchorRect] = useState<DOMRect | null>(null);
+  const [workDateOpen, setWorkDateOpen] = useState(false);
+  const [workDateAnchor, setWorkDateAnchor] = useState<DOMRect | null>(null);
+  const [startDateOpen, setStartDateOpen] = useState(false);
+  const [startDateAnchor, setStartDateAnchor] = useState<DOMRect | null>(null);
+  const [dueDateOpen, setDueDateOpen] = useState(false);
+  const [dueDateAnchor, setDueDateAnchor] = useState<DOMRect | null>(null);
   const [newItemDrafts, setNewItemDrafts] = useState<Record<string, string>>({});
   const [newChecklistTitle, setNewChecklistTitle] = useState<string | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState<string | null>(null);
@@ -543,33 +560,50 @@ export default function TaskDetailPanel({
                   </span>
                 </div>
 
-                <div className="td-settings-row" style={{ cursor: canEdit ? 'pointer' : 'default' }}>
-                  <span className="k">{META_ICONS.Due}Due</span>
-                  <span className="v">
-                    {task.due_date ? (
-                      <span className={due.accent ? 'font-medium' : ''}>
-                        {due.text}
-                      </span>
-                    ) : (
-                      <span className="muted">No due date</span>
-                    )}
-                    <input
-                      type="date"
-                      value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
-                      onChange={canEdit ? (e) => updateTask.mutate({ id: task.id, due_date: e.target.value || null }) : undefined}
-                      disabled={!canEdit}
-                      className="sr-only"
-                      id={`due-${task.id}`}
-                    />
-                    {canEdit && (
-                      <label
-                        htmlFor={`due-${task.id}`}
-                        className="text-[11.5px] text-[color:var(--sh-ink-4)] cursor-pointer hover:text-[color:var(--sh-ink-2)] ml-1"
-                      >
-                        {task.due_date ? 'Change' : 'Set'}
-                      </label>
-                    )}
-                  </span>
+                <div className="td-dates-row">
+                  <div
+                    className="td-date-cell"
+                    data-empty={!task.work_date}
+                    style={{ cursor: canEdit ? 'pointer' : 'default' }}
+                    onClick={canEdit ? (e) => {
+                      setWorkDateAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                      setWorkDateOpen(v => !v);
+                    } : undefined}
+                  >
+                    <span className="td-date-label">{META_ICONS.WorkDate}Work</span>
+                    <span className="td-date-value">
+                      {task.work_date ? formatDueRelative(task.work_date).text : '—'}
+                    </span>
+                  </div>
+                  <div
+                    className="td-date-cell"
+                    data-empty={!task.start_date}
+                    style={{ cursor: canEdit ? 'pointer' : 'default' }}
+                    onClick={canEdit ? (e) => {
+                      setStartDateAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                      setStartDateOpen(v => !v);
+                    } : undefined}
+                  >
+                    <span className="td-date-label">{META_ICONS.StartDate}Start</span>
+                    <span className="td-date-value">
+                      {task.start_date ? formatDueRelative(task.start_date).text : '—'}
+                    </span>
+                  </div>
+                  <div
+                    className="td-date-cell"
+                    data-empty={!task.due_date}
+                    data-accent={task.due_date ? due.accent : false}
+                    style={{ cursor: canEdit ? 'pointer' : 'default' }}
+                    onClick={canEdit ? (e) => {
+                      setDueDateAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                      setDueDateOpen(v => !v);
+                    } : undefined}
+                  >
+                    <span className="td-date-label">{META_ICONS.Due}Due</span>
+                    <span className="td-date-value">
+                      {task.due_date ? due.text : '—'}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="td-settings-row">
@@ -1092,6 +1126,36 @@ export default function TaskDetailPanel({
           onClose={() => setAssigneePickerOpen(false)}
         />
       )}
+
+      {workDateOpen && task && (
+        <DatePicker
+          anchorRect={workDateAnchor}
+          value={task.work_date}
+          mode="datetime"
+          onChange={(next) => updateTask.mutate({ id: task.id, work_date: next })}
+          onClose={() => setWorkDateOpen(false)}
+        />
+      )}
+
+      {startDateOpen && task && (
+        <DatePicker
+          anchorRect={startDateAnchor}
+          value={task.start_date}
+          mode="datetime"
+          onChange={(next) => updateTask.mutate({ id: task.id, start_date: next })}
+          onClose={() => setStartDateOpen(false)}
+        />
+      )}
+
+      {dueDateOpen && task && (
+        <DatePicker
+          anchorRect={dueDateAnchor}
+          value={task.due_date}
+          mode="datetime"
+          onChange={(next) => updateTask.mutate({ id: task.id, due_date: next })}
+          onClose={() => setDueDateOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1107,6 +1171,20 @@ const META_ICONS: Record<string, React.ReactNode> = {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="5" width="18" height="16" rx="2" />
       <path d="M3 10h18M8 3v4M16 3v4" />
+    </svg>
+  ),
+  WorkDate: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+      <path d="M9 15l2 2 4-4" />
+    </svg>
+  ),
+  StartDate: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+      <path d="M10 14l3 2-3 2z" fill="currentColor" />
     </svg>
   ),
   Status: (
