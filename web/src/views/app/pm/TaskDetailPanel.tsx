@@ -665,21 +665,6 @@ export default function TaskDetailPanel({
                   </span>
                 </div>
 
-                {spaceName && (
-                  <div className="td-settings-row">
-                    <span className="k">{META_ICONS.Space}Space</span>
-                    <span className="v">
-                      <span
-                        className="td-space-emblem-xs"
-                        style={{ background: spaceColor || 'var(--sh-ink)' }}
-                      >
-                        {initialOf(spaceName)[0]}
-                      </span>
-                      <span>{spaceName}</span>
-                    </span>
-                  </div>
-                )}
-
                 <div className="td-settings-row">
                   <span className="k">{META_ICONS.Reporter}Created by</span>
                   <span className="v">
