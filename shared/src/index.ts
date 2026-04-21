@@ -15,6 +15,9 @@ export interface User {
   status: 'active' | 'pending' | 'rejected' | 'banned' | 'suspended';
   user_type: UserType;
   created_at: string;
+  // Optional workspace-scoped joins (only present on specific endpoints).
+  workspace_role?: 'super_admin' | 'admin' | 'member' | 'guest' | null;
+  custom_role?: { id: string; name: string; color: string } | null;
 }
 
 // ---- Workspaces ----

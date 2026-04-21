@@ -52,11 +52,65 @@ router.get('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const members = (data || []).map((m: any) => ({
-      ...m,
-      user: m.users,
-      users: undefined,
-    }));
+    // Resolve the resource's workspace_id so we can attach each user's
+    // workspace-scoped role (workspace_members.role + custom_role).
+    let workspaceId: string | null = null;
+    if (resourceType === 'channel') {
+      const { data: ch } = await supabaseAdmin
+        .from('channels').select('workspace_id').eq('id', resourceId).single();
+      workspaceId = (ch as any)?.workspace_id ?? null;
+    } else if (resourceType === 'space') {
+      const { data: sp } = await supabaseAdmin
+        .from('spaces').select('workspace_id').eq('id', resourceId).single();
+      workspaceId = (sp as any)?.workspace_id ?? null;
+    } else if (resourceType === 'folder') {
+      const { data: f } = await supabaseAdmin
+        .from('folders').select('space_id').eq('id', resourceId).single();
+      if ((f as any)?.space_id) {
+        const { data: sp } = await supabaseAdmin
+          .from('spaces').select('workspace_id').eq('id', (f as any).space_id).single();
+        workspaceId = (sp as any)?.workspace_id ?? null;
+      }
+    } else if (resourceType === 'list') {
+      const { data: l } = await supabaseAdmin
+        .from('lists').select('space_id').eq('id', resourceId).single();
+      if ((l as any)?.space_id) {
+        const { data: sp } = await supabaseAdmin
+          .from('spaces').select('workspace_id').eq('id', (l as any).space_id).single();
+        workspaceId = (sp as any)?.workspace_id ?? null;
+      }
+    }
+
+    const userIds = (data || []).map((m: any) => m.user_id);
+    const roleByUserId = new Map<string, { workspace_role: string; custom_role: { id: string; name: string; color: string } | null }>();
+    if (workspaceId && userIds.length > 0) {
+      const { data: wsMembers } = await supabaseAdmin
+        .from('workspace_members')
+        .select('user_id, role, roles:role_id(id, name, color)')
+        .eq('workspace_id', workspaceId)
+        .in('user_id', userIds);
+      for (const wm of (wsMembers || []) as any[]) {
+        roleByUserId.set(wm.user_id, {
+          workspace_role: wm.role,
+          custom_role: wm.roles ? { id: wm.roles.id, name: wm.roles.name, color: wm.roles.color } : null,
+        });
+      }
+    }
+
+    const members = (data || []).map((m: any) => {
+      const roleInfo = roleByUserId.get(m.user_id);
+      return {
+        ...m,
+        user: m.users
+          ? {
+              ...m.users,
+              workspace_role: roleInfo?.workspace_role ?? null,
+              custom_role: roleInfo?.custom_role ?? null,
+            }
+          : null,
+        users: undefined,
+      };
+    });
 
     res.json({ success: true, data: members });
   } catch (err) {

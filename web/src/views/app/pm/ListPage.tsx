@@ -3,18 +3,14 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useCreateTask } from '../../../hooks/useTasks';
+import { useIsAdmin } from '../../../hooks/usePermissions';
+import { canAtLeast } from '../../../lib/access';
 import type { SpaceStatus, AccessLevel } from '@squadhub/shared';
 import ListView from './ListView';
 import BoardView from './BoardView';
 import TaskDetailPanel from './TaskDetailPanel';
 import SettingsSlider from '../../../components/SettingsSlider';
 import ManageMembersModal from './ManageMembersModal';
-
-function canAtLeast(userLevel: AccessLevel | undefined, required: AccessLevel): boolean {
-  const levels: AccessLevel[] = ['viewer', 'commenter', 'member', 'manager'];
-  if (!userLevel) return false;
-  return levels.indexOf(userLevel) >= levels.indexOf(required);
-}
 
 export default function ListPage() {
   const { activeSpaceId, activeListId, activeTaskId, viewMode, setViewMode } = usePMStore();
@@ -58,6 +54,8 @@ export default function ListPage() {
 
   const myAccess: AccessLevel | undefined = spaceData?.my_access_level || listData?.my_access_level;
   const isManager = canAtLeast(myAccess, 'manager');
+  const isAdmin = useIsAdmin();
+  const canAccessSettings = isManager || isAdmin;
   const canEdit = canAtLeast(myAccess, 'member');
 
   const filters = useMemo(() => ({}), []);
@@ -138,8 +136,8 @@ export default function ListPage() {
             </button>
           )}
 
-          {/* Settings button - managers only */}
-          {isManager && (
+          {/* Settings button - list managers + workspace admins */}
+          {canAccessSettings && (
             <button
               onClick={() => setShowSettings(!showSettings)}
               className={`rounded p-1.5 transition ${
@@ -231,6 +229,7 @@ export default function ListPage() {
             id={activeListId}
             name={listData?.name || ''}
             spaceId={activeSpaceId}
+            myAccess={myAccess}
             onClose={() => setShowSettings(false)}
             onDeleted={() => {
               setShowSettings(false);

@@ -6,14 +6,8 @@ import CreateSpaceModal from './CreateSpaceModal';
 import CreateFolderListModal from './CreateFolderListModal';
 import ManageMembersModal from './ManageMembersModal';
 import SettingsSlider from '../../../components/SettingsSlider';
+import { canAtLeast } from '../../../lib/access';
 import type { Folder, List, AccessLevel, Space } from '@squadhub/shared';
-
-// Access level check helper
-function canAtLeast(userLevel: AccessLevel | undefined, required: AccessLevel): boolean {
-  const levels: AccessLevel[] = ['viewer', 'commenter', 'member', 'manager'];
-  if (!userLevel) return false;
-  return levels.indexOf(userLevel) >= levels.indexOf(required);
-}
 
 // ---- Lock icon for private items ----
 function LockIcon() {
@@ -165,7 +159,7 @@ const FolderIcon = (
 );
 
 // ---- List item ----
-function ListItem({ list, depth = 0, isManager = false }: { list: List; depth?: number; isManager?: boolean }) {
+function ListItem({ list, depth = 0, isManager = false, myAccess }: { list: List; depth?: number; isManager?: boolean; myAccess?: AccessLevel | null }) {
   const { activeListId, setActiveList, setActiveSpace } = usePMStore();
   const [showShare, setShowShare] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -223,7 +217,7 @@ function ListItem({ list, depth = 0, isManager = false }: { list: List; depth?: 
       {showSettings && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setShowSettings(false)}>
           <div onClick={(e) => e.stopPropagation()}>
-            <SettingsSlider type="list" id={list.id} name={list.name} spaceId={list.space_id} onClose={() => setShowSettings(false)} />
+            <SettingsSlider type="list" id={list.id} name={list.name} spaceId={list.space_id} myAccess={myAccess} onClose={() => setShowSettings(false)} />
           </div>
         </div>
       )}
@@ -270,7 +264,7 @@ function InlineInput({
 }
 
 // ---- Folder item ----
-function FolderItem({ folder, spaceId, canAdd, canDelete, isManager }: { folder: Folder; spaceId: string; canAdd: boolean; canDelete: boolean; isManager: boolean }) {
+function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }: { folder: Folder; spaceId: string; canAdd: boolean; canDelete: boolean; isManager: boolean; myAccess?: AccessLevel | null }) {
   const [open, setOpen] = useState(true);
   const [adding, setAdding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -313,7 +307,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager }: { folder:
       {open && (
         <div>
           {folder.lists?.map((list) => (
-            <ListItem key={list.id} list={list} depth={3} isManager={isManager} />
+            <ListItem key={list.id} list={list} depth={3} isManager={isManager} myAccess={myAccess} />
           ))}
           {adding && (
             <InlineInput
@@ -334,7 +328,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager }: { folder:
       {showSettings && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setShowSettings(false)}>
           <div onClick={(e) => e.stopPropagation()}>
-            <SettingsSlider type="folder" id={folder.id} name={folder.name} spaceId={spaceId} onClose={() => setShowSettings(false)} />
+            <SettingsSlider type="folder" id={folder.id} name={folder.name} spaceId={spaceId} myAccess={myAccess} onClose={() => setShowSettings(false)} />
           </div>
         </div>
       )}
@@ -435,12 +429,12 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
         <div>
           {/* Folders */}
           {space.folders?.map((folder) => (
-            <FolderItem key={folder.id} folder={folder} spaceId={spaceId} canAdd={canAddItems && canCreateLists} canDelete={isManager} isManager={isManager} />
+            <FolderItem key={folder.id} folder={folder} spaceId={spaceId} canAdd={canAddItems && canCreateLists} canDelete={isManager} isManager={isManager} myAccess={myAccess} />
           ))}
 
           {/* Root lists */}
           {space.lists?.map((list) => (
-            <ListItem key={list.id} list={list} depth={2} isManager={isManager} />
+            <ListItem key={list.id} list={list} depth={2} isManager={isManager} myAccess={myAccess} />
           ))}
 
           {/* Create folder/list modal */}
@@ -466,7 +460,7 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
       {showSettings && space && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setShowSettings(false)}>
           <div onClick={(e) => e.stopPropagation()}>
-            <SettingsSlider type="space" id={spaceId} name={space.name} description={space.description} onClose={() => setShowSettings(false)} />
+            <SettingsSlider type="space" id={spaceId} name={space.name} description={space.description} myAccess={myAccess} onClose={() => setShowSettings(false)} />
           </div>
         </div>
       )}
