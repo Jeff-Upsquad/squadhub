@@ -352,6 +352,23 @@ export default function TaskDetailPanel({
               <path d="M13 17l5-5-5-5M6 17l5-5-5-5" />
             </svg>
           </button>
+          {task && spaceName && (
+            <span className="td-host-chip td-focus" tabIndex={0}>
+              <span className="logo" style={{ background: spaceColor || 'var(--sh-ink)' }}>
+                {initialOf(spaceName)[0]}
+              </span>
+              <span>{spaceName}</span>
+              <svg className="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M9 5l7 7-7 7" />
+              </svg>
+            </span>
+          )}
+          {task && (
+            <span className="text-[11.5px] text-[color:var(--sh-ink-4)] font-medium tracking-[0.01em]">
+              SQ-{String(task.display_number ?? 0).padStart(3, '0')}
+            </span>
+          )}
+          <div className="flex-1" />
           <button type="button" onClick={handleCopyLink} className="td-pill-btn">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
@@ -370,7 +387,7 @@ export default function TaskDetailPanel({
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setMoreMenuOpen(false)} />
                 <div
-                  className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border shadow-lg"
+                  className="absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border shadow-lg"
                   style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
                 >
                   {canEdit && (
@@ -386,7 +403,6 @@ export default function TaskDetailPanel({
               </>
             )}
           </div>
-          <div className="flex-1" />
           {task && canEdit && (
             isTimerForThisTask ? (
               <button type="button" onClick={handleStopTimer} className="td-pill-btn" title="Stop timer">
@@ -474,32 +490,19 @@ export default function TaskDetailPanel({
                 )}
               </div>
 
-              {/* Subtitle row: Space + SQ-ID + priority */}
-              <div className="flex items-center gap-2.5 mb-5 flex-wrap">
-                {spaceName && (
-                  <span className="td-host-chip td-focus" tabIndex={0}>
-                    <span className="logo" style={{ background: spaceColor || 'var(--sh-ink)' }}>
-                      {initialOf(spaceName)[0]}
+              {/* Subtitle row — priority only (space + SQ moved to top bar) */}
+              {priorityLabel && (
+                <div className="flex items-center gap-2.5 mb-5 flex-wrap">
+                  {(priorityLabel === 'P0' || priorityLabel === 'P1') ? (
+                    <span className="td-pri-chip" data-level={priorityLabel.toLowerCase()}>
+                      <span className="dot" />
+                      {priorityLabel === 'P0' ? 'Urgent' : 'High'}
                     </span>
-                    <span>{spaceName}</span>
-                    <svg className="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                      <path d="M9 5l7 7-7 7" />
-                    </svg>
-                  </span>
-                )}
-                <span className="text-[11.5px] text-[color:var(--sh-ink-4)] font-medium tracking-[0.01em]">
-                  SQ-{String(task.display_number ?? 0).padStart(3, '0')}
-                </span>
-                {priorityLabel && (priorityLabel === 'P0' || priorityLabel === 'P1') && (
-                  <span className="td-pri-chip" data-level={priorityLabel.toLowerCase()}>
-                    <span className="dot" />
-                    {priorityLabel === 'P0' ? 'Urgent' : 'High'}
-                  </span>
-                )}
-                {priorityLabel && priorityLabel !== 'P0' && priorityLabel !== 'P1' && (
-                  <span className="text-[11.5px] text-[color:var(--sh-ink-3)]">· {priorityLabel}</span>
-                )}
-              </div>
+                  ) : (
+                    <span className="text-[11.5px] text-[color:var(--sh-ink-3)]">{priorityLabel}</span>
+                  )}
+                </div>
+              )}
 
               {/* Meta — macOS Settings-style grouped card */}
               <div className="td-eyebrow">Details</div>
