@@ -50,11 +50,38 @@ const fieldCreateSchema = z.object({
 
 const fieldUpdateSchema = fieldCreateSchema.partial().omit({ key: true });
 
+const enabledSchema = z.object({ is_enabled: z.boolean() });
+
+// ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+
+async function getType(id: string): Promise<{ id: string; is_system: boolean; is_default: boolean } | null> {
+  const { data } = await supabaseAdmin
+    .from('task_types')
+    .select('id, is_system, is_default')
+    .eq('id', id)
+    .maybeSingle();
+  return data as any;
+}
+
+function rejectIfSystem(type: { is_system: boolean } | null, res: Response): boolean {
+  if (!type) {
+    res.status(404).json({ success: false, error: 'Task type not found' });
+    return true;
+  }
+  if (type.is_system) {
+    res.status(400).json({ success: false, error: 'System task types cannot be modified' });
+    return true;
+  }
+  return false;
+}
+
 // ------------------------------------------------------------
 // Task Types — list + create
 // ------------------------------------------------------------
 
-// GET /admin/task-types — list with nested fields
+// GET /admin/task-types — list with nested fields + access info
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const { data: types, error: typesErr } = await supabaseAdmin
@@ -72,20 +99,67 @@ router.get('/', async (_req: Request, res: Response) => {
       .from('task_type_fields')
       .select('*')
       .order('position', { ascending: true });
-
     if (fieldsErr) {
       res.status(500).json({ success: false, error: fieldsErr.message });
       return;
     }
 
-    const byType = new Map<string, any[]>();
-    for (const f of fields || []) {
-      const list = byType.get(f.task_type_id) || [];
-      list.push(f);
-      byType.set(f.task_type_id, list);
+    const { data: roleAccess } = await supabaseAdmin
+      .from('task_type_role_access')
+      .select('id, task_type_id, role_id, created_at');
+    const { data: userAccess } = await supabaseAdmin
+      .from('task_type_user_access')
+      .select('id, task_type_id, user_id, created_at');
+
+    const roleIds = [...new Set((roleAccess || []).map((r: any) => r.role_id))];
+    const userIds = [...new Set((userAccess || []).map((u: any) => u.user_id))];
+
+    const rolesMap: Record<string, any> = {};
+    if (roleIds.length) {
+      const { data: roles } = await supabaseAdmin
+        .from('roles')
+        .select('id, name, color')
+        .in('id', roleIds);
+      (roles || []).forEach((r: any) => { rolesMap[r.id] = r; });
     }
 
-    const result = (types || []).map((t: any) => ({ ...t, fields: byType.get(t.id) || [] }));
+    const usersMap: Record<string, any> = {};
+    if (userIds.length) {
+      const { data: users } = await supabaseAdmin
+        .from('users')
+        .select('id, display_name, email')
+        .in('id', userIds);
+      (users || []).forEach((u: any) => { usersMap[u.id] = u; });
+    }
+
+    const fieldsByType = new Map<string, any[]>();
+    for (const f of fields || []) {
+      const list = fieldsByType.get(f.task_type_id) || [];
+      list.push(f);
+      fieldsByType.set(f.task_type_id, list);
+    }
+
+    const roleAccessByType = new Map<string, any[]>();
+    for (const ra of roleAccess || []) {
+      const list = roleAccessByType.get(ra.task_type_id) || [];
+      list.push({ ...ra, role: rolesMap[ra.role_id] || null });
+      roleAccessByType.set(ra.task_type_id, list);
+    }
+
+    const userAccessByType = new Map<string, any[]>();
+    for (const ua of userAccess || []) {
+      const list = userAccessByType.get(ua.task_type_id) || [];
+      list.push({ ...ua, user: usersMap[ua.user_id] || null });
+      userAccessByType.set(ua.task_type_id, list);
+    }
+
+    const result = (types || []).map((t: any) => ({
+      ...t,
+      fields: fieldsByType.get(t.id) || [],
+      role_access: roleAccessByType.get(t.id) || [],
+      user_access: userAccessByType.get(t.id) || [],
+    }));
+
     res.json({ success: true, data: result });
   } catch (err) {
     console.error('List task types error:', err);
@@ -93,7 +167,7 @@ router.get('/', async (_req: Request, res: Response) => {
   }
 });
 
-// POST /admin/task-types — create
+// POST /admin/task-types — create (custom types only)
 router.post('/', async (req: Request, res: Response) => {
   try {
     const body = typeCreateSchema.parse(req.body);
@@ -125,7 +199,7 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    res.status(201).json({ success: true, data: { ...data, fields: [] } });
+    res.status(201).json({ success: true, data: { ...data, fields: [], role_access: [], user_access: [] } });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
@@ -169,9 +243,12 @@ router.put('/reorder', async (req: Request, res: Response) => {
 // Nested field static routes (must come before /:id/fields/:fieldId)
 // ------------------------------------------------------------
 
-// PUT /admin/task-types/:id/fields/reorder
+// PUT /admin/task-types/:id/fields/reorder (custom types only)
 router.put('/:id/fields/reorder', async (req: Request, res: Response) => {
   try {
+    const type = await getType(req.params.id as string);
+    if (rejectIfSystem(type, res)) return;
+
     const { items } = reorderSchema.parse(req.body);
     for (const item of items) {
       const { error } = await supabaseAdmin
@@ -199,9 +276,12 @@ router.put('/:id/fields/reorder', async (req: Request, res: Response) => {
 // :id routes
 // ------------------------------------------------------------
 
-// PUT /admin/task-types/:id — update (cannot change key)
+// PUT /admin/task-types/:id — update (custom types only)
 router.put('/:id', async (req: Request, res: Response) => {
   try {
+    const type = await getType(req.params.id as string);
+    if (rejectIfSystem(type, res)) return;
+
     const body = typeUpdateSchema.parse(req.body);
     const patch: Record<string, any> = {};
     if (body.name !== undefined) patch.name = body.name;
@@ -232,10 +312,35 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /admin/task-types/:id/enabled — toggle is_enabled (allowed on system + custom)
+router.put('/:id/enabled', async (req: Request, res: Response) => {
+  try {
+    const { is_enabled } = enabledSchema.parse(req.body);
+    const { data, error } = await supabaseAdmin
+      .from('task_types')
+      .update({ is_enabled })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Toggle enabled error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // DELETE /admin/task-types/:id
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const id = req.params.id;
+    const id = req.params.id as string;
     const reassignTo = (req.query.reassign_to as string) || null;
 
     const { data: type } = await supabaseAdmin
@@ -299,7 +404,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 // PUT /admin/task-types/:id/default — atomic promote to default
 router.put('/:id/default', async (req: Request, res: Response) => {
   try {
-    const id = req.params.id;
+    const id = req.params.id as string;
 
     const { data: target } = await supabaseAdmin
       .from('task_types')
@@ -341,13 +446,16 @@ router.put('/:id/default', async (req: Request, res: Response) => {
 });
 
 // ------------------------------------------------------------
-// Custom Fields
+// Custom Fields (custom types only)
 // ------------------------------------------------------------
 
-// POST /admin/task-types/:id/fields — create field
+// POST /admin/task-types/:id/fields
 router.post('/:id/fields', async (req: Request, res: Response) => {
   try {
-    const typeId = req.params.id;
+    const typeId = req.params.id as string;
+    const type = await getType(typeId);
+    if (rejectIfSystem(type, res)) return;
+
     const body = fieldCreateSchema.parse(req.body);
 
     if (RESERVED_FIELD_KEYS.has(body.key)) {
@@ -397,9 +505,12 @@ router.post('/:id/fields', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /admin/task-types/:id/fields/:fieldId — update field
+// PUT /admin/task-types/:id/fields/:fieldId
 router.put('/:id/fields/:fieldId', async (req: Request, res: Response) => {
   try {
+    const type = await getType(req.params.id as string);
+    if (rejectIfSystem(type, res)) return;
+
     const body = fieldUpdateSchema.parse(req.body);
     const patch: Record<string, any> = {};
     if (body.label !== undefined) patch.label = body.label;
@@ -436,6 +547,9 @@ router.put('/:id/fields/:fieldId', async (req: Request, res: Response) => {
 // DELETE /admin/task-types/:id/fields/:fieldId
 router.delete('/:id/fields/:fieldId', async (req: Request, res: Response) => {
   try {
+    const type = await getType(req.params.id as string);
+    if (rejectIfSystem(type, res)) return;
+
     const { error } = await supabaseAdmin
       .from('task_type_fields')
       .delete()
@@ -450,6 +564,129 @@ router.delete('/:id/fields/:fieldId', async (req: Request, res: Response) => {
     res.json({ success: true, message: 'Field deleted' });
   } catch (err) {
     console.error('Delete field error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ------------------------------------------------------------
+// Access sharing (custom types only)
+// ------------------------------------------------------------
+
+const roleAccessSchema = z.object({ role_id: z.string().uuid() });
+const userAccessSchema = z.object({ user_id: z.string().uuid() });
+
+// POST /admin/task-types/:id/roles — grant role access
+router.post('/:id/roles', async (req: Request, res: Response) => {
+  try {
+    const type = await getType(req.params.id as string);
+    if (rejectIfSystem(type, res)) return;
+
+    const { role_id } = roleAccessSchema.parse(req.body);
+    const { data, error } = await supabaseAdmin
+      .from('task_type_role_access')
+      .insert({ task_type_id: req.params.id, role_id })
+      .select()
+      .single();
+
+    if (error) {
+      const status = error.code === '23505' ? 409 : 500;
+      res.status(status).json({ success: false, error: error.message });
+      return;
+    }
+
+    const { data: role } = await supabaseAdmin
+      .from('roles')
+      .select('id, name, color')
+      .eq('id', role_id)
+      .single();
+
+    res.status(201).json({ success: true, data: { ...data, role } });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Add role access error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /admin/task-types/:id/roles/:roleId
+router.delete('/:id/roles/:roleId', async (req: Request, res: Response) => {
+  try {
+    const type = await getType(req.params.id as string);
+    if (rejectIfSystem(type, res)) return;
+
+    const { error } = await supabaseAdmin
+      .from('task_type_role_access')
+      .delete()
+      .eq('task_type_id', req.params.id)
+      .eq('role_id', req.params.roleId);
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Remove role access error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /admin/task-types/:id/users — grant user access
+router.post('/:id/users', async (req: Request, res: Response) => {
+  try {
+    const type = await getType(req.params.id as string);
+    if (rejectIfSystem(type, res)) return;
+
+    const { user_id } = userAccessSchema.parse(req.body);
+    const { data, error } = await supabaseAdmin
+      .from('task_type_user_access')
+      .insert({ task_type_id: req.params.id, user_id })
+      .select()
+      .single();
+
+    if (error) {
+      const status = error.code === '23505' ? 409 : 500;
+      res.status(status).json({ success: false, error: error.message });
+      return;
+    }
+
+    const { data: user } = await supabaseAdmin
+      .from('users')
+      .select('id, display_name, email')
+      .eq('id', user_id)
+      .single();
+
+    res.status(201).json({ success: true, data: { ...data, user } });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Add user access error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /admin/task-types/:id/users/:userId
+router.delete('/:id/users/:userId', async (req: Request, res: Response) => {
+  try {
+    const type = await getType(req.params.id as string);
+    if (rejectIfSystem(type, res)) return;
+
+    const { error } = await supabaseAdmin
+      .from('task_type_user_access')
+      .delete()
+      .eq('task_type_id', req.params.id)
+      .eq('user_id', req.params.userId);
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Remove user access error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
