@@ -1,8 +1,7 @@
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
-import { useCreateTask } from '../../../hooks/useTasks';
 import { useIsAdmin } from '../../../hooks/usePermissions';
 import { canAtLeast } from '../../../lib/access';
 import type { SpaceStatus, AccessLevel } from '@squadhub/shared';
@@ -10,6 +9,7 @@ import ListView from './ListView';
 import BoardView from './BoardView';
 import SettingsSlider from '../../../components/SettingsSlider';
 import ManageMembersModal from './ManageMembersModal';
+import TaskCreatePanel from './TaskCreatePanel';
 
 export default function ListPage() {
   const { activeSpaceId, activeListId, viewMode, setViewMode, setActiveTask } = usePMStore();
@@ -17,16 +17,7 @@ export default function ListPage() {
   const [showShare, setShowShare] = useState(false);
   const [groupByStatus] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [addingTask, setAddingTask] = useState(false);
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const addTaskInputRef = useRef<HTMLInputElement>(null);
-  const createTask = useCreateTask(activeListId);
-
-  useEffect(() => {
-    if (addingTask && addTaskInputRef.current) {
-      addTaskInputRef.current.focus();
-    }
-  }, [addingTask]);
+  const [showCreatePanel, setShowCreatePanel] = useState(false);
 
   const { data: listData } = useQuery({
     queryKey: ['list', activeListId],
@@ -157,31 +148,9 @@ export default function ListPage() {
             </button>
           )}
 
-          {canEdit && addingTask ? (
-            <div className="flex items-center gap-1.5">
-              <input
-                ref={addTaskInputRef}
-                value={newTaskTitle}
-                onChange={(e) => setNewTaskTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newTaskTitle.trim()) {
-                    createTask.mutate({ title: newTaskTitle.trim() }, {
-                      onSuccess: () => { setNewTaskTitle(''); setAddingTask(false); },
-                    });
-                  }
-                  if (e.key === 'Escape') { setAddingTask(false); setNewTaskTitle(''); }
-                }}
-                onBlur={() => {
-                  if (!newTaskTitle.trim()) { setAddingTask(false); setNewTaskTitle(''); }
-                }}
-                placeholder="Task name…"
-                className="w-48 rounded-full border bg-transparent px-3.5 py-1.5 text-xs outline-none"
-                style={{ borderColor: 'var(--sh-ink)', color: 'var(--sh-ink)' }}
-              />
-            </div>
-          ) : canEdit ? (
+          {canEdit ? (
             <button
-              onClick={() => setAddingTask(true)}
+              onClick={() => setShowCreatePanel(true)}
               className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition"
               style={{ background: 'var(--sh-ink)', color: 'var(--surface)' }}
             >
@@ -237,6 +206,17 @@ export default function ListPage() {
           resourceId={activeListId}
           resourceName={listData?.name || 'List'}
           onClose={() => setShowShare(false)}
+        />
+      )}
+
+      {showCreatePanel && activeListId && canEdit && (
+        <TaskCreatePanel
+          listId={activeListId}
+          statuses={statuses}
+          defaultStatus={statuses[0]?.category}
+          spaceName={spaceData?.name || listData?.name}
+          spaceColor={spaceData?.color || null}
+          onClose={() => setShowCreatePanel(false)}
         />
       )}
     </div>

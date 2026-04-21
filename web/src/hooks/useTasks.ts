@@ -57,6 +57,8 @@ export function useCreateTask(listId: string | null) {
       priority?: string;
       description?: string;
       due_date?: string;
+      work_date?: string;
+      start_date?: string;
       assignee_ids?: string[];
       metadata?: TaskMetadata;
       list_id?: string;

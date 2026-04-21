@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@squadhub/shared';
-import { useAssignableUsers } from '../../../hooks/useAssignableUsers';
+import { useAssignableUsers, useAssignableUsersByList } from '../../../hooks/useAssignableUsers';
 
 function hashHue(input: string): number {
   let h = 0;
@@ -23,18 +23,25 @@ function initialOf(name: string | undefined | null): string {
 
 export default function AssigneePicker({
   taskId,
+  listId,
   currentAssigneeIds,
   anchorRect,
   onChange,
   onClose,
 }: {
-  taskId: string;
+  /** Scope the assignable-users query to an existing task. */
+  taskId?: string;
+  /** Scope the query directly to a list — used by the task-create slide
+   *  before any task exists. Exactly one of `taskId` or `listId` must be set. */
+  listId?: string;
   currentAssigneeIds: string[];
   anchorRect: DOMRect | null;
   onChange: (ids: string[]) => void;
   onClose: () => void;
 }) {
-  const { data: users = [], isLoading } = useAssignableUsers(taskId);
+  const byTask = useAssignableUsers(taskId ?? null);
+  const byList = useAssignableUsersByList(taskId ? null : (listId ?? null));
+  const { data: users = [], isLoading } = taskId ? byTask : byList;
   const [query, setQuery] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
