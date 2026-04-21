@@ -57,8 +57,9 @@ async function requireSalesLeadsAccess(req: Request, res: Response, next: NextFu
   res.status(403).json({ success: false, error: 'You do not have access to Sales Leads' });
 }
 
-// Return IDs of users eligible to be sales persons: anyone with the 'sales' role
-// as primary OR secondary, plus anyone with direct mini_app_user_access for sales-leads.
+// Return IDs of users eligible to be sales persons — mirrors the gate for the
+// sales-leads mini app: any user reachable through ANY role granted access to
+// the app (primary or secondary role), PLUS any direct user grant.
 async function getEligibleSalesUserIds(): Promise<string[]> {
   const { data: app } = await supabaseAdmin
     .from('mini_apps')
@@ -67,16 +68,16 @@ async function getEligibleSalesUserIds(): Promise<string[]> {
     .single();
   if (!app) return [];
 
-  const { data: salesRole } = await supabaseAdmin
-    .from('roles')
-    .select('id')
-    .eq('system_key', 'sales')
-    .maybeSingle();
-
   const ids = new Set<string>();
 
-  if (salesRole) {
-    const roleUsers = await getUserIdsByRoleId(salesRole.id);
+  const { data: roleGrants } = await supabaseAdmin
+    .from('mini_app_role_access')
+    .select('role_id')
+    .eq('mini_app_id', app.id);
+
+  for (const row of roleGrants || []) {
+    if (!row.role_id) continue;
+    const roleUsers = await getUserIdsByRoleId(row.role_id as string);
     roleUsers.forEach((u) => ids.add(u));
   }
 
