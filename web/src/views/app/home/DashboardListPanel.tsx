@@ -3,16 +3,18 @@ import { usePMStore } from '../../../stores/pmStore';
 import { useMyTasksSummary } from '../../../hooks/useMyTasksSummary';
 import DashboardTaskRow from './DashboardTaskRow';
 
-const TAB_LABELS: Record<'today' | 'overdue' | 'tomorrow', string> = {
+const TAB_LABELS: Record<'today' | 'overdue' | 'tomorrow' | 'all', string> = {
   today: 'Today',
   overdue: 'Overdue',
   tomorrow: 'Tomorrow',
+  all: 'All tasks',
 };
 
-const EMPTY_COPY: Record<'today' | 'overdue' | 'tomorrow', string> = {
+const EMPTY_COPY: Record<'today' | 'overdue' | 'tomorrow' | 'all', string> = {
   today: 'Nothing scheduled for today. Enjoy the quiet.',
   overdue: 'All clear — no overdue tasks.',
   tomorrow: 'Tomorrow is wide open.',
+  all: 'No tasks assigned to you.',
 };
 
 export default function DashboardListPanel() {
@@ -45,6 +47,9 @@ export default function DashboardListPanel() {
 
   const tasks = useMemo(() => {
     if (!data || !activeDashboardTab) return [];
+    if (activeDashboardTab === 'all') {
+      return [...data.overdue, ...data.today, ...data.tomorrow, ...data.upcoming, ...data.later];
+    }
     return data[activeDashboardTab] || [];
   }, [data, activeDashboardTab]);
 

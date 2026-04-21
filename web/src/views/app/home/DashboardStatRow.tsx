@@ -27,6 +27,10 @@ export default function DashboardStatRow({ onOpenInbox }: { onOpenInbox: () => v
   const todayCount = buckets?.today.length ?? 0;
   const overdueCount = buckets?.overdue.length ?? 0;
   const tomorrowCount = buckets?.tomorrow.length ?? 0;
+  const allTasks = buckets
+    ? [...buckets.overdue, ...buckets.today, ...buckets.tomorrow, ...buckets.upcoming, ...buckets.later]
+    : [];
+  const allCount = allTasks.length;
 
   const inboxDelta = unreadLoading
     ? ''
@@ -57,6 +61,14 @@ export default function DashboardStatRow({ onOpenInbox }: { onOpenInbox: () => v
       : buckets?.tomorrow[0]?.title
         ? truncate(buckets.tomorrow[0].title, 34)
         : `${tomorrowCount} items`;
+
+  const allDelta = tasksLoading
+    ? ''
+    : allCount === 0
+      ? 'Nothing assigned'
+      : allTasks[0]?.title
+        ? truncate(allTasks[0].title, 34)
+        : `${allCount} items`;
 
   const loadingVal = '—';
 
@@ -97,6 +109,15 @@ export default function DashboardStatRow({ onOpenInbox }: { onOpenInbox: () => v
           </div>
           <div className="val">{tasksLoading ? loadingVal : tomorrowCount}<span className="tiny">items</span></div>
           <div className="delta">{tomorrowDelta}</div>
+        </div>
+
+        <div className="stat" role="button" tabIndex={0} onClick={() => setActiveDashboardTab('all')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveDashboardTab('all'); } }}>
+          <div className="lbl">
+            <svg {...icoProps}><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+            All tasks
+          </div>
+          <div className="val">{tasksLoading ? loadingVal : allCount}<span className="tiny">items</span></div>
+          <div className="delta">{allDelta}</div>
         </div>
       </div>
 

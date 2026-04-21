@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
 export type ViewMode = 'list' | 'board';
-export type DashboardTab = 'today' | 'overdue' | 'tomorrow';
+export type DashboardTab = 'today' | 'overdue' | 'tomorrow' | 'all';
 
 interface TimerState {
   taskId: string;
