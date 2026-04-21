@@ -21,6 +21,13 @@
       "port": 3001
     },
     {
+      "name": "Admin App Preview",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/admin && exec npx next dev -p 3010"],
+      "port": 3010,
+      "autoPort": true
+    },
+    {
       "name": "Worktree Web",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "-w", "web", "--", "-p", "3003"],
