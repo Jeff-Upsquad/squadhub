@@ -1260,3 +1260,204 @@ export interface LmsAudienceInput {
   user_types: UserType[];
   user_ids: string[];
 }
+
+// ============================================================
+// Squad Chat (WhatsApp-style messaging, two Android apps)
+// Tables live in chat_* schema; isolated from workspace messages.
+// ============================================================
+
+export type ChatAppVariant = 'clients' | 'team';
+export type ChatMessageType = 'text' | 'voice' | 'image' | 'video' | 'document' | 'system';
+export type ChatConversationType = 'group' | 'dm';
+export type ChatMessageLocalState = 'queued' | 'sending' | 'sent' | 'failed';
+
+export interface ChatGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  avatar_url: string | null;
+  app_scope: ChatAppVariant;
+  created_by: string | null;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined (optional)
+  member_count?: number;
+  unread_count?: number;
+  last_message?: ChatMessage | null;
+  my_is_group_admin?: boolean;
+  my_last_read_at?: string | null;
+}
+
+export interface ChatGroupMember {
+  id: string;
+  group_id: string;
+  user_id: string;
+  is_group_admin: boolean;
+  joined_at: string;
+  last_read_at: string | null;
+  muted_until: string | null;
+  // Joined
+  user?: Pick<User, 'id' | 'display_name' | 'avatar_url' | 'user_type' | 'is_admin'>;
+}
+
+export interface ChatDmConversation {
+  id: string;
+  user1_id: string;
+  user2_id: string;
+  last_message_at: string | null;
+  created_at: string;
+  // Joined
+  other_user?: Pick<User, 'id' | 'display_name' | 'avatar_url' | 'user_type' | 'is_admin'>;
+  unread_count?: number;
+  last_message?: ChatMessage | null;
+}
+
+export interface ChatMessageReceipt {
+  message_id: string;
+  user_id: string;
+  delivered_at: string | null;
+  read_at: string | null;
+}
+
+export interface ChatMessage {
+  id: string;
+  group_id: string | null;
+  dm_conversation_id: string | null;
+  sender_id: string | null;
+  client_temp_id: string | null;
+  content: string | null;
+  type: ChatMessageType;
+  file_url: string | null;
+  file_name: string | null;
+  file_size: number | null;
+  file_mime: string | null;
+  duration_ms: number | null;
+  width: number | null;
+  height: number | null;
+  parent_message_id: string | null;
+  mentions: string[];
+  edited_at: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  // Joined
+  sender?: Pick<User, 'id' | 'display_name' | 'avatar_url' | 'user_type' | 'is_admin'> | null;
+  parent?: Pick<ChatMessage, 'id' | 'sender_id' | 'content' | 'type' | 'file_url' | 'deleted_at'> & {
+    sender?: Pick<User, 'id' | 'display_name'> | null;
+  } | null;
+  receipts?: ChatMessageReceipt[];
+  // Client-side only (never returned from server)
+  local_state?: ChatMessageLocalState;
+}
+
+export interface ChatPushToken {
+  id: string;
+  user_id: string;
+  token: string;
+  app_variant: ChatAppVariant;
+  platform: 'ios' | 'android';
+  last_seen_at: string;
+  created_at: string;
+}
+
+export interface ChatAppConfig {
+  variant: ChatAppVariant;
+  min_version: string;
+  download_url: string | null;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+// ---- Squad Chat request/response payloads ----
+
+export interface ChatSendMessageRequest {
+  group_id?: string;
+  dm_conversation_id?: string;
+  client_temp_id: string;
+  content?: string;
+  type: ChatMessageType;
+  file_url?: string;
+  file_name?: string;
+  file_size?: number;
+  file_mime?: string;
+  duration_ms?: number;
+  width?: number;
+  height?: number;
+  parent_message_id?: string;
+  mentions?: string[];
+}
+
+export interface ChatPresignRequest {
+  conversation_type: ChatConversationType;
+  conversation_id: string;
+  filename: string;
+  content_type: string;
+  file_size: number;
+  file_category: 'image' | 'audio' | 'video' | 'file';
+}
+
+export interface ChatPresignResponse {
+  upload_url: string;
+  public_url: string;
+  key: string;
+  expires_in: number;
+}
+
+export interface ChatReceiptsDeliveredRequest {
+  message_ids: string[];
+}
+
+export interface ChatReceiptsReadRequest {
+  conversation_type: ChatConversationType;
+  conversation_id: string;
+  up_to_message_id: string;
+}
+
+export interface ChatPushRegisterRequest {
+  token: string;
+  app_variant: ChatAppVariant;
+  platform: 'ios' | 'android';
+}
+
+export interface ChatCreateDmRequest {
+  other_user_id: string;
+}
+
+// ---- Squad Chat socket events ----
+// Merged into ServerToClientEvents/ClientToServerEvents via intersection
+// at the socket.io consumer so one connection handles both surfaces.
+
+export interface ChatServerToClientEvents {
+  chat_message_new: (message: ChatMessage) => void;
+  chat_message_edit: (message: ChatMessage) => void;
+  chat_message_delete: (data: { id: string; group_id?: string; dm_conversation_id?: string }) => void;
+  chat_receipt_update: (data: {
+    message_id: string;
+    user_id: string;
+    delivered_at: string | null;
+    read_at: string | null;
+  }) => void;
+  chat_typing_start: (data: {
+    user_id: string;
+    conversation_type: ChatConversationType;
+    conversation_id: string;
+  }) => void;
+  chat_typing_stop: (data: {
+    user_id: string;
+    conversation_type: ChatConversationType;
+    conversation_id: string;
+  }) => void;
+  chat_group_member_added: (data: { group_id: string; member: ChatGroupMember }) => void;
+  chat_group_member_removed: (data: { group_id: string; user_id: string }) => void;
+  chat_group_updated: (group: ChatGroup) => void;
+}
+
+export interface ChatClientToServerEvents {
+  chat_typing: (data: { conversation_type: ChatConversationType; conversation_id: string }) => void;
+  chat_stop_typing: (data: { conversation_type: ChatConversationType; conversation_id: string }) => void;
+  chat_mark_read: (data: {
+    conversation_type: ChatConversationType;
+    conversation_id: string;
+    up_to_message_id: string;
+  }) => void;
+}

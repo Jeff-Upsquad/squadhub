@@ -51,6 +51,16 @@ import notificationsRoutes from './routes/notifications';
 import partnerAppRoutes from './routes/partner-app';
 import lmsRoutes from './routes/lms';
 import lmsAdminRoutes from './routes/lms-admin';
+import chatAppRoutes from './routes/chat/app';
+import chatGroupsRoutes from './routes/chat/groups';
+import chatMessagesRoutes from './routes/chat/messages';
+import chatDmsRoutes from './routes/chat/dms';
+import chatReceiptsRoutes from './routes/chat/receipts';
+import chatPushRoutes from './routes/chat/push';
+import chatUploadRoutes from './routes/chat/upload';
+import adminChatGroupsRoutes from './routes/admin/chat-groups';
+import adminChatBroadcastsRoutes from './routes/admin/chat-broadcasts';
+import adminChatAppConfigRoutes from './routes/admin/chat-app-config';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimerCron } from './cron/timer-cron';
 
@@ -123,6 +133,18 @@ app.use('/notifications', notificationsRoutes);
 app.use('/partner-app', partnerAppRoutes);
 app.use('/lms', lmsRoutes);
 app.use('/admin/lms', lmsAdminRoutes);
+
+// Squad Chat
+app.use('/chat/app', chatAppRoutes);
+app.use('/chat/groups', chatGroupsRoutes);
+app.use('/chat/messages', chatMessagesRoutes);
+app.use('/chat/dms', chatDmsRoutes);
+app.use('/chat/receipts', chatReceiptsRoutes);
+app.use('/chat/push', chatPushRoutes);
+app.use('/chat/upload', chatUploadRoutes);
+app.use('/admin/chat/groups', adminChatGroupsRoutes);
+app.use('/admin/chat/broadcasts', adminChatBroadcastsRoutes);
+app.use('/admin/chat/app-config', adminChatAppConfigRoutes);
 
 // 404 handler
 app.use((_req, res) => {

@@ -126,6 +126,12 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
               </svg>
               Cash Book
             </NavLink>
+            <NavLink href="/admin/squad-chat">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
+              Squad Chat
+            </NavLink>
           </div>
 
           <div className="!mt-4 border-t border-[#E2E8F0] pt-3">
