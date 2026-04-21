@@ -229,6 +229,22 @@ export interface TaskTypeField {
   updated_at: string;
 }
 
+export interface TaskTypeRoleAccess {
+  id: string;
+  task_type_id: string;
+  role_id: string;
+  created_at: string;
+  role?: Pick<Role, 'id' | 'name' | 'color'>;
+}
+
+export interface TaskTypeUserAccess {
+  id: string;
+  task_type_id: string;
+  user_id: string;
+  created_at: string;
+  user?: Pick<User, 'id' | 'display_name' | 'email'>;
+}
+
 export interface TaskType {
   id: string;
   key: string;
@@ -239,9 +255,12 @@ export interface TaskType {
   position: number;
   is_default: boolean;
   is_system: boolean;
+  is_enabled: boolean;
   created_at: string;
   updated_at: string;
   fields?: TaskTypeField[];
+  role_access?: TaskTypeRoleAccess[];
+  user_access?: TaskTypeUserAccess[];
 }
 
 export interface TaskChecklistItem {

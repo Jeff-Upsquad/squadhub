@@ -103,25 +103,79 @@ async function hydrateLists<T extends { list_id: string }>(
   });
 }
 
-// GET /pm/task-types — list all task types with their custom fields (authenticated users)
-router.get('/task-types', async (_req: Request, res: Response) => {
+// GET /pm/task-types — task types the caller can use when creating a task.
+// Admins see every type. Non-admins get is_enabled types, with custom
+// (non-system) types gated by task_type_role_access or task_type_user_access.
+// ?include_ids=id1,id2 forces-include specific types (used when rendering a
+// task whose current type isn't in the user's accessible set).
+router.get('/task-types', async (req: Request, res: Response) => {
   try {
+    const userId = req.userId!;
+    const includeIds = (req.query.include_ids as string || '')
+      .split(',').map((s) => s.trim()).filter(Boolean);
+
+    // Admin bypass
+    const { data: me } = await supabaseAdmin
+      .from('users')
+      .select('is_admin')
+      .eq('id', userId)
+      .single();
+    const isAdmin = !!(me as any)?.is_admin;
+
     const { data: types, error: typesErr } = await supabaseAdmin
       .from('task_types')
       .select('*')
       .order('position', { ascending: true })
       .order('created_at', { ascending: true });
-
     if (typesErr) {
       res.status(500).json({ success: false, error: typesErr.message });
       return;
     }
 
-    const { data: fields, error: fieldsErr } = await supabaseAdmin
-      .from('task_type_fields')
-      .select('*')
-      .order('position', { ascending: true });
+    let visible = types || [];
 
+    if (!isAdmin) {
+      // Caller's workspace role
+      const { data: memberRows } = await supabaseAdmin
+        .from('workspace_members')
+        .select('role_id')
+        .eq('user_id', userId)
+        .limit(1);
+      const roleId = memberRows?.[0]?.role_id || null;
+
+      // Access row sets (pulled once for all types)
+      let accessibleTypeIds = new Set<string>();
+
+      const { data: userAccess } = await supabaseAdmin
+        .from('task_type_user_access')
+        .select('task_type_id')
+        .eq('user_id', userId);
+      (userAccess || []).forEach((ua: any) => accessibleTypeIds.add(ua.task_type_id));
+
+      if (roleId) {
+        const { data: roleAccess } = await supabaseAdmin
+          .from('task_type_role_access')
+          .select('task_type_id')
+          .eq('role_id', roleId);
+        (roleAccess || []).forEach((ra: any) => accessibleTypeIds.add(ra.task_type_id));
+      }
+
+      visible = visible.filter((t: any) => {
+        if (includeIds.includes(t.id)) return true;
+        if (!t.is_enabled) return false;
+        if (t.is_system) return true;
+        return accessibleTypeIds.has(t.id);
+      });
+    }
+
+    const visibleIds = visible.map((t: any) => t.id);
+    const { data: fields, error: fieldsErr } = visibleIds.length
+      ? await supabaseAdmin
+          .from('task_type_fields')
+          .select('*')
+          .in('task_type_id', visibleIds)
+          .order('position', { ascending: true })
+      : { data: [] as any[], error: null };
     if (fieldsErr) {
       res.status(500).json({ success: false, error: fieldsErr.message });
       return;
@@ -134,7 +188,7 @@ router.get('/task-types', async (_req: Request, res: Response) => {
       byType.set(f.task_type_id, list);
     }
 
-    const result = (types || []).map((t: any) => ({ ...t, fields: byType.get(t.id) || [] }));
+    const result = visible.map((t: any) => ({ ...t, fields: byType.get(t.id) || [] }));
     res.json({ success: true, data: result });
   } catch (err) {
     console.error('Get task types error:', err);
