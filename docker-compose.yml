@@ -41,6 +41,7 @@ services:
       - NODE_ENV=production
       - CLIENT_URL=${CLIENT_URL:-https://squadhub.in}
       - ADMIN_URL=${ADMIN_URL:-https://admin.squadhub.in}
+      - CASHBOOK_URL=${CASHBOOK_URL:-https://cashbook.squadhub.in}
       - CASHBOOK_MIN_VERSION=${CASHBOOK_MIN_VERSION:-1.0.0}
       - CASHBOOK_DOWNLOAD_URL=${CASHBOOK_DOWNLOAD_URL:-}
       - PARTNER_APP_MIN_VERSION=${PARTNER_APP_MIN_VERSION:-1.0.0}

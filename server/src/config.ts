@@ -26,6 +26,7 @@ export const config = {
   // CORS
   clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
   adminUrl: process.env.ADMIN_URL || 'http://localhost:5174',
+  cashbookUrl: process.env.CASHBOOK_URL || 'https://cashbook.squadhub.in',
 
   // Cash Book App Versioning
   cashbookMinVersion: process.env.CASHBOOK_MIN_VERSION || '1.0.0',
