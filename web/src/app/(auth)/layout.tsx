@@ -20,16 +20,20 @@ export default function AuthLayout({
   }, [isAuthenticated, router]);
 
   return (
-    <div className="relative flex min-h-screen w-full items-center justify-center bg-gradient-to-br from-[#EEF2FF] via-white to-[#F5EEFF] px-4 py-10">
+    <div className="relative flex min-h-screen w-full items-center justify-center bg-[#F8FAFC] px-4 py-10">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-40"
+        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#2962FF]/[0.12] via-transparent to-[#8B5CF6]/[0.16]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.08]"
         style={{
-          backgroundImage: 'radial-gradient(circle, #CBD5E1 1px, transparent 1px)',
+          backgroundImage: 'radial-gradient(#0F172B 1.25px, transparent 1.25px)',
           backgroundSize: '16px 16px',
         }}
       />
-      <div className="relative z-10 w-full max-w-md">{children}</div>
+      <div className="relative z-10 flex w-full max-w-md flex-col items-center gap-8">{children}</div>
     </div>
   );
 }
