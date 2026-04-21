@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { SalesPerson, OnboardingLink } from '@squadhub/shared';
+import SalesPersonSelect from './SalesPersonSelect';
 
 interface GenerateLinkDialogProps {
   open: boolean;
@@ -19,13 +20,21 @@ export default function GenerateLinkDialog({ open, onClose, salesPeople, current
 
   useEffect(() => {
     if (!open) return;
-    const eligibleMe = currentUserId && salesPeople.some((p) => p.id === currentUserId) ? currentUserId : '';
-    setPrimaryId(eligibleMe || salesPeople[0]?.id || '');
+    setPrimaryId('');
     setSecondaryId('');
     setJustCreated(null);
     setError('');
     setCopied(false);
-  }, [open, currentUserId, salesPeople.length]);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || primaryId) return;
+    if (salesPeople.length === 0) return;
+    const eligibleMe = currentUserId && salesPeople.some((p) => p.id === currentUserId)
+      ? currentUserId
+      : '';
+    setPrimaryId(eligibleMe || salesPeople[0]?.id || '');
+  }, [open, currentUserId, salesPeople, primaryId]);
 
   if (!open) return null;
 
@@ -70,29 +79,30 @@ export default function GenerateLinkDialog({ open, onClose, salesPeople, current
           <div className="space-y-4">
             <div>
               <label className="mb-1 block text-xs font-medium text-[var(--sh-ink-3)]">Primary Sales Person</label>
-              <select
+              <SalesPersonSelect
                 value={primaryId}
-                onChange={(e) => setPrimaryId(e.target.value)}
-                className="w-full rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--sh-ink)] focus:outline-none focus:ring-1 focus:ring-[var(--sh-ink)]"
-              >
-                <option value="">Select…</option>
-                {salesPeople.map((p) => (
-                  <option key={p.id} value={p.id}>{p.display_name}{p.id === currentUserId ? ' (you)' : ''}</option>
-                ))}
-              </select>
+                onChange={setPrimaryId}
+                options={salesPeople.map((p) => ({
+                  id: p.id,
+                  label: p.display_name,
+                  hint: p.id === currentUserId ? 'you' : undefined,
+                }))}
+                placeholder="Select…"
+              />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-[var(--sh-ink-3)]">Secondary Sales Person (optional)</label>
-              <select
+              <SalesPersonSelect
                 value={secondaryId}
-                onChange={(e) => setSecondaryId(e.target.value)}
-                className="w-full rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--sh-ink)] focus:outline-none focus:ring-1 focus:ring-[var(--sh-ink)]"
-              >
-                <option value="">None</option>
-                {salesPeople.filter((p) => p.id !== primaryId).map((p) => (
-                  <option key={p.id} value={p.id}>{p.display_name}</option>
-                ))}
-              </select>
+                onChange={setSecondaryId}
+                options={[
+                  { id: '', label: 'None' },
+                  ...salesPeople
+                    .filter((p) => p.id !== primaryId)
+                    .map((p) => ({ id: p.id, label: p.display_name })),
+                ]}
+                placeholder="None"
+              />
             </div>
             <div className="rounded-md bg-[var(--sh-hair-3)] px-3 py-2 text-xs text-[var(--sh-ink-3)]">
               Link expires in 7 days and can only be used for one submission.
