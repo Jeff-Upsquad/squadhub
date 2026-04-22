@@ -70,6 +70,22 @@ fun ChatScreen(
 
     val listState = rememberLazyListState()
 
+    // Auto-scroll to the newest message when one arrives and the user is near
+    // the bottom already (within 3 items). Matches WhatsApp: if you're reading
+    // the latest thread, a new message slides in; if you've scrolled up to read
+    // history, we don't yank you back.
+    LaunchedEffect(messages.lastOrNull()?.id) {
+        val newest = messages.lastOrNull()?.id ?: return@LaunchedEffect
+        if (listState.firstVisibleItemIndex <= 3) {
+            // scrollToItem(0) is instant — no jarring animation when you open
+            // a chat via a push-notification deep link and want to land right
+            // on the message that triggered it.
+            listState.scrollToItem(0)
+        }
+    }
+
+    // Separate effect so markRead doesn't depend on scroll position changes
+    // unrelated to the newest message arriving.
     LaunchedEffect(messages.lastOrNull()?.id, listState.firstVisibleItemIndex) {
         val newest = messages.lastOrNull()?.id
         if (newest != null && listState.firstVisibleItemIndex <= 1) {
