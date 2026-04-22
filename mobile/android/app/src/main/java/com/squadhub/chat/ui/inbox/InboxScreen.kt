@@ -2,6 +2,7 @@ package com.squadhub.chat.ui.inbox
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,13 +16,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.Chat
+import androidx.compose.material.icons.outlined.Forum
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -30,11 +40,11 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -42,7 +52,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -50,6 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,6 +73,29 @@ import com.squadhub.chat.data.model.ChatGroup
 import com.squadhub.chat.data.model.ChatMessage
 import com.squadhub.chat.data.model.ChatMessageType
 import com.squadhub.chat.ui.common.formatInboxTimestamp
+
+/*
+ * Matches the post-2024 WhatsApp Android redesign:
+ *  - Top bar: white, "Squad Chat" title left, camera + overflow right.
+ *  - Inline search pill directly below the top bar.
+ *  - Content list (Chats | DMs | Settings depending on the bottom-nav tab).
+ *  - NavigationBar at the bottom with outlined icons that fill on select.
+ *  - FAB only on the Chats tab.
+ *
+ * Sources consulted:
+ *  - https://design.facebook.com/blog/whatsapp-user-interface-update/
+ *  - https://en.androidguias.com/new-design-whatsapp-android/
+ */
+
+private enum class InboxTab(
+    val label: String,
+    val outlined: ImageVector,
+    val filled: ImageVector,
+) {
+    CHATS("Chats", Icons.Outlined.Chat, Icons.AutoMirrored.Filled.Chat),
+    DMS("DMs", Icons.Outlined.Forum, Icons.Filled.Forum),
+    SETTINGS("Settings", Icons.Outlined.Person, Icons.Filled.Person),
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,8 +112,14 @@ fun InboxScreen(
         if (ui.signedOut) onSignOut()
     }
 
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-    val showDmsTab = viewModel.isTeamApp
+    val isTeam = viewModel.isTeamApp
+    // Tab list depends on variant: clients has Chats + Settings only (no DMs).
+    val tabs = remember(isTeam) {
+        if (isTeam) listOf(InboxTab.CHATS, InboxTab.DMS, InboxTab.SETTINGS)
+        else listOf(InboxTab.CHATS, InboxTab.SETTINGS)
+    }
+    var currentTab by rememberSaveable { mutableStateOf(InboxTab.CHATS) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     var menuOpen by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -90,7 +129,7 @@ fun InboxScreen(
                 title = {
                     Text(
                         text = stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
@@ -101,11 +140,8 @@ fun InboxScreen(
                     actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
                 actions = {
-                    IconButton(onClick = { /* search: TBD */ }) {
-                        Icon(Icons.Filled.CameraAlt, contentDescription = "Camera")
-                    }
-                    IconButton(onClick = { /* search: TBD */ }) {
-                        Icon(Icons.Filled.Search, contentDescription = "Search")
+                    IconButton(onClick = { /* camera TBD */ }) {
+                        Icon(Icons.Outlined.CameraAlt, contentDescription = "Camera")
                     }
                     Box {
                         IconButton(onClick = { menuOpen = true }) {
@@ -134,50 +170,73 @@ fun InboxScreen(
                 },
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { /* new chat: Phase 4 */ },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Icon(Icons.Filled.Edit, contentDescription = "New chat")
-            }
-        },
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (showDmsTab) {
-                ScrollableTabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.primary,
-                    edgePadding = 12.dp,
-                    indicator = { positions ->
-                        TabRowDefaults.SecondaryIndicator(
-                            Modifier.tabIndicatorOffset(positions[selectedTab]),
-                            color = MaterialTheme.colorScheme.primary,
-                            height = 3.dp,
-                        )
-                    },
-                    divider = {},
-                ) {
-                    InboxTab(
-                        label = stringResource(R.string.inbox_tab_groups),
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                    )
-                    InboxTab(
-                        label = stringResource(R.string.inbox_tab_dms),
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
+        bottomBar = {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                tabs.forEach { tab ->
+                    val selected = tab == currentTab
+                    NavigationBarItem(
+                        selected = selected,
+                        onClick = { currentTab = tab },
+                        icon = {
+                            Icon(
+                                if (selected) tab.filled else tab.outlined,
+                                contentDescription = tab.label,
+                            )
+                        },
+                        label = {
+                            Text(
+                                tab.label,
+                                fontWeight = if (selected) FontWeight.SemiBold
+                                             else FontWeight.Normal,
+                            )
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
                     )
                 }
             }
-
-            if (ui.refreshing) {
-                ThinProgressStrip()
+        },
+        floatingActionButton = {
+            if (currentTab == InboxTab.CHATS) {
+                FloatingActionButton(
+                    onClick = { /* new chat: Phase 4 */ },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    shape = RoundedCornerShape(18.dp),
+                ) {
+                    Icon(Icons.Filled.Edit, contentDescription = "New chat")
+                }
+            }
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(MaterialTheme.colorScheme.surface),
+        ) {
+            if (currentTab != InboxTab.SETTINGS) {
+                SearchPill(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                )
             }
 
-            if (ui.error != null) {
+            if (ui.refreshing) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+                )
+            }
+
+            if (ui.error != null && currentTab != InboxTab.SETTINGS) {
                 Text(
                     text = ui.error!!,
                     color = MaterialTheme.colorScheme.error,
@@ -186,39 +245,66 @@ fun InboxScreen(
                 )
             }
 
-            when {
-                !showDmsTab || selectedTab == 0 -> GroupsList(groups, onOpenConversation)
-                else -> DmsList(dms, onOpenConversation)
+            when (currentTab) {
+                InboxTab.CHATS -> GroupsList(
+                    groups = groups.filterByQuery(searchQuery) { it.name },
+                    onOpenConversation = onOpenConversation,
+                )
+                InboxTab.DMS -> DmsList(
+                    dms = dms.filterByQuery(searchQuery) { it.other_user?.display_name.orEmpty() },
+                    onOpenConversation = onOpenConversation,
+                )
+                InboxTab.SETTINGS -> SettingsTab(
+                    onSignOut = viewModel::signOut,
+                    onRefresh = viewModel::refresh,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun InboxTab(label: String, selected: Boolean, onClick: () -> Unit) {
-    Tab(
-        selected = selected,
-        onClick = onClick,
-        selectedContentColor = MaterialTheme.colorScheme.primary,
-        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    ) {
-        Text(
-            label.uppercase(),
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
-
-@Composable
-private fun ThinProgressStrip() {
-    Box(
+private fun SearchPill(query: String, onQueryChange: (String) -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = RoundedCornerShape(26.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .height(2.dp)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-    )
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+        ) {
+            Icon(
+                Icons.Filled.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            androidx.compose.foundation.text.BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = androidx.compose.ui.unit.TextUnit(16f, androidx.compose.ui.unit.TextUnitType.Sp),
+                ),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                decorationBox = { inner ->
+                    if (query.isEmpty()) {
+                        Text(
+                            "Ask Meta AI or Search",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                    inner()
+                },
+            )
+        }
+    }
 }
 
 @Composable
@@ -341,7 +427,7 @@ private fun Avatar(url: String?, initials: String) {
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -366,14 +452,60 @@ private fun UnreadBadge(count: Int) {
         modifier = Modifier
             .size(width = if (count > 9) 28.dp else 20.dp, height = 20.dp)
             .clip(CircleShape)
-            .background(WaUnreadBadge),
+            .background(androidx.compose.ui.graphics.Color(0xFF25D366)),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             if (count > 99) "99+" else count.toString(),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onPrimary,
+            color = androidx.compose.ui.graphics.Color.White,
             fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun SettingsTab(onSignOut: () -> Unit, onRefresh: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text(
+            "Settings",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(24.dp))
+        SettingsRow(
+            icon = Icons.Filled.Search,
+            label = "Refresh",
+            onClick = onRefresh,
+        )
+        SettingsRow(
+            icon = Icons.AutoMirrored.Filled.Logout,
+            label = "Sign out",
+            onClick = onSignOut,
+        )
+    }
+}
+
+@Composable
+private fun SettingsRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(16.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }
@@ -393,9 +525,6 @@ private fun EmptyHint(text: String) {
 private fun initials(s: String): String = s.split(" ").filter { it.isNotBlank() }
     .take(2).joinToString("") { it.first().uppercase() }.ifEmpty { "?" }
 
-// --- WhatsApp-style preview ---
-// Text: "<Sender>: <content>" for groups; bare content for DMs.
-// Non-text types get the canonical WA emoji label.
 private fun buildPreview(message: ChatMessage?, groupContext: Boolean): String {
     if (message == null) return ""
     val body = when (message.type) {
@@ -411,6 +540,8 @@ private fun buildPreview(message: ChatMessage?, groupContext: Boolean): String {
         "$senderName: $body" else body
 }
 
-// The unread pill uses the WA green explicitly (not onPrimary from the scheme,
-// which would render white on white in our surface-as-top-bar setup).
-private val WaUnreadBadge = androidx.compose.ui.graphics.Color(0xFF25D366)
+private fun <T> List<T>.filterByQuery(query: String, selector: (T) -> String): List<T> {
+    if (query.isBlank()) return this
+    val q = query.trim().lowercase()
+    return filter { selector(it).lowercase().contains(q) }
+}
