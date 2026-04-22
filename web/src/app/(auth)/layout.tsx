@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
+import ThemeToggleAuth from '@/components/ThemeToggleAuth';
 
 export default function AuthLayout({
   children,
@@ -13,7 +14,6 @@ export default function AuthLayout({
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   useEffect(() => {
-    // Redirect authenticated users away from auth pages
     if (isAuthenticated) {
       router.push('/app');
     }
@@ -33,6 +33,9 @@ export default function AuthLayout({
           backgroundSize: '16px 16px',
         }}
       />
+      <div className="absolute right-4 top-4 z-20">
+        <ThemeToggleAuth />
+      </div>
       <div className="relative z-10 flex w-full max-w-md flex-col items-center gap-8">{children}</div>
     </div>
   );
