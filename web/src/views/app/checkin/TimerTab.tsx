@@ -3,6 +3,7 @@ import { useActiveTimer, useTimeStats, useStartTimer, useStopTimer } from '../..
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import TimerDisplay from './TimerDisplay';
 import TodayTimeSummary from './TodayTimeSummary';
+import TodaySessionsList from './TodaySessionsList';
 
 function formatOfficeHours(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);
@@ -132,6 +133,15 @@ export default function TimerTab({ context = 'default' }: { context?: string }) 
         noWorkSeconds={todaySummary?.total_no_work_seconds || 0}
         officeHoursTotalSeconds={officeTiming?.office_hours_total_seconds}
         maxBreakMinutes={officeTiming?.max_break_minutes}
+      />
+
+      {/* Today's sessions (editable per role) */}
+      <TodaySessionsList
+        sessions={stats?.today_sessions || []}
+        canEdit={stats?.time_log_edit?.can_edit === true}
+        windowHours={stats?.time_log_edit?.window_hours ?? 0}
+        workspaceId={workspaceId}
+        context={context}
       />
 
       {/* Weekly mini chart */}

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireUserType } from '../middleware/userType';
+import { getPrimaryRolePermissions } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 import { nowIST, todayIST, IST_OFFSET_MS } from '../utils/ist';
 
@@ -34,6 +35,72 @@ async function stopSession(sessionId: string): Promise<void> {
 
   // Update daily summary
   await upsertDailySummary(session.user_id, session.date, session.timer_type, durationSeconds, now, session.workspace_id, session.context);
+}
+
+/**
+ * Rebuild daily_time_summaries for a given (user, workspace, context, date)
+ * by re-aggregating all completed timer_sessions for that day. Used after
+ * edits or deletes, where incremental delta math is error-prone.
+ */
+async function rebuildDailySummary(
+  userId: string,
+  workspaceId: string,
+  context: string,
+  date: string,
+): Promise<void> {
+  const { data: sessions } = await supabaseAdmin
+    .from('timer_sessions')
+    .select('timer_type, duration_seconds, start_time, end_time')
+    .eq('user_id', userId)
+    .eq('workspace_id', workspaceId)
+    .eq('context', context)
+    .eq('date', date)
+    .not('end_time', 'is', null);
+
+  const rows = sessions || [];
+  let totalWork = 0;
+  let totalBreak = 0;
+  let totalNoWork = 0;
+  let firstStart: string | null = null;
+  let lastStop: string | null = null;
+
+  for (const s of rows as any[]) {
+    const dur = s.duration_seconds || 0;
+    if (s.timer_type === 'work') totalWork += dur;
+    else if (s.timer_type === 'break') totalBreak += dur;
+    else totalNoWork += dur;
+    if (!firstStart || s.start_time < firstStart) firstStart = s.start_time;
+    if (!lastStop || (s.end_time && s.end_time > lastStop)) lastStop = s.end_time;
+  }
+
+  const { data: existing } = await supabaseAdmin
+    .from('daily_time_summaries')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('workspace_id', workspaceId)
+    .eq('context', context)
+    .eq('date', date)
+    .single();
+
+  const payload = {
+    user_id: userId,
+    workspace_id: workspaceId,
+    context,
+    date,
+    total_work_seconds: totalWork,
+    total_break_seconds: totalBreak,
+    total_no_work_seconds: totalNoWork,
+    session_count: rows.length,
+    first_start: firstStart,
+    last_stop: lastStop,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (existing) {
+    await supabaseAdmin.from('daily_time_summaries').update(payload).eq('id', existing.id);
+  } else if (rows.length > 0) {
+    await supabaseAdmin.from('daily_time_summaries').insert(payload);
+  }
 }
 
 /** Upsert daily_time_summaries with the new session duration */
@@ -337,6 +404,23 @@ router.get('/stats', async (req: Request, res: Response) => {
       };
     }
 
+    // Today's sessions (completed + active) for the edit list
+    const { data: todaySessions } = await supabaseAdmin
+      .from('timer_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('workspace_id', workspace_id)
+      .eq('context', context)
+      .eq('date', today)
+      .order('start_time', { ascending: true });
+
+    // Edit permission from the user's PRIMARY role
+    const primary = await getPrimaryRolePermissions(userId);
+    const timeLogEdit = {
+      can_edit: primary.can_edit_time_logs === true,
+      window_hours: typeof primary.time_edit_window_hours === 'number' ? primary.time_edit_window_hours : 0,
+    };
+
     res.json({
       success: true,
       data: {
@@ -344,10 +428,155 @@ router.get('/stats', async (req: Request, res: Response) => {
         active_timer: activeSessions?.[0] || null,
         week_summaries: weekSummaries || [],
         office_timing: officeTiming,
+        today_sessions: todaySessions || [],
+        time_log_edit: timeLogEdit,
       },
     });
   } catch (err) {
     console.error('Timer stats error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PATCH /timer/sessions/:id — edit an owned session (start/end/type).
+// Enforces: ownership, primary-role can_edit_time_logs, edit window.
+const patchSchema = z.object({
+  start_time: z.string().datetime().optional(),
+  end_time: z.string().datetime().optional(),
+  timer_type: z.enum(['work', 'break', 'no_work']).optional(),
+});
+
+router.patch('/sessions/:id', async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const sessionId = req.params.id;
+    const body = patchSchema.parse(req.body);
+
+    const { data: session } = await supabaseAdmin
+      .from('timer_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .single();
+
+    // 404 on ownership mismatch so existence isn't leaked
+    if (!session || session.user_id !== userId) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    if (!session.end_time) {
+      res.status(400).json({ success: false, error: 'Stop the timer before editing' });
+      return;
+    }
+
+    const primary = await getPrimaryRolePermissions(userId);
+    if (primary.can_edit_time_logs !== true) {
+      res.status(403).json({ success: false, error: 'Your role cannot edit time logs' });
+      return;
+    }
+
+    const windowHours = typeof primary.time_edit_window_hours === 'number' ? primary.time_edit_window_hours : 0;
+    if (windowHours > 0) {
+      const ageMs = Date.now() - new Date(session.end_time).getTime();
+      if (ageMs > windowHours * 3600 * 1000) {
+        res.status(403).json({ success: false, error: 'Edit window has expired' });
+        return;
+      }
+    }
+
+    const newStart = body.start_time ?? session.start_time;
+    const newEnd = body.end_time ?? session.end_time;
+    const newType = body.timer_type ?? session.timer_type;
+
+    const startMs = new Date(newStart).getTime();
+    const endMs = new Date(newEnd).getTime();
+    if (!(endMs > startMs)) {
+      res.status(400).json({ success: false, error: 'end_time must be after start_time' });
+      return;
+    }
+    if (endMs > Date.now() + 60_000) {
+      res.status(400).json({ success: false, error: 'end_time cannot be in the future' });
+      return;
+    }
+
+    const duration = Math.round((endMs - startMs) / 1000);
+
+    const { data: updated, error } = await supabaseAdmin
+      .from('timer_sessions')
+      .update({
+        start_time: newStart,
+        end_time: newEnd,
+        timer_type: newType,
+        duration_seconds: duration,
+      })
+      .eq('id', sessionId)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    await rebuildDailySummary(userId, session.workspace_id, session.context, session.date);
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Timer patch error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /timer/sessions/:id — delete an owned session.
+router.delete('/sessions/:id', async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const sessionId = req.params.id;
+
+    const { data: session } = await supabaseAdmin
+      .from('timer_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .single();
+
+    if (!session || session.user_id !== userId) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    if (!session.end_time) {
+      res.status(400).json({ success: false, error: 'Stop the timer before deleting' });
+      return;
+    }
+
+    const primary = await getPrimaryRolePermissions(userId);
+    if (primary.can_edit_time_logs !== true) {
+      res.status(403).json({ success: false, error: 'Your role cannot edit time logs' });
+      return;
+    }
+
+    const windowHours = typeof primary.time_edit_window_hours === 'number' ? primary.time_edit_window_hours : 0;
+    if (windowHours > 0) {
+      const ageMs = Date.now() - new Date(session.end_time).getTime();
+      if (ageMs > windowHours * 3600 * 1000) {
+        res.status(403).json({ success: false, error: 'Edit window has expired' });
+        return;
+      }
+    }
+
+    const { error } = await supabaseAdmin.from('timer_sessions').delete().eq('id', sessionId);
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    await rebuildDailySummary(userId, session.workspace_id, session.context, session.date);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Timer delete error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

@@ -48,3 +48,34 @@ export function useStopTimer({ workspaceId, context }: TimerScope) {
     },
   });
 }
+
+interface UpdateTimerSessionArgs {
+  session_id: string;
+  start_time?: string;
+  end_time?: string;
+  timer_type?: TimerType;
+}
+
+export function useUpdateTimerSession({ workspaceId, context }: TimerScope) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ session_id, ...body }: UpdateTimerSessionArgs) =>
+      api.patch(`/timer/sessions/${session_id}`, body).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['timer-active', workspaceId, context] });
+      qc.invalidateQueries({ queryKey: ['timer-stats', workspaceId, context] });
+    },
+  });
+}
+
+export function useDeleteTimerSession({ workspaceId, context }: TimerScope) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (session_id: string) =>
+      api.delete(`/timer/sessions/${session_id}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['timer-active', workspaceId, context] });
+      qc.invalidateQueries({ queryKey: ['timer-stats', workspaceId, context] });
+    },
+  });
+}
