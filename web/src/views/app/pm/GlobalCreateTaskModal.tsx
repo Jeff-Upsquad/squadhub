@@ -6,6 +6,7 @@ export default function GlobalCreateTaskModal({ onClose }: { onClose: () => void
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const activeSpaceId = usePMStore((s) => s.activeSpaceId);
   const activeListId = usePMStore((s) => s.activeListId);
+  const contextListId = usePMStore((s) => s.contextListId);
 
   if (!workspaceId) return null;
 
@@ -14,7 +15,7 @@ export default function GlobalCreateTaskModal({ onClose }: { onClose: () => void
       pickable
       workspaceId={workspaceId}
       initialSpaceId={activeSpaceId}
-      initialListId={activeListId}
+      initialListId={activeListId ?? contextListId}
       onClose={onClose}
     />
   );

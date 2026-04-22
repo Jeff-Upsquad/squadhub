@@ -21,6 +21,7 @@ interface PMState {
   activeDesignFolderId: string | null;
   activeClientId: string | null;
   activeDashboardTab: DashboardTab | null;
+  contextListId: string | null;
   viewMode: ViewMode;
   collapsedGroups: Record<string, boolean>;
   selectedTasks: string[];
@@ -31,6 +32,7 @@ interface PMState {
   setActiveSpacePage: (id: string | null) => void;
   setActiveTask: (id: string | null) => void;
   setActiveDesignFolder: (id: string | null) => void;
+  setContextListId: (id: string | null) => void;
   setActiveClient: (id: string | null) => void;
   setActiveDashboardTab: (tab: DashboardTab | null) => void;
   setViewMode: (mode: ViewMode) => void;
@@ -54,17 +56,19 @@ export const usePMStore = create<PMState>()(
       activeDesignFolderId: null,
       activeClientId: null,
       activeDashboardTab: null,
+      contextListId: null,
       viewMode: 'list',
       collapsedGroups: {},
       selectedTasks: [],
       timer: null,
 
       setActiveSpace: (id) => set({ activeSpaceId: id }),
-      setActiveList: (id) => set({ activeListId: id, selectedTasks: [], activeDesignFolderId: null, activeFolderId: null, activeSpacePageId: null }),
-      setActiveFolder: (id) => set({ activeFolderId: id, activeListId: null, activeDesignFolderId: null, activeSpacePageId: null, selectedTasks: [] }),
-      setActiveSpacePage: (id) => set({ activeSpacePageId: id, activeListId: null, activeFolderId: null, activeDesignFolderId: null, selectedTasks: [] }),
+      setActiveList: (id) => set({ activeListId: id, contextListId: id, selectedTasks: [], activeDesignFolderId: null, activeFolderId: null, activeSpacePageId: null }),
+      setActiveFolder: (id) => set({ activeFolderId: id, activeListId: null, activeDesignFolderId: null, activeSpacePageId: null, contextListId: null, selectedTasks: [] }),
+      setActiveSpacePage: (id) => set({ activeSpacePageId: id, activeListId: null, activeFolderId: null, activeDesignFolderId: null, contextListId: null, selectedTasks: [] }),
       setActiveTask: (id) => set({ activeTaskId: id }),
-      setActiveDesignFolder: (id) => set({ activeDesignFolderId: id, activeListId: null, activeFolderId: null, activeSpacePageId: null, selectedTasks: [] }),
+      setActiveDesignFolder: (id) => set({ activeDesignFolderId: id, activeListId: null, activeFolderId: null, activeSpacePageId: null, contextListId: null, selectedTasks: [] }),
+      setContextListId: (id) => set({ contextListId: id }),
       setActiveClient: (id) => set({ activeClientId: id }),
       setActiveDashboardTab: (tab) => set({ activeDashboardTab: tab }),
       setViewMode: (mode) => set({ viewMode: mode }),
@@ -95,7 +99,7 @@ export const usePMStore = create<PMState>()(
         set({ timer: null });
         return prev;
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, viewMode: 'list', collapsedGroups: {}, selectedTasks: [], timer: null }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', collapsedGroups: {}, selectedTasks: [], timer: null }),
     }),
     {
       name: 'squadhub-pm',
