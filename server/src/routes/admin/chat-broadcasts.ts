@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/admin';
 import { supabaseAdmin } from '../../supabase-chat';
-import { sendChatPush } from '../../push/expo';
+import { sendChatPush } from '../../push/chat';
 import type { ChatAppVariant, ChatMessageType } from '@squadhub/shared';
 
 const router = Router();
