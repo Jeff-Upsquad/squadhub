@@ -12,6 +12,9 @@ interface GroupDao {
     @Query("SELECT * FROM groups WHERE archivedAt IS NULL ORDER BY updatedAt DESC")
     fun observeActive(): Flow<List<GroupEntity>>
 
+    @Query("SELECT * FROM groups WHERE id = :id LIMIT 1")
+    fun observeById(id: String): Flow<GroupEntity?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(groups: List<GroupEntity>)
 

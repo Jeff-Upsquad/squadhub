@@ -131,6 +131,13 @@ dependencies {
     // Splash screen (branded instant-first-frame on cold start)
     implementation(libs.androidx.core.splashscreen)
 
+    // Socket.IO client (realtime chat — Phase 3)
+    implementation(libs.socketio.client) {
+        // socket.io-client bundles an old json-java that Android ships; exclude
+        // to avoid dex duplicate-class errors.
+        exclude(group = "org.json", module = "json")
+    }
+
     // Firebase (FCM) — wired in Phase 3, dep already present so google-services plugin is happy
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

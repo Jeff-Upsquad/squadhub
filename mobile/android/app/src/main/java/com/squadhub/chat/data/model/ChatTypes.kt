@@ -52,3 +52,11 @@ enum class ChatConversationType {
 
 // Client-side only — never sent to the server. Drives the composer UI state.
 enum class ChatMessageLocalState { QUEUED, SENDING, SENT, FAILED }
+
+// Mirror of shared/src/index.ts:1399 — keep in sync manually.
+// Phase 0 server distinguishes these to route pushes through Expo vs Firebase.
+@Serializable
+enum class ChatPushProvider {
+    @SerialName("expo") EXPO,
+    @SerialName("fcm") FCM,
+}

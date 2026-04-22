@@ -36,6 +36,22 @@
             </intent-filter>
         </activity>
 
+        <!-- FCM receiver: fires onNewToken + onMessageReceived while the
+             app process is alive OR on a fresh process start. -->
+        <service
+            android:name=".push.ChatFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Use our notification channel as the default for FCM auto-generated
+             notifications (when the payload includes a notification block). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="@string/push_channel_id" />
+
     </application>
 
 </manifest>

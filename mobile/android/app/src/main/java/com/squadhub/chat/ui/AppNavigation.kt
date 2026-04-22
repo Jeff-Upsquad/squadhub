@@ -11,6 +11,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.squadhub.chat.ChatDeepLink
 import com.squadhub.chat.data.model.ChatConversationType
 import com.squadhub.chat.ui.auth.LoginScreen
 import com.squadhub.chat.ui.bootstrap.BootstrapViewModel
@@ -29,10 +30,26 @@ object Routes {
 
 @Composable
 fun AppNavigation(
+    pendingChatLink: ChatDeepLink? = null,
+    onChatLinkConsumed: () -> Unit = {},
     navController: NavHostController = rememberNavController(),
     bootstrap: BootstrapViewModel = hiltViewModel(),
 ) {
     val state by bootstrap.state.collectAsState()
+
+    // Deep link from a tapped FCM notification: once we're signed-in, route
+    // to the right chat and clear the link so rotation doesn't re-trigger.
+    LaunchedEffect(pendingChatLink, state) {
+        val link = pendingChatLink ?: return@LaunchedEffect
+        if (state is BootstrapViewModel.State.SignedIn) {
+            val route = when (link) {
+                is ChatDeepLink.Group -> Routes.chat(ChatConversationType.GROUP, link.id)
+                is ChatDeepLink.Dm -> Routes.chat(ChatConversationType.DM, link.id)
+            }
+            navController.navigate(route) { launchSingleTop = true }
+            onChatLinkConsumed()
+        }
+    }
 
     // Auth/update gate — only resets the back stack when state flips between
     // sign-in/out/update-required. Navigation inside the signed-in area (Inbox
@@ -75,15 +92,9 @@ fun AppNavigation(
                 navArgument("type") { type = NavType.StringType },
                 navArgument("id") { type = NavType.StringType },
             ),
-        ) { entry ->
-            // Title ideally comes from the conversation row tapped; but the chat
-            // state lives in the other repos. For now we pass the raw id and let
-            // a future Phase 3 improvement hydrate a real name + avatar at top.
-            val id = entry.arguments!!.getString("id").orEmpty()
-            ChatScreen(
-                title = id.take(8),
-                onBack = { navController.popBackStack() },
-            )
+        ) {
+            // Title + avatar hydrate from ChatViewModel via GroupDao/DmDao flows.
+            ChatScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.UPDATE) {
             UpdateRequiredScreen()

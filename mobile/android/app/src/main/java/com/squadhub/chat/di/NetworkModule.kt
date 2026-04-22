@@ -4,6 +4,7 @@ import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFact
 import com.squadhub.chat.BuildConfig
 import com.squadhub.chat.data.remote.AuthInterceptor
 import com.squadhub.chat.data.remote.ChatApi
+import com.squadhub.chat.data.remote.PushApi
 import com.squadhub.chat.data.remote.TokenAuthenticator
 import dagger.Module
 import dagger.Provides
@@ -62,4 +63,8 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideChatApi(retrofit: Retrofit): ChatApi = retrofit.create(ChatApi::class.java)
+
+    @Provides
+    @Singleton
+    fun providePushApi(retrofit: Retrofit): PushApi = retrofit.create(PushApi::class.java)
 }

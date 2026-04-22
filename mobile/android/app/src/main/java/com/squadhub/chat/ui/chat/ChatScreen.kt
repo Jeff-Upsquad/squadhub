@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.squadhub.chat.data.model.ChatMessage
 import com.squadhub.chat.ui.common.formatDayHeader
 import java.time.LocalDate
@@ -59,12 +60,13 @@ import java.time.ZoneId
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-    title: String,
     onBack: () -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val messages by viewModel.messages.collectAsState()
     val ui by viewModel.ui.collectAsState()
+    val title by viewModel.title.collectAsState()
+    val avatarUrl by viewModel.avatarUrl.collectAsState()
 
     val listState = rememberLazyListState()
 
@@ -89,7 +91,7 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-            ChatTopBar(title = title, onBack = onBack)
+            ChatTopBar(title = title, avatarUrl = avatarUrl, onBack = onBack)
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
@@ -146,7 +148,7 @@ fun ChatScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ChatTopBar(title: String, onBack: () -> Unit) {
+private fun ChatTopBar(title: String, avatarUrl: String?, onBack: () -> Unit) {
     TopAppBar(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -155,7 +157,7 @@ private fun ChatTopBar(title: String, onBack: () -> Unit) {
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -164,6 +166,13 @@ private fun ChatTopBar(title: String, onBack: () -> Unit) {
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (!avatarUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = avatarUrl,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize().clip(CircleShape),
+                        )
+                    }
                 }
                 Spacer(Modifier.width(10.dp))
                 Column {

@@ -12,6 +12,9 @@ interface DmDao {
     @Query("SELECT * FROM dms ORDER BY COALESCE(lastMessageAt, createdAt) DESC")
     fun observeAll(): Flow<List<DmEntity>>
 
+    @Query("SELECT * FROM dms WHERE id = :id LIMIT 1")
+    fun observeById(id: String): Flow<DmEntity?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(dms: List<DmEntity>)
 
