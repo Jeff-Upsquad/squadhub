@@ -11,36 +11,54 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// Classic WhatsApp green. Dynamic color (Material You) is off on purpose —
-// brand consistency across devices trumps per-device tint personalization.
+/*
+ * Matches current WhatsApp (2024-2025) Android design language:
+ *  - Top bars are white in light mode, dark navy in dark mode — NOT green.
+ *  - Green is reserved for accents: FAB, outgoing bubble, active tab,
+ *    unread badge.
+ *  - Chat background is cream (#EFEAE2) in light mode.
+ *  - Bubble tails draw from primaryContainer for outgoing, surface for
+ *    incoming.
+ */
+
 private val LightColors = lightColorScheme(
     primary = WaGreen,
-    onPrimary = SurfaceLight,
-    primaryContainer = WaLightGreenBubble,
-    onPrimaryContainer = OnSurfaceLight,
-    secondary = WaTeal,
-    onSecondary = SurfaceLight,
-    surface = SurfaceLight,
-    onSurface = OnSurfaceLight,
-    surfaceVariant = WaChatBackground,
-    onSurfaceVariant = OnSurfaceMuted,
-    outline = OutlineLight,
-    error = ErrorColor,
+    onPrimary = WaSurfaceLight,
+    primaryContainer = WaBubbleOutLight,
+    onPrimaryContainer = WaOnSurfaceLight,
+    secondary = WaGreen,
+    onSecondary = WaSurfaceLight,
+    tertiary = WaGreenDeep,
+    background = WaChatBgLight,
+    onBackground = WaOnSurfaceLight,
+    surface = WaSurfaceLight,             // top bar, rows, composer
+    onSurface = WaOnSurfaceLight,
+    surfaceVariant = WaChatBgLight,        // chat area
+    onSurfaceVariant = WaMutedLight,       // muted: timestamps, previews
+    surfaceContainerHighest = WaComposerBarLight,
+    outline = WaOutlineLight,
+    outlineVariant = WaOutlineLight,
+    error = WaError,
 )
 
 private val DarkColors = darkColorScheme(
-    primary = WaGreenDark,
-    onPrimary = OnSurfaceDark,
-    primaryContainer = OutgoingBubbleDark,
-    onPrimaryContainer = OnSurfaceDark,
-    secondary = WaTeal,
-    onSecondary = OnSurfaceDark,
-    surface = SurfaceDarkBg,
-    onSurface = OnSurfaceDark,
-    surfaceVariant = WaChatBackgroundDark,
-    onSurfaceVariant = OnSurfaceMutedDark,
-    outline = OutlineDark,
-    error = ErrorColor,
+    primary = WaGreen,
+    onPrimary = WaSurfaceLight,
+    primaryContainer = WaBubbleOutDark,
+    onPrimaryContainer = WaOnSurfaceDark,
+    secondary = WaGreen,
+    onSecondary = WaSurfaceLight,
+    tertiary = WaGreenDeep,
+    background = WaChatBgDark,
+    onBackground = WaOnSurfaceDark,
+    surface = WaSurfaceDark,
+    onSurface = WaOnSurfaceDark,
+    surfaceVariant = WaChatBgDark,
+    onSurfaceVariant = WaMutedDark,
+    surfaceContainerHighest = WaComposerBarDark,
+    outline = WaOutlineDark,
+    outlineVariant = WaOutlineDark,
+    error = WaError,
 )
 
 @Composable
@@ -54,11 +72,9 @@ fun SquadChatTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            // Status bar uses dark green in light mode (classic WhatsApp feel) and
-            // the app's surface color in dark mode.
-            val statusBarColor = if (darkTheme) colors.surface else WaGreenDark
-            window.statusBarColor = statusBarColor.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+            window.statusBarColor = colors.surface.toArgb()
+            // Light top bar in light mode → dark status bar icons.
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
 

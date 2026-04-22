@@ -18,16 +18,23 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -36,6 +43,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -72,63 +81,100 @@ fun InboxScreen(
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val showDmsTab = viewModel.isTeamApp
+    var menuOpen by remember { mutableStateOf(false) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        stringResource(R.string.inbox_title),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontWeight = FontWeight.SemiBold,
+                        text = stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
                 actions = {
-                    IconButton(onClick = viewModel::refresh, enabled = !ui.refreshing) {
-                        if (ui.refreshing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                            )
-                        } else {
-                            Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
-                        }
+                    IconButton(onClick = { /* search: TBD */ }) {
+                        Icon(Icons.Filled.CameraAlt, contentDescription = "Camera")
                     }
-                    IconButton(onClick = viewModel::signOut) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out")
+                    IconButton(onClick = { /* search: TBD */ }) {
+                        Icon(Icons.Filled.Search, contentDescription = "Search")
+                    }
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                        }
+                        DropdownMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Refresh") },
+                                onClick = { menuOpen = false; viewModel.refresh() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Sign out") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.Logout,
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = { menuOpen = false; viewModel.signOut() },
+                            )
+                        }
                     }
                 },
             )
         },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { /* new chat: Phase 4 */ },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+                Icon(Icons.Filled.Edit, contentDescription = "New chat")
+            }
+        },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (showDmsTab) {
-                TabRow(
+                ScrollableTabRow(
                     selectedTabIndex = selectedTab,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    edgePadding = 12.dp,
+                    indicator = { positions ->
+                        TabRowDefaults.SecondaryIndicator(
+                            Modifier.tabIndicatorOffset(positions[selectedTab]),
+                            color = MaterialTheme.colorScheme.primary,
+                            height = 3.dp,
+                        )
+                    },
+                    divider = {},
                 ) {
-                    Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }) {
-                        Text(
-                            stringResource(R.string.inbox_tab_groups),
-                            Modifier.padding(12.dp),
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                    Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }) {
-                        Text(
-                            stringResource(R.string.inbox_tab_dms),
-                            Modifier.padding(12.dp),
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
+                    InboxTab(
+                        label = stringResource(R.string.inbox_tab_groups),
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                    )
+                    InboxTab(
+                        label = stringResource(R.string.inbox_tab_dms),
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                    )
                 }
+            }
+
+            if (ui.refreshing) {
+                ThinProgressStrip()
             }
 
             if (ui.error != null) {
@@ -146,6 +192,33 @@ fun InboxScreen(
             }
         }
     }
+}
+
+@Composable
+private fun InboxTab(label: String, selected: Boolean, onClick: () -> Unit) {
+    Tab(
+        selected = selected,
+        onClick = onClick,
+        selectedContentColor = MaterialTheme.colorScheme.primary,
+        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Text(
+            label.uppercase(),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun ThinProgressStrip() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(2.dp)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+    )
 }
 
 @Composable
@@ -167,11 +240,6 @@ private fun GroupsList(
                 timestamp = g.last_message?.created_at ?: g.updated_at,
                 unread = g.unread_count ?: 0,
                 onClick = { onOpenConversation(ChatConversationType.GROUP, g.id) },
-            )
-            HorizontalDivider(
-                thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(start = 84.dp),
             )
         }
     }
@@ -198,11 +266,6 @@ private fun DmsList(
                 unread = d.unread_count ?: 0,
                 onClick = { onOpenConversation(ChatConversationType.DM, d.id) },
             )
-            HorizontalDivider(
-                thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(start = 84.dp),
-            )
         }
     }
 }
@@ -219,6 +282,7 @@ private fun ConversationRow(
 ) {
     val preview = buildPreview(lastMessage, groupContext)
     val ts = formatInboxTimestamp(timestamp)
+    val hasUnread = unread > 0
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -226,7 +290,7 @@ private fun ConversationRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
         Avatar(url = avatarUrl, initials = initials(title))
         Column(modifier = Modifier.weight(1f)) {
@@ -235,6 +299,7 @@ private fun ConversationRow(
                     title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
@@ -243,13 +308,14 @@ private fun ConversationRow(
                     Spacer(Modifier.width(8.dp))
                     Text(
                         ts,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (unread > 0) MaterialTheme.colorScheme.primary
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (hasUnread) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (hasUnread) FontWeight.SemiBold else FontWeight.Normal,
                     )
                 }
             }
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(3.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     preview.ifEmpty { " " },
@@ -259,7 +325,7 @@ private fun ConversationRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                if (unread > 0) {
+                if (hasUnread) {
                     Spacer(Modifier.width(8.dp))
                     UnreadBadge(count = unread)
                 }
@@ -270,14 +336,20 @@ private fun ConversationRow(
 
 @Composable
 private fun Avatar(url: String?, initials: String) {
-    val size = 52.dp
+    val size = 56.dp
     Box(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+            .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
+        Text(
+            initials,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         if (!url.isNullOrBlank()) {
             AsyncImage(
                 model = url,
@@ -285,14 +357,6 @@ private fun Avatar(url: String?, initials: String) {
                 modifier = Modifier.fillMaxSize().clip(CircleShape),
             )
         }
-        // Fallback initials render underneath the AsyncImage; if the image loads
-        // successfully it fully covers them.
-        Text(
-            initials,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary,
-        )
     }
 }
 
@@ -300,14 +364,15 @@ private fun Avatar(url: String?, initials: String) {
 private fun UnreadBadge(count: Int) {
     Box(
         modifier = Modifier
+            .size(width = if (count > 9) 28.dp else 20.dp, height = 20.dp)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.secondary)
-            .padding(horizontal = 8.dp, vertical = 2.dp),
+            .background(WaUnreadBadge),
+        contentAlignment = Alignment.Center,
     ) {
         Text(
             if (count > 99) "99+" else count.toString(),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSecondary,
+            color = MaterialTheme.colorScheme.onPrimary,
             fontWeight = FontWeight.SemiBold,
         )
     }
@@ -320,6 +385,7 @@ private fun EmptyHint(text: String) {
             text = text,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(24.dp),
         )
     }
 }
@@ -327,21 +393,16 @@ private fun EmptyHint(text: String) {
 private fun initials(s: String): String = s.split(" ").filter { it.isNotBlank() }
     .take(2).joinToString("") { it.first().uppercase() }.ifEmpty { "?" }
 
-/**
- * WhatsApp-style one-line preview.
- *  - Text: "<Sender>: <content>" for groups; bare content for DMs; "You: ..." when sender is me.
- *    (We can't reliably identify "me" without the current userId here, so we
- *     just use the sender's display_name; DMs show bare content, which is the
- *     canonical WhatsApp DM behavior since there are only two parties.)
- *  - Non-text: 📷 Photo / 🎥 Video / 📎 <file_name> / 🎙 Voice note.
- */
+// --- WhatsApp-style preview ---
+// Text: "<Sender>: <content>" for groups; bare content for DMs.
+// Non-text types get the canonical WA emoji label.
 private fun buildPreview(message: ChatMessage?, groupContext: Boolean): String {
     if (message == null) return ""
     val body = when (message.type) {
         ChatMessageType.TEXT -> message.content.orEmpty()
         ChatMessageType.IMAGE -> "📷 Photo"
         ChatMessageType.VIDEO -> "🎥 Video"
-        ChatMessageType.VOICE -> "🎙 Voice note"
+        ChatMessageType.VOICE -> "🎙 Voice message"
         ChatMessageType.DOCUMENT -> "📎 ${message.file_name ?: "Document"}"
         ChatMessageType.SYSTEM -> message.content.orEmpty()
     }
@@ -349,3 +410,7 @@ private fun buildPreview(message: ChatMessage?, groupContext: Boolean): String {
     return if (groupContext && !senderName.isNullOrBlank() && message.type != ChatMessageType.SYSTEM)
         "$senderName: $body" else body
 }
+
+// The unread pill uses the WA green explicitly (not onPrimary from the scheme,
+// which would render white on white in our surface-as-top-bar setup).
+private val WaUnreadBadge = androidx.compose.ui.graphics.Color(0xFF25D366)

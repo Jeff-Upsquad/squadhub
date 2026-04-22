@@ -5,9 +5,9 @@
          owns the actual UI; this theme just sets the window background to
          avoid the default-white flash before the first Compose frame. -->
     <style name="Theme.SquadChat" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor" tools:targetApi="21">#FF075E54</item>
-        <item name="android:windowLightStatusBar" tools:targetApi="23">false</item>
-        <item name="android:windowBackground">#FFECE5DD</item>
+        <item name="android:statusBarColor" tools:targetApi="21">#FFFFFFFF</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="23">true</item>
+        <item name="android:windowBackground">#FFEFEAE2</item>
     </style>
 
     <!-- Splash theme inherits from the Splash Screen API base. AndroidManifest

@@ -8,24 +8,28 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -60,8 +64,6 @@ fun ChatScreen(
 
     val listState = rememberLazyListState()
 
-    // Mark-as-read debounced: fire whenever the newest message id changes
-    // (and the user is within the top-of-reverse-layout, i.e. looking at recent).
     LaunchedEffect(messages.lastOrNull()?.id, listState.firstVisibleItemIndex) {
         val newest = messages.lastOrNull()?.id
         if (newest != null && listState.firstVisibleItemIndex <= 1) {
@@ -69,8 +71,6 @@ fun ChatScreen(
         }
     }
 
-    // Pagination: when the user has scrolled near the earliest cached message,
-    // fetch another page. Reverse layout means "earliest = last item".
     val shouldLoadMore by remember {
         derivedStateOf {
             val layout = listState.layoutInfo
@@ -85,33 +85,9 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
-            )
+            ChatTopBar(title = title, onBack = onBack)
         },
-        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (ui.error != null) {
@@ -122,7 +98,12 @@ fun ChatScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background),
+            ) {
                 if (ui.loading && messages.isEmpty()) {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center),
@@ -160,6 +141,75 @@ fun ChatScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChatTopBar(title: String, onBack: () -> Unit) {
+    TopAppBar(
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Small avatar left of the title, WhatsApp-style.
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = title.firstOrNull()?.uppercase() ?: "?",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "tap for info",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+            }
+        },
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        },
+        actions = {
+            IconButton(onClick = { /* video call TBD */ }) {
+                Icon(Icons.Filled.Videocam, contentDescription = "Video call")
+            }
+            IconButton(onClick = { /* voice call TBD */ }) {
+                Icon(Icons.Filled.Call, contentDescription = "Voice call")
+            }
+            IconButton(onClick = { /* overflow TBD */ }) {
+                Icon(Icons.Filled.MoreVert, contentDescription = "More")
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+    )
+}
+
 @Composable
 private fun MessageList(
     messages: List<ChatMessage>,
@@ -167,38 +217,33 @@ private fun MessageList(
     currentUserId: String?,
     listState: androidx.compose.foundation.lazy.LazyListState,
 ) {
-    // The DAO returns messages chronologically ascending. Reverse-layout draws
-    // them bottom-up, so we iterate in reverse and emit items as we go.
     val reversed = remember(messages) { messages.reversed() }
 
     LazyColumn(
         state = listState,
         reverseLayout = true,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().padding(vertical = 4.dp),
         verticalArrangement = Arrangement.Top,
     ) {
         reversed.forEachIndexed { idx, msg ->
             val nextNewer = reversed.getOrNull(idx - 1)
             val previousOlder = reversed.getOrNull(idx + 1)
             val fromMe = msg.sender_id != null && msg.sender_id == currentUserId
-            val showName = isGroup && !fromMe && !samesender(msg, nextNewer)
+            val showName = isGroup && !fromMe && !sameSender(msg, nextNewer)
 
             item(key = msg.id) {
                 MessageBubble(message = msg, fromMe = fromMe, showSenderName = showName)
             }
-            // Day header sits between the older message and the newer one.
             if (!sameDay(previousOlder, msg)) {
                 item(key = "day:${dayKey(msg.created_at)}") {
-                    com.squadhub.chat.ui.chat.DayHeader(
-                        label = formatDayHeader(msg.created_at),
-                    )
+                    DayHeader(label = formatDayHeader(msg.created_at))
                 }
             }
         }
     }
 }
 
-private fun samesender(a: ChatMessage, b: ChatMessage?): Boolean =
+private fun sameSender(a: ChatMessage, b: ChatMessage?): Boolean =
     b != null && a.sender_id != null && a.sender_id == b.sender_id
 
 private fun sameDay(a: ChatMessage?, b: ChatMessage?): Boolean {
@@ -217,62 +262,83 @@ private fun Composer(
     onChange: (String) -> Unit,
     onSend: () -> Unit,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
+    // Classic WhatsApp composer: rounded input pill on a slightly-tinted
+    // background strip, with a round green send button to the right.
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 6.dp, vertical = 6.dp),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-        ) {
-            Box(
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
                 modifier = Modifier
                     .weight(1f)
-                    .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                BasicTextField(
-                    value = draft,
-                    onValueChange = onChange,
-                    textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
-                    modifier = Modifier.fillMaxWidth(),
-                    decorationBox = { inner ->
-                        if (draft.isEmpty()) {
-                            Text(
-                                "Message",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        inner()
-                    },
-                )
+                IconButton(onClick = { /* emoji TBD */ }, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        Icons.Filled.EmojiEmotions,
+                        contentDescription = "Emoji",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Box(modifier = Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                    BasicTextField(
+                        value = draft,
+                        onValueChange = onChange,
+                        textStyle = TextStyle(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = androidx.compose.ui.unit.TextUnit(16f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        decorationBox = { inner ->
+                            if (draft.isEmpty()) {
+                                Text(
+                                    "Message",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            inner()
+                        },
+                    )
+                }
+                IconButton(onClick = { /* attach TBD */ }, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        Icons.Filled.AttachFile,
+                        contentDescription = "Attach",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             Spacer(Modifier.width(8.dp))
-            IconButton(
-                onClick = onSend,
-                enabled = draft.isNotBlank() && !sending,
+            Box(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .background(
-                        if (draft.isNotBlank() && !sending)
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-                    ),
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center,
             ) {
                 if (sending) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(22.dp),
                         strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                 } else {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                    )
+                    IconButton(
+                        onClick = onSend,
+                        enabled = draft.isNotBlank(),
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
                 }
             }
         }
