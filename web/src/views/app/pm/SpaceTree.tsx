@@ -332,8 +332,9 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
 
 // ---- Space item ----
 function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
-  const { activeSpaceId, setActiveSpace, setActiveList } = usePMStore();
+  const { activeSpaceId, activeSpacePageId, setActiveSpace, setActiveSpacePage } = usePMStore();
   const isActive = activeSpaceId === spaceId;
+  const isSpacePageActive = activeSpacePageId === spaceId;
   const [open, setOpen] = useState(false);
   const [createModal, setCreateModal] = useState<'folder' | 'list' | null>(null);
   const [showMembers, setShowMembers] = useState(false);
@@ -348,29 +349,24 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
   const canAddItems = canAtLeast(myAccess, 'member');
   const isManager = canAtLeast(myAccess, 'manager');
 
-  const handleSelect = () => {
+  const handleRowClick = () => {
     setActiveSpace(spaceId);
+    setActiveSpacePage(spaceId);
     setOpen(true);
-    if (space) {
-      const firstList = space.folders?.[0]?.lists?.[0] || space.lists?.[0];
-      if (firstList) setActiveList(firstList.id);
-    }
   };
 
   return (
     <div className="mb-0.5">
       {/* Space row */}
       <div
-        className={`group flex items-center rounded-md py-[6px] pl-3 pr-2 transition ${
-          isActive && open
+        onClick={handleRowClick}
+        className={`group flex cursor-pointer items-center rounded-md py-[6px] pl-3 pr-2 transition ${
+          isSpacePageActive || (isActive && open)
             ? 'bg-white shadow-[0_1px_3px_rgba(15,23,43,0.08),0_0_0_1px_rgba(15,23,43,0.06)]'
             : 'hover:bg-[#F5F5F5]'
         }`}
       >
-        <button
-          onClick={() => { setOpen(!open); if (!open) handleSelect(); }}
-          className="flex flex-1 items-center gap-2 text-left"
-        >
+        <div className="flex flex-1 items-center gap-2 text-left">
           {/* Color badge */}
           <span
             className="flex h-[22px] w-[22px] items-center justify-center rounded text-[11px] font-bold text-white"
@@ -378,10 +374,10 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
           >
             {space?.name?.[0]?.toUpperCase() || 'S'}
           </span>
-          <span className={`truncate text-[13px] ${isActive && open ? 'font-semibold text-[#0F172B]' : 'font-medium text-[#444444]'}`}>
+          <span className={`truncate text-[13px] ${isSpacePageActive || (isActive && open) ? 'font-semibold text-[#0F172B]' : 'font-medium text-[#444444]'}`}>
             {space?.name || 'Loading...'}
           </span>
-        </button>
+        </div>
 
         {space?.is_locked && <AdminLockIcon />}
         {space?.is_private && !space?.is_locked && <LockIcon />}
@@ -409,7 +405,7 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
         </div>
 
         <button
-          onClick={() => { setOpen(!open); if (!open) handleSelect(); }}
+          onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
           className="ml-1 flex items-center"
           aria-label={open ? 'Collapse space' : 'Expand space'}
         >
