@@ -9,6 +9,7 @@ const registerSchema = z.object({
   token: z.string().min(1),
   app_variant: z.enum(['clients', 'team']),
   platform: z.enum(['ios', 'android']),
+  provider: z.enum(['expo', 'fcm']).optional().default('expo'),
 });
 
 const unregisterSchema = z.object({
@@ -28,6 +29,7 @@ router.post('/register', requireAuth, async (req: Request, res: Response) => {
           token: body.token,
           app_variant: body.app_variant,
           platform: body.platform,
+          provider: body.provider,
           last_seen_at: new Date().toISOString(),
         },
         { onConflict: 'user_id,token' },

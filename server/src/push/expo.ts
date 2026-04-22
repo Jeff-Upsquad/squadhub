@@ -12,14 +12,16 @@ export interface ChatPushPayload {
   appVariant: ChatAppVariant;
 }
 
-// Send a push to every active token the user has for this app variant.
-// Prunes tokens that return DeviceNotRegistered.
-export async function sendChatPush(userId: string, payload: ChatPushPayload): Promise<void> {
+// Send a push to every Expo-provider token the user has for this app variant.
+// Prunes tokens that Expo reports as DeviceNotRegistered.
+// Tokens with `provider = 'fcm'` are handled by ./fcm.ts.
+export async function sendExpoChatPush(userId: string, payload: ChatPushPayload): Promise<void> {
   const { data: tokens } = await supabaseAdmin
     .from('chat_push_tokens')
     .select('id, token, platform')
     .eq('user_id', userId)
-    .eq('app_variant', payload.appVariant);
+    .eq('app_variant', payload.appVariant)
+    .eq('provider', 'expo');
 
   if (!tokens || tokens.length === 0) return;
 
@@ -31,8 +33,7 @@ export async function sendChatPush(userId: string, payload: ChatPushPayload): Pr
 
   for (const row of tokens) {
     if (!Expo.isExpoPushToken(row.token)) {
-      // Invalid token format — drop the row.
-      await supabaseAdmin.from('chat_push_tokens').delete().eq('id', row.id);
+      console.warn('[chat push] skipping malformed expo token', row.id);
       continue;
     }
     tokenRowByToken.set(row.token, { id: row.id });
@@ -60,7 +61,6 @@ export async function sendChatPush(userId: string, payload: ChatPushPayload): Pr
     }
   }
 
-  // Prune tokens that errored with DeviceNotRegistered.
   const idsToDelete: string[] = [];
   tickets.forEach((t, i) => {
     if (t.status === 'error' && t.details?.error === 'DeviceNotRegistered') {
@@ -75,8 +75,6 @@ export async function sendChatPush(userId: string, payload: ChatPushPayload): Pr
   }
 }
 
-// Handle incoming receipts periodically if we ever add a worker; for v1 we
-// just log non-fatal failures at send time and trust Expo to retry.
 export async function checkChatPushReceipts(receiptIds: string[]): Promise<Record<string, ExpoPushReceipt>> {
   const receipts: Record<string, ExpoPushReceipt> = {};
   const chunks = expo.chunkPushNotificationReceiptIds(receiptIds);

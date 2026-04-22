@@ -1388,12 +1388,15 @@ export interface ChatMessage {
   local_state?: ChatMessageLocalState;
 }
 
+export type ChatPushProvider = 'expo' | 'fcm';
+
 export interface ChatPushToken {
   id: string;
   user_id: string;
   token: string;
   app_variant: ChatAppVariant;
   platform: 'ios' | 'android';
+  provider: ChatPushProvider;
   last_seen_at: string;
   created_at: string;
 }
@@ -1455,6 +1458,7 @@ export interface ChatPushRegisterRequest {
   token: string;
   app_variant: ChatAppVariant;
   platform: 'ios' | 'android';
+  provider?: ChatPushProvider;
 }
 
 export interface ChatCreateDmRequest {
