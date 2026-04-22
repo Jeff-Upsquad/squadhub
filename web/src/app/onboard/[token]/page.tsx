@@ -249,6 +249,10 @@ export default function OnboardTokenPage() {
             <input type="text" required placeholder="Full name" value={form.contact_person} onChange={(e) => update('contact_person', e.target.value)} className="input-field" />
           </Field>
 
+          <Field label="Email" required helper="You'll use this to access our platform (can be changed later)">
+            <input type="email" required placeholder="email@company.com" value={form.email} onChange={(e) => update('email', e.target.value)} className="input-field" />
+          </Field>
+
           <Field label="Designation of Contact Person">
             <input type="text" placeholder="e.g. Marketing Head, CEO" value={form.designation} onChange={(e) => update('designation', e.target.value)} className="input-field" />
           </Field>
@@ -263,10 +267,6 @@ export default function OnboardTokenPage() {
               <div style={{ width: 1, height: 24, background: '#DDDDDD', flexShrink: 0 }} />
               <input type="tel" required placeholder="Phone number" value={form.contact_number} onChange={(e) => update('contact_number', e.target.value)} style={{ flex: 1, border: 'none', outline: 'none', padding: '10px 12px', fontSize: 16, color: '#222', background: 'transparent' }} />
             </div>
-          </Field>
-
-          <Field label="Official Email" required>
-            <input type="email" required placeholder="email@company.com" value={form.email} onChange={(e) => update('email', e.target.value)} className="input-field" />
           </Field>
 
           <Field label="Business Address" required helper="For billing purpose">

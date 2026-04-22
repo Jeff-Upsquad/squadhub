@@ -70,6 +70,18 @@
       "port": 3005
     },
     {
+      "name": "Home Heading Single Line Worktree",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-home-heading-single-line/web && PORT=3006 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3006"],
+      "port": 3006
+    },
+    {
+      "name": "Lead Email Move Worktree",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-lead-email-move/web && PORT=3008 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3008"],
+      "port": 3008
+    },
+    {
       "name": "Universal New Task Button Worktree",
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/universal-new-task-button/web && PORT=3007 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3007"],

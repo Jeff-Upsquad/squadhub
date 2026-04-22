@@ -51,7 +51,7 @@ export default function DashboardHome() {
         <div className="dash-hero">
           <div>
             <div className="eyebrow" style={{ marginBottom: 10 }}>{greeting}, {firstName}</div>
-            <h1 className="greeting">Three things matter<br /><em>today.</em></h1>
+            <h1 className="greeting">Three things matter <em>today.</em></h1>
             <div className="sub">You have 4 meetings, 3 client-facing tasks, and 2 threads awaiting your reply.</div>
           </div>
           <div className="date">
