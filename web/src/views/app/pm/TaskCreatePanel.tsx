@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCreateTask } from '../../../hooks/useTasks';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
+import { useSpace } from '../../../hooks/useSpaces';
 import { useAuthStore } from '../../../stores/authStore';
 import type { SpaceStatus, Task, TaskPriority } from '@squadhub/shared';
 import AssigneePicker from './AssigneePicker';
 import DatePicker from './DatePicker';
 import EmergencyConfirm from './EmergencyConfirm';
+import ListPickerCombobox from './ListPickerCombobox';
 
 /* -------------------------------------------------------------------------- */
 /* Helpers (duplicated from TaskDetailPanel — keep in sync if they change)    */
@@ -194,23 +196,67 @@ export default function TaskCreatePanel({
   spaceColor,
   onClose,
   onCreated,
+  pickable = false,
+  workspaceId,
+  initialSpaceId,
+  initialListId,
 }: {
-  statuses: SpaceStatus[];
-  listId: string;
+  statuses?: SpaceStatus[];
+  listId?: string;
   /** Status category to pre-select (e.g. 'todo'). Falls back to first status. */
   defaultStatus?: string;
   spaceName?: string;
   spaceColor?: string | null;
   onClose: () => void;
   onCreated?: (newTask: Task) => void;
+  /** When true, render space/folder/list pickers at the top and derive listId + statuses from selection. */
+  pickable?: boolean;
+  workspaceId?: string;
+  initialSpaceId?: string | null;
+  initialListId?: string | null;
 }) {
-  const createTask = useCreateTask(listId);
+  // Picker-mode state — spaceId is derived from the selected list (combobox hands both back)
+  const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(initialSpaceId ?? null);
+  const [selectedListId, setSelectedListId] = useState<string | null>(initialListId ?? null);
+
+  // Load the selected space for statuses + selected list metadata (name/color)
+  const { data: spaceData } = useSpace(pickable ? selectedSpaceId : null);
+
+  // Selected list info (for the combobox button label)
+  const selectedListInfo = useMemo(() => {
+    if (!pickable || !selectedListId || !spaceData) return null;
+    const direct = (spaceData.lists || []).find((l) => l.id === selectedListId);
+    if (direct) return { name: direct.name };
+    for (const f of spaceData.folders || []) {
+      const inFolder = (f.lists || []).find((l) => l.id === selectedListId);
+      if (inFolder) return { name: inFolder.name };
+    }
+    return null;
+  }, [pickable, selectedListId, spaceData]);
+
+  // Derived effective values — switch between prop-fed (fixed mode) and state-fed (picker mode)
+  const effectiveListId = pickable ? selectedListId : (listId ?? null);
+  const effectiveStatuses = useMemo<SpaceStatus[]>(
+    () => (pickable ? (spaceData?.statuses || []) : (statuses || [])),
+    [pickable, spaceData?.statuses, statuses],
+  );
+  const effectiveSpaceName = pickable ? spaceData?.name : spaceName;
+  const effectiveSpaceColor = pickable ? (spaceData?.color ?? null) : (spaceColor ?? null);
+
+  const createTask = useCreateTask(effectiveListId);
   const { data: taskTypes } = useTaskTypes();
   const currentUser = useAuthStore((s) => s.user);
 
-  const initialStatus = defaultStatus || statuses[0]?.category || 'todo';
+  const initialStatus = defaultStatus || effectiveStatuses[0]?.category || 'todo';
   const [draft, setDraft] = useState<Draft>(() => makeDraft(initialStatus));
   const [mounted, setMounted] = useState(false);
+
+  // When statuses load (picker mode) or space changes, reset draft.status to a valid one
+  useEffect(() => {
+    if (!effectiveStatuses.length) return;
+    if (effectiveStatuses.some((s) => s.category === draft.status)) return;
+    setDraft((d) => ({ ...d, status: effectiveStatuses[0].category }));
+  }, [effectiveStatuses, draft.status]);
 
   // Popover / menu anchors
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
@@ -257,8 +303,8 @@ export default function TaskCreatePanel({
   }, [onClose]);
 
   const currentStatus = useMemo(
-    () => statuses.find((s) => s.category === draft.status),
-    [statuses, draft.status],
+    () => effectiveStatuses.find((s) => s.category === draft.status),
+    [effectiveStatuses, draft.status],
   );
   const currentType = useMemo(
     () => taskTypes?.find((t) => t.id === draft.task_type_id) || null,
@@ -267,11 +313,11 @@ export default function TaskCreatePanel({
   const priorityLabel = PRIORITY_LABEL[draft.priority];
   const dueInfo = formatDueRelative(draft.due_date);
 
-  const canSubmit = draft.title.trim().length > 0 && !createTask.isPending;
+  const canSubmit = draft.title.trim().length > 0 && !!effectiveListId && !createTask.isPending;
 
   const handleSubmit = () => {
     const title = draft.title.trim();
-    if (!title) return;
+    if (!title || !effectiveListId) return;
     createTask.mutate(
       {
         title,
@@ -283,7 +329,7 @@ export default function TaskCreatePanel({
         start_date: draft.start_date || undefined,
         due_date: draft.due_date || undefined,
         task_type_id: draft.task_type_id || undefined,
-        list_id: listId,
+        list_id: effectiveListId,
       },
       {
         onSuccess: (newTask: Task) => {
@@ -336,12 +382,12 @@ export default function TaskCreatePanel({
               <path d="M13 17l5-5-5-5M6 17l5-5-5-5" />
             </svg>
           </button>
-          {spaceName && (
+          {effectiveSpaceName && (
             <span className="td-host-chip td-focus" tabIndex={0}>
-              <span className="logo" style={{ background: spaceColor || 'var(--sh-ink)' }}>
-                {initialOf(spaceName)[0]}
+              <span className="logo" style={{ background: effectiveSpaceColor || 'var(--sh-ink)' }}>
+                {initialOf(effectiveSpaceName)[0]}
               </span>
-              <span>{spaceName}</span>
+              <span>{effectiveSpaceName}</span>
               <svg className="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M9 5l7 7-7 7" />
               </svg>
@@ -368,6 +414,23 @@ export default function TaskCreatePanel({
 
         {/* Scrollable body */}
         <div className="td-scroll flex-1 overflow-y-auto px-6 pt-3 pb-8">
+          {/* List picker combobox (picker mode only) */}
+          {pickable && workspaceId && (
+            <div className="mb-4">
+              <ListPickerCombobox
+                workspaceId={workspaceId}
+                selectedListId={selectedListId}
+                selectedListName={selectedListInfo?.name ?? null}
+                selectedSpaceColor={effectiveSpaceColor}
+                initialSpaceId={selectedSpaceId}
+                onChange={(listId, spaceId) => {
+                  setSelectedListId(listId);
+                  setSelectedSpaceId(spaceId);
+                }}
+              />
+            </div>
+          )}
+
           {/* Title row */}
           <div className="flex items-start gap-3 mb-3">
             <span
@@ -502,7 +565,7 @@ export default function TaskCreatePanel({
                         className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-xl border shadow-lg"
                         style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
                       >
-                        {statuses.map((s) => (
+                        {effectiveStatuses.map((s) => (
                           <button
                             key={s.id}
                             onClick={() => {
@@ -550,17 +613,17 @@ export default function TaskCreatePanel({
             </div>
 
             {/* Space (read-only) */}
-            {spaceName && (
+            {effectiveSpaceName && (
               <div className="td-settings-row">
                 <span className="k">{META_ICONS.Space}Space</span>
                 <span className="v">
                   <span
                     className="td-space-emblem-xs"
-                    style={{ background: spaceColor || 'var(--sh-ink)' }}
+                    style={{ background: effectiveSpaceColor || 'var(--sh-ink)' }}
                   >
-                    {initialOf(spaceName)[0]}
+                    {initialOf(effectiveSpaceName)[0]}
                   </span>
-                  <span>{spaceName}</span>
+                  <span>{effectiveSpaceName}</span>
                 </span>
               </div>
             )}
@@ -678,9 +741,9 @@ export default function TaskCreatePanel({
         </div>
       </aside>
 
-      {assigneePickerOpen && (
+      {assigneePickerOpen && effectiveListId && (
         <AssigneePicker
-          listId={listId}
+          listId={effectiveListId}
           currentAssigneeIds={draft.assignee_ids}
           anchorRect={assigneeAnchorRect}
           onChange={(ids) => setDraft((d) => ({ ...d, assignee_ids: ids }))}

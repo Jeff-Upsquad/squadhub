@@ -10,6 +10,7 @@ import type { Workspace, Channel, RoleHomeView } from '@squadhub/shared';
 import { connectSocket, disconnectSocket } from '../services/socket';
 import ChatPanel from '../views/app/chat/ChatPanel';
 import CreateChannelModal from '../views/app/chat/CreateChannelModal';
+import GlobalCreateTaskModal from '../views/app/pm/GlobalCreateTaskModal';
 import ListPage from '../views/app/pm/ListPage';
 import HomeSidebar from '../views/app/HomeSidebar';
 import SettingsSlider from '../components/SettingsSlider';
@@ -160,6 +161,7 @@ export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
+  const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
 
   // Auto-switch to tasks view when a list is selected
   useEffect(() => {
@@ -358,7 +360,19 @@ export default function MainLayout() {
       )}
 
       {/* Main content area */}
-      <div className="flex flex-1 flex-col overflow-hidden bg-surface">
+      <div className="relative flex flex-1 flex-col overflow-hidden bg-surface">
+        {/* Universal "New task" button — visible in all views */}
+        <button
+          type="button"
+          onClick={() => setShowCreateTaskModal(true)}
+          title="New task"
+          aria-label="Create new task"
+          className="absolute right-3 top-2 z-40 grid h-8 w-8 place-items-center rounded-[9px] border border-transparent text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition"
+        >
+          <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
         <EmergencyBanner />
         <ActiveTimer />
         {activeSection === 'learning' ? (
@@ -511,6 +525,11 @@ export default function MainLayout() {
           workspaceId={currentWorkspace.id}
           onClose={() => setShowCreateChannel(false)}
         />
+      )}
+
+      {/* Universal create task modal — opens from the global + button */}
+      {showCreateTaskModal && (
+        <GlobalCreateTaskModal onClose={() => setShowCreateTaskModal(false)} />
       )}
     </div>
   );
