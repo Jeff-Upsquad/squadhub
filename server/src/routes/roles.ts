@@ -10,15 +10,19 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
-const permissionsSchema = z.object({
-  can_manage_channels: z.boolean(),
-  can_delete_messages: z.boolean(),
-  can_manage_members: z.boolean(),
-  can_manage_tasks: z.boolean(),
-  can_manage_roles: z.boolean(),
-  can_view_admin_panel: z.boolean(),
-  can_manage_workspace: z.boolean(),
-});
+const permissionsSchema = z
+  .object({
+    can_manage_channels: z.boolean().optional(),
+    can_delete_messages: z.boolean().optional(),
+    can_manage_members: z.boolean().optional(),
+    can_manage_tasks: z.boolean().optional(),
+    can_manage_roles: z.boolean().optional(),
+    can_view_admin_panel: z.boolean().optional(),
+    can_manage_workspace: z.boolean().optional(),
+    can_edit_time_logs: z.boolean().optional(),
+    time_edit_window_hours: z.number().int().min(0).max(720).optional(),
+  })
+  .passthrough();
 
 const homeViewSchema = z.enum(['member', 'user', 'guest']);
 

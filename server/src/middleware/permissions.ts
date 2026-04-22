@@ -20,11 +20,19 @@ const ALL_FALSE_PERMISSIONS: RolePermissions = {
   can_manage_roles: false,
   can_view_admin_panel: false,
   can_manage_workspace: false,
+  can_edit_time_logs: false,
+  time_edit_window_hours: 0,
 };
 
-const ALL_TRUE_PERMISSIONS: RolePermissions = Object.fromEntries(
-  Object.keys(ALL_FALSE_PERMISSIONS).map((k) => [k, true]),
-) as unknown as RolePermissions;
+// Boolean keys only — excludes numeric fields like time_edit_window_hours.
+const BOOLEAN_PERMISSION_KEYS = Object.entries(ALL_FALSE_PERMISSIONS)
+  .filter(([, v]) => typeof v === 'boolean')
+  .map(([k]) => k);
+
+const ALL_TRUE_PERMISSIONS: RolePermissions = {
+  ...Object.fromEntries(BOOLEAN_PERMISSION_KEYS.map((k) => [k, true])),
+  time_edit_window_hours: 0, // unlimited
+} as unknown as RolePermissions;
 
 // Access level hierarchy (higher index = more permission)
 const ACCESS_LEVELS: AccessLevel[] = ['viewer', 'commenter', 'member', 'manager'];
@@ -92,12 +100,55 @@ export async function getUserPermissions(userId: string): Promise<{
 
   const effective: RolePermissions = { ...ALL_FALSE_PERMISSIONS };
   for (const perms of permSets) {
-    for (const key of Object.keys(ALL_FALSE_PERMISSIONS)) {
+    for (const key of BOOLEAN_PERMISSION_KEYS) {
       if (perms[key] === true) (effective as any)[key] = true;
     }
   }
 
   return { permissions: effective, workspaceRole };
+}
+
+/**
+ * Fetch permissions derived from the user's PRIMARY role only (no union with
+ * secondary roles). Used for settings that must not be unlocked by a secondary
+ * role — e.g. editing time logs.
+ *
+ * Admins/super_admins still get all-true, matching the broader bypass pattern.
+ */
+export async function getPrimaryRolePermissions(userId: string): Promise<RolePermissions> {
+  const { data: membership } = await supabaseAdmin
+    .from('workspace_members')
+    .select('role, role_id, roles(permissions)')
+    .eq('user_id', userId)
+    .single();
+
+  if (!membership) return { ...ALL_FALSE_PERMISSIONS };
+
+  const workspaceRole = (membership as any).role as string;
+  if (workspaceRole === 'admin' || workspaceRole === 'super_admin') {
+    return { ...ALL_TRUE_PERMISSIONS };
+  }
+
+  let primary = (membership as any).roles?.permissions as Record<string, unknown> | undefined;
+  if (!primary) {
+    const { data: defaultRole } = await supabaseAdmin
+      .from('roles')
+      .select('permissions')
+      .eq('is_default', true)
+      .single();
+    primary = defaultRole?.permissions as Record<string, unknown> | undefined;
+  }
+
+  const out: RolePermissions = { ...ALL_FALSE_PERMISSIONS };
+  if (primary) {
+    for (const key of BOOLEAN_PERMISSION_KEYS) {
+      if (primary[key] === true) (out as any)[key] = true;
+    }
+    if (typeof primary.time_edit_window_hours === 'number') {
+      out.time_edit_window_hours = primary.time_edit_window_hours;
+    }
+  }
+  return out;
 }
 
 /**

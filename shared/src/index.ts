@@ -378,7 +378,10 @@ export interface RolePermissions {
   can_manage_roles: boolean;
   can_view_admin_panel: boolean;
   can_manage_workspace: boolean;
-  [key: string]: boolean;
+  // Time Logs — resolved against the PRIMARY role only
+  can_edit_time_logs: boolean;
+  time_edit_window_hours: number; // 0 = unlimited when toggle is on
+  [key: string]: boolean | number;
 }
 
 // ---- Notifications ----
@@ -619,6 +622,11 @@ export interface TimeStatsResponse {
   active_timer: TimerSession | null;
   week_summaries: DailyTimeSummary[];
   office_timing?: OfficeTimingSummary | null;
+  today_sessions?: TimerSession[];
+  time_log_edit?: {
+    can_edit: boolean;
+    window_hours: number; // 0 = unlimited
+  };
 }
 
 export interface TeamTimerStatus {

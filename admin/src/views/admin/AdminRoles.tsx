@@ -72,6 +72,18 @@ const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    id: 'time_logs',
+    title: 'Time Logs',
+    icon: (
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6l4 2m5-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    permissions: [
+      { key: 'can_edit_time_logs', label: 'Edit Own Time Logs', description: "Edit or delete their own timer sessions (primary role only)" },
+    ],
+  },
+  {
     id: 'admin',
     title: 'Administration',
     icon: (
@@ -93,9 +105,10 @@ const PERMISSION_GROUPS: PermissionGroup[] = [
 
 const ALL_PERMISSION_KEYS = PERMISSION_GROUPS.flatMap((g) => g.permissions.map((p) => p.key));
 
-const DEFAULT_PERMISSIONS: RolePermissions = Object.fromEntries(
-  ALL_PERMISSION_KEYS.map((k) => [k, false]),
-) as unknown as RolePermissions;
+const DEFAULT_PERMISSIONS: RolePermissions = {
+  ...(Object.fromEntries(ALL_PERMISSION_KEYS.map((k) => [k, false])) as Record<string, boolean>),
+  time_edit_window_hours: 0,
+} as unknown as RolePermissions;
 
 const PRESET_COLORS = ['#22c55e', '#a855f7', '#3b82f6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#888888'];
 
@@ -125,16 +138,21 @@ function PermissionGroupPanel({
   onToggle,
   onSelectAll,
   onDeselectAll,
+  onNumberChange,
 }: {
   group: PermissionGroup;
   permissions: RolePermissions;
   onToggle: (key: string) => void;
   onSelectAll: (keys: string[]) => void;
   onDeselectAll: (keys: string[]) => void;
+  onNumberChange?: (key: string, value: number) => void;
 }) {
   const keys = group.permissions.map((p) => p.key);
   const enabledCount = keys.filter((k) => permissions[k]).length;
   const allEnabled = enabledCount === keys.length;
+  const isTimeLogs = group.id === 'time_logs';
+  const canEditTime = permissions.can_edit_time_logs === true;
+  const windowHours = typeof permissions.time_edit_window_hours === 'number' ? permissions.time_edit_window_hours : 0;
 
   return (
     <div className="rounded-lg border border-[#E2E8F0] bg-white">
@@ -166,6 +184,26 @@ function PermissionGroupPanel({
             <Toggle checked={!!permissions[perm.key]} onChange={() => onToggle(perm.key)} />
           </div>
         ))}
+        {isTimeLogs && (
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="mr-4">
+              <p className={`text-sm font-medium ${canEditTime ? 'text-[#0F172B]' : 'text-[#90A1B9]'}`}>Edit Window (hours)</p>
+              <p className="mt-0.5 text-xs text-[#90A1B9]">How long after a session ends it can still be edited. 0 = unlimited.</p>
+            </div>
+            <input
+              type="number"
+              min={0}
+              max={720}
+              value={windowHours}
+              disabled={!canEditTime}
+              onChange={(e) => {
+                const v = Math.max(0, Math.min(720, Number(e.target.value) || 0));
+                onNumberChange?.('time_edit_window_hours', v);
+              }}
+              className="w-20 rounded-md border border-[#E2E8F0] px-2 py-1 text-right text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none disabled:bg-[#F1F5F9] disabled:text-[#90A1B9]"
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -277,6 +315,10 @@ export default function AdminRoles() {
 
   const togglePermission = (key: string) => {
     setFormPermissions((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const setPermissionNumber = (key: string, value: number) => {
+    setFormPermissions((prev) => ({ ...prev, [key]: value }));
   };
 
   const selectAll = (keys: string[]) => {
@@ -523,6 +565,7 @@ export default function AdminRoles() {
                         onToggle={togglePermission}
                         onSelectAll={selectAll}
                         onDeselectAll={deselectAll}
+                        onNumberChange={setPermissionNumber}
                       />
                     ))}
                   </div>
