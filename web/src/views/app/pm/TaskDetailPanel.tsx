@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
-import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask } from '../../../hooks/useTasks';
+import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useUpdateTaskTimeTracked } from '../../../hooks/useTasks';
+import { useTimeStats } from '../../../hooks/useTimer';
+import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import {
   useChecklists,
@@ -154,7 +156,11 @@ export default function TaskDetailPanel({
   const { data: taskTypes } = useTaskTypes();
   const { data: checklists } = useChecklists(activeTaskId);
   const updateTask = useUpdateTask(listId);
+  const updateTaskTimeTracked = useUpdateTaskTimeTracked(listId);
   const deleteTask = useDeleteTask(listId);
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
+  const { data: timeStats } = useTimeStats({ workspaceId, context: 'default' });
+  const canEditTimeLogs = timeStats?.data?.time_log_edit?.can_edit === true;
   const createTask = useCreateTask(listId);
   const addComment = useAddComment(activeTaskId);
   const createChecklist = useCreateChecklist(activeTaskId);
@@ -170,6 +176,8 @@ export default function TaskDetailPanel({
   const [tab, setTab] = useState<'overview' | 'comments' | 'activity' | 'files'>('overview');
   const [estimateInput, setEstimateInput] = useState('');
   const [editingEstimate, setEditingEstimate] = useState(false);
+  const [loggedInput, setLoggedInput] = useState('');
+  const [editingLogged, setEditingLogged] = useState(false);
   const [timerElapsed, setTimerElapsed] = useState(0);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -792,12 +800,52 @@ export default function TaskDetailPanel({
                         </span>
                       </span>
                     )}
-                    {(task.time_tracked || isTimerForThisTask) ? (
-                      <span className="td-time-chip">
+                    {editingLogged ? (
+                      <input
+                        autoFocus
+                        value={loggedInput}
+                        onChange={(e) => setLoggedInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const mins = parseTimeInput(loggedInput);
+                            const seconds = mins !== null ? mins * 60 : 0;
+                            updateTaskTimeTracked.mutate({ id: task.id, time_tracked: seconds });
+                            setEditingLogged(false);
+                          }
+                          if (e.key === 'Escape') setEditingLogged(false);
+                        }}
+                        onBlur={() => {
+                          const mins = parseTimeInput(loggedInput);
+                          const seconds = mins !== null ? mins * 60 : 0;
+                          updateTaskTimeTracked.mutate({ id: task.id, time_tracked: seconds });
+                          setEditingLogged(false);
+                        }}
+                        placeholder="e.g. 1h 30m"
+                        className="text-[13.5px] bg-transparent border-b outline-none w-28"
+                        style={{ borderColor: 'var(--sh-ink)' }}
+                      />
+                    ) : (task.time_tracked || isTimerForThisTask) ? (
+                      <span
+                        onClick={canEditTimeLogs && !isTimerForThisTask ? () => {
+                          setEditingLogged(true);
+                          setLoggedInput(formatTracked(task.time_tracked) || '');
+                        } : undefined}
+                        className={canEditTimeLogs && !isTimerForThisTask ? 'td-time-chip cursor-pointer' : 'td-time-chip'}
+                        title={canEditTimeLogs && !isTimerForThisTask ? 'Click to edit logged time' : undefined}
+                      >
                         <span className="td-time-chip-label">Logged</span>
                         <span className="td-time-chip-value">
                           {formatTracked(isTimerForThisTask ? ((task.time_tracked || 0) + timerElapsed) : task.time_tracked) || '0m'}
                         </span>
+                      </span>
+                    ) : canEditTimeLogs ? (
+                      <span
+                        onClick={() => { setEditingLogged(true); setLoggedInput(''); }}
+                        className="td-time-chip cursor-pointer"
+                        title="Click to log time"
+                      >
+                        <span className="td-time-chip-label">Logged</span>
+                        <span className="td-time-chip-value"><span className="muted">—</span></span>
                       </span>
                     ) : null}
                   </span>
