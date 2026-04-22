@@ -120,6 +120,30 @@ async function hydrateLists<T extends { list_id: string }>(
   });
 }
 
+// Attach `parent_task: { id, title } | null` to each task so the frontend
+// can show parent context on subtask rows without a second round-trip.
+async function hydrateParents<T extends { parent_task_id: string | null }>(
+  tasks: T[],
+): Promise<(T & { parent_task: { id: string; title: string } | null })[]> {
+  const parentIds = Array.from(
+    new Set(tasks.map(t => t.parent_task_id).filter((id): id is string => !!id)),
+  );
+  if (parentIds.length === 0) {
+    return tasks.map(t => ({ ...t, parent_task: null }));
+  }
+  const { data: parents } = await supabaseAdmin
+    .from('tasks')
+    .select('id, title')
+    .in('id', parentIds);
+  const byId = new Map<string, { id: string; title: string }>(
+    (parents || []).map((p: any) => [p.id, { id: p.id, title: p.title }]),
+  );
+  return tasks.map(t => ({
+    ...t,
+    parent_task: t.parent_task_id ? byId.get(t.parent_task_id) || null : null,
+  }));
+}
+
 // GET /pm/task-types — task types the caller can use when creating a task.
 // Admins see every type. Non-admins get is_enabled types, with custom
 // (non-system) types gated by task_type_role_access or task_type_user_access.
@@ -274,8 +298,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     let query = supabaseAdmin
       .from('tasks')
       .select('*')
-      .contains('assignee_ids', [req.userId!])
-      .is('parent_task_id', null);
+      .contains('assignee_ids', [req.userId!]);
 
     if (!includeDone) {
       query = query.not('status', 'in', '(done,closed)');
@@ -288,7 +311,8 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     }
 
     const withAssignees = await hydrateAssignees(data || []);
-    const tasks = await hydrateLists(withAssignees);
+    const withLists = await hydrateLists(withAssignees);
+    const tasks = await hydrateParents(withLists);
 
     // Compute day boundaries in user's timezone
     const fmt = new Intl.DateTimeFormat('en-CA', {

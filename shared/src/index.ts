@@ -321,6 +321,7 @@ export interface Task {
   list?: { id: string; name: string } | null;
   folder?: { id: string; name: string } | null;
   space?: { id: string; name: string } | null;
+  parent_task?: { id: string; title: string } | null;
 }
 
 export interface TaskTag {
