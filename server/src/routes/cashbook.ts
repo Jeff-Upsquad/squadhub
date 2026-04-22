@@ -1203,7 +1203,7 @@ router.post('/sync', async (req: Request, res: Response) => {
 const presignSchema = z.object({
   filename: z.string().min(1).max(255),
   content_type: z.string().regex(/^image\/(jpeg|png|heic|heif|webp)$/),
-  entry_type: z.enum(['cash_entry', 'check_entry']),
+  entry_type: z.enum(['cash_entry', 'check_entry', 'expense_entry']),
 });
 
 // POST /cashbook/upload/presign
