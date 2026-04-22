@@ -176,7 +176,8 @@ export default function TaskDetailPanel({
   const [tab, setTab] = useState<'overview' | 'comments' | 'activity' | 'files'>('overview');
   const [estimateInput, setEstimateInput] = useState('');
   const [editingEstimate, setEditingEstimate] = useState(false);
-  const [loggedInput, setLoggedInput] = useState('');
+  const [loggedHours, setLoggedHours] = useState('');
+  const [loggedMinutes, setLoggedMinutes] = useState('');
   const [editingLogged, setEditingLogged] = useState(false);
   const [timerElapsed, setTimerElapsed] = useState(0);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
@@ -801,34 +802,64 @@ export default function TaskDetailPanel({
                       </span>
                     )}
                     {editingLogged ? (
-                      <input
-                        autoFocus
-                        value={loggedInput}
-                        onChange={(e) => setLoggedInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const mins = parseTimeInput(loggedInput);
-                            const seconds = mins !== null ? mins * 60 : 0;
-                            updateTaskTimeTracked.mutate({ id: task.id, time_tracked: seconds });
-                            setEditingLogged(false);
-                          }
-                          if (e.key === 'Escape') setEditingLogged(false);
-                        }}
-                        onBlur={() => {
-                          const mins = parseTimeInput(loggedInput);
-                          const seconds = mins !== null ? mins * 60 : 0;
+                      (() => {
+                        const commit = () => {
+                          const h = Math.max(0, Math.min(999, parseInt(loggedHours || '0', 10) || 0));
+                          const m = Math.max(0, Math.min(59, parseInt(loggedMinutes || '0', 10) || 0));
+                          const seconds = h * 3600 + m * 60;
                           updateTaskTimeTracked.mutate({ id: task.id, time_tracked: seconds });
                           setEditingLogged(false);
-                        }}
-                        placeholder="e.g. 1h 30m"
-                        className="text-[13.5px] bg-transparent border-b outline-none w-28"
-                        style={{ borderColor: 'var(--sh-ink)' }}
-                      />
+                        };
+                        return (
+                          <span
+                            className="td-time-chip"
+                            onBlur={(e) => {
+                              // Only commit if focus is leaving BOTH inputs
+                              if (!e.currentTarget.contains(e.relatedTarget as Node)) commit();
+                            }}
+                          >
+                            <span className="td-time-chip-label">Logged</span>
+                            <input
+                              autoFocus
+                              type="number"
+                              min={0}
+                              max={999}
+                              value={loggedHours}
+                              onChange={(e) => setLoggedHours(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') commit();
+                                if (e.key === 'Escape') setEditingLogged(false);
+                              }}
+                              placeholder="0"
+                              className="w-10 text-[13.5px] text-right bg-transparent border-b outline-none tabular-nums"
+                              style={{ borderColor: 'var(--sh-ink)' }}
+                            />
+                            <span className="text-[12px] text-[var(--sh-ink-3)]">h</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={59}
+                              value={loggedMinutes}
+                              onChange={(e) => setLoggedMinutes(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') commit();
+                                if (e.key === 'Escape') setEditingLogged(false);
+                              }}
+                              placeholder="0"
+                              className="w-10 text-[13.5px] text-right bg-transparent border-b outline-none tabular-nums"
+                              style={{ borderColor: 'var(--sh-ink)' }}
+                            />
+                            <span className="text-[12px] text-[var(--sh-ink-3)]">m</span>
+                          </span>
+                        );
+                      })()
                     ) : (task.time_tracked || isTimerForThisTask) ? (
                       <span
                         onClick={canEditTimeLogs && !isTimerForThisTask ? () => {
+                          const total = task.time_tracked || 0;
+                          setLoggedHours(String(Math.floor(total / 3600)));
+                          setLoggedMinutes(String(Math.floor((total % 3600) / 60)));
                           setEditingLogged(true);
-                          setLoggedInput(formatTracked(task.time_tracked) || '');
                         } : undefined}
                         className={canEditTimeLogs && !isTimerForThisTask ? 'td-time-chip cursor-pointer' : 'td-time-chip'}
                         title={canEditTimeLogs && !isTimerForThisTask ? 'Click to edit logged time' : undefined}
@@ -840,7 +871,7 @@ export default function TaskDetailPanel({
                       </span>
                     ) : canEditTimeLogs ? (
                       <span
-                        onClick={() => { setEditingLogged(true); setLoggedInput(''); }}
+                        onClick={() => { setLoggedHours(''); setLoggedMinutes(''); setEditingLogged(true); }}
                         className="td-time-chip cursor-pointer"
                         title="Click to log time"
                       >
