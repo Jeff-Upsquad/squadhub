@@ -1,141 +1,315 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import api from '../../services/api';
+import { usePMStore } from '../../stores/pmStore';
+import { useWorkspaceStore } from '../../stores/workspaceStore';
+import type { HomeView } from '../../layouts/MainLayout';
+import InboxTaskDetail from './inbox/InboxTaskDetail';
+import InboxMessageDetail from './inbox/InboxMessageDetail';
 
-type InboxItem = {
-  id: number;
-  group: 'Needs you' | 'FYI';
-  from: string;
-  ctx: string;
+type Notification = {
+  id: string;
+  user_id: string;
+  type:
+    | 'task_assigned'
+    | 'task_updated'
+    | 'task_completed'
+    | 'task_commented'
+    | 'task_due_soon'
+    | 'mention'
+    | 'message_mention'
+    | 'dm_received'
+    | 'reaction_added'
+    | 'lms_assigned'
+    | 'lms_updated';
+  reference_id: string;
+  reference_type: string;
+  actor_id: string | null;
   title: string;
-  snippet: string;
-  unread: boolean;
-  ava: string;
-  color: string;
-  tag: 'client' | 'ops' | 'design' | 'eng' | 'space';
+  body: string | null;
+  metadata: Record<string, any>;
+  is_read: boolean;
+  created_at: string;
+  actor: { id: string; display_name: string; email: string; avatar_url: string | null } | null;
 };
-
-const ITEMS: InboxItem[] = [
-  { id: 0, group: 'Needs you', from: 'Elena Boko', ctx: 'Arbor Co · comment', title: 'Pricing page v3 — ship blocker?', snippet: 'The revised pricing page works — can we ship it before Thursday? Our sales team is holding 4 demos on it.', unread: true, ava: 'EB', color: 'oklch(0.62 0.13 20)', tag: 'client' },
-  { id: 1, group: 'Needs you', from: 'Maya Hartwell', ctx: 'Q2 Launch · task', title: 'Q2 launch copy — sign-off needed', snippet: "Blocked on you. I've marked the three contentious lines in the doc. 2 min review tops.", unread: true, ava: 'MH', color: 'oklch(0.58 0.12 60)', tag: 'ops' },
-  { id: 2, group: 'Needs you', from: '#design-crit', ctx: 'mention', title: 'Leo mentioned you — new motion comps', snippet: '@arjun curious your take on option C — feels closer to the brief but Tomás prefers A.', unread: true, ava: '#', color: 'var(--sh-ink-3)', tag: 'design' },
-  { id: 3, group: 'FYI', from: 'Dev Krishnan', ctx: 'task status', title: 'Auth migration — phase 2 → In Review', snippet: 'Pushed the refactor. Tests passing. Ready for your review when convenient.', unread: true, ava: 'DK', color: 'oklch(0.6 0.13 150)', tag: 'eng' },
-  { id: 4, group: 'FYI', from: 'Nina Ito', ctx: 'Lumen · DM', title: 'MSA v3 attached', snippet: 'Legal signed off on our end. Small changes in §4 and §8.2 — tracked for you.', unread: false, ava: 'NI', color: 'oklch(0.62 0.12 100)', tag: 'client' },
-  { id: 5, group: 'FYI', from: 'Daily digest', ctx: 'summary', title: '7 updates across 3 spaces', snippet: 'Priya shipped payments refactor. Leo posted 6 comps. Tomás opened 2 motion prototypes.', unread: false, ava: '•', color: 'var(--sh-ink-3)', tag: 'space' },
-];
 
 type Filter = 'all' | 'unread' | 'mentions';
 
-export default function InboxView() {
-  const [activeId, setActiveId] = useState(0);
-  const [filter, setFilter] = useState<Filter>('all');
+const NEEDS_YOU = new Set<Notification['type']>(['task_assigned', 'mention', 'message_mention']);
 
-  const filtered = ITEMS.filter((it) => {
-    if (filter === 'unread') return it.unread;
-    if (filter === 'mentions') return it.ctx === 'mention';
-    return true;
+function isMention(t: Notification['type']) {
+  return t === 'mention' || t === 'message_mention';
+}
+
+function avatarFor(n: Notification): { initials: string; color: string } {
+  const name = n.actor?.display_name || 'Someone';
+  const initials = name
+    .split(' ')
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() || '?';
+  const seed = n.actor?.id || n.id;
+  const hue = Array.from(seed).reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
+  return { initials, color: `oklch(0.6 0.13 ${hue})` };
+}
+
+function ctxLabel(n: Notification): string {
+  switch (n.type) {
+    case 'task_assigned': return 'task';
+    case 'task_completed': return 'task done';
+    case 'task_commented': return 'comment';
+    case 'mention': return 'mention';
+    case 'message_mention': return 'mention';
+    case 'task_updated': return 'task update';
+    case 'task_due_soon': return 'due soon';
+    case 'dm_received': return 'DM';
+    case 'reaction_added': return 'reaction';
+    case 'lms_assigned': return 'learning';
+    case 'lms_updated': return 'learning';
+    default: return n.type;
+  }
+}
+
+function timeAgo(iso: string): string {
+  const then = new Date(iso).getTime();
+  const diff = Date.now() - then;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+export default function InboxView({
+  setHomeView,
+}: {
+  setHomeView?: (v: HomeView) => void;
+} = {}) {
+  const queryClient = useQueryClient();
+  const setActiveTask = usePMStore((s) => s.setActiveTask);
+  const setActiveChannel = useWorkspaceStore((s) => s.setActiveChannel);
+
+  const [filter, setFilter] = useState<Filter>('all');
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const { data: items = [], isLoading } = useQuery<Notification[]>({
+    queryKey: ['notifications', 'list'],
+    queryFn: async () => {
+      const res = await api.get('/notifications', { params: { limit: 100 } });
+      return res.data.data || [];
+    },
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 
-  const groups = filtered.reduce<Record<string, InboxItem[]>>((acc, it) => {
-    (acc[it.group] = acc[it.group] || []).push(it);
-    return acc;
-  }, {});
+  const markRead = useMutation({
+    mutationFn: async (id: string) => api.patch(`/notifications/${id}/read`),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['notifications', 'list'] });
+      const prev = queryClient.getQueryData<Notification[]>(['notifications', 'list']);
+      queryClient.setQueryData<Notification[]>(['notifications', 'list'], (old) =>
+        (old || []).map((n) => (n.id === id ? { ...n, is_read: true } : n)),
+      );
+      return { prev };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['notifications', 'list'], ctx.prev);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] });
+    },
+  });
 
-  const current = ITEMS.find((i) => i.id === activeId) || ITEMS[0];
+  const markAllRead = useMutation({
+    mutationFn: async () => api.post('/notifications/mark-all-read'),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['notifications', 'list'] });
+      const prev = queryClient.getQueryData<Notification[]>(['notifications', 'list']);
+      queryClient.setQueryData<Notification[]>(['notifications', 'list'], (old) =>
+        (old || []).map((n) => ({ ...n, is_read: true })),
+      );
+      return { prev };
+    },
+    onError: (_err, _v, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['notifications', 'list'], ctx.prev);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] });
+    },
+  });
+
+  const filtered = useMemo(() => {
+    return items.filter((it) => {
+      if (filter === 'unread') return !it.is_read;
+      if (filter === 'mentions') return isMention(it.type);
+      return true;
+    });
+  }, [items, filter]);
+
+  const groups = useMemo(() => {
+    const out: { needs: Notification[]; fyi: Notification[] } = { needs: [], fyi: [] };
+    for (const n of filtered) {
+      if (NEEDS_YOU.has(n.type)) out.needs.push(n);
+      else out.fyi.push(n);
+    }
+    return out;
+  }, [filtered]);
+
+  const current = items.find((n) => n.id === activeId) || filtered[0] || null;
+
+  const openSource = (n: Notification) => {
+    if (n.reference_type === 'task' && n.metadata?.task_id) {
+      setActiveTask(n.metadata.task_id as string);
+    } else if ((n.reference_type === 'message' || n.reference_type === 'chat_message') && n.metadata?.channel_id) {
+      setActiveChannel(n.metadata.channel_id as string);
+      setHomeView?.('chat');
+    }
+  };
+
+  const onRowClick = (n: Notification) => {
+    setActiveId(n.id);
+    if (!n.is_read) markRead.mutate(n.id);
+    openSource(n);
+  };
+
+  const unreadCount = items.filter((n) => !n.is_read).length;
 
   return (
     <div className="sh-view inbox-view">
-      {/* List */}
       <div className="inbox-list">
         <div className="inbox-filter">
           <div className="pill" data-active={filter === 'all'} onClick={() => setFilter('all')}>All</div>
-          <div className="pill" data-active={filter === 'unread'} onClick={() => setFilter('unread')}>Unread</div>
+          <div className="pill" data-active={filter === 'unread'} onClick={() => setFilter('unread')}>
+            Unread{unreadCount > 0 ? ` · ${unreadCount}` : ''}
+          </div>
           <div className="pill" data-active={filter === 'mentions'} onClick={() => setFilter('mentions')}>Mentions</div>
           <div style={{ flex: 1 }} />
-          <div className="pill" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M3 5h18l-7 9v5l-4 2v-7z" /></svg>
-            Filters
-          </div>
+          <button
+            type="button"
+            className="pill"
+            disabled={unreadCount === 0 || markAllRead.isPending}
+            onClick={() => markAllRead.mutate()}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, opacity: unreadCount === 0 ? 0.5 : 1, cursor: unreadCount === 0 ? 'default' : 'pointer' }}
+          >
+            <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="m5 12 5 5L20 7" />
+            </svg>
+            Mark all read
+          </button>
         </div>
-        {Object.entries(groups).map(([g, arr]) => (
-          <div key={g}>
-            <div className="inbox-group-hd">{g} · {arr.length}</div>
-            {arr.map((it) => (
-              <div
-                key={it.id}
-                className="ib-item"
-                data-unread={it.unread}
-                data-active={activeId === it.id}
-                onClick={() => setActiveId(it.id)}
-              >
-                <div className="line1">
-                  <div className="ava" style={{ width: 20, height: 20, borderRadius: '50%', background: it.color, fontSize: 9, fontWeight: 600 }}>{it.ava}</div>
-                  <span className="ib-from">{it.from}</span>
-                  <span className="ib-ctx">{it.ctx}</span>
-                </div>
-                <div className="ib-title">{it.title}</div>
-                <div className="ib-snip">{it.snippet}</div>
-                <div className="ib-meta">
-                  <span className={`tag ${it.tag}`}>{it.ctx.split(' ')[0]}</span>
-                </div>
-              </div>
-            ))}
+
+        {isLoading && filtered.length === 0 ? (
+          <div style={{ padding: 16, fontSize: 13, color: 'var(--sh-ink-3)' }}>Loading…</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: 24, fontSize: 13, color: 'var(--sh-ink-3)' }}>
+            {filter === 'unread' ? 'You\u2019re all caught up.' : filter === 'mentions' ? 'No mentions yet.' : 'No notifications yet.'}
           </div>
-        ))}
+        ) : (
+          <>
+            {groups.needs.length > 0 && (
+              <div>
+                <div className="inbox-group-hd">Needs you · {groups.needs.length}</div>
+                {groups.needs.map((n) => (
+                  <NotifRow key={n.id} n={n} active={current?.id === n.id} onClick={() => onRowClick(n)} />
+                ))}
+              </div>
+            )}
+            {groups.fyi.length > 0 && (
+              <div>
+                <div className="inbox-group-hd">FYI · {groups.fyi.length}</div>
+                {groups.fyi.map((n) => (
+                  <NotifRow key={n.id} n={n} active={current?.id === n.id} onClick={() => onRowClick(n)} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
-      {/* Detail */}
       <div className="inbox-detail">
-        <div className="detail-head">
-          <div className="ava" style={{ width: 40, height: 40, borderRadius: '50%', background: current.color, fontWeight: 600 }}>{current.ava}</div>
-          <div style={{ flex: 1 }}>
-            <h1>{current.title}</h1>
-            <div style={{ fontSize: 12, color: 'var(--sh-ink-3)', marginTop: 2 }}>
-              From <b style={{ color: 'var(--sh-ink)' }}>{current.from}</b> · {current.ctx} · 2h ago
-            </div>
+        {current ? (
+          renderDetail(current, () => openSource(current))
+        ) : (
+          <div style={{ padding: 32, fontSize: 13, color: 'var(--sh-ink-3)' }}>
+            Pick a notification to see the detail.
           </div>
-          <div className="top-btn ghost-border">
-            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="m8.5 12.5 2.5 2.5 4.5-5" /></svg>
-            Mark done
-          </div>
-          <div className="top-btn ghost-border">
-            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-            Snooze
-          </div>
-        </div>
-
-        <div className="detail-meta">
-          <div><b>Space</b> · Arbor Co — Redesign</div>
-          <div><b>Thread</b> · Pricing page iteration</div>
-          <div><b>Priority</b> · High</div>
-        </div>
-
-        <div className="detail-body">
-          <p>{current.snippet}</p>
-          <p>Specifically — the mobile flow fails two of our WCAG touch-target checks (the tier toggles are 36×36, minimum is 44×44), and the contrast on the secondary CTAs comes out at 3.8 against the cream background.</p>
-          <p>Leo has acknowledged in #design-crit and is targeting a fix by EOD. Do you want to pull the Thursday ship forward a day, or keep it and QA after?</p>
-          <p>— E</p>
-        </div>
-
-        <div className="reply-card">
-          <textarea placeholder={`Reply to ${current.from.replace(/^#/, '')}…`} />
-          <div className="reply-actions">
-            <div style={{ display: 'flex', gap: 4 }}>
-              <div className="sb-icon-btn" title="Attach">
-                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M21 11.5 12 20a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8" /></svg>
-              </div>
-              <div className="sb-icon-btn" title="Mention">
-                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" /></svg>
-              </div>
-              <div className="sb-icon-btn" title="Emoji">
-                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" /></svg>
-              </div>
-            </div>
-            <button type="button" className="send-btn">
-              Send
-              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="m3 3 18 9-18 9 4-9z" /></svg>
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
+  );
+}
+
+function renderDetail(n: Notification, onOpen: () => void) {
+  if (n.reference_type === 'task' && n.metadata?.task_id) {
+    return <InboxTaskDetail taskId={n.metadata.task_id as string} onOpen={onOpen} />;
+  }
+  if (n.reference_type === 'message' && (n.metadata?.message_id || n.reference_id)) {
+    return (
+      <InboxMessageDetail
+        messageId={(n.metadata?.message_id as string) || n.reference_id}
+        onOpen={onOpen}
+      />
+    );
+  }
+  return <DetailPane n={n} onOpen={onOpen} />;
+}
+
+function NotifRow({ n, active, onClick }: { n: Notification; active: boolean; onClick: () => void }) {
+  const av = avatarFor(n);
+  return (
+    <div
+      className="ib-item"
+      data-unread={!n.is_read}
+      data-active={active}
+      onClick={onClick}
+    >
+      <div className="line1">
+        <div
+          className="ava"
+          style={{ width: 20, height: 20, borderRadius: '50%', background: av.color, fontSize: 9, fontWeight: 600 }}
+        >
+          {av.initials}
+        </div>
+        <span className="ib-from">{n.actor?.display_name || 'System'}</span>
+        <span className="ib-ctx">{ctxLabel(n)}</span>
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--sh-ink-3)' }}>{timeAgo(n.created_at)}</span>
+      </div>
+      <div className="ib-title">{n.title}</div>
+      {n.body && <div className="ib-snip">{n.body}</div>}
+    </div>
+  );
+}
+
+function DetailPane({ n, onOpen }: { n: Notification; onOpen: () => void }) {
+  const av = avatarFor(n);
+  return (
+    <>
+      <div className="detail-head">
+        <div className="ava" style={{ width: 40, height: 40, borderRadius: '50%', background: av.color, fontWeight: 600 }}>
+          {av.initials}
+        </div>
+        <div style={{ flex: 1 }}>
+          <h1>{n.title}</h1>
+          <div style={{ fontSize: 12, color: 'var(--sh-ink-3)', marginTop: 2 }}>
+            From <b style={{ color: 'var(--sh-ink)' }}>{n.actor?.display_name || 'System'}</b> · {ctxLabel(n)} · {timeAgo(n.created_at)}
+          </div>
+        </div>
+        <button type="button" className="top-btn ghost-border" onClick={onOpen}>
+          <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+          Open
+        </button>
+      </div>
+      <div className="detail-body">
+        {n.body ? <p>{n.body}</p> : <p style={{ color: 'var(--sh-ink-3)' }}>No preview available.</p>}
+      </div>
+    </>
   );
 }

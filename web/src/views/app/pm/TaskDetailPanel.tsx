@@ -16,6 +16,7 @@ import {
 import api from '../../../services/api';
 import type { SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority } from '@squadhub/shared';
 import AssigneePicker from './AssigneePicker';
+import MentionPicker from '../../../components/MentionPicker';
 import DatePicker from './DatePicker';
 import EmergencyConfirm from './EmergencyConfirm';
 
@@ -173,6 +174,7 @@ export default function TaskDetailPanel({
   const [editing, setEditing] = useState<'title' | 'description' | null>(null);
   const [editValue, setEditValue] = useState('');
   const [commentText, setCommentText] = useState('');
+  const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [tab, setTab] = useState<'overview' | 'comments' | 'activity' | 'files'>('overview');
   const [estimateInput, setEstimateInput] = useState('');
   const [editingEstimate, setEditingEstimate] = useState(false);
@@ -299,7 +301,10 @@ export default function TaskDetailPanel({
 
   const handleAddComment = () => {
     if (!commentText.trim()) return;
-    addComment.mutate(commentText.trim(), { onSuccess: () => setCommentText('') });
+    addComment.mutate(
+      { content: commentText.trim(), mentions: commentMentions },
+      { onSuccess: () => { setCommentText(''); setCommentMentions([]); } },
+    );
   };
 
   const handleToggleDone = () => {
@@ -1173,14 +1178,19 @@ export default function TaskDetailPanel({
                 <div className="flex flex-col gap-4">
                   {/* Reply input at top */}
                   <div className="flex gap-2 mb-1">
-                    <input
-                      value={commentText}
-                      onChange={(e) => setCommentText(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
-                      placeholder="Write a comment…"
-                      className="flex-1 rounded-full border bg-transparent px-4 py-2 text-[13px] outline-none"
+                    <div
+                      className="flex-1 rounded-full border bg-transparent px-4 py-2 text-[13px]"
                       style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface-alt)' }}
-                    />
+                    >
+                      <MentionPicker
+                        value={commentText}
+                        mentions={commentMentions}
+                        onChange={(t, m) => { setCommentText(t); setCommentMentions(m); }}
+                        onSubmit={handleAddComment}
+                        placeholder="Write a comment… use @ to mention"
+                        className="w-full bg-transparent text-[13px] text-[color:var(--sh-ink)] placeholder:text-[color:var(--sh-ink-3)] focus:outline-none"
+                      />
+                    </div>
                     <button
                       onClick={handleAddComment}
                       disabled={!commentText.trim()}

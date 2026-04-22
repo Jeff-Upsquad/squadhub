@@ -568,7 +568,7 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
 
     const { data, error } = await supabaseAdmin
       .from('tasks')
-      .update(body)
+      .update({ ...body, last_modified_by: req.userId! })
       .eq('id', id)
       .select()
       .single();
@@ -793,12 +793,22 @@ router.get('/tasks/:id/comments', async (req: Request, res: Response) => {
 });
 
 // POST /pm/tasks/:id/comments — requires commenter access on parent list
+const commentSchema = z.object({
+  content: z.string().min(1),
+  mentions: z.array(z.string().uuid()).max(100).optional(),
+});
+
 router.post('/tasks/:id/comments', async (req: Request, res: Response) => {
   try {
     const taskId = req.params.id as string;
-    const { content } = req.body;
+    const parsed = commentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.errors[0].message });
+      return;
+    }
+    const { content, mentions } = parsed.data;
 
-    if (!content?.trim()) {
+    if (!content.trim()) {
       res.status(400).json({ success: false, error: 'Content is required' });
       return;
     }
@@ -818,6 +828,7 @@ router.post('/tasks/:id/comments', async (req: Request, res: Response) => {
         task_id: taskId,
         user_id: req.userId!,
         content: content.trim(),
+        mentions: mentions || [],
       })
       .select('*, users(id, display_name, email, avatar_url)')
       .single();
