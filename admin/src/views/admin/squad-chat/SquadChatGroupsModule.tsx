@@ -161,7 +161,7 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
   const users: UserRow[] = usersRes?.data || [];
   const allowedUsers = users.filter((u) =>
     scope === 'clients'
-      ? u.user_type === 'client' || u.user_type === 'client_staff'
+      ? u.user_type === 'client' || u.user_type === 'client_staff' || u.user_type === 'internal' || u.is_admin
       : u.user_type === 'partner' || u.user_type === 'internal' || u.is_admin,
   );
   const filteredUsers = search
@@ -368,7 +368,7 @@ function EditGroupDialog({ groupId, onClose, onChanged }: { groupId: string; onC
   const addable = users.filter((u) => {
     if (memberIds.has(u.id)) return false;
     return group.app_scope === 'clients'
-      ? u.user_type === 'client' || u.user_type === 'client_staff'
+      ? u.user_type === 'client' || u.user_type === 'client_staff' || u.user_type === 'internal' || u.is_admin
       : u.user_type === 'partner' || u.user_type === 'internal' || u.is_admin;
   });
 

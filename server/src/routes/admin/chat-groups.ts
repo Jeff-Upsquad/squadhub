@@ -54,7 +54,7 @@ router.post('/', async (req: Request, res: Response) => {
       .in('id', memberIds.length > 0 ? memberIds : ['00000000-0000-0000-0000-000000000000']);
     const scopeOk = (u: { user_type: string; is_admin: boolean | null }) =>
       body.app_scope === 'clients'
-        ? u.user_type === 'client' || u.user_type === 'client_staff'
+        ? u.user_type === 'client' || u.user_type === 'client_staff' || u.user_type === 'internal' || u.is_admin
         : u.user_type === 'partner' || u.user_type === 'internal' || u.is_admin;
     const allowedIds = new Set((users || []).filter(scopeOk).map((u: any) => u.id));
 
@@ -175,7 +175,7 @@ router.post('/:id/members', async (req: Request, res: Response) => {
       .in('id', body.user_ids);
     const ok = (u: { user_type: string; is_admin: boolean | null }) =>
       g.app_scope === 'clients'
-        ? u.user_type === 'client' || u.user_type === 'client_staff'
+        ? u.user_type === 'client' || u.user_type === 'client_staff' || u.user_type === 'internal' || u.is_admin
         : u.user_type === 'partner' || u.user_type === 'internal' || u.is_admin;
     const allowed = (users || []).filter(ok).map((u: any) => u.id);
     if (allowed.length === 0) {
