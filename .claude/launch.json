@@ -56,6 +56,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-task-emergency-priority/web && PORT=3010 INTERNAL_API_URL=http://localhost:4010 exec npx next dev -p 3010"],
       "port": 3010
+    },
+    {
+      "name": "Clickable Today Tasks Worktree",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-clickable-today-tasks/web && PORT=3004 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3004"],
+      "port": 3004
     }
   ]
 }
