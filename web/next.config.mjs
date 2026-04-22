@@ -25,6 +25,7 @@ const nextConfig = {
       { source: '/checkin/:path*', destination: `${API_URL}/checkin/:path*` },
       { source: '/pm/:path*', destination: `${API_URL}/pm/:path*` },
       { source: '/mini-apps/:path*', destination: `${API_URL}/mini-apps/:path*` },
+      { source: '/onboarding-links/:path*', destination: `${API_URL}/onboarding-links/:path*` },
       { source: '/memberships/:path*', destination: `${API_URL}/memberships/:path*` },
       { source: '/clients/:path*', destination: `${API_URL}/clients/:path*` },
       { source: '/timer/:path*', destination: `${API_URL}/timer/:path*` },
