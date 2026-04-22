@@ -12,6 +12,7 @@ import ChatPanel from '../views/app/chat/ChatPanel';
 import CreateChannelModal from '../views/app/chat/CreateChannelModal';
 import GlobalCreateTaskModal from '../views/app/pm/GlobalCreateTaskModal';
 import ListPage from '../views/app/pm/ListPage';
+import FolderPage from '../views/app/pm/FolderPage';
 import HomeSidebar from '../views/app/HomeSidebar';
 import SettingsSlider from '../components/SettingsSlider';
 import CheckInWidget from '../views/app/checkin/CheckInWidget';
@@ -155,6 +156,7 @@ export default function MainLayout() {
   const logout = useAuthStore((s) => s.logout);
   const pmReset = usePMStore((s) => s.reset);
   const activeListId = usePMStore((s) => s.activeListId);
+  const activeFolderId = usePMStore((s) => s.activeFolderId);
   const activeDesignFolderId = usePMStore((s) => s.activeDesignFolderId);
   const userType = useUserType();
   const [activeSection, setActiveSection] = useState<ActiveSection>('home');
@@ -169,6 +171,11 @@ export default function MainLayout() {
   useEffect(() => {
     if (activeListId) setHomeView('tasks');
   }, [activeListId]);
+
+  // Auto-switch to tasks view when a folder is selected
+  useEffect(() => {
+    if (activeFolderId) setHomeView('tasks');
+  }, [activeFolderId]);
 
   // Auto-switch to tasks view when a client opens a design folder
   useEffect(() => {
@@ -491,6 +498,8 @@ export default function MainLayout() {
           ) : homeView === 'tasks' ? (
             activeDesignFolderId ? (
               <ClientDesignDashboard folderId={activeDesignFolderId} />
+            ) : activeFolderId && !activeListId ? (
+              <FolderPage />
             ) : (
               <ListPage />
             )
