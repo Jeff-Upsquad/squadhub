@@ -148,7 +148,7 @@ body {
 /* Dashboard */
 .sh-view .dash { max-width: 1180px; margin: 0 auto; padding: 22px 44px 80px; }
 .sh-view .dash-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 18px; border-bottom: 1px solid var(--sh-hair); margin-bottom: 22px; }
-.sh-view .dash-hero .greeting { font-family: 'Instrument Serif', serif; font-size: 38px; line-height: 1.05; letter-spacing: -0.015em; color: var(--sh-ink); margin: 0; }
+.sh-view .dash-hero .greeting { font-family: 'Instrument Serif', serif; font-size: 28px; line-height: 1.15; letter-spacing: -0.015em; color: var(--sh-ink); margin: 0; white-space: nowrap; }
 .sh-view .dash-hero .greeting em { font-style: italic; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 6px; text-decoration-color: var(--sh-ink-4); }
 .sh-view .dash-hero .sub { color: var(--sh-ink-3); font-size: 13px; margin-top: 6px; }
 .sh-view .dash-hero .date { text-align: right; color: var(--sh-ink-3); font-size: 12.5px; }
