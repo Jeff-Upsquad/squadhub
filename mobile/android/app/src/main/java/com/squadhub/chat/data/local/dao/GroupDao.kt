@@ -15,6 +15,9 @@ interface GroupDao {
     @Query("SELECT * FROM groups WHERE id = :id LIMIT 1")
     fun observeById(id: String): Flow<GroupEntity?>
 
+    @Query("UPDATE groups SET unreadCount = 0 WHERE id = :id")
+    suspend fun markRead(id: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(groups: List<GroupEntity>)
 

@@ -1,5 +1,7 @@
 package com.squadhub.chat.data.repo
 
+import com.squadhub.chat.data.local.dao.DmDao
+import com.squadhub.chat.data.local.dao.GroupDao
 import com.squadhub.chat.data.local.dao.MessageDao
 import com.squadhub.chat.data.local.entities.MessageEntity
 import com.squadhub.chat.data.model.ChatConversationType
@@ -28,6 +30,8 @@ import kotlinx.coroutines.flow.map
 class MessageRepository @Inject constructor(
     private val api: ChatApi,
     private val dao: MessageDao,
+    private val groupDao: GroupDao,
+    private val dmDao: DmDao,
     private val tokenStore: AuthTokenStore,
 ) {
 
@@ -131,5 +135,11 @@ class MessageRepository @Inject constructor(
             ),
         )
         if (!env.success) throw IllegalStateException(env.error ?: "markRead failed")
+        // Server confirmed — zero the local denormalized unread count so the
+        // Inbox row's green badge clears immediately on return.
+        when (c.type) {
+            ChatConversationType.GROUP -> groupDao.markRead(c.id)
+            ChatConversationType.DM -> dmDao.markRead(c.id)
+        }
     }
 }

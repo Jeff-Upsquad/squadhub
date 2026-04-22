@@ -1,5 +1,6 @@
 package com.squadhub.chat.data.remote
 
+import android.util.Log
 import com.squadhub.chat.BuildConfig
 import com.squadhub.chat.data.model.ChatMessage
 import io.socket.client.IO
@@ -68,11 +69,23 @@ class SocketManager @Inject constructor(
         val s = IO.socket(BuildConfig.API_BASE_URL.trimEnd('/'), options)
         socket = s
 
-        s.on(Socket.EVENT_CONNECT) { _status.value = Status.CONNECTED }
-        s.on(Socket.EVENT_DISCONNECT) { _status.value = Status.DISCONNECTED }
-        s.on(Socket.EVENT_CONNECT_ERROR) { _status.value = Status.ERROR }
+        s.on(Socket.EVENT_CONNECT) {
+            Log.i(TAG, "connected (sid=${s.id()})")
+            _status.value = Status.CONNECTED
+        }
+        s.on(Socket.EVENT_DISCONNECT) { args ->
+            Log.w(TAG, "disconnected: ${args.joinToString()}")
+            _status.value = Status.DISCONNECTED
+        }
+        s.on(Socket.EVENT_CONNECT_ERROR) { args ->
+            Log.e(TAG, "connect error: ${args.joinToString()}")
+            _status.value = Status.ERROR
+        }
 
-        s.on("chat_message_new") { args -> emitMessage(args, _onMessageNew) }
+        s.on("chat_message_new") { args ->
+            Log.i(TAG, "RX chat_message_new args=${args.size} first=${args.firstOrNull()?.javaClass?.simpleName}")
+            emitMessage(args, _onMessageNew)
+        }
         s.on("chat_message_edit") { args -> emitMessage(args, _onMessageEdit) }
         s.on("chat_message_delete") { args -> emitDelete(args) }
 
@@ -92,11 +105,17 @@ class SocketManager @Inject constructor(
     }
 
     private fun emitMessage(args: Array<Any?>, target: MutableSharedFlow<ChatMessage>) {
-        val payload = args.firstOrNull() as? JSONObject ?: return
+        val payload = args.firstOrNull() as? JSONObject
+        if (payload == null) {
+            Log.w(TAG, "message payload was not a JSONObject; got ${args.firstOrNull()?.javaClass}")
+            return
+        }
         val parsed = runCatching {
             json.decodeFromString(ChatMessage.serializer(), payload.toString())
-        }.getOrNull() ?: return
-        target.tryEmit(parsed)
+        }.onFailure { Log.e(TAG, "message deserialization failed: ${it.message}", it) }
+            .getOrNull() ?: return
+        val delivered = target.tryEmit(parsed)
+        Log.i(TAG, "emitted ChatMessage id=${parsed.id} tryEmit=$delivered")
     }
 
     private fun emitDelete(args: Array<Any?>) {
@@ -112,4 +131,8 @@ class SocketManager @Inject constructor(
         val groupId: String?,
         val dmConversationId: String?,
     )
+
+    private companion object {
+        const val TAG = "SocketManager"
+    }
 }
