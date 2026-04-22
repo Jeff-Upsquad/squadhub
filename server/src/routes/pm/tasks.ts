@@ -70,35 +70,51 @@ async function hydrateAssignees<T extends { assignee_ids?: string[] | null }>(
   }));
 }
 
-// Attach `list: { id, name }` and `space: { id, name }` to each task so the
-// frontend can show the task's parent list/space without a second round-trip.
+// Attach `list: { id, name }`, `folder: { id, name }`, and `space: { id, name }`
+// to each task so the frontend can show the task's parent list/folder/space
+// without a second round-trip.
 async function hydrateLists<T extends { list_id: string }>(
   tasks: T[],
-): Promise<(T & { list: { id: string; name: string } | null; space: { id: string; name: string } | null })[]> {
+): Promise<(T & {
+  list: { id: string; name: string } | null;
+  folder: { id: string; name: string } | null;
+  space: { id: string; name: string } | null;
+})[]> {
   const listIds = Array.from(new Set(tasks.map(t => t.list_id).filter(Boolean)));
   if (listIds.length === 0) {
-    return tasks.map(t => ({ ...t, list: null, space: null }));
+    return tasks.map(t => ({ ...t, list: null, folder: null, space: null }));
   }
   const { data: lists } = await supabaseAdmin
     .from('lists')
-    .select('id, name, space_id')
+    .select('id, name, space_id, folder_id')
     .in('id', listIds);
   const spaceIds = Array.from(new Set((lists || []).map((l: any) => l.space_id).filter(Boolean)));
-  const { data: spaces } = spaceIds.length
-    ? await supabaseAdmin.from('spaces').select('id, name').in('id', spaceIds)
-    : { data: [] as any[] };
-  const listById = new Map<string, { id: string; name: string; space_id: string | null }>(
+  const folderIds = Array.from(new Set((lists || []).map((l: any) => l.folder_id).filter(Boolean)));
+  const [{ data: spaces }, { data: folders }] = await Promise.all([
+    spaceIds.length
+      ? supabaseAdmin.from('spaces').select('id, name').in('id', spaceIds)
+      : Promise.resolve({ data: [] as any[] }),
+    folderIds.length
+      ? supabaseAdmin.from('folders').select('id, name').in('id', folderIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const listById = new Map<string, { id: string; name: string; space_id: string | null; folder_id: string | null }>(
     (lists || []).map((l: any) => [l.id, l]),
   );
   const spaceById = new Map<string, { id: string; name: string }>(
     (spaces || []).map((s: any) => [s.id, s]),
   );
+  const folderById = new Map<string, { id: string; name: string }>(
+    (folders || []).map((f: any) => [f.id, f]),
+  );
   return tasks.map(t => {
     const l = listById.get(t.list_id);
     const s = l?.space_id ? spaceById.get(l.space_id) : null;
+    const f = l?.folder_id ? folderById.get(l.folder_id) : null;
     return {
       ...t,
       list: l ? { id: l.id, name: l.name } : null,
+      folder: f ? { id: f.id, name: f.name } : null,
       space: s ? { id: s.id, name: s.name } : null,
     };
   });

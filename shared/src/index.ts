@@ -319,6 +319,7 @@ export interface Task {
   comment_count?: number;
   creator?: User;
   list?: { id: string; name: string } | null;
+  folder?: { id: string; name: string } | null;
   space?: { id: string; name: string } | null;
 }
 
