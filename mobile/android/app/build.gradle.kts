@@ -19,7 +19,7 @@ android {
         versionName = "1.0.0"
 
         // API base URL lives in BuildConfig so flavors can override if needed.
-        buildConfigField("String", "API_BASE_URL", "\"https://squadhub.in/\"")
+        buildConfigField("String", "API_BASE_URL", "\"https://api.squadhub.in/\"")
     }
 
     flavorDimensions += "variant"
