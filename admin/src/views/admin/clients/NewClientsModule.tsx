@@ -3,14 +3,19 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import type {
   ClientSubmission,
+  ClientSubmissionSubscription,
   Country,
   Subscription,
   SubscriptionPlanRow,
   SubscriptionPlan,
   SubscriptionTier,
   SalesPerson,
+  SubmissionStatus,
 } from '@squadhub/shared';
+import { PIPELINE_STATUSES } from '@squadhub/shared';
 import SliderPanel from './SliderPanel';
+import LeadStatusChips, { STATUS_META } from '../../../components/LeadStatusChips';
+import AdminLeadSubscriptionsSection from './AdminLeadSubscriptionsSection';
 
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
 const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Elite'];
@@ -20,24 +25,21 @@ const TIER_COLOR: Record<SubscriptionTier, string> = {
   Elite: 'bg-yellow-100 text-yellow-700',
 };
 
+type SubmissionWithStaged = ClientSubmission & {
+  selected_subscriptions?: ClientSubmissionSubscription[];
+};
+
 export default function NewClientsModule() {
   const queryClient = useQueryClient();
-  const [selectedSubmission, setSelectedSubmission] = useState<ClientSubmission | null>(null);
-  const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [rejectConfirm, setRejectConfirm] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const { data: submissionsRes, isLoading } = useQuery({
     queryKey: ['admin-submissions'],
     queryFn: () => api.get('/admin/clients/submissions').then((r) => r.data),
   });
-  const submissions: ClientSubmission[] = submissionsRes?.data || [];
-
-  const { data: catalogRes } = useQuery({
-    queryKey: ['admin-subs-catalog'],
-    queryFn: () => api.get('/admin/subscriptions').then((r) => r.data),
-  });
-  const catalog: Subscription[] = catalogRes?.data || [];
+  const submissions: SubmissionWithStaged[] = submissionsRes?.data || [];
 
   const { data: countriesRes } = useQuery({
     queryKey: ['admin-countries'],
@@ -54,10 +56,16 @@ export default function NewClientsModule() {
   const [editPrimary, setEditPrimary] = useState<string>('');
   const [editSecondary, setEditSecondary] = useState<string>('');
 
+  const selectedSubmission = useMemo(
+    () => submissions.find((s) => s.id === selectedSubmissionId) || null,
+    [submissions, selectedSubmissionId],
+  );
+
   useEffect(() => {
     setEditPrimary(selectedSubmission?.primary_sales_person_id || '');
     setEditSecondary(selectedSubmission?.secondary_sales_person_id || '');
-  }, [selectedSubmission?.id]);
+    setStatusError(null);
+  }, [selectedSubmission?.id, selectedSubmission?.status]);
 
   const updateSpMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: any }) =>
@@ -68,38 +76,23 @@ export default function NewClientsModule() {
     onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed to update sales person'),
   });
 
-  const approveMutation = useMutation({
-    mutationFn: ({ id, plan_ids }: { id: string; plan_ids: string[] }) =>
-      api.post(`/admin/clients/submissions/${id}/approve`, { plan_ids }),
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: SubmissionStatus }) =>
+      api.patch(`/admin/clients/submissions/${id}/status`, { status }).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['admin-submissions-count'] });
       queryClient.invalidateQueries({ queryKey: ['admin-clients'] });
       queryClient.invalidateQueries({ queryKey: ['admin-clients-count'] });
-      closeSlider();
+      setStatusError(null);
     },
-    onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed to approve'),
-  });
-
-  const rejectMutation = useMutation({
-    mutationFn: (id: string) => api.post(`/admin/clients/submissions/${id}/reject`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-submissions'] });
-      queryClient.invalidateQueries({ queryKey: ['admin-submissions-count'] });
-      closeSlider();
+    onError: (err: any) => {
+      setStatusError(err?.response?.data?.error || err.message || 'Failed to update status');
     },
   });
 
   function closeSlider() {
-    setSelectedSubmission(null);
-    setSelectedPlanIds([]);
-    setRejectConfirm(false);
-  }
-
-  function togglePlan(id: string) {
-    setSelectedPlanIds((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
-    );
+    setSelectedSubmissionId(null);
   }
 
   const filtered = submissions.filter((s) =>
@@ -107,15 +100,32 @@ export default function NewClientsModule() {
     s.contact_person.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Group by pipeline status, preserving the PIPELINE_STATUSES order.
+  const grouped = useMemo(() => {
+    const bucket: Record<SubmissionStatus, SubmissionWithStaged[]> = {
+      new: [], in_progress: [], selection: [], converted: [], onboarding: [], closed: [],
+    };
+    for (const s of filtered) {
+      const st = (s.status as SubmissionStatus) || 'new';
+      (bucket[st] = bucket[st] || []).push(s);
+    }
+    return PIPELINE_STATUSES
+      .map((s) => ({ status: s as SubmissionStatus, items: bucket[s] || [] }))
+      .filter((g) => g.items.length > 0);
+  }, [filtered]);
+
   const selectedCountry = selectedSubmission
     ? countries.find((c) => c.id === selectedSubmission.country_id) || null
     : null;
+
+  const selectedSubs = selectedSubmission?.selected_subscriptions || [];
+  const subsLocked = selectedSubmission?.status === 'converted' || selectedSubmission?.status === 'closed';
 
   return (
     <div>
       <div className="mb-6">
         <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">New Clients</h1>
-        <p className="mt-1 text-sm text-[#62748E]">Review onboarding submissions and assign subscriptions</p>
+        <p className="mt-1 text-sm text-[#62748E]">Track lead pipeline and assign subscriptions</p>
       </div>
 
       <div className="mb-4">
@@ -130,65 +140,91 @@ export default function NewClientsModule() {
 
       {isLoading ? (
         <p className="py-8 text-center text-sm text-[#90A1B9]">Loading...</p>
-      ) : filtered.length === 0 ? (
+      ) : grouped.length === 0 ? (
         <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-          <p className="text-sm text-[#90A1B9]">{search ? 'No matching submissions.' : 'No pending submissions.'}</p>
+          <p className="text-sm text-[#90A1B9]">{search ? 'No matching submissions.' : 'No submissions yet.'}</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {filtered.map((sub) => {
-            const countryName = countries.find((c) => c.id === sub.country_id)?.name;
+        <div className="space-y-6">
+          {grouped.map((group) => {
+            const meta = STATUS_META[group.status];
             return (
-              <button
-                key={sub.id}
-                onClick={() => setSelectedSubmission(sub)}
-                className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 text-left transition hover:shadow-sm"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600 text-sm font-semibold">
-                    {sub.business_name.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-[#0F172B]">{sub.business_name}</p>
-                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">New</span>
-                      {countryName && (
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                          {countryName}
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-0.5 text-xs text-[#62748E]">
-                      {sub.contact_person}{sub.designation ? ` - ${sub.designation}` : ''}
-                    </p>
-                  </div>
+              <div key={group.status}>
+                <div className="mb-2 flex items-center gap-2">
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                    style={{ backgroundColor: `${meta.color}18`, color: meta.color }}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: meta.color }} />
+                    {meta.label}
+                  </span>
+                  <span className="text-xs text-[#90A1B9]">({group.items.length})</span>
                 </div>
-                <span className="text-xs text-[#90A1B9]">
-                  {new Date(sub.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </span>
-              </button>
+                <div className="space-y-2">
+                  {group.items.map((sub) => {
+                    const countryName = countries.find((c) => c.id === sub.country_id)?.name;
+                    return (
+                      <button
+                        key={sub.id}
+                        onClick={() => setSelectedSubmissionId(sub.id)}
+                        className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 text-left transition hover:shadow-sm"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600 text-sm font-semibold">
+                            {sub.business_name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-[#0F172B]">{sub.business_name}</p>
+                              {countryName && (
+                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                                  {countryName}
+                                </span>
+                              )}
+                              {(sub.selected_subscriptions?.length ?? 0) > 0 && (
+                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                                  {sub.selected_subscriptions!.length} sub{sub.selected_subscriptions!.length === 1 ? '' : 's'}
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-0.5 text-xs text-[#62748E]">
+                              {sub.contact_person}{sub.designation ? ` - ${sub.designation}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-xs text-[#90A1B9]">
+                          {new Date(sub.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </div>
       )}
 
-      <SliderPanel open={!!selectedSubmission} onClose={closeSlider} title="Review Submission" width="w-[520px]">
+      <SliderPanel open={!!selectedSubmission} onClose={closeSlider} title="Lead" width="w-[520px]">
         {selectedSubmission && (
           <div className="space-y-6">
-            <div className="space-y-3">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Business Details</h4>
-              <InfoRow label="Business Name" value={selectedSubmission.business_name} />
-              <InfoRow label="Country" value={selectedCountry?.name || 'Not set'} />
-              <InfoRow label="Contact Person" value={selectedSubmission.contact_person} />
-              {selectedSubmission.designation && <InfoRow label="Designation" value={selectedSubmission.designation} />}
-              <InfoRow label="Contact Number" value={selectedSubmission.contact_number} />
-              <InfoRow label="Email" value={selectedSubmission.email} />
-              <InfoRow label="Business Address" value={selectedSubmission.business_address} />
-              <InfoRow label="GST Registered" value={selectedSubmission.gst_registered ? 'Yes' : 'No'} />
-              {selectedSubmission.gst_number && <InfoRow label="GST Number" value={selectedSubmission.gst_number} />}
-              {selectedSubmission.accounts_email && <InfoRow label="Accounts Email" value={selectedSubmission.accounts_email} />}
-              <InfoRow label="Submitted" value={new Date(selectedSubmission.created_at).toLocaleString('en-IN')} />
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Pipeline</h4>
+              <LeadStatusChips
+                value={selectedSubmission.status as SubmissionStatus}
+                onChange={(s) => statusMutation.mutate({ id: selectedSubmission.id, status: s })}
+                loading={statusMutation.isPending}
+              />
+              {statusError && <p className="text-xs text-red-600">{statusError}</p>}
             </div>
+
+            <AdminLeadSubscriptionsSection
+              submissionId={selectedSubmission.id}
+              country={selectedCountry}
+              countries={countries}
+              selected={selectedSubs}
+              disabled={subsLocked}
+            />
 
             <div className="space-y-3">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Sales Attribution</h4>
@@ -234,52 +270,19 @@ export default function NewClientsModule() {
               </div>
             </div>
 
-            <div>
-              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">
-                Assign Plans {selectedCountry ? `(${selectedCountry.currency} pricing for ${selectedCountry.name})` : ''}
-              </h4>
-
-              <PlanPicker
-                catalog={catalog}
-                country={selectedCountry}
-                selectedPlanIds={selectedPlanIds}
-                onToggle={togglePlan}
-              />
-            </div>
-
-            <div className="space-y-2 pt-2">
-              <button
-                onClick={() => approveMutation.mutate({ id: selectedSubmission.id, plan_ids: selectedPlanIds })}
-                disabled={selectedPlanIds.length === 0 || approveMutation.isPending}
-                className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50"
-              >
-                {approveMutation.isPending ? 'Approving...' : `Approve & Move to Clients (${selectedPlanIds.length} plans)`}
-              </button>
-
-              {rejectConfirm ? (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => rejectMutation.mutate(selectedSubmission.id)}
-                    disabled={rejectMutation.isPending}
-                    className="flex-1 rounded-lg bg-red-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-red-600 disabled:opacity-50"
-                  >
-                    {rejectMutation.isPending ? 'Rejecting...' : 'Confirm Reject'}
-                  </button>
-                  <button
-                    onClick={() => setRejectConfirm(false)}
-                    className="flex-1 rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-medium text-[#62748E] transition hover:bg-[#F1F5F9]"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setRejectConfirm(true)}
-                  className="w-full rounded-lg border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
-                >
-                  Reject Submission
-                </button>
-              )}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Business Details</h4>
+              <InfoRow label="Business Name" value={selectedSubmission.business_name} />
+              <InfoRow label="Country" value={selectedCountry?.name || 'Not set'} />
+              <InfoRow label="Contact Person" value={selectedSubmission.contact_person} />
+              {selectedSubmission.designation && <InfoRow label="Designation" value={selectedSubmission.designation} />}
+              <InfoRow label="Contact Number" value={selectedSubmission.contact_number} />
+              <InfoRow label="Email" value={selectedSubmission.email} />
+              <InfoRow label="Business Address" value={selectedSubmission.business_address} />
+              <InfoRow label="GST Registered" value={selectedSubmission.gst_registered ? 'Yes' : 'No'} />
+              {selectedSubmission.gst_number && <InfoRow label="GST Number" value={selectedSubmission.gst_number} />}
+              {selectedSubmission.accounts_email && <InfoRow label="Accounts Email" value={selectedSubmission.accounts_email} />}
+              <InfoRow label="Submitted" value={new Date(selectedSubmission.created_at).toLocaleString('en-IN')} />
             </div>
           </div>
         )}
@@ -289,7 +292,7 @@ export default function NewClientsModule() {
 }
 
 // ============================================================
-// Plan picker — groups by subscription then by tier, filters by country pricing
+// Plan picker — kept exported; used by ClientsModule for already-approved clients.
 // ============================================================
 
 export function PlanPicker({
