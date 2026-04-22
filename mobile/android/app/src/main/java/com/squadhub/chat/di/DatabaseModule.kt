@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.squadhub.chat.data.local.ChatDatabase
 import com.squadhub.chat.data.local.dao.DmDao
 import com.squadhub.chat.data.local.dao.GroupDao
+import com.squadhub.chat.data.local.dao.MessageDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -28,4 +29,7 @@ object DatabaseModule {
 
     @Provides
     fun provideDmDao(db: ChatDatabase): DmDao = db.dmDao()
+
+    @Provides
+    fun provideMessageDao(db: ChatDatabase): MessageDao = db.messageDao()
 }

@@ -13,6 +13,7 @@ data class ChatDmConversation(
     // Joined
     val other_user: DmOtherUser? = null,
     val unread_count: Int? = null,
+    val last_message: ChatMessage? = null,
 )
 
 @Serializable

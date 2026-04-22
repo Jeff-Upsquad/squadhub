@@ -128,6 +128,9 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.security.crypto)
 
+    // Splash screen (branded instant-first-frame on cold start)
+    implementation(libs.androidx.core.splashscreen)
+
     // Firebase (FCM) — wired in Phase 3, dep already present so google-services plugin is happy
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

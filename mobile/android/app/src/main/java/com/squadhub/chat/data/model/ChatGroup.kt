@@ -19,4 +19,5 @@ data class ChatGroup(
     val unread_count: Int? = null,
     val my_is_group_admin: Boolean? = null,
     val my_last_read_at: String? = null,
+    val last_message: ChatMessage? = null,
 )

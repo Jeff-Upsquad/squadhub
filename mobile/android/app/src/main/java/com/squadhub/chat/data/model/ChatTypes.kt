@@ -28,3 +28,27 @@ enum class UserStatus {
     @SerialName("banned") BANNED,
     @SerialName("suspended") SUSPENDED,
 }
+
+// Mirror of shared/src/index.ts:1316 — keep in sync manually.
+@Serializable
+enum class ChatMessageType {
+    @SerialName("text") TEXT,
+    @SerialName("voice") VOICE,
+    @SerialName("image") IMAGE,
+    @SerialName("video") VIDEO,
+    @SerialName("document") DOCUMENT,
+    @SerialName("system") SYSTEM;
+
+    val wireValue: String get() = name.lowercase()
+}
+
+@Serializable
+enum class ChatConversationType {
+    @SerialName("group") GROUP,
+    @SerialName("dm") DM;
+
+    val wireValue: String get() = name.lowercase()
+}
+
+// Client-side only — never sent to the server. Drives the composer UI state.
+enum class ChatMessageLocalState { QUEUED, SENDING, SENT, FAILED }

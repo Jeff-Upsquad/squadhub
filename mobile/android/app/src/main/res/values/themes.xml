@@ -1,7 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Post-splash base (used after the splash screen finishes). Compose
+         owns the actual UI; this theme just sets the window background to
+         avoid the default-white flash before the first Compose frame. -->
     <style name="Theme.SquadChat" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor" tools:targetApi="21">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar" tools:targetApi="23">true</item>
+        <item name="android:statusBarColor" tools:targetApi="21">#FF075E54</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="23">false</item>
+        <item name="android:windowBackground">#FFECE5DD</item>
     </style>
+
+    <!-- Splash theme inherits from the Splash Screen API base. AndroidManifest
+         sets this as the activity theme so the OS renders it instantly on cold
+         start, while Hilt + Room initialize in the background. -->
+    <style name="Theme.SquadChat.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#FF128C7E</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.SquadChat</item>
+    </style>
+
 </resources>

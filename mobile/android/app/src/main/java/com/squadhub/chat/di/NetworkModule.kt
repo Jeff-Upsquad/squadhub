@@ -34,8 +34,12 @@ object NetworkModule {
         authInterceptor: AuthInterceptor,
         tokenAuthenticator: TokenAuthenticator,
     ): OkHttpClient {
+        // BASIC logs method + URL + status + latency only. BODY-level logging
+        // visibly slows the reader thread when responses carry joined payloads
+        // (e.g. /chat/groups with last_message + sender), so we keep it off by
+        // default — bump to BODY manually when debugging a specific endpoint.
         val logging = HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC
                     else HttpLoggingInterceptor.Level.NONE
         }
         return OkHttpClient.Builder()

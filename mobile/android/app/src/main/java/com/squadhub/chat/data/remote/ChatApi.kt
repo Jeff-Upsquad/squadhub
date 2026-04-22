@@ -4,6 +4,10 @@ import com.squadhub.chat.data.model.ApiEnvelope
 import com.squadhub.chat.data.model.ChatAppConfig
 import com.squadhub.chat.data.model.ChatDmConversation
 import com.squadhub.chat.data.model.ChatGroup
+import com.squadhub.chat.data.model.ChatMarkReadRequest
+import com.squadhub.chat.data.model.ChatMessage
+import com.squadhub.chat.data.model.ChatMessagesPage
+import com.squadhub.chat.data.model.ChatSendRequest
 import com.squadhub.chat.data.model.LoginRequest
 import com.squadhub.chat.data.model.LoginResponseData
 import com.squadhub.chat.data.model.RefreshRequest
@@ -36,4 +40,19 @@ interface ChatApi {
     // ---- DMs (team app only; server enforces via requireTeamVariant) ----
     @GET("chat/dms")
     suspend fun listDms(): ApiEnvelope<List<ChatDmConversation>>
+
+    // ---- Messages ----
+    @GET("chat/messages")
+    suspend fun listMessages(
+        @Query("group_id") groupId: String? = null,
+        @Query("dm_conversation_id") dmConversationId: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("limit") limit: Int = 50,
+    ): ChatMessagesPage
+
+    @POST("chat/messages")
+    suspend fun sendMessage(@Body body: ChatSendRequest): ApiEnvelope<ChatMessage>
+
+    @POST("chat/receipts/read")
+    suspend fun markRead(@Body body: ChatMarkReadRequest): ApiEnvelope<Unit>
 }
