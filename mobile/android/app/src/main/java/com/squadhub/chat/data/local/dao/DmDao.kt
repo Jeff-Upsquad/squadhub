@@ -18,6 +18,33 @@ interface DmDao {
     @Query("UPDATE dms SET unreadCount = 0 WHERE id = :id")
     suspend fun markRead(id: String)
 
+    @Query(
+        """
+        UPDATE dms
+        SET lastMessageId = :msgId,
+            lastMessageContent = :content,
+            lastMessageType = :type,
+            lastMessageSenderId = :senderId,
+            lastMessageFileName = :fileName,
+            lastMessageAt = :createdAt,
+            unreadCount = CASE
+                WHEN :incrementUnread THEN COALESCE(unreadCount, 0) + 1
+                ELSE COALESCE(unreadCount, 0)
+            END
+        WHERE id = :dmId
+        """,
+    )
+    suspend fun onIncomingMessage(
+        dmId: String,
+        msgId: String,
+        content: String?,
+        type: String,
+        senderId: String?,
+        fileName: String?,
+        createdAt: String,
+        incrementUnread: Boolean,
+    )
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(dms: List<DmEntity>)
 
