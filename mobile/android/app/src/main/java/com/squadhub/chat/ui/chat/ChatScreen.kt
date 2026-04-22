@@ -102,11 +102,10 @@ fun ChatScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
-            Box(
+            ChatDoodleBackground(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background),
+                    .fillMaxWidth(),
             ) {
                 if (ui.loading && messages.isEmpty()) {
                     CircularProgressIndicator(
