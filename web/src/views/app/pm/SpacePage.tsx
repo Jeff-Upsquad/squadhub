@@ -15,6 +15,7 @@ const NO_FOLDER_KEY = '__none__';
 
 export default function SpacePage() {
   const activeSpacePageId = usePMStore((s) => s.activeSpacePageId);
+  const setContextListId = usePMStore((s) => s.setContextListId);
   const [folderFilter, setFolderFilter] = useState<string>('all');
   const [listFilter, setListFilter] = useState<string>('all');
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
@@ -31,6 +32,11 @@ export default function SpacePage() {
   useEffect(() => {
     setListFilter('all');
   }, [folderFilter]);
+
+  // Mirror the list filter into the store so the global + button prefills it
+  useEffect(() => {
+    setContextListId(listFilter === 'all' ? null : listFilter);
+  }, [listFilter, setContextListId]);
 
   // Flatten: every list in the space, stamped with its folder (or null for direct)
   const allLists: ListWithFolder[] = useMemo(() => {

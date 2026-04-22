@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import type { Folder, List, Task } from '@squadhub/shared';
 import api from '../../../services/api';
@@ -10,8 +10,14 @@ type FolderWithLists = Folder & { lists?: List[] };
 
 export default function FolderPage() {
   const activeFolderId = usePMStore((s) => s.activeFolderId);
+  const setContextListId = usePMStore((s) => s.setContextListId);
   const [listFilter, setListFilter] = useState<string>('all');
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
+
+  // Mirror the list filter into the store so the global + button prefills it
+  useEffect(() => {
+    setContextListId(listFilter === 'all' ? null : listFilter);
+  }, [listFilter, setContextListId]);
 
   const { data: folder } = useQuery<FolderWithLists>({
     queryKey: ['folder', activeFolderId],
