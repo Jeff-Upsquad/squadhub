@@ -55,6 +55,8 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
   const color = avatarColor(seed);
   const label = initialOf(firstAssignee?.display_name || firstAssignee?.email);
   const priorityLabel = PRIORITY_LABEL[task.priority as string] || null;
+  const isSubtask = !!task.parent_task_id;
+  const parentTitle = task.parent_task?.title || null;
 
   const onOpen = () => {
     setActiveDashboardTab(null);
@@ -65,15 +67,26 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
     <div
       className="today-item"
       data-done={isDone}
+      data-subtask={isSubtask || undefined}
       onClick={onOpen}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
+      style={isSubtask ? { paddingLeft: 24 } : undefined}
     >
       <div className="checkbox" data-done={isDone} onClick={(e) => e.stopPropagation()} />
       <div>
-        <div className="ti-title">{task.title}</div>
+        <div className="ti-title">
+          {isSubtask && <span style={{ color: 'var(--sh-ink-4)', marginRight: 4 }}>↳</span>}
+          {task.title}
+        </div>
         <div className="ti-meta">
+          {isSubtask && parentTitle && (
+            <>
+              <span style={{ color: 'var(--sh-ink-4)' }}>From: {parentTitle}</span>
+              <span>·</span>
+            </>
+          )}
           <span>{formatWhen(task.due_date)}</span>
           {priorityLabel && (<><span>·</span><span>{priorityLabel}</span></>)}
           {firstAssignee?.display_name && (<><span>·</span><span>{firstAssignee.display_name}</span></>)}

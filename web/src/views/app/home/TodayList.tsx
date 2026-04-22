@@ -57,14 +57,18 @@ export default function TodayList() {
           const when = formatWhen(t.due_date);
           const assignee = t.assignees?.[0];
           const label = t.list?.name || t.space?.name || '';
+          const isSubtask = !!t.parent_task_id;
+          const parentTitle = t.parent_task?.title || null;
           return (
             <div
               key={t.id}
               className="today-item"
+              data-subtask={isSubtask || undefined}
               onClick={() => openTask(t.id)}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTask(t.id); } }}
+              style={isSubtask ? { paddingLeft: 24 } : undefined}
             >
               <div
                 className="checkbox"
@@ -74,8 +78,17 @@ export default function TodayList() {
                 }}
               />
               <div>
-                <div className="ti-title">{t.title}</div>
+                <div className="ti-title">
+                  {isSubtask && <span style={{ color: 'var(--sh-ink-4)', marginRight: 4 }}>↳</span>}
+                  {t.title}
+                </div>
                 <div className="ti-meta">
+                  {isSubtask && parentTitle && (
+                    <>
+                      <span style={{ color: 'var(--sh-ink-4)' }}>From: {parentTitle}</span>
+                      {(label || when.text) && <span>·</span>}
+                    </>
+                  )}
                   {label && <span className="tag">{label}</span>}
                   {label && when.text && <span>·</span>}
                   {when.text && (
