@@ -20,10 +20,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.EmojiEmotions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -281,7 +285,7 @@ private fun Composer(
             ) {
                 IconButton(onClick = { /* emoji TBD */ }, modifier = Modifier.size(40.dp)) {
                     Icon(
-                        Icons.Filled.EmojiEmotions,
+                        Icons.Outlined.EmojiEmotions,
                         contentDescription = "Emoji",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -313,8 +317,19 @@ private fun Composer(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                IconButton(onClick = { /* camera TBD */ }, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        Icons.Outlined.CameraAlt,
+                        contentDescription = "Camera",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             Spacer(Modifier.width(8.dp))
+            // Voice mic when the draft is empty, send arrow when there's text.
+            // Matches current WhatsApp: single right-edge action button that
+            // swaps role by composer state.
+            val hasText = draft.isNotBlank()
             Box(
                 modifier = Modifier
                     .size(48.dp)
@@ -330,12 +345,14 @@ private fun Composer(
                     )
                 } else {
                     IconButton(
-                        onClick = onSend,
-                        enabled = draft.isNotBlank(),
+                        onClick = {
+                            if (hasText) onSend() else { /* voice: Phase 4 */ }
+                        },
                     ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send",
+                            if (hasText) Icons.AutoMirrored.Filled.Send
+                            else Icons.Filled.Mic,
+                            contentDescription = if (hasText) "Send" else "Record voice",
                             tint = MaterialTheme.colorScheme.onPrimary,
                         )
                     }

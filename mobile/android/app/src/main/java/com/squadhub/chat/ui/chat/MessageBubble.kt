@@ -136,6 +136,8 @@ private fun StatusTicks(state: ChatMessageLocalState?) {
 
 @Composable
 fun DayHeader(label: String) {
+    // Matches current WhatsApp: a small off-white pill with mixed-case text,
+    // tonally elevated above the cream chat background.
     Box(
         modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
@@ -143,14 +145,14 @@ fun DayHeader(label: String) {
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(14.dp))
-                .background(Color(0xFFE1F3FB)),  // WA uses a pale blue for date pills
+                .background(Color(0xFFF5F0E5)),
         ) {
             Text(
-                text = label.uppercase(),
+                text = label,
                 style = MaterialTheme.typography.labelMedium,
                 color = Color(0xFF54656F),
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
             )
         }
     }

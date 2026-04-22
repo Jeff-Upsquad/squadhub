@@ -2,6 +2,7 @@ package com.squadhub.chat.ui.inbox
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,13 +24,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Chat
+import androidx.compose.material.icons.outlined.Create
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,6 +40,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -127,11 +130,13 @@ fun InboxScreen(
         topBar = {
             TopAppBar(
                 title = {
+                    // WhatsApp renders its own wordmark in brand green at the
+                    // top-left, not the theme onSurface color.
                     Text(
                         text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -171,17 +176,46 @@ fun InboxScreen(
             )
         },
         bottomBar = {
+            val totalUnread = groups.sumOf { it.unread_count ?: 0 } +
+                if (isTeam) dms.sumOf { it.unread_count ?: 0 } else 0
+            val dmsUnread = if (isTeam) dms.sumOf { it.unread_count ?: 0 } else 0
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 tabs.forEach { tab ->
                     val selected = tab == currentTab
+                    val badgeCount = when (tab) {
+                        InboxTab.CHATS -> groups.sumOf { it.unread_count ?: 0 }
+                        InboxTab.DMS -> dmsUnread
+                        InboxTab.SETTINGS -> 0
+                    }
                     NavigationBarItem(
                         selected = selected,
                         onClick = { currentTab = tab },
                         icon = {
-                            Icon(
-                                if (selected) tab.filled else tab.outlined,
-                                contentDescription = tab.label,
-                            )
+                            if (badgeCount > 0) {
+                                BadgedBox(
+                                    badge = {
+                                        Badge(
+                                            containerColor = androidx.compose.ui.graphics.Color(0xFF25D366),
+                                            contentColor = androidx.compose.ui.graphics.Color.White,
+                                        ) {
+                                            Text(
+                                                if (badgeCount > 99) "99+" else badgeCount.toString(),
+                                                style = MaterialTheme.typography.labelSmall,
+                                            )
+                                        }
+                                    },
+                                ) {
+                                    Icon(
+                                        if (selected) tab.filled else tab.outlined,
+                                        contentDescription = tab.label,
+                                    )
+                                }
+                            } else {
+                                Icon(
+                                    if (selected) tab.filled else tab.outlined,
+                                    contentDescription = tab.label,
+                                )
+                            }
                         },
                         label = {
                             Text(
@@ -199,6 +233,10 @@ fun InboxScreen(
                         ),
                     )
                 }
+                // Silence unused-variable warning on clients flavor where
+                // totalUnread would otherwise be dropped — future use: app
+                // icon badge / push notification counter.
+                @Suppress("UNUSED_EXPRESSION") totalUnread
             }
         },
         floatingActionButton = {
@@ -209,7 +247,7 @@ fun InboxScreen(
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                     shape = RoundedCornerShape(18.dp),
                 ) {
-                    Icon(Icons.Filled.Edit, contentDescription = "New chat")
+                    Icon(Icons.Outlined.Create, contentDescription = "New chat")
                 }
             }
         },
@@ -224,6 +262,14 @@ fun InboxScreen(
                 SearchPill(
                     query = searchQuery,
                     onQueryChange = { searchQuery = it },
+                )
+                FilterChipsRow(
+                    unreadCount = when (currentTab) {
+                        InboxTab.CHATS -> groups.count { (it.unread_count ?: 0) > 0 }
+                        InboxTab.DMS -> dms.count { (it.unread_count ?: 0) > 0 }
+                        else -> 0
+                    },
+                    groupsCount = groups.size,
                 )
             }
 
@@ -303,6 +349,69 @@ private fun SearchPill(query: String, onQueryChange: (String) -> Unit) {
                     inner()
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun FilterChipsRow(unreadCount: Int, groupsCount: Int) {
+    var selected by remember { mutableStateOf("All") }
+    val chips = buildList {
+        add("All" to null)
+        if (unreadCount > 0) add("Unread" to unreadCount)
+        add("Favourites" to null)
+        if (groupsCount > 0) add("Groups" to groupsCount)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        chips.forEach { (label, count) ->
+            FilterChipPill(
+                label = label,
+                count = count,
+                selected = selected == label,
+                onClick = { selected = label },
+            )
+        }
+    }
+}
+
+@Composable
+private fun FilterChipPill(label: String, count: Int?, selected: Boolean, onClick: () -> Unit) {
+    val bg = if (selected) MaterialTheme.colorScheme.primaryContainer
+             else MaterialTheme.colorScheme.surface
+    val border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                 else BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    val labelColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                     else MaterialTheme.colorScheme.onSurface
+    Surface(
+        color = bg,
+        border = border,
+        shape = CircleShape,
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                color = labelColor,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            )
+            if (count != null) {
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    count.toString(),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = labelColor,
+                )
+            }
         }
     }
 }
