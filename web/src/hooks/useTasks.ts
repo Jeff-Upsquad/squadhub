@@ -17,6 +17,18 @@ export function useTasks(listId: string | null, filters?: { status?: string; pri
   });
 }
 
+export function useEmergencyTasks() {
+  return useQuery<Task[]>({
+    queryKey: ['emergency-tasks'],
+    queryFn: async () => {
+      const res = await api.get('/pm/tasks/emergency');
+      return res.data.data;
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+}
+
 export type MyTasksBuckets = {
   overdue: Task[];
   today: Task[];
@@ -73,6 +85,7 @@ export function useCreateTask(listId: string | null) {
       const targetListId = vars.list_id || listId;
       qc.invalidateQueries({ queryKey: ['tasks', targetListId] });
       qc.invalidateQueries({ queryKey: ['folder-tasks'] });
+      qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
       if (vars.parent_task_id) {
         qc.invalidateQueries({ queryKey: ['task', vars.parent_task_id] });
       }
@@ -105,6 +118,7 @@ export function useUpdateTask(listId: string | null) {
       qc.invalidateQueries({ queryKey: ['tasks', listId] });
       qc.invalidateQueries({ queryKey: ['task', vars.id] });
       qc.invalidateQueries({ queryKey: ['my-tasks'] });
+      qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
     },
   });
 }
@@ -134,6 +148,7 @@ export function useDeleteTask(listId: string | null) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tasks', listId] });
+      qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
     },
   });
 }

@@ -16,7 +16,7 @@ const createSchema = z.object({
   title: z.string().min(1).max(500),
   description: z.string().optional(),
   status: z.string().optional(),
-  priority: z.enum(['urgent', 'high', 'normal', 'low', 'none']).optional(),
+  priority: z.enum(['emergency', 'urgent', 'high', 'normal', 'low', 'none']).optional(),
   due_date: z.string().optional(),
   work_date: z.string().nullable().optional(),
   start_date: z.string().nullable().optional(),
@@ -30,7 +30,7 @@ const updateSchema = z.object({
   title: z.string().min(1).max(500).optional(),
   description: z.string().nullable().optional(),
   status: z.string().optional(),
-  priority: z.enum(['urgent', 'high', 'normal', 'low', 'none']).optional(),
+  priority: z.enum(['emergency', 'urgent', 'high', 'normal', 'low', 'none']).optional(),
   due_date: z.string().nullable().optional(),
   work_date: z.string().nullable().optional(),
   start_date: z.string().nullable().optional(),
@@ -321,6 +321,40 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     res.json({ success: true, data: buckets });
   } catch (err) {
     console.error('Get my tasks error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /pm/tasks/emergency — all active EMERGENCY tasks the caller can see.
+// Feeds the global EMERGENCY banner.
+router.get('/tasks/emergency', async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('tasks')
+      .select('*')
+      .eq('priority', 'emergency')
+      .not('status', 'in', '(done,closed)')
+      .is('parent_task_id', null)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const rows = data || [];
+    const listIds = Array.from(new Set(rows.map((t: any) => t.list_id).filter(Boolean)));
+    const accessCache = new Map<string, boolean>();
+    await Promise.all(listIds.map(async (listId) => {
+      const level = await checkResourceAccess(req.userId!, 'list', listId as string);
+      accessCache.set(listId as string, !!level);
+    }));
+
+    const visible = rows.filter((t: any) => accessCache.get(t.list_id) === true);
+    const hydrated = await hydrateAssignees(visible);
+    res.json({ success: true, data: hydrated });
+  } catch (err) {
+    console.error('Get emergency tasks error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

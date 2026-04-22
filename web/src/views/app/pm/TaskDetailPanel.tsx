@@ -17,6 +17,7 @@ import api from '../../../services/api';
 import type { SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority } from '@squadhub/shared';
 import AssigneePicker from './AssigneePicker';
 import DatePicker from './DatePicker';
+import EmergencyConfirm from './EmergencyConfirm';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -74,11 +75,21 @@ function formatSeconds(totalSeconds: number): string {
 }
 
 const PRIORITY_LABEL: Record<TaskPriority, string | null> = {
+  emergency: 'EMG',
   urgent: 'P0',
   high: 'P1',
   normal: 'P2',
   low: 'P3',
   none: null,
+};
+
+const PRIORITY_NAME: Record<TaskPriority, string> = {
+  emergency: 'Emergency',
+  urgent: 'Urgent',
+  high: 'High',
+  normal: 'Normal',
+  low: 'Low',
+  none: 'None',
 };
 
 function hashHue(input: string): number {
@@ -171,6 +182,9 @@ export default function TaskDetailPanel({
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
+  const [priorityAnchor, setPriorityAnchor] = useState<DOMRect | null>(null);
+  const [pendingEmergency, setPendingEmergency] = useState(false);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   const [assigneeAnchorRect, setAssigneeAnchorRect] = useState<DOMRect | null>(null);
   const [workDateOpen, setWorkDateOpen] = useState(false);
@@ -555,7 +569,12 @@ export default function TaskDetailPanel({
               {/* Subtitle row — priority only (space + SQ moved to top bar) */}
               {priorityLabel && (
                 <div className="flex items-center gap-2.5 mb-5 flex-wrap">
-                  {(priorityLabel === 'P0' || priorityLabel === 'P1') ? (
+                  {priorityLabel === 'EMG' ? (
+                    <span className="td-pri-chip" data-level="emg">
+                      <span className="dot" />
+                      EMERGENCY
+                    </span>
+                  ) : (priorityLabel === 'P0' || priorityLabel === 'P1') ? (
                     <span className="td-pri-chip" data-level={priorityLabel.toLowerCase()}>
                       <span className="dot" />
                       {priorityLabel === 'P0' ? 'Urgent' : 'High'}
@@ -695,6 +714,34 @@ export default function TaskDetailPanel({
                         </>
                       )}
                     </div>
+                  </span>
+                </div>
+
+                <div className="td-settings-row">
+                  <span className="k">{META_ICONS.Priority}Priority</span>
+                  <span className="v">
+                    <button
+                      type="button"
+                      onClick={canEdit ? (e) => {
+                        setPriorityAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                        setPriorityMenuOpen((v) => !v);
+                      } : undefined}
+                      className="inline-flex items-center gap-2 px-2 py-0.5 rounded-full hover:bg-[color:var(--sh-hair-3)] transition td-focus"
+                    >
+                      {task.priority === 'emergency' ? (
+                        <span className="td-pri-chip" data-level="emg">
+                          <span className="dot" />
+                          EMERGENCY
+                        </span>
+                      ) : (
+                        PRIORITY_NAME[(task.priority || 'none') as TaskPriority]
+                      )}
+                      {canEdit && (
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-[color:var(--sh-ink-4)]">
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      )}
+                    </button>
                   </span>
                 </div>
 
@@ -1217,6 +1264,59 @@ export default function TaskDetailPanel({
           onClose={() => setDueDateOpen(false)}
         />
       )}
+
+      {priorityMenuOpen && task && priorityAnchor && (
+        <>
+          <div className="fixed inset-0 z-[55]" onClick={() => setPriorityMenuOpen(false)} />
+          <div
+            className="fixed z-[56] w-48 overflow-hidden rounded-xl border shadow-lg"
+            style={{
+              borderColor: 'var(--sh-hair)',
+              background: 'var(--surface)',
+              top: Math.min(priorityAnchor.bottom + 4, window.innerHeight - 260),
+              left: Math.min(priorityAnchor.left, window.innerWidth - 200),
+            }}
+          >
+            {(['urgent', 'high', 'normal', 'low', 'none'] as TaskPriority[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => {
+                  updateTask.mutate({ id: task.id, priority: p } as any);
+                  setPriorityMenuOpen(false);
+                }}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)]"
+              >
+                <span>{PRIORITY_NAME[p]}</span>
+                {PRIORITY_LABEL[p] && (
+                  <span className="text-[11px] text-[color:var(--sh-ink-4)]">{PRIORITY_LABEL[p]}</span>
+                )}
+              </button>
+            ))}
+            <div className="td-menu-divider" />
+            <button
+              onClick={() => {
+                setPriorityMenuOpen(false);
+                setPendingEmergency(true);
+              }}
+              className="td-menu-danger flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-[color:var(--sh-hair-3)]"
+            >
+              <span className="text-[13px] font-semibold">EMERGENCY</span>
+              <span className="td-menu-hint">Use cautiously</span>
+            </button>
+          </div>
+        </>
+      )}
+
+      {pendingEmergency && task && (
+        <EmergencyConfirm
+          taskTitle={task.title}
+          onConfirm={() => {
+            updateTask.mutate({ id: task.id, priority: 'emergency' } as any);
+            setPendingEmergency(false);
+          }}
+          onCancel={() => setPendingEmergency(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1252,6 +1352,12 @@ const META_ICONS: Record<string, React.ReactNode> = {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="9" />
       <path d="M9 12l2 2 4-4" />
+    </svg>
+  ),
+  Priority: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+      <line x1="4" y1="22" x2="4" y2="15" />
     </svg>
   ),
   Space: (

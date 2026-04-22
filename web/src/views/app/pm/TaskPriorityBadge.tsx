@@ -1,11 +1,12 @@
 import type { TaskPriority } from '@squadhub/shared';
 
 const config: Record<TaskPriority, { label: string; badgeColor: string; flagColor: string; icon: string }> = {
-  urgent: { label: 'Urgent', badgeColor: '#ef4444', flagColor: '#ef4444', icon: '!!!' },
-  high:   { label: 'High',   badgeColor: '#f97316', flagColor: '#f97316', icon: '!!' },
-  normal: { label: 'Normal', badgeColor: '#3b82f6', flagColor: '#3b82f6', icon: '!' },
-  low:    { label: 'Low',    badgeColor: '#6b7280', flagColor: '#22c55e', icon: '\u2193' },
-  none:   { label: 'None',   badgeColor: '#374151', flagColor: '#374151', icon: '\u2014' },
+  emergency: { label: 'EMERGENCY', badgeColor: '#b91c1c', flagColor: '#b91c1c', icon: '!!!!' },
+  urgent:    { label: 'Urgent',    badgeColor: '#ef4444', flagColor: '#ef4444', icon: '!!!' },
+  high:      { label: 'High',      badgeColor: '#f97316', flagColor: '#f97316', icon: '!!' },
+  normal:    { label: 'Normal',    badgeColor: '#3b82f6', flagColor: '#3b82f6', icon: '!' },
+  low:       { label: 'Low',       badgeColor: '#6b7280', flagColor: '#22c55e', icon: '\u2193' },
+  none:      { label: 'None',      badgeColor: '#374151', flagColor: '#374151', icon: '\u2014' },
 };
 
 function FlagIcon({ color }: { color: string }) {
