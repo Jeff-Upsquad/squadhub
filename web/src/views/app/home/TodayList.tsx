@@ -1,10 +1,18 @@
 import type { Task } from '@squadhub/shared';
 import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
+import { usePMStore } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
 
 export default function TodayList() {
   const { data, isLoading, isError, refetch } = useMyTasks();
   const updateTask = useUpdateTask(null);
+  const setActiveTask = usePMStore((s) => s.setActiveTask);
+  const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
+
+  const openTask = (id: string) => {
+    setActiveDashboardTab(null);
+    setActiveTask(id);
+  };
 
   const tasks: Task[] = data ? [...data.overdue, ...data.today] : [];
 
@@ -50,7 +58,14 @@ export default function TodayList() {
           const assignee = t.assignees?.[0];
           const label = t.list?.name || t.space?.name || '';
           return (
-            <div key={t.id} className="today-item">
+            <div
+              key={t.id}
+              className="today-item"
+              onClick={() => openTask(t.id)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTask(t.id); } }}
+            >
               <div
                 className="checkbox"
                 onClick={(e) => {
