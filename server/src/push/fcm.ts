@@ -48,8 +48,16 @@ export async function sendFcmChatPush(userId: string, payload: ChatPushPayload):
   const channelId = payload.appVariant === 'clients' ? 'chat_messages_clients' : 'chat_messages_team';
   const tokenList = tokens.map((t) => t.token);
 
-  // FCM data payload must be all strings — serialize non-strings.
-  const dataStrings: Record<string, string> = {};
+  // FCM data payload must be all strings — serialize non-strings. We inline
+  // title + body so the Android service can render its own NotificationCompat
+  // with a deep-link PendingIntent on tap. (If we sent FCM's `notification`
+  // block, Android's system would auto-render a notification and our
+  // ChatFirebaseMessagingService.onMessageReceived wouldn't fire for background
+  // deliveries — breaking deep-link tap-to-open.)
+  const dataStrings: Record<string, string> = {
+    title: payload.title,
+    body: payload.body,
+  };
   for (const [k, v] of Object.entries(payload.data)) {
     dataStrings[k] = v === null || v === undefined ? '' : typeof v === 'string' ? v : JSON.stringify(v);
   }
@@ -57,11 +65,10 @@ export async function sendFcmChatPush(userId: string, payload: ChatPushPayload):
   try {
     const res = await firebase.messaging().sendEachForMulticast({
       tokens: tokenList,
-      notification: { title: payload.title, body: payload.body },
+      // data-only payload — intentional, see comment above.
       data: dataStrings,
       android: {
         priority: 'high',
-        notification: { channelId, sound: 'default' },
       },
     });
 
