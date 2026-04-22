@@ -27,6 +27,7 @@ import MemberHome from '../views/app/home/MemberHome';
 import UserHome from '../views/app/home/UserHome';
 import GuestHome from '../views/app/home/GuestHome';
 import GlobalTaskDetailPanel from '../views/app/home/GlobalTaskDetailPanel';
+import EmergencyBanner from '../views/app/pm/EmergencyBanner';
 import InboxView from '../views/app/InboxView';
 import MyTasksView from '../views/app/MyTasksView';
 import LearningShell from '../views/app/learning/LearningShell';
@@ -358,6 +359,7 @@ export default function MainLayout() {
 
       {/* Main content area */}
       <div className="flex flex-1 flex-col overflow-hidden bg-surface">
+        <EmergencyBanner />
         <ActiveTimer />
         {activeSection === 'learning' ? (
           <LearningShell />

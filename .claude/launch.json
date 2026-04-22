@@ -50,6 +50,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-sales-invite-dropdown/web && PORT=3002 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3002"],
       "port": 3002
+    },
+    {
+      "name": "Task Emergency Priority Worktree",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-task-emergency-priority/web && PORT=3010 INTERNAL_API_URL=http://localhost:4010 exec npx next dev -p 3010"],
+      "port": 3010
     }
   ]
 }
