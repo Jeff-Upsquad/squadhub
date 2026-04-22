@@ -13,6 +13,7 @@ import CreateChannelModal from '../views/app/chat/CreateChannelModal';
 import GlobalCreateTaskModal from '../views/app/pm/GlobalCreateTaskModal';
 import ListPage from '../views/app/pm/ListPage';
 import FolderPage from '../views/app/pm/FolderPage';
+import SpacePage from '../views/app/pm/SpacePage';
 import HomeSidebar from '../views/app/HomeSidebar';
 import SettingsSlider from '../components/SettingsSlider';
 import CheckInWidget from '../views/app/checkin/CheckInWidget';
@@ -157,6 +158,7 @@ export default function MainLayout() {
   const pmReset = usePMStore((s) => s.reset);
   const activeListId = usePMStore((s) => s.activeListId);
   const activeFolderId = usePMStore((s) => s.activeFolderId);
+  const activeSpacePageId = usePMStore((s) => s.activeSpacePageId);
   const activeDesignFolderId = usePMStore((s) => s.activeDesignFolderId);
   const userType = useUserType();
   const [activeSection, setActiveSection] = useState<ActiveSection>('home');
@@ -176,6 +178,11 @@ export default function MainLayout() {
   useEffect(() => {
     if (activeFolderId) setHomeView('tasks');
   }, [activeFolderId]);
+
+  // Auto-switch to tasks view when a space is opened (space page)
+  useEffect(() => {
+    if (activeSpacePageId) setHomeView('tasks');
+  }, [activeSpacePageId]);
 
   // Auto-switch to tasks view when a client opens a design folder
   useEffect(() => {
@@ -500,6 +507,8 @@ export default function MainLayout() {
               <ClientDesignDashboard folderId={activeDesignFolderId} />
             ) : activeFolderId && !activeListId ? (
               <FolderPage />
+            ) : activeSpacePageId && !activeListId && !activeFolderId ? (
+              <SpacePage />
             ) : (
               <ListPage />
             )

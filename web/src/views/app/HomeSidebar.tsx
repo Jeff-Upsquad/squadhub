@@ -176,7 +176,7 @@ export default function HomeSidebar({
   const { data: sharedItems, isLoading: sharedLoading } = useSharedWithMe(workspaceId);
   const { data: myClients, isLoading: myClientsLoading, isError: myClientsError } = useMyClients();
   const removeFavorite = useRemoveFavorite(workspaceId);
-  const { setActiveSpace, setActiveList } = usePMStore();
+  const { setActiveSpace, setActiveList, setActiveFolder, setActiveSpacePage } = usePMStore();
   const canCreateChannels = useHasPermission('can_create_channels');
   const canCreateSpaces = useHasPermission('can_create_spaces');
   const [showCreateSpace, setShowCreateSpace] = useState(false);
@@ -439,8 +439,10 @@ export default function HomeSidebar({
                         setActiveList(fav.item_id);
                       } else if (fav.item_type === 'space') {
                         setActiveSpace(fav.item_id);
+                        setActiveSpacePage(fav.item_id);
                       } else if (fav.item_type === 'folder') {
                         if (fav.space_id) setActiveSpace(fav.space_id);
+                        setActiveFolder(fav.item_id);
                       }
                       onChangeView('tasks');
                     }}
