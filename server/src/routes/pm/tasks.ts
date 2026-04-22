@@ -4,7 +4,7 @@ import type { User } from '@squadhub/shared';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
-import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
+import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAdmin, isResourceLocked, getPrimaryRolePermissions } from '../../middleware/permissions';
 import { getUserRoleIds } from '../../utils/roles';
 
 const router = Router();
@@ -536,6 +536,61 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       return;
     }
     console.error('Update task error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PATCH /pm/tasks/:id/time-tracked — manual edit of the "Logged" value on a task.
+// Requires can_edit_time_logs on the user's PRIMARY role (not unioned). This is
+// separate from PUT /pm/tasks/:id so that ActiveTimer can keep writing through
+// PUT without tripping the role check.
+const patchTimeTrackedSchema = z.object({
+  time_tracked: z.number().int().min(0),
+});
+
+router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const { time_tracked } = patchTimeTrackedSchema.parse(req.body);
+
+    const listId = await getTaskListId(id);
+    if (!listId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required' });
+      return;
+    }
+
+    const primary = await getPrimaryRolePermissions(req.userId!);
+    if (primary.can_edit_time_logs !== true) {
+      res.status(403).json({ success: false, error: 'Your role cannot edit logged time' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('tasks')
+      .update({ time_tracked })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const [hydrated] = await hydrateAssignees([data]);
+    res.json({ success: true, data: hydrated });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Patch time_tracked error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

@@ -109,6 +109,23 @@ export function useUpdateTask(listId: string | null) {
   });
 }
 
+// Manual edit of task.time_tracked. Requires can_edit_time_logs on primary role server-side.
+export function useUpdateTaskTimeTracked(listId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, time_tracked }: { id: string; time_tracked: number }) => {
+      const res = await api.patch(`/pm/tasks/${id}/time-tracked`, { time_tracked });
+      return res.data.data;
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['tasks', listId] });
+      qc.invalidateQueries({ queryKey: ['task', vars.id] });
+      qc.invalidateQueries({ queryKey: ['my-tasks'] });
+      qc.invalidateQueries({ queryKey: ['folder-tasks'] });
+    },
+  });
+}
+
 export function useDeleteTask(listId: string | null) {
   const qc = useQueryClient();
   return useMutation({
