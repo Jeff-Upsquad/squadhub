@@ -68,6 +68,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-home-groupby-tabs/web && PORT=3005 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3005"],
       "port": 3005
+    },
+    {
+      "name": "Home Heading Single Line Worktree",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-home-heading-single-line/web && PORT=3006 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3006"],
+      "port": 3006
     }
   ]
 }

@@ -33,7 +33,7 @@ export default function MemberHome({ onOpenInbox }: { onOpenInbox: () => void })
         <div className="dash-hero">
           <div>
             <div className="eyebrow" style={{ marginBottom: 10 }}>{greeting}, {firstName}</div>
-            <h1 className="greeting">Three things matter<br /><em>today.</em></h1>
+            <h1 className="greeting">Three things matter <em>today.</em></h1>
             <div className="sub">{quote}</div>
           </div>
           <div className="date">
