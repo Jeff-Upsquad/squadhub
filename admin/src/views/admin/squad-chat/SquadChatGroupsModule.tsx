@@ -156,7 +156,7 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
 
   const { data: usersRes } = useQuery({
     queryKey: ['admin-users', scope],
-    queryFn: () => api.get('/users').then((r) => r.data),
+    queryFn: () => api.get('/admin/users?limit=100').then((r) => r.data),
   });
   const users: UserRow[] = usersRes?.data || [];
   const allowedUsers = users.filter((u) =>
@@ -333,7 +333,7 @@ function EditGroupDialog({ groupId, onClose, onChanged }: { groupId: string; onC
 
   const { data: usersRes } = useQuery({
     queryKey: ['admin-users-for-group', group?.app_scope],
-    queryFn: () => api.get('/users').then((r) => r.data),
+    queryFn: () => api.get('/admin/users?limit=100').then((r) => r.data),
     enabled: !!group,
   });
   const users: UserRow[] = usersRes?.data || [];
