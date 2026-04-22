@@ -259,25 +259,31 @@ function InlineInput({
 
 // ---- Folder item ----
 function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }: { folder: Folder; spaceId: string; canAdd: boolean; canDelete: boolean; isManager: boolean; myAccess?: AccessLevel | null }) {
+  const { activeFolderId, setActiveFolder, setActiveSpace } = usePMStore();
   const [open, setOpen] = useState(true);
   const [adding, setAdding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const createList = useCreateList(spaceId);
+  const isActive = activeFolderId === folder.id;
 
   return (
     <div>
-      <div className="group relative flex items-center rounded-md py-[5px] pl-3 pr-2 hover:bg-[#F5F5F5]">
+      <div
+        onClick={() => { setActiveSpace(spaceId); setActiveFolder(folder.id); }}
+        className={`group relative flex cursor-pointer items-center rounded-md py-[5px] pl-3 pr-2 transition ${
+          isActive
+            ? 'bg-white text-[#0F172B] font-medium shadow-[0_1px_3px_rgba(15,23,43,0.08),0_0_0_1px_rgba(15,23,43,0.06)]'
+            : 'hover:bg-[#F5F5F5]'
+        }`}
+      >
         <TreeBranch />
-        <button
-          onClick={() => setOpen(!open)}
-          className="flex flex-1 items-center gap-2 text-left text-[13px] text-[#555555]"
-        >
+        <div className={`flex flex-1 items-center gap-2 text-left text-[13px] ${isActive ? 'text-[#0F172B]' : 'text-[#555555]'}`}>
           {/* Folder icon */}
           <svg className="h-4 w-4 shrink-0 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
           </svg>
           <span className="flex-1 truncate">{folder.name}</span>
-        </button>
+        </div>
         {folder.is_locked && <AdminLockIcon />}
         {folder.is_private && !folder.is_locked && <LockIcon />}
         <div className="flex items-center gap-0.5">
@@ -285,7 +291,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
           {canAdd && !folder.is_locked && <AddButton onClick={() => setAdding(true)} title="Add list" />}
         </div>
         <button
-          onClick={() => setOpen(!open)}
+          onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
           className="ml-1 flex items-center"
           aria-label={open ? 'Collapse folder' : 'Expand folder'}
         >

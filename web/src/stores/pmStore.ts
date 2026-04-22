@@ -15,6 +15,7 @@ interface TimerState {
 interface PMState {
   activeSpaceId: string | null;
   activeListId: string | null;
+  activeFolderId: string | null;
   activeTaskId: string | null;
   activeDesignFolderId: string | null;
   activeClientId: string | null;
@@ -25,6 +26,7 @@ interface PMState {
   timer: TimerState | null;
   setActiveSpace: (id: string | null) => void;
   setActiveList: (id: string | null) => void;
+  setActiveFolder: (id: string | null) => void;
   setActiveTask: (id: string | null) => void;
   setActiveDesignFolder: (id: string | null) => void;
   setActiveClient: (id: string | null) => void;
@@ -44,6 +46,7 @@ export const usePMStore = create<PMState>()(
     (set, get) => ({
       activeSpaceId: null,
       activeListId: null,
+      activeFolderId: null,
       activeTaskId: null,
       activeDesignFolderId: null,
       activeClientId: null,
@@ -54,9 +57,10 @@ export const usePMStore = create<PMState>()(
       timer: null,
 
       setActiveSpace: (id) => set({ activeSpaceId: id }),
-      setActiveList: (id) => set({ activeListId: id, selectedTasks: [], activeDesignFolderId: null }),
+      setActiveList: (id) => set({ activeListId: id, selectedTasks: [], activeDesignFolderId: null, activeFolderId: null }),
+      setActiveFolder: (id) => set({ activeFolderId: id, activeListId: null, activeDesignFolderId: null, selectedTasks: [] }),
       setActiveTask: (id) => set({ activeTaskId: id }),
-      setActiveDesignFolder: (id) => set({ activeDesignFolderId: id, activeListId: null, selectedTasks: [] }),
+      setActiveDesignFolder: (id) => set({ activeDesignFolderId: id, activeListId: null, activeFolderId: null, selectedTasks: [] }),
       setActiveClient: (id) => set({ activeClientId: id }),
       setActiveDashboardTab: (tab) => set({ activeDashboardTab: tab }),
       setViewMode: (mode) => set({ viewMode: mode }),
@@ -87,7 +91,7 @@ export const usePMStore = create<PMState>()(
         set({ timer: null });
         return prev;
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, viewMode: 'list', collapsedGroups: {}, selectedTasks: [], timer: null }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, viewMode: 'list', collapsedGroups: {}, selectedTasks: [], timer: null }),
     }),
     {
       name: 'squadhub-pm',
