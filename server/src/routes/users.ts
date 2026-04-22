@@ -10,6 +10,37 @@ const updateProfileSchema = z.object({
   avatar_url: z.string().url().nullable().optional(),
 });
 
+// GET /users/search?q=&limit=10 — autocomplete users by display_name (mention picker)
+router.get('/search', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const q = ((req.query.q as string) || '').trim();
+    const limit = Math.min(parseInt((req.query.limit as string) || '10', 10), 25);
+
+    let query = supabaseAdmin
+      .from('users')
+      .select('id, display_name, avatar_url, user_type, email')
+      .eq('status', 'active')
+      .neq('id', req.userId!)
+      .order('display_name', { ascending: true })
+      .limit(limit);
+
+    if (q.length > 0) {
+      query = query.ilike('display_name', `%${q}%`);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data: data || [] });
+  } catch (err) {
+    console.error('User search error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // GET /users/me — get current user's profile
 router.get('/me', requireAuth, async (req: Request, res: Response) => {
   try {

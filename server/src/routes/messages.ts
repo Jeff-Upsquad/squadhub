@@ -13,6 +13,7 @@ const sendMessageSchema = z.object({
   type: z.enum(['text', 'image', 'audio', 'video', 'file']).default('text'),
   file_url: z.string().url().optional(),
   parent_message_id: z.string().uuid().optional(), // for threads
+  mentions: z.array(z.string().uuid()).max(100).optional(),
 }).refine(
   (data) => data.channel_id || data.dm_conversation_id,
   { message: 'Either channel_id or dm_conversation_id is required' },
@@ -108,6 +109,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
         content: body.content || null,
         type: body.type,
         file_url: body.file_url || null,
+        mentions: body.mentions || [],
       })
       .select('*, sender:users!sender_id(id, display_name, avatar_url)')
       .single();
@@ -139,6 +141,87 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       return;
     }
     console.error('Send message error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /messages/:id — fetch a single message with sender (used by inbox)
+router.get('/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    const { data, error } = await supabaseAdmin
+      .from('messages')
+      .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    if (!data) {
+      res.status(404).json({ success: false, error: 'Message not found' });
+      return;
+    }
+
+    if ((data as any).channel_id) {
+      const access = await checkResourceAccess(req.userId!, 'channel', (data as any).channel_id);
+      if (!access) {
+        res.status(403).json({ success: false, error: 'You do not have access to this message' });
+        return;
+      }
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Get message error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /messages/:id/thread — fetch parent (if any) + thread replies
+router.get('/:id/thread', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+
+    const { data: msg } = await supabaseAdmin
+      .from('messages')
+      .select('id, channel_id, dm_conversation_id, parent_message_id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (!msg) {
+      res.status(404).json({ success: false, error: 'Message not found' });
+      return;
+    }
+
+    if ((msg as any).channel_id) {
+      const access = await checkResourceAccess(req.userId!, 'channel', (msg as any).channel_id);
+      if (!access) {
+        res.status(403).json({ success: false, error: 'You do not have access to this message' });
+        return;
+      }
+    }
+
+    const rootId = (msg as any).parent_message_id || id;
+
+    const [{ data: root }, { data: replies }] = await Promise.all([
+      supabaseAdmin
+        .from('messages')
+        .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+        .eq('id', rootId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('messages')
+        .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+        .eq('parent_message_id', rootId)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: true }),
+    ]);
+
+    res.json({ success: true, data: { root, replies: replies || [] } });
+  } catch (err) {
+    console.error('Get thread error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

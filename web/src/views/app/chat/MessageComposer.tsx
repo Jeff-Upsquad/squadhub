@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import api from '../../../services/api';
 import { getSocket } from '../../../services/socket';
+import MentionPicker from '../../../components/MentionPicker';
 
 // ---- Formatting toolbar button (28x28, padding 5px, icon 18x18) ----
 function FormatBtn({ children, title }: { children: React.ReactNode; title: string }) {
@@ -39,15 +40,22 @@ function ActionBtn({ children, title }: { children: React.ReactNode; title: stri
 
 export default function MessageComposer({ channelId, onSend }: { channelId: string; onSend: () => void }) {
   const [text, setText] = useState('');
+  const [mentions, setMentions] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!text.trim() || sending) return;
     setSending(true);
     try {
-      await api.post('/messages', { channel_id: channelId, content: text.trim(), type: 'text' });
+      await api.post('/messages', {
+        channel_id: channelId,
+        content: text.trim(),
+        type: 'text',
+        mentions,
+      });
       setText('');
+      setMentions([]);
       onSend();
     } catch (err) {
       console.error('Send message failed:', err);
@@ -117,12 +125,12 @@ export default function MessageComposer({ channelId, onSend }: { channelId: stri
 
         {/* Message Text Box */}
         <div className="flex w-full items-start px-[12px] py-[8px]">
-          <input
-            type="text"
+          <MentionPicker
             value={text}
-            onChange={(e) => { setText(e.target.value); handleTyping(); }}
+            mentions={mentions}
+            onChange={(t, m) => { setText(t); setMentions(m); handleTyping(); }}
+            onSubmit={() => handleSubmit()}
             placeholder="Message"
-            className="w-full bg-transparent font-[Lato] text-[15px] font-normal leading-[22px] text-foreground placeholder:text-foreground-dim focus:outline-none"
           />
         </div>
 

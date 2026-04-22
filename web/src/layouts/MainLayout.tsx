@@ -33,6 +33,7 @@ import InboxView from '../views/app/InboxView';
 import MyTasksView from '../views/app/MyTasksView';
 import LearningShell from '../views/app/learning/LearningShell';
 import { useUserType } from '../hooks/useUserType';
+import { useUnreadCount } from '../hooks/useUnreadCount';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'learning' | 'more';
@@ -158,6 +159,7 @@ export default function MainLayout() {
   const userType = useUserType();
   const [activeSection, setActiveSection] = useState<ActiveSection>('home');
   const [homeView, setHomeView] = useState<HomeView>('hub');
+  const { data: unreadCount = 0 } = useUnreadCount();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
@@ -282,7 +284,7 @@ export default function MainLayout() {
           <RailBtn
             icon={ICON.inbox}
             label="Inbox"
-            badge={8}
+            badge={unreadCount > 0 ? unreadCount : undefined}
             active={activeSection === 'home' && homeView === 'inbox'}
             onClick={() => { setActiveSection('home'); setHomeView('inbox'); }}
           />
@@ -384,7 +386,7 @@ export default function MainLayout() {
             <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Coming soon</p>
           </div>
         ) : homeView === 'inbox' ? (
-          <InboxView />
+          <InboxView setHomeView={setHomeView} />
         ) : homeView === 'my-tasks' ? (
           <MyTasksView />
         ) : homeView === 'mentions' ? (

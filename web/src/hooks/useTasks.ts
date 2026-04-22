@@ -87,6 +87,8 @@ export function useCreateTask(listId: string | null) {
       qc.invalidateQueries({ queryKey: ['folder-tasks'] });
       qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
       qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
+      qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+      qc.invalidateQueries({ queryKey: ['notifications', 'list'] });
       if (vars.parent_task_id) {
         qc.invalidateQueries({ queryKey: ['task', vars.parent_task_id] });
       }
@@ -121,6 +123,8 @@ export function useUpdateTask(listId: string | null) {
       qc.invalidateQueries({ queryKey: ['my-tasks'] });
       qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
       qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
+      qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+      qc.invalidateQueries({ queryKey: ['notifications', 'list'] });
     },
   });
 }
@@ -171,13 +175,16 @@ export function useTaskComments(taskId: string | null) {
 export function useAddComment(taskId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (content: string) => {
-      const res = await api.post(`/pm/tasks/${taskId}/comments`, { content });
+    mutationFn: async (input: string | { content: string; mentions?: string[] }) => {
+      const payload = typeof input === 'string' ? { content: input } : input;
+      const res = await api.post(`/pm/tasks/${taskId}/comments`, payload);
       return res.data.data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['task-comments', taskId] });
       qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+      qc.invalidateQueries({ queryKey: ['notifications', 'list'] });
     },
   });
 }
