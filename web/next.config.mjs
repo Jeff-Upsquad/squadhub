@@ -28,6 +28,7 @@ const nextConfig = {
       { source: '/onboarding-links/:path*', destination: `${API_URL}/onboarding-links/:path*` },
       { source: '/memberships/:path*', destination: `${API_URL}/memberships/:path*` },
       { source: '/clients/:path*', destination: `${API_URL}/clients/:path*` },
+      { source: '/client-spaces/:path*', destination: `${API_URL}/client-spaces/:path*` },
       { source: '/timer/:path*', destination: `${API_URL}/timer/:path*` },
       { source: '/admin/:path*', destination: `${API_URL}/admin/:path*` },
       { source: '/partner/:path*', destination: `${API_URL}/partner/:path*` },
