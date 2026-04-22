@@ -19,6 +19,10 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const refreshSchema = z.object({
+  refresh_token: z.string().min(1),
+});
+
 // POST /auth/register
 router.post('/register', async (req: Request, res: Response) => {
   try {
@@ -207,6 +211,37 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
     console.error('Login error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /auth/refresh
+router.post('/refresh', async (req: Request, res: Response) => {
+  try {
+    const body = refreshSchema.parse(req.body);
+
+    const { data, error } = await supabase.auth.refreshSession({
+      refresh_token: body.refresh_token,
+    });
+
+    if (error || !data.session) {
+      res.status(401).json({ success: false, error: 'Session expired' });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Refresh error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
