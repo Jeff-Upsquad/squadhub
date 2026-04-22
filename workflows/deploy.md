@@ -28,6 +28,10 @@ The script automatically:
 5. Reloads Caddy if `Caddyfile` changed
 6. Shows container status and recent logs
 
+### Concurrent deploys
+
+Only one deploy can run on the VPS at a time. If another deploy is already running, `deploy.sh` prints `Another deploy is in progress on the VPS. Waiting up to 600s...` and automatically resumes once the first one finishes — no manual retry needed. If the first deploy hangs beyond 10 minutes, the queued one gives up with exit code 78 and you should investigate the stuck deploy on the VPS before retrying.
+
 ### Change detection mapping
 
 | Changed path | Services rebuilt |
