@@ -1,8 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import jwt from 'jsonwebtoken';
 import { config } from '../config';
-import { supabaseAdmin } from '../supabase';
+import { supabaseAdmin, supabaseAuth } from '../supabase';
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
@@ -28,18 +27,25 @@ export function setupSocketIO(httpServer: HttpServer) {
     },
   });
 
-  // Auth middleware — verify JWT before allowing socket connection
-  io.use((socket, next) => {
-    const token = socket.handshake.auth?.token;
+  // Auth middleware — verify via Supabase (matches HTTP requireAuth). Supabase
+  // now issues ES256 access tokens, so a local jwt.verify with the legacy HMAC
+  // JWT_SECRET rejects every handshake. Delegating verification to Supabase's
+  // own /auth/v1/user endpoint sidesteps the algorithm mismatch.
+  io.use(async (socket, next) => {
+    const token = socket.handshake.auth?.token as string | undefined;
     if (!token) {
       return next(new Error('Authentication required'));
     }
-
     try {
-      const decoded = jwt.verify(token, config.jwtSecret) as { sub: string };
-      (socket as any).userId = decoded.sub;
+      const { data, error } = await supabaseAuth.auth.getUser(token);
+      if (error || !data.user) {
+        console.warn('[socket] auth rejected:', error?.message || 'no user');
+        return next(new Error('Invalid token'));
+      }
+      (socket as any).userId = data.user.id;
       next();
-    } catch {
+    } catch (e) {
+      console.error('[socket] auth threw:', e);
       next(new Error('Invalid token'));
     }
   });
