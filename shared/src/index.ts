@@ -116,7 +116,7 @@ export interface ResourceMembership {
 }
 
 // ---- Project Management ----
-export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low' | 'none';
+export type TaskPriority = 'emergency' | 'urgent' | 'high' | 'normal' | 'low' | 'none';
 export type StatusCategory = 'todo' | 'active' | 'done' | 'closed';
 export type ListView = 'list' | 'board';
 export type ResourceStatus = 'active' | 'inactive';

@@ -1062,6 +1062,86 @@ body {
   background: currentColor;
 }
 
+/* EMERGENCY chip — stronger visual, pulses subtly */
+.td-pri-chip[data-level="emg"] {
+  background: #b91c1c;
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  animation: td-emg-pulse 1.6s ease-in-out infinite;
+}
+[data-theme="dark"] .td-pri-chip[data-level="emg"],
+.dark .td-pri-chip[data-level="emg"] {
+  background: #dc2626;
+  color: #fff;
+}
+.td-pri-chip[data-level="emg"] .dot {
+  background: #fff;
+}
+@keyframes td-emg-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(185, 28, 28, 0.45); }
+  50%      { opacity: 0.88; box-shadow: 0 0 0 4px rgba(185, 28, 28, 0); }
+}
+
+/* Dropdown menu divider + danger option (EMERGENCY) */
+.td-menu-divider {
+  height: 1px;
+  background: var(--sh-hair);
+  margin: 4px 0;
+}
+.td-menu-danger {
+  color: #b91c1c;
+}
+[data-theme="dark"] .td-menu-danger,
+.dark .td-menu-danger {
+  color: #f87171;
+}
+.td-menu-hint {
+  font-size: 10.5px;
+  color: var(--sh-ink-4);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Global EMERGENCY banner */
+.emg-banner {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: linear-gradient(90deg, #991b1b 0%, #b91c1c 50%, #991b1b 100%);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+  animation: td-emg-pulse 2s ease-in-out infinite;
+}
+.emg-banner-label {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.emg-banner-link {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  padding: 0 2px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.emg-banner-link:hover { text-decoration-thickness: 2px; }
+
 /* Refined lcard: lighter header, better spacing */
 .td-lcard.apple {
   border: 0.5px solid var(--sh-hair);
