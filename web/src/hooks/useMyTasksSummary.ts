@@ -19,6 +19,7 @@ export function useMyTasksSummary(enabled = true) {
       return res.data.data;
     },
     staleTime: 30_000,
+    refetchInterval: 60_000,
     enabled,
   });
 }

@@ -86,6 +86,7 @@ export function useCreateTask(listId: string | null) {
       qc.invalidateQueries({ queryKey: ['tasks', targetListId] });
       qc.invalidateQueries({ queryKey: ['folder-tasks'] });
       qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
+      qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
       if (vars.parent_task_id) {
         qc.invalidateQueries({ queryKey: ['task', vars.parent_task_id] });
       }
@@ -118,6 +119,7 @@ export function useUpdateTask(listId: string | null) {
       qc.invalidateQueries({ queryKey: ['tasks', listId] });
       qc.invalidateQueries({ queryKey: ['task', vars.id] });
       qc.invalidateQueries({ queryKey: ['my-tasks'] });
+      qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
       qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
     },
   });
@@ -135,6 +137,7 @@ export function useUpdateTaskTimeTracked(listId: string | null) {
       qc.invalidateQueries({ queryKey: ['tasks', listId] });
       qc.invalidateQueries({ queryKey: ['task', vars.id] });
       qc.invalidateQueries({ queryKey: ['my-tasks'] });
+      qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
       qc.invalidateQueries({ queryKey: ['folder-tasks'] });
     },
   });
@@ -148,6 +151,7 @@ export function useDeleteTask(listId: string | null) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tasks', listId] });
+      qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
       qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
     },
   });
