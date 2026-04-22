@@ -815,7 +815,25 @@ export type SubscriptionSlug = 'designer' | 'video_editor';
 export type DeliverableKind = 'hours' | 'item';
 export type CurrencyCode = 'INR' | 'USD';
 export type ClientStatus = 'active' | 'paused' | 'cancelled';
-export type SubmissionStatus = 'pending' | 'approved' | 'rejected';
+export type SubmissionStatus =
+  | 'new'
+  | 'in_progress'
+  | 'selection'
+  | 'converted'
+  | 'onboarding'
+  | 'closed';
+
+export const PIPELINE_STATUSES: SubmissionStatus[] = [
+  'new',
+  'in_progress',
+  'selection',
+  'converted',
+  'onboarding',
+  'closed',
+];
+
+export const TERMINAL_STATUSES: SubmissionStatus[] = ['converted', 'onboarding', 'closed'];
+
 export type ClientSubscriptionStatus = 'active' | 'paused' | 'cancelled';
 
 export interface Country {
@@ -937,6 +955,18 @@ export interface ClientSubmission {
   country?: Country;
   primary_sales_person?: SalesPerson | null;
   secondary_sales_person?: SalesPerson | null;
+  selected_subscriptions?: ClientSubmissionSubscription[];
+}
+
+export interface ClientSubmissionSubscription {
+  id: string;
+  submission_id: string;
+  subscription_id: string;
+  plan_id: string;
+  created_at: string;
+  // Joined
+  subscription?: Subscription;
+  plan?: SubscriptionPlanRow;
 }
 
 export interface Client {

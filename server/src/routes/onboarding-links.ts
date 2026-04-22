@@ -3,6 +3,12 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../supabase';
 import { getUserRoleIds, getUserIdsByRoleId } from '../utils/roles';
+import { hydrateSubscription } from '../utils/subscriptions';
+import {
+  PIPELINE_STATUSES,
+  isPipelineStatus,
+  transitionSubmissionStatus,
+} from '../utils/submissionPipeline';
 
 const router = Router();
 
@@ -245,6 +251,62 @@ router.get('/my', requireSalesLeadsAccess, async (req: Request, res: Response) =
   }
 });
 
+// Hydrate staged subscriptions for a set of submission IDs into a map keyed by submission_id.
+async function hydrateStagedSubscriptions(submissionIds: string[]): Promise<Record<string, any[]>> {
+  if (submissionIds.length === 0) return {};
+
+  const { data: rows } = await supabaseAdmin
+    .from('client_submission_subscriptions')
+    .select('*')
+    .in('submission_id', submissionIds)
+    .order('created_at');
+
+  const list = rows || [];
+  if (list.length === 0) return {};
+
+  const subIds = Array.from(new Set(list.map((r: any) => r.subscription_id)));
+  const planIds = Array.from(new Set(list.map((r: any) => r.plan_id)));
+
+  const [{ data: subs }, { data: plans }] = await Promise.all([
+    supabaseAdmin.from('subscriptions').select('*').in('id', subIds),
+    supabaseAdmin.from('subscription_plans').select('*').in('id', planIds),
+  ]);
+
+  const subMap: Record<string, any> = {};
+  (subs || []).forEach((s: any) => { subMap[s.id] = s; });
+  const planMap: Record<string, any> = {};
+  (plans || []).forEach((p: any) => { planMap[p.id] = p; });
+
+  const bySubmission: Record<string, any[]> = {};
+  list.forEach((r: any) => {
+    const enriched = {
+      ...r,
+      subscription: subMap[r.subscription_id] || null,
+      plan: planMap[r.plan_id] || null,
+    };
+    (bySubmission[r.submission_id] = bySubmission[r.submission_id] || []).push(enriched);
+  });
+
+  return bySubmission;
+}
+
+// Guard that resolves a lead and verifies the caller is primary or secondary SP.
+async function resolveLeadForUser(leadId: string, userId: string) {
+  const { data: submission, error } = await supabaseAdmin
+    .from('client_submissions')
+    .select('*')
+    .eq('id', leadId)
+    .maybeSingle();
+
+  if (error) return { ok: false as const, code: 500, error: error.message };
+  if (!submission) return { ok: false as const, code: 404, error: 'Lead not found' };
+
+  if (submission.primary_sales_person_id !== userId && submission.secondary_sales_person_id !== userId) {
+    return { ok: false as const, code: 403, error: 'You do not have access to this lead' };
+  }
+  return { ok: true as const, submission };
+}
+
 // ============================================================
 // GET /onboarding-links/leads — submissions where current user is primary OR secondary SP
 // ============================================================
@@ -263,20 +325,262 @@ router.get('/leads', requireSalesLeadsAccess, async (req: Request, res: Response
       return;
     }
 
+    const list = leads || [];
     const peopleMap = await hydrateSalesPeople(
-      (leads || []).flatMap((l: any) => [l.primary_sales_person_id, l.secondary_sales_person_id]),
+      list.flatMap((l: any) => [l.primary_sales_person_id, l.secondary_sales_person_id]),
     );
+    const stagedMap = await hydrateStagedSubscriptions(list.map((l: any) => l.id));
 
-    const enriched = (leads || []).map((l: any) => ({
+    const enriched = list.map((l: any) => ({
       ...l,
       primary_sales_person: l.primary_sales_person_id ? peopleMap[l.primary_sales_person_id] || null : null,
       secondary_sales_person: l.secondary_sales_person_id ? peopleMap[l.secondary_sales_person_id] || null : null,
       my_role: l.primary_sales_person_id === userId ? 'primary' : 'secondary',
+      selected_subscriptions: stagedMap[l.id] || [],
     }));
 
     res.json({ success: true, data: enriched });
   } catch (err) {
     console.error('List leads error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// PATCH /onboarding-links/leads/:id/status — sales person updates pipeline status
+// ============================================================
+const statusSchema = z.object({
+  status: z.enum(PIPELINE_STATUSES),
+});
+
+router.patch('/leads/:id/status', requireSalesLeadsAccess, async (req: Request, res: Response) => {
+  try {
+    const body = statusSchema.parse(req.body);
+    const guard = await resolveLeadForUser(req.params.id as string, req.userId!);
+    if (!guard.ok) {
+      res.status(guard.code).json({ success: false, error: guard.error });
+      return;
+    }
+
+    const result = await transitionSubmissionStatus(req.params.id as string, body.status);
+    if (!result.ok) {
+      res.status(result.code).json({ success: false, error: result.error });
+      return;
+    }
+
+    res.json({ success: true, data: { status: result.status, client_id: result.clientId } });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Update lead status error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// PATCH /onboarding-links/leads/:id/country — update billing country on a lead
+// ============================================================
+const countrySchema = z.object({ country_id: z.string().uuid() });
+
+router.patch('/leads/:id/country', requireSalesLeadsAccess, async (req: Request, res: Response) => {
+  try {
+    const body = countrySchema.parse(req.body);
+    const guard = await resolveLeadForUser(req.params.id as string, req.userId!);
+    if (!guard.ok) {
+      res.status(guard.code).json({ success: false, error: guard.error });
+      return;
+    }
+    if (guard.submission.status === 'converted' || guard.submission.status === 'closed') {
+      res.status(409).json({ success: false, error: 'Cannot change billing country on a converted or closed lead' });
+      return;
+    }
+
+    const { data: country } = await supabaseAdmin
+      .from('countries')
+      .select('id, is_active')
+      .eq('id', body.country_id)
+      .maybeSingle();
+    if (!country || !country.is_active) {
+      res.status(400).json({ success: false, error: 'Country not found or inactive' });
+      return;
+    }
+
+    const { error } = await supabaseAdmin
+      .from('client_submissions')
+      .update({ country_id: body.country_id })
+      .eq('id', req.params.id as string);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data: { country_id: body.country_id } });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Update lead country error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// GET /onboarding-links/leads/:id/subscriptions — list staged subscriptions on a lead
+// ============================================================
+router.get('/leads/:id/subscriptions', requireSalesLeadsAccess, async (req: Request, res: Response) => {
+  try {
+    const guard = await resolveLeadForUser(req.params.id as string, req.userId!);
+    if (!guard.ok) {
+      res.status(guard.code).json({ success: false, error: guard.error });
+      return;
+    }
+
+    const leadId = req.params.id as string;
+    const map = await hydrateStagedSubscriptions([leadId]);
+    res.json({ success: true, data: map[leadId] || [] });
+  } catch (err) {
+    console.error('List staged subs error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /onboarding-links/leads/:id/subscriptions — add a (subscription, plan) row
+// ============================================================
+const addStagedSubSchema = z.object({
+  subscription_id: z.string().uuid(),
+  plan_id: z.string().uuid(),
+});
+
+router.post('/leads/:id/subscriptions', requireSalesLeadsAccess, async (req: Request, res: Response) => {
+  try {
+    const body = addStagedSubSchema.parse(req.body);
+    const guard = await resolveLeadForUser(req.params.id as string, req.userId!);
+    if (!guard.ok) {
+      res.status(guard.code).json({ success: false, error: guard.error });
+      return;
+    }
+
+    if (guard.submission.status === 'converted' || guard.submission.status === 'closed') {
+      res.status(409).json({ success: false, error: 'Cannot edit subscriptions on a converted or closed lead' });
+      return;
+    }
+
+    // Validate plan belongs to subscription.
+    const { data: plan } = await supabaseAdmin
+      .from('subscription_plans')
+      .select('id, subscription_id, is_active')
+      .eq('id', body.plan_id)
+      .maybeSingle();
+    if (!plan || plan.subscription_id !== body.subscription_id) {
+      res.status(400).json({ success: false, error: 'Plan does not belong to the given subscription' });
+      return;
+    }
+    if (!plan.is_active) {
+      res.status(400).json({ success: false, error: 'Plan is inactive' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('client_submission_subscriptions')
+      .insert({
+        submission_id: req.params.id as string,
+        subscription_id: body.subscription_id,
+        plan_id: body.plan_id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      if ((error as any).code === '23505') {
+        res.status(409).json({ success: false, error: 'This subscription + plan is already selected for this lead' });
+        return;
+      }
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Add staged sub error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// DELETE /onboarding-links/leads/:id/subscriptions/:rowId — remove a staged row
+// ============================================================
+router.delete('/leads/:id/subscriptions/:rowId', requireSalesLeadsAccess, async (req: Request, res: Response) => {
+  try {
+    const guard = await resolveLeadForUser(req.params.id as string, req.userId!);
+    if (!guard.ok) {
+      res.status(guard.code).json({ success: false, error: guard.error });
+      return;
+    }
+
+    if (guard.submission.status === 'converted' || guard.submission.status === 'closed') {
+      res.status(409).json({ success: false, error: 'Cannot edit subscriptions on a converted or closed lead' });
+      return;
+    }
+
+    const { error } = await supabaseAdmin
+      .from('client_submission_subscriptions')
+      .delete()
+      .eq('id', req.params.rowId)
+      .eq('submission_id', req.params.id);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete staged sub error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// GET /onboarding-links/subscriptions — read-only list for sales users
+// Optionally filters pricing/plans to a given country_id.
+// ============================================================
+router.get('/subscriptions', requireSalesLeadsAccess, async (req: Request, res: Response) => {
+  try {
+    const countryId = typeof req.query.country_id === 'string' ? req.query.country_id : null;
+
+    const { data: subs, error } = await supabaseAdmin
+      .from('subscriptions')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order');
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const hydrated = await Promise.all((subs || []).map((s: any) => hydrateSubscription(s.id)));
+    const cleaned = hydrated.filter(Boolean).map((sub: any) => ({
+      ...sub,
+      plans: (sub.plans || [])
+        .filter((p: any) => p.is_active)
+        .map((p: any) => ({
+          ...p,
+          pricing: countryId ? (p.pricing || []).filter((pr: any) => pr.country_id === countryId) : (p.pricing || []),
+        }))
+        .filter((p: any) => !countryId || (p.pricing && p.pricing.length > 0)),
+    }));
+
+    res.json({ success: true, data: cleaned });
+  } catch (err) {
+    console.error('List subs for sales error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

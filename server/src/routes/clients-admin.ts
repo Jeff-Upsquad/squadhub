@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
+import {
+  PIPELINE_STATUSES,
+  transitionSubmissionStatus,
+} from '../utils/submissionPipeline';
 
 const router = Router();
 
@@ -182,7 +186,6 @@ router.get('/submissions', async (_req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('client_submissions')
       .select('*')
-      .eq('status', 'pending')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -190,7 +193,42 @@ router.get('/submissions', async (_req: Request, res: Response) => {
       return;
     }
     const enriched = await hydrateSalesPeopleOn(data || []);
-    res.json({ success: true, data: enriched });
+
+    // Hydrate staged subscription selections for each submission
+    const ids = enriched.map((s: any) => s.id);
+    let stagedMap: Record<string, any[]> = {};
+    if (ids.length > 0) {
+      const { data: rows } = await supabaseAdmin
+        .from('client_submission_subscriptions')
+        .select('*')
+        .in('submission_id', ids)
+        .order('created_at');
+      const list = rows || [];
+      const subIds = Array.from(new Set(list.map((r: any) => r.subscription_id)));
+      const planIds = Array.from(new Set(list.map((r: any) => r.plan_id)));
+      const [{ data: subs }, { data: plans }] = await Promise.all([
+        subIds.length ? supabaseAdmin.from('subscriptions').select('*').in('id', subIds) : Promise.resolve({ data: [] as any[] }),
+        planIds.length ? supabaseAdmin.from('subscription_plans').select('*').in('id', planIds) : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const subMap: Record<string, any> = {};
+      (subs || []).forEach((s: any) => { subMap[s.id] = s; });
+      const planMap: Record<string, any> = {};
+      (plans || []).forEach((p: any) => { planMap[p.id] = p; });
+      list.forEach((r: any) => {
+        (stagedMap[r.submission_id] = stagedMap[r.submission_id] || []).push({
+          ...r,
+          subscription: subMap[r.subscription_id] || null,
+          plan: planMap[r.plan_id] || null,
+        });
+      });
+    }
+
+    const withStaged = enriched.map((s: any) => ({
+      ...s,
+      selected_subscriptions: stagedMap[s.id] || [],
+    }));
+
+    res.json({ success: true, data: withStaged });
   } catch (err) {
     console.error('List submissions error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -276,12 +314,13 @@ router.patch('/:id/sales-people', async (req: Request, res: Response) => {
   }
 });
 
+// Count of leads in active pipeline (not converted/onboarding/closed) — drives the sidebar badge.
 router.get('/submissions/count', async (_req: Request, res: Response) => {
   try {
     const { count, error } = await supabaseAdmin
       .from('client_submissions')
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending');
+      .in('status', ['new', 'in_progress', 'selection']);
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -294,89 +333,223 @@ router.get('/submissions/count', async (_req: Request, res: Response) => {
   }
 });
 
-// POST /admin/clients/submissions/:id/approve
-const approveSchema = z.object({
-  plan_ids: z.array(z.string().uuid()).min(1),
+// PATCH /admin/clients/submissions/:id/status — admin updates pipeline status.
+// Transitioning to 'converted' materialises the Client + client_subscriptions.
+const submissionStatusSchema = z.object({
+  status: z.enum(PIPELINE_STATUSES),
 });
 
-router.post('/submissions/:id/approve', async (req: Request, res: Response) => {
+router.patch('/submissions/:id/status', async (req: Request, res: Response) => {
   try {
-    const body = approveSchema.parse(req.body);
-
-    const { data: submission, error: subErr } = await supabaseAdmin
-      .from('client_submissions')
-      .select('*')
-      .eq('id', req.params.id)
-      .eq('status', 'pending')
-      .single();
-
-    if (subErr || !submission) {
-      res.status(404).json({ success: false, error: 'Submission not found or already processed' });
+    const body = submissionStatusSchema.parse(req.body);
+    const result = await transitionSubmissionStatus(req.params.id as string, body.status);
+    if (!result.ok) {
+      res.status(result.code).json({ success: false, error: result.error });
       return;
     }
-
-    const { data: client, error: clientErr } = await supabaseAdmin
-      .from('clients')
-      .insert({
-        submission_id: submission.id,
-        business_name: submission.business_name,
-        contact_person: submission.contact_person,
-        designation: submission.designation,
-        contact_number: submission.contact_number,
-        email: submission.email,
-        business_address: submission.business_address,
-        gst_registered: submission.gst_registered,
-        gst_number: submission.gst_number,
-        accounts_email: submission.accounts_email,
-        country_id: submission.country_id,
-        primary_sales_person_id: submission.primary_sales_person_id || null,
-        secondary_sales_person_id: submission.secondary_sales_person_id || null,
-      })
-      .select()
-      .single();
-
-    if (clientErr || !client) {
-      res.status(500).json({ success: false, error: clientErr?.message || 'Failed to create client' });
-      return;
-    }
-
-    const { error: assignErr } = await assignPlansToClient(client.id, body.plan_ids);
-    if (assignErr) {
-      res.status(500).json({ success: false, error: assignErr });
-      return;
-    }
-
-    await supabaseAdmin
-      .from('client_submissions')
-      .update({ status: 'approved' })
-      .eq('id', req.params.id);
-
-    res.json({ success: true, data: client });
+    res.json({ success: true, data: { status: result.status, client_id: result.clientId } });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
       return;
     }
-    console.error('Approve submission error:', err);
+    console.error('Update submission status error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
-router.post('/submissions/:id/reject', async (req: Request, res: Response) => {
+// PATCH /admin/clients/submissions/:id/country — admin updates billing country on a lead.
+const submissionCountrySchema = z.object({ country_id: z.string().uuid() });
+
+router.patch('/submissions/:id/country', async (req: Request, res: Response) => {
   try {
+    const body = submissionCountrySchema.parse(req.body);
+
+    const { data: submission } = await supabaseAdmin
+      .from('client_submissions')
+      .select('status')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (!submission) {
+      res.status(404).json({ success: false, error: 'Submission not found' });
+      return;
+    }
+    if (submission.status === 'converted' || submission.status === 'closed') {
+      res.status(409).json({ success: false, error: 'Cannot change billing country on a converted or closed lead' });
+      return;
+    }
+
+    const { data: country } = await supabaseAdmin
+      .from('countries')
+      .select('id, is_active')
+      .eq('id', body.country_id)
+      .maybeSingle();
+    if (!country || !country.is_active) {
+      res.status(400).json({ success: false, error: 'Country not found or inactive' });
+      return;
+    }
+
     const { error } = await supabaseAdmin
       .from('client_submissions')
-      .update({ status: 'rejected' })
-      .eq('id', req.params.id)
-      .eq('status', 'pending');
+      .update({ country_id: body.country_id })
+      .eq('id', req.params.id as string);
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
-    res.json({ success: true, message: 'Submission rejected' });
+    res.json({ success: true, data: { country_id: body.country_id } });
   } catch (err) {
-    console.error('Reject submission error:', err);
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Admin update lead country error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Staged subscription management — mirrors the sales endpoints but without the
+// primary/secondary-SP guard (admin can edit any lead).
+const addStagedSubSchema = z.object({
+  subscription_id: z.string().uuid(),
+  plan_id: z.string().uuid(),
+});
+
+router.get('/submissions/:id/subscriptions', async (req: Request, res: Response) => {
+  try {
+    const { data: rows, error } = await supabaseAdmin
+      .from('client_submission_subscriptions')
+      .select('*')
+      .eq('submission_id', req.params.id)
+      .order('created_at');
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const list = rows || [];
+    if (list.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const subIds = Array.from(new Set(list.map((r: any) => r.subscription_id)));
+    const planIds = Array.from(new Set(list.map((r: any) => r.plan_id)));
+    const [{ data: subs }, { data: plans }] = await Promise.all([
+      supabaseAdmin.from('subscriptions').select('*').in('id', subIds),
+      supabaseAdmin.from('subscription_plans').select('*').in('id', planIds),
+    ]);
+    const subMap: Record<string, any> = {};
+    (subs || []).forEach((s: any) => { subMap[s.id] = s; });
+    const planMap: Record<string, any> = {};
+    (plans || []).forEach((p: any) => { planMap[p.id] = p; });
+
+    const enriched = list.map((r: any) => ({
+      ...r,
+      subscription: subMap[r.subscription_id] || null,
+      plan: planMap[r.plan_id] || null,
+    }));
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    console.error('Admin list staged subs error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+router.post('/submissions/:id/subscriptions', async (req: Request, res: Response) => {
+  try {
+    const body = addStagedSubSchema.parse(req.body);
+
+    const { data: submission } = await supabaseAdmin
+      .from('client_submissions')
+      .select('status')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (!submission) {
+      res.status(404).json({ success: false, error: 'Submission not found' });
+      return;
+    }
+    if (submission.status === 'converted' || submission.status === 'closed') {
+      res.status(409).json({ success: false, error: 'Cannot edit subscriptions on a converted or closed lead' });
+      return;
+    }
+
+    const { data: plan } = await supabaseAdmin
+      .from('subscription_plans')
+      .select('id, subscription_id, is_active')
+      .eq('id', body.plan_id)
+      .maybeSingle();
+    if (!plan || plan.subscription_id !== body.subscription_id) {
+      res.status(400).json({ success: false, error: 'Plan does not belong to the given subscription' });
+      return;
+    }
+    if (!plan.is_active) {
+      res.status(400).json({ success: false, error: 'Plan is inactive' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('client_submission_subscriptions')
+      .insert({
+        submission_id: req.params.id,
+        subscription_id: body.subscription_id,
+        plan_id: body.plan_id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      if ((error as any).code === '23505') {
+        res.status(409).json({ success: false, error: 'This subscription + plan is already selected for this lead' });
+        return;
+      }
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Admin add staged sub error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+router.delete('/submissions/:id/subscriptions/:rowId', async (req: Request, res: Response) => {
+  try {
+    const { data: submission } = await supabaseAdmin
+      .from('client_submissions')
+      .select('status')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (!submission) {
+      res.status(404).json({ success: false, error: 'Submission not found' });
+      return;
+    }
+    if (submission.status === 'converted' || submission.status === 'closed') {
+      res.status(409).json({ success: false, error: 'Cannot edit subscriptions on a converted or closed lead' });
+      return;
+    }
+
+    const { error } = await supabaseAdmin
+      .from('client_submission_subscriptions')
+      .delete()
+      .eq('id', req.params.rowId)
+      .eq('submission_id', req.params.id);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Admin delete staged sub error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
