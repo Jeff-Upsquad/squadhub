@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "264099090529",
+    "project_id": "squad-chat-c4665",
+    "storage_bucket": "squad-chat-c4665.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:264099090529:android:17973e191acffa4bcf1a20",
+        "android_client_info": {
+          "package_name": "com.squadhub.chat.clients"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCC7UeIYAnqeJHrYsmaPSrSJtmeGMu_MU4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

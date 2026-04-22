@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Android 11 and lower: controls what gets backed up to Google cloud.
+   Exclude encrypted auth prefs and the local Room DB — we don't want tokens
+   or cached conversations in Google's backup.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="squad_chat_auth_encrypted.xml" />
+    <exclude domain="database" path="squad_chat.db" />
+</full-backup-content>

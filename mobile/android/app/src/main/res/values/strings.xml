@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- app_name is injected per flavor via resValue in build.gradle.kts -->
+    <string name="login_email">Email</string>
+    <string name="login_password">Password</string>
+    <string name="login_button">Sign in</string>
+    <string name="login_title">Welcome back</string>
+    <string name="login_generic_error">Something went wrong. Try again.</string>
+
+    <string name="inbox_title">Chats</string>
+    <string name="inbox_tab_groups">Groups</string>
+    <string name="inbox_tab_dms">Direct messages</string>
+    <string name="inbox_empty_groups">You aren\'t in any groups yet.</string>
+    <string name="inbox_empty_dms">No conversations yet.</string>
+
+    <string name="update_required_title">Update required</string>
+    <string name="update_required_body">A new version is available. Please update to keep chatting.</string>
+    <string name="update_required_button">Get the latest version</string>
+
+    <string name="wrong_app_title">Wrong app</string>
+    <string name="wrong_app_body_clients">Your account is for the Squad Chat Team app. Install that one instead.</string>
+    <string name="wrong_app_body_team">Your account is for the Squad Chat (Clients) app. Install that one instead.</string>
+    <string name="wrong_app_button_sign_out">Sign out</string>
+</resources>

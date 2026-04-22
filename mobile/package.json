@@ -2,5 +2,5 @@
   "name": "@squadhub/mobile",
   "version": "0.1.0",
   "private": true,
-  "description": "SquadHub mobile app (React Native + Expo) — Phase 2"
+  "description": "SquadHub mobile apps. Squad Chat native Android (Kotlin/Gradle) lives under ./android — see ./android/README.md. This package.json is only here so npm workspaces still resolve the directory."
 }
