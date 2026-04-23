@@ -7,6 +7,7 @@ import {
   PIPELINE_STATUSES,
   transitionSubmissionStatus,
 } from '../utils/submissionPipeline';
+import { hydrateStagedSubscriptions } from '../utils/stagedSubscriptions';
 
 const router = Router();
 
@@ -194,35 +195,7 @@ router.get('/submissions', async (_req: Request, res: Response) => {
     }
     const enriched = await hydrateSalesPeopleOn(data || []);
 
-    // Hydrate staged subscription selections for each submission
-    const ids = enriched.map((s: any) => s.id);
-    let stagedMap: Record<string, any[]> = {};
-    if (ids.length > 0) {
-      const { data: rows } = await supabaseAdmin
-        .from('client_submission_subscriptions')
-        .select('*')
-        .in('submission_id', ids)
-        .order('created_at');
-      const list = rows || [];
-      const subIds = Array.from(new Set(list.map((r: any) => r.subscription_id)));
-      const planIds = Array.from(new Set(list.map((r: any) => r.plan_id)));
-      const [{ data: subs }, { data: plans }] = await Promise.all([
-        subIds.length ? supabaseAdmin.from('subscriptions').select('*').in('id', subIds) : Promise.resolve({ data: [] as any[] }),
-        planIds.length ? supabaseAdmin.from('subscription_plans').select('*').in('id', planIds) : Promise.resolve({ data: [] as any[] }),
-      ]);
-      const subMap: Record<string, any> = {};
-      (subs || []).forEach((s: any) => { subMap[s.id] = s; });
-      const planMap: Record<string, any> = {};
-      (plans || []).forEach((p: any) => { planMap[p.id] = p; });
-      list.forEach((r: any) => {
-        (stagedMap[r.submission_id] = stagedMap[r.submission_id] || []).push({
-          ...r,
-          subscription: subMap[r.subscription_id] || null,
-          plan: planMap[r.plan_id] || null,
-        });
-      });
-    }
-
+    const stagedMap = await hydrateStagedSubscriptions(enriched.map((s: any) => s.id));
     const withStaged = enriched.map((s: any) => ({
       ...s,
       selected_subscriptions: stagedMap[s.id] || [],
@@ -418,40 +391,9 @@ const addStagedSubSchema = z.object({
 
 router.get('/submissions/:id/subscriptions', async (req: Request, res: Response) => {
   try {
-    const { data: rows, error } = await supabaseAdmin
-      .from('client_submission_subscriptions')
-      .select('*')
-      .eq('submission_id', req.params.id)
-      .order('created_at');
-
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
-
-    const list = rows || [];
-    if (list.length === 0) {
-      res.json({ success: true, data: [] });
-      return;
-    }
-
-    const subIds = Array.from(new Set(list.map((r: any) => r.subscription_id)));
-    const planIds = Array.from(new Set(list.map((r: any) => r.plan_id)));
-    const [{ data: subs }, { data: plans }] = await Promise.all([
-      supabaseAdmin.from('subscriptions').select('*').in('id', subIds),
-      supabaseAdmin.from('subscription_plans').select('*').in('id', planIds),
-    ]);
-    const subMap: Record<string, any> = {};
-    (subs || []).forEach((s: any) => { subMap[s.id] = s; });
-    const planMap: Record<string, any> = {};
-    (plans || []).forEach((p: any) => { planMap[p.id] = p; });
-
-    const enriched = list.map((r: any) => ({
-      ...r,
-      subscription: subMap[r.subscription_id] || null,
-      plan: planMap[r.plan_id] || null,
-    }));
-    res.json({ success: true, data: enriched });
+    const leadId = req.params.id as string;
+    const map = await hydrateStagedSubscriptions([leadId]);
+    res.json({ success: true, data: map[leadId] || [] });
   } catch (err) {
     console.error('Admin list staged subs error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -502,10 +444,6 @@ router.post('/submissions/:id/subscriptions', async (req: Request, res: Response
       .single();
 
     if (error) {
-      if ((error as any).code === '23505') {
-        res.status(409).json({ success: false, error: 'This subscription + plan is already selected for this lead' });
-        return;
-      }
       res.status(500).json({ success: false, error: error.message });
       return;
     }
