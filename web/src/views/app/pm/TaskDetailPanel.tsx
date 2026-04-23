@@ -21,6 +21,7 @@ import MentionPicker from '../../../components/MentionPicker';
 import DatePicker from './DatePicker';
 import EmergencyConfirm from './EmergencyConfirm';
 import TaskStatusPicker from './TaskStatusPicker';
+import ListPickerCombobox from './ListPickerCombobox';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -146,12 +147,14 @@ export default function TaskDetailPanel({
   canEdit = true,
   spaceName,
   spaceColor,
+  spaceId,
 }: {
   statuses: SpaceStatus[];
   listId: string;
   canEdit?: boolean;
   spaceName?: string;
   spaceColor?: string | null;
+  spaceId?: string | null;
 }) {
   const { activeTaskId, setActiveTask, timer, startTimer: globalStartTimer, stopTimer: globalStopTimer } = usePMStore();
   const { data: task, isLoading } = useTask(activeTaskId);
@@ -434,7 +437,35 @@ export default function TaskDetailPanel({
               <path d="M13 17l5-5-5-5M6 17l5-5-5-5" />
             </svg>
           </button>
-          {task && spaceName && (
+          {task && spaceName && workspaceId && canEdit ? (
+            <ListPickerCombobox
+              workspaceId={workspaceId}
+              selectedListId={listId}
+              selectedListName={null}
+              initialSpaceId={spaceId ?? null}
+              onChange={(newListId) => {
+                if (newListId !== listId) {
+                  updateTask.mutate({ id: task.id, list_id: newListId });
+                }
+              }}
+              renderTrigger={({ toggle }) => (
+                <button
+                  type="button"
+                  onClick={toggle}
+                  className="td-host-chip td-focus"
+                  title="Move to another list"
+                >
+                  <span className="logo" style={{ background: spaceColor || 'var(--sh-ink)' }}>
+                    {initialOf(spaceName)[0]}
+                  </span>
+                  <span>{spaceName}</span>
+                  <svg className="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              )}
+            />
+          ) : task && spaceName ? (
             <span className="td-host-chip td-focus" tabIndex={0}>
               <span className="logo" style={{ background: spaceColor || 'var(--sh-ink)' }}>
                 {initialOf(spaceName)[0]}
@@ -444,7 +475,7 @@ export default function TaskDetailPanel({
                 <path d="M9 5l7 7-7 7" />
               </svg>
             </span>
-          )}
+          ) : null}
           {task && (
             <span className="text-[11.5px] text-[color:var(--sh-ink-4)] font-medium tracking-[0.01em]">
               SQ-{String(task.display_number ?? 0).padStart(3, '0')}
