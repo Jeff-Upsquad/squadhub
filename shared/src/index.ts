@@ -324,6 +324,24 @@ export interface Task {
   parent_task?: { id: string; title: string } | null;
 }
 
+export interface TaskTimeEntry {
+  id: string;
+  task_id: string;
+  user_id: string;
+  workspace_id: string;
+  started_at: string;
+  stopped_at: string;
+  duration_seconds: number;
+  created_at: string;
+  // Joined — task + its list/folder/space + parent (for UI breadcrumbs)
+  task?: Pick<Task, 'id' | 'title' | 'list_id' | 'time_tracked'> & {
+    list?: { id: string; name: string } | null;
+    folder?: { id: string; name: string } | null;
+    space?: { id: string; name: string } | null;
+    parent_task?: { id: string; title: string } | null;
+  };
+}
+
 export interface TaskTag {
   id: string;
   workspace_id: string;

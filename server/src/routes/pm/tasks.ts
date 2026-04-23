@@ -399,6 +399,128 @@ router.get('/tasks/emergency', async (req: Request, res: Response) => {
   }
 });
 
+// GET /pm/tasks/my-time-entries — returns the caller's task time entries
+// (per-session history) joined with task + list/folder/space + parent_task for
+// the Time Sheet panel. Sorted newest first; client groups by local date.
+router.get('/tasks/my-time-entries', async (req: Request, res: Response) => {
+  try {
+    const { data: entries, error } = await supabaseAdmin
+      .from('task_time_entries')
+      .select('*')
+      .eq('user_id', req.userId!)
+      .order('started_at', { ascending: false })
+      .limit(500);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const rows = entries || [];
+    if (rows.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const taskIds = Array.from(new Set(rows.map((e: any) => e.task_id)));
+    const { data: tasks } = await supabaseAdmin
+      .from('tasks')
+      .select('id, title, list_id, parent_task_id, time_tracked')
+      .in('id', taskIds);
+
+    const hydratedTasks = await hydrateParents(await hydrateLists(tasks || []));
+    const taskById = new Map<string, any>(hydratedTasks.map((t: any) => [t.id, t]));
+
+    const data = rows.map((e: any) => ({
+      ...e,
+      task: taskById.get(e.task_id) || null,
+    }));
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Get my time entries error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /pm/tasks/:id/time-entries — record one timer session. Creates a row
+// in task_time_entries AND atomically bumps tasks.time_tracked so existing
+// aggregate UIs (task detail "Logged" field) stay in sync.
+const createTimeEntrySchema = z.object({
+  started_at: z.string(),
+  duration_seconds: z.number().int().min(1),
+});
+
+router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
+  try {
+    const taskId = req.params.id as string;
+    const { started_at, duration_seconds } = createTimeEntrySchema.parse(req.body);
+
+    // Resolve list → space → workspace for the entry's workspace_id
+    const { data: task } = await supabaseAdmin
+      .from('tasks')
+      .select('id, list_id, time_tracked')
+      .eq('id', taskId)
+      .single();
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    const userLevel = await checkResourceAccess(req.userId!, 'list', (task as any).list_id);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this task' });
+      return;
+    }
+
+    const { data: list } = await supabaseAdmin
+      .from('lists').select('space_id').eq('id', (task as any).list_id).single();
+    const { data: space } = list?.space_id
+      ? await supabaseAdmin.from('spaces').select('workspace_id').eq('id', (list as any).space_id).single()
+      : { data: null as any };
+    const workspaceId = (space as any)?.workspace_id;
+    if (!workspaceId) {
+      res.status(500).json({ success: false, error: 'Cannot resolve workspace for task' });
+      return;
+    }
+
+    const stoppedAt = new Date(new Date(started_at).getTime() + duration_seconds * 1000).toISOString();
+
+    const { data: entry, error: insertErr } = await supabaseAdmin
+      .from('task_time_entries')
+      .insert({
+        task_id: taskId,
+        user_id: req.userId!,
+        workspace_id: workspaceId,
+        started_at,
+        stopped_at: stoppedAt,
+        duration_seconds,
+      })
+      .select()
+      .single();
+
+    if (insertErr) {
+      res.status(500).json({ success: false, error: insertErr.message });
+      return;
+    }
+
+    // Bump aggregate cache on the task
+    const newTotal = ((task as any).time_tracked || 0) + duration_seconds;
+    await supabaseAdmin
+      .from('tasks')
+      .update({ time_tracked: newTotal })
+      .eq('id', taskId);
+
+    res.json({ success: true, data: entry });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Create time entry error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // GET /pm/tasks/:id — requires viewer access on parent list
 router.get('/tasks/:id', async (req: Request, res: Response) => {
   try {

@@ -1,22 +1,14 @@
 import { useState, useEffect } from 'react';
 import { usePMStore } from '../stores/pmStore';
-import api from '../services/api';
-import { useQueryClient } from '@tanstack/react-query';
-
-function formatSeconds(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  if (h) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
+import { useCreateTaskTimeEntry } from '../hooks/useTaskTimeEntries';
+import { formatClock } from '../lib/formatDuration';
 
 export default function ActiveTimer() {
   const timer = usePMStore((s) => s.timer);
   const stopTimer = usePMStore((s) => s.stopTimer);
   const setActiveTask = usePMStore((s) => s.setActiveTask);
+  const createEntry = useCreateTaskTimeEntry();
   const [elapsed, setElapsed] = useState(0);
-  const qc = useQueryClient();
 
   useEffect(() => {
     if (!timer) { setElapsed(0); return; }
@@ -32,11 +24,13 @@ export default function ActiveTimer() {
     const stopped = stopTimer();
     if (!stopped) return;
     const elapsedSecs = Math.floor((Date.now() - stopped.startedAt) / 1000);
-    const newTracked = stopped.baseTracked + elapsedSecs;
+    if (elapsedSecs < 1) return;
     try {
-      await api.put(`/pm/tasks/${stopped.taskId}`, { time_tracked: newTracked });
-      qc.invalidateQueries({ queryKey: ['tasks', stopped.listId] });
-      qc.invalidateQueries({ queryKey: ['task', stopped.taskId] });
+      await createEntry.mutateAsync({
+        taskId: stopped.taskId,
+        startedAt: new Date(stopped.startedAt).toISOString(),
+        durationSeconds: elapsedSecs,
+      });
     } catch (err) {
       console.error('Failed to save tracked time:', err);
     }
@@ -61,7 +55,7 @@ export default function ActiveTimer() {
 
       {/* Elapsed time */}
       <span className="rounded bg-emerald-100 px-2 py-0.5 font-mono text-xs font-semibold text-emerald-800 tabular-nums">
-        {formatSeconds(elapsed)}
+        {formatClock(elapsed)}
       </span>
 
       {/* Stop button */}
