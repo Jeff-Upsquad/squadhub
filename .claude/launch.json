@@ -110,6 +110,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-fix-task-list-invalidation/web && INTERNAL_API_URL=http://localhost:4020 exec npx next dev -p 3020"],
       "port": 3020
+    },
+    {
+      "name": "Move List Folder Worktree",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-move-list-folder/web && PORT=3099 INTERNAL_API_URL=http://localhost:4010 exec npx next dev -p 3099"],
+      "port": 3099
     }
   ]
 }

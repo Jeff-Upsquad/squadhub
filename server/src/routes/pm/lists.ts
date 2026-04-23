@@ -284,6 +284,64 @@ router.put('/lists/:id', async (req: Request, res: Response) => {
     if (req.body.name) updates.name = req.body.name;
     if (req.body.default_view) updates.default_view = req.body.default_view;
     if (req.body.folder_id !== undefined) updates.folder_id = req.body.folder_id;
+    if (req.body.space_id !== undefined) updates.space_id = req.body.space_id;
+
+    // Validate destination when moving (space_id or folder_id changed)
+    if ('space_id' in updates || 'folder_id' in updates) {
+      const { data: currentList } = await supabaseAdmin
+        .from('lists')
+        .select('space_id, folder_id')
+        .eq('id', id)
+        .single();
+      if (!currentList) {
+        res.status(404).json({ success: false, error: 'List not found' });
+        return;
+      }
+
+      const resolvedSpaceId = (updates.space_id as string | undefined) ?? currentList.space_id;
+      const resolvedFolderId = ('folder_id' in updates
+        ? (updates.folder_id as string | null | undefined)
+        : currentList.folder_id) ?? null;
+
+      // Destination space must exist and be accessible at member+
+      if (updates.space_id && updates.space_id !== currentList.space_id) {
+        const { data: destSpace } = await supabaseAdmin
+          .from('spaces')
+          .select('id, deleted_at')
+          .eq('id', resolvedSpaceId)
+          .single();
+        if (!destSpace || destSpace.deleted_at) {
+          res.status(400).json({ success: false, error: 'Destination space does not exist' });
+          return;
+        }
+        const destAccess = await checkResourceAccess(req.userId!, 'space', resolvedSpaceId);
+        if (!destAccess || !meetsAccessLevel(destAccess, 'member')) {
+          res.status(403).json({ success: false, error: 'Member access required on destination space' });
+          return;
+        }
+        if (!adminUser && await isResourceLocked('space', resolvedSpaceId)) {
+          res.status(403).json({ success: false, error: 'Destination space is locked' });
+          return;
+        }
+      }
+
+      // Destination folder (if provided) must exist, not be soft-deleted, and live in the resolved space
+      if (resolvedFolderId) {
+        const { data: destFolder } = await supabaseAdmin
+          .from('folders')
+          .select('id, space_id, deleted_at')
+          .eq('id', resolvedFolderId)
+          .single();
+        if (!destFolder || destFolder.deleted_at) {
+          res.status(400).json({ success: false, error: 'Destination folder does not exist' });
+          return;
+        }
+        if (destFolder.space_id !== resolvedSpaceId) {
+          res.status(400).json({ success: false, error: 'Destination folder is not in the destination space' });
+          return;
+        }
+      }
+    }
 
     const { data, error } = await supabaseAdmin
       .from('lists')

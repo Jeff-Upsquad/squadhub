@@ -100,3 +100,42 @@ export function useDeleteList(spaceId: string) {
     },
   });
 }
+
+export function useMoveList(currentSpaceId: string) {
+  const qc = useQueryClient();
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
+  return useMutation({
+    mutationFn: async (vars: { listId: string; space_id: string; folder_id: string | null }) => {
+      const res = await api.put(`/pm/lists/${vars.listId}`, {
+        space_id: vars.space_id,
+        folder_id: vars.folder_id,
+      });
+      return res.data.data;
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['space', currentSpaceId] });
+      if (vars.space_id !== currentSpaceId) {
+        qc.invalidateQueries({ queryKey: ['space', vars.space_id] });
+      }
+      qc.invalidateQueries({ queryKey: ['spaces', workspaceId] });
+    },
+  });
+}
+
+export function useMoveFolder(currentSpaceId: string) {
+  const qc = useQueryClient();
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
+  return useMutation({
+    mutationFn: async (vars: { folderId: string; space_id: string }) => {
+      const res = await api.put(`/pm/folders/${vars.folderId}`, { space_id: vars.space_id });
+      return res.data.data;
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['space', currentSpaceId] });
+      if (vars.space_id !== currentSpaceId) {
+        qc.invalidateQueries({ queryKey: ['space', vars.space_id] });
+      }
+      qc.invalidateQueries({ queryKey: ['spaces', workspaceId] });
+    },
+  });
+}
