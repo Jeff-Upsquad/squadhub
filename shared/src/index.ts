@@ -926,6 +926,14 @@ export type SubscriptionTier = 'Junior' | 'Pro' | 'Elite';
 export type SubscriptionSlug = 'designer' | 'video_editor';
 export type DeliverableKind = 'hours' | 'item';
 export type CurrencyCode = 'INR' | 'USD';
+
+// Formats a price in the given currency — "₹3,000" or "$30".
+export function formatPrice(amount: number, currency: CurrencyCode): string {
+  const sym = currency === 'USD' ? '$' : '\u20B9';
+  const locale = currency === 'USD' ? 'en-US' : 'en-IN';
+  return `${sym}${amount.toLocaleString(locale)}`;
+}
+
 export type ClientStatus = 'active' | 'paused' | 'cancelled';
 export type SubmissionStatus =
   | 'new'

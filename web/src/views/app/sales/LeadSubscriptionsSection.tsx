@@ -6,9 +6,12 @@ import type {
   Country,
   Subscription,
   SubscriptionPlan,
+  SubscriptionPlanDeliverable,
   SubscriptionPlanRow,
   SubscriptionTier,
 } from '@squadhub/shared';
+import { formatPrice } from '@squadhub/shared';
+import ConfirmRemoveDialog from '../../../components/ConfirmRemoveDialog';
 
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
 const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Elite'];
@@ -23,6 +26,7 @@ type Props = {
 export default function LeadSubscriptionsSection({ leadId, countryId, selected, disabled }: Props) {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
+  const [confirmRowId, setConfirmRowId] = useState<string | null>(null);
 
   const { data: countriesRes } = useQuery({
     queryKey: ['public-countries'],
@@ -43,9 +47,15 @@ export default function LeadSubscriptionsSection({ leadId, countryId, selected, 
 
   const deleteMutation = useMutation({
     mutationFn: (rowId: string) => api.delete(`/onboarding-links/leads/${leadId}/subscriptions/${rowId}`),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      setConfirmRowId(null);
+    },
     onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed to remove'),
   });
+
+  const rowBeingConfirmed = selected.find((r) => r.id === confirmRowId) || null;
+  const activeCountry = countries.find((c) => c.id === countryId) || null;
 
   return (
     <div className="space-y-2">
@@ -98,29 +108,103 @@ export default function LeadSubscriptionsSection({ leadId, countryId, selected, 
       ) : (
         <ul className="divide-y divide-[var(--sh-hair)] rounded-lg border border-[var(--sh-hair)]">
           {selected.map((row) => (
-            <li key={row.id} className="flex items-center justify-between px-3 py-2 text-sm">
-              <div>
-                <p className="font-medium text-[var(--sh-ink)]">{row.subscription?.name || '—'}</p>
-                <p className="text-xs text-[var(--sh-ink-3)]">
-                  {row.plan ? `${row.plan.plan} · ${row.plan.tier}` : '—'}
-                </p>
-              </div>
-              {!disabled && (
-                <button
-                  type="button"
-                  onClick={() => deleteMutation.mutate(row.id)}
-                  disabled={deleteMutation.isPending}
-                  className="rounded-md px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
-                  aria-label="Remove"
-                >
-                  Remove
-                </button>
-              )}
-            </li>
+            <SelectedSubscriptionRow
+              key={row.id}
+              row={row}
+              countryId={countryId}
+              countryName={activeCountry?.name || null}
+              canRemove={!disabled}
+              onRemove={() => setConfirmRowId(row.id)}
+              removing={deleteMutation.isPending && confirmRowId === row.id}
+            />
           ))}
         </ul>
       )}
+
+      <ConfirmRemoveDialog
+        open={!!rowBeingConfirmed}
+        title="Remove subscription"
+        description={rowBeingConfirmed
+          ? `${rowBeingConfirmed.subscription?.name || 'Subscription'} · ${rowBeingConfirmed.plan?.plan || ''} · ${rowBeingConfirmed.plan?.tier || ''} will be removed from this lead.`
+          : ''}
+        loading={deleteMutation.isPending}
+        onClose={() => setConfirmRowId(null)}
+        onConfirm={() => rowBeingConfirmed && deleteMutation.mutate(rowBeingConfirmed.id)}
+      />
     </div>
+  );
+}
+
+function SelectedSubscriptionRow({
+  row, countryId, countryName, canRemove, onRemove, removing,
+}: {
+  row: ClientSubmissionSubscription;
+  countryId: string | null;
+  countryName: string | null;
+  canRemove: boolean;
+  onRemove: () => void;
+  removing: boolean;
+}) {
+  const plan = row.plan || null;
+  const pricing = (plan?.pricing || []).find((pr) => pr.country_id === countryId);
+  const priceLabel = pricing
+    ? `${formatPrice(pricing.price, pricing.country?.currency || 'INR')}/mo`
+    : null;
+  const deliverables = plan?.deliverables || [];
+
+  return (
+    <li className="px-3 py-2.5 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <p className="font-medium text-[var(--sh-ink)]">{row.subscription?.name || '—'}</p>
+            <p className="text-xs text-[var(--sh-ink-3)]">
+              {plan ? `${plan.plan} · ${plan.tier}` : '—'}
+            </p>
+            {priceLabel ? (
+              <p className="text-xs font-medium text-[var(--sh-ink)]">{priceLabel}</p>
+            ) : (
+              <p className="text-xs text-[var(--sh-ink-4)]">
+                — no price set{countryName ? ` for ${countryName}` : ''}
+              </p>
+            )}
+          </div>
+
+          {deliverables.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {deliverables.map((d) => <DeliverableChip key={d.id} deliverable={d} />)}
+            </div>
+          )}
+        </div>
+        {canRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={removing}
+            className="shrink-0 rounded-md px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+          >
+            Remove
+          </button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function DeliverableChip({ deliverable }: { deliverable: SubscriptionPlanDeliverable }) {
+  const label = deliverable.kind === 'hours'
+    ? 'Hours'
+    : (deliverable.deliverable_type?.name || 'Item');
+  const badgeClass = deliverable.kind === 'hours'
+    ? 'bg-indigo-100 text-indigo-700'
+    : 'bg-purple-100 text-purple-700';
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-md bg-[var(--sh-hair-3)] px-2 py-0.5 text-[11px] text-[var(--sh-ink)]">
+      <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${badgeClass}`}>{label}</span>
+      <span className="text-[var(--sh-ink-3)]">
+        {deliverable.per_day}/d · {deliverable.per_week}/w · {deliverable.per_month}/m
+      </span>
+    </span>
   );
 }
 
@@ -151,15 +235,13 @@ function AddSubscriptionInline({
     onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed to add'),
   });
 
-  const takenPlanIds = new Set(alreadySelected.map((s) => s.plan_id));
-
   const selectedSub = catalog.find((s) => s.id === subscriptionId) || null;
-  const availablePlans: SubscriptionPlanRow[] = useMemo(() => {
+  const sortedPlans: SubscriptionPlanRow[] = useMemo(() => {
     if (!selectedSub) return [];
     return (selectedSub.plans || [])
-      .filter((p) => p.is_active && !takenPlanIds.has(p.id))
+      .filter((p) => p.is_active)
       .sort((a, b) => PLAN_ORDER.indexOf(a.plan) - PLAN_ORDER.indexOf(b.plan));
-  }, [selectedSub, alreadySelected]);
+  }, [selectedSub]);
 
   return (
     <div className="space-y-2 rounded-lg border border-[var(--sh-hair)] bg-[var(--sh-hair-3)] p-3">
@@ -179,9 +261,9 @@ function AddSubscriptionInline({
       {selectedSub && (
         <div>
           <label className="mb-1 block text-xs font-medium text-[var(--sh-ink-3)]">Plan</label>
-          {availablePlans.length === 0 ? (
+          {sortedPlans.length === 0 ? (
             <p className="rounded-md bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--sh-ink-4)]">
-              No plans available for this country.
+              No plans priced for this country.
             </p>
           ) : (
             <select
@@ -191,17 +273,18 @@ function AddSubscriptionInline({
             >
               <option value="">Select plan…</option>
               {TIERS.map((tier) => {
-                const inTier = availablePlans.filter((p) => p.tier === tier);
+                const inTier = sortedPlans.filter((p) => p.tier === tier);
                 if (inTier.length === 0) return null;
                 return (
                   <optgroup key={tier} label={tier}>
                     {inTier.map((p) => {
                       const pr = (p.pricing || [])[0];
-                      const price = pr?.price ?? 0;
-                      const sym = pr?.country?.currency === 'USD' ? '$' : '\u20B9';
+                      const priceLabel = pr
+                        ? `${formatPrice(pr.price, pr.country?.currency || 'INR')}/mo`
+                        : 'no price';
                       return (
                         <option key={p.id} value={p.id}>
-                          {p.plan} — {sym}{price.toLocaleString()}/mo
+                          {p.plan} — {priceLabel}
                         </option>
                       );
                     })}

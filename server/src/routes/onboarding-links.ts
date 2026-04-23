@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../supabase';
 import { getUserRoleIds, getUserIdsByRoleId } from '../utils/roles';
 import { hydrateSubscription } from '../utils/subscriptions';
+import { hydrateStagedSubscriptions } from '../utils/stagedSubscriptions';
 import {
   PIPELINE_STATUSES,
   isPipelineStatus,
@@ -251,45 +252,6 @@ router.get('/my', requireSalesLeadsAccess, async (req: Request, res: Response) =
   }
 });
 
-// Hydrate staged subscriptions for a set of submission IDs into a map keyed by submission_id.
-async function hydrateStagedSubscriptions(submissionIds: string[]): Promise<Record<string, any[]>> {
-  if (submissionIds.length === 0) return {};
-
-  const { data: rows } = await supabaseAdmin
-    .from('client_submission_subscriptions')
-    .select('*')
-    .in('submission_id', submissionIds)
-    .order('created_at');
-
-  const list = rows || [];
-  if (list.length === 0) return {};
-
-  const subIds = Array.from(new Set(list.map((r: any) => r.subscription_id)));
-  const planIds = Array.from(new Set(list.map((r: any) => r.plan_id)));
-
-  const [{ data: subs }, { data: plans }] = await Promise.all([
-    supabaseAdmin.from('subscriptions').select('*').in('id', subIds),
-    supabaseAdmin.from('subscription_plans').select('*').in('id', planIds),
-  ]);
-
-  const subMap: Record<string, any> = {};
-  (subs || []).forEach((s: any) => { subMap[s.id] = s; });
-  const planMap: Record<string, any> = {};
-  (plans || []).forEach((p: any) => { planMap[p.id] = p; });
-
-  const bySubmission: Record<string, any[]> = {};
-  list.forEach((r: any) => {
-    const enriched = {
-      ...r,
-      subscription: subMap[r.subscription_id] || null,
-      plan: planMap[r.plan_id] || null,
-    };
-    (bySubmission[r.submission_id] = bySubmission[r.submission_id] || []).push(enriched);
-  });
-
-  return bySubmission;
-}
-
 // Guard that resolves a lead and verifies the caller is primary or secondary SP.
 async function resolveLeadForUser(leadId: string, userId: string) {
   const { data: submission, error } = await supabaseAdmin
@@ -495,10 +457,6 @@ router.post('/leads/:id/subscriptions', requireSalesLeadsAccess, async (req: Req
       .single();
 
     if (error) {
-      if ((error as any).code === '23505') {
-        res.status(409).json({ success: false, error: 'This subscription + plan is already selected for this lead' });
-        return;
-      }
       res.status(500).json({ success: false, error: error.message });
       return;
     }
