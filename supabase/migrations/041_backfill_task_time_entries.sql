@@ -9,7 +9,7 @@
 -- Caveats:
 --   - This inflates team-wide totals: a 5h total on a 3-assignee task
 --     becomes 5h in THREE people's Time Sheets.
---   - started_at and stopped_at are both set to task.updated_at (we don't
+--   - started_at and stopped_at are both set to task.created_at (we don't
 --     know when the time was actually logged). Duration is correct.
 --   - Subsequent code path (ActiveTimer / TaskDetailPanel) stops bumping
 --     tasks.time_tracked through the old PUT path — from the release of
@@ -22,8 +22,8 @@ SELECT
   t.id,
   u.user_id,
   s.workspace_id,
-  t.updated_at,
-  t.updated_at,
+  t.created_at,
+  t.created_at,
   t.time_tracked,
   now()
 FROM tasks t
