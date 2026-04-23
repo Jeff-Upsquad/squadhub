@@ -10,12 +10,22 @@ import BoardView from './BoardView';
 import SettingsSlider from '../../../components/SettingsSlider';
 import ManageMembersModal from './ManageMembersModal';
 import TaskCreatePanel from './TaskCreatePanel';
+import { LIST_GROUP_BY_OPTIONS } from '../../../lib/taskGrouping';
 
 export default function ListPage() {
-  const { activeSpaceId, activeListId, viewMode, setViewMode, setActiveTask } = usePMStore();
+  const {
+    activeSpaceId,
+    activeListId,
+    viewMode,
+    setViewMode,
+    setActiveTask,
+    listGroupBy,
+    setListGroupBy,
+    myTasksOnly,
+    setMyTasksOnly,
+  } = usePMStore();
   const [showSettings, setShowSettings] = useState(false);
   const [showShare, setShowShare] = useState(false);
-  const [groupByStatus] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreatePanel, setShowCreatePanel] = useState(false);
 
@@ -163,6 +173,45 @@ export default function ListPage() {
         </div>
       </div>
 
+      {/* Group by pills + My tasks toggle (List view only) */}
+      {viewMode === 'list' && (
+        <div className="sh-view dl-groupby shrink-0">
+          <span className="dl-groupby-lbl">Group by</span>
+          {LIST_GROUP_BY_OPTIONS.map((opt) => (
+            <div
+              key={opt.value}
+              className="pill"
+              data-active={listGroupBy === opt.value}
+              onClick={() => setListGroupBy(opt.value as typeof listGroupBy)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setListGroupBy(opt.value as typeof listGroupBy);
+                }
+              }}
+            >
+              {opt.label}
+            </div>
+          ))}
+          <div style={{ flex: 1 }} />
+          <button
+            type="button"
+            onClick={() => setMyTasksOnly(!myTasksOnly)}
+            className="lv-mytasks-toggle"
+            data-active={myTasksOnly}
+            aria-pressed={myTasksOnly}
+            title="Show only tasks assigned to me"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+            My tasks
+          </button>
+        </div>
+      )}
+
       {/* Content area + task detail panel */}
       <div className="flex flex-1 overflow-hidden">
         {viewMode === 'list' ? (
@@ -170,7 +219,8 @@ export default function ListPage() {
             listId={activeListId}
             statuses={statuses}
             filters={filters}
-            groupByStatus={groupByStatus}
+            groupBy={listGroupBy}
+            myTasksOnly={myTasksOnly}
             searchQuery={searchQuery}
             canEdit={canEdit}
           />
