@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import type { GroupBy } from '../lib/taskGrouping';
 
 export type ViewMode = 'list' | 'board';
 export type DashboardTab = 'today' | 'overdue' | 'tomorrow' | 'all';
+export type ListGroupBy = Extract<GroupBy, 'status' | 'none' | 'work_date' | 'due_date' | 'priority'>;
 
 interface TimerState {
   taskId: string;
@@ -23,6 +25,8 @@ interface PMState {
   activeDashboardTab: DashboardTab | null;
   contextListId: string | null;
   viewMode: ViewMode;
+  listGroupBy: ListGroupBy;
+  myTasksOnly: boolean;
   collapsedGroups: Record<string, boolean>;
   selectedTasks: string[];
   timer: TimerState | null;
@@ -36,6 +40,8 @@ interface PMState {
   setActiveClient: (id: string | null) => void;
   setActiveDashboardTab: (tab: DashboardTab | null) => void;
   setViewMode: (mode: ViewMode) => void;
+  setListGroupBy: (g: ListGroupBy) => void;
+  setMyTasksOnly: (v: boolean) => void;
   toggleGroupCollapse: (statusId: string) => void;
   toggleTaskSelection: (taskId: string) => void;
   selectAllTasks: (taskIds: string[]) => void;
@@ -58,6 +64,8 @@ export const usePMStore = create<PMState>()(
       activeDashboardTab: null,
       contextListId: null,
       viewMode: 'list',
+      listGroupBy: 'status',
+      myTasksOnly: false,
       collapsedGroups: {},
       selectedTasks: [],
       timer: null,
@@ -72,6 +80,8 @@ export const usePMStore = create<PMState>()(
       setActiveClient: (id) => set({ activeClientId: id }),
       setActiveDashboardTab: (tab) => set({ activeDashboardTab: tab }),
       setViewMode: (mode) => set({ viewMode: mode }),
+      setListGroupBy: (g) => set({ listGroupBy: g }),
+      setMyTasksOnly: (v) => set({ myTasksOnly: v }),
       toggleGroupCollapse: (statusId) =>
         set((state) => ({
           collapsedGroups: {
@@ -99,12 +109,12 @@ export const usePMStore = create<PMState>()(
         set({ timer: null });
         return prev;
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', collapsedGroups: {}, selectedTasks: [], timer: null }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], timer: null }),
     }),
     {
       name: 'squadhub-pm',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ timer: state.timer }),
+      partialize: (state) => ({ timer: state.timer, listGroupBy: state.listGroupBy, myTasksOnly: state.myTasksOnly }),
       version: 1,
     }
   )

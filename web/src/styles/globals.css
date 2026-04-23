@@ -235,6 +235,10 @@ body {
 .sh-view .pill[data-active="true"] { background: var(--sh-ink); color: var(--surface); }
 .sh-view.dl-groupby { display: flex; align-items: center; gap: 6px; padding: 8px 18px; border-bottom: 1px solid var(--sh-hair-3); font-size: 11.5px; flex-wrap: wrap; }
 .sh-view.dl-groupby .dl-groupby-lbl { color: var(--sh-ink-3); margin-right: 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+.lv-mytasks-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 500; color: var(--sh-ink-3); background: transparent; border: 1px solid var(--sh-hair); cursor: pointer; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
+.lv-mytasks-toggle:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
+.lv-mytasks-toggle[data-active="true"] { background: #16a34a; color: #fff; border-color: #16a34a; }
+.lv-mytasks-toggle[data-active="true"]:hover { background: #15803d; border-color: #15803d; color: #fff; }
 .sh-view .today-group-head { padding: 12px 18px 4px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; color: var(--sh-ink-3); display: flex; align-items: center; gap: 6px; }
 .sh-view .today-group-head .count { color: var(--sh-ink-4); font-weight: 500; }
 .sh-view .today-group + .today-group .today-group-head { border-top: 1px solid var(--sh-hair-3); margin-top: 6px; padding-top: 14px; }

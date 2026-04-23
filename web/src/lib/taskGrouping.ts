@@ -1,6 +1,6 @@
 import type { Task } from '@squadhub/shared';
 
-export type GroupBy = 'none' | 'work_date' | 'due_date' | 'priority' | 'space' | 'folder' | 'list';
+export type GroupBy = 'none' | 'status' | 'work_date' | 'due_date' | 'priority' | 'space' | 'folder' | 'list';
 
 export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'none', label: 'None' },
@@ -10,6 +10,14 @@ export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'space', label: 'Space' },
   { value: 'folder', label: 'Folder' },
   { value: 'list', label: 'List' },
+];
+
+export const LIST_GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
+  { value: 'status', label: 'Status' },
+  { value: 'none', label: 'None' },
+  { value: 'work_date', label: 'Work date' },
+  { value: 'due_date', label: 'Due date' },
+  { value: 'priority', label: 'Priority' },
 ];
 
 export const PRIORITY_ORDER: Record<string, number> = {
