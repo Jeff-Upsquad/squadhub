@@ -47,6 +47,7 @@ export default function GlobalTaskDetailPanel() {
       canEdit={canEdit}
       spaceName={spaceData?.name || listData?.name}
       spaceColor={spaceData?.color || null}
+      spaceId={spaceId ?? null}
     />
   );
 }

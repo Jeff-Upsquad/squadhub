@@ -39,6 +39,7 @@ const updateSchema = z.object({
   time_tracked: z.number().int().min(0).optional(),
   assignee_ids: z.array(z.string().uuid()).optional(),
   metadata: z.record(z.string(), z.any()).optional(),
+  list_id: z.string().uuid().optional(),
 });
 
 // Helper to get list_id from a task
@@ -722,6 +723,27 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     if (!adminUser && await isResourceLocked('list', listId)) {
       res.status(403).json({ success: false, error: 'This list is locked' });
       return;
+    }
+
+    if (body.list_id && body.list_id !== listId) {
+      const { data: destList } = await supabaseAdmin
+        .from('lists')
+        .select('id, deleted_at')
+        .eq('id', body.list_id)
+        .single();
+      if (!destList || destList.deleted_at) {
+        res.status(400).json({ success: false, error: 'Destination list does not exist' });
+        return;
+      }
+      const destLevel = await checkResourceAccess(req.userId!, 'list', body.list_id);
+      if (!destLevel || !meetsAccessLevel(destLevel, 'member')) {
+        res.status(403).json({ success: false, error: 'Member access required on destination list' });
+        return;
+      }
+      if (!adminUser && await isResourceLocked('list', body.list_id)) {
+        res.status(403).json({ success: false, error: 'Destination list is locked' });
+        return;
+      }
     }
 
     const { data, error } = await supabaseAdmin

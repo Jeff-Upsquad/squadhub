@@ -123,12 +123,17 @@ export function useUpdateTask(listId: string | null) {
       time_tracked?: number;
       assignee_ids?: string[];
       metadata?: TaskMetadata;
+      list_id?: string;
     }) => {
       const res = await api.put(`/pm/tasks/${id}`, body);
       return res.data.data;
     },
     onSuccess: (_data, vars) => {
       invalidateTaskLists(qc, listId);
+      if (vars.list_id && vars.list_id !== listId) {
+        invalidateTaskLists(qc, vars.list_id);
+        qc.invalidateQueries({ queryKey: ['list', vars.list_id] });
+      }
       qc.invalidateQueries({ queryKey: ['task', vars.id] });
       qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
       qc.invalidateQueries({ queryKey: ['notifications', 'list'] });

@@ -49,6 +49,7 @@ export default function ListPickerCombobox({
   selectedSpaceColor,
   initialSpaceId,
   onChange,
+  renderTrigger,
 }: {
   workspaceId: string;
   selectedListId: string | null;
@@ -56,6 +57,7 @@ export default function ListPickerCombobox({
   selectedSpaceColor?: string | null;
   initialSpaceId?: string | null;
   onChange: (listId: string, spaceId: string) => void;
+  renderTrigger?: (props: { open: boolean; toggle: () => void }) => React.ReactNode;
 }) {
   const { data: spaces } = useSpaces(workspaceId);
   const [open, setOpen] = useState(false);
@@ -108,37 +110,43 @@ export default function ListPickerCombobox({
     setQuery('');
   };
 
+  const toggle = () => setOpen((v) => !v);
+
   return (
     <div ref={containerRef} className="relative inline-block">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[13px] text-[color:var(--sh-ink)] hover:bg-[color:var(--sh-hair-3)] transition"
-        style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
-      >
-        <span
-          className="grid h-4 w-4 place-items-center rounded-[4px] text-[9px] font-semibold text-white"
-          style={{ background: selectedSpaceColor || 'var(--sh-ink)' }}
-          aria-hidden
+      {renderTrigger ? (
+        renderTrigger({ open, toggle })
+      ) : (
+        <button
+          type="button"
+          onClick={toggle}
+          className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[13px] text-[color:var(--sh-ink)] hover:bg-[color:var(--sh-hair-3)] transition"
+          style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
         >
-          {selectedListName ? 'L' : '·'}
-        </span>
-        <span className="max-w-[220px] truncate">
-          {selectedListName || 'Choose list…'}
-        </span>
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          className="text-[color:var(--sh-ink-4)]"
-        >
-          <path d={open ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'} />
-        </svg>
-      </button>
+          <span
+            className="grid h-4 w-4 place-items-center rounded-[4px] text-[9px] font-semibold text-white"
+            style={{ background: selectedSpaceColor || 'var(--sh-ink)' }}
+            aria-hidden
+          >
+            {selectedListName ? 'L' : '·'}
+          </span>
+          <span className="max-w-[220px] truncate">
+            {selectedListName || 'Choose list…'}
+          </span>
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            className="text-[color:var(--sh-ink-4)]"
+          >
+            <path d={open ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'} />
+          </svg>
+        </button>
+      )}
 
       {open && (
         <div
