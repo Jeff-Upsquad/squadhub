@@ -1,4 +1,6 @@
 import { useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import api from '../../../services/api';
 
 // Right-side detail drawer for a single cashbook submission (entry / check /
 // expense). Shows the full record incl. receipt photo, exposes prev/next
@@ -9,6 +11,25 @@ import { useEffect } from 'react';
 // component takes the row directly — no refetch on open.
 
 type Kind = 'entry' | 'check' | 'expense';
+
+// Fetch a short-lived signed GET URL for a cashbook photo. The bucket is
+// private, so we can't render photo_url directly.
+function useSignedPhotoUrl(photoKey: string | null | undefined) {
+  return useQuery({
+    queryKey: ['partner-cashbook-photo-sign', photoKey],
+    queryFn: async () => {
+      if (!photoKey) return null;
+      const { data } = await api.get('/partner/cashbook/photo/sign', {
+        params: { key: photoKey },
+      });
+      if (!data.success) throw new Error(data.error || 'Failed to sign URL');
+      return data.data.url as string;
+    },
+    enabled: !!photoKey,
+    staleTime: 50 * 60 * 1000,
+    gcTime: 55 * 60 * 1000,
+  });
+}
 
 interface Props {
   kind: Kind;
@@ -33,6 +54,40 @@ const formatDateTime = (iso: string | null | undefined) => {
     return iso;
   }
 };
+
+function ReceiptPhoto({ photoKey }: { photoKey: string | null | undefined }) {
+  const { data: url, isLoading, isError } = useSignedPhotoUrl(photoKey);
+  if (!photoKey) return null;
+  if (isLoading) {
+    return (
+      <div className="mb-5 flex h-[120px] items-center justify-center rounded-lg border border-divider bg-surface-alt text-xs text-[#64748B]">
+        Loading photo…
+      </div>
+    );
+  }
+  if (isError || !url) {
+    return (
+      <div className="mb-5 flex h-[120px] items-center justify-center rounded-lg border border-divider bg-surface-alt text-xs text-[#DC2626]">
+        Could not load photo
+      </div>
+    );
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mb-5 block overflow-hidden rounded-lg border border-divider bg-surface-alt"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt="Receipt"
+        className="block h-auto max-h-[360px] w-full object-contain"
+      />
+    </a>
+  );
+}
 
 export default function PartnerCashBookEntryDrawer({
   kind,
@@ -120,21 +175,7 @@ export default function PartnerCashBookEntryDrawer({
           <h2 className="mb-5 text-xl font-semibold tracking-tight text-foreground">{titleLine}</h2>
 
           {/* Photo */}
-          {current.photo_url && (
-            <a
-              href={current.photo_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mb-5 block overflow-hidden rounded-lg border border-divider bg-surface-alt"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={current.photo_url}
-                alt="Receipt"
-                className="block h-auto max-h-[360px] w-full object-contain"
-              />
-            </a>
-          )}
+          <ReceiptPhoto photoKey={current.photo_key} />
 
           {/* Property grid */}
           <dl className="grid grid-cols-[120px_1fr] gap-x-4 gap-y-2.5 text-xs">

@@ -4,7 +4,7 @@ import { config } from '../config';
 import { requireAuth } from '../middleware/auth';
 import { requireCashBookAccess, requireCashBookAdmin } from '../middleware/cashbook';
 import { supabaseAdmin } from '../supabase';
-import { generateCashBookUploadUrl } from '../r2';
+import { generateCashBookUploadUrl, generateR2DownloadUrl } from '../r2';
 
 const router = Router();
 
@@ -1225,6 +1225,30 @@ router.post('/upload/presign', async (req: Request, res: Response) => {
       return;
     }
     console.error('Presign error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /cashbook/upload/sign-get?key=<objectKey>
+// Returns a short-lived signed GET URL for a cash book photo. The key must
+// be scoped to the requester's own clientId prefix — prevents cross-tenant
+// reads even though the bucket is private.
+router.get('/upload/sign-get', async (req: Request, res: Response) => {
+  try {
+    const key = typeof req.query.key === 'string' ? req.query.key : '';
+    if (!key) {
+      res.status(400).json({ success: false, error: 'Missing key' });
+      return;
+    }
+    const expectedPrefix = `cashbook/${req.cashBookClientId!}/`;
+    if (!key.startsWith(expectedPrefix)) {
+      res.status(403).json({ success: false, error: 'Not allowed' });
+      return;
+    }
+    const url = await generateR2DownloadUrl(key, 3600);
+    res.json({ success: true, data: { url, expiresIn: 3600 } });
+  } catch (err) {
+    console.error('Sign-get error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireUserType } from '../middleware/userType';
 import { supabaseAdmin } from '../supabase';
+import { generateR2DownloadUrl } from '../r2';
 
 const router = Router();
 
@@ -656,6 +657,30 @@ router.post('/expenses/unpost', async (req: Request, res: Response) => {
       return;
     }
     console.error('Partner unpost expenses error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /partner/cashbook/photo/sign?key=<objectKey>
+// Returns a short-lived signed GET URL. Verifies the partner has access to
+// the client whose clientId is embedded in the key prefix.
+router.get('/photo/sign', async (req: Request, res: Response) => {
+  try {
+    const key = typeof req.query.key === 'string' ? req.query.key : '';
+    const match = key.match(/^cashbook\/([^/]+)\//);
+    if (!match) {
+      res.status(400).json({ success: false, error: 'Invalid key' });
+      return;
+    }
+    const clientId = match[1];
+    if (!await verifyClientAccess(req.userId!, clientId)) {
+      res.status(403).json({ success: false, error: 'No access to this client' });
+      return;
+    }
+    const url = await generateR2DownloadUrl(key, 3600);
+    res.json({ success: true, data: { url, expiresIn: 3600 } });
+  } catch (err) {
+    console.error('Partner photo sign error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

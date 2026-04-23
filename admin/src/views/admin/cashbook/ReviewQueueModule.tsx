@@ -2,6 +2,26 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 
+// Open a cashbook photo via a short-lived signed GET URL. Opens a blank
+// window synchronously (so the browser's popup blocker doesn't catch it),
+// then navigates it to the signed URL once the sign request returns.
+async function openSignedPhoto(photoKey: string) {
+  const w = window.open('', '_blank', 'noopener,noreferrer');
+  try {
+    const { data } = await api.get('/admin/cashbook/photo/sign', {
+      params: { key: photoKey },
+    });
+    if (w && data?.data?.url) {
+      w.location.href = data.data.url;
+    } else if (w) {
+      w.close();
+    }
+  } catch (err) {
+    if (w) w.close();
+    console.error('Photo sign failed:', err);
+  }
+}
+
 export default function ReviewQueueModule() {
   const queryClient = useQueryClient();
   const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
@@ -178,10 +198,14 @@ export default function ReviewQueueModule() {
                     <td className="px-4 py-2.5 text-[#475569]">{entry.party_name || '-'}</td>
                     <td className="max-w-[150px] truncate px-4 py-2.5 text-[#475569]">{entry.description || '-'}</td>
                     <td className="px-4 py-2.5">
-                      {entry.photo_url ? (
-                        <a href={entry.photo_url} target="_blank" rel="noopener noreferrer" className="text-[#2962FF] underline">
+                      {entry.photo_key ? (
+                        <button
+                          type="button"
+                          onClick={() => openSignedPhoto(entry.photo_key)}
+                          className="text-[#2962FF] underline"
+                        >
                           View
-                        </a>
+                        </button>
                       ) : (
                         <span className="text-[#CBD5E1]">-</span>
                       )}

@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { config } from './config';
 
@@ -112,4 +112,17 @@ export async function generateCashBookUploadUrl(
   const publicUrl = `${config.r2PublicUrl}/${objectKey}`;
 
   return { uploadUrl, objectKey, publicUrl };
+}
+
+// Generate a short-lived signed GET URL for any R2 object. Used for serving
+// cash book receipts to clients without exposing the bucket publicly.
+export async function generateR2DownloadUrl(
+  objectKey: string,
+  expiresInSeconds = 3600,
+): Promise<string> {
+  const command = new GetObjectCommand({
+    Bucket: config.r2BucketName,
+    Key: objectKey,
+  });
+  return getSignedUrl(r2Client, command, { expiresIn: expiresInSeconds });
 }

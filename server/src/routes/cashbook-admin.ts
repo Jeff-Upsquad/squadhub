@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import { getDefaultRoleIdForUserType } from '../utils/defaultRole';
+import { generateR2DownloadUrl } from '../r2';
 
 const router = Router();
 
@@ -897,6 +898,24 @@ router.delete('/partner-access/:id', async (req: Request, res: Response) => {
     res.json({ success: true, message: 'Access revoked' });
   } catch (err) {
     console.error('Revoke partner access error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /admin/cashbook/photo/sign?key=<objectKey>
+// Returns a short-lived signed GET URL for any cash book photo. Admin can
+// view all clients' photos; access is gated only by requireAdmin above.
+router.get('/photo/sign', async (req: Request, res: Response) => {
+  try {
+    const key = typeof req.query.key === 'string' ? req.query.key : '';
+    if (!key.startsWith('cashbook/')) {
+      res.status(400).json({ success: false, error: 'Invalid key' });
+      return;
+    }
+    const url = await generateR2DownloadUrl(key, 3600);
+    res.json({ success: true, data: { url, expiresIn: 3600 } });
+  } catch (err) {
+    console.error('Admin photo sign error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
