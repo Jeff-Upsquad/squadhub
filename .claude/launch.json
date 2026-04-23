@@ -122,6 +122,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-time-sheet-module/web && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3030"],
       "port": 3030
+    },
+    {
+      "name": "Completed Section Worktree",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-completed-section/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3040"],
+      "port": 3040
     }
   ]
 }

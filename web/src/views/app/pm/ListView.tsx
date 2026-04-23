@@ -3,7 +3,7 @@ import type { SpaceStatus, Task } from '@squadhub/shared';
 import { useTasks, useUpdateTask, useCreateTask, groupTasksByStatus } from '../../../hooks/useTasks';
 import { usePMStore, type ListGroupBy } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
-import { groupTasks as groupTasksGeneric } from '../../../lib/taskGrouping';
+import { groupTasks as groupTasksGeneric, partitionByCompletion } from '../../../lib/taskGrouping';
 import TaskRow from './TaskRow';
 
 export default function ListView({
@@ -42,6 +42,11 @@ export default function ListView({
     });
   }, [tasks, searchQuery, myTasksOnly, currentUserId]);
 
+  const { open: openTasks, completed: completedTasks } = useMemo(
+    () => partitionByCompletion(filteredTasks),
+    [filteredTasks],
+  );
+
   const statusGroups = useMemo(() => {
     if (groupBy !== 'status') return null;
     return groupTasksByStatus(filteredTasks, statuses);
@@ -49,8 +54,8 @@ export default function ListView({
 
   const genericGroups = useMemo(() => {
     if (groupBy === 'status' || groupBy === 'none') return null;
-    return groupTasksGeneric(filteredTasks, groupBy, tz);
-  }, [filteredTasks, groupBy, tz]);
+    return groupTasksGeneric(openTasks, groupBy, tz);
+  }, [openTasks, groupBy, tz]);
 
   const handleStatusChange = (taskId: string, statusId: string) => {
     updateTask.mutate({ id: taskId, status: statusId });
@@ -100,28 +105,46 @@ export default function ListView({
             />
           ))
         ) : groupBy === 'none' ? (
-          <StatusGroup
-            status={{ id: 'all', name: 'All tasks', color: '#6b7280', position: 0, space_id: '', is_default: false, category: 'active' as const }}
-            tasks={filteredTasks}
-            allStatuses={statuses}
-            listId={listId}
-            onStatusChange={handleStatusChange}
-            showHeader={false}
-            canEdit={canEdit}
-          />
-        ) : genericGroups ? (
-          genericGroups.map((g) => (
-            <GenericGroup
-              key={g.key}
-              groupKey={g.key}
-              label={g.label}
-              tasks={g.tasks}
+          <>
+            <StatusGroup
+              status={{ id: 'all', name: 'All tasks', color: '#6b7280', position: 0, space_id: '', is_default: false, category: 'active' as const }}
+              tasks={openTasks}
+              allStatuses={statuses}
+              listId={listId}
+              onStatusChange={handleStatusChange}
+              showHeader={false}
+              canEdit={canEdit}
+            />
+            <CompletedListGroup
+              tasks={completedTasks}
               allStatuses={statuses}
               listId={listId}
               onStatusChange={handleStatusChange}
               canEdit={canEdit}
             />
-          ))
+          </>
+        ) : genericGroups ? (
+          <>
+            {genericGroups.map((g) => (
+              <GenericGroup
+                key={g.key}
+                groupKey={g.key}
+                label={g.label}
+                tasks={g.tasks}
+                allStatuses={statuses}
+                listId={listId}
+                onStatusChange={handleStatusChange}
+                canEdit={canEdit}
+              />
+            ))}
+            <CompletedListGroup
+              tasks={completedTasks}
+              allStatuses={statuses}
+              listId={listId}
+              onStatusChange={handleStatusChange}
+              canEdit={canEdit}
+            />
+          </>
         ) : null}
 
         {/* Bulk action bar — floating pill */}
@@ -328,6 +351,56 @@ function GenericGroup({
           </svg>
         </span>
         <span className="title">{label}</span>
+        <span className="count">· {tasks.length}</span>
+      </div>
+
+      {!isCollapsed && (
+        <div className="lv-group-body">
+          {tasks.map((task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              statuses={allStatuses}
+              onStatusChange={onStatusChange}
+              canEdit={canEdit}
+              listId={listId}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CompletedListGroup({
+  tasks,
+  allStatuses,
+  listId,
+  onStatusChange,
+  canEdit = true,
+}: {
+  tasks: Task[];
+  allStatuses: SpaceStatus[];
+  listId: string;
+  onStatusChange: (taskId: string, statusId: string) => void;
+  canEdit?: boolean;
+}) {
+  const [isCollapsed, setIsCollapsed] = useState(true);
+  if (tasks.length === 0) return null;
+
+  return (
+    <div className="lv-group">
+      <div
+        className="lv-group-head"
+        data-collapsed={isCollapsed}
+        onClick={() => setIsCollapsed((v) => !v)}
+      >
+        <span className="caret">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M9 5l7 7-7 7" />
+          </svg>
+        </span>
+        <span className="title">Completed</span>
         <span className="count">· {tasks.length}</span>
       </div>
 

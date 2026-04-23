@@ -40,6 +40,22 @@ export const PRIORITY_LABELS: Record<string, string> = {
 
 export type Group = { key: string; label: string; sort: number | string; tasks: Task[] };
 
+export function isTaskCompleted(t: Task): boolean {
+  const s = (t as unknown as { status?: { category?: string } | string | null }).status;
+  if (s && typeof s === 'object') {
+    return s.category === 'done' || s.category === 'closed';
+  }
+  if (typeof s === 'string') return s === 'closed' || s === 'done';
+  return false;
+}
+
+export function partitionByCompletion(tasks: Task[]): { open: Task[]; completed: Task[] } {
+  const open: Task[] = [];
+  const completed: Task[] = [];
+  for (const t of tasks) (isTaskCompleted(t) ? completed : open).push(t);
+  return { open, completed };
+}
+
 export function groupByDate(tasks: Task[], field: 'work_date' | 'due_date', tz: string, emptyLabel: string): Group[] {
   const fmtKey = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
   const fmtLabel = new Intl.DateTimeFormat(undefined, { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric' });
