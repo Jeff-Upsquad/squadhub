@@ -661,23 +661,27 @@ router.post('/expenses/unpost', async (req: Request, res: Response) => {
   }
 });
 
-// GET /partner/cashbook/photo/sign?key=<objectKey>
+// GET /partner/cashbook/photo/sign?key=<objectKey>[&download=1]
 // Returns a short-lived signed GET URL. Verifies the partner has access to
-// the client whose clientId is embedded in the key prefix.
+// the client whose clientId is embedded in the key prefix. When download=1,
+// the URL carries a Content-Disposition header so the browser downloads the
+// file instead of rendering it inline.
 router.get('/photo/sign', async (req: Request, res: Response) => {
   try {
     const key = typeof req.query.key === 'string' ? req.query.key : '';
-    const match = key.match(/^cashbook\/([^/]+)\//);
+    const match = key.match(/^cashbook\/([^/]+)\/[^/]+\/(.+)$/);
     if (!match) {
       res.status(400).json({ success: false, error: 'Invalid key' });
       return;
     }
     const clientId = match[1];
+    const filename = match[2];
     if (!await verifyClientAccess(req.userId!, clientId)) {
       res.status(403).json({ success: false, error: 'No access to this client' });
       return;
     }
-    const url = await generateR2DownloadUrl(key, 3600);
+    const download = req.query.download === '1' || req.query.download === 'true';
+    const url = await generateR2DownloadUrl(key, 3600, download ? filename : undefined);
     res.json({ success: true, data: { url, expiresIn: 3600 } });
   } catch (err) {
     console.error('Partner photo sign error:', err);

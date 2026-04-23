@@ -116,13 +116,20 @@ export async function generateCashBookUploadUrl(
 
 // Generate a short-lived signed GET URL for any R2 object. Used for serving
 // cash book receipts to clients without exposing the bucket publicly.
+// When `filename` is provided, the signed URL includes a response
+// Content-Disposition header so the browser downloads the file under that
+// name instead of rendering it inline.
 export async function generateR2DownloadUrl(
   objectKey: string,
   expiresInSeconds = 3600,
+  filename?: string,
 ): Promise<string> {
   const command = new GetObjectCommand({
     Bucket: config.r2BucketName,
     Key: objectKey,
+    ...(filename
+      ? { ResponseContentDisposition: `attachment; filename="${filename.replace(/"/g, '')}"` }
+      : {}),
   });
   return getSignedUrl(r2Client, command, { expiresIn: expiresInSeconds });
 }

@@ -55,6 +55,22 @@ const formatDateTime = (iso: string | null | undefined) => {
   }
 };
 
+async function downloadReceipt(photoKey: string) {
+  const { data } = await api.get('/partner/cashbook/photo/sign', {
+    params: { key: photoKey, download: 1 },
+  });
+  if (!data?.success || !data?.data?.url) return;
+  // The signed URL carries Content-Disposition: attachment, so navigating
+  // a hidden <a> triggers a browser download with the server-provided
+  // filename — no bounce through a tab, no popup blocker.
+  const a = document.createElement('a');
+  a.href = data.data.url;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 function ReceiptPhoto({ photoKey }: { photoKey: string | null | undefined }) {
   const { data: url, isLoading, isError } = useSignedPhotoUrl(photoKey);
   if (!photoKey) return null;
@@ -73,19 +89,30 @@ function ReceiptPhoto({ photoKey }: { photoKey: string | null | undefined }) {
     );
   }
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="mb-5 block overflow-hidden rounded-lg border border-divider bg-surface-alt"
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={url}
-        alt="Receipt"
-        className="block h-auto max-h-[360px] w-full object-contain"
-      />
-    </a>
+    <div className="mb-5 overflow-hidden rounded-lg border border-divider bg-surface-alt">
+      <a href={url} target="_blank" rel="noopener noreferrer" className="block">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={url}
+          alt="Receipt"
+          className="block h-auto max-h-[360px] w-full object-contain"
+        />
+      </a>
+      <div className="flex items-center justify-end border-t border-divider bg-surface px-3 py-2">
+        <button
+          type="button"
+          onClick={() => downloadReceipt(photoKey)}
+          className="inline-flex items-center gap-1.5 rounded-md border border-divider bg-white px-3 py-1.5 text-xs font-medium text-[#0F172B] hover:bg-[#F1F5F9]"
+        >
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Download
+        </button>
+      </div>
+    </div>
   );
 }
 
