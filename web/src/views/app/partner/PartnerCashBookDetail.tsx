@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
+import PartnerCashBookEntryDrawer from './PartnerCashBookEntryDrawer';
 
 interface Props {
   clientId: string;
   clientName: string;
   onBack: () => void;
 }
+
+type DetailKind = 'entry' | 'check' | 'expense';
 
 export default function PartnerCashBookDetail({ clientId, clientName, onBack }: Props) {
   const queryClient = useQueryClient();
@@ -16,6 +19,8 @@ export default function PartnerCashBookDetail({ clientId, clientName, onBack }: 
   const [selectedExpenses, setSelectedExpenses] = useState<Set<string>>(new Set());
   const [filterPosted, setFilterPosted] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
+  // Selected row for the right-side detail drawer. Cleared on close.
+  const [detail, setDetail] = useState<{ kind: DetailKind; id: string } | null>(null);
 
   // Stats
   const { data: statsRes } = useQuery({
@@ -362,8 +367,12 @@ export default function PartnerCashBookDetail({ clientId, clientName, onBack }: 
                   <tr><td colSpan={9} className="py-12 text-center text-foreground-dim">No entries found</td></tr>
                 ) : (
                   entries.map((entry: any) => (
-                    <tr key={entry.id} className={`border-b border-divider ${selectedEntries.has(entry.id) ? 'bg-blue-500/5' : 'hover:bg-surface'}`}>
-                      <td className="px-4 py-2.5">
+                    <tr
+                      key={entry.id}
+                      onClick={() => setDetail({ kind: 'entry', id: entry.id })}
+                      className={`cursor-pointer border-b border-divider ${selectedEntries.has(entry.id) ? 'bg-blue-500/5' : 'hover:bg-surface'}`}
+                    >
+                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" checked={selectedEntries.has(entry.id)} onChange={() => toggleEntry(entry.id)} className="rounded border-divider" />
                       </td>
                       <td className="px-4 py-2.5 text-foreground">{entry.entry_date}</td>
@@ -420,8 +429,12 @@ export default function PartnerCashBookDetail({ clientId, clientName, onBack }: 
                   <tr><td colSpan={9} className="py-12 text-center text-foreground-dim">No checks found</td></tr>
                 ) : (
                   checks.map((check: any) => (
-                    <tr key={check.id} className={`border-b border-divider ${selectedChecks.has(check.id) ? 'bg-blue-500/5' : 'hover:bg-surface'}`}>
-                      <td className="px-4 py-2.5">
+                    <tr
+                      key={check.id}
+                      onClick={() => setDetail({ kind: 'check', id: check.id })}
+                      className={`cursor-pointer border-b border-divider ${selectedChecks.has(check.id) ? 'bg-blue-500/5' : 'hover:bg-surface'}`}
+                    >
+                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" checked={selectedChecks.has(check.id)} onChange={() => toggleCheck(check.id)} className="rounded border-divider" />
                       </td>
                       <td className="px-4 py-2.5 text-foreground">{check.check_date}</td>
@@ -481,8 +494,12 @@ export default function PartnerCashBookDetail({ clientId, clientName, onBack }: 
                   <tr><td colSpan={9} className="py-12 text-center text-foreground-dim">No expenses found</td></tr>
                 ) : (
                   expenses.map((expense: any) => (
-                    <tr key={expense.id} className={`border-b border-divider ${selectedExpenses.has(expense.id) ? 'bg-blue-500/5' : 'hover:bg-surface'}`}>
-                      <td className="px-4 py-2.5">
+                    <tr
+                      key={expense.id}
+                      onClick={() => setDetail({ kind: 'expense', id: expense.id })}
+                      className={`cursor-pointer border-b border-divider ${selectedExpenses.has(expense.id) ? 'bg-blue-500/5' : 'hover:bg-surface'}`}
+                    >
+                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" checked={selectedExpenses.has(expense.id)} onChange={() => toggleExpense(expense.id)} className="rounded border-divider" />
                       </td>
                       <td className="px-4 py-2.5 text-foreground">{expense.entry_date}</td>
@@ -513,6 +530,33 @@ export default function PartnerCashBookDetail({ clientId, clientName, onBack }: 
           </div>
         )}
       </div>
+
+      {/* Detail drawer (entries/checks/expenses) */}
+      {detail && (
+        <PartnerCashBookEntryDrawer
+          kind={detail.kind}
+          list={detail.kind === 'entry' ? entries : detail.kind === 'check' ? checks : expenses}
+          currentId={detail.id}
+          onSelectId={(id) => setDetail({ kind: detail.kind, id })}
+          onClose={() => setDetail(null)}
+          onTogglePosted={(id, isPosted) => {
+            if (detail.kind === 'entry') {
+              (isPosted ? unpostEntriesMutation : postEntriesMutation).mutate([id]);
+            } else if (detail.kind === 'check') {
+              (isPosted ? unpostChecksMutation : postChecksMutation).mutate([id]);
+            } else {
+              (isPosted ? unpostExpensesMutation : postExpensesMutation).mutate([id]);
+            }
+          }}
+          isMutating={
+            detail.kind === 'entry'
+              ? postEntriesMutation.isPending || unpostEntriesMutation.isPending
+              : detail.kind === 'check'
+              ? postChecksMutation.isPending || unpostChecksMutation.isPending
+              : postExpensesMutation.isPending || unpostExpensesMutation.isPending
+          }
+        />
+      )}
     </div>
   );
 }
