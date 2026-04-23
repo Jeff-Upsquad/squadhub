@@ -5,18 +5,29 @@
 -- catalog key (e.g. 'open', 'front_burner', 'over_due', 'closed') for this
 -- task type. Other task types keep using per-space space_statuses.
 --
--- This migration does two things:
---   1. Remaps existing tasks.status for task_type='task' rows:
+-- This migration does three things:
+--   1. Drops the legacy tasks_status_check constraint that limited status to
+--      the 4 legacy category values. The new catalog has 28 keys and
+--      validation now lives in the application layer (TASK_STATUS_CATALOG
+--      in shared/src/index.ts). The constraint was added directly in the
+--      Supabase dashboard (no migration file defined it), so we drop by name.
+--   2. Remaps existing tasks.status for task_type='task' rows:
 --        'todo'   -> 'open'
 --        'active' -> 'in_progress'
 --        'done'   -> 'closed'
 --        'closed' -> 'closed'
---   2. Updates notify_task_completed() so the terminal catalog key 'closed'
+--   3. Updates notify_task_completed() so the terminal catalog key 'closed'
 --      is recognised as a completion event even when no matching
 --      space_statuses row exists (catalog tasks have no per-space row).
 
 -- ------------------------------------------------------------
--- 1. Data remap for task_type='task'
+-- 1. Drop legacy CHECK constraint on tasks.status
+-- ------------------------------------------------------------
+
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
+
+-- ------------------------------------------------------------
+-- 2. Data remap for task_type='task'
 -- ------------------------------------------------------------
 
 UPDATE tasks
@@ -30,7 +41,7 @@ END
 WHERE task_type_id IN (SELECT id FROM task_types WHERE key = 'task');
 
 -- ------------------------------------------------------------
--- 2. Rewrite notify_task_completed() to recognise catalog keys.
+-- 3. Rewrite notify_task_completed() to recognise catalog keys.
 --
 -- For tasks of type 'task' the status is a catalog key, so we check for the
 -- terminal key 'closed' directly. For other types we still resolve via
