@@ -4,7 +4,8 @@ import type { Folder, List, Task } from '@squadhub/shared';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import DashboardTaskRow from '../home/DashboardTaskRow';
-import { GROUP_BY_OPTIONS, groupTasks, type GroupBy } from '../../../lib/taskGrouping';
+import CompletedSection from './CompletedSection';
+import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, type GroupBy } from '../../../lib/taskGrouping';
 
 type FolderWithLists = Folder & { lists?: List[] };
 
@@ -65,10 +66,15 @@ export default function FolderPage() {
 
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
 
+  const { open: openTasks, completed: completedTasks } = useMemo(
+    () => partitionByCompletion(filteredTasks),
+    [filteredTasks],
+  );
+
   const groups = useMemo(() => {
     if (groupBy === 'none') return [];
-    return groupTasks(filteredTasks, groupBy, tz);
-  }, [filteredTasks, groupBy, tz]);
+    return groupTasks(openTasks, groupBy, tz);
+  }, [openTasks, groupBy, tz]);
 
   if (!activeFolderId) {
     return (
@@ -173,26 +179,31 @@ export default function FolderPage() {
           <div style={{ padding: '28px 20px', fontSize: 13, color: 'var(--sh-ink-3)' }}>
             {activeListName ? `No tasks in ${activeListName}.` : 'No tasks in this folder yet.'}
           </div>
-        ) : groupBy === 'none' ? (
-          <div className="today-list">
-            {filteredTasks.map((t) => (
-              <DashboardTaskRow key={t.id} task={t} />
-            ))}
-          </div>
         ) : (
-          groups.map((g) => (
-            <div key={g.key} className="today-group">
-              <div className="today-group-head">
-                <span>{g.label}</span>
-                <span className="count">· {g.tasks.length}</span>
-              </div>
+          <>
+            {groupBy === 'none' ? (
               <div className="today-list">
-                {g.tasks.map((t) => (
+                {openTasks.map((t) => (
                   <DashboardTaskRow key={t.id} task={t} />
                 ))}
               </div>
-            </div>
-          ))
+            ) : (
+              groups.map((g) => (
+                <div key={g.key} className="today-group">
+                  <div className="today-group-head">
+                    <span>{g.label}</span>
+                    <span className="count">· {g.tasks.length}</span>
+                  </div>
+                  <div className="today-list">
+                    {g.tasks.map((t) => (
+                      <DashboardTaskRow key={t.id} task={t} />
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+            <CompletedSection tasks={completedTasks} />
+          </>
         )}
       </div>
     </div>
