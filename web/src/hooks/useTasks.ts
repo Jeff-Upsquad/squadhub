@@ -1,6 +1,18 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import type { Task, SpaceStatus, TaskComment, TaskMetadata } from '@squadhub/shared';
+
+// Invalidate every query key that contributes to a task-list UI so all views
+// (List, Folder, Space, My Tasks, Emergency) refresh after a mutation without
+// requiring the user to reload.
+function invalidateTaskLists(qc: QueryClient, listId: string | null) {
+  qc.invalidateQueries({ queryKey: ['tasks', listId] });
+  qc.invalidateQueries({ queryKey: ['folder-tasks'] });
+  qc.invalidateQueries({ queryKey: ['space-tasks'] });
+  qc.invalidateQueries({ queryKey: ['my-tasks'] });
+  qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
+  qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
+}
 
 export function useTasks(listId: string | null, filters?: { status?: string; priority?: string; sort?: string }) {
   return useQuery<Task[]>({
@@ -83,10 +95,7 @@ export function useCreateTask(listId: string | null) {
     },
     onSuccess: (_data, vars) => {
       const targetListId = vars.list_id || listId;
-      qc.invalidateQueries({ queryKey: ['tasks', targetListId] });
-      qc.invalidateQueries({ queryKey: ['folder-tasks'] });
-      qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
-      qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
+      invalidateTaskLists(qc, targetListId);
       qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
       qc.invalidateQueries({ queryKey: ['notifications', 'list'] });
       if (vars.parent_task_id) {
@@ -118,11 +127,8 @@ export function useUpdateTask(listId: string | null) {
       return res.data.data;
     },
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ['tasks', listId] });
+      invalidateTaskLists(qc, listId);
       qc.invalidateQueries({ queryKey: ['task', vars.id] });
-      qc.invalidateQueries({ queryKey: ['my-tasks'] });
-      qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
-      qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
       qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
       qc.invalidateQueries({ queryKey: ['notifications', 'list'] });
     },
@@ -138,11 +144,8 @@ export function useUpdateTaskTimeTracked(listId: string | null) {
       return res.data.data;
     },
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ['tasks', listId] });
+      invalidateTaskLists(qc, listId);
       qc.invalidateQueries({ queryKey: ['task', vars.id] });
-      qc.invalidateQueries({ queryKey: ['my-tasks'] });
-      qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
-      qc.invalidateQueries({ queryKey: ['folder-tasks'] });
     },
   });
 }
@@ -152,11 +155,11 @@ export function useDeleteTask(listId: string | null) {
   return useMutation({
     mutationFn: async (taskId: string) => {
       await api.delete(`/pm/tasks/${taskId}`);
+      return taskId;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tasks', listId] });
-      qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
-      qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
+    onSuccess: (taskId) => {
+      invalidateTaskLists(qc, listId);
+      qc.removeQueries({ queryKey: ['task', taskId] });
     },
   });
 }

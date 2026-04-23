@@ -98,6 +98,18 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-home-subtasks/web && PORT=3010 INTERNAL_API_URL=http://localhost:4010 exec npx next dev -p 3010"],
       "port": 3010
+    },
+    {
+      "name": "Fix Task List Invalidation Server",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-fix-task-list-invalidation && PORT=4020 exec npm run dev -w server"],
+      "port": 4020
+    },
+    {
+      "name": "Fix Task List Invalidation Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-fix-task-list-invalidation/web && INTERNAL_API_URL=http://localhost:4020 exec npx next dev -p 3020"],
+      "port": 3020
     }
   ]
 }
