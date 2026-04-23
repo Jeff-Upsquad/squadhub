@@ -32,6 +32,8 @@ export default function TaskRow({
   const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection } = usePMStore();
   const updateTask = useUpdateTask(listId);
   const [expanded, setExpanded] = useState(false);
+  const [isFadingOut, setIsFadingOut] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
 
   // Inline picker anchors — null = closed, DOMRect = open & positioned
   const [assigneeAnchor, setAssigneeAnchor] = useState<DOMRect | null>(null);
@@ -44,6 +46,7 @@ export default function TaskRow({
 
   const statusCategory = (task as any).status as string | undefined;
   const isDone = statusCategory === 'done' || statusCategory === 'closed';
+  const displayDone = isDone || isFadingOut;
   const priorityLevel = PRIORITY_LEVEL[task.priority || 'none'];
   const workWhen = formatWhen(task.work_date);
   const dueWhen = formatWhen(task.due_date);
@@ -53,8 +56,19 @@ export default function TaskRow({
     e.stopPropagation();
     if (!canEdit) return;
     const next = isDone ? 'todo' : 'done';
-    updateTask.mutate({ id: task.id, status: next } as any);
+    if (!isDone) setIsFadingOut(true);
+    updateTask.mutate(
+      { id: task.id, status: next } as any,
+      { onError: () => { setIsFadingOut(false); setIsHidden(false); } },
+    );
   };
+
+  const handleRowTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.propertyName === 'transform' && isFadingOut) setIsHidden(true);
+  };
+
+  if (isHidden) return null;
 
   const openPicker = (
     e: React.MouseEvent,
@@ -87,10 +101,12 @@ export default function TaskRow({
           }
           setActiveTask(task.id);
         }}
+        onTransitionEnd={handleRowTransitionEnd}
         className="lv-row"
         data-active={isActive}
         data-selected={isSelected}
-        data-done={isDone}
+        data-done={displayDone}
+        data-fading={isFadingOut}
         style={depth > 0 ? { paddingLeft: 20 + depth * 22 } : undefined}
       >
         {/* Checkbox — toggles done */}
@@ -98,7 +114,8 @@ export default function TaskRow({
           type="button"
           onClick={handleGlyphClick}
           className="lv-glyph"
-          data-done={isDone}
+          data-done={displayDone}
+          data-celebrating={isFadingOut}
           data-progress={!isDone && statusCategory === 'active'}
           disabled={!canEdit}
           aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}

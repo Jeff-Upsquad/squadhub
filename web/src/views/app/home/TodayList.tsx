@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
 import { usePMStore } from '../../../stores/pmStore';
@@ -5,7 +6,6 @@ import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
 
 export default function TodayList() {
   const { data, isLoading, isError, refetch } = useMyTasks();
-  const updateTask = useUpdateTask(null);
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
 
@@ -53,85 +53,117 @@ export default function TodayList() {
           </div>
         )}
 
-        {!isLoading && tasks.map((t) => {
-          const when = formatWhen(t.due_date);
-          const assignee = t.assignees?.[0];
-          const label = t.list?.name || t.space?.name || '';
-          const isSubtask = !!t.parent_task_id;
-          const parentTitle = t.parent_task?.title || null;
-          return (
-            <div
-              key={t.id}
-              className="today-item"
-              data-subtask={isSubtask || undefined}
-              onClick={() => openTask(t.id)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTask(t.id); } }}
-              style={isSubtask ? { paddingLeft: 24 } : undefined}
-            >
-              <div
-                className="checkbox"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  updateTask.mutate({ id: t.id, status: 'done' });
-                }}
-              />
-              <div>
-                <div className="ti-title">
-                  {isSubtask && <span style={{ color: 'var(--sh-ink-4)', marginRight: 4 }}>↳</span>}
-                  {t.title}
-                </div>
-                <div className="ti-meta">
-                  {isSubtask && parentTitle && (
-                    <>
-                      <span style={{ color: 'var(--sh-ink-4)' }}>From: {parentTitle}</span>
-                      {(label || when.text) && <span>·</span>}
-                    </>
-                  )}
-                  {label && <span className="tag">{label}</span>}
-                  {label && when.text && <span>·</span>}
-                  {when.text && (
-                    <span style={when.state === 'overdue' ? { color: 'var(--sh-danger, #c43)' } : undefined}>
-                      {when.text}
-                    </span>
-                  )}
-                </div>
-              </div>
-              {assignee ? (
-                <div
-                  className="ava"
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: '50%',
-                    background: avatarColor(assignee.id || assignee.email),
-                    fontSize: 9.5,
-                  }}
-                  title={assignee.display_name || assignee.email}
-                >
-                  {initialOf(assignee.display_name || assignee.email)}
-                </div>
-              ) : (
-                <div
-                  className="ava"
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: '50%',
-                    background: 'var(--sh-ink-6, #eee)',
-                    color: 'var(--sh-ink-4)',
-                    fontSize: 9.5,
-                  }}
-                  title="Unassigned"
-                >
-                  –
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {!isLoading && tasks.map((t) => (
+          <TodayRow key={t.id} task={t} onOpen={openTask} />
+        ))}
       </div>
+    </div>
+  );
+}
+
+function TodayRow({ task: t, onOpen }: { task: Task; onOpen: (id: string) => void }) {
+  const updateTask = useUpdateTask(null);
+  const [isFadingOut, setIsFadingOut] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
+
+  const when = formatWhen(t.due_date);
+  const assignee = t.assignees?.[0];
+  const label = t.list?.name || t.space?.name || '';
+  const isSubtask = !!t.parent_task_id;
+  const parentTitle = t.parent_task?.title || null;
+  const status = (t as any).status as string | undefined;
+  const isDone = status === 'done' || status === 'closed';
+  const displayDone = isDone || isFadingOut;
+
+  const onToggleDone = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = isDone ? 'todo' : 'done';
+    if (!isDone) setIsFadingOut(true);
+    updateTask.mutate(
+      { id: t.id, status: next } as any,
+      { onError: () => { setIsFadingOut(false); setIsHidden(false); } },
+    );
+  };
+
+  const onRowTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.propertyName === 'transform' && isFadingOut) setIsHidden(true);
+  };
+
+  if (isHidden) return null;
+
+  return (
+    <div
+      className="today-item"
+      data-done={displayDone}
+      data-fading={isFadingOut}
+      data-subtask={isSubtask || undefined}
+      onClick={() => onOpen(t.id)}
+      onTransitionEnd={onRowTransitionEnd}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(t.id); } }}
+      style={isSubtask ? { paddingLeft: 24 } : undefined}
+    >
+      <div
+        className="checkbox"
+        data-done={displayDone}
+        data-celebrating={isFadingOut}
+        role="button"
+        aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
+        onClick={onToggleDone}
+      />
+      <div>
+        <div className="ti-title">
+          {isSubtask && <span style={{ color: 'var(--sh-ink-4)', marginRight: 4 }}>↳</span>}
+          {t.title}
+        </div>
+        <div className="ti-meta">
+          {isSubtask && parentTitle && (
+            <>
+              <span style={{ color: 'var(--sh-ink-4)' }}>From: {parentTitle}</span>
+              {(label || when.text) && <span>·</span>}
+            </>
+          )}
+          {label && <span className="tag">{label}</span>}
+          {label && when.text && <span>·</span>}
+          {when.text && (
+            <span style={when.state === 'overdue' ? { color: 'var(--sh-danger, #c43)' } : undefined}>
+              {when.text}
+            </span>
+          )}
+        </div>
+      </div>
+      {assignee ? (
+        <div
+          className="ava"
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            background: avatarColor(assignee.id || assignee.email),
+            fontSize: 9.5,
+          }}
+          title={assignee.display_name || assignee.email}
+        >
+          {initialOf(assignee.display_name || assignee.email)}
+        </div>
+      ) : (
+        <div
+          className="ava"
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            background: 'var(--sh-ink-6, #eee)',
+            color: 'var(--sh-ink-4)',
+            fontSize: 9.5,
+          }}
+          title="Unassigned"
+        >
+          –
+        </div>
+      )}
     </div>
   );
 }

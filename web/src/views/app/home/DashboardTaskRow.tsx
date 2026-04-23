@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
+import { useUpdateTask } from '../../../hooks/useTasks';
 
 function hashHue(input: string): number {
   let h = 0;
@@ -48,8 +50,12 @@ const PRIORITY_LABEL: Record<string, string | null> = {
 export default function DashboardTaskRow({ task }: { task: Task }) {
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
+  const updateTask = useUpdateTask(null);
+  const [isFadingOut, setIsFadingOut] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
 
   const isDone = ((task as any).status as string | undefined) === 'done' || ((task as any).status as string | undefined) === 'closed';
+  const displayDone = isDone || isFadingOut;
   const firstAssignee = (task.assignees && task.assignees[0]) || null;
   const seed = firstAssignee?.display_name || firstAssignee?.email || task.id;
   const color = avatarColor(seed);
@@ -63,18 +69,44 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
     setActiveTask(task.id);
   };
 
+  const onToggleDone = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = isDone ? 'todo' : 'done';
+    if (!isDone) setIsFadingOut(true);
+    updateTask.mutate(
+      { id: task.id, status: next } as any,
+      { onError: () => { setIsFadingOut(false); setIsHidden(false); } },
+    );
+  };
+
+  const onRowTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.propertyName === 'transform' && isFadingOut) setIsHidden(true);
+  };
+
+  if (isHidden) return null;
+
   return (
     <div
       className="today-item"
-      data-done={isDone}
+      data-done={displayDone}
+      data-fading={isFadingOut}
       data-subtask={isSubtask || undefined}
       onClick={onOpen}
+      onTransitionEnd={onRowTransitionEnd}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
       style={isSubtask ? { paddingLeft: 24 } : undefined}
     >
-      <div className="checkbox" data-done={isDone} onClick={(e) => e.stopPropagation()} />
+      <div
+        className="checkbox"
+        data-done={displayDone}
+        data-celebrating={isFadingOut}
+        role="button"
+        aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
+        onClick={onToggleDone}
+      />
       <div>
         <div className="ti-title">
           {isSubtask && <span style={{ color: 'var(--sh-ink-4)', marginRight: 4 }}>↳</span>}

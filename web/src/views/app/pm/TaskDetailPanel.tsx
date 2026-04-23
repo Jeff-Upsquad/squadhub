@@ -200,6 +200,8 @@ export default function TaskDetailPanel({
   const [newChecklistTitle, setNewChecklistTitle] = useState<string | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [mainCelebrating, setMainCelebrating] = useState(false);
+  const [celebratingSubtaskId, setCelebratingSubtaskId] = useState<string | null>(null);
 
   useEffect(() => {
     if (activeTaskId) {
@@ -319,6 +321,10 @@ export default function TaskDetailPanel({
   const handleToggleDone = () => {
     if (!task || !canEdit) return;
     const next = isDone ? 'todo' : 'done';
+    if (!isDone) {
+      setMainCelebrating(true);
+      setTimeout(() => setMainCelebrating(false), 650);
+    }
     updateTask.mutate({ id: task.id, status: next } as any);
   };
 
@@ -529,7 +535,8 @@ export default function TaskDetailPanel({
                   onClick={handleToggleDone}
                   disabled={!canEdit}
                   className="mt-[6px] td-checkbox-lg shrink-0 td-focus"
-                  data-done={isDone ? 'true' : 'false'}
+                  data-done={(isDone || mainCelebrating) ? 'true' : 'false'}
+                  data-celebrating={mainCelebrating ? 'true' : 'false'}
                   aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
                 />
                 {editing === 'title' ? (
@@ -1021,10 +1028,17 @@ export default function TaskDetailPanel({
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     if (!canEdit) return;
+                                    if (!stDone) {
+                                      setCelebratingSubtaskId(st.id);
+                                      setTimeout(() => {
+                                        setCelebratingSubtaskId((curr) => (curr === st.id ? null : curr));
+                                      }, 650);
+                                    }
                                     updateTask.mutate({ id: st.id, status: stDone ? 'todo' : 'done' } as any);
                                   }}
                                   className="td-checkbox shrink-0"
-                                  data-done={stDone ? 'true' : 'false'}
+                                  data-done={(stDone || celebratingSubtaskId === st.id) ? 'true' : 'false'}
+                                  data-celebrating={celebratingSubtaskId === st.id ? 'true' : 'false'}
                                   aria-label="Toggle subtask"
                                 />
                                 <button
