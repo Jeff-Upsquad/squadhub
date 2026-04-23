@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import type { Task, SpaceStatus, TaskComment, TaskMetadata } from '@squadhub/shared';
+import { getTaskStatusCategory } from '@squadhub/shared';
 
 // Invalidate every query key that contributes to a task-list UI so all views
 // (List, Folder, Space, My Tasks, Emergency) refresh after a mutation without
@@ -193,13 +194,21 @@ export function useAddComment(taskId: string | null) {
   });
 }
 
-// Helper: group tasks by status — matches task.status (text) to spaceStatus.category
+// Helper: group tasks by status. For task_type='task' tasks, task.status holds
+// a TASK_STATUS_CATALOG key — resolve it to the legacy 4-bucket category so the
+// same board layout keeps working.
 export function groupTasksByStatus(tasks: Task[], statuses: SpaceStatus[]) {
   const groups: { status: SpaceStatus; tasks: Task[] }[] = [];
   for (const status of statuses) {
     groups.push({
       status,
-      tasks: tasks.filter((t) => (t as any).status === status.category),
+      tasks: tasks.filter((t) => {
+        const raw = (t as any).status as string | undefined;
+        if (!raw) return false;
+        if (raw === status.category) return true;
+        const mapped = getTaskStatusCategory(raw);
+        return mapped === status.category;
+      }),
     });
   }
   return groups;

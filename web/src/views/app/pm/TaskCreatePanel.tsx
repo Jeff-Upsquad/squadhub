@@ -3,11 +3,13 @@ import { useCreateTask } from '../../../hooks/useTasks';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useSpace } from '../../../hooks/useSpaces';
 import { useAuthStore } from '../../../stores/authStore';
-import type { SpaceStatus, Task, TaskPriority } from '@squadhub/shared';
+import type { SpaceStatus, Task, TaskPriority, TaskStatusKey } from '@squadhub/shared';
+import { getTaskStatusDef } from '@squadhub/shared';
 import AssigneePicker from './AssigneePicker';
 import DatePicker from './DatePicker';
 import EmergencyConfirm from './EmergencyConfirm';
 import ListPickerCombobox from './ListPickerCombobox';
+import TaskStatusPicker from './TaskStatusPicker';
 
 /* -------------------------------------------------------------------------- */
 /* Helpers (duplicated from TaskDetailPanel — keep in sync if they change)    */
@@ -251,12 +253,27 @@ export default function TaskCreatePanel({
   const [draft, setDraft] = useState<Draft>(() => makeDraft(initialStatus));
   const [mounted, setMounted] = useState(false);
 
-  // When statuses load (picker mode) or space changes, reset draft.status to a valid one
+  // When the task type resolves (or changes) normalize draft.status.
+  // - task_type='task': status must be a TASK_STATUS_CATALOG key (default 'open')
+  // - other types: status must match a space_status.category (default first)
   useEffect(() => {
+    const typeKey = (taskTypes?.find((t) => t.id === draft.task_type_id) as { key?: string } | undefined)?.key;
+    if (typeKey === 'task') {
+      if (!getTaskStatusDef(draft.status)) {
+        const legacyMap: Record<string, TaskStatusKey> = {
+          todo: 'open',
+          active: 'in_progress',
+          done: 'closed',
+          closed: 'closed',
+        };
+        setDraft((d) => ({ ...d, status: legacyMap[d.status] || 'open' }));
+      }
+      return;
+    }
     if (!effectiveStatuses.length) return;
     if (effectiveStatuses.some((s) => s.category === draft.status)) return;
     setDraft((d) => ({ ...d, status: effectiveStatuses[0].category }));
-  }, [effectiveStatuses, draft.status]);
+  }, [effectiveStatuses, draft.status, draft.task_type_id, taskTypes]);
 
   // Popover / menu anchors
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
@@ -546,42 +563,49 @@ export default function TaskCreatePanel({
             <div className="td-settings-row">
               <span className="k">{META_ICONS.Status}Status</span>
               <span className="v">
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setStatusMenuOpen((v) => !v)}
-                    className="inline-flex items-center gap-2 px-2 py-0.5 rounded-full hover:bg-[color:var(--sh-hair-3)] transition td-focus"
-                  >
-                    <span className="td-dot" style={{ background: currentStatus?.color || 'var(--sh-ink-4)' }} />
-                    {currentStatus?.name || draft.status || 'No status'}
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-[color:var(--sh-ink-4)]">
-                      <path d="M6 9l6 6 6-6" />
-                    </svg>
-                  </button>
-                  {statusMenuOpen && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
-                      <div
-                        className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-xl border shadow-lg"
-                        style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
-                      >
-                        {effectiveStatuses.map((s) => (
-                          <button
-                            key={s.id}
-                            onClick={() => {
-                              setDraft((d) => ({ ...d, status: s.category }));
-                              setStatusMenuOpen(false);
-                            }}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)]"
-                          >
-                            <span className="td-dot" style={{ background: s.color }} />
-                            {s.name}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
+                {currentType?.key === 'task' ? (
+                  <TaskStatusPicker
+                    value={draft.status}
+                    onChange={(key) => setDraft((d) => ({ ...d, status: key }))}
+                  />
+                ) : (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setStatusMenuOpen((v) => !v)}
+                      className="inline-flex items-center gap-2 px-2 py-0.5 rounded-full hover:bg-[color:var(--sh-hair-3)] transition td-focus"
+                    >
+                      <span className="td-dot" style={{ background: currentStatus?.color || 'var(--sh-ink-4)' }} />
+                      {currentStatus?.name || draft.status || 'No status'}
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-[color:var(--sh-ink-4)]">
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                    {statusMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
+                        <div
+                          className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-xl border shadow-lg"
+                          style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
+                        >
+                          {effectiveStatuses.map((s) => (
+                            <button
+                              key={s.id}
+                              onClick={() => {
+                                setDraft((d) => ({ ...d, status: s.category }));
+                                setStatusMenuOpen(false);
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)]"
+                            >
+                              <span className="td-dot" style={{ background: s.color }} />
+                              {s.name}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </span>
             </div>
 
