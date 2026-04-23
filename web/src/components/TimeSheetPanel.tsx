@@ -249,8 +249,18 @@ function EntryRow({
             ↳ Parent: {task.parent_task.title}
           </div>
         )}
-        <div className="mt-1 text-[11px] text-[var(--sh-ink-3)]">
-          {formatTimeRange(entry.started_at, entry.stopped_at)} · {formatTracked(entry.duration_seconds) || '—'}
+        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--sh-ink-3)]">
+          {entry.source === 'manual' ? (
+            <span className="rounded-[4px] bg-[var(--sh-hair-3)] px-1.5 py-[1px] font-medium text-[var(--sh-ink-3)]">
+              Manual
+            </span>
+          ) : (
+            <span>{formatTimeRange(entry.started_at, entry.stopped_at)}</span>
+          )}
+          <span>·</span>
+          <span className={entry.duration_seconds < 0 ? 'text-red-500' : undefined}>
+            {formatTracked(entry.duration_seconds) || '—'}
+          </span>
         </div>
       </div>
       <button

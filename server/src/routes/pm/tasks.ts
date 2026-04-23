@@ -767,6 +767,16 @@ router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
       return;
     }
 
+    // Read the old aggregate + workspace_id to compute the delta and attribute
+    // the entry correctly. If old == new, skip the entry (no-op edit).
+    const { data: existing } = await supabaseAdmin
+      .from('tasks')
+      .select('time_tracked, list_id')
+      .eq('id', id)
+      .single();
+    const oldTotal = (existing as any)?.time_tracked || 0;
+    const delta = time_tracked - oldTotal;
+
     const { data, error } = await supabaseAdmin
       .from('tasks')
       .update({ time_tracked })
@@ -777,6 +787,27 @@ router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
+    }
+
+    if (delta !== 0) {
+      const { data: list } = await supabaseAdmin
+        .from('lists').select('space_id').eq('id', (existing as any).list_id).single();
+      const { data: space } = list?.space_id
+        ? await supabaseAdmin.from('spaces').select('workspace_id').eq('id', (list as any).space_id).single()
+        : { data: null as any };
+      const workspaceId = (space as any)?.workspace_id;
+      if (workspaceId) {
+        const now = new Date().toISOString();
+        await supabaseAdmin.from('task_time_entries').insert({
+          task_id: id,
+          user_id: req.userId!,
+          workspace_id: workspaceId,
+          started_at: now,
+          stopped_at: now,
+          duration_seconds: delta,
+          source: 'manual',
+        });
+      }
     }
 
     const [hydrated] = await hydrateAssignees([data]);
