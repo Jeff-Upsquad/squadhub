@@ -93,6 +93,37 @@ export function groupByPriority(tasks: Task[]): Group[] {
   return [...map.values()].sort((a, b) => (a.sort as number) - (b.sort as number));
 }
 
+export function groupByStatus(tasks: Task[]): Group[] {
+  const map = new Map<string, Group>();
+  for (const t of tasks) {
+    const s = (t as unknown as { status?: { id?: string; name?: string; position?: number } | string | null }).status;
+    let key: string;
+    let label: string;
+    let sort: number | string;
+    if (s && typeof s === 'object') {
+      key = s.id || s.name || '__none__';
+      label = s.name || 'No status';
+      sort = typeof s.position === 'number' ? s.position : (s.name || '').toLowerCase();
+    } else if (typeof s === 'string' && s) {
+      key = s;
+      label = s.charAt(0).toUpperCase() + s.slice(1);
+      sort = s;
+    } else {
+      key = '__none__';
+      label = 'No status';
+      sort = '\uffff';
+    }
+    if (!map.has(key)) map.set(key, { key, label, sort, tasks: [] });
+    map.get(key)!.tasks.push(t);
+  }
+  return [...map.values()].sort((a, b) => {
+    if (typeof a.sort === 'number' && typeof b.sort === 'number') return a.sort - b.sort;
+    if (typeof a.sort === 'number') return -1;
+    if (typeof b.sort === 'number') return 1;
+    return (a.sort as string).localeCompare(b.sort as string);
+  });
+}
+
 export function groupByNamedRef(
   tasks: Task[],
   pick: (t: Task) => { id: string; name: string } | null | undefined,
@@ -123,6 +154,8 @@ export function groupTasks(tasks: Task[], by: GroupBy, tz: string): Group[] {
       return groupByDate(tasks, 'due_date', tz, 'No due date');
     case 'priority':
       return groupByPriority(tasks);
+    case 'status':
+      return groupByStatus(tasks);
     case 'space':
       return groupByNamedRef(tasks, (t) => t.space ?? null, 'No space');
     case 'folder':
