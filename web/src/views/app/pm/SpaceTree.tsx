@@ -214,7 +214,7 @@ function ListItem({ list, isManager = false, myAccess }: { list: List; isManager
       {showSettings && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setShowSettings(false)}>
           <div onClick={(e) => e.stopPropagation()}>
-            <SettingsSlider type="list" id={list.id} name={list.name} spaceId={list.space_id} myAccess={myAccess} onClose={() => setShowSettings(false)} />
+            <SettingsSlider type="list" id={list.id} name={list.name} spaceId={list.space_id} folderId={list.folder_id} myAccess={myAccess} onClose={() => setShowSettings(false)} />
           </div>
         </div>
       )}

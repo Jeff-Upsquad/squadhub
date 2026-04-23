@@ -8,6 +8,7 @@ import { useFavorites, useAddFavorite, useRemoveFavorite } from '../hooks/useFav
 import { useIsAdmin } from '../hooks/usePermissions';
 import { canAtLeast } from '../lib/access';
 import ManageMembersModal from '../views/app/pm/ManageMembersModal';
+import MoveModal from '../views/app/pm/MoveModal';
 import type { ResourceType, AccessLevel, ResourceMembership } from '@squadhub/shared';
 
 type SettingsSliderProps = {
@@ -16,6 +17,7 @@ type SettingsSliderProps = {
   name: string;
   description?: string | null;
   spaceId?: string | null;
+  folderId?: string | null;
   myAccess?: AccessLevel | null;
   onClose: () => void;
   onDeleted?: () => void;
@@ -35,7 +37,7 @@ const ACCESS_ITEM_LABELS: Record<AccessLevel, string> = {
   viewer: 'Viewer',
 };
 
-export default function SettingsSlider({ type, id, name, description, spaceId, myAccess, onClose, onDeleted }: SettingsSliderProps) {
+export default function SettingsSlider({ type, id, name, description, spaceId, folderId, myAccess, onClose, onDeleted }: SettingsSliderProps) {
   const qc = useQueryClient();
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const currentUserId = useAuthStore((s) => s.user?.id);
@@ -45,6 +47,7 @@ export default function SettingsSlider({ type, id, name, description, spaceId, m
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [showInvite, setShowInvite] = useState(false);
+  const [showMove, setShowMove] = useState(false);
   const { data: members } = useMemberships(type, id);
   const updateAccess = useUpdateMemberAccess(type, id);
   const removeMember = useRemoveMember(type, id);
@@ -180,6 +183,28 @@ export default function SettingsSlider({ type, id, name, description, spaceId, m
           </span>
         </button>
 
+        {/* Move — lists and folders only */}
+        {(type === 'list' || type === 'folder') && canManage && spaceId && (
+          <button
+            onClick={() => setShowMove(true)}
+            className="flex w-full items-center gap-2 rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-xs font-medium text-[#0F172B] transition hover:bg-[#F1F5F9]"
+          >
+            <svg
+              className="h-4 w-4 shrink-0 text-[#64748B]"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              <path d="M10 13l3-3m0 0l-3-3m3 3H6" />
+            </svg>
+            <span className="flex-1 text-left">Move {type === 'list' ? 'list' : 'folder'}...</span>
+          </button>
+        )}
+
         {/* Name */}
         <div>
           <label className="mb-1 block text-xs font-medium text-[#666666] uppercase tracking-wide">Name</label>
@@ -290,6 +315,29 @@ export default function SettingsSlider({ type, id, name, description, spaceId, m
           resourceName={name}
           onClose={() => setShowInvite(false)}
         />
+      )}
+
+      {showMove && spaceId && (type === 'list' || type === 'folder') && (
+        type === 'list' ? (
+          <MoveModal
+            type="list"
+            id={id}
+            name={name}
+            currentSpaceId={spaceId}
+            currentFolderId={folderId ?? null}
+            onClose={() => setShowMove(false)}
+            onMoved={onClose}
+          />
+        ) : (
+          <MoveModal
+            type="folder"
+            id={id}
+            name={name}
+            currentSpaceId={spaceId}
+            onClose={() => setShowMove(false)}
+            onMoved={onClose}
+          />
+        )
       )}
 
       {/* Danger zone at bottom */}

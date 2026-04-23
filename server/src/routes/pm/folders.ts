@@ -412,9 +412,52 @@ router.put('/folders/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    const updates: Record<string, unknown> = {};
+    if (req.body.name !== undefined) updates.name = req.body.name;
+    if (req.body.space_id !== undefined) updates.space_id = req.body.space_id;
+
+    // If moving to a new space, validate destination access + lock, then
+    // cascade the space_id change to this folder's child lists so the
+    // invariant "list.space_id == folder.space_id" holds.
+    let newSpaceId: string | null = null;
+    let oldSpaceId: string | null = null;
+    if (updates.space_id) {
+      const { data: currentFolder } = await supabaseAdmin
+        .from('folders')
+        .select('space_id')
+        .eq('id', id)
+        .single();
+      if (!currentFolder) {
+        res.status(404).json({ success: false, error: 'Folder not found' });
+        return;
+      }
+      oldSpaceId = currentFolder.space_id;
+      if (updates.space_id !== oldSpaceId) {
+        newSpaceId = updates.space_id as string;
+        const { data: destSpace } = await supabaseAdmin
+          .from('spaces')
+          .select('id, deleted_at')
+          .eq('id', newSpaceId)
+          .single();
+        if (!destSpace || destSpace.deleted_at) {
+          res.status(400).json({ success: false, error: 'Destination space does not exist' });
+          return;
+        }
+        const destAccess = await checkResourceAccess(req.userId!, 'space', newSpaceId);
+        if (!destAccess || !meetsAccessLevel(destAccess, 'member')) {
+          res.status(403).json({ success: false, error: 'Member access required on destination space' });
+          return;
+        }
+        if (!adminUser && await isResourceLocked('space', newSpaceId)) {
+          res.status(403).json({ success: false, error: 'Destination space is locked' });
+          return;
+        }
+      }
+    }
+
     const { data, error } = await supabaseAdmin
       .from('folders')
-      .update({ name: req.body.name })
+      .update(updates)
       .eq('id', id)
       .select()
       .single();
@@ -422,6 +465,22 @@ router.put('/folders/:id', async (req: Request, res: Response) => {
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
+    }
+
+    // Cascade: move child lists with the folder so their space_id matches.
+    if (newSpaceId && oldSpaceId && newSpaceId !== oldSpaceId) {
+      const { error: cascadeErr } = await supabaseAdmin
+        .from('lists')
+        .update({ space_id: newSpaceId })
+        .eq('folder_id', id)
+        .is('deleted_at', null);
+      if (cascadeErr) {
+        // Roll back the folder move to keep the invariant.
+        await supabaseAdmin.from('folders').update({ space_id: oldSpaceId }).eq('id', id);
+        console.error('[pm/folders] cascade list move failed, rolled back:', cascadeErr);
+        res.status(500).json({ success: false, error: 'Failed to move child lists; folder move rolled back' });
+        return;
+      }
     }
 
     res.json({ success: true, data });
