@@ -253,13 +253,18 @@ export default function TaskDetailPanel({
     const prev = globalStartTimer(task.id, task.title, listId, task.time_tracked || 0);
     if (prev) {
       const elapsedSecs = Math.floor((Date.now() - prev.startedAt) / 1000);
-      const newTracked = prev.baseTracked + elapsedSecs;
-      try {
-        await api.put(`/pm/tasks/${prev.taskId}`, { time_tracked: newTracked });
-        qc.invalidateQueries({ queryKey: ['tasks', prev.listId] });
-        qc.invalidateQueries({ queryKey: ['task', prev.taskId] });
-      } catch (err) {
-        console.error('Failed to save previous timer:', err);
+      if (elapsedSecs >= 1) {
+        try {
+          await api.post(`/pm/tasks/${prev.taskId}/time-entries`, {
+            started_at: new Date(prev.startedAt).toISOString(),
+            duration_seconds: elapsedSecs,
+          });
+          qc.invalidateQueries({ queryKey: ['task-time-entries'] });
+          qc.invalidateQueries({ queryKey: ['tasks', prev.listId] });
+          qc.invalidateQueries({ queryKey: ['task', prev.taskId] });
+        } catch (err) {
+          console.error('Failed to save previous timer:', err);
+        }
       }
     }
   };
@@ -268,9 +273,13 @@ export default function TaskDetailPanel({
     const stopped = globalStopTimer();
     if (!stopped) return;
     const elapsedSecs = Math.floor((Date.now() - stopped.startedAt) / 1000);
-    const newTracked = stopped.baseTracked + elapsedSecs;
+    if (elapsedSecs < 1) return;
     try {
-      await api.put(`/pm/tasks/${stopped.taskId}`, { time_tracked: newTracked });
+      await api.post(`/pm/tasks/${stopped.taskId}/time-entries`, {
+        started_at: new Date(stopped.startedAt).toISOString(),
+        duration_seconds: elapsedSecs,
+      });
+      qc.invalidateQueries({ queryKey: ['task-time-entries'] });
       qc.invalidateQueries({ queryKey: ['tasks', stopped.listId] });
       qc.invalidateQueries({ queryKey: ['task', stopped.taskId] });
     } catch (err) {

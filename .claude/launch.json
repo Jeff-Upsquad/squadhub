@@ -116,6 +116,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-move-list-folder/web && PORT=3099 INTERNAL_API_URL=http://localhost:4010 exec npx next dev -p 3099"],
       "port": 3099
+    },
+    {
+      "name": "Time Sheet Module Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-time-sheet-module/web && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3030"],
+      "port": 3030
     }
   ]
 }

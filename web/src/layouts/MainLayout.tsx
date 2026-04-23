@@ -21,6 +21,7 @@ import TimeManagementPage from '../views/app/time-management/TimeManagementPage'
 import SalesLeadsPage from '../views/app/sales/SalesLeadsPage';
 import ThemeToggle from '../components/ThemeToggle';
 import ActiveTimer from '../components/ActiveTimer';
+import TimeSheetPanel from '../components/TimeSheetPanel';
 import ClientDashboard from '../views/app/client/ClientDashboard';
 import PartnerDashboard from '../views/app/partner/PartnerDashboard';
 import PartnerCashBook from '../views/app/partner/PartnerCashBook';
@@ -83,6 +84,12 @@ const ICON = {
   learning: (
     <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
       <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+    </svg>
+  ),
+  timesheet: (
+    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
     </svg>
   ),
   users: (
@@ -168,6 +175,8 @@ export default function MainLayout() {
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
+  const [timesheetOpen, setTimesheetOpen] = useState(false);
+  const [timesheetAnchor, setTimesheetAnchor] = useState<DOMRect | null>(null);
 
   // Auto-switch to tasks view when a list is selected
   useEffect(() => {
@@ -312,6 +321,21 @@ export default function MainLayout() {
           <RailBtn icon={ICON.cal}  label="Cal"  active={activeSection === 'cal'}  onClick={() => setActiveSection('cal')} />
           <RailBtn icon={ICON.apps} label="Apps" active={activeSection === 'apps'} onClick={() => setActiveSection('apps')} />
           <RailBtn icon={ICON.learning} label="Learning" active={activeSection === 'learning'} onClick={() => setActiveSection('learning')} />
+          <button
+            onClick={(e) => {
+              setTimesheetAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+              setTimesheetOpen((v) => !v);
+            }}
+            title="Time sheet"
+            className={`relative grid h-10 w-10 place-items-center rounded-[9px] transition ${
+              timesheetOpen
+                ? 'border border-[var(--sh-hair)] bg-[var(--surface)] text-[var(--sh-ink)]'
+                : 'border border-transparent text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+            }`}
+            style={timesheetOpen ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+          >
+            {ICON.timesheet}
+          </button>
         </div>
 
         {/* Divider */}
@@ -538,6 +562,14 @@ export default function MainLayout() {
 
       {/* Global task detail panel — opens from any view when activeTaskId is set */}
       <GlobalTaskDetailPanel />
+
+      {/* Time sheet panel — anchored to the rail button */}
+      {timesheetOpen && (
+        <TimeSheetPanel
+          anchorRect={timesheetAnchor}
+          onClose={() => setTimesheetOpen(false)}
+        />
+      )}
 
       {/* Create channel modal */}
       {showCreateChannel && currentWorkspace && (
