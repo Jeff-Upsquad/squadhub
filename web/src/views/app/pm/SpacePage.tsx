@@ -89,7 +89,7 @@ export default function SpacePage() {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskQueries.map((q) => q.data).join('|')]);
+  }, [taskQueries.map((q) => q.dataUpdatedAt).join('|')]);
 
   const filteredTasks = useMemo(() => {
     let arr = allTasks;
