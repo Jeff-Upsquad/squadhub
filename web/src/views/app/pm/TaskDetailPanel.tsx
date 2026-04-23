@@ -14,11 +14,13 @@ import {
   useDeleteChecklistItem,
 } from '../../../hooks/useChecklists';
 import api from '../../../services/api';
-import type { SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority } from '@squadhub/shared';
+import type { SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority, TaskStatusKey } from '@squadhub/shared';
+import { getTaskStatusDef } from '@squadhub/shared';
 import AssigneePicker from './AssigneePicker';
 import MentionPicker from '../../../components/MentionPicker';
 import DatePicker from './DatePicker';
 import EmergencyConfirm from './EmergencyConfirm';
+import TaskStatusPicker from './TaskStatusPicker';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -289,9 +291,17 @@ export default function TaskDetailPanel({
 
   if (!activeTaskId) return null;
 
-  const status = task ? statuses.find((s) => s.category === (task as any).status) : undefined;
   const taskStatusCategory = task ? (task as any).status as string | undefined : undefined;
-  const isDone = taskStatusCategory === 'done' || taskStatusCategory === 'closed';
+  const catalogDef = getTaskStatusDef(taskStatusCategory);
+  const isTaskType = currentType?.key === 'task';
+  const status = task
+    ? isTaskType
+      ? (catalogDef
+          ? ({ color: catalogDef.color, name: catalogDef.label } as Pick<SpaceStatus, 'color' | 'name'> as SpaceStatus)
+          : undefined)
+      : statuses.find((s) => s.category === taskStatusCategory)
+    : undefined;
+  const isDone = catalogDef?.category === 'closed' || taskStatusCategory === 'done' || taskStatusCategory === 'closed';
 
   const handleSave = (field: 'title' | 'description') => {
     if (!task) return;
@@ -691,44 +701,53 @@ export default function TaskDetailPanel({
                 <div className="td-settings-row">
                   <span className="k">{META_ICONS.Status}Status</span>
                   <span className="v">
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={canEdit ? () => setStatusMenuOpen((v) => !v) : undefined}
-                        className="inline-flex items-center gap-2 px-2 py-0.5 rounded-full hover:bg-[color:var(--sh-hair-3)] transition td-focus"
-                      >
-                        <span className="td-dot" style={{ background: status?.color || 'var(--sh-ink-4)' }} />
-                        {status?.name || taskStatusCategory || 'No status'}
-                        {canEdit && (
-                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-[color:var(--sh-ink-4)]">
-                            <path d="M6 9l6 6 6-6" />
-                          </svg>
+                    {isTaskType && canEdit ? (
+                      <TaskStatusPicker
+                        value={taskStatusCategory || null}
+                        onChange={(key: TaskStatusKey) => {
+                          updateTask.mutate({ id: task.id, status: key } as any);
+                        }}
+                      />
+                    ) : (
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={canEdit ? () => setStatusMenuOpen((v) => !v) : undefined}
+                          className="inline-flex items-center gap-2 px-2 py-0.5 rounded-full hover:bg-[color:var(--sh-hair-3)] transition td-focus"
+                        >
+                          <span className="td-dot" style={{ background: status?.color || 'var(--sh-ink-4)' }} />
+                          {status?.name || taskStatusCategory || 'No status'}
+                          {canEdit && (
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-[color:var(--sh-ink-4)]">
+                              <path d="M6 9l6 6 6-6" />
+                            </svg>
+                          )}
+                        </button>
+                        {statusMenuOpen && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
+                            <div
+                              className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-xl border shadow-lg"
+                              style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
+                            >
+                              {statuses.map((s) => (
+                                <button
+                                  key={s.id}
+                                  onClick={() => {
+                                    updateTask.mutate({ id: task.id, status: s.category } as any);
+                                    setStatusMenuOpen(false);
+                                  }}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)]"
+                                >
+                                  <span className="td-dot" style={{ background: s.color }} />
+                                  {s.name}
+                                </button>
+                              ))}
+                            </div>
+                          </>
                         )}
-                      </button>
-                      {statusMenuOpen && (
-                        <>
-                          <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
-                          <div
-                            className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-xl border shadow-lg"
-                            style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
-                          >
-                            {statuses.map((s) => (
-                              <button
-                                key={s.id}
-                                onClick={() => {
-                                  updateTask.mutate({ id: task.id, status: s.category } as any);
-                                  setStatusMenuOpen(false);
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)]"
-                              >
-                                <span className="td-dot" style={{ background: s.color }} />
-                                {s.name}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </span>
                 </div>
 

@@ -121,6 +121,99 @@ export type StatusCategory = 'todo' | 'active' | 'done' | 'closed';
 export type ListView = 'list' | 'board';
 export type ResourceStatus = 'active' | 'inactive';
 
+// ---- Task status catalog (for task_type = 'task') ----
+// tasks.status holds one of these keys for `task` task-type. Other task types
+// continue to use per-space space_statuses. The `category` field maps each key
+// back to the legacy 4-bucket category so existing board grouping + notification
+// triggers keep working.
+export type TaskStatusKey =
+  | 'open' | 'empty'
+  | 'scheduled' | 'reminder' | 'back_burner' | 'up_next' | 'this_week' | 'tomorrow' | 'front_burner' | 'today'
+  | 'priority' | 'high_priority' | 'over_due' | 'urgent' | 'emergency' | 'focus_now'
+  | 'active' | 'in_progress' | 'time_tracked' | 'active_daily'
+  | 'routines' | 'imp_routines'
+  | 'on_hold' | 'waiting_on_dependency' | 'follow_ups' | 'help' | 'unblocked'
+  | 'closed';
+
+export type TaskStatusGroup =
+  | 'not_started'
+  | 'scheduled_queued'
+  | 'priority_urgency'
+  | 'in_motion'
+  | 'routines'
+  | 'blocked_paused'
+  | 'done';
+
+export interface TaskStatusDef {
+  key: TaskStatusKey;
+  label: string;
+  description: string;
+  group: TaskStatusGroup;
+  groupLabel: string;
+  groupEmoji: string;
+  category: StatusCategory;
+  color: string;
+}
+
+export const TASK_STATUS_CATALOG: TaskStatusDef[] = [
+  // Not Started → todo
+  { key: 'open', label: 'OPEN', description: 'Newly created task, not yet triaged or planned.', group: 'not_started', groupLabel: 'Not Started', groupEmoji: '📥', category: 'todo', color: '#9ca3af' },
+  { key: 'empty', label: 'EMPTY', description: 'Placeholder task with no details filled in yet.', group: 'not_started', groupLabel: 'Not Started', groupEmoji: '📥', category: 'todo', color: '#d1d5db' },
+
+  // Scheduled / Queued → active
+  { key: 'scheduled', label: 'SCHEDULED', description: 'Has a specific date/time set.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', category: 'active', color: '#60a5fa' },
+  { key: 'reminder', label: 'REMINDER', description: 'A nudge to do or check something later.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', category: 'active', color: '#93c5fd' },
+  { key: 'back_burner', label: 'BACK BURNER', description: 'Low priority; get to it eventually.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', category: 'active', color: '#a8a29e' },
+  { key: 'up_next', label: 'UP NEXT', description: 'Next in line after current work wraps up.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', category: 'active', color: '#38bdf8' },
+  { key: 'this_week', label: 'THIS WEEK', description: 'To be handled sometime this week.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', category: 'active', color: '#22d3ee' },
+  { key: 'tomorrow', label: 'TOMORROW', description: 'Planned for the next day.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', category: 'active', color: '#06b6d4' },
+  { key: 'front_burner', label: 'FRONT BURNER', description: 'Moving up the queue; becoming relevant soon.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', category: 'active', color: '#f59e0b' },
+  { key: 'today', label: 'TODAY', description: 'Must be addressed today.', group: 'scheduled_queued', groupLabel: 'Scheduled / Queued', groupEmoji: '📅', category: 'active', color: '#f97316' },
+
+  // Priority & Urgency → active (most urgent first)
+  { key: 'focus_now', label: 'FOCUS NOW', description: 'Requires your undivided attention right now.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', category: 'active', color: '#e11d48' },
+  { key: 'emergency', label: 'EMERGENCY', description: 'Critical; drop everything.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', category: 'active', color: '#b91c1c' },
+  { key: 'urgent', label: 'URGENT', description: 'Needs immediate action.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', category: 'active', color: '#ef4444' },
+  { key: 'over_due', label: 'OVER DUE', description: 'Deadline has already passed.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', category: 'active', color: '#dc2626' },
+  { key: 'high_priority', label: 'HIGH PRIORITY', description: 'Very important; needs attention soon.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', category: 'active', color: '#f97316' },
+  { key: 'priority', label: 'PRIORITY', description: 'Important; above normal.', group: 'priority_urgency', groupLabel: 'Priority & Urgency', groupEmoji: '⚡', category: 'active', color: '#fb923c' },
+
+  // In Motion → active
+  { key: 'active', label: 'ACTIVE', description: 'Currently being worked on.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', category: 'active', color: '#22c55e' },
+  { key: 'in_progress', label: 'IN PROGRESS', description: 'Work has started and is ongoing.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', category: 'active', color: '#16a34a' },
+  { key: 'time_tracked', label: 'TIME TRACKED', description: 'Timer is running / hours being logged against it.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', category: 'active', color: '#0d9488' },
+  { key: 'active_daily', label: 'ACTIVE DAILY', description: 'Touched every day until resolved.', group: 'in_motion', groupLabel: 'In Motion', groupEmoji: '🏃', category: 'active', color: '#14b8a6' },
+
+  // Routines → active
+  { key: 'routines', label: 'ROUTINES', description: 'Regular recurring task.', group: 'routines', groupLabel: 'Routines', groupEmoji: '🔁', category: 'active', color: '#a855f7' },
+  { key: 'imp_routines', label: 'IMP ROUTINES', description: 'Important recurring task that cannot be missed.', group: 'routines', groupLabel: 'Routines', groupEmoji: '🔁', category: 'active', color: '#7c3aed' },
+
+  // Blocked / Paused → active
+  { key: 'on_hold', label: 'ON HOLD', description: 'Intentionally paused for now.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', category: 'active', color: '#78716c' },
+  { key: 'waiting_on_dependency', label: 'WAITING ON – DEPENDANCY', description: 'Blocked until something/someone else moves.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', category: 'active', color: '#6b7280' },
+  { key: 'follow_ups', label: 'FOLLOW UPS', description: 'Awaiting a reply; check back periodically.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', category: 'active', color: '#4b5563' },
+  { key: 'help', label: 'HELP', description: 'Stuck; needs input or assistance from someone.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', category: 'active', color: '#a16207' },
+  { key: 'unblocked', label: 'UNBLOCKED', description: 'Was blocked, now free to resume.', group: 'blocked_paused', groupLabel: 'Blocked / Paused', groupEmoji: '⏸️', category: 'active', color: '#84cc16' },
+
+  // Closed → closed
+  { key: 'closed', label: 'CLOSED', description: 'Completed and archived.', group: 'done', groupLabel: 'Closed', groupEmoji: '✅', category: 'closed', color: '#10b981' },
+];
+
+const TASK_STATUS_BY_KEY: Record<string, TaskStatusDef> = TASK_STATUS_CATALOG.reduce(
+  (m, d) => { m[d.key] = d; return m; },
+  {} as Record<string, TaskStatusDef>
+);
+
+export function getTaskStatusDef(key: string | null | undefined): TaskStatusDef | null {
+  if (!key) return null;
+  return TASK_STATUS_BY_KEY[key] || null;
+}
+
+export function getTaskStatusCategory(key: string | null | undefined): StatusCategory | null {
+  const def = getTaskStatusDef(key);
+  return def ? def.category : null;
+}
+
 export interface Space {
   id: string;
   workspace_id: string;

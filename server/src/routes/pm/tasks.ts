@@ -635,22 +635,34 @@ router.post('/tasks', async (req: Request, res: Response) => {
       }
     }
 
-    // Resolve task_type_id: use supplied value or fall back to the default type
+    // Resolve task_type_id + key: use supplied value or fall back to the default type
     let resolvedTypeId: string | null = body.task_type_id ?? null;
-    if (!resolvedTypeId) {
+    let resolvedTypeKey: string | null = null;
+    if (resolvedTypeId) {
+      const { data: t } = await supabaseAdmin
+        .from('task_types')
+        .select('id, key')
+        .eq('id', resolvedTypeId)
+        .maybeSingle();
+      resolvedTypeKey = (t as any)?.key ?? null;
+    } else {
       const { data: defaultType } = await supabaseAdmin
         .from('task_types')
-        .select('id')
+        .select('id, key')
         .eq('is_default', true)
         .maybeSingle();
       resolvedTypeId = (defaultType as any)?.id ?? null;
+      resolvedTypeKey = (defaultType as any)?.key ?? null;
     }
+
+    // Catalog-driven task type uses 'open' as its initial status; legacy types still use 'todo'.
+    const defaultStatus = resolvedTypeKey === 'task' ? 'open' : 'todo';
 
     const insertData: Record<string, any> = {
       list_id: body.list_id,
       title: body.title,
       description: body.description || null,
-      status: body.status || 'todo',
+      status: body.status || defaultStatus,
       priority: body.priority || 'none',
       due_date: body.due_date || null,
       work_date: body.work_date || null,
