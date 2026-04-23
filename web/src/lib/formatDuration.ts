@@ -2,11 +2,13 @@
 
 export function formatTracked(seconds: number | null | undefined): string {
   if (!seconds) return '';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h && m) return `${h}h ${m}m`;
-  if (h) return `${h}h`;
-  return `${m}m`;
+  const sign = seconds < 0 ? '-' : '';
+  const abs = Math.abs(seconds);
+  const h = Math.floor(abs / 3600);
+  const m = Math.floor((abs % 3600) / 60);
+  if (h && m) return `${sign}${h}h ${m}m`;
+  if (h) return `${sign}${h}h`;
+  return `${sign}${m}m`;
 }
 
 export function formatClock(totalSeconds: number): string {

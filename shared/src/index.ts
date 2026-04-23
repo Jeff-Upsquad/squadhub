@@ -332,6 +332,7 @@ export interface TaskTimeEntry {
   started_at: string;
   stopped_at: string;
   duration_seconds: number;
+  source: 'timer' | 'manual';
   created_at: string;
   // Joined — task + its list/folder/space + parent (for UI breadcrumbs)
   task?: Pick<Task, 'id' | 'title' | 'list_id' | 'time_tracked'> & {
