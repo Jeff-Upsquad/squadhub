@@ -58,6 +58,11 @@ const HOME_BY_VIEW: Record<RoleHomeView, React.ComponentType<{ onOpenInbox: () =
   accountant: AccountantHome,
 };
 
+// Role-specific homes override the user_type dashboards (Partner/Client).
+// The "vanilla" home_view values (member/user/guest) are the user_type defaults
+// and defer to PartnerDashboard / ClientDashboard as before.
+const ROLE_SPECIFIC_HOMES: RoleHomeView[] = ['designer', 'video_editor', 'accountant'];
+
 // ---- Rail icons (stroke-1.6, 18x18) ----
 const ICON = {
   home: (
@@ -176,6 +181,7 @@ function RailBtn({
 export default function MainLayout() {
   const { currentWorkspace, activeChannelId, setWorkspace, setChannels, setActiveChannel } = useWorkspaceStore();
   const myHomeView: RoleHomeView = currentWorkspace?.my_home_view ?? 'user';
+  const useRoleHome = ROLE_SPECIFIC_HOMES.includes(myHomeView);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const pmReset = usePMStore((s) => s.reset);
@@ -560,9 +566,9 @@ export default function MainLayout() {
             <TimeManagementPage />
           ) : homeView === 'sales-leads' ? (
             <SalesLeadsPage />
-          ) : homeView === 'hub' && (userType === 'client' || userType === 'client_staff') ? (
+          ) : homeView === 'hub' && !useRoleHome && (userType === 'client' || userType === 'client_staff') ? (
             <ClientDashboard />
-          ) : homeView === 'hub' && userType === 'partner' ? (
+          ) : homeView === 'hub' && !useRoleHome && userType === 'partner' ? (
             <PartnerDashboard />
           ) : homeView === 'cashbook' && userType === 'partner' ? (
             <PartnerCashBook />
