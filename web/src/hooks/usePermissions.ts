@@ -34,3 +34,8 @@ export function useIsAdmin(): boolean {
   const { data } = useMyPermissions();
   return data?.workspaceRole === 'admin' || data?.workspaceRole === 'super_admin';
 }
+
+export function useIsGuest(): boolean {
+  const { data } = useMyPermissions();
+  return data?.workspaceRole === 'guest';
+}
