@@ -228,10 +228,23 @@ export default function MainLayout() {
 
   const workspaces: (Workspace & { my_role?: string; my_home_view?: RoleHomeView })[] = useMemo(() => workspacesRes?.data || [], [workspacesRes]);
 
-  // Auto-select first workspace
+  // Auto-select first workspace on first load, and re-sync whenever the
+  // React Query refetch surfaces a changed my_role / my_home_view for the
+  // active workspace (e.g. an admin edited the role mid-session). Without
+  // this, the Zustand store freezes on its initial value and users have to
+  // hard-refresh to pick up role changes.
   useEffect(() => {
-    if (workspaces.length > 0 && !currentWorkspace) {
-      setWorkspace(workspaces[0]);
+    if (workspaces.length === 0) return;
+    const next = currentWorkspace
+      ? (workspaces.find((w) => w.id === currentWorkspace.id) ?? workspaces[0])
+      : workspaces[0];
+    if (
+      !currentWorkspace ||
+      currentWorkspace.id !== next.id ||
+      currentWorkspace.my_home_view !== next.my_home_view ||
+      currentWorkspace.my_role !== next.my_role
+    ) {
+      setWorkspace(next);
     }
   }, [workspaces, currentWorkspace, setWorkspace]);
 
