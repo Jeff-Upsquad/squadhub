@@ -456,7 +456,7 @@ export interface TaskComment {
 
 // ---- Roles & Permissions ----
 export type SystemRoleKey = 'member' | 'user' | 'guest';
-export type RoleHomeView = 'member' | 'user' | 'guest';
+export type RoleHomeView = 'member' | 'user' | 'guest' | 'designer' | 'video_editor' | 'accountant';
 
 export interface Role {
   id: string;

@@ -31,6 +31,9 @@ import ClientDesignDashboard from '../views/app/pm/client-design/ClientDesignDas
 import MemberHome from '../views/app/home/MemberHome';
 import UserHome from '../views/app/home/UserHome';
 import GuestHome from '../views/app/home/GuestHome';
+import DesignerHome from '../views/app/home/DesignerHome';
+import VideoEditorHome from '../views/app/home/VideoEditorHome';
+import AccountantHome from '../views/app/home/AccountantHome';
 import GlobalTaskDetailPanel from '../views/app/home/GlobalTaskDetailPanel';
 import EmergencyBanner from '../views/app/pm/EmergencyBanner';
 import InboxView from '../views/app/InboxView';
@@ -42,6 +45,18 @@ import { useUnreadCount } from '../hooks/useUnreadCount';
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'learning' | 'more';
 export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities';
+
+// ---- Role Home lookup ----
+// Picks which Home component to render based on the role's home_view.
+// Each key ↔ a RoleHomeView value from shared/src/index.ts.
+const HOME_BY_VIEW: Record<RoleHomeView, React.ComponentType<{ onOpenInbox: () => void }>> = {
+  member: MemberHome,
+  user: UserHome,
+  guest: GuestHome,
+  designer: DesignerHome,
+  video_editor: VideoEditorHome,
+  accountant: AccountantHome,
+};
 
 // ---- Rail icons (stroke-1.6, 18x18) ----
 const ICON = {
@@ -556,9 +571,10 @@ export default function MainLayout() {
           ) : homeView === 'opportunities' && userType === 'partner' ? (
             <PartnerOpportunities />
           ) : (
-            myHomeView === 'member' ? <MemberHome onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} /> :
-            myHomeView === 'guest' ? <GuestHome onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} /> :
-            <UserHome onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} />
+            (() => {
+              const HomeComponent = HOME_BY_VIEW[myHomeView] ?? UserHome;
+              return <HomeComponent onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} />;
+            })()
           )
         )}
       </div>

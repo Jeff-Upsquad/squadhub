@@ -7,6 +7,9 @@ const HOME_VIEW_OPTIONS: { value: RoleHomeView; label: string; desc: string }[] 
   { value: 'member', label: 'Member', desc: 'Internal teammates' },
   { value: 'user', label: 'User', desc: 'Client organizations' },
   { value: 'guest', label: 'Guest', desc: 'Partners & freelancers' },
+  { value: 'designer', label: 'Designer', desc: 'Design-focused freelancers' },
+  { value: 'video_editor', label: 'Video Editor', desc: 'Video & post-production freelancers' },
+  { value: 'accountant', label: 'Accountant', desc: 'Finance & accounting contributors' },
 ];
 
 interface RoleWithCount extends Role {
