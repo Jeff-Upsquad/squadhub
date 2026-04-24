@@ -49,6 +49,9 @@ const targetsSchema = z.object({
     country_id: z.string().uuid(),
     region: z.string().min(1).max(100),
   })),
+  // SquadHire (Profiles) category IDs. UUIDs from SquadHire's DB, not ours —
+  // no FK. Empty array means "don't publish to SquadHire on publish".
+  squadhire_category_ids: z.array(z.string().uuid()).default([]),
 });
 
 // ------------------------------------------------------------
@@ -184,6 +187,7 @@ router.put(
           target_tier: body.target_tier,
           min_experience_years: body.min_experience_years,
           target_languages: body.target_languages,
+          squadhire_category_ids: body.squadhire_category_ids,
         })
         .eq('id', req.params.id as string);
       if (updErr) {

@@ -55,11 +55,19 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, target_tier, min_experience_years, target_languages, published_at',
+      'id, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, target_tier, min_experience_years, target_languages, squadhire_category_ids, published_at',
     )
     .eq('id', cardId)
     .maybeSingle();
   if (!card) return null;
+
+  // Skip-if-empty gate: an admin who didn't pick any SquadHire categories
+  // doesn't want this card on SquadHire. The publish handler treats a null
+  // payload as a no-op, so the outbound fetch + retry loop never starts.
+  const categoryIds = Array.isArray(card.squadhire_category_ids)
+    ? (card.squadhire_category_ids as string[])
+    : [];
+  if (categoryIds.length === 0) return null;
 
   const [
     { data: countryRows },
@@ -104,11 +112,13 @@ export async function buildSquadhirePayloadForCard(
   if (card.notes) descriptionLines.push(card.notes);
   const description = descriptionLines.join('\n\n');
 
-  // match_rules is intentionally pass-through. SquadHire's matcher knows
-  // `category_ids` today and logs+skips anything else. Keeping the
-  // SquadHub-side targeting in the payload means once SquadHire's matcher
-  // grows, no SquadHub change is needed to start honouring those rules.
-  const match_rules: Record<string, unknown> = {};
+  // match_rules: `category_ids` is the primary axis SquadHire's matcher
+  // currently honours. Everything else is pass-through — SquadHire logs-and-
+  // skips unknown keys today, so forwarding tier/experience/language/country
+  // gives future matcher growth a free upgrade with no SquadHub change.
+  const match_rules: Record<string, unknown> = {
+    category_ids: categoryIds,
+  };
   if (card.target_tier) match_rules.target_tier = card.target_tier;
   if ((card.min_experience_years ?? 0) > 0) {
     match_rules.min_experience_years = card.min_experience_years;

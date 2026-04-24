@@ -66,6 +66,7 @@ import adminChatGroupsRoutes from './routes/admin/chat-groups';
 import adminChatBroadcastsRoutes from './routes/admin/chat-broadcasts';
 import adminChatAppConfigRoutes from './routes/admin/chat-app-config';
 import squadhireCallbacksRoutes from './routes/integrations/squadhire-callbacks';
+import squadhireCategoriesRoutes from './routes/integrations/squadhire-categories';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimerCron } from './cron/timer-cron';
 import { startSquadhireSyncSweeper } from './utils/squadhireWebhook';
@@ -158,6 +159,8 @@ app.use('/admin/chat/app-config', adminChatAppConfigRoutes);
 
 // Integrations — inbound callbacks from sister products (SquadHire etc.)
 app.use('/integrations/squadhire', squadhireCallbacksRoutes);
+// Admin-facing read-through proxy for SquadHire metadata (categories etc.)
+app.use('/admin/integrations/squadhire', squadhireCategoriesRoutes);
 
 // 404 handler
 app.use((_req, res) => {
