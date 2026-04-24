@@ -5,6 +5,7 @@ import type {
   Country,
   DeliverableKind,
   PartnerTier,
+  SquadHireCategory,
   SubscriptionCard,
   SubscriptionCardCustomDeliverable,
   SubscriptionDeliverableType,
@@ -123,6 +124,19 @@ export default function SubscriptionCardDrawer({
   const [targetLanguages, setTargetLanguages] = useState<string[]>([]);
   const [targetCountryIds, setTargetCountryIds] = useState<string[]>([]);
   const [targetRegions, setTargetRegions] = useState<{ country_id: string; region: string }[]>([]);
+  const [squadhireCategoryIds, setSquadhireCategoryIds] = useState<string[]>([]);
+
+  // Read-through fetch: SquadHire categories, cached 10 min on the server.
+  // Runs once per drawer open. Errors are surfaced inline so the admin knows
+  // the picker is unavailable without blocking the rest of the drawer.
+  const { data: squadhireCategoriesRes, error: squadhireCategoriesError } = useQuery({
+    queryKey: ['squadhire-categories'],
+    queryFn: () =>
+      api.get('/admin/integrations/squadhire/categories').then((r) => r.data),
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+  });
+  const squadhireCategories: SquadHireCategory[] = squadhireCategoriesRes?.data || [];
 
   useEffect(() => {
     if (!card) return;
@@ -136,6 +150,7 @@ export default function SubscriptionCardDrawer({
     setTargetLanguages(card.target_languages || []);
     setTargetCountryIds(card.target_country_ids || []);
     setTargetRegions(card.target_regions || []);
+    setSquadhireCategoryIds(card.squadhire_category_ids || []);
   }, [card]);
 
   const readOnly = !card || card.state !== 'draft';
@@ -168,6 +183,7 @@ export default function SubscriptionCardDrawer({
       target_languages: targetLanguages,
       target_country_ids: targetCountryIds,
       target_regions: targetRegions.filter((r) => targetCountryIds.includes(r.country_id)),
+      squadhire_category_ids: squadhireCategoryIds,
     });
   }
 
@@ -425,6 +441,49 @@ export default function SubscriptionCardDrawer({
                       );
                     })}
                   </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-[var(--sh-ink-3)]">
+                    SquadHire categories
+                  </label>
+                  <p className="mb-2 text-[11px] text-[var(--sh-ink-3)]">
+                    Leave empty to skip publishing to SquadHire.
+                  </p>
+                  {squadhireCategoriesError ? (
+                    <p className="text-[11px] text-red-600">
+                      Could not load SquadHire categories. Publishing to SquadHire
+                      is disabled for this session.
+                    </p>
+                  ) : squadhireCategories.length === 0 ? (
+                    <p className="text-[11px] text-[var(--sh-ink-3)]">Loading…</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {squadhireCategories.map((cat) => {
+                        const on = squadhireCategoryIds.includes(cat.id);
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            disabled={readOnly}
+                            title={cat.description || cat.slug}
+                            onClick={() =>
+                              setSquadhireCategoryIds((prev) =>
+                                on ? prev.filter((x) => x !== cat.id) : [...prev, cat.id],
+                              )
+                            }
+                            className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
+                              on
+                                ? 'border-[var(--sh-ink)] bg-[var(--sh-ink)] text-[var(--surface)]'
+                                : 'border-[var(--sh-hair)] bg-[var(--surface)] text-[var(--sh-ink-3)] hover:border-[var(--sh-ink-3)]'
+                            } disabled:opacity-60 disabled:cursor-not-allowed`}
+                          >
+                            {cat.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </Section>
             </div>

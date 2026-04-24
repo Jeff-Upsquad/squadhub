@@ -1128,6 +1128,9 @@ export interface SubscriptionCard {
   custom_deliverables: SubscriptionCardCustomDeliverable[];
   target_country_ids: string[];
   target_regions: SubscriptionCardTargetRegion[];
+  // SquadHire (Profiles) targeting — UUIDs from SquadHire's categories table.
+  // No SquadHub-side FK. Empty means the card is not published to SquadHire.
+  squadhire_category_ids: string[];
   published_at: string | null;
   published_by: string | null;
   closed_at: string | null;
@@ -1138,6 +1141,19 @@ export interface SubscriptionCard {
   // Joined
   submission_subscription?: ClientSubmissionSubscription;
   submission?: Pick<ClientSubmission, 'id' | 'business_name' | 'country_id' | 'country'> | null;
+}
+
+/**
+ * A SquadHire category as seen by the SquadHub admin UI. Served by
+ * /admin/integrations/squadhire/categories (a signed read-through to
+ * Profiles). `id` is a UUID from Profiles' DB — never used as a FK here.
+ */
+export interface SquadHireCategory {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  sort_order: number;
 }
 
 export interface SubscriptionCardRecipient {
