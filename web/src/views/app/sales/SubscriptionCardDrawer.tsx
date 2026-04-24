@@ -125,6 +125,8 @@ export default function SubscriptionCardDrawer({
   const [targetCountryIds, setTargetCountryIds] = useState<string[]>([]);
   const [targetRegions, setTargetRegions] = useState<{ country_id: string; region: string }[]>([]);
   const [squadhireCategoryIds, setSquadhireCategoryIds] = useState<string[]>([]);
+  // '' means "no override — use plan default". A numeric string overrides.
+  const [partnerPriceOverride, setPartnerPriceOverride] = useState<string>('');
 
   // Read-through fetch: SquadHire categories, cached 10 min on the server.
   // Runs once per drawer open. Errors are surfaced inline so the admin knows
@@ -151,6 +153,9 @@ export default function SubscriptionCardDrawer({
     setTargetCountryIds(card.target_country_ids || []);
     setTargetRegions(card.target_regions || []);
     setSquadhireCategoryIds(card.squadhire_category_ids || []);
+    setPartnerPriceOverride(
+      card.partner_price_override == null ? '' : String(card.partner_price_override),
+    );
   }, [card]);
 
   const readOnly = !card || card.state !== 'draft';
@@ -161,6 +166,28 @@ export default function SubscriptionCardDrawer({
     : null;
   const defaultDeliverables: SubscriptionPlanDeliverable[] = plan?.deliverables || [];
 
+  // Partner price: resolves against the card's selected target country when
+  // set, else falls back to the lead's country. Server-side resolution in
+  // squadhireWebhook.ts uses the same precedence, so the drawer preview
+  // matches what the talent eventually sees.
+  const partnerPricingCountryId =
+    targetCountryIds.length === 1 ? targetCountryIds[0] : countryId;
+  const partnerPricingCountry = countries.find((c) => c.id === partnerPricingCountryId) || null;
+  const defaultPartnerPriceRow = partnerPricingCountryId
+    ? (plan?.partner_pricing || []).find((pr) => pr.country_id === partnerPricingCountryId)
+    : undefined;
+  const defaultPartnerPrice = defaultPartnerPriceRow?.price ?? null;
+  const partnerCurrency =
+    defaultPartnerPriceRow?.country?.currency || partnerPricingCountry?.currency || 'INR';
+  const partnerOverrideNum =
+    partnerPriceOverride.trim() === '' ? null : parseInt(partnerPriceOverride, 10);
+  const effectivePartnerPrice =
+    partnerOverrideNum != null && !Number.isNaN(partnerOverrideNum) && partnerOverrideNum >= 0
+      ? partnerOverrideNum
+      : defaultPartnerPrice;
+  const grossProfit =
+    pricing && effectivePartnerPrice != null ? pricing.price - effectivePartnerPrice : null;
+
   const acceptedCount = card?.recipient_counts?.accepted ?? 0;
   const pendingCount = card?.recipient_counts?.pending ?? 0;
   const rejectedCount = card?.recipient_counts?.rejected ?? 0;
@@ -170,12 +197,16 @@ export default function SubscriptionCardDrawer({
 
   function saveDraft() {
     if (!card) return;
+    const overrideNum = partnerPriceOverride.trim() === '' ? null : parseInt(partnerPriceOverride, 10);
+    const cleanOverride =
+      overrideNum != null && !Number.isNaN(overrideNum) && overrideNum >= 0 ? overrideNum : null;
     patchCard.mutate({
       working_days: workingDays,
       brand_name: brandName || null,
       business_nature: businessNature || null,
       notes: notes || null,
       custom_deliverables: customDeliverables,
+      partner_price_override: cleanOverride,
     });
     putTargets.mutate({
       target_tiers: targetTiers,
@@ -235,7 +266,22 @@ export default function SubscriptionCardDrawer({
                     <p className="text-xs text-[var(--sh-ink-3)]">
                       {plan ? `${plan.plan} · ${plan.tier}` : '—'}
                     </p>
-                    {priceLabel && <p className="text-xs font-medium text-[var(--sh-ink)]">{priceLabel}</p>}
+                    {priceLabel && (
+                      <p className="text-xs font-medium text-[var(--sh-ink)]">Customer: {priceLabel}</p>
+                    )}
+                    {effectivePartnerPrice != null && (
+                      <p className="text-xs font-medium text-[var(--sh-ink)]">
+                        Partner: {formatPrice(effectivePartnerPrice, partnerCurrency)}/mo
+                      </p>
+                    )}
+                    {grossProfit != null && (
+                      <p
+                        className={`text-xs font-medium ${grossProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}
+                        title="Gross profit = customer − partner"
+                      >
+                        GP: {formatPrice(grossProfit, partnerCurrency)}
+                      </p>
+                    )}
                   </div>
                   {defaultDeliverables.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
@@ -244,6 +290,46 @@ export default function SubscriptionCardDrawer({
                       ))}
                     </div>
                   )}
+                </div>
+              </Section>
+
+              {/* Partner price (override the plan default) */}
+              <Section title="Partner Price">
+                <div className="space-y-2">
+                  <p className="text-xs text-[var(--sh-ink-3)]">
+                    {defaultPartnerPrice != null
+                      ? `Plan default for ${partnerPricingCountry?.name ?? 'this country'}: ${formatPrice(defaultPartnerPrice, partnerCurrency)}/mo`
+                      : partnerPricingCountryId
+                        ? 'No plan default set for this country. Set one in Subscriptions admin, or enter an override below.'
+                        : 'Select a target country to see the plan default.'}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-[var(--sh-ink-3)]">Custom price</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={partnerPriceOverride}
+                      onChange={(e) => setPartnerPriceOverride(e.target.value)}
+                      disabled={readOnly}
+                      placeholder={defaultPartnerPrice != null ? String(defaultPartnerPrice) : '—'}
+                      className="w-32 rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] px-3 py-1.5 text-sm text-[var(--sh-ink)] outline-none focus:border-[var(--sh-ink-3)] disabled:opacity-60"
+                    />
+                    <span className="text-xs text-[var(--sh-ink-4)]">
+                      {partnerCurrency} / month
+                    </span>
+                    {partnerPriceOverride.trim() !== '' && !readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => setPartnerPriceOverride('')}
+                        className="text-xs text-[var(--sh-ink-3)] underline hover:text-[var(--sh-ink)]"
+                      >
+                        Use default
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[var(--sh-ink-4)]">
+                    Leave blank to use the plan default. This is what the partner sees on SquadHire as their monthly pay.
+                  </p>
                 </div>
               </Section>
 
@@ -351,7 +437,9 @@ export default function SubscriptionCardDrawer({
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-[var(--sh-ink-3)]">Countries</label>
+                  <label className="mb-1 block text-xs font-medium text-[var(--sh-ink-3)]">
+                    Country <span className="text-[var(--sh-ink-4)]">(pick exactly one — drives partner pricing)</span>
+                  </label>
                   <div className="flex flex-wrap gap-2">
                     {countries.map((c) => {
                       const on = targetCountryIds.includes(c.id);
@@ -360,15 +448,17 @@ export default function SubscriptionCardDrawer({
                           key={c.id}
                           type="button"
                           disabled={readOnly}
-                          onClick={() =>
-                            setTargetCountryIds((prev) => {
-                              if (on) {
-                                setTargetRegions((r) => r.filter((x) => x.country_id !== c.id));
-                                return prev.filter((x) => x !== c.id);
-                              }
-                              return [...prev, c.id];
-                            })
-                          }
+                          onClick={() => {
+                            if (on) {
+                              // Deselect — clear country + its regions.
+                              setTargetRegions((r) => r.filter((x) => x.country_id !== c.id));
+                              setTargetCountryIds([]);
+                            } else {
+                              // Select — replace (single-select); drop regions from other countries.
+                              setTargetRegions((r) => r.filter((x) => x.country_id === c.id));
+                              setTargetCountryIds([c.id]);
+                            }
+                          }}
                           className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
                             on
                               ? 'border-[var(--sh-ink)] bg-[var(--sh-ink)] text-[var(--surface)]'

@@ -991,7 +991,19 @@ export interface SubscriptionPlanRow {
   updated_at: string;
   // Joined
   pricing?: SubscriptionPlanPricing[];
+  partner_pricing?: SubscriptionPlanPartnerPricing[];
   deliverables?: SubscriptionPlanDeliverable[];
+}
+
+export interface SubscriptionPlanPartnerPricing {
+  id: string;
+  plan_id: string;
+  country_id: string;
+  price: number;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  country?: Country;
 }
 
 export interface SubscriptionPlanPricing {
@@ -1131,6 +1143,8 @@ export interface SubscriptionCard {
   // SquadHire (Profiles) targeting — UUIDs from SquadHire's categories table.
   // No SquadHub-side FK. Empty means the card is not published to SquadHire.
   squadhire_category_ids: string[];
+  /** Per-card override of the plan's default partner price. null = use default. */
+  partner_price_override: number | null;
   published_at: string | null;
   published_by: string | null;
   closed_at: string | null;

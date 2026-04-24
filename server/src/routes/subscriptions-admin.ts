@@ -174,6 +174,60 @@ router.delete('/plans/:planId/pricing/:countryId', async (req: Request, res: Res
 });
 
 // ============================================================
+// Plan PARTNER pricing per country (upsert + delete)
+// Mirrors /pricing but writes to subscription_plan_partner_pricing.
+// "Partner price" = what we pay the partner for this plan in that country.
+// Gross profit per subscription = customer price − partner price.
+// ============================================================
+
+router.post('/plans/:planId/partner-pricing', async (req: Request, res: Response) => {
+  try {
+    const body = upsertPricingSchema.parse(req.body);
+
+    const { data, error } = await supabaseAdmin
+      .from('subscription_plan_partner_pricing')
+      .upsert(
+        { plan_id: req.params.planId, country_id: body.country_id, price: body.price },
+        { onConflict: 'plan_id,country_id' },
+      )
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Upsert plan partner pricing error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+router.delete('/plans/:planId/partner-pricing/:countryId', async (req: Request, res: Response) => {
+  try {
+    const { error } = await supabaseAdmin
+      .from('subscription_plan_partner_pricing')
+      .delete()
+      .eq('plan_id', req.params.planId)
+      .eq('country_id', req.params.countryId);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete plan partner pricing error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
 // Deliverable types (per subscription)
 // ============================================================
 

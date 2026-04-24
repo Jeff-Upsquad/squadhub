@@ -38,6 +38,8 @@ const patchCardSchema = z.object({
   business_nature: z.string().max(500).nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
   custom_deliverables: z.array(customDeliverableSchema).optional(),
+  // null = clear override and fall back to the plan's default partner price.
+  partner_price_override: z.number().int().min(0).nullable().optional(),
 });
 
 const targetsSchema = z.object({

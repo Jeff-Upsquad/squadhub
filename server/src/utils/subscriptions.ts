@@ -12,12 +12,14 @@ export async function hydrateSubscription(subscriptionId: string) {
   const planIds = (plans || []).map((p: any) => p.id);
   const delivsByPlan: Record<string, any[]> = {};
   const pricingByPlan: Record<string, any[]> = {};
+  const partnerPricingByPlan: Record<string, any[]> = {};
   let countriesById: Record<string, any> = {};
 
   if (planIds.length > 0) {
-    const [{ data: delivs }, { data: pricing }, { data: countries }] = await Promise.all([
+    const [{ data: delivs }, { data: pricing }, { data: partnerPricing }, { data: countries }] = await Promise.all([
       supabaseAdmin.from('subscription_plan_deliverables').select('*').in('plan_id', planIds).order('sort_order'),
       supabaseAdmin.from('subscription_plan_pricing').select('*').in('plan_id', planIds),
+      supabaseAdmin.from('subscription_plan_partner_pricing').select('*').in('plan_id', planIds),
       supabaseAdmin.from('countries').select('*').order('sort_order'),
     ]);
 
@@ -26,6 +28,9 @@ export async function hydrateSubscription(subscriptionId: string) {
     });
     (pricing || []).forEach((p: any) => {
       (pricingByPlan[p.plan_id] = pricingByPlan[p.plan_id] || []).push(p);
+    });
+    (partnerPricing || []).forEach((p: any) => {
+      (partnerPricingByPlan[p.plan_id] = partnerPricingByPlan[p.plan_id] || []).push(p);
     });
     (countries || []).forEach((c: any) => { countriesById[c.id] = c; });
   }
@@ -38,6 +43,10 @@ export async function hydrateSubscription(subscriptionId: string) {
     plans: (plans || []).map((p: any) => ({
       ...p,
       pricing: (pricingByPlan[p.id] || []).map((pr: any) => ({
+        ...pr,
+        country: countriesById[pr.country_id] || null,
+      })),
+      partner_pricing: (partnerPricingByPlan[p.id] || []).map((pr: any) => ({
         ...pr,
         country: countriesById[pr.country_id] || null,
       })),
