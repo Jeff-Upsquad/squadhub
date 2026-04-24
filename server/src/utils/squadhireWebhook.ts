@@ -1,3 +1,4 @@
+import { formatDeliverableCadence } from '@squadhub/shared';
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
 
@@ -142,11 +143,12 @@ export async function buildSquadhirePayloadForCard(
     : planHoursDeliverable;
   let hoursLabel: string | null = null;
   if (hoursSource && (hoursSource.per_day || hoursSource.per_week || hoursSource.per_month)) {
-    const parts: string[] = [];
-    if (hoursSource.per_day) parts.push(`${hoursSource.per_day}/d`);
-    if (hoursSource.per_week) parts.push(`${hoursSource.per_week}/w`);
-    if (hoursSource.per_month) parts.push(`${hoursSource.per_month}/m`);
-    hoursLabel = parts.join(' · ');
+    hoursLabel = formatDeliverableCadence(
+      hoursSource.per_day,
+      hoursSource.per_week,
+      hoursSource.per_month,
+      'hrs',
+    );
   }
 
   // Resolve partner price for the card's country.
@@ -245,9 +247,9 @@ export async function buildSquadhirePayloadForCard(
     content.monthly_price = resolvedMonthlyPrice;
     content.currency = resolvedCurrency;
   }
-  // Attach a single-line hours label ("1/d · 6/w · 30/m") when the plan (or a
-  // card override) defines an hours-kind deliverable. Profiles' renderer
-  // promotes this to the HOURS section above description.
+  // Attach a single-line hours label ("1 hrs/day · 6 hrs/week · 30 hrs/month")
+  // when the plan (or a card override) defines an hours-kind deliverable.
+  // Profiles' renderer promotes this to the HOURS section above description.
   if (hoursLabel) {
     content.hours_label = hoursLabel;
   }

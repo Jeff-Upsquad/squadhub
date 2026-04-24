@@ -10,7 +10,7 @@ import type {
   SubscriptionPlanRow,
   SubscriptionTier,
 } from '@squadhub/shared';
-import { formatPrice } from '@squadhub/shared';
+import { formatPrice, formatDeliverableCadence } from '@squadhub/shared';
 import ConfirmRemoveDialog from '../../../components/ConfirmRemoveDialog';
 
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
@@ -195,7 +195,12 @@ function DeliverableChip({ deliverable }: { deliverable: SubscriptionPlanDeliver
     <span className="inline-flex items-center gap-1.5 rounded-md bg-[#F1F5F9] px-2 py-0.5 text-[11px] text-[#0F172B]">
       <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${badgeClass}`}>{label}</span>
       <span className="text-[#62748E]">
-        {deliverable.per_day}/d · {deliverable.per_week}/w · {deliverable.per_month}/m
+        {formatDeliverableCadence(
+          deliverable.per_day,
+          deliverable.per_week,
+          deliverable.per_month,
+          deliverable.kind === 'hours' ? 'hrs' : (deliverable.deliverable_type?.name || 'items'),
+        )}
       </span>
     </span>
   );
