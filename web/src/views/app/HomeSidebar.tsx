@@ -13,7 +13,7 @@ import CreateSpaceModal from './pm/CreateSpaceModal';
 import { useHasMiniApp } from '../../hooks/useMiniApps';
 import { useUnreadCount } from '../../hooks/useUnreadCount';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
-import { useIsInternal, useIsClient, useIsPartner } from '../../hooks/useUserType';
+import { useIsClient, useIsPartner } from '../../hooks/useUserType';
 import { useMyClients, useClientFolders, type MyClientEntry } from '../../hooks/useMyClients';
 import { useIsWorkspaceAdmin } from '../../hooks/useIsWorkspaceAdmin';
 import AddClientSpaceModal from './clients/AddClientSpaceModal';
@@ -176,7 +176,6 @@ export default function HomeSidebar({
   const canCreateSpaces = useHasPermission('can_create_spaces');
   const [showCreateSpace, setShowCreateSpace] = useState(false);
   const [addSpaceForClient, setAddSpaceForClient] = useState<MyClientEntry | null>(null);
-  const isInternal = useIsInternal();
   const isClient = useIsClient();
   const isPartner = useIsPartner();
   const currentUserEmail = useAuthStore((s) => s.user?.email);
@@ -317,7 +316,7 @@ export default function HomeSidebar({
             </>
           )}
 
-          {isInternal && hasCheckin && (
+          {hasCheckin && (
             <button
               onClick={() => onChangeView('checkin')}
               className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
@@ -334,7 +333,7 @@ export default function HomeSidebar({
             </button>
           )}
 
-          {isInternal && hasCheckinPartners && (
+          {hasCheckinPartners && (
             <button
               onClick={() => onChangeView('checkin-partners')}
               className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
@@ -351,7 +350,7 @@ export default function HomeSidebar({
             </button>
           )}
 
-          {isInternal && hasTimeManagement && (
+          {hasTimeManagement && (
             <button
               onClick={() => onChangeView('time-management')}
               className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
@@ -368,7 +367,7 @@ export default function HomeSidebar({
             </button>
           )}
 
-          {isInternal && hasSalesLeads && (
+          {hasSalesLeads && (
             <button
               onClick={() => onChangeView('sales-leads')}
               className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
@@ -385,7 +384,7 @@ export default function HomeSidebar({
             </button>
           )}
 
-          {(isPartner || isClient) && hasCashBook && (
+          {hasCashBook && (
             <button
               onClick={() => onChangeView('cashbook')}
               className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
