@@ -4,7 +4,7 @@ import { getDailyQuote } from '../../../lib/dailyQuote';
 import TodayList from './TodayList';
 import DashboardStatRow from './DashboardStatRow';
 
-export default function GuestHome({ onOpenInbox }: { onOpenInbox: () => void }) {
+export default function AccountantHome({ onOpenInbox }: { onOpenInbox: () => void }) {
   const user = useAuthStore((s) => s.user);
 
   const { day, date, week, firstName } = useMemo(() => {
@@ -32,14 +32,14 @@ export default function GuestHome({ onOpenInbox }: { onOpenInbox: () => void }) 
         <div className="dash-hero">
           <div>
             <div className="eyebrow" style={{ marginBottom: 10 }}>{greeting}, {firstName}</div>
-            <h1 className="greeting">Today is<br /><em>4 focused hours.</em></h1>
+            <h1 className="greeting">Three accounts to review <em>today.</em></h1>
             <div className="sub">{quote}</div>
           </div>
           <div className="date">
             {day.toUpperCase()}
             <span className="big">{date}</span>
             <span className="mono" style={{ fontSize: 11, color: 'var(--sh-ink-4)' }}>{week}</span>
-            <span className="mono" style={{ display: 'block', fontSize: 10, color: 'var(--sh-ink-4)', opacity: 0.8, marginTop: 2 }}>Guest Home</span>
+            <span className="mono" style={{ display: 'block', fontSize: 10, color: 'var(--sh-ink-4)', opacity: 0.8, marginTop: 2 }}>Accountant Home</span>
           </div>
         </div>
 

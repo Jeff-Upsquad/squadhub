@@ -41,7 +41,7 @@ const patchCardSchema = z.object({
 });
 
 const targetsSchema = z.object({
-  target_tier: z.enum(PARTNER_TIERS).nullable(),
+  target_tiers: z.array(z.enum(PARTNER_TIERS)),
   min_experience_years: z.number().int().min(0),
   target_languages: z.array(z.string().min(1).max(20)),
   target_country_ids: z.array(z.string().uuid()),
@@ -181,13 +181,10 @@ router.put(
         return;
       }
 
-      // DB column is `target_tiers` (TEXT[]) — a card can target multiple
-      // tiers. The API / UI still expose a single tier for now; we wrap into
-      // a 0-or-1 element array on write and unwrap in hydrateCard on read.
       const { error: updErr } = await supabaseAdmin
         .from('subscription_cards')
         .update({
-          target_tiers: body.target_tier ? [body.target_tier] : [],
+          target_tiers: body.target_tiers,
           min_experience_years: body.min_experience_years,
           target_languages: body.target_languages,
           squadhire_category_ids: body.squadhire_category_ids,

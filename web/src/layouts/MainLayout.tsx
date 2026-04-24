@@ -31,6 +31,9 @@ import ClientDesignDashboard from '../views/app/pm/client-design/ClientDesignDas
 import MemberHome from '../views/app/home/MemberHome';
 import UserHome from '../views/app/home/UserHome';
 import GuestHome from '../views/app/home/GuestHome';
+import DesignerHome from '../views/app/home/DesignerHome';
+import VideoEditorHome from '../views/app/home/VideoEditorHome';
+import AccountantHome from '../views/app/home/AccountantHome';
 import GlobalTaskDetailPanel from '../views/app/home/GlobalTaskDetailPanel';
 import EmergencyBanner from '../views/app/pm/EmergencyBanner';
 import InboxView from '../views/app/InboxView';
@@ -42,6 +45,23 @@ import { useUnreadCount } from '../hooks/useUnreadCount';
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'learning' | 'more';
 export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities';
+
+// ---- Role Home lookup ----
+// Picks which Home component to render based on the role's home_view.
+// Each key ↔ a RoleHomeView value from shared/src/index.ts.
+const HOME_BY_VIEW: Record<RoleHomeView, React.ComponentType<{ onOpenInbox: () => void }>> = {
+  member: MemberHome,
+  user: UserHome,
+  guest: GuestHome,
+  designer: DesignerHome,
+  video_editor: VideoEditorHome,
+  accountant: AccountantHome,
+};
+
+// Role-specific homes override the user_type dashboards (Partner/Client).
+// The "vanilla" home_view values (member/user/guest) are the user_type defaults
+// and defer to PartnerDashboard / ClientDashboard as before.
+const ROLE_SPECIFIC_HOMES: RoleHomeView[] = ['designer', 'video_editor', 'accountant'];
 
 // ---- Rail icons (stroke-1.6, 18x18) ----
 const ICON = {
@@ -111,7 +131,7 @@ const ICON = {
 } as const;
 
 const SECTION_TITLES: Record<ActiveSection, string> = {
-  home: 'Home',
+  home: 'My Home',
   cal: 'Calendar',
   docs: 'Documents',
   teams: 'Teams',
@@ -161,6 +181,7 @@ function RailBtn({
 export default function MainLayout() {
   const { currentWorkspace, activeChannelId, setWorkspace, setChannels, setActiveChannel } = useWorkspaceStore();
   const myHomeView: RoleHomeView = currentWorkspace?.my_home_view ?? 'user';
+  const useRoleHome = ROLE_SPECIFIC_HOMES.includes(myHomeView);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const pmReset = usePMStore((s) => s.reset);
@@ -207,10 +228,23 @@ export default function MainLayout() {
 
   const workspaces: (Workspace & { my_role?: string; my_home_view?: RoleHomeView })[] = useMemo(() => workspacesRes?.data || [], [workspacesRes]);
 
-  // Auto-select first workspace
+  // Auto-select first workspace on first load, and re-sync whenever the
+  // React Query refetch surfaces a changed my_role / my_home_view for the
+  // active workspace (e.g. an admin edited the role mid-session). Without
+  // this, the Zustand store freezes on its initial value and users have to
+  // hard-refresh to pick up role changes.
   useEffect(() => {
-    if (workspaces.length > 0 && !currentWorkspace) {
-      setWorkspace(workspaces[0]);
+    if (workspaces.length === 0) return;
+    const next = currentWorkspace
+      ? (workspaces.find((w) => w.id === currentWorkspace.id) ?? workspaces[0])
+      : workspaces[0];
+    if (
+      !currentWorkspace ||
+      currentWorkspace.id !== next.id ||
+      currentWorkspace.my_home_view !== next.my_home_view ||
+      currentWorkspace.my_role !== next.my_role
+    ) {
+      setWorkspace(next);
     }
   }, [workspaces, currentWorkspace, setWorkspace]);
 
@@ -301,7 +335,7 @@ export default function MainLayout() {
         <div className="flex w-full flex-col items-center gap-[2px]">
           <RailBtn
             icon={ICON.home}
-            label="Home"
+            label="My Home"
             active={activeSection === 'home' && homeView === 'hub'}
             onClick={() => { setActiveSection('home'); setHomeView('hub'); }}
           />
@@ -545,9 +579,9 @@ export default function MainLayout() {
             <TimeManagementPage />
           ) : homeView === 'sales-leads' ? (
             <SalesLeadsPage />
-          ) : homeView === 'hub' && (userType === 'client' || userType === 'client_staff') ? (
+          ) : homeView === 'hub' && !useRoleHome && (userType === 'client' || userType === 'client_staff') ? (
             <ClientDashboard />
-          ) : homeView === 'hub' && userType === 'partner' ? (
+          ) : homeView === 'hub' && !useRoleHome && userType === 'partner' ? (
             <PartnerDashboard />
           ) : homeView === 'cashbook' && userType === 'partner' ? (
             <PartnerCashBook />
@@ -556,9 +590,10 @@ export default function MainLayout() {
           ) : homeView === 'opportunities' && userType === 'partner' ? (
             <PartnerOpportunities />
           ) : (
-            myHomeView === 'member' ? <MemberHome onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} /> :
-            myHomeView === 'guest' ? <GuestHome onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} /> :
-            <UserHome onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} />
+            (() => {
+              const HomeComponent = HOME_BY_VIEW[myHomeView] ?? UserHome;
+              return <HomeComponent onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} />;
+            })()
           )
         )}
       </div>

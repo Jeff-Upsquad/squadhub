@@ -35,17 +35,8 @@ export async function hydrateCard(card: any): Promise<any> {
     if (r.status in counts) (counts as any)[r.status]++;
   });
 
-  // DB stores target_tiers as TEXT[] (multi-tier). The current API/UI still
-  // expose a single target_tier — expose the first element (or null) and
-  // hide the array from callers so the type stays consistent.
-  const { target_tiers, ...rest } = card as any;
-  const firstTier: string | null = Array.isArray(target_tiers) && target_tiers.length > 0
-    ? target_tiers[0]
-    : null;
-
   return {
-    ...rest,
-    target_tier: firstTier,
+    ...card,
     target_country_ids: (countries || []).map((r: any) => r.country_id),
     target_regions: (regions || []).map((r: any) => ({
       country_id: r.country_id,
@@ -123,7 +114,9 @@ export async function matchPartnersForCard(cardId: string): Promise<string[]> {
     .eq('status', 'active')
     .not('tier', 'is', null);
 
-  const targetTiers: string[] = Array.isArray(cardRow.target_tiers) ? cardRow.target_tiers : [];
+  const targetTiers: string[] = Array.isArray(cardRow.target_tiers)
+    ? cardRow.target_tiers
+    : [];
   if (targetTiers.length > 0) query = query.in('tier', targetTiers);
   if (cardRow.min_experience_years > 0) {
     query = query.gte('min_experience_years', cardRow.min_experience_years);

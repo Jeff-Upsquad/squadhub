@@ -40,6 +40,7 @@ export default function MemberHome({ onOpenInbox }: { onOpenInbox: () => void })
             {day.toUpperCase()}
             <span className="big">{date}</span>
             <span className="mono" style={{ fontSize: 11, color: 'var(--sh-ink-4)' }}>{week}</span>
+            <span className="mono" style={{ display: 'block', fontSize: 10, color: 'var(--sh-ink-4)', opacity: 0.8, marginTop: 2 }}>Member Home</span>
           </div>
         </div>
 

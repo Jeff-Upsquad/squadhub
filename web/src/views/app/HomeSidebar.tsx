@@ -6,12 +6,14 @@ import api from '../../services/api';
 import { useFavorites, useRemoveFavorite } from '../../hooks/useFavorites';
 import { useSharedWithMe } from '../../hooks/useSharedWithMe';
 import { useHasPermission } from '../../hooks/usePermissions';
+import { useAuthStore } from '../../stores/authStore';
 import { usePMStore } from '../../stores/pmStore';
 import SpaceTree from './pm/SpaceTree';
 import CreateSpaceModal from './pm/CreateSpaceModal';
 import { useHasMiniApp } from '../../hooks/useMiniApps';
+import { useUnreadCount } from '../../hooks/useUnreadCount';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
-import { useIsInternal, useIsClient, useIsPartner } from '../../hooks/useUserType';
+import { useIsClient, useIsPartner } from '../../hooks/useUserType';
 import { useMyClients, useClientFolders, type MyClientEntry } from '../../hooks/useMyClients';
 import { useIsWorkspaceAdmin } from '../../hooks/useIsWorkspaceAdmin';
 import AddClientSpaceModal from './clients/AddClientSpaceModal';
@@ -174,13 +176,16 @@ export default function HomeSidebar({
   const canCreateSpaces = useHasPermission('can_create_spaces');
   const [showCreateSpace, setShowCreateSpace] = useState(false);
   const [addSpaceForClient, setAddSpaceForClient] = useState<MyClientEntry | null>(null);
-  const isInternal = useIsInternal();
   const isClient = useIsClient();
   const isPartner = useIsPartner();
+  const currentUserEmail = useAuthStore((s) => s.user?.email);
+  const canSeeDogfoodNav = currentUserEmail === 'jeff@upsquadconnect.com';
   const hasCheckin = useHasMiniApp('daily-checkin');
   const hasCheckinPartners = useHasMiniApp('daily-checkin-partners');
   const hasTimeManagement = useHasMiniApp('time-management');
   const hasSalesLeads = useHasMiniApp('sales-leads');
+  const hasCashBook = useHasMiniApp('cash-book');
+  const { data: inboxUnreadCount } = useUnreadCount();
 
   const [expandedSections, setExpandedSections] = useState({
     favorites: true,
@@ -266,48 +271,52 @@ export default function HomeSidebar({
             }
             label="Inbox"
             active={homeView === 'inbox'}
-            count={8}
+            count={inboxUnreadCount ?? 0}
             unread
             onClick={() => onChangeView('inbox')}
           />
-          <NavItem
-            icon={
-              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="9" />
-                <path d="m8.5 12.5 2.5 2.5 4.5-5" />
-              </svg>
-            }
-            label="My Tasks"
-            active={homeView === 'my-tasks'}
-            count={14}
-            onClick={() => onChangeView('my-tasks')}
-          />
-          <NavItem
-            icon={
-              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="4" />
-                <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
-              </svg>
-            }
-            label="Mentions"
-            active={homeView === 'mentions'}
-            count={3}
-            unread
-            onClick={() => onChangeView('mentions')}
-          />
-          <NavItem
-            icon={
-              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" />
-              </svg>
-            }
-            label="Later"
-            active={homeView === 'later'}
-            onClick={() => onChangeView('later')}
-          />
+          {canSeeDogfoodNav && (
+            <>
+              <NavItem
+                icon={
+                  <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+                  </svg>
+                }
+                label="My Tasks"
+                active={homeView === 'my-tasks'}
+                count={14}
+                onClick={() => onChangeView('my-tasks')}
+              />
+              <NavItem
+                icon={
+                  <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
+                  </svg>
+                }
+                label="Mentions"
+                active={homeView === 'mentions'}
+                count={3}
+                unread
+                onClick={() => onChangeView('mentions')}
+              />
+              <NavItem
+                icon={
+                  <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                }
+                label="Later"
+                active={homeView === 'later'}
+                onClick={() => onChangeView('later')}
+              />
+            </>
+          )}
 
-          {isInternal && hasCheckin && (
+          {hasCheckin && (
             <button
               onClick={() => onChangeView('checkin')}
               className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
@@ -324,7 +333,7 @@ export default function HomeSidebar({
             </button>
           )}
 
-          {isInternal && hasCheckinPartners && (
+          {hasCheckinPartners && (
             <button
               onClick={() => onChangeView('checkin-partners')}
               className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
@@ -341,7 +350,7 @@ export default function HomeSidebar({
             </button>
           )}
 
-          {isInternal && hasTimeManagement && (
+          {hasTimeManagement && (
             <button
               onClick={() => onChangeView('time-management')}
               className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
@@ -358,7 +367,7 @@ export default function HomeSidebar({
             </button>
           )}
 
-          {isInternal && hasSalesLeads && (
+          {hasSalesLeads && (
             <button
               onClick={() => onChangeView('sales-leads')}
               className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
@@ -375,7 +384,7 @@ export default function HomeSidebar({
             </button>
           )}
 
-          {(isPartner || isClient) && (
+          {hasCashBook && (
             <button
               onClick={() => onChangeView('cashbook')}
               className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${

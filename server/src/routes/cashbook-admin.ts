@@ -11,6 +11,47 @@ const router = Router();
 // All routes require auth + admin
 router.use(requireAuth, requireAdmin);
 
+// Keep mini_app_user_access in sync with whether the user has any effective
+// Cash Book access (enabled partner-access row or active cash_book_users row).
+// Call after any grant/revoke/toggle/delete on cash_book_partner_access or
+// cash_book_users so the sidebar gate (useHasMiniApp('cash-book')) stays honest.
+async function syncCashBookMiniAppAccess(userId: string): Promise<void> {
+  const { data: miniApp } = await supabaseAdmin
+    .from('mini_apps')
+    .select('id')
+    .eq('slug', 'cash-book')
+    .single();
+  if (!miniApp) return;
+
+  const [{ count: partnerCount }, { count: userCount }] = await Promise.all([
+    supabaseAdmin
+      .from('cash_book_partner_access')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('is_enabled', true),
+    supabaseAdmin
+      .from('cash_book_users')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('is_active', true),
+  ]);
+
+  if ((partnerCount || 0) > 0 || (userCount || 0) > 0) {
+    await supabaseAdmin
+      .from('mini_app_user_access')
+      .upsert(
+        { mini_app_id: miniApp.id, user_id: userId },
+        { onConflict: 'mini_app_id,user_id' },
+      );
+  } else {
+    await supabaseAdmin
+      .from('mini_app_user_access')
+      .delete()
+      .eq('mini_app_id', miniApp.id)
+      .eq('user_id', userId);
+  }
+}
+
 // ---- Client Access Management ----
 
 // GET /admin/cashbook/clients - List all active clients (used by partner access dropdown too)
@@ -646,6 +687,8 @@ router.post('/clients/:clientId/users', async (req: Request, res: Response) => {
       return;
     }
 
+    await syncCashBookMiniAppAccess(userId);
+
     res.json({ success: true, data: cbUser });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -662,7 +705,7 @@ router.put('/clients/:clientId/users/:userId/toggle', async (req: Request, res: 
   try {
     const { data: cbUser, error: fetchError } = await supabaseAdmin
       .from('cash_book_users')
-      .select('id, is_active')
+      .select('id, is_active, user_id')
       .eq('id', req.params.userId)
       .eq('client_id', req.params.clientId)
       .single();
@@ -682,6 +725,8 @@ router.put('/clients/:clientId/users/:userId/toggle', async (req: Request, res: 
       res.status(500).json({ success: false, error: 'Failed to update user' });
       return;
     }
+
+    await syncCashBookMiniAppAccess(cbUser.user_id);
 
     res.json({ success: true, is_active: newStatus });
   } catch (err) {
@@ -720,6 +765,13 @@ router.put('/clients/:clientId/users/:userId/role', async (req: Request, res: Re
 // DELETE /admin/cashbook/clients/:clientId/users/:userId - Remove user from cash book
 router.delete('/clients/:clientId/users/:userId', async (req: Request, res: Response) => {
   try {
+    const { data: existing } = await supabaseAdmin
+      .from('cash_book_users')
+      .select('user_id')
+      .eq('id', req.params.userId)
+      .eq('client_id', req.params.clientId)
+      .single();
+
     const { error } = await supabaseAdmin
       .from('cash_book_users')
       .delete()
@@ -730,6 +782,10 @@ router.delete('/clients/:clientId/users/:userId', async (req: Request, res: Resp
       console.error('Remove cash book user error:', error);
       res.status(500).json({ success: false, error: 'Failed to remove user' });
       return;
+    }
+
+    if (existing?.user_id) {
+      await syncCashBookMiniAppAccess(existing.user_id);
     }
 
     res.json({ success: true, message: 'User removed' });
@@ -840,6 +896,8 @@ router.post('/partner-access', async (req: Request, res: Response) => {
       return;
     }
 
+    await syncCashBookMiniAppAccess(body.user_id);
+
     res.json({ success: true, message: `Access granted to ${body.client_ids.length} client(s)` });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -856,7 +914,7 @@ router.put('/partner-access/:id/toggle', async (req: Request, res: Response) => 
   try {
     const { data: existing } = await supabaseAdmin
       .from('cash_book_partner_access')
-      .select('id, is_enabled')
+      .select('id, is_enabled, user_id')
       .eq('id', req.params.id)
       .single();
 
@@ -875,6 +933,8 @@ router.put('/partner-access/:id/toggle', async (req: Request, res: Response) => 
       return;
     }
 
+    await syncCashBookMiniAppAccess(existing.user_id);
+
     res.json({ success: true, is_enabled: !existing.is_enabled });
   } catch (err) {
     console.error('Toggle partner access error:', err);
@@ -885,6 +945,12 @@ router.put('/partner-access/:id/toggle', async (req: Request, res: Response) => 
 // DELETE /admin/cashbook/partner-access/:id - Revoke access
 router.delete('/partner-access/:id', async (req: Request, res: Response) => {
   try {
+    const { data: existing } = await supabaseAdmin
+      .from('cash_book_partner_access')
+      .select('user_id')
+      .eq('id', req.params.id)
+      .single();
+
     const { error } = await supabaseAdmin
       .from('cash_book_partner_access')
       .delete()
@@ -893,6 +959,10 @@ router.delete('/partner-access/:id', async (req: Request, res: Response) => {
     if (error) {
       res.status(500).json({ success: false, error: 'Failed to revoke access' });
       return;
+    }
+
+    if (existing?.user_id) {
+      await syncCashBookMiniAppAccess(existing.user_id);
     }
 
     res.json({ success: true, message: 'Access revoked' });

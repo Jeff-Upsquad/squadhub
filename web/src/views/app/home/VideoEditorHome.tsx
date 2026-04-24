@@ -4,7 +4,7 @@ import { getDailyQuote } from '../../../lib/dailyQuote';
 import TodayList from './TodayList';
 import DashboardStatRow from './DashboardStatRow';
 
-export default function GuestHome({ onOpenInbox }: { onOpenInbox: () => void }) {
+export default function VideoEditorHome({ onOpenInbox }: { onOpenInbox: () => void }) {
   const user = useAuthStore((s) => s.user);
 
   const { day, date, week, firstName } = useMemo(() => {
@@ -17,13 +17,6 @@ export default function GuestHome({ onOpenInbox }: { onOpenInbox: () => void }) 
     return { day: d, date: dt, week: `Week ${weekNum}`, firstName: name.charAt(0).toUpperCase() + name.slice(1) };
   }, [user]);
 
-  const greeting = useMemo(() => {
-    const h = new Date().getHours();
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    return 'Good evening';
-  }, []);
-
   const quote = useMemo(() => getDailyQuote(), []);
 
   return (
@@ -31,15 +24,15 @@ export default function GuestHome({ onOpenInbox }: { onOpenInbox: () => void }) 
       <div className="dash">
         <div className="dash-hero">
           <div>
-            <div className="eyebrow" style={{ marginBottom: 10 }}>{greeting}, {firstName}</div>
-            <h1 className="greeting">Today is<br /><em>4 focused hours.</em></h1>
+            <div className="eyebrow" style={{ marginBottom: 10 }}>Lights, camera, {firstName}</div>
+            <h1 className="greeting">Three edits in the queue <em>today.</em></h1>
             <div className="sub">{quote}</div>
           </div>
           <div className="date">
             {day.toUpperCase()}
             <span className="big">{date}</span>
             <span className="mono" style={{ fontSize: 11, color: 'var(--sh-ink-4)' }}>{week}</span>
-            <span className="mono" style={{ display: 'block', fontSize: 10, color: 'var(--sh-ink-4)', opacity: 0.8, marginTop: 2 }}>Guest Home</span>
+            <span className="mono" style={{ display: 'block', fontSize: 10, color: 'var(--sh-ink-4)', opacity: 0.8, marginTop: 2 }}>Video Editor Home</span>
           </div>
         </div>
 
