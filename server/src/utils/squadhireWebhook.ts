@@ -1,0 +1,287 @@
+import { config } from '../config';
+import { supabaseAdmin } from '../supabase';
+
+/**
+ * Outbound delivery of a published subscription card to SquadHire's webhook.
+ *
+ * Strategy mirrors Profiles' callback service (deliberately — keeps the two
+ * halves of the link symmetric):
+ *   - Attempted inline at publish time, 3 attempts with 0/2/10s backoff.
+ *   - If still undelivered, the card row is left with squadhire_synced_at
+ *     NULL and squadhire_sync_last_error populated. A setInterval sweeper
+ *     (startSquadhireSyncSweeper) retries every 5 min up to MAX_SYNC_ATTEMPTS.
+ *   - If SQUADHIRE_WEBHOOK_URL is unset, delivery is a no-op with a logged
+ *     reason, so local dev without SquadHire configured still works.
+ *
+ * The payload follows SquadHire's ingest contract (see its
+ * ingestSubscriptionCardSchema): external_id, content, match_rules,
+ * published_at, expires_at? — with `content` and `match_rules` being
+ * free-form JSONB so SquadHub can evolve without a Profiles migration.
+ */
+
+const REQUEST_TIMEOUT_MS = 3_000;
+const INLINE_ATTEMPTS = 3;
+const INLINE_BACKOFF_MS = [0, 2_000, 10_000];
+const MAX_SYNC_ATTEMPTS = 10;
+const SWEEPER_INTERVAL_MS = 5 * 60 * 1_000;
+const SWEEPER_BATCH_SIZE = 20;
+
+export interface SquadhireCardPayload {
+  external_id: string;
+  content: Record<string, unknown>;
+  match_rules: Record<string, unknown>;
+  published_at: string;
+  expires_at?: string;
+}
+
+interface AttemptOutcome {
+  delivered: boolean;
+  error?: string;
+  recipientCount?: number;
+}
+
+// ------------------------------------------------------------
+// Payload construction
+// ------------------------------------------------------------
+
+/**
+ * Build the webhook payload from a card id by reading the card + joined
+ * targeting rows + the subscription/plan names. Returns null if the card
+ * disappeared (deleted between publish and sweeper tick).
+ */
+export async function buildSquadhirePayloadForCard(
+  cardId: string,
+): Promise<SquadhireCardPayload | null> {
+  const { data: card } = await supabaseAdmin
+    .from('subscription_cards')
+    .select(
+      'id, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, target_tier, min_experience_years, target_languages, published_at',
+    )
+    .eq('id', cardId)
+    .maybeSingle();
+  if (!card) return null;
+
+  const [
+    { data: countryRows },
+    { data: regionRows },
+    { data: staged },
+  ] = await Promise.all([
+    supabaseAdmin
+      .from('subscription_card_target_countries')
+      .select('country_id')
+      .eq('card_id', cardId),
+    supabaseAdmin
+      .from('subscription_card_target_regions')
+      .select('country_id, region')
+      .eq('card_id', cardId),
+    supabaseAdmin
+      .from('client_submission_subscriptions')
+      .select('subscription_id, plan_id')
+      .eq('id', card.submission_subscription_id)
+      .maybeSingle(),
+  ]);
+
+  let subscriptionName: string | null = null;
+  let planName: string | null = null;
+  if (staged) {
+    const [{ data: sub }, { data: plan }] = await Promise.all([
+      supabaseAdmin.from('subscriptions').select('name').eq('id', staged.subscription_id).maybeSingle(),
+      supabaseAdmin.from('subscription_plans').select('name').eq('id', staged.plan_id).maybeSingle(),
+    ]);
+    subscriptionName = sub?.name ?? null;
+    planName = plan?.name ?? null;
+  }
+
+  const brand = (card.brand_name ?? '').trim();
+  const titleParts = [brand, subscriptionName, planName].filter(Boolean) as string[];
+  const title = titleParts.length > 0 ? titleParts.join(' — ') : 'New subscription opportunity';
+
+  const descriptionLines: string[] = [];
+  if (card.business_nature) descriptionLines.push(`About: ${card.business_nature}`);
+  if (Array.isArray(card.working_days) && card.working_days.length > 0) {
+    descriptionLines.push(`Working days: ${card.working_days.join(', ')}`);
+  }
+  if (card.notes) descriptionLines.push(card.notes);
+  const description = descriptionLines.join('\n\n');
+
+  // match_rules is intentionally pass-through. SquadHire's matcher knows
+  // `category_ids` today and logs+skips anything else. Keeping the
+  // SquadHub-side targeting in the payload means once SquadHire's matcher
+  // grows, no SquadHub change is needed to start honouring those rules.
+  const match_rules: Record<string, unknown> = {};
+  if (card.target_tier) match_rules.target_tier = card.target_tier;
+  if ((card.min_experience_years ?? 0) > 0) {
+    match_rules.min_experience_years = card.min_experience_years;
+  }
+  if (Array.isArray(card.target_languages) && card.target_languages.length > 0) {
+    match_rules.target_languages = card.target_languages;
+  }
+  const targetCountryIds = (countryRows ?? []).map((r: any) => r.country_id as string);
+  if (targetCountryIds.length > 0) match_rules.target_country_ids = targetCountryIds;
+  const targetRegions = (regionRows ?? []).map((r: any) => ({
+    country_id: r.country_id as string,
+    region: r.region as string,
+  }));
+  if (targetRegions.length > 0) match_rules.target_regions = targetRegions;
+
+  return {
+    external_id: card.id as string,
+    content: {
+      title,
+      description,
+      brand_name: card.brand_name ?? null,
+      business_nature: card.business_nature ?? null,
+      working_days: card.working_days ?? [],
+      notes: card.notes ?? null,
+      subscription_name: subscriptionName,
+      plan_name: planName,
+      custom_deliverables: card.custom_deliverables ?? [],
+    },
+    match_rules,
+    published_at: (card.published_at as string | null) ?? new Date().toISOString(),
+  };
+}
+
+// ------------------------------------------------------------
+// Single delivery attempt
+// ------------------------------------------------------------
+
+async function postOnce(payload: SquadhireCardPayload): Promise<AttemptOutcome> {
+  const url = config.squadhireWebhookUrl;
+  if (!url) {
+    return { delivered: false, error: 'squadhire_webhook_url_not_configured' };
+  }
+  if (!config.squadhireWebhookSecret) {
+    return { delivered: false, error: 'squadhire_webhook_secret_not_configured' };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    if (!res.ok) return { delivered: false, error: `http_${res.status}` };
+    const body = (await res.json().catch(() => ({}))) as any;
+    return {
+      delivered: true,
+      recipientCount:
+        typeof body?.recipient_count === 'number' ? body.recipient_count : undefined,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { delivered: false, error: msg.slice(0, 500) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ------------------------------------------------------------
+// Persist attempt state onto the card row
+// ------------------------------------------------------------
+
+async function persistResult(
+  cardId: string,
+  outcome: AttemptOutcome,
+  attemptsDelta: number,
+): Promise<void> {
+  const { data: current, error: readErr } = await supabaseAdmin
+    .from('subscription_cards')
+    .select('squadhire_sync_attempts')
+    .eq('id', cardId)
+    .maybeSingle();
+  if (readErr) {
+    console.error('[squadhire-webhook] failed to read sync attempts', readErr);
+    return;
+  }
+
+  const patch: Record<string, unknown> = {
+    squadhire_sync_attempts: (current?.squadhire_sync_attempts ?? 0) + attemptsDelta,
+    squadhire_sync_last_error: outcome.delivered
+      ? null
+      : outcome.error ?? 'unknown_error',
+  };
+  if (outcome.delivered) {
+    patch.squadhire_synced_at = new Date().toISOString();
+    if (typeof outcome.recipientCount === 'number') {
+      patch.squadhire_recipient_count = outcome.recipientCount;
+    }
+  }
+
+  const { error } = await supabaseAdmin
+    .from('subscription_cards')
+    .update(patch)
+    .eq('id', cardId);
+  if (error) {
+    console.error('[squadhire-webhook] failed to persist sync state', error);
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// ------------------------------------------------------------
+// Public: inline delivery (called from the publish handler).
+// Never throws; never blocks longer than the retry budget.
+// ------------------------------------------------------------
+
+export async function deliverCardToSquadhire(
+  cardId: string,
+  payload: SquadhireCardPayload,
+): Promise<void> {
+  let lastOutcome: AttemptOutcome = { delivered: false, error: 'not_attempted' };
+  for (let i = 0; i < INLINE_ATTEMPTS; i++) {
+    if (INLINE_BACKOFF_MS[i] > 0) await sleep(INLINE_BACKOFF_MS[i]);
+    lastOutcome = await postOnce(payload);
+    if (lastOutcome.delivered) break;
+  }
+  await persistResult(cardId, lastOutcome, INLINE_ATTEMPTS);
+}
+
+// ------------------------------------------------------------
+// Public: background sweeper — retries published cards that never synced.
+// Bounded by SWEEPER_BATCH_SIZE per tick and MAX_SYNC_ATTEMPTS per card.
+// ------------------------------------------------------------
+
+export function startSquadhireSyncSweeper(): NodeJS.Timeout {
+  const tick = async () => {
+    try {
+      const { data: cards, error } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id')
+        .eq('state', 'published')
+        .is('squadhire_synced_at', null)
+        .lt('squadhire_sync_attempts', MAX_SYNC_ATTEMPTS)
+        .order('published_at', { ascending: true })
+        .limit(SWEEPER_BATCH_SIZE);
+
+      if (error) {
+        console.error('[squadhire-webhook] sweeper query failed', error);
+        return;
+      }
+      if (!cards || cards.length === 0) return;
+
+      for (const card of cards as { id: string }[]) {
+        const payload = await buildSquadhirePayloadForCard(card.id);
+        if (!payload) continue;
+        const outcome = await postOnce(payload);
+        await persistResult(card.id, outcome, 1);
+      }
+    } catch (err) {
+      console.error('[squadhire-webhook] sweeper tick errored', err);
+    }
+  };
+
+  // First tick a few seconds after boot so startup isn't blocked.
+  const handle = setInterval(tick, SWEEPER_INTERVAL_MS);
+  setTimeout(tick, 15_000);
+  return handle;
+}

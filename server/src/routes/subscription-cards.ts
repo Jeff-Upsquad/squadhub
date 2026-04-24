@@ -8,6 +8,10 @@ import {
   hydrateCard,
   matchPartnersForCard,
 } from '../utils/subscriptionCards';
+import {
+  buildSquadhirePayloadForCard,
+  deliverCardToSquadhire,
+} from '../utils/squadhireWebhook';
 
 const router = Router();
 
@@ -276,6 +280,20 @@ router.post(
         res.status(409).json({ success: false, error: 'Card state changed — refresh and try again' });
         return;
       }
+
+      // Fan out to SquadHire. Fire-and-forget from the user's point of view:
+      // the admin sees "published" immediately; delivery runs in the
+      // background with inline retries and the sweeper as the safety net.
+      // Never block or fail the publish response on this call.
+      buildSquadhirePayloadForCard(updated.id)
+        .then((payload) => {
+          if (payload) {
+            return deliverCardToSquadhire(updated.id, payload);
+          }
+        })
+        .catch((err) => {
+          console.error('[publish] squadhire delivery threw unexpectedly', err);
+        });
 
       res.json({
         success: true,

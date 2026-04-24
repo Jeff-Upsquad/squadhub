@@ -35,6 +35,16 @@ export const config = {
   // Partner App Versioning
   partnerAppMinVersion: process.env.PARTNER_APP_MIN_VERSION || '1.0.0',
   partnerAppDownloadUrl: process.env.PARTNER_APP_DOWNLOAD_URL || '',
+
+  // SquadHire (Profiles) integration — all optional; when unset the outbound
+  // webhook logs a no-op and the inbound callback endpoint returns 503, so
+  // dev boxes work without any SquadHire wiring.
+  //   squadhireWebhookUrl:     full URL to POST cards to (e.g. http://localhost:5010/api/webhooks/squadhub/cards)
+  //   squadhireWebhookSecret:  shared secret we send in X-SquadHub-Signature when publishing
+  //   squadhireCallbackSecret: shared secret we expect in X-SquadHub-Signature when receiving accept/reject callbacks
+  squadhireWebhookUrl: process.env.SQUADHIRE_WEBHOOK_URL || '',
+  squadhireWebhookSecret: process.env.SQUADHIRE_WEBHOOK_SECRET || '',
+  squadhireCallbackSecret: process.env.SQUADHIRE_CALLBACK_SECRET || '',
 } as const;
 
 // Validate required env vars at startup
