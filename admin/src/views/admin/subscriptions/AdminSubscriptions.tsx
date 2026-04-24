@@ -441,9 +441,17 @@ function PlanRow({
 
   const delivs = plan.deliverables || [];
   const pricing = plan.pricing || [];
+  const partnerPricing = plan.partner_pricing || [];
   const currentPriceRow = selectedCountry
     ? pricing.find((p) => p.country_id === selectedCountry.id) || null
     : null;
+  const currentPartnerPriceRow = selectedCountry
+    ? partnerPricing.find((p) => p.country_id === selectedCountry.id) || null
+    : null;
+  const grossProfit =
+    currentPriceRow && currentPartnerPriceRow
+      ? currentPriceRow.price - currentPartnerPriceRow.price
+      : null;
 
   return (
     <div className={`rounded-lg border border-[#E2E8F0] bg-white ${plan.is_active ? '' : 'opacity-60'}`}>
@@ -465,10 +473,28 @@ function PlanRow({
         </span>
 
         <InlinePriceInput
+          mode="customer"
           planId={plan.id}
           country={selectedCountry}
           current={currentPriceRow?.price ?? null}
         />
+
+        <InlinePriceInput
+          mode="partner"
+          planId={plan.id}
+          country={selectedCountry}
+          current={currentPartnerPriceRow?.price ?? null}
+        />
+
+        {grossProfit != null && grossProfit !== 0 && (
+          <span
+            className={`text-[10px] font-medium ${grossProfit > 0 ? 'text-emerald-600' : 'text-rose-600'}`}
+            title="Gross profit = customer price − partner price"
+          >
+            GP: {currencySymbol(selectedCountry?.currency)}
+            {grossProfit.toLocaleString()}
+          </span>
+        )}
 
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-[#90A1B9]">{delivs.length} deliverable{delivs.length === 1 ? '' : 's'}</span>
@@ -505,8 +531,14 @@ function PlanRow({
 // ============================================================
 
 function InlinePriceInput({
-  planId, country, current,
+  mode = 'customer', planId, country, current,
 }: {
+  /**
+   * Which pricing table this input edits.
+   *   'customer' → subscription_plan_pricing (what the customer pays us)
+   *   'partner'  → subscription_plan_partner_pricing (what we pay the partner)
+   */
+  mode?: 'customer' | 'partner';
   planId: string;
   country: Country | null;
   current: number | null;
@@ -516,16 +548,18 @@ function InlinePriceInput({
 
   useEffect(() => setValue(current == null ? '' : String(current)), [current, country?.id]);
 
+  const endpoint = mode === 'partner' ? 'partner-pricing' : 'pricing';
+
   const upsertPrice = useMutation({
     mutationFn: (body: { country_id: string; price: number }) =>
-      api.post(`/admin/subscriptions/plans/${planId}/pricing`, body),
+      api.post(`/admin/subscriptions/plans/${planId}/${endpoint}`, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-subs-catalog'] }),
     onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed'),
   });
 
   const deletePrice = useMutation({
     mutationFn: (countryId: string) =>
-      api.delete(`/admin/subscriptions/plans/${planId}/pricing/${countryId}`),
+      api.delete(`/admin/subscriptions/plans/${planId}/${endpoint}/${countryId}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-subs-catalog'] }),
   });
 
@@ -541,8 +575,13 @@ function InlinePriceInput({
     upsertPrice.mutate({ country_id: country.id, price: n });
   }
 
+  const label = mode === 'partner' ? 'Partner' : 'Customer';
+
   return (
     <div className="flex items-center gap-1.5">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">
+        {label}
+      </span>
       <span className="text-[11px] text-[#90A1B9]">{currencySymbol(country?.currency)}</span>
       <input
         type="number"

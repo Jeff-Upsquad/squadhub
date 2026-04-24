@@ -61,7 +61,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at',
+      'id, state, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -95,20 +95,60 @@ export async function buildSquadhirePayloadForCard(
       .eq('card_id', cardId),
     supabaseAdmin
       .from('client_submission_subscriptions')
-      .select('subscription_id, plan_id')
+      .select('subscription_id, plan_id, submission_id')
       .eq('id', card.submission_subscription_id)
       .maybeSingle(),
   ]);
 
   let subscriptionName: string | null = null;
   let planName: string | null = null;
+  let leadCountryId: string | null = null;
   if (staged) {
-    const [{ data: sub }, { data: plan }] = await Promise.all([
+    const [{ data: sub }, { data: plan }, { data: submission }] = await Promise.all([
       supabaseAdmin.from('subscriptions').select('name').eq('id', staged.subscription_id).maybeSingle(),
       supabaseAdmin.from('subscription_plans').select('name').eq('id', staged.plan_id).maybeSingle(),
+      supabaseAdmin.from('client_submissions').select('country_id').eq('id', staged.submission_id).maybeSingle(),
     ]);
     subscriptionName = sub?.name ?? null;
     planName = plan?.name ?? null;
+    leadCountryId = (submission?.country_id as string | undefined) ?? null;
+  }
+
+  // Resolve partner price for the card's country.
+  //
+  // Country resolution: cards can target multiple countries via
+  // subscription_card_target_countries, but the per-card override is a single
+  // scalar so we need exactly one country to read the plan default against.
+  // Preference order: the single target-country (if the card has exactly one),
+  // else fall back to the lead's country. Zero or multiple target countries
+  // without a lead country → skip the Payment section on Profiles.
+  const targetCountryIdList = (countryRows ?? []).map((r: any) => r.country_id as string);
+  const pricingCountryId =
+    targetCountryIdList.length === 1 ? targetCountryIdList[0] : leadCountryId;
+
+  let resolvedMonthlyPrice: number | null = null;
+  let resolvedCurrency: string | null = null;
+  if (pricingCountryId && staged?.plan_id) {
+    const [{ data: planPartner }, { data: country }] = await Promise.all([
+      supabaseAdmin
+        .from('subscription_plan_partner_pricing')
+        .select('price')
+        .eq('plan_id', staged.plan_id)
+        .eq('country_id', pricingCountryId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('countries')
+        .select('currency')
+        .eq('id', pricingCountryId)
+        .maybeSingle(),
+    ]);
+    const defaultPartnerPrice = (planPartner?.price as number | undefined) ?? null;
+    const override = card.partner_price_override as number | null | undefined;
+    const resolved = override ?? defaultPartnerPrice;
+    if (resolved != null && country?.currency) {
+      resolvedMonthlyPrice = resolved;
+      resolvedCurrency = country.currency as string;
+    }
   }
 
   const brand = (card.brand_name ?? '').trim();
@@ -153,19 +193,27 @@ export async function buildSquadhirePayloadForCard(
   const publishedAtRaw = (card.published_at as string | null) ?? new Date().toISOString();
   const publishedAt = new Date(publishedAtRaw).toISOString();
 
+  const content: Record<string, unknown> = {
+    title,
+    description,
+    brand_name: card.brand_name ?? null,
+    business_nature: card.business_nature ?? null,
+    working_days: card.working_days ?? [],
+    notes: card.notes ?? null,
+    subscription_name: subscriptionName,
+    plan_name: planName,
+    custom_deliverables: card.custom_deliverables ?? [],
+  };
+  // Attach the resolved partner price only when we have both amount and
+  // currency — Profiles' renderer hides the Payment section on missing data.
+  if (resolvedMonthlyPrice != null && resolvedCurrency) {
+    content.monthly_price = resolvedMonthlyPrice;
+    content.currency = resolvedCurrency;
+  }
+
   return {
     external_id: card.id as string,
-    content: {
-      title,
-      description,
-      brand_name: card.brand_name ?? null,
-      business_nature: card.business_nature ?? null,
-      working_days: card.working_days ?? [],
-      notes: card.notes ?? null,
-      subscription_name: subscriptionName,
-      plan_name: planName,
-      custom_deliverables: card.custom_deliverables ?? [],
-    },
+    content,
     match_rules,
     published_at: publishedAt,
     status,
