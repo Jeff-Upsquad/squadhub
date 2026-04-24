@@ -135,6 +135,13 @@ export async function buildSquadhirePayloadForCard(
   }));
   if (targetRegions.length > 0) match_rules.target_regions = targetRegions;
 
+  // Normalise to the Z-suffix form of ISO-8601. Postgres / the Supabase
+  // client return `...+00:00`, which some consumers' ISO validators reject
+  // by default (zod's `.datetime()` is one). Sending Z form keeps the
+  // contract canonical regardless of how lenient the other side is.
+  const publishedAtRaw = (card.published_at as string | null) ?? new Date().toISOString();
+  const publishedAt = new Date(publishedAtRaw).toISOString();
+
   return {
     external_id: card.id as string,
     content: {
@@ -149,7 +156,7 @@ export async function buildSquadhirePayloadForCard(
       custom_deliverables: card.custom_deliverables ?? [],
     },
     match_rules,
-    published_at: (card.published_at as string | null) ?? new Date().toISOString(),
+    published_at: publishedAt,
   };
 }
 
