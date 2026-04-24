@@ -32,6 +32,12 @@ export interface SquadhireCardPayload {
   match_rules: Record<string, unknown>;
   published_at: string;
   expires_at?: string;
+  // `active` while the card is live in SquadHub (state = 'published').
+  // `archived` after Recall (back to draft) or Close. Profiles filters
+  // archived cards out of talent-facing queries, so the talents stop
+  // seeing the card. Always sent so reruns of the same delivery stay
+  // idempotent.
+  status: 'active' | 'archived';
 }
 
 interface AttemptOutcome {
@@ -55,7 +61,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at',
+      'id, state, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -68,6 +74,11 @@ export async function buildSquadhirePayloadForCard(
     ? (card.squadhire_category_ids as string[])
     : [];
   if (categoryIds.length === 0) return null;
+
+  // Map SquadHub state → SquadHire status. Published = visible to talents;
+  // anything else (draft after recall, closed) = archived and hidden.
+  const status: 'active' | 'archived' =
+    card.state === 'published' ? 'active' : 'archived';
 
   const [
     { data: countryRows },
@@ -157,6 +168,7 @@ export async function buildSquadhirePayloadForCard(
     },
     match_rules,
     published_at: publishedAt,
+    status,
   };
 }
 
@@ -272,13 +284,17 @@ export async function deliverCardToSquadhire(
 export function startSquadhireSyncSweeper(): NodeJS.Timeout {
   const tick = async () => {
     try {
+      // Any card with SquadHire categories that hasn't been successfully
+      // synced yet is fair game — not just state=published. Recall and
+      // Close both reset squadhire_synced_at to NULL and bump sync_attempts
+      // back to 0, so their archived deliveries are retried here too.
       const { data: cards, error } = await supabaseAdmin
         .from('subscription_cards')
         .select('id')
-        .eq('state', 'published')
+        .not('squadhire_category_ids', 'eq', '{}')
         .is('squadhire_synced_at', null)
         .lt('squadhire_sync_attempts', MAX_SYNC_ATTEMPTS)
-        .order('published_at', { ascending: true })
+        .order('updated_at', { ascending: true })
         .limit(SWEEPER_BATCH_SIZE);
 
       if (error) {

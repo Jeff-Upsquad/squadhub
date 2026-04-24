@@ -353,7 +353,18 @@ router.post(
 
       const { data: updated, error: updErr } = await supabaseAdmin
         .from('subscription_cards')
-        .update({ state: 'draft', published_at: null, published_by: null })
+        .update({
+          state: 'draft',
+          published_at: null,
+          published_by: null,
+          // Reset SquadHire sync state so the fire-and-forget below (and the
+          // sweeper, as a safety net) retries delivery with the new state.
+          // buildSquadhirePayloadForCard will compute status='archived' from
+          // the new state='draft'.
+          squadhire_synced_at: null,
+          squadhire_sync_attempts: 0,
+          squadhire_sync_last_error: null,
+        })
         .eq('id', (req.params.id as string))
         .select('*')
         .single();
@@ -361,6 +372,13 @@ router.post(
         res.status(500).json({ success: false, error: updErr.message });
         return;
       }
+
+      buildSquadhirePayloadForCard(updated.id)
+        .then((payload) => payload && deliverCardToSquadhire(updated.id, payload))
+        .catch((err) => {
+          console.error('[recall] squadhire delivery threw unexpectedly', err);
+        });
+
       res.json({ success: true, data: await hydrateCard(updated) });
     } catch (err: any) {
       console.error('Recall card error:', err);
@@ -386,7 +404,15 @@ router.post(
 
       const { data: updated, error } = await supabaseAdmin
         .from('subscription_cards')
-        .update({ state: 'closed', closed_at: new Date().toISOString() })
+        .update({
+          state: 'closed',
+          closed_at: new Date().toISOString(),
+          // Reset sync state so the archived-delivery is re-attempted,
+          // mirroring the recall path.
+          squadhire_synced_at: null,
+          squadhire_sync_attempts: 0,
+          squadhire_sync_last_error: null,
+        })
         .eq('id', (req.params.id as string))
         .select('*')
         .single();
@@ -394,6 +420,13 @@ router.post(
         res.status(500).json({ success: false, error: error.message });
         return;
       }
+
+      buildSquadhirePayloadForCard(updated.id)
+        .then((payload) => payload && deliverCardToSquadhire(updated.id, payload))
+        .catch((err) => {
+          console.error('[close] squadhire delivery threw unexpectedly', err);
+        });
+
       res.json({ success: true, data: await hydrateCard(updated) });
     } catch (err: any) {
       console.error('Close card error:', err);
