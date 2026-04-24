@@ -24,7 +24,7 @@ const permissionsSchema = z
   })
   .passthrough();
 
-const homeViewSchema = z.enum(['member', 'user', 'guest']);
+const homeViewSchema = z.enum(['member', 'user', 'guest', 'designer', 'video_editor', 'accountant']);
 
 const createRoleSchema = z.object({
   name: z.string().min(1).max(30),
