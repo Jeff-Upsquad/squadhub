@@ -84,7 +84,7 @@ export async function getOrCreateDraftCard(submissionSubscriptionId: string) {
 export async function matchPartnersForCard(cardId: string): Promise<string[]> {
   const { data: cardRow, error: cardErr } = await supabaseAdmin
     .from('subscription_cards')
-    .select('target_tier, min_experience_years, target_languages')
+    .select('target_tiers, min_experience_years, target_languages')
     .eq('id', cardId)
     .single();
   if (cardErr) throw cardErr;
@@ -114,7 +114,10 @@ export async function matchPartnersForCard(cardId: string): Promise<string[]> {
     .eq('status', 'active')
     .not('tier', 'is', null);
 
-  if (cardRow.target_tier) query = query.eq('tier', cardRow.target_tier);
+  const targetTiers: string[] = Array.isArray(cardRow.target_tiers)
+    ? cardRow.target_tiers
+    : [];
+  if (targetTiers.length > 0) query = query.in('tier', targetTiers);
   if (cardRow.min_experience_years > 0) {
     query = query.gte('min_experience_years', cardRow.min_experience_years);
   }

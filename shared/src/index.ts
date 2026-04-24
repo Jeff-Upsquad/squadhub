@@ -1122,7 +1122,7 @@ export interface SubscriptionCard {
   brand_name: string | null;
   business_nature: string | null;
   notes: string | null;
-  target_tier: PartnerTier | null;
+  target_tiers: PartnerTier[];
   min_experience_years: number;
   target_languages: string[];
   custom_deliverables: SubscriptionCardCustomDeliverable[];

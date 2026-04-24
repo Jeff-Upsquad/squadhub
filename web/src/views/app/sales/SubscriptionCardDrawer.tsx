@@ -118,7 +118,7 @@ export default function SubscriptionCardDrawer({
   const [notes, setNotes] = useState('');
   const [customDeliverables, setCustomDeliverables] = useState<SubscriptionCardCustomDeliverable[]>([]);
 
-  const [targetTier, setTargetTier] = useState<PartnerTier | ''>('');
+  const [targetTiers, setTargetTiers] = useState<PartnerTier[]>([]);
   const [minExp, setMinExp] = useState<string>('0');
   const [targetLanguages, setTargetLanguages] = useState<string[]>([]);
   const [targetCountryIds, setTargetCountryIds] = useState<string[]>([]);
@@ -131,7 +131,7 @@ export default function SubscriptionCardDrawer({
     setBusinessNature(card.business_nature || '');
     setNotes(card.notes || '');
     setCustomDeliverables(card.custom_deliverables || []);
-    setTargetTier(card.target_tier || '');
+    setTargetTiers(card.target_tiers || []);
     setMinExp(String(card.min_experience_years ?? 0));
     setTargetLanguages(card.target_languages || []);
     setTargetCountryIds(card.target_country_ids || []);
@@ -163,7 +163,7 @@ export default function SubscriptionCardDrawer({
       custom_deliverables: customDeliverables,
     });
     putTargets.mutate({
-      target_tier: targetTier || null,
+      target_tiers: targetTiers,
       min_experience_years: parseInt(minExp || '0', 10) || 0,
       target_languages: targetLanguages,
       target_country_ids: targetCountryIds,
@@ -291,23 +291,32 @@ export default function SubscriptionCardDrawer({
               {/* Publish to */}
               <Section title="Publish to">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-[var(--sh-ink-3)]">Tier</label>
+                  <label className="mb-1 block text-xs font-medium text-[var(--sh-ink-3)]">
+                    Tiers <span className="text-[var(--sh-ink-4)]">(select one or more; leave empty for any tier)</span>
+                  </label>
                   <div className="flex flex-wrap gap-2">
-                    {(['', ...PARTNER_TIERS] as const).map((t) => (
-                      <button
-                        key={t || 'any'}
-                        type="button"
-                        disabled={readOnly}
-                        onClick={() => setTargetTier(t as PartnerTier | '')}
-                        className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${
-                          targetTier === t
-                            ? 'border-[var(--sh-ink)] bg-[var(--sh-ink)] text-[var(--surface)]'
-                            : 'border-[var(--sh-hair)] bg-[var(--surface)] text-[var(--sh-ink-3)] hover:border-[var(--sh-ink-3)]'
-                        } disabled:opacity-60 disabled:cursor-not-allowed`}
-                      >
-                        {t || 'Any'}
-                      </button>
-                    ))}
+                    {PARTNER_TIERS.map((t) => {
+                      const on = targetTiers.includes(t);
+                      return (
+                        <button
+                          key={t}
+                          type="button"
+                          disabled={readOnly}
+                          onClick={() =>
+                            setTargetTiers((prev) =>
+                              on ? prev.filter((x) => x !== t) : [...prev, t],
+                            )
+                          }
+                          className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${
+                            on
+                              ? 'border-[var(--sh-ink)] bg-[var(--sh-ink)] text-[var(--surface)]'
+                              : 'border-[var(--sh-hair)] bg-[var(--surface)] text-[var(--sh-ink-3)] hover:border-[var(--sh-ink-3)]'
+                          } disabled:opacity-60 disabled:cursor-not-allowed`}
+                        >
+                          {t}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -473,7 +482,7 @@ export default function SubscriptionCardDrawer({
             <ConfirmRemoveDialog
               open={confirmPublish}
               title="Publish subscription card"
-              description={`This will send the card to all matching partners (tier ${targetTier || 'Any'}, min ${parseInt(minExp || '0', 10) || 0}y, ${targetCountryIds.length || 'all'} countries). You can recall it only before anyone accepts.`}
+              description={`This will send the card to all matching partners (tiers ${targetTiers.length === 0 ? 'Any' : targetTiers.join(', ')}, min ${parseInt(minExp || '0', 10) || 0}y, ${targetCountryIds.length || 'all'} countries). You can recall it only before anyone accepts.`}
               confirmWord="PUBLISH"
               loading={publishMutation.isPending}
               onClose={() => setConfirmPublish(false)}
