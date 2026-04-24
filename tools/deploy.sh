@@ -6,7 +6,42 @@ DEPLOY_DIR="/opt/squadhub"
 LOCK_FILE="/var/lock/squadhub-deploy.lock"
 LOCK_TIMEOUT=600  # seconds — longer than any realistic full rebuild
 
+# Timestamp-tag images per deploy so rollback is a cheap `docker tag + up`.
+# See workflows/rollback.md for the rollback procedure.
+DEPLOY_TAG="$(date -u +%Y%m%d-%H%M%S)"
+
 echo "=== SquadHub Deploy ==="
+echo "Deploy tag: $DEPLOY_TAG"
+echo ""
+
+# --- Local habit: .env / .env.example drift check ---
+# Warn if any .env.example is missing a key that the real .env has,
+# or has a key the real .env doesn't. Never blocks the deploy — just surfaces.
+envdrift() {
+  local real="$1"
+  local example="$2"
+  [ -f "$real" ] || return 0
+  [ -f "$example" ] || return 0
+
+  local real_keys example_keys
+  real_keys=$(grep -oE '^[A-Z_][A-Z0-9_]*=' "$real" | sort -u)
+  example_keys=$(grep -oE '^[A-Z_][A-Z0-9_]*=' "$example" | sort -u)
+
+  local missing_in_example added_in_example
+  missing_in_example=$(comm -23 <(echo "$real_keys") <(echo "$example_keys"))
+  added_in_example=$(comm -13 <(echo "$real_keys") <(echo "$example_keys"))
+
+  if [ -n "$missing_in_example" ] || [ -n "$added_in_example" ]; then
+    echo "⚠ env drift: $real vs $example"
+    [ -n "$missing_in_example" ] && echo "  missing from example: $(echo "$missing_in_example" | tr '\n' ' ')"
+    [ -n "$added_in_example" ] && echo "  in example only:      $(echo "$added_in_example" | tr '\n' ' ')"
+  fi
+}
+
+echo "Env file drift check..."
+envdrift ".env" ".env.example"
+envdrift "server/.env" "server/.env.example"
+echo "  done"
 echo ""
 
 # Pre-lock: capture VPS HEAD so we can tell at the end if anything actually shipped.
@@ -20,8 +55,9 @@ fi
 
 # Locked critical section: pull, detect, rebuild, caddy reload. All state is
 # recomputed server-side inside the lock so a queued deploy sees post-first-deploy state.
+# DEPLOY_TAG is passed via ssh env so the remote tagging step can use it.
 set +e
-ssh "$VPS" "flock -w $LOCK_TIMEOUT -E 78 $LOCK_FILE bash -s" <<'REMOTE'
+ssh "$VPS" "DEPLOY_TAG=$DEPLOY_TAG flock -w $LOCK_TIMEOUT -E 78 $LOCK_FILE bash -s" <<'REMOTE'
 set -euo pipefail
 cd /opt/squadhub
 
@@ -95,6 +131,16 @@ echo "Rebuilding: $SERVICES"
 echo "---"
 docker compose build $SERVICES && docker compose up -d $SERVICES
 
+# Habit: tag ALL three images with the deploy timestamp, even if only some
+# rebuilt. This gives a consistent 3-service snapshot per deploy — rolling back
+# to a tag restores the full trio to the state it had at that moment.
+for svc in server web admin; do
+    if docker image inspect "squadhub-${svc}:latest" >/dev/null 2>&1; then
+        docker tag "squadhub-${svc}:latest" "squadhub-${svc}:${DEPLOY_TAG}"
+        echo "  tagged squadhub-${svc}:${DEPLOY_TAG}"
+    fi
+done
+
 if echo "$CHANGED_FILES" | grep -qE '^Caddyfile$'; then
     echo ""
     echo "Reloading Caddy configuration..."
@@ -131,4 +177,6 @@ for SVC in server web admin; do
     echo ""
 done
 
-echo "Deploy complete: ${BEFORE_SHA:0:7} -> ${AFTER_SHA:0:7}"
+echo "Deploy complete: ${BEFORE_SHA:0:7} -> ${AFTER_SHA:0:7}  (tag: $DEPLOY_TAG)"
+echo ""
+echo "Rollback: bash tools/rollback.sh $DEPLOY_TAG  (or any prior tag from 'docker images | grep ^squadhub-' on the VPS)"

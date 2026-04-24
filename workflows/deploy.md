@@ -21,12 +21,15 @@ bash tools/deploy.sh
 ```
 
 The script automatically:
-1. SSHes to the VPS and pulls latest from `origin/main`
-2. Detects which packages changed (server, web, admin, shared)
-3. Rebuilds only the affected Docker services
-4. Removes rogue `next.config.js` files (see Known Gotchas #3)
-5. Reloads Caddy if `Caddyfile` changed
-6. Shows container status and recent logs
+1. Runs a local `.env` ↔ `.env.example` drift check (non-blocking warning if keys have drifted)
+2. SSHes to the VPS and pulls latest from `origin/main`
+3. Detects which packages changed (server, web, admin, shared)
+4. Rebuilds only the affected Docker services
+5. Tags all three images (`squadhub-server`, `squadhub-web`, `squadhub-admin`) with a UTC timestamp (`YYYYMMDD-HHMMSS`) alongside `:latest`, creating a consistent 3-service rollback snapshot per deploy
+6. Removes rogue `next.config.js` files (see Known Gotchas #3)
+7. Reloads Caddy if `Caddyfile` changed
+8. Shows container status and recent logs
+9. Prints the rollback command for this deploy (`bash tools/rollback.sh <TAG>`)
 
 ### Concurrent deploys
 
@@ -48,6 +51,16 @@ Only one deploy can run on the VPS at a time. If another deploy is already runni
 ### Post-deploy verification
 
 Try logging in on both https://squadhub.in and https://admin.squadhub.in to confirm API proxying works.
+
+### Rollback
+
+Every deploy leaves behind timestamped image tags for all three services. To roll back a bad deploy to a prior known-good snapshot:
+
+```bash
+bash tools/rollback.sh <DEPLOY_TAG>
+```
+
+See [rollback.md](rollback.md) for the full procedure, including how to list available tags and handle edge cases (DB-incompatible older builds, missing tags after pruning, concurrent deploys).
 
 ## Architecture Reference
 
