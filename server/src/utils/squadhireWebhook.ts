@@ -103,15 +103,50 @@ export async function buildSquadhirePayloadForCard(
   let subscriptionName: string | null = null;
   let planName: string | null = null;
   let leadCountryId: string | null = null;
+  let planHoursDeliverable: { per_day: number; per_week: number; per_month: number } | null = null;
   if (staged) {
-    const [{ data: sub }, { data: plan }, { data: submission }] = await Promise.all([
+    const [{ data: sub }, { data: plan }, { data: submission }, { data: planDelivs }] = await Promise.all([
       supabaseAdmin.from('subscriptions').select('name').eq('id', staged.subscription_id).maybeSingle(),
       supabaseAdmin.from('subscription_plans').select('name').eq('id', staged.plan_id).maybeSingle(),
       supabaseAdmin.from('client_submissions').select('country_id').eq('id', staged.submission_id).maybeSingle(),
+      supabaseAdmin
+        .from('subscription_plan_deliverables')
+        .select('kind, per_day, per_week, per_month')
+        .eq('plan_id', staged.plan_id),
     ]);
     subscriptionName = sub?.name ?? null;
     planName = plan?.name ?? null;
     leadCountryId = (submission?.country_id as string | undefined) ?? null;
+    const hoursRow = (planDelivs ?? []).find((d: any) => d.kind === 'hours');
+    if (hoursRow) {
+      planHoursDeliverable = {
+        per_day: Number(hoursRow.per_day) || 0,
+        per_week: Number(hoursRow.per_week) || 0,
+        per_month: Number(hoursRow.per_month) || 0,
+      };
+    }
+  }
+
+  // Hours resolution: a card's custom_deliverables can carry an hours entry
+  // that overrides the plan default (same pattern as partner price). Prefer
+  // the card-level override, fall back to the plan deliverable.
+  const cardHoursOverride = Array.isArray(card.custom_deliverables)
+    ? (card.custom_deliverables as any[]).find((d) => d?.kind === 'hours')
+    : null;
+  const hoursSource = cardHoursOverride
+    ? {
+        per_day: Number(cardHoursOverride.per_day) || 0,
+        per_week: Number(cardHoursOverride.per_week) || 0,
+        per_month: Number(cardHoursOverride.per_month) || 0,
+      }
+    : planHoursDeliverable;
+  let hoursLabel: string | null = null;
+  if (hoursSource && (hoursSource.per_day || hoursSource.per_week || hoursSource.per_month)) {
+    const parts: string[] = [];
+    if (hoursSource.per_day) parts.push(`${hoursSource.per_day}/d`);
+    if (hoursSource.per_week) parts.push(`${hoursSource.per_week}/w`);
+    if (hoursSource.per_month) parts.push(`${hoursSource.per_month}/m`);
+    hoursLabel = parts.join(' · ');
   }
 
   // Resolve partner price for the card's country.
@@ -209,6 +244,12 @@ export async function buildSquadhirePayloadForCard(
   if (resolvedMonthlyPrice != null && resolvedCurrency) {
     content.monthly_price = resolvedMonthlyPrice;
     content.currency = resolvedCurrency;
+  }
+  // Attach a single-line hours label ("1/d · 6/w · 30/m") when the plan (or a
+  // card override) defines an hours-kind deliverable. Profiles' renderer
+  // promotes this to the HOURS section above description.
+  if (hoursLabel) {
+    content.hours_label = hoursLabel;
   }
 
   return {
