@@ -181,10 +181,13 @@ router.put(
         return;
       }
 
+      // DB column is `target_tiers` (TEXT[]) — a card can target multiple
+      // tiers. The API / UI still expose a single tier for now; we wrap into
+      // a 0-or-1 element array on write and unwrap in hydrateCard on read.
       const { error: updErr } = await supabaseAdmin
         .from('subscription_cards')
         .update({
-          target_tier: body.target_tier,
+          target_tiers: body.target_tier ? [body.target_tier] : [],
           min_experience_years: body.min_experience_years,
           target_languages: body.target_languages,
           squadhire_category_ids: body.squadhire_category_ids,

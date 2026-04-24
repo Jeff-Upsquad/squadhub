@@ -55,7 +55,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, target_tier, min_experience_years, target_languages, squadhire_category_ids, published_at',
+      'id, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -119,7 +119,8 @@ export async function buildSquadhirePayloadForCard(
   const match_rules: Record<string, unknown> = {
     category_ids: categoryIds,
   };
-  if (card.target_tier) match_rules.target_tier = card.target_tier;
+  const targetTiers: string[] = Array.isArray(card.target_tiers) ? card.target_tiers : [];
+  if (targetTiers.length > 0) match_rules.target_tiers = targetTiers;
   if ((card.min_experience_years ?? 0) > 0) {
     match_rules.min_experience_years = card.min_experience_years;
   }
