@@ -6,7 +6,7 @@ import type {
   SubscriptionPlanDeliverable,
   WeekDay,
 } from '@squadhub/shared';
-import { formatPrice } from '@squadhub/shared';
+import { formatPrice, formatDeliverableCadence } from '@squadhub/shared';
 import api from '../../../services/api';
 
 const TABS: { key: RecipientStatus; label: string }[] = [
@@ -160,7 +160,12 @@ function OpportunityCard({
               </span>
               <span>{d.name}</span>
               <span className="text-[var(--sh-ink-3)]">
-                {d.per_day}/d · {d.per_week}/w · {d.per_month}/m
+                {formatDeliverableCadence(
+                  d.per_day,
+                  d.per_week,
+                  d.per_month,
+                  d.kind === 'hours' ? 'hrs' : (d.name || 'items'),
+                )}
               </span>
             </span>
           ))}
@@ -228,7 +233,12 @@ function DeliverableChipDefault({ deliverable }: { deliverable: SubscriptionPlan
     <span className="inline-flex items-center gap-1.5 rounded-md bg-[var(--sh-hair-3)] px-2 py-0.5 text-[11px] text-[var(--sh-ink)]">
       <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${badgeClass}`}>{label}</span>
       <span className="text-[var(--sh-ink-3)]">
-        {deliverable.per_day}/d · {deliverable.per_week}/w · {deliverable.per_month}/m
+        {formatDeliverableCadence(
+          deliverable.per_day,
+          deliverable.per_week,
+          deliverable.per_month,
+          deliverable.kind === 'hours' ? 'hrs' : (deliverable.deliverable_type?.name || 'items'),
+        )}
       </span>
     </span>
   );

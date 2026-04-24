@@ -1059,6 +1059,15 @@ export interface ClientSubscriptionDeliverable {
   deliverable_type?: SubscriptionDeliverableType | null;
 }
 
+export function formatDeliverableCadence(
+  perDay: number,
+  perWeek: number,
+  perMonth: number,
+  unit: string,
+): string {
+  return `${perDay} ${unit}/day · ${perWeek} ${unit}/week · ${perMonth} ${unit}/month`;
+}
+
 export interface SalesPerson {
   id: string;
   display_name: string;
