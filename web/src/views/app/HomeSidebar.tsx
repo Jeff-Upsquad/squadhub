@@ -11,6 +11,7 @@ import { usePMStore } from '../../stores/pmStore';
 import SpaceTree from './pm/SpaceTree';
 import CreateSpaceModal from './pm/CreateSpaceModal';
 import { useHasMiniApp } from '../../hooks/useMiniApps';
+import { useUnreadCount } from '../../hooks/useUnreadCount';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useIsInternal, useIsClient, useIsPartner } from '../../hooks/useUserType';
 import { useMyClients, useClientFolders, type MyClientEntry } from '../../hooks/useMyClients';
@@ -185,6 +186,7 @@ export default function HomeSidebar({
   const hasTimeManagement = useHasMiniApp('time-management');
   const hasSalesLeads = useHasMiniApp('sales-leads');
   const hasCashBook = useHasMiniApp('cash-book');
+  const { data: inboxUnreadCount } = useUnreadCount();
 
   const [expandedSections, setExpandedSections] = useState({
     favorites: true,
@@ -270,7 +272,7 @@ export default function HomeSidebar({
             }
             label="Inbox"
             active={homeView === 'inbox'}
-            count={8}
+            count={inboxUnreadCount ?? 0}
             unread
             onClick={() => onChangeView('inbox')}
           />
