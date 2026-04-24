@@ -110,7 +110,7 @@ const ICON = {
 } as const;
 
 const SECTION_TITLES: Record<ActiveSection, string> = {
-  home: 'Home',
+  home: 'My Home',
   cal: 'Calendar',
   docs: 'Documents',
   teams: 'Teams',
@@ -300,7 +300,7 @@ export default function MainLayout() {
         <div className="flex w-full flex-col items-center gap-[2px]">
           <RailBtn
             icon={ICON.home}
-            label="Home"
+            label="My Home"
             active={activeSection === 'home' && homeView === 'hub'}
             onClick={() => { setActiveSection('home'); setHomeView('hub'); }}
           />
