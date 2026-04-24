@@ -3,7 +3,8 @@ import type { Channel } from '@squadhub/shared';
 import type { HomeView } from '../../layouts/MainLayout';
 import { useFavorites, useRemoveFavorite } from '../../hooks/useFavorites';
 import { useSharedWithMe } from '../../hooks/useSharedWithMe';
-import { useHasPermission, useIsGuest } from '../../hooks/usePermissions';
+import { useHasPermission } from '../../hooks/usePermissions';
+import { useAuthStore } from '../../stores/authStore';
 import { usePMStore } from '../../stores/pmStore';
 import SpaceTree from './pm/SpaceTree';
 import CreateSpaceModal from './pm/CreateSpaceModal';
@@ -175,7 +176,8 @@ export default function HomeSidebar({
   const isInternal = useIsInternal();
   const isClient = useIsClient();
   const isPartner = useIsPartner();
-  const isGuest = useIsGuest();
+  const currentUserEmail = useAuthStore((s) => s.user?.email);
+  const canSeeDogfoodNav = currentUserEmail === 'jeff@upsquadconnect.com';
   const hasCheckin = useHasMiniApp('daily-checkin');
   const hasCheckinPartners = useHasMiniApp('daily-checkin-partners');
   const hasTimeManagement = useHasMiniApp('time-management');
@@ -269,7 +271,7 @@ export default function HomeSidebar({
             unread
             onClick={() => onChangeView('inbox')}
           />
-          {!isGuest && (
+          {canSeeDogfoodNav && (
             <>
               <NavItem
                 icon={
