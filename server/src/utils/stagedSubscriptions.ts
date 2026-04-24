@@ -6,6 +6,7 @@ import { supabaseAdmin } from '../supabase';
  *   - subscription: base Subscription row
  *   - plan: base SubscriptionPlan row, extended with:
  *       - pricing: SubscriptionPlanPricing[] (country joined)
+ *       - partner_pricing: SubscriptionPlanPartnerPricing[] (country joined)
  *       - deliverables: SubscriptionPlanDeliverable[] (deliverable_type joined)
  *
  * Pricing is returned for every country — the frontend picks the row matching
@@ -32,6 +33,7 @@ export async function hydrateStagedSubscriptions(
     { data: subs },
     { data: plans },
     { data: pricing },
+    { data: partnerPricing },
     { data: deliverables },
     { data: countries },
     { data: deliverableTypes },
@@ -39,6 +41,7 @@ export async function hydrateStagedSubscriptions(
     supabaseAdmin.from('subscriptions').select('*').in('id', subIds),
     supabaseAdmin.from('subscription_plans').select('*').in('id', planIds),
     supabaseAdmin.from('subscription_plan_pricing').select('*').in('plan_id', planIds),
+    supabaseAdmin.from('subscription_plan_partner_pricing').select('*').in('plan_id', planIds),
     supabaseAdmin
       .from('subscription_plan_deliverables')
       .select('*')
@@ -68,6 +71,14 @@ export async function hydrateStagedSubscriptions(
     });
   });
 
+  const partnerPricingByPlan: Record<string, any[]> = {};
+  (partnerPricing || []).forEach((pr: any) => {
+    (partnerPricingByPlan[pr.plan_id] = partnerPricingByPlan[pr.plan_id] || []).push({
+      ...pr,
+      country: countryMap[pr.country_id] || null,
+    });
+  });
+
   const delivsByPlan: Record<string, any[]> = {};
   (deliverables || []).forEach((d: any) => {
     (delivsByPlan[d.plan_id] = delivsByPlan[d.plan_id] || []).push({
@@ -81,6 +92,7 @@ export async function hydrateStagedSubscriptions(
     planMap[p.id] = {
       ...p,
       pricing: pricingByPlan[p.id] || [],
+      partner_pricing: partnerPricingByPlan[p.id] || [],
       deliverables: delivsByPlan[p.id] || [],
     };
   });
