@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { Country, PartnerTier } from '@squadhub/shared';
+import { PARTNER_TIERS, SUPPORTED_LANGUAGES } from '@squadhub/shared';
 import api from '../../services/api';
 
 interface PartnerAssignment {
@@ -18,6 +20,11 @@ interface PartnerUser {
   avatar_url: string | null;
   user_type: string;
   status: string;
+  tier: PartnerTier | null;
+  min_experience_years: number | null;
+  country_id: string | null;
+  state_region: string | null;
+  languages: string[];
   assignments: PartnerAssignment[];
 }
 
@@ -229,6 +236,13 @@ export default function AdminPartners() {
               {partner.assignments.length === 0 && (
                 <p className="mt-3 text-xs text-[#90A1B9]">No clients assigned</p>
               )}
+
+              <div className="mt-5 border-t border-[#E2E8F0] pt-4">
+                <p className="text-xs font-medium uppercase tracking-wider text-[#90A1B9]">
+                  Subscription Card Targeting
+                </p>
+                <PartnerTargetingEditor partner={partner} />
+              </div>
             </div>
           ))}
         </div>
@@ -242,6 +256,141 @@ export default function AdminPartners() {
           existingClientIds={assignModal.existingClientIds}
           onClose={() => setAssignModal(null)}
         />
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────── Targeting Editor ─────────────────── */
+function PartnerTargetingEditor({ partner }: { partner: PartnerUser }) {
+  const queryClient = useQueryClient();
+  const [tier, setTier] = useState<PartnerTier | ''>(partner.tier || '');
+  const [minExp, setMinExp] = useState<string>(
+    partner.min_experience_years == null ? '' : String(partner.min_experience_years),
+  );
+  const [countryId, setCountryId] = useState<string>(partner.country_id || '');
+  const [region, setRegion] = useState<string>(partner.state_region || '');
+  const [languages, setLanguages] = useState<string[]>(partner.languages || []);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setTier(partner.tier || '');
+    setMinExp(partner.min_experience_years == null ? '' : String(partner.min_experience_years));
+    setCountryId(partner.country_id || '');
+    setRegion(partner.state_region || '');
+    setLanguages(partner.languages || []);
+    setDirty(false);
+  }, [partner]);
+
+  const { data: countriesRes } = useQuery({
+    queryKey: ['admin-countries'],
+    queryFn: () => api.get('/clients/countries').then((r) => r.data),
+  });
+  const countries: Country[] = countriesRes?.data || [];
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.patch(`/admin/partners/${partner.id}/targeting`, {
+        tier: tier || null,
+        min_experience_years: minExp === '' ? null : parseInt(minExp, 10) || 0,
+        country_id: countryId || null,
+        state_region: region || null,
+        languages,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-partners'] });
+      setDirty(false);
+    },
+    onError: (err: any) => alert(err?.response?.data?.error || 'Failed to save targeting'),
+  });
+
+  const mark = () => setDirty(true);
+
+  return (
+    <div className="mt-3 space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-[#62748E]">Tier</label>
+          <select
+            value={tier}
+            onChange={(e) => { setTier(e.target.value as PartnerTier | ''); mark(); }}
+            className="w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs text-[#0F172B] focus:border-blue-500 focus:outline-none"
+          >
+            <option value="">Unset</option>
+            {PARTNER_TIERS.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-[#62748E]">Years of experience</label>
+          <input
+            type="number"
+            min={0}
+            value={minExp}
+            onChange={(e) => { setMinExp(e.target.value); mark(); }}
+            className="w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs text-[#0F172B] focus:border-blue-500 focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-[#62748E]">Country</label>
+          <select
+            value={countryId}
+            onChange={(e) => { setCountryId(e.target.value); mark(); }}
+            className="w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs text-[#0F172B] focus:border-blue-500 focus:outline-none"
+          >
+            <option value="">Unset</option>
+            {countries.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-[#62748E]">State / Region</label>
+          <input
+            type="text"
+            value={region}
+            onChange={(e) => { setRegion(e.target.value); mark(); }}
+            placeholder="e.g. Tamil Nadu"
+            className="w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs text-[#0F172B] focus:border-blue-500 focus:outline-none"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-[#62748E]">Languages</label>
+        <div className="flex flex-wrap gap-1.5">
+          {SUPPORTED_LANGUAGES.map((l) => {
+            const on = languages.includes(l.code);
+            return (
+              <button
+                key={l.code}
+                type="button"
+                onClick={() => {
+                  setLanguages((prev) =>
+                    on ? prev.filter((x) => x !== l.code) : [...prev, l.code],
+                  );
+                  mark();
+                }}
+                className={`rounded-md border px-2 py-0.5 text-[11px] font-medium transition ${
+                  on
+                    ? 'border-[#0F172B] bg-[#0F172B] text-white'
+                    : 'border-[#E2E8F0] bg-white text-[#62748E] hover:border-[#0F172B]'
+                }`}
+              >
+                {l.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {dirty && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => save.mutate()}
+            disabled={save.isPending}
+            className="rounded-md bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {save.isPending ? 'Saving…' : 'Save targeting'}
+          </button>
+        </div>
       )}
     </div>
   );

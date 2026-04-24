@@ -17,7 +17,7 @@ router.use(requireAuth);
 
 // Gate: require the user to have access to the 'sales-leads' mini app —
 // either via ANY of their roles (primary or secondary) OR a direct user grant.
-async function requireSalesLeadsAccess(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function requireSalesLeadsAccess(req: Request, res: Response, next: NextFunction): Promise<void> {
   const userId = req.userId!;
 
   const { data: app } = await supabaseAdmin
@@ -253,7 +253,7 @@ router.get('/my', requireSalesLeadsAccess, async (req: Request, res: Response) =
 });
 
 // Guard that resolves a lead and verifies the caller is primary or secondary SP.
-async function resolveLeadForUser(leadId: string, userId: string) {
+export async function resolveLeadForUser(leadId: string, userId: string) {
   const { data: submission, error } = await supabaseAdmin
     .from('client_submissions')
     .select('*')
@@ -543,5 +543,5 @@ router.get('/subscriptions', requireSalesLeadsAccess, async (req: Request, res: 
   }
 });
 
-export { requireSalesLeadsAccess, getEligibleSalesUserIds, fetchSalesPeople, hydrateSalesPeople, deriveLinkStatus, buildOnboardUrl };
+export { getEligibleSalesUserIds, fetchSalesPeople, hydrateSalesPeople, deriveLinkStatus, buildOnboardUrl };
 export default router;

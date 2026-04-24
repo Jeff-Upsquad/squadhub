@@ -247,4 +247,56 @@ router.get('/by-client/:clientId', async (req: Request, res: Response) => {
   }
 });
 
+// PATCH /admin/partners/:userId/targeting — set partner's subscription-card
+// targeting profile (tier / experience / location / languages).
+const targetingSchema = z.object({
+  tier: z.enum(['Junior', 'Pro', 'Elite', 'Custom']).nullable(),
+  min_experience_years: z.number().int().min(0).nullable(),
+  country_id: z.string().uuid().nullable(),
+  state_region: z.string().max(100).nullable(),
+  languages: z.array(z.string().min(1).max(20)),
+});
+
+router.patch('/:userId/targeting', async (req: Request, res: Response) => {
+  try {
+    const userId = req.params.userId;
+    const body = targetingSchema.parse(req.body);
+
+    const { data: user } = await supabaseAdmin
+      .from('users')
+      .select('id, user_type')
+      .eq('id', userId)
+      .maybeSingle();
+    if (!user || user.user_type !== 'partner') {
+      res.status(404).json({ success: false, error: 'Partner not found' });
+      return;
+    }
+
+    const { data: updated, error } = await supabaseAdmin
+      .from('users')
+      .update({
+        tier: body.tier,
+        min_experience_years: body.min_experience_years,
+        country_id: body.country_id,
+        state_region: body.state_region,
+        languages: body.languages,
+      })
+      .eq('id', userId)
+      .select('id, tier, min_experience_years, country_id, state_region, languages')
+      .single();
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data: updated });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Update partner targeting error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 export default router;
