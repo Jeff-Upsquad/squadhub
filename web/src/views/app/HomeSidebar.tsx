@@ -180,6 +180,7 @@ export default function HomeSidebar({
   const hasCheckinPartners = useHasMiniApp('daily-checkin-partners');
   const hasTimeManagement = useHasMiniApp('time-management');
   const hasSalesLeads = useHasMiniApp('sales-leads');
+  const hasCashBook = useHasMiniApp('cash-book');
 
   const [expandedSections, setExpandedSections] = useState({
     favorites: true,
@@ -378,7 +379,7 @@ export default function HomeSidebar({
             </button>
           )}
 
-          {(isPartner || isClient) && (
+          {(isPartner || isClient) && hasCashBook && (
             <button
               onClick={() => onChangeView('cashbook')}
               className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
