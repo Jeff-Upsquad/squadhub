@@ -25,6 +25,7 @@ import TimeSheetPanel from '../components/TimeSheetPanel';
 import ClientDashboard from '../views/app/client/ClientDashboard';
 import PartnerDashboard from '../views/app/partner/PartnerDashboard';
 import PartnerCashBook from '../views/app/partner/PartnerCashBook';
+import PartnerOpportunities from '../views/app/partner/PartnerOpportunities';
 import ClientCashBook from '../views/app/client/ClientCashBook';
 import ClientDesignDashboard from '../views/app/pm/client-design/ClientDesignDashboard';
 import MemberHome from '../views/app/home/MemberHome';
@@ -40,7 +41,7 @@ import { useUnreadCount } from '../hooks/useUnreadCount';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities';
 
 // ---- Rail icons (stroke-1.6, 18x18) ----
 const ICON = {
@@ -552,6 +553,8 @@ export default function MainLayout() {
             <PartnerCashBook />
           ) : homeView === 'cashbook' && (userType === 'client' || userType === 'client_staff') ? (
             <ClientCashBook />
+          ) : homeView === 'opportunities' && userType === 'partner' ? (
+            <PartnerOpportunities />
           ) : (
             myHomeView === 'member' ? <MemberHome onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} /> :
             myHomeView === 'guest' ? <GuestHome onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} /> :

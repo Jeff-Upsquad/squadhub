@@ -1089,6 +1089,96 @@ export interface ClientSubmissionSubscription {
   plan?: SubscriptionPlanRow;
 }
 
+// ---- Subscription Cards ----
+// Partners have their own tier including 'Custom'. subscription_plans.tier
+// stays (Junior|Pro|Elite) — do not conflate them.
+export type PartnerTier = 'Junior' | 'Pro' | 'Elite' | 'Custom';
+export const PARTNER_TIERS: PartnerTier[] = ['Junior', 'Pro', 'Elite', 'Custom'];
+
+export type SubscriptionCardState = 'draft' | 'published' | 'closed';
+export type RecipientStatus = 'pending' | 'accepted' | 'rejected';
+export type WeekDay = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
+export const WEEK_DAYS: WeekDay[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+export interface SubscriptionCardCustomDeliverable {
+  id: string;
+  name: string;
+  kind: DeliverableKind;
+  per_day: number;
+  per_week: number;
+  per_month: number;
+}
+
+export interface SubscriptionCardTargetRegion {
+  country_id: string;
+  region: string;
+}
+
+export interface SubscriptionCard {
+  id: string;
+  submission_subscription_id: string;
+  state: SubscriptionCardState;
+  working_days: WeekDay[];
+  brand_name: string | null;
+  business_nature: string | null;
+  notes: string | null;
+  target_tier: PartnerTier | null;
+  min_experience_years: number;
+  target_languages: string[];
+  custom_deliverables: SubscriptionCardCustomDeliverable[];
+  target_country_ids: string[];
+  target_regions: SubscriptionCardTargetRegion[];
+  published_at: string | null;
+  published_by: string | null;
+  closed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // Derived
+  recipient_counts?: { pending: number; accepted: number; rejected: number };
+  // Joined
+  submission_subscription?: ClientSubmissionSubscription;
+  submission?: Pick<ClientSubmission, 'id' | 'business_name' | 'country_id' | 'country'> | null;
+}
+
+export interface SubscriptionCardRecipient {
+  id: string;
+  card_id: string;
+  partner_id: string;
+  status: RecipientStatus;
+  responded_at: string | null;
+  created_at: string;
+  // Joined
+  card?: SubscriptionCard;
+}
+
+export interface SupportedLanguage {
+  code: string;
+  name: string;
+}
+
+export const SUPPORTED_LANGUAGES: SupportedLanguage[] = [
+  { code: 'en', name: 'English' },
+  { code: 'hi', name: 'Hindi' },
+  { code: 'ta', name: 'Tamil' },
+  { code: 'te', name: 'Telugu' },
+  { code: 'kn', name: 'Kannada' },
+  { code: 'ml', name: 'Malayalam' },
+  { code: 'mr', name: 'Marathi' },
+  { code: 'gu', name: 'Gujarati' },
+  { code: 'bn', name: 'Bengali' },
+  { code: 'pa', name: 'Punjabi' },
+  { code: 'ur', name: 'Urdu' },
+  { code: 'es', name: 'Spanish' },
+  { code: 'fr', name: 'French' },
+  { code: 'de', name: 'German' },
+  { code: 'pt', name: 'Portuguese' },
+  { code: 'ar', name: 'Arabic' },
+  { code: 'zh', name: 'Chinese' },
+  { code: 'ja', name: 'Japanese' },
+  { code: 'id', name: 'Bahasa Indonesia' },
+  { code: 'fil', name: 'Filipino' },
+];
+
 export interface Client {
   id: string;
   submission_id: string | null;

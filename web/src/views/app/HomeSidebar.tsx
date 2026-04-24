@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import type { Channel } from '@squadhub/shared';
+import { useQuery } from '@tanstack/react-query';
+import type { Channel, SubscriptionCardRecipient } from '@squadhub/shared';
 import type { HomeView } from '../../layouts/MainLayout';
+import api from '../../services/api';
 import { useFavorites, useRemoveFavorite } from '../../hooks/useFavorites';
 import { useSharedWithMe } from '../../hooks/useSharedWithMe';
 import { useHasPermission } from '../../hooks/usePermissions';
@@ -389,6 +391,13 @@ export default function HomeSidebar({
               Cash Book
             </button>
           )}
+
+          {isPartner && (
+            <PartnerOpportunitiesLink
+              active={homeView === 'opportunities'}
+              onClick={() => onChangeView('opportunities')}
+            />
+          )}
         </div>
 
         {/* Divider */}
@@ -743,5 +752,45 @@ function ClientRow({
         </div>
       )}
     </div>
+  );
+}
+
+function PartnerOpportunitiesLink({
+  active, onClick,
+}: { active: boolean; onClick: () => void }) {
+  const { data } = useQuery({
+    queryKey: ['partner-opportunities-pending'],
+    queryFn: () => api.get('/partner/opportunities?status=pending').then((r) => r.data),
+    refetchInterval: 30_000,
+  });
+  const pending: SubscriptionCardRecipient[] = data?.data || [];
+  const pendingCount = pending.length;
+
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
+        active
+          ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+          : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+      }`}
+      style={active ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+    >
+      <svg
+        className={`h-[14px] w-[14px] shrink-0 ${active ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        viewBox="0 0 24 24"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+      </svg>
+      <span className="flex-1">Opportunities</span>
+      {pendingCount > 0 && (
+        <span className="grid min-w-[18px] place-items-center rounded-full bg-[var(--sh-ink)] px-1.5 text-[10px] font-semibold text-[var(--sidebar)]">
+          {pendingCount}
+        </span>
+      )}
+    </button>
   );
 }
