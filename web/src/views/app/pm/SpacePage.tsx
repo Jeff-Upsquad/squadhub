@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
-import type { Folder, List, Space, Task } from '@squadhub/shared';
+import type { Folder, List, Space, SpaceStatus, Task } from '@squadhub/shared';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useSpace } from '../../../hooks/useSpaces';
 import DashboardTaskRow from '../home/DashboardTaskRow';
 import CompletedSection from './CompletedSection';
 import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, type GroupBy } from '../../../lib/taskGrouping';
+import FilterBar from '../../../components/pm/FilterBar';
+import {
+  EMPTY_FILTER,
+  countActiveFilters,
+  deriveAssigneeOptions,
+  deriveTagOptions,
+  filterTasks,
+} from '../../../lib/filters';
 
 type SpaceWithChildren = Space & { folders?: (Folder & { lists?: List[] })[]; lists?: List[] };
 
@@ -17,9 +25,15 @@ const NO_FOLDER_KEY = '__none__';
 export default function SpacePage() {
   const activeSpacePageId = usePMStore((s) => s.activeSpacePageId);
   const setContextListId = usePMStore((s) => s.setContextListId);
+  const filtersByScope = usePMStore((s) => s.filtersByScope);
+  const setScopeFilters = usePMStore((s) => s.setScopeFilters);
+  const clearScopeFilters = usePMStore((s) => s.clearScopeFilters);
   const [folderFilter, setFolderFilter] = useState<string>('all');
   const [listFilter, setListFilter] = useState<string>('all');
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
+
+  const scopeKey = activeSpacePageId ? `space:${activeSpacePageId}` : '';
+  const filters = (scopeKey && filtersByScope[scopeKey]) || EMPTY_FILTER;
 
   const { data: space } = useSpace(activeSpacePageId) as { data: SpaceWithChildren | undefined };
 
@@ -92,7 +106,9 @@ export default function SpacePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskQueries.map((q) => q.dataUpdatedAt).join('|')]);
 
-  const filteredTasks = useMemo(() => {
+  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
+
+  const tasksAfterPills = useMemo(() => {
     let arr = allTasks;
     if (folderFilter === NO_FOLDER_KEY) {
       arr = arr.filter((t) => !t.folder);
@@ -105,7 +121,18 @@ export default function SpacePage() {
     return arr;
   }, [allTasks, folderFilter, listFilter]);
 
-  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
+  const filteredTasks = useMemo(
+    () => filterTasks(tasksAfterPills, filters, tz),
+    [tasksAfterPills, filters, tz],
+  );
+
+  const spaceStatuses: SpaceStatus[] = useMemo(
+    () => ((space as unknown as { space_statuses?: SpaceStatus[] } | undefined)?.space_statuses ?? []),
+    [space],
+  );
+  const assigneeOptions = useMemo(() => deriveAssigneeOptions(tasksAfterPills), [tasksAfterPills]);
+  const tagOptions = useMemo(() => deriveTagOptions(tasksAfterPills), [tasksAfterPills]);
+  const activeFilterCount = countActiveFilters(filters);
 
   const { open: openTasks, completed: completedTasks } = useMemo(
     () => partitionByCompletion(filteredTasks),
@@ -243,7 +270,7 @@ export default function SpacePage() {
         ))}
       </div>
 
-      {/* Group by pills */}
+      {/* Group by pills + Filter */}
       <div className="sh-view dl-groupby shrink-0">
         <span className="dl-groupby-lbl">Group by</span>
         {GROUP_BY_OPTIONS.map((opt) => (
@@ -264,6 +291,14 @@ export default function SpacePage() {
             {opt.label}
           </div>
         ))}
+        <span style={{ width: 8, display: 'inline-block' }} />
+        <FilterBar
+          filters={filters}
+          onChange={(next) => scopeKey && setScopeFilters(scopeKey, next)}
+          statuses={spaceStatuses}
+          assigneeOptions={assigneeOptions}
+          tagOptions={tagOptions}
+        />
       </div>
 
       {/* Body */}
@@ -276,7 +311,22 @@ export default function SpacePage() {
           </div>
         ) : filteredCount === 0 ? (
           <div style={{ padding: '28px 20px', fontSize: 13, color: 'var(--sh-ink-3)' }}>
-            {activeListName ? `No tasks in ${activeListName}.` : 'No tasks match the current filters.'}
+            {activeFilterCount > 0 ? (
+              <>
+                No tasks match the current filters.{' '}
+                <button
+                  type="button"
+                  onClick={() => scopeKey && clearScopeFilters(scopeKey)}
+                  style={{ color: 'var(--sh-ink)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit' }}
+                >
+                  Clear filters
+                </button>
+              </>
+            ) : activeListName ? (
+              `No tasks in ${activeListName}.`
+            ) : (
+              'No tasks match the current filters.'
+            )}
           </div>
         ) : (
           <>

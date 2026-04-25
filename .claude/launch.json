@@ -128,6 +128,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-completed-section/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3040"],
       "port": 3040
+    },
+    {
+      "name": "Task Filters Worktree",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-task-filters/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3050"],
+      "port": 3050
     }
   ]
 }

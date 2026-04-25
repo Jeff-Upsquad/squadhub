@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { SpaceStatus, Task } from '@squadhub/shared';
 import { useTasks, useUpdateTask, useCreateTask, groupTasksByStatus } from '../../../hooks/useTasks';
 import { usePMStore } from '../../../stores/pmStore';
+import { filterTasks, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
 import TaskPriorityBadge from './TaskPriorityBadge';
 
 function formatDate(dateStr: string | null | undefined) {
@@ -262,20 +263,23 @@ export default function BoardView({
 }: {
   listId: string;
   statuses: SpaceStatus[];
-  filters?: { status?: string; priority?: string; sort?: string };
+  filters?: TaskFilterState;
   listName?: string;
   searchQuery?: string;
   canEdit?: boolean;
 }) {
-  const { data: tasks, isLoading } = useTasks(listId, filters);
+  const { data: tasks, isLoading } = useTasks(listId, undefined);
   const updateTask = useUpdateTask(listId);
+  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
   const groups = useMemo(() => {
-    const allTasks = (tasks || []).filter(
-      (t) => !searchQuery || t.title.toLowerCase().includes(searchQuery.toLowerCase()),
-    );
-    return groupTasksByStatus(allTasks, statuses);
-  }, [tasks, statuses, searchQuery]);
+    let arr = filterTasks(tasks ?? [], filters ?? EMPTY_FILTER, tz);
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      arr = arr.filter((t) => t.title.toLowerCase().includes(q));
+    }
+    return groupTasksByStatus(arr, statuses);
+  }, [tasks, statuses, searchQuery, filters, tz]);
 
   const handleDrop = (taskId: string, statusId: string) => {
     if (!canEdit) return;

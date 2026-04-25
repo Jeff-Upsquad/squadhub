@@ -4,12 +4,14 @@ import { useTasks, useUpdateTask, useCreateTask, groupTasksByStatus } from '../.
 import { usePMStore, type ListGroupBy } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { groupTasks as groupTasksGeneric, partitionByCompletion } from '../../../lib/taskGrouping';
+import { filterTasks, countActiveFilters, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
 import TaskRow from './TaskRow';
 
 export default function ListView({
   listId,
   statuses,
   filters,
+  onClearFilters,
   groupBy = 'status',
   myTasksOnly = false,
   searchQuery = '',
@@ -17,13 +19,16 @@ export default function ListView({
 }: {
   listId: string;
   statuses: SpaceStatus[];
-  filters?: { status?: string; priority?: string; sort?: string };
+  filters?: TaskFilterState;
+  onClearFilters?: () => void;
   groupBy?: ListGroupBy;
   myTasksOnly?: boolean;
   searchQuery?: string;
   canEdit?: boolean;
 }) {
-  const { data: tasks, isLoading } = useTasks(listId, filters);
+  // Filtering happens client-side now — pass undefined for server-side filters
+  // so the React Query cache key doesn't fragment per filter selection.
+  const { data: tasks, isLoading } = useTasks(listId, undefined);
   const updateTask = useUpdateTask(listId);
   const { selectedTasks, clearSelection } = usePMStore();
   const currentUserId = useAuthStore((s) => s.user?.id);
@@ -31,16 +36,19 @@ export default function ListView({
 
   const filteredTasks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return (tasks || []).filter((t) => {
-      if (q && !t.title.toLowerCase().includes(q)) return false;
-      if (myTasksOnly) {
-        if (!currentUserId) return false;
+    let arr = filterTasks(tasks ?? [], filters ?? EMPTY_FILTER, tz);
+    if (q) arr = arr.filter((t) => t.title.toLowerCase().includes(q));
+    if (myTasksOnly) {
+      if (!currentUserId) return [];
+      arr = arr.filter((t) => {
         const assignees = (t.assignees || []) as { id: string }[];
-        if (!assignees.some((a) => a.id === currentUserId)) return false;
-      }
-      return true;
-    });
-  }, [tasks, searchQuery, myTasksOnly, currentUserId]);
+        return assignees.some((a) => a.id === currentUserId);
+      });
+    }
+    return arr;
+  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz]);
+
+  const activeFilterCount = countActiveFilters(filters);
 
   const { open: openTasks, completed: completedTasks } = useMemo(
     () => partitionByCompletion(filteredTasks),
@@ -72,9 +80,11 @@ export default function ListView({
   const totalVisible = filteredTasks.length;
   const emptyMessage = searchQuery
     ? `No tasks match “${searchQuery}”.`
-    : myTasksOnly
-      ? 'No tasks assigned to you in this list.'
-      : 'No tasks yet. Press + to add one.';
+    : activeFilterCount > 0
+      ? 'No tasks match the current filters.'
+      : myTasksOnly
+        ? 'No tasks assigned to you in this list.'
+        : 'No tasks yet. Press + to add one.';
 
   return (
     <div className="relative flex flex-1 flex-col overflow-auto">
@@ -89,7 +99,21 @@ export default function ListView({
         </div>
 
         {totalVisible === 0 ? (
-          <div className="lv-empty">{emptyMessage}</div>
+          <div className="lv-empty">
+            {emptyMessage}
+            {activeFilterCount > 0 && onClearFilters && (
+              <>
+                {' '}
+                <button
+                  type="button"
+                  onClick={onClearFilters}
+                  style={{ color: 'var(--sh-ink)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit' }}
+                >
+                  Clear filters
+                </button>
+              </>
+            )}
+          </div>
         ) : groupBy === 'status' && statusGroups ? (
           statusGroups.map(({ status, tasks: groupTasks }) => (
             <StatusGroup
