@@ -22,6 +22,8 @@ import DatePicker from './DatePicker';
 import EmergencyConfirm from './EmergencyConfirm';
 import TaskStatusPicker from './TaskStatusPicker';
 import ListPickerCombobox from './ListPickerCombobox';
+import TaskAttachments from './TaskAttachments';
+import { useTaskAttachments } from '../../../hooks/useTaskAttachments';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -138,8 +140,6 @@ function formatDueRelative(iso: string | null | undefined): { text: string; acce
   const text = time ? `${prefix} · ${time}` : prefix;
   return { text, accent: delta <= 0 };
 }
-
-type AttachmentLike = { name?: string; size?: string | number };
 
 export default function TaskDetailPanel({
   statuses,
@@ -380,7 +380,8 @@ export default function TaskDetailPanel({
   const priorityLabel = task ? PRIORITY_LABEL[(task.priority || 'none') as TaskPriority] : null;
   const assignees = task?.assignees || [];
   const due = formatDueRelative(task?.due_date);
-  const attachments: AttachmentLike[] = (task?.metadata as TaskMetadata | undefined)?.attachments || [];
+  const { data: attachmentsData = [] } = useTaskAttachments(task?.id || null);
+  const attachmentCount = attachmentsData.length;
   const subtasks = task?.subtasks || [];
   const subtaskDone = subtasks.filter((s: any) => s.status === 'done' || s.status === 'closed').length;
 
@@ -971,7 +972,7 @@ export default function TaskDetailPanel({
                   { id: 'overview', l: 'Overview' },
                   { id: 'comments', l: `Comments · ${comments?.length ?? 0}` },
                   { id: 'activity', l: 'Activity' },
-                  { id: 'files', l: `Files · ${attachments.length}` },
+                  { id: 'files', l: `Files · ${attachmentCount}` },
                 ] as const).map((t) => (
                   <button
                     key={t.id}
@@ -1311,27 +1312,8 @@ export default function TaskDetailPanel({
                 </div>
               )}
 
-              {tab === 'files' && (
-                <div className="flex flex-col gap-2">
-                  {attachments.length > 0 ? attachments.map((f, i) => {
-                    const ext = (f.name || '').split('.').pop()?.toUpperCase() || 'FILE';
-                    return (
-                      <div
-                        key={i}
-                        className="td-file flex items-center gap-3 p-3 rounded-xl border"
-                        style={{ borderColor: 'var(--sh-hair-3)' }}
-                      >
-                        <div className="td-doc-icon">{ext}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[13.5px] font-medium text-[color:var(--sh-ink)] truncate">{f.name || 'untitled'}</div>
-                          {f.size && <div className="text-[11.5px] text-[color:var(--sh-ink-3)] mt-0.5">{f.size}</div>}
-                        </div>
-                      </div>
-                    );
-                  }) : (
-                    <div className="text-[13px] text-[color:var(--sh-ink-3)] py-4">No files yet.</div>
-                  )}
-                </div>
+              {tab === 'files' && task && (
+                <TaskAttachments taskId={task.id} canEdit={canEdit} />
               )}
             </>
           )}

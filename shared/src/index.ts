@@ -296,9 +296,22 @@ export interface TaskMetadata {
   tone?: string;
   category?: string;
   references?: string[];
+  /** @deprecated File attachments now live in the `task_attachments` table — see TaskAttachment. */
   attachments?: { name: string; size: string }[];
   custom?: Record<string, unknown>;
   [key: string]: unknown;
+}
+
+export interface TaskAttachment {
+  id: string;
+  task_id: string;
+  object_key: string;
+  file_url: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  uploaded_by: string;
+  uploaded_at: string;
 }
 
 export type TaskFieldType = 'text' | 'textarea' | 'select' | 'multi_select' | 'number' | 'date' | 'url' | 'checkbox';
