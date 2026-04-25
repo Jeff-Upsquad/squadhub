@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { GroupBy } from '../lib/taskGrouping';
+import type { TaskFilterState } from '../lib/filters';
+import { isFilterEmpty } from '../lib/filters';
 
 export type ViewMode = 'list' | 'board';
 export type DashboardTab = 'today' | 'overdue' | 'tomorrow' | 'all';
@@ -30,6 +32,7 @@ interface PMState {
   collapsedGroups: Record<string, boolean>;
   selectedTasks: string[];
   timer: TimerState | null;
+  filtersByScope: Record<string, TaskFilterState>;
   setActiveSpace: (id: string | null) => void;
   setActiveList: (id: string | null) => void;
   setActiveFolder: (id: string | null) => void;
@@ -48,6 +51,8 @@ interface PMState {
   clearSelection: () => void;
   startTimer: (taskId: string, taskTitle: string, listId: string, baseTracked: number) => TimerState | null;
   stopTimer: () => TimerState | null;
+  setScopeFilters: (scopeKey: string, next: TaskFilterState) => void;
+  clearScopeFilters: (scopeKey: string) => void;
   reset: () => void;
 }
 
@@ -69,6 +74,7 @@ export const usePMStore = create<PMState>()(
       collapsedGroups: {},
       selectedTasks: [],
       timer: null,
+      filtersByScope: {},
 
       setActiveSpace: (id) => set({ activeSpaceId: id }),
       setActiveList: (id) => set({ activeListId: id, contextListId: id, selectedTasks: [], activeDesignFolderId: null, activeFolderId: null, activeSpacePageId: null }),
@@ -109,13 +115,40 @@ export const usePMStore = create<PMState>()(
         set({ timer: null });
         return prev;
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], timer: null }),
+      setScopeFilters: (scopeKey, next) =>
+        set((state) => {
+          if (isFilterEmpty(next)) {
+            if (!(scopeKey in state.filtersByScope)) return state;
+            const { [scopeKey]: _removed, ...rest } = state.filtersByScope;
+            return { filtersByScope: rest };
+          }
+          return { filtersByScope: { ...state.filtersByScope, [scopeKey]: next } };
+        }),
+      clearScopeFilters: (scopeKey) =>
+        set((state) => {
+          if (!(scopeKey in state.filtersByScope)) return state;
+          const { [scopeKey]: _removed, ...rest } = state.filtersByScope;
+          return { filtersByScope: rest };
+        }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], timer: null, filtersByScope: {} }),
     }),
     {
       name: 'squadhub-pm',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ timer: state.timer, listGroupBy: state.listGroupBy, myTasksOnly: state.myTasksOnly }),
-      version: 1,
+      partialize: (state) => ({
+        timer: state.timer,
+        listGroupBy: state.listGroupBy,
+        myTasksOnly: state.myTasksOnly,
+        filtersByScope: state.filtersByScope,
+      }),
+      version: 2,
+      migrate: (persisted: unknown, fromVersion: number) => {
+        const p = (persisted ?? {}) as Partial<PMState>;
+        if (fromVersion < 2) {
+          return { ...p, filtersByScope: {} };
+        }
+        return p;
+      },
     }
   )
 );

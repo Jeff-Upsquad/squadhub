@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useIsAdmin } from '../../../hooks/usePermissions';
+import { useTasks } from '../../../hooks/useTasks';
 import { canAtLeast } from '../../../lib/access';
 import type { SpaceStatus, AccessLevel } from '@squadhub/shared';
 import ListView from './ListView';
@@ -10,7 +11,9 @@ import BoardView from './BoardView';
 import SettingsSlider from '../../../components/SettingsSlider';
 import ManageMembersModal from './ManageMembersModal';
 import TaskCreatePanel from './TaskCreatePanel';
+import FilterBar from '../../../components/pm/FilterBar';
 import { LIST_GROUP_BY_OPTIONS } from '../../../lib/taskGrouping';
+import { EMPTY_FILTER, deriveAssigneeOptions, deriveTagOptions } from '../../../lib/filters';
 
 export default function ListPage() {
   const {
@@ -23,11 +26,17 @@ export default function ListPage() {
     setListGroupBy,
     myTasksOnly,
     setMyTasksOnly,
+    filtersByScope,
+    setScopeFilters,
+    clearScopeFilters,
   } = usePMStore();
   const [showSettings, setShowSettings] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreatePanel, setShowCreatePanel] = useState(false);
+
+  const scopeKey = activeListId ? `list:${activeListId}` : '';
+  const filters = (scopeKey && filtersByScope[scopeKey]) || EMPTY_FILTER;
 
   const { data: listData } = useQuery({
     queryKey: ['list', activeListId],
@@ -58,7 +67,11 @@ export default function ListPage() {
   const canAccessSettings = isManager || isAdmin;
   const canEdit = canAtLeast(myAccess, 'member');
 
-  const filters = useMemo(() => ({}), []);
+  // Cached fetch of the same task set used by ListView/BoardView (React Query dedupes).
+  // Used purely to derive filter dropdown options from the un-filtered set.
+  const { data: tasksForOptions } = useTasks(activeListId, undefined);
+  const assigneeOptions = useMemo(() => deriveAssigneeOptions(tasksForOptions ?? []), [tasksForOptions]);
+  const tagOptions = useMemo(() => deriveTagOptions(tasksForOptions ?? []), [tasksForOptions]);
 
   if (!activeListId) {
     return (
@@ -173,7 +186,7 @@ export default function ListPage() {
         </div>
       </div>
 
-      {/* Group by pills + My tasks toggle (List view only) */}
+      {/* Group by pills + Filter + My tasks toggle (List view only) */}
       {viewMode === 'list' && (
         <div className="sh-view dl-groupby shrink-0">
           <span className="dl-groupby-lbl">Group by</span>
@@ -195,6 +208,14 @@ export default function ListPage() {
               {opt.label}
             </div>
           ))}
+          <span style={{ width: 8, display: 'inline-block' }} />
+          <FilterBar
+            filters={filters}
+            onChange={(next) => scopeKey && setScopeFilters(scopeKey, next)}
+            statuses={statuses}
+            assigneeOptions={assigneeOptions}
+            tagOptions={tagOptions}
+          />
           <div style={{ flex: 1 }} />
           <button
             type="button"
@@ -212,6 +233,19 @@ export default function ListPage() {
         </div>
       )}
 
+      {/* For board view: filter row above content */}
+      {viewMode === 'board' && (
+        <div className="sh-view dl-groupby shrink-0">
+          <FilterBar
+            filters={filters}
+            onChange={(next) => scopeKey && setScopeFilters(scopeKey, next)}
+            statuses={statuses}
+            assigneeOptions={assigneeOptions}
+            tagOptions={tagOptions}
+          />
+        </div>
+      )}
+
       {/* Content area + task detail panel */}
       <div className="flex flex-1 overflow-hidden">
         {viewMode === 'list' ? (
@@ -219,6 +253,7 @@ export default function ListPage() {
             listId={activeListId}
             statuses={statuses}
             filters={filters}
+            onClearFilters={() => scopeKey && clearScopeFilters(scopeKey)}
             groupBy={listGroupBy}
             myTasksOnly={myTasksOnly}
             searchQuery={searchQuery}
