@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { config } from './config';
 
@@ -132,4 +132,52 @@ export async function generateR2DownloadUrl(
       : {}),
   });
   return getSignedUrl(r2Client, command, { expiresIn: expiresInSeconds });
+}
+
+// Task attachments share a single 100 MB cap regardless of MIME — videos,
+// audio, images, PDFs, docs all flow through the same path.
+export const TASK_ATTACHMENT_MAX_BYTES = 100 * 1024 * 1024;
+
+// Path: tasks/<task_id>/<timestamp>_<filename>
+export async function generateTaskUploadUrl(
+  taskId: string,
+  filename: string,
+  contentType: string,
+): Promise<{ uploadUrl: string; objectKey: string; publicUrl: string }> {
+  const timestamp = Date.now();
+  const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const objectKey = `tasks/${taskId}/${timestamp}_${safeFilename}`;
+
+  const command = new PutObjectCommand({
+    Bucket: config.r2BucketName,
+    Key: objectKey,
+    ContentType: contentType,
+  });
+
+  const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 3600 });
+  const publicUrl = `${config.r2PublicUrl}/${objectKey}`;
+
+  return { uploadUrl, objectKey, publicUrl };
+}
+
+// Confirms an object exists in R2 and returns its size. Used post-upload to
+// re-validate client-reported file size before inserting a DB row.
+export async function headR2Object(objectKey: string): Promise<{ contentLength: number; contentType: string | undefined } | null> {
+  try {
+    const result = await r2Client.send(
+      new HeadObjectCommand({ Bucket: config.r2BucketName, Key: objectKey }),
+    );
+    return {
+      contentLength: result.ContentLength ?? 0,
+      contentType: result.ContentType,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Best-effort delete. Caller logs failures and moves on — orphan blobs are
+// recoverable later.
+export async function deleteR2Object(objectKey: string): Promise<void> {
+  await r2Client.send(new DeleteObjectCommand({ Bucket: config.r2BucketName, Key: objectKey }));
 }
