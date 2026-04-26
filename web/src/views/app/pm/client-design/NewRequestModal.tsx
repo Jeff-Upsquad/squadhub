@@ -1,21 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useCreateTask } from '../../../../hooks/useTasks';
-import { IconClose, IconPaperclip } from './atoms/Icons';
+import { useTaskTypes } from '../../../../hooks/useTaskTypes';
+import { IconClose } from './atoms/Icons';
 import { PRIORITY_CHOICES } from './atoms/PriorityDot';
-import type { TaskPriority } from '@squadhub/shared';
+import type { TaskPriority, TaskTypeField } from '@squadhub/shared';
 
-export const CATEGORIES = [
-  'Poster',
-  'Social media',
-  'Ad banner',
-  'Presentation',
-  'Brand asset',
-  'Web / landing',
-  'Illustration',
-  'Print collateral',
-  'Motion / video',
-  'Other',
-];
+const DESIGN_TASK_KEY = 'design_task';
 
 export default function NewRequestModal({
   briefsListId,
@@ -26,25 +16,23 @@ export default function NewRequestModal({
   onClose: () => void;
   onSubmitted: () => void;
 }) {
+  const { data: taskTypes } = useTaskTypes();
+  const designType = useMemo(
+    () => taskTypes?.find((t) => t.key === DESIGN_TASK_KEY) || null,
+    [taskTypes]
+  );
+  const fields: TaskTypeField[] = designType?.fields || [];
+
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('Poster');
   const [priority, setPriority] = useState<TaskPriority>('none');
   const [brief, setBrief] = useState('');
-  const [format, setFormat] = useState('');
-  const [audience, setAudience] = useState('');
-  const [tone, setTone] = useState('');
   const [due, setDue] = useState('');
-  const [links, setLinks] = useState('');
-  const [files, setFiles] = useState<{ name: string; size: string }[]>([]);
+  const [custom, setCustom] = useState<Record<string, unknown>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const createTask = useCreateTask(briefsListId);
 
-  const estimate =
-    priority === 'low' ? '~1h'
-      : priority === 'high' || priority === 'urgent' ? '~4–6h'
-        : '~2–3h'; // covers 'none' (treated as Normal) and 'normal'
   const hasTitle = title.trim().length > 0;
   const hasBrief = brief.trim().length > 0;
   const canSubmit = hasTitle && hasBrief && !!briefsListId;
@@ -56,27 +44,40 @@ export default function NewRequestModal({
         ? 'No "Briefs" list found in this folder'
         : null;
 
+  const setField = (key: string, v: unknown) =>
+    setCustom((prev) => {
+      const next = { ...prev };
+      if (v == null || (Array.isArray(v) && v.length === 0) || v === '') delete next[key];
+      else next[key] = v;
+      return next;
+    });
+
+  const briefTypeField = fields.find((f) => f.key === 'brief_type');
   const handleSubmit = async () => {
     if (!canSubmit || !briefsListId) return;
     setSubmitting(true);
     setError(null);
     try {
+      // Denormalize a `category` string for the request row / board / reports tag.
+      const briefTypeArr = (custom['brief_type'] as string[] | undefined) || [];
+      const categoryLabel = briefTypeArr
+        .map((v) =>
+          v === '__other__'
+            ? (custom['brief_type_other'] as string) || 'Other'
+            : briefTypeField?.options.find((o) => o.value === v)?.label || v
+        )
+        .filter(Boolean)[0];
+
       await createTask.mutateAsync({
         title: title.trim(),
         description: brief.trim(),
         priority,
         due_date: due || undefined,
         list_id: briefsListId,
+        task_type_id: designType?.id,
         metadata: {
-          category,
-          format: format.trim() || undefined,
-          audience: audience.trim() || undefined,
-          tone: tone.trim() || undefined,
-          references: links
-            .split(/\n|,/)
-            .map((s) => s.trim())
-            .filter(Boolean),
-          attachments: files,
+          custom,
+          category: categoryLabel,
         },
       });
       onSubmitted();
@@ -112,26 +113,6 @@ export default function NewRequestModal({
 
             <div className="cd-field">
               <div className="cd-field-row">
-                <div className="cd-field-label">
-                  Type<span className="req">*</span>
-                </div>
-                <div className="cd-choice-row">
-                  {CATEGORIES.map((c) => (
-                    <button
-                      key={c}
-                      className={`cd-choice${category === c ? ' active' : ''}`}
-                      onClick={() => setCategory(c)}
-                      type="button"
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="cd-field">
-              <div className="cd-field-row">
                 <div className="cd-field-label">Priority</div>
                 <div className="cd-prio-row">
                   {PRIORITY_CHOICES.map((p) => (
@@ -157,48 +138,23 @@ export default function NewRequestModal({
                 <textarea
                   className="cd-textarea"
                   rows={4}
-                  placeholder="Describe what you want. Goals, context, audience, what success looks like."
+                  placeholder="Describe what you want. Goals, context, what success looks like."
                   value={brief}
                   onChange={(e) => setBrief(e.target.value)}
                 />
               </div>
             </div>
 
-            <div className="cd-field">
-              <div className="cd-field-row">
-                <div className="cd-field-label">Format</div>
-                <input
-                  className="cd-input"
-                  placeholder="e.g. 1080×1350 · 16:9 · A4 print"
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="cd-field">
-              <div className="cd-field-row">
-                <div className="cd-field-label">Audience</div>
-                <input
-                  className="cd-input"
-                  placeholder="Who is this for?"
-                  value={audience}
-                  onChange={(e) => setAudience(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="cd-field">
-              <div className="cd-field-row">
-                <div className="cd-field-label">Tone / style</div>
-                <input
-                  className="cd-input"
-                  placeholder="e.g. confident, editorial, playful"
-                  value={tone}
-                  onChange={(e) => setTone(e.target.value)}
-                />
-              </div>
-            </div>
+            {fields.map((f) => (
+              <BriefFieldInput
+                key={f.id}
+                field={f}
+                value={custom[f.key]}
+                otherValue={custom[f.key + '_other']}
+                onChange={(v) => setField(f.key, v)}
+                onOtherChange={(v) => setField(f.key + '_other', v)}
+              />
+            ))}
 
             <div className="cd-field">
               <div className="cd-field-row">
@@ -209,72 +165,6 @@ export default function NewRequestModal({
                   value={due}
                   onChange={(e) => setDue(e.target.value)}
                 />
-              </div>
-            </div>
-
-            <div className="cd-field">
-              <div className="cd-field-row">
-                <div className="cd-field-label">Reference links</div>
-                <textarea
-                  className="cd-textarea"
-                  rows={2}
-                  placeholder="Paste inspiration URLs, one per line"
-                  value={links}
-                  onChange={(e) => setLinks(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="cd-field">
-              <div className="cd-field-row">
-                <div className="cd-field-label">Attachments</div>
-                <div className={`cd-upload${files.length ? ' has-files' : ''}`}>
-                  {files.length ? (
-                    <div className="cd-upload-list">
-                      {files.map((f, i) => (
-                        <div key={i} className="cd-upload-item">
-                          <IconPaperclip size={13} style={{ color: 'var(--cd-fg-2)' }} />
-                          <span className="name">{f.name}</span>
-                          <span className="size">{f.size}</span>
-                          <button
-                            type="button"
-                            className="cd-modal-close"
-                            onClick={() => setFiles(files.filter((_, j) => j !== i))}
-                          >
-                            <IconClose size={11} />
-                          </button>
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        className="cd-upload"
-                        style={{ padding: 8, fontSize: 11 }}
-                        onClick={() =>
-                          setFiles([
-                            ...files,
-                            { name: `asset-${files.length + 1}.png`, size: '3.1 MB' },
-                          ])
-                        }
-                      >
-                        + Add another file
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="cd-upload"
-                      style={{ width: '100%', padding: 14 }}
-                      onClick={() =>
-                        setFiles([{ name: 'reference-board.jpg', size: '2.4 MB' }])
-                      }
-                    >
-                      <div>Drop files or click to upload</div>
-                      <div className="mono" style={{ marginTop: 4 }}>
-                        PNG · JPG · PDF · AI · PSD · ZIP · up to 200 MB
-                      </div>
-                    </button>
-                  )}
-                </div>
               </div>
             </div>
 
@@ -299,7 +189,7 @@ export default function NewRequestModal({
               {disabledReason ? (
                 <span style={{ color: 'var(--cd-fg-2)' }}>{disabledReason}</span>
               ) : (
-                <>Est. <b>{estimate}</b> · will consume from your daily allotment</>
+                <span style={{ color: 'var(--cd-fg-2)' }}>Ready to submit</span>
               )}
             </div>
             <button className="cd-btn" onClick={onClose} type="button">
@@ -316,6 +206,186 @@ export default function NewRequestModal({
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function BriefFieldInput({
+  field,
+  value,
+  otherValue,
+  onChange,
+  onOtherChange,
+}: {
+  field: TaskTypeField;
+  value: unknown;
+  otherValue: unknown;
+  onChange: (v: unknown) => void;
+  onOtherChange: (v: unknown) => void;
+}) {
+  const str = typeof value === 'string' ? value : value == null ? '' : String(value);
+  const otherStr = typeof otherValue === 'string' ? otherValue : '';
+
+  let control: React.ReactNode = null;
+
+  switch (field.field_type) {
+    case 'multi_select': {
+      const arr: string[] = Array.isArray(value) ? (value as string[]) : [];
+      const otherSelected = arr.includes('__other__') || (field.allow_other && !!otherStr);
+      control = (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="cd-choice-row">
+            {field.options.map((o) => {
+              const on = arr.includes(o.value);
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  className={`cd-choice${on ? ' active' : ''}`}
+                  onClick={() => {
+                    onChange(on ? arr.filter((v) => v !== o.value) : [...arr, o.value]);
+                  }}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+            {field.allow_other && (
+              <button
+                type="button"
+                className={`cd-choice${otherSelected ? ' active' : ''}`}
+                onClick={() => {
+                  if (otherSelected) {
+                    onChange(arr.filter((v) => v !== '__other__'));
+                    onOtherChange(null);
+                  } else if (!arr.includes('__other__')) {
+                    onChange([...arr, '__other__']);
+                  }
+                }}
+              >
+                Other
+              </button>
+            )}
+          </div>
+          {field.allow_other && otherSelected && (
+            <input
+              className="cd-input"
+              type="text"
+              value={otherStr}
+              placeholder="Describe…"
+              onChange={(e) => onOtherChange(e.target.value || null)}
+            />
+          )}
+        </div>
+      );
+      break;
+    }
+    case 'select':
+      control = (
+        <select
+          className="cd-input"
+          value={str}
+          onChange={(e) => onChange(e.target.value || null)}
+        >
+          <option value="">—</option>
+          {field.options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      );
+      break;
+    case 'textarea':
+      control = (
+        <textarea
+          className="cd-textarea"
+          rows={2}
+          placeholder={field.placeholder || ''}
+          value={str}
+          onChange={(e) => onChange(e.target.value || null)}
+        />
+      );
+      break;
+    case 'number':
+      control = (
+        <input
+          className="cd-input"
+          type="number"
+          placeholder={field.placeholder || ''}
+          value={str}
+          onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+        />
+      );
+      break;
+    case 'date':
+      control = (
+        <input
+          className="cd-input"
+          type="date"
+          value={str}
+          onChange={(e) => onChange(e.target.value || null)}
+        />
+      );
+      break;
+    case 'url':
+      control = (
+        <input
+          className="cd-input"
+          type="url"
+          placeholder={field.placeholder || 'https://'}
+          value={str}
+          onChange={(e) => onChange(e.target.value || null)}
+        />
+      );
+      break;
+    case 'checkbox':
+      control = (
+        <input
+          type="checkbox"
+          checked={!!value}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+      );
+      break;
+    case 'text':
+    default:
+      control = (
+        <input
+          className="cd-input"
+          type="text"
+          placeholder={field.placeholder || ''}
+          value={str}
+          onChange={(e) => onChange(e.target.value || null)}
+        />
+      );
+  }
+
+  return (
+    <div className="cd-field">
+      <div className="cd-field-row">
+        <div className="cd-field-label" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span>
+            {field.label}
+            {field.is_required && <span className="req">*</span>}
+          </span>
+          {field.help_url && (
+            <a
+              href={field.help_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontSize: 10.5,
+                color: 'var(--cd-fg-2)',
+                textDecoration: 'underline',
+              }}
+            >
+              View size chart ↗
+            </a>
+          )}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>{control}</div>
       </div>
     </div>
   );

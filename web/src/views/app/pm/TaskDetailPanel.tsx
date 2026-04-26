@@ -23,7 +23,6 @@ import EmergencyConfirm from './EmergencyConfirm';
 import TaskStatusPicker from './TaskStatusPicker';
 import ListPickerCombobox from './ListPickerCombobox';
 import TaskAttachments from './TaskAttachments';
-import DesignBriefSection from './DesignBriefSection';
 import { useTaskAttachments } from '../../../hooks/useTaskAttachments';
 
 function parseTimeInput(input: string): number | null {
@@ -631,11 +630,24 @@ export default function TaskDetailPanel({
                 </div>
               </div>
 
-              <DesignBriefSection
-                task={task}
-                canEdit={canEdit}
-                onSave={(metadata) => updateTask.mutate({ id: task.id, metadata })}
-              />
+              {customFields.length > 0 && (
+                <>
+                  <div className="td-eyebrow">{currentType?.name || 'Brief'}</div>
+                  <div className="td-settings-card" style={{ marginBottom: 16 }}>
+                    {customFields.map((field) => (
+                      <CustomFieldRow
+                        key={field.id}
+                        field={field}
+                        value={customValues[field.key]}
+                        onChange={(v) => updateCustomField(field.key, v)}
+                        otherValue={customValues[field.key + '_other']}
+                        onOtherChange={(v) => updateCustomField(field.key + '_other', v)}
+                        canEdit={canEdit}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
 
               {/* Subtitle row — priority only (space + SQ moved to top bar) */}
               {priorityLabel && (
@@ -1046,20 +1058,7 @@ export default function TaskDetailPanel({
                     </div>
                   )}
 
-                  {/* Custom fields */}
-                  {customFields.length > 0 && (
-                    <div className="mb-5">
-                      {customFields.map((field) => (
-                        <CustomFieldRow
-                          key={field.id}
-                          field={field}
-                          value={customValues[field.key]}
-                          onChange={(v) => updateCustomField(field.key, v)}
-                          canEdit={canEdit}
-                        />
-                      ))}
-                    </div>
-                  )}
+                  {/* Custom fields are rendered above the Details card now */}
 
                   {/* Subtasks */}
                   <div className="td-eyebrow">
@@ -1509,11 +1508,15 @@ function CustomFieldRow({
   field,
   value,
   onChange,
+  otherValue,
+  onOtherChange,
   canEdit,
 }: {
   field: TaskTypeField;
   value: unknown;
   onChange: (v: unknown) => void;
+  otherValue?: unknown;
+  onOtherChange?: (v: unknown) => void;
   canEdit: boolean;
 }) {
   const baseInputCls = `rounded-lg border bg-transparent px-3 py-1.5 text-[13px] outline-none ${canEdit ? '' : 'cursor-default opacity-70'}`;
@@ -1521,6 +1524,7 @@ function CustomFieldRow({
 
   let control: React.ReactNode = null;
   const str = typeof value === 'string' ? value : value == null ? '' : String(value);
+  const otherStr = typeof otherValue === 'string' ? otherValue : '';
 
   switch (field.field_type) {
     case 'textarea':
@@ -1554,27 +1558,64 @@ function CustomFieldRow({
       break;
     case 'multi_select': {
       const arr: string[] = Array.isArray(value) ? (value as string[]) : [];
+      const otherSelected = arr.includes('__other__') || (field.allow_other && !!otherStr);
+      const pillCls = (on: boolean) =>
+        `rounded-full px-3 py-1 text-[12px] ${
+          on ? 'bg-[color:var(--sh-ink)] text-[color:var(--surface)]' : 'bg-[color:var(--sh-hair-3)] text-[color:var(--sh-ink-2)]'
+        } ${canEdit ? '' : 'cursor-default opacity-70'}`;
       control = (
-        <div className="flex flex-wrap gap-1.5">
-          {field.options.map((o) => {
-            const on = arr.includes(o.value);
-            return (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            {field.options.map((o) => {
+              const on = arr.includes(o.value);
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() => {
+                    const next = on ? arr.filter((v) => v !== o.value) : [...arr, o.value];
+                    onChange(next);
+                  }}
+                  className={pillCls(on)}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+            {field.allow_other && (
               <button
-                key={o.value}
+                key="__other__"
                 type="button"
                 disabled={!canEdit}
                 onClick={() => {
-                  const next = on ? arr.filter((v) => v !== o.value) : [...arr, o.value];
-                  onChange(next);
+                  if (otherSelected) {
+                    onChange(arr.filter((v) => v !== '__other__'));
+                    onOtherChange?.(null);
+                  } else {
+                    if (!arr.includes('__other__')) onChange([...arr, '__other__']);
+                  }
                 }}
-                className={`rounded-full px-3 py-1 text-[12px] ${
-                  on ? 'bg-[color:var(--sh-ink)] text-[color:var(--surface)]' : 'bg-[color:var(--sh-hair-3)] text-[color:var(--sh-ink-2)]'
-                } ${canEdit ? '' : 'cursor-default opacity-70'}`}
+                className={pillCls(otherSelected)}
               >
-                {o.label}
+                Other
               </button>
-            );
-          })}
+            )}
+          </div>
+          {field.allow_other && otherSelected && (
+            <input
+              type="text"
+              defaultValue={otherStr}
+              placeholder="Describe…"
+              disabled={!canEdit}
+              onBlur={(e) => {
+                const v = e.target.value.trim();
+                if (v !== otherStr) onOtherChange?.(v || null);
+              }}
+              className={`${baseInputCls} max-w-md`}
+              style={baseStyle}
+            />
+          )}
         </div>
       );
       break;
@@ -1652,7 +1693,19 @@ function CustomFieldRow({
         {field.label}
         {field.is_required && <span className="text-red-500">*</span>}
       </span>
-      <div className="min-w-0 flex-1">{control}</div>
+      <div className="min-w-0 flex-1">
+        {control}
+        {field.help_url && (
+          <a
+            href={field.help_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1.5 inline-block text-[11px] underline text-[color:var(--sh-ink-3)] hover:text-[color:var(--sh-ink)]"
+          >
+            View size chart ↗
+          </a>
+        )}
+      </div>
     </div>
   );
 }

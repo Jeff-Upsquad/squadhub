@@ -45,6 +45,8 @@ const fieldCreateSchema = z.object({
   options: z.array(z.object({ label: z.string(), value: z.string(), color: z.string().optional() })).optional(),
   is_required: z.boolean().optional(),
   help_text: z.string().nullable().optional(),
+  help_url: z.string().nullable().optional(),
+  allow_other: z.boolean().optional(),
   placeholder: z.string().nullable().optional(),
 });
 
@@ -482,6 +484,8 @@ router.post('/:id/fields', async (req: Request, res: Response) => {
         options: body.options ?? [],
         is_required: body.is_required ?? false,
         help_text: body.help_text ?? null,
+        help_url: body.help_url ?? null,
+        allow_other: body.allow_other ?? false,
         placeholder: body.placeholder ?? null,
         position: nextPos,
       })
@@ -518,6 +522,8 @@ router.put('/:id/fields/:fieldId', async (req: Request, res: Response) => {
     if (body.options !== undefined) patch.options = body.options;
     if (body.is_required !== undefined) patch.is_required = body.is_required;
     if (body.help_text !== undefined) patch.help_text = body.help_text;
+    if (body.help_url !== undefined) patch.help_url = body.help_url;
+    if (body.allow_other !== undefined) patch.allow_other = body.allow_other;
     if (body.placeholder !== undefined) patch.placeholder = body.placeholder;
 
     const { data, error } = await supabaseAdmin
