@@ -79,7 +79,16 @@ export async function buildSquadhirePayloadForCard(
   const categoryIds = Array.isArray(card.squadhire_category_ids)
     ? (card.squadhire_category_ids as string[])
     : [];
-  if (categoryIds.length === 0) return null;
+  if (categoryIds.length === 0) {
+    // Without this log, a forgotten-checkbox publish is invisible: no fetch,
+    // no error, no audit trail. Surface it so it's at least diagnosable in
+    // pm2 logs after the fact.
+    console.warn(
+      '[squadhire] skipping delivery — card has no SquadHire categories',
+      { cardId, state: card.state },
+    );
+    return null;
+  }
 
   // Map SquadHub state → SquadHire status. Published = visible to talents;
   // anything else (draft after recall, closed) = archived and hidden.
