@@ -28,6 +28,7 @@ export async function hydrateStagedSubscriptions(
 
   const subIds = Array.from(new Set(list.map((r: any) => r.subscription_id)));
   const planIds = Array.from(new Set(list.map((r: any) => r.plan_id)));
+  const stagedRowIds = list.map((r: any) => r.id);
 
   const [
     { data: subs },
@@ -37,6 +38,7 @@ export async function hydrateStagedSubscriptions(
     { data: deliverables },
     { data: countries },
     { data: deliverableTypes },
+    { data: cards },
   ] = await Promise.all([
     supabaseAdmin.from('subscriptions').select('*').in('id', subIds),
     supabaseAdmin.from('subscription_plans').select('*').in('id', planIds),
@@ -52,6 +54,10 @@ export async function hydrateStagedSubscriptions(
       .from('subscription_deliverable_types')
       .select('*')
       .in('subscription_id', subIds),
+    supabaseAdmin
+      .from('subscription_cards')
+      .select('submission_subscription_id, state')
+      .in('submission_subscription_id', stagedRowIds),
   ]);
 
   const subMap: Record<string, any> = {};
@@ -97,12 +103,18 @@ export async function hydrateStagedSubscriptions(
     };
   });
 
+  const cardStateByStagedId: Record<string, string> = {};
+  (cards || []).forEach((c: any) => {
+    cardStateByStagedId[c.submission_subscription_id] = c.state;
+  });
+
   const bySubmission: Record<string, any[]> = {};
   list.forEach((r: any) => {
     const enriched = {
       ...r,
       subscription: subMap[r.subscription_id] || null,
       plan: planMap[r.plan_id] || null,
+      card_state: cardStateByStagedId[r.id] ?? null,
     };
     (bySubmission[r.submission_id] = bySubmission[r.submission_id] || []).push(enriched);
   });

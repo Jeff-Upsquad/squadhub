@@ -189,9 +189,11 @@ export default function SubscriptionCardDrawer({
   const grossProfit =
     pricing && effectivePartnerPrice != null ? pricing.price - effectivePartnerPrice : null;
 
-  const acceptedCount = card?.recipient_counts?.accepted ?? 0;
-  const pendingCount = card?.recipient_counts?.pending ?? 0;
-  const rejectedCount = card?.recipient_counts?.rejected ?? 0;
+  const partnerCounts = card?.recipient_counts?.partners;
+  const talentCounts = card?.recipient_counts?.talents;
+  const acceptedCount = (partnerCounts?.accepted ?? 0) + (talentCounts?.accepted ?? 0);
+  const pendingCount = partnerCounts?.pending ?? 0;
+  const rejectedCount = (partnerCounts?.rejected ?? 0) + (talentCounts?.rejected ?? 0);
 
   const [confirmPublish, setConfirmPublish] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -753,6 +755,7 @@ function CustomDeliverablesEditor({
         per_day: parseFloat(perDay) || 0,
         per_week: parseFloat(perWeek) || 0,
         per_month: parseFloat(perMonth) || 0,
+        deliverable_type_id: kind === 'item' && typeId ? typeId : null,
       },
     ]);
     reset();
@@ -763,40 +766,49 @@ function CustomDeliverablesEditor({
       {value.length === 0 && !adding && (
         <p className="text-xs text-[var(--sh-ink-4)]">No custom deliverables on this card.</p>
       )}
-      {value.map((d) => (
-        <div
-          key={d.id}
-          className="flex items-center justify-between rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] px-3 py-2"
-        >
-          <div className="flex items-center gap-2">
-            <span
-              className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
-                d.kind === 'hours' ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'
-              }`}
-            >
-              {d.kind === 'hours' ? 'Hours' : 'Item'}
-            </span>
-            <span className="text-sm text-[var(--sh-ink)]">{d.name}</span>
-            <span className="text-xs text-[var(--sh-ink-3)]">
-              {formatDeliverableCadence(
-                d.per_day,
-                d.per_week,
-                d.per_month,
-                d.kind === 'hours' ? 'hrs' : (d.name || 'items'),
+      {value.map((d) => {
+        const typeName = d.kind === 'item' && d.deliverable_type_id
+          ? deliverableTypes.find((t) => t.id === d.deliverable_type_id)?.name || null
+          : null;
+        // Title prefers the deliverable-type name (what the admin picked from
+        // the dropdown). Falls back to legacy `name` for rows saved before
+        // deliverable_type_id existed.
+        const title = d.kind === 'hours' ? 'Hours' : (typeName || d.name || 'Item');
+        const labelDifferent = d.kind === 'item' && d.name && d.name !== title;
+        const cadenceUnit = d.kind === 'hours' ? 'hrs' : (typeName || 'items');
+        return (
+          <div
+            key={d.id}
+            className="flex items-center justify-between rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] px-3 py-2"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
+                  d.kind === 'hours' ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'
+                }`}
+              >
+                {d.kind === 'hours' ? 'Hours' : 'Item'}
+              </span>
+              <span className="text-sm font-medium text-[var(--sh-ink)]">{title}</span>
+              {labelDifferent && (
+                <span className="text-xs text-[var(--sh-ink-3)]">"{d.name}"</span>
               )}
-            </span>
+              <span className="text-xs text-[var(--sh-ink-3)]">
+                {formatDeliverableCadence(d.per_day, d.per_week, d.per_month, cadenceUnit)}
+              </span>
+            </div>
+            {!disabled && (
+              <button
+                type="button"
+                onClick={() => onChange(value.filter((x) => x.id !== d.id))}
+                className="rounded-md px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+              >
+                Remove
+              </button>
+            )}
           </div>
-          {!disabled && (
-            <button
-              type="button"
-              onClick={() => onChange(value.filter((x) => x.id !== d.id))}
-              className="rounded-md px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-            >
-              Remove
-            </button>
-          )}
-        </div>
-      ))}
+        );
+      })}
       {adding ? (
         <div className="space-y-2 rounded-md border border-dashed border-[var(--sh-hair)] bg-[var(--sh-hair-3)] p-3">
           <div className="flex items-center gap-4">

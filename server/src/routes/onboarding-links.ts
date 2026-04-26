@@ -506,6 +506,79 @@ router.delete('/leads/:id/subscriptions/:rowId', requireSalesLeadsAccess, async 
 });
 
 // ============================================================
+// POST /onboarding-links/leads/:id/subscriptions/:rowId/cancel
+//
+// Lifecycle-aware "Cancel" used by the Sales Leads UI:
+//   - no card / state='draft'   → delete the staged subscription (existing
+//     destructive behaviour, mirrors the DELETE above)
+//   - state='published'         → close the card (state='closed', closed_at)
+//                                 so it stays in history and lands in the
+//                                 "Cancelled" group on the Published cards tab
+//   - state='closed'            → 409 (already cancelled)
+// ============================================================
+router.post('/leads/:id/subscriptions/:rowId/cancel', requireSalesLeadsAccess, async (req: Request, res: Response) => {
+  try {
+    const guard = await resolveLeadForUser(req.params.id as string, req.userId!);
+    if (!guard.ok) {
+      res.status(guard.code).json({ success: false, error: guard.error });
+      return;
+    }
+    if (guard.submission.status === 'converted' || guard.submission.status === 'closed') {
+      res.status(409).json({ success: false, error: 'Cannot edit subscriptions on a converted or closed lead' });
+      return;
+    }
+
+    const rowId = req.params.rowId as string;
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state')
+      .eq('submission_subscription_id', rowId)
+      .maybeSingle();
+
+    if (!card || card.state === 'draft') {
+      const { error } = await supabaseAdmin
+        .from('client_submission_subscriptions')
+        .delete()
+        .eq('id', rowId)
+        .eq('submission_id', req.params.id as string);
+      if (error) {
+        res.status(500).json({ success: false, error: error.message });
+        return;
+      }
+      res.json({ success: true, action: 'deleted' });
+      return;
+    }
+
+    if (card.state === 'closed') {
+      res.status(409).json({ success: false, error: 'Card is already cancelled' });
+      return;
+    }
+
+    // state === 'published' → close the card. Reset SquadHire sync state so
+    // the archived-delivery is re-attempted, mirroring the close endpoint.
+    const { error: updErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .update({
+        state: 'closed',
+        closed_at: new Date().toISOString(),
+        squadhire_synced_at: null,
+        squadhire_sync_attempts: 0,
+        squadhire_sync_last_error: null,
+      })
+      .eq('id', card.id);
+    if (updErr) {
+      res.status(500).json({ success: false, error: updErr.message });
+      return;
+    }
+
+    res.json({ success: true, action: 'closed', card_id: card.id });
+  } catch (err) {
+    console.error('Cancel staged sub error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
 // GET /onboarding-links/subscriptions — read-only list for sales users
 // Optionally filters pricing/plans to a given country_id.
 // ============================================================

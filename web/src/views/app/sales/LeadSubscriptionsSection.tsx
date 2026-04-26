@@ -47,13 +47,17 @@ export default function LeadSubscriptionsSection({ leadId, countryId, selected, 
     onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed to update country'),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (rowId: string) => api.delete(`/onboarding-links/leads/${leadId}/subscriptions/${rowId}`),
+  // Lifecycle-aware "Cancel": delete if the card is still draft (or none),
+  // close the card if it has been published. Server picks the path so the FE
+  // always calls the same endpoint.
+  const cancelMutation = useMutation({
+    mutationFn: (rowId: string) =>
+      api.post(`/onboarding-links/leads/${leadId}/subscriptions/${rowId}/cancel`),
     onSuccess: () => {
       invalidate();
       setConfirmRowId(null);
     },
-    onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed to remove'),
+    onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed to cancel'),
   });
 
   const rowBeingConfirmed = selected.find((r) => r.id === confirmRowId) || null;
@@ -115,10 +119,10 @@ export default function LeadSubscriptionsSection({ leadId, countryId, selected, 
               row={row}
               countryId={countryId}
               countryName={activeCountry?.name || null}
-              canRemove={!disabled}
-              onRemove={() => setConfirmRowId(row.id)}
+              canCancel={!disabled && row.card_state !== 'closed'}
+              onCancel={() => setConfirmRowId(row.id)}
               onOpenCard={() => setOpenCardSubId(row.id)}
-              removing={deleteMutation.isPending && confirmRowId === row.id}
+              cancelling={cancelMutation.isPending && confirmRowId === row.id}
             />
           ))}
         </ul>
@@ -126,13 +130,15 @@ export default function LeadSubscriptionsSection({ leadId, countryId, selected, 
 
       <ConfirmRemoveDialog
         open={!!rowBeingConfirmed}
-        title="Remove subscription"
+        title="Cancel subscription"
         description={rowBeingConfirmed
-          ? `${rowBeingConfirmed.subscription?.name || 'Subscription'} · ${rowBeingConfirmed.plan?.plan || ''} · ${rowBeingConfirmed.plan?.tier || ''} will be removed from this lead.`
+          ? rowBeingConfirmed.card_state === 'published'
+            ? `${rowBeingConfirmed.subscription?.name || 'Subscription'} · ${rowBeingConfirmed.plan?.plan || ''} · ${rowBeingConfirmed.plan?.tier || ''} — the published card will be cancelled. Partners and talents who already accepted will see it move to Cancelled.`
+            : `${rowBeingConfirmed.subscription?.name || 'Subscription'} · ${rowBeingConfirmed.plan?.plan || ''} · ${rowBeingConfirmed.plan?.tier || ''} will be removed from this lead.`
           : ''}
-        loading={deleteMutation.isPending}
+        loading={cancelMutation.isPending}
         onClose={() => setConfirmRowId(null)}
-        onConfirm={() => rowBeingConfirmed && deleteMutation.mutate(rowBeingConfirmed.id)}
+        onConfirm={() => rowBeingConfirmed && cancelMutation.mutate(rowBeingConfirmed.id)}
       />
 
       {openCardSubId && (() => {
@@ -152,15 +158,15 @@ export default function LeadSubscriptionsSection({ leadId, countryId, selected, 
 }
 
 function SelectedSubscriptionRow({
-  row, countryId, countryName, canRemove, onRemove, onOpenCard, removing,
+  row, countryId, countryName, canCancel, onCancel, onOpenCard, cancelling,
 }: {
   row: ClientSubmissionSubscription;
   countryId: string | null;
   countryName: string | null;
-  canRemove: boolean;
-  onRemove: () => void;
+  canCancel: boolean;
+  onCancel: () => void;
   onOpenCard: () => void;
-  removing: boolean;
+  cancelling: boolean;
 }) {
   const plan = row.plan || null;
   const pricing = (plan?.pricing || []).find((pr) => pr.country_id === countryId);
@@ -204,14 +210,14 @@ function SelectedSubscriptionRow({
             </div>
           )}
         </div>
-        {canRemove && (
+        {canCancel && (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            disabled={removing}
+            onClick={(e) => { e.stopPropagation(); onCancel(); }}
+            disabled={cancelling}
             className="shrink-0 rounded-md px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
           >
-            Remove
+            Cancel
           </button>
         )}
       </div>

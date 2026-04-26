@@ -4,7 +4,10 @@ import { supabaseAdmin } from '../supabase';
  * Hydrate a subscription_cards row into the shape the UI expects:
  *   - target_country_ids: string[]
  *   - target_regions: { country_id, region }[]
- *   - recipient_counts: { pending, accepted, rejected }
+ *   - recipient_counts: {
+ *       partners: { pending, accepted, rejected },
+ *       talents:  { accepted, rejected }     // external table only stores responses
+ *     }
  *
  * Accepts a single card row (raw DB shape). Call-sites usually have the row
  * already; this helper pulls the joined relations in a single round-trip.
@@ -14,7 +17,8 @@ export async function hydrateCard(card: any): Promise<any> {
   const [
     { data: countries },
     { data: regions },
-    { data: recipients },
+    { data: partnerRecipients },
+    { data: talentRecipients },
   ] = await Promise.all([
     supabaseAdmin
       .from('subscription_card_target_countries')
@@ -28,11 +32,20 @@ export async function hydrateCard(card: any): Promise<any> {
       .from('subscription_card_recipients')
       .select('status')
       .eq('card_id', card.id),
+    supabaseAdmin
+      .from('subscription_card_external_recipients')
+      .select('status')
+      .eq('card_id', card.id),
   ]);
 
-  const counts = { pending: 0, accepted: 0, rejected: 0 };
-  (recipients || []).forEach((r: any) => {
-    if (r.status in counts) (counts as any)[r.status]++;
+  const partners = { pending: 0, accepted: 0, rejected: 0 };
+  (partnerRecipients || []).forEach((r: any) => {
+    if (r.status in partners) (partners as any)[r.status]++;
+  });
+
+  const talents = { accepted: 0, rejected: 0 };
+  (talentRecipients || []).forEach((r: any) => {
+    if (r.status in talents) (talents as any)[r.status]++;
   });
 
   return {
@@ -42,7 +55,7 @@ export async function hydrateCard(card: any): Promise<any> {
       country_id: r.country_id,
       region: r.region,
     })),
-    recipient_counts: counts,
+    recipient_counts: { partners, talents },
   };
 }
 
