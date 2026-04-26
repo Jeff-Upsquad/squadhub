@@ -140,6 +140,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-clients-archive-sections/admin && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3002"],
       "port": 3002
+    },
+    {
+      "name": "Clients Status Tabs Admin",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-clients-status-tabs/admin && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3004"],
+      "port": 3004
     }
   ]
 }
