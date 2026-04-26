@@ -1839,3 +1839,52 @@ export interface ChatClientToServerEvents {
     up_to_message_id: string;
   }) => void;
 }
+
+// ============================================================
+// Profile Access — local mirror of SquadHire's talent_access_grants
+// ============================================================
+
+export type ProfileAccessGrantStatus = 'active' | 'expired' | 'revoked';
+
+export interface ProfileAccessGrantCategory {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface ProfileAccessGrant {
+  id: string;
+  email: string;
+  expires_at: string;
+  revoked_at: string | null;
+  notes: string | null;
+  created_by: string | null;
+  category_ids: string[];
+  profiles_grant_id: string | null;
+  profiles_synced_at: string | null;
+  profiles_sync_attempts: number;
+  profiles_sync_last_error: string | null;
+  created_at: string;
+  updated_at: string;
+  // Computed server-side from expires_at + revoked_at — not a column.
+  status?: ProfileAccessGrantStatus;
+  // Hydrated by joining against the cached SquadHire categories list.
+  categories?: ProfileAccessGrantCategory[];
+}
+
+export interface CreateProfileAccessGrantInput {
+  email: string;
+  category_ids: string[];
+  expires_at?: string;
+  notes?: string | null;
+}
+
+export interface UpdateProfileAccessGrantInput {
+  category_ids?: string[];
+  expires_at?: string;
+  notes?: string | null;
+}
+
+export interface ExtendProfileAccessGrantInput {
+  days: number;
+}

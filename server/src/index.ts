@@ -72,9 +72,12 @@ import adminChatAppConfigRoutes from './routes/admin/chat-app-config';
 import squadhireCallbacksRoutes from './routes/integrations/squadhire-callbacks';
 import squadhireCategoriesRoutes from './routes/integrations/squadhire-categories';
 import subscriptionSquadhireProfilesAdminRoutes from './routes/subscription-squadhire-profiles-admin';
+import profileAccessRoutes from './routes/profile-access';
+import profileAccessAdminRoutes from './routes/profile-access-admin';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimerCron } from './cron/timer-cron';
 import { startSquadhireSyncSweeper } from './utils/squadhireWebhook';
+import { startProfileAccessGrantsSyncSweeper } from './utils/squadhireGrantsWebhook';
 
 // Validate env vars before starting
 validateConfig();
@@ -172,6 +175,10 @@ app.use('/integrations/squadhire', squadhireCallbacksRoutes);
 // Admin-facing read-through proxy for SquadHire metadata (categories etc.)
 app.use('/admin/integrations/squadhire', squadhireCategoriesRoutes);
 
+// Profile Access — local mirror of SquadHire's talent_access_grants.
+app.use('/profile-access', profileAccessRoutes);
+app.use('/admin/profile-access', profileAccessAdminRoutes);
+
 // 404 handler
 app.use((_req, res) => {
   res.status(404).json({ success: false, error: 'Route not found' });
@@ -195,4 +202,5 @@ server.listen(config.port, () => {
   // Outbound SquadHire webhook retry sweeper. No-ops when SQUADHIRE_WEBHOOK_URL
   // is unset, so dev environments without SquadHire configured are unaffected.
   startSquadhireSyncSweeper();
+  startProfileAccessGrantsSyncSweeper();
 });
