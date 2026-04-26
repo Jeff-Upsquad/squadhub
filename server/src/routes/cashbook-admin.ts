@@ -5,6 +5,7 @@ import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import { getDefaultRoleIdForUserType } from '../utils/defaultRole';
 import { generateR2DownloadUrl } from '../r2';
+import { PARTNER_USER_TYPES, type UserType } from '@squadhub/shared';
 
 const router = Router();
 
@@ -841,7 +842,7 @@ router.get('/partner-access/partners', async (_req: Request, res: Response) => {
     const { data, error } = await supabaseAdmin
       .from('users')
       .select('id, display_name, email')
-      .eq('user_type', 'partner')
+      .in('user_type', PARTNER_USER_TYPES as unknown as string[])
       .order('display_name', { ascending: true });
 
     if (error) {
@@ -872,7 +873,7 @@ router.post('/partner-access', async (req: Request, res: Response) => {
       .eq('id', body.user_id)
       .single();
 
-    if (!user || user.user_type !== 'partner') {
+    if (!user || !PARTNER_USER_TYPES.includes(user.user_type as UserType)) {
       res.status(400).json({ success: false, error: 'User is not a partner' });
       return;
     }

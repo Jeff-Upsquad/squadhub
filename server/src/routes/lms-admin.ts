@@ -9,7 +9,7 @@ router.use(requireAuth);
 router.use(requireAdmin);
 
 const BLOCK_TYPES = ['text', 'image', 'video_upload', 'video_embed', 'audio', 'pdf', 'quiz'] as const;
-const USER_TYPES = ['internal', 'client', 'client_staff', 'partner'] as const;
+const USER_TYPES = ['internal', 'client', 'client_staff', 'partner', 'partner_employee'] as const;
 
 function slugify(input: string): string {
   return input

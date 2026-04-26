@@ -4,12 +4,13 @@ import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { requirePermission, isWorkspaceAdmin, checkResourceAccess, meetsAccessLevel, isResourceLocked } from '../../middleware/permissions';
+import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
 
-// All PM routes require auth and internal/partner user type
+// All PM routes require auth and internal/partner-tier user type
 router.use(requireAuth);
-router.use(requireUserType('internal', 'partner'));
+router.use(requireUserType('internal', ...PARTNER_USER_TYPES));
 
 const createSchema = z.object({
   workspace_id: z.string().uuid(),

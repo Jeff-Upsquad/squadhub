@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
+import { PARTNER_USER_TYPES, type UserType } from '@squadhub/shared';
 
 const router = Router();
 
@@ -20,7 +21,7 @@ router.get('/', async (req: Request, res: Response) => {
     let query = supabaseAdmin
       .from('users')
       .select('*', { count: 'exact' })
-      .eq('user_type', 'partner')
+      .in('user_type', PARTNER_USER_TYPES as unknown as string[])
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -110,7 +111,7 @@ router.post('/:userId/assignments', async (req: Request, res: Response) => {
       .eq('id', userId)
       .single();
 
-    if (!user || user.user_type !== 'partner') {
+    if (!user || !PARTNER_USER_TYPES.includes(user.user_type as UserType)) {
       res.status(400).json({ success: false, error: 'User is not a partner' });
       return;
     }
@@ -267,7 +268,7 @@ router.patch('/:userId/targeting', async (req: Request, res: Response) => {
       .select('id, user_type')
       .eq('id', userId)
       .maybeSingle();
-    if (!user || user.user_type !== 'partner') {
+    if (!user || !PARTNER_USER_TYPES.includes(user.user_type as UserType)) {
       res.status(404).json({ success: false, error: 'Partner not found' });
       return;
     }

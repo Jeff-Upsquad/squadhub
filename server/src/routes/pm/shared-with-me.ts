@@ -2,10 +2,11 @@ import { Router, Request, Response } from 'express';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
+import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
 router.use(requireAuth);
-router.use(requireUserType('internal', 'partner', 'client', 'client_staff'));
+router.use(requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_staff'));
 
 // GET /pm/shared-with-me?workspace_id=xxx
 // Returns lists and folders the user has direct membership on

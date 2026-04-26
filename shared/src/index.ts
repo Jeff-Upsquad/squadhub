@@ -4,7 +4,11 @@
 // ============================================================
 
 // ---- Users ----
-export type UserType = 'internal' | 'client' | 'client_staff' | 'partner';
+export type UserType = 'internal' | 'client' | 'client_staff' | 'partner' | 'partner_employee';
+
+// Roles that act with partner-level access. Use this anywhere you'd otherwise
+// hardcode 'partner' in role checks, so adding sub-roles in future is trivial.
+export const PARTNER_USER_TYPES: readonly UserType[] = ['partner', 'partner_employee'] as const;
 
 export interface User {
   id: string;

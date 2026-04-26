@@ -11,10 +11,11 @@ import {
   headR2Object,
   deleteR2Object,
 } from '../../r2';
+import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
 router.use(requireAuth);
-router.use(requireUserType('internal', 'partner', 'client', 'client_staff'));
+router.use(requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_staff'));
 
 async function getTaskListId(taskId: string): Promise<string | null> {
   const { data } = await supabaseAdmin.from('tasks').select('list_id').eq('id', taskId).single();

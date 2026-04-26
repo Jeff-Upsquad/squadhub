@@ -26,6 +26,7 @@ function accessLabelClass(label: AccessLabel): string {
 
 function userTypeLabel(userType: string): string {
   if (userType === 'client_staff') return 'Client Staff';
+  if (userType === 'partner_employee') return 'Partner Employee';
   return userType.charAt(0).toUpperCase() + userType.slice(1);
 }
 
@@ -391,6 +392,7 @@ function UserRow({
             ut === 'client' ? 'bg-emerald-50 text-emerald-600' :
             ut === 'client_staff' ? 'bg-teal-50 text-teal-600' :
             ut === 'partner' ? 'bg-purple-50 text-purple-600' :
+            ut === 'partner_employee' ? 'bg-violet-50 text-violet-600' :
             'bg-blue-50 text-blue-600';
           return (
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${cls}`}>
@@ -546,7 +548,7 @@ export default function AdminUsers() {
 
       {/* User type filter */}
       <div className="mb-4 flex gap-1">
-        {(['all', 'internal', 'client', 'client_staff', 'partner'] as const).map((tab) => (
+        {(['all', 'internal', 'client', 'client_staff', 'partner', 'partner_employee'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => { setUserTypeFilter(tab); setPage(1); }}

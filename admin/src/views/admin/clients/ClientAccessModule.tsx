@@ -329,15 +329,16 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
   );
 }
 
-const KNOWN_USER_TYPES = ['client', 'client_staff', 'internal', 'partner'];
+const KNOWN_USER_TYPES = ['client', 'client_staff', 'internal', 'partner', 'partner_employee'];
 const USER_TYPE_SECTIONS: {
   key: string;
   label: string;
   match: (t: string | null | undefined) => boolean;
 }[] = [
-  { key: 'client',       label: 'Client User',   match: (t) => t === 'client' },
-  { key: 'client_staff', label: 'Client Staff',  match: (t) => t === 'client_staff' },
-  { key: 'internal',     label: 'Squad Manager', match: (t) => t === 'internal' },
-  { key: 'partner',      label: 'Partner Users', match: (t) => t === 'partner' },
-  { key: 'other',        label: 'Other Users',   match: (t) => !KNOWN_USER_TYPES.includes(t ?? '') },
+  { key: 'client',           label: 'Client User',      match: (t) => t === 'client' },
+  { key: 'client_staff',     label: 'Client Staff',     match: (t) => t === 'client_staff' },
+  { key: 'internal',         label: 'Squad Manager',    match: (t) => t === 'internal' },
+  { key: 'partner',          label: 'Partner Users',    match: (t) => t === 'partner' },
+  { key: 'partner_employee', label: 'Partner Employees', match: (t) => t === 'partner_employee' },
+  { key: 'other',            label: 'Other Users',      match: (t) => !KNOWN_USER_TYPES.includes(t ?? '') },
 ];

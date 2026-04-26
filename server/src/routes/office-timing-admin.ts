@@ -9,7 +9,7 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
-const ELIGIBLE_USER_TYPES = ['internal', 'partner'] as const;
+const ELIGIBLE_USER_TYPES = ['internal', 'partner', 'partner_employee'] as const;
 
 // GET /admin/office-timing/users — list eligible users with their timing row
 router.get('/users', async (req: Request, res: Response) => {
@@ -24,7 +24,7 @@ router.get('/users', async (req: Request, res: Response) => {
       .neq('status', 'banned')
       .order('display_name');
 
-    if (userType === 'internal' || userType === 'partner') {
+    if (userType && (ELIGIBLE_USER_TYPES as readonly string[]).includes(userType)) {
       query = query.eq('user_type', userType);
     }
     if (search) {
@@ -96,7 +96,7 @@ router.put('/user/:userId', async (req: Request, res: Response) => {
     if (!ELIGIBLE_USER_TYPES.includes(targetUser.user_type as any)) {
       res.status(400).json({
         success: false,
-        error: 'Office timing is only configurable for internal and partner users',
+        error: 'Office timing is only configurable for internal, partner, and partner_employee users',
       });
       return;
     }

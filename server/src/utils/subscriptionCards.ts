@@ -143,7 +143,7 @@ export async function matchPartnersForCard(cardId: string): Promise<string[]> {
   let query = supabaseAdmin
     .from('users')
     .select('id, country_id, state_region, languages, tier, min_experience_years')
-    .eq('user_type', 'partner')
+    .in('user_type', ['partner', 'partner_employee'])
     .eq('status', 'active')
     .not('tier', 'is', null);
 

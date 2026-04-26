@@ -40,7 +40,7 @@ import EmergencyBanner from '../views/app/pm/EmergencyBanner';
 import InboxView from '../views/app/InboxView';
 import MyTasksView from '../views/app/MyTasksView';
 import LearningShell from '../views/app/learning/LearningShell';
-import { useUserType } from '../hooks/useUserType';
+import { useUserType, useIsPartner } from '../hooks/useUserType';
 import { useUnreadCount } from '../hooks/useUnreadCount';
 
 // ---- Types ----
@@ -191,6 +191,7 @@ export default function MainLayout() {
   const activeSpacePageId = usePMStore((s) => s.activeSpacePageId);
   const activeDesignFolderId = usePMStore((s) => s.activeDesignFolderId);
   const userType = useUserType();
+  const isPartner = useIsPartner();
   const [activeSection, setActiveSection] = useState<ActiveSection>('home');
   const [homeView, setHomeView] = useState<HomeView>('hub');
   const { data: unreadCount = 0 } = useUnreadCount();
@@ -582,15 +583,15 @@ export default function MainLayout() {
             <SalesLeadsPage />
           ) : homeView === 'hub' && !useRoleHome && (userType === 'client' || userType === 'client_staff') ? (
             <ClientDashboard />
-          ) : homeView === 'hub' && !useRoleHome && userType === 'partner' ? (
+          ) : homeView === 'hub' && !useRoleHome && isPartner ? (
             <PartnerDashboard />
-          ) : homeView === 'cashbook' && userType === 'partner' ? (
+          ) : homeView === 'cashbook' && isPartner ? (
             <PartnerCashBook />
           ) : homeView === 'cashbook' && (userType === 'client' || userType === 'client_staff') ? (
             <ClientCashBook />
           ) : homeView === 'published-cards' && (userType === 'client' || userType === 'client_staff') ? (
             <ClientPublishedCards />
-          ) : homeView === 'opportunities' && userType === 'partner' ? (
+          ) : homeView === 'opportunities' && isPartner ? (
             <PartnerOpportunities />
           ) : (
             (() => {

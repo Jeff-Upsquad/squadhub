@@ -11,7 +11,7 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   display_name: z.string().min(1).max(50),
-  user_type: z.enum(['internal', 'client', 'client_staff', 'partner']).optional().default('internal'),
+  user_type: z.enum(['internal', 'client', 'client_staff', 'partner', 'partner_employee']).optional().default('internal'),
 });
 
 const loginSchema = z.object({
@@ -97,7 +97,7 @@ router.post('/register', async (req: Request, res: Response) => {
       }
 
       // If invitation links to a client, create the partner-client assignment
-      if (invitation.client_id && (userType === 'partner' || userType === 'client' || userType === 'client_staff')) {
+      if (invitation.client_id && (userType === 'partner' || userType === 'partner_employee' || userType === 'client' || userType === 'client_staff')) {
         await supabaseAdmin.from('partner_client_assignments').insert({
           user_id: authData.user.id,
           client_id: invitation.client_id,
