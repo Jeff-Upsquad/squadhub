@@ -19,6 +19,7 @@ type TalentHit = {
   name: string;
   email: string | null;
   country: string | null;
+  tier: string | null;
 };
 
 export default function AssignRecipientPicker({
@@ -281,11 +282,18 @@ function TalentList({
               <p className="truncate text-sm text-[#0F172B]">{t.name || 'Unnamed talent'}</p>
               {t.email && <p className="truncate text-[11px] text-[#90A1B9]">{t.email}</p>}
             </div>
-            {t.country && (
-              <span className="shrink-0 rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
-                {t.country}
-              </span>
-            )}
+            <div className="flex shrink-0 items-center gap-1.5">
+              {t.tier && (
+                <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
+                  {t.tier}
+                </span>
+              )}
+              {t.country && (
+                <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
+                  {t.country}
+                </span>
+              )}
+            </div>
           </button>
         </li>
       ))}
