@@ -731,11 +731,18 @@ export default function SubscriptionCardDrawer({
                   ? 'Soft publish subscription card'
                   : 'Publish subscription card'
               }
-              description={
-                pendingPublishMode === 'manual'
-                  ? "Soft publish — no auto fan-out. The card will appear in the Published Cards list and on SquadHire's admin, but partners and talents won't see it until you hand-pick them from the recipients panel. You can recall it only before anyone accepts."
-                  : `This will send the card to all matching partners (tiers ${targetTiers.length === 0 ? 'Any' : targetTiers.join(', ')}, min ${parseInt(minExp || '0', 10) || 0}y, ${targetCountryIds.length || 'all'} countries). You can recall it only before anyone accepts.`
-              }
+              description={(() => {
+                const baseDescription =
+                  pendingPublishMode === 'manual'
+                    ? "Soft publish — no auto fan-out. The card will appear in the Published Cards list and on SquadHire's admin, but partners and talents won't see it until you hand-pick them from the recipients panel. You can recall it only before anyone accepts."
+                    : `This will send the card to all matching partners (tiers ${targetTiers.length === 0 ? 'Any' : targetTiers.join(', ')}, min ${parseInt(minExp || '0', 10) || 0}y, ${targetCountryIds.length || 'all'} countries). You can recall it only before anyone accepts.`;
+                // Loud-on-purpose warning when no SquadHire categories are
+                // selected — silent skip is the bug we're guarding against.
+                if (squadhireCategoryIds.length === 0) {
+                  return `⚠ This card will NOT be sent to SquadHire (no SquadHire categories selected) — talents won't see it. Cancel and pick a category if that's not intentional. ${baseDescription}`;
+                }
+                return baseDescription;
+              })()}
               confirmWord={pendingPublishMode === 'manual' ? 'SOFT PUBLISH' : 'PUBLISH'}
               loading={publishMutation.isPending}
               onClose={() => setPendingPublishMode(null)}

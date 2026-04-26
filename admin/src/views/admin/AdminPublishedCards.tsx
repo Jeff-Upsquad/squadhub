@@ -22,6 +22,10 @@ export type PublishedCard = {
   custom_deliverables: { id: string; name: string; kind: 'hours' | 'item'; per_day: number; per_week: number; per_month: number }[];
   disabled_default_deliverable_ids: string[];
   partner_price_override: number | null;
+  squadhire_category_ids?: string[] | null;
+  squadhire_synced_at?: string | null;
+  squadhire_sync_attempts?: number | null;
+  squadhire_sync_last_error?: string | null;
   submission?: {
     id: string;
     business_name: string;
@@ -43,6 +47,20 @@ export type PublishedCard = {
   };
   published_by_user?: { id: string; display_name: string | null; email: string | null } | null;
 };
+
+/**
+ * Three states per card on the SquadHire delivery axis:
+ *  - 'skipped'   — card has no SquadHire categories; webhook never fires by design.
+ *  - 'pending'   — categories present, webhook not yet delivered (in retry loop).
+ *  - 'delivered' — squadhire_synced_at set; nothing to surface (default, no chip).
+ */
+function squadhireDeliveryState(card: PublishedCard): 'skipped' | 'pending' | 'delivered' {
+  if (card.squadhire_synced_at) return 'delivered';
+  const hasCategories =
+    Array.isArray(card.squadhire_category_ids) && card.squadhire_category_ids.length > 0;
+  if (!hasCategories) return 'skipped';
+  return 'pending';
+}
 
 type SalesPerson = { id: string; display_name: string | null; email: string | null };
 
@@ -262,6 +280,7 @@ function PublishedCardRow({ card, onOpen, showCancelledTag }: { card: PublishedC
   const partners = card.recipient_counts?.partners ?? { pending: 0, accepted: 0, rejected: 0 };
   const talents = card.recipient_counts?.talents ?? { accepted: 0, rejected: 0 };
   const publisher = card.published_by_user;
+  const deliveryState = squadhireDeliveryState(card);
 
   return (
     <button
@@ -292,6 +311,26 @@ function PublishedCardRow({ card, onOpen, showCancelledTag }: { card: PublishedC
         {showCancelledTag && (
           <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600">
             Cancelled
+          </span>
+        )}
+        {deliveryState === 'skipped' && (
+          <span
+            className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800"
+            title="No SquadHire categories were selected, so this card was never delivered to SquadHire. Talents will not see it. Recall, edit categories, then re-publish to deliver."
+          >
+            Not on SquadHire
+          </span>
+        )}
+        {deliveryState === 'pending' && (
+          <span
+            className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-800"
+            title={
+              card.squadhire_sync_last_error
+                ? `SquadHire delivery failed: ${card.squadhire_sync_last_error} (${card.squadhire_sync_attempts ?? 0} attempts). Retry sweeper runs every 5 min.`
+                : `SquadHire delivery in progress (${card.squadhire_sync_attempts ?? 0} attempts so far). Retry sweeper runs every 5 min.`
+            }
+          >
+            SquadHire pending
           </span>
         )}
         <CountChip label="Partners" accepted={partners.accepted} rejected={partners.rejected} pending={partners.pending} />
