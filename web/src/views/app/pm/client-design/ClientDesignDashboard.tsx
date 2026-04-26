@@ -2,16 +2,15 @@ import { useEffect, useState } from 'react';
 import './design.css';
 import { useFolderTasks } from '../../../../hooks/useFolderTasks';
 import { useClientDesignPlan } from '../../../../hooks/useClientDesignPlan';
+import { usePMStore } from '../../../../stores/pmStore';
 import DashboardTab from './tabs/DashboardTab';
 import RequestsTab from './tabs/RequestsTab';
 import BoardTab from './tabs/BoardTab';
 import ReportsTab from './tabs/ReportsTab';
 import CompletedTab from './tabs/CompletedTab';
 import NewRequestModal from './NewRequestModal';
-import RequestDetailDrawer from './RequestDetailDrawer';
 import SquadShareModal from './SquadShareModal';
 import { IconPlus, IconSearch, IconKeyboard, IconShare } from './atoms/Icons';
-import type { RequestRowData } from './atoms/RequestRow';
 
 type TabKey = 'dashboard' | 'requests' | 'board' | 'reports' | 'completed';
 const TAB_STORAGE = 'cd.tab';
@@ -22,12 +21,13 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
     const v = window.localStorage.getItem(TAB_STORAGE);
     return (v as TabKey) || 'dashboard';
   });
-  const [openRequest, setOpenRequest] = useState<RequestRowData | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [showShare, setShowShare] = useState(false);
 
+  const setActiveTask = usePMStore((s) => s.setActiveTask);
   const { folder, requests, byStatus, listByStatus, isLoading } = useFolderTasks(folderId);
   const plan = useClientDesignPlan();
+  const openRequest = (id: string) => setActiveTask(id);
 
   useEffect(() => {
     if (typeof window !== 'undefined') window.localStorage.setItem(TAB_STORAGE, tab);
@@ -43,7 +43,6 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
       }
       if (e.key === 'Escape') {
         setShowNew(false);
-        setOpenRequest(null);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -132,23 +131,23 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
               <DashboardTab
                 requests={requests}
                 plan={plan}
-                onOpenRequest={setOpenRequest}
+                onOpenRequest={(r) => openRequest(r.id)}
                 onSwitchTab={(t) => setTab(t as TabKey)}
               />
             )}
             {tab === 'requests' && (
-              <RequestsTab requests={requests} onOpenRequest={setOpenRequest} />
+              <RequestsTab requests={requests} onOpenRequest={(r) => openRequest(r.id)} />
             )}
             {tab === 'board' && (
               <BoardTab
                 byStatus={byStatus}
-                onOpenRequest={setOpenRequest}
+                onOpenRequest={(r) => openRequest(r.id)}
                 onNewRequest={() => setShowNew(true)}
               />
             )}
             {tab === 'reports' && <ReportsTab requests={requests} plan={plan} />}
             {tab === 'completed' && (
-              <CompletedTab requests={requests} onOpenRequest={setOpenRequest} />
+              <CompletedTab requests={requests} onOpenRequest={(r) => openRequest(r.id)} />
             )}
           </>
         )}
@@ -160,9 +159,6 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
           onClose={() => setShowNew(false)}
           onSubmitted={() => setShowNew(false)}
         />
-      )}
-      {openRequest && (
-        <RequestDetailDrawer request={openRequest} onClose={() => setOpenRequest(null)} />
       )}
       {showShare && folder && (
         <SquadShareModal
