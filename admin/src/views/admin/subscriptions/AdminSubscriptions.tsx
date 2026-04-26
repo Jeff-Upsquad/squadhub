@@ -365,6 +365,17 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
         </button>
       </div>
 
+      {/* SquadHire Profiles — top, compact dropdown */}
+      <section className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div>
+          <h2 className="font-[family-name:var(--font-display)] text-sm font-semibold text-[#0F172B]">SquadHire Profiles</h2>
+          <p className="text-[11px] text-[#62748E]">Pre-fills new subscription cards. Sales can override per card.</p>
+        </div>
+        <div className="ml-auto min-w-[260px]">
+          <SquadHireProfilesPanel subscriptionId={subscription.id} />
+        </div>
+      </section>
+
       {/* Plans, grouped by tier */}
       <section>
         <div className="mb-3 flex items-center justify-between">
@@ -414,15 +425,6 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
       <section>
         <h2 className="mb-3 font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">Deliverable Types</h2>
         <DeliverableTypesEditor subscriptionId={subscription.id} types={subscription.deliverable_types || []} />
-      </section>
-
-      {/* SquadHire Profiles */}
-      <section>
-        <h2 className="mb-1 font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">SquadHire Profiles</h2>
-        <p className="mb-3 text-xs text-[#62748E]">
-          These categories pre-fill new subscription cards for this product. Sales can still override per card.
-        </p>
-        <SquadHireProfilesPanel subscriptionId={subscription.id} />
       </section>
     </div>
   );
