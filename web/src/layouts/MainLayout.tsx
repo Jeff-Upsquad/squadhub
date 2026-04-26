@@ -27,6 +27,7 @@ import PartnerDashboard from '../views/app/partner/PartnerDashboard';
 import PartnerCashBook from '../views/app/partner/PartnerCashBook';
 import PartnerOpportunities from '../views/app/partner/PartnerOpportunities';
 import ClientCashBook from '../views/app/client/ClientCashBook';
+import ClientPublishedCards from '../views/app/client/ClientPublishedCards';
 import ClientDesignDashboard from '../views/app/pm/client-design/ClientDesignDashboard';
 import MemberHome from '../views/app/home/MemberHome';
 import UserHome from '../views/app/home/UserHome';
@@ -44,7 +45,7 @@ import { useUnreadCount } from '../hooks/useUnreadCount';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards';
 
 // ---- Role Home lookup ----
 // Picks which Home component to render based on the role's home_view.
@@ -587,6 +588,8 @@ export default function MainLayout() {
             <PartnerCashBook />
           ) : homeView === 'cashbook' && (userType === 'client' || userType === 'client_staff') ? (
             <ClientCashBook />
+          ) : homeView === 'published-cards' && (userType === 'client' || userType === 'client_staff') ? (
+            <ClientPublishedCards />
           ) : homeView === 'opportunities' && userType === 'partner' ? (
             <PartnerOpportunities />
           ) : (

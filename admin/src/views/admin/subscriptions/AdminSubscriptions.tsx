@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
+import SquadHireProfilesPanel from './SquadHireProfilesPanel';
 import type {
   Subscription,
   SubscriptionPlan,
@@ -413,6 +414,15 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
       <section>
         <h2 className="mb-3 font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">Deliverable Types</h2>
         <DeliverableTypesEditor subscriptionId={subscription.id} types={subscription.deliverable_types || []} />
+      </section>
+
+      {/* SquadHire Profiles */}
+      <section>
+        <h2 className="mb-1 font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">SquadHire Profiles</h2>
+        <p className="mb-3 text-xs text-[#62748E]">
+          These categories pre-fill new subscription cards for this product. Sales can still override per card.
+        </p>
+        <SquadHireProfilesPanel subscriptionId={subscription.id} />
       </section>
     </div>
   );

@@ -401,6 +401,23 @@ export default function HomeSidebar({
             </button>
           )}
 
+          {isClient && (
+            <button
+              onClick={() => onChangeView('published-cards')}
+              className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
+                homeView === 'published-cards'
+                  ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+                  : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+              }`}
+              style={homeView === 'published-cards' ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+            >
+              <svg className={`h-[14px] w-[14px] shrink-0 ${homeView === 'published-cards' ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`} fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 7.5h19.5M3.75 6h16.5a1.5 1.5 0 011.5 1.5v10.5a1.5 1.5 0 01-1.5 1.5H3.75a1.5 1.5 0 01-1.5-1.5V7.5A1.5 1.5 0 013.75 6zm3 5.25h4.5m-4.5 3h7.5" />
+              </svg>
+              Published Cards
+            </button>
+          )}
+
           {isPartner && (
             <PartnerOpportunitiesLink
               active={homeView === 'opportunities'}

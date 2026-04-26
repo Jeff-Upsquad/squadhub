@@ -208,6 +208,45 @@ async function respond(
       res.status(500).json({ success: false, error: updErr.message });
       return;
     }
+
+    // On accept, auto-share this partner with the card's owning client
+    // (mirrors the manual partner_client_assignments admin flow). Idempotent
+    // via UNIQUE(user_id, client_id). Silently skipped if the lead hasn't
+    // been converted to a client yet.
+    if (newStatus === 'accepted') {
+      try {
+        const { data: cardRow } = await supabaseAdmin
+          .from('subscription_cards')
+          .select('submission_subscription_id')
+          .eq('id', existing.card_id)
+          .maybeSingle();
+        if (cardRow?.submission_subscription_id) {
+          const { data: staged } = await supabaseAdmin
+            .from('client_submission_subscriptions')
+            .select('submission_id')
+            .eq('id', cardRow.submission_subscription_id)
+            .maybeSingle();
+          if (staged?.submission_id) {
+            const { data: client } = await supabaseAdmin
+              .from('clients')
+              .select('id')
+              .eq('submission_id', staged.submission_id)
+              .maybeSingle();
+            if (client?.id) {
+              await supabaseAdmin
+                .from('partner_client_assignments')
+                .upsert(
+                  { user_id: req.userId!, client_id: client.id, role: null },
+                  { onConflict: 'user_id,client_id', ignoreDuplicates: true }
+                );
+            }
+          }
+        }
+      } catch (assignErr) {
+        console.error('[partner accept] auto-share to client failed:', assignErr);
+      }
+    }
+
     res.json({ success: true, data: updated });
   } catch (err: any) {
     console.error(`Partner respond (${newStatus}) error:`, err);
