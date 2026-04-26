@@ -102,13 +102,15 @@ export default function PublishedCardRecipientsPanel({
               <Section title="Talents">
                 <Subgroup label="Accepted" items={talentGroups.accepted.map((t) => ({
                   key: t.external_user_id,
-                  name: t.name || `SquadHire talent ${t.external_user_id.slice(0, 8)}`,
+                  name: t.name || 'Unknown talent',
+                  subtitle: t.external_user_id.slice(0, 8),
                   status: t.status,
                   responded_at: t.responded_at,
                 }))} />
                 <Subgroup label="Rejected" items={talentGroups.rejected.map((t) => ({
                   key: t.external_user_id,
-                  name: t.name || `SquadHire talent ${t.external_user_id.slice(0, 8)}`,
+                  name: t.name || 'Unknown talent',
+                  subtitle: t.external_user_id.slice(0, 8),
                   status: t.status,
                   responded_at: t.responded_at,
                 }))} />
@@ -135,7 +137,7 @@ function Subgroup({
   items,
 }: {
   label: 'Accepted' | 'Rejected' | 'Pending';
-  items: { key: string; name: string; status: 'accepted' | 'rejected' | 'pending'; responded_at: string | null }[];
+  items: { key: string; name: string; subtitle?: string | null; status: 'accepted' | 'rejected' | 'pending'; responded_at: string | null }[];
 }) {
   if (items.length === 0) {
     return (
@@ -155,6 +157,9 @@ function Subgroup({
           <li key={it.key} className="flex items-center justify-between gap-3 px-3 py-2">
             <div className="min-w-0 flex-1 truncate">
               <p className="truncate text-sm text-[var(--sh-ink)]">{it.name}</p>
+              {it.subtitle && (
+                <p className="truncate text-[11px] font-mono text-[var(--sh-ink-4)]">{it.subtitle}</p>
+              )}
               {it.responded_at && (
                 <p className="text-[11px] text-[var(--sh-ink-4)]">{formatRelative(it.responded_at)}</p>
               )}
