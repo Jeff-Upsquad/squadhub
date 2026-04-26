@@ -492,3 +492,57 @@ export async function notifySquadhireOfManualAssignment(
     clearTimeout(timer);
   }
 }
+
+// ------------------------------------------------------------
+// Public: outbound notification when an admin removes a previously-
+// assigned talent. SquadHire deletes its mirror recipient row so the
+// card stops appearing in the talent's subscription tab. Best-effort,
+// single attempt. Idempotent on the receiving side.
+// ------------------------------------------------------------
+
+export async function notifySquadhireOfManualRemoval(
+  cardId: string,
+  talentId: string,
+): Promise<void> {
+  const baseUrl = config.squadhireWebhookUrl;
+  if (!baseUrl) {
+    console.warn('[squadhire-webhook] manual-removal skipped: url not configured');
+    return;
+  }
+  if (!config.squadhireWebhookSecret) {
+    console.warn('[squadhire-webhook] manual-removal skipped: secret not configured');
+    return;
+  }
+
+  const url = baseUrl.endsWith('/')
+    ? `${baseUrl}manual-assignments/remove`
+    : `${baseUrl}/manual-assignments/remove`;
+  const body = {
+    type: 'manual_assignment_removal',
+    card_id: cardId,
+    talent_id: talentId,
+    removed_at: new Date().toISOString(),
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.warn(`[squadhire-webhook] manual-removal http_${res.status}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[squadhire-webhook] manual-removal failed', msg);
+  } finally {
+    clearTimeout(timer);
+  }
+}
