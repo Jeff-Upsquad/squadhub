@@ -5,14 +5,37 @@ import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
 import AdminPublishedCardRecipientsPanel from './AdminPublishedCardRecipientsPanel';
 
-type PublishedCard = {
+export type PublishedCard = {
   id: string;
   state: 'published' | 'closed';
+  distribution: 'broadcast' | 'manual';
   published_at: string | null;
-  submission?: { id: string; business_name: string } | null;
+  working_days: string[];
+  brand_name: string | null;
+  business_nature: string | null;
+  notes: string | null;
+  target_tiers: string[];
+  min_experience_years: number;
+  target_languages: string[];
+  target_country_ids: string[];
+  target_regions: { country_id: string; region: string }[];
+  custom_deliverables: { id: string; name: string; kind: 'hours' | 'item'; per_day: number; per_week: number; per_month: number }[];
+  disabled_default_deliverable_ids: string[];
+  partner_price_override: number | null;
+  submission?: {
+    id: string;
+    business_name: string;
+    country_id?: string;
+    country?: { id: string; name: string; currency: string } | null;
+  } | null;
   submission_subscription?: {
     subscription?: { id: string; name: string } | null;
-    plan?: { id: string; plan: string; tier: string } | null;
+    plan?: {
+      id: string;
+      plan: string;
+      tier: string;
+      pricing?: { country_id: string; price: number; country?: { id: string; name: string; currency: string } | null }[];
+    } | null;
   } | null;
   recipient_counts?: {
     partners: { pending: number; accepted: number; rejected: number };
@@ -25,12 +48,37 @@ type SalesPerson = { id: string; display_name: string | null; email: string | nu
 
 function formatPublishedAt(iso: string | null): string {
   if (!iso) return '';
-  const then = new Date(iso).getTime();
-  const days = Math.floor((Date.now() - then) / 86400000);
-  if (days < 1) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const date = new Date(iso);
+  const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const days = Math.floor((Date.now() - date.getTime()) / 86400000);
+  if (days < 1) return `today at ${time}`;
+  if (days === 1) return `yesterday at ${time}`;
+  if (days < 7) return `${days}d ago at ${time}`;
+  return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${time}`;
+}
+
+type GroupBy = 'status' | 'date';
+
+function bucketByDate<T extends { state: 'published' | 'closed'; published_at: string | null }>(
+  cards: T[],
+): { today: T[]; yesterday: T[]; thisWeek: T[]; earlier: T[] } {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfYesterday = startOfToday - 86400000;
+  const startOfWeek = startOfToday - 6 * 86400000;
+  const today: T[] = [];
+  const yesterday: T[] = [];
+  const thisWeek: T[] = [];
+  const earlier: T[] = [];
+  for (const c of cards) {
+    if (!c.published_at) { earlier.push(c); continue; }
+    const t = new Date(c.published_at).getTime();
+    if (t >= startOfToday) today.push(c);
+    else if (t >= startOfYesterday) yesterday.push(c);
+    else if (t >= startOfWeek) thisWeek.push(c);
+    else earlier.push(c);
+  }
+  return { today, yesterday, thisWeek, earlier };
 }
 
 function publishedCardTitle(card: PublishedCard): string {
@@ -43,6 +91,7 @@ export default function AdminPublishedCards() {
   const [stateFilter, setStateFilter] = useState<'all' | 'published' | 'closed'>('all');
   const [publishedBy, setPublishedBy] = useState<string>('');
   const [search, setSearch] = useState<string>('');
+  const [groupBy, setGroupBy] = useState<GroupBy>('status');
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
   const { data: cardsRes, isLoading } = useQuery({
@@ -68,6 +117,8 @@ export default function AdminPublishedCards() {
     active: cards.filter((c) => c.state === 'published'),
     cancelled: cards.filter((c) => c.state === 'closed'),
   }), [cards]);
+
+  const dateGroups = useMemo(() => bucketByDate(cards), [cards]);
 
   const selectedCard = useMemo(
     () => cards.find((c) => c.id === selectedCardId) || null,
@@ -108,6 +159,14 @@ export default function AdminPublishedCards() {
             placeholder="Search business name…"
             className="flex-1 min-w-[200px] rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder:text-[#90A1B9] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
           />
+          <select
+            value={groupBy}
+            onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+            className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
+          >
+            <option value="status">Group by status</option>
+            <option value="date">Group by date</option>
+          </select>
         </div>
       </div>
 
@@ -120,11 +179,30 @@ export default function AdminPublishedCards() {
           </div>
         ) : (
           <div className="space-y-6">
-            {groups.active.length > 0 && (
-              <CardGroup label="Active" color="#10B981" items={groups.active} onOpen={setSelectedCardId} />
-            )}
-            {groups.cancelled.length > 0 && (
-              <CardGroup label="Cancelled" color="#6B7280" items={groups.cancelled} onOpen={setSelectedCardId} />
+            {groupBy === 'status' ? (
+              <>
+                {groups.active.length > 0 && (
+                  <CardGroup label="Active" color="#10B981" items={groups.active} onOpen={setSelectedCardId} showCancelledTag={false} />
+                )}
+                {groups.cancelled.length > 0 && (
+                  <CardGroup label="Cancelled" color="#6B7280" items={groups.cancelled} onOpen={setSelectedCardId} showCancelledTag={false} />
+                )}
+              </>
+            ) : (
+              <>
+                {dateGroups.today.length > 0 && (
+                  <CardGroup label="Today" color="#475569" items={dateGroups.today} onOpen={setSelectedCardId} showCancelledTag />
+                )}
+                {dateGroups.yesterday.length > 0 && (
+                  <CardGroup label="Yesterday" color="#475569" items={dateGroups.yesterday} onOpen={setSelectedCardId} showCancelledTag />
+                )}
+                {dateGroups.thisWeek.length > 0 && (
+                  <CardGroup label="Earlier this week" color="#475569" items={dateGroups.thisWeek} onOpen={setSelectedCardId} showCancelledTag />
+                )}
+                {dateGroups.earlier.length > 0 && (
+                  <CardGroup label="Earlier" color="#475569" items={dateGroups.earlier} onOpen={setSelectedCardId} showCancelledTag />
+                )}
+              </>
             )}
           </div>
         )}
@@ -132,7 +210,7 @@ export default function AdminPublishedCards() {
 
       {selectedCard && (
         <AdminPublishedCardRecipientsPanel
-          cardId={selectedCard.id}
+          card={selectedCard}
           title={publishedCardTitle(selectedCard)}
           onClose={() => setSelectedCardId(null)}
         />
@@ -142,12 +220,13 @@ export default function AdminPublishedCards() {
 }
 
 function CardGroup({
-  label, color, items, onOpen,
+  label, color, items, onOpen, showCancelledTag,
 }: {
   label: string;
   color: string;
   items: PublishedCard[];
   onOpen: (id: string) => void;
+  showCancelledTag: boolean;
 }) {
   return (
     <div>
@@ -163,14 +242,19 @@ function CardGroup({
       </div>
       <div className="space-y-1.5">
         {items.map((card) => (
-          <PublishedCardRow key={card.id} card={card} onOpen={() => onOpen(card.id)} />
+          <PublishedCardRow
+            key={card.id}
+            card={card}
+            onOpen={() => onOpen(card.id)}
+            showCancelledTag={showCancelledTag && card.state === 'closed'}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function PublishedCardRow({ card, onOpen }: { card: PublishedCard; onOpen: () => void }) {
+function PublishedCardRow({ card, onOpen, showCancelledTag }: { card: PublishedCard; onOpen: () => void; showCancelledTag: boolean }) {
   const business = card.submission?.business_name || 'Unknown';
   const subName = card.submission_subscription?.subscription?.name || '—';
   const plan = card.submission_subscription?.plan;
@@ -205,6 +289,11 @@ function PublishedCardRow({ card, onOpen }: { card: PublishedCard; onOpen: () =>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
+        {showCancelledTag && (
+          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+            Cancelled
+          </span>
+        )}
         <CountChip label="Partners" accepted={partners.accepted} rejected={partners.rejected} pending={partners.pending} />
         <CountChip label="Talents" accepted={talents.accepted} rejected={talents.rejected} />
       </div>
