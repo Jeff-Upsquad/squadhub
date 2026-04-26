@@ -39,6 +39,11 @@ export interface SquadhireCardPayload {
   // seeing the card. Always sent so reruns of the same delivery stay
   // idempotent.
   status: 'active' | 'archived';
+  // `broadcast` (default) = SquadHire broadcasts the card to talents.
+  // `manual` = card appears in SquadHire's admin Published Cards list
+  // but is NOT broadcast — talents only see it if hand-picked. Mirrors
+  // the SquadHub side of the same lever. Always sent.
+  distribution: 'broadcast' | 'manual';
 }
 
 interface AttemptOutcome {
@@ -62,7 +67,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override',
+      'id, state, distribution, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -265,12 +270,16 @@ export async function buildSquadhirePayloadForCard(
     content.hours_label = hoursLabel;
   }
 
+  const distribution: 'broadcast' | 'manual' =
+    card.distribution === 'manual' ? 'manual' : 'broadcast';
+
   return {
     external_id: card.id as string,
     content,
     match_rules,
     published_at: publishedAt,
     status,
+    distribution,
   };
 }
 
@@ -420,4 +429,57 @@ export function startSquadhireSyncSweeper(): NodeJS.Timeout {
   const handle = setInterval(tick, SWEEPER_INTERVAL_MS);
   setTimeout(tick, 15_000);
   return handle;
+}
+
+// ------------------------------------------------------------
+// Public: outbound notification when an admin hand-picks a talent
+// for a card from SquadHub. SquadHire upserts a local card-talent
+// assignment row on its side and surfaces the card in the talent's
+// subscription tab. Best-effort, single attempt. Idempotent on the
+// receiving side via (card_id, talent_id).
+// ------------------------------------------------------------
+
+export async function notifySquadhireOfManualAssignment(
+  cardId: string,
+  talentId: string,
+): Promise<void> {
+  const baseUrl = config.squadhireWebhookUrl;
+  if (!baseUrl) {
+    console.warn('[squadhire-webhook] manual-assignment skipped: url not configured');
+    return;
+  }
+  if (!config.squadhireWebhookSecret) {
+    console.warn('[squadhire-webhook] manual-assignment skipped: secret not configured');
+    return;
+  }
+
+  const url = baseUrl.endsWith('/') ? `${baseUrl}manual-assignments` : `${baseUrl}/manual-assignments`;
+  const body = {
+    type: 'manual_assignment',
+    card_id: cardId,
+    talent_id: talentId,
+    assigned_at: new Date().toISOString(),
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.warn(`[squadhire-webhook] manual-assignment http_${res.status}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[squadhire-webhook] manual-assignment failed', msg);
+  } finally {
+    clearTimeout(timer);
+  }
 }

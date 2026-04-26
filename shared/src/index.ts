@@ -1136,6 +1136,13 @@ export type PartnerTier = 'Junior' | 'Pro' | 'Elite' | 'Custom';
 export const PARTNER_TIERS: PartnerTier[] = ['Junior', 'Pro', 'Elite', 'Custom'];
 
 export type SubscriptionCardState = 'draft' | 'published' | 'closed';
+/**
+ * `broadcast` (default) — at publish time the server fans out to all matching
+ * partners and SquadHire broadcasts to its talents. `manual` — no fan-out;
+ * the card is visible in admin Published Cards lists but recipients must be
+ * hand-picked via the assign endpoints.
+ */
+export type SubscriptionCardDistribution = 'broadcast' | 'manual';
 export type RecipientStatus = 'pending' | 'accepted' | 'rejected';
 export type WeekDay = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
 export const WEEK_DAYS: WeekDay[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -1163,6 +1170,7 @@ export interface SubscriptionCard {
   id: string;
   submission_subscription_id: string;
   state: SubscriptionCardState;
+  distribution: SubscriptionCardDistribution;
   working_days: WeekDay[];
   brand_name: string | null;
   business_nature: string | null;

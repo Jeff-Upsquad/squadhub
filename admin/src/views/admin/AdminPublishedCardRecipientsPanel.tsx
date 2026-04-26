@@ -1,21 +1,24 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
+import AssignRecipientPicker from './AssignRecipientPicker';
 
 type PartnerRecipient = {
   id: string;
   name: string;
   status: 'pending' | 'accepted' | 'rejected';
   responded_at: string | null;
+  assigned_manually?: boolean;
 };
 
 type TalentRecipient = {
   external_user_id: string;
   name: string | null;
-  status: 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'rejected';
   responded_at: string | null;
+  assigned_manually?: boolean;
 };
 
 type RecipientsResponse = {
@@ -52,6 +55,8 @@ export default function AdminPublishedCardRecipientsPanel({
   title: string;
   onClose: () => void;
 }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['admin-card-recipients', cardId],
     queryFn: () =>
@@ -68,7 +73,8 @@ export default function AdminPublishedCardRecipientsPanel({
   const talentGroups = useMemo(() => {
     const accepted = (data?.talents || []).filter((t) => t.status === 'accepted');
     const rejected = (data?.talents || []).filter((t) => t.status === 'rejected');
-    return { accepted, rejected };
+    const pending = (data?.talents || []).filter((t) => t.status === 'pending');
+    return { accepted, rejected, pending };
   }, [data]);
 
   return (
@@ -83,6 +89,15 @@ export default function AdminPublishedCardRecipientsPanel({
             </svg>
           </button>
         </div>
+        <div className="flex items-center justify-between border-b border-[#E2E8F0] bg-[#F8FAFC] px-5 py-2.5">
+          <p className="text-xs text-[#62748E]">Hand-pick a partner or talent for this card.</p>
+          <button
+            onClick={() => setPickerOpen(true)}
+            className="rounded-md bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+          >
+            Assign
+          </button>
+        </div>
         <div className="flex-1 overflow-y-auto p-5 space-y-6 text-sm">
           {isLoading ? (
             <p className="text-center text-xs text-[#90A1B9]">Loading…</p>
@@ -92,13 +107,13 @@ export default function AdminPublishedCardRecipientsPanel({
             <>
               <Section title="Partners">
                 <Subgroup label="Accepted" items={partnerGroups.accepted.map((p) => ({
-                  key: p.id, name: p.name, status: p.status, responded_at: p.responded_at,
+                  key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
                 }))} />
                 <Subgroup label="Rejected" items={partnerGroups.rejected.map((p) => ({
-                  key: p.id, name: p.name, status: p.status, responded_at: p.responded_at,
+                  key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
                 }))} />
                 <Subgroup label="Pending" items={partnerGroups.pending.map((p) => ({
-                  key: p.id, name: p.name, status: p.status, responded_at: null,
+                  key: p.id, name: p.name, status: p.status, responded_at: null, assigned_manually: !!p.assigned_manually,
                 }))} />
               </Section>
               <Section title="Talents">
@@ -108,6 +123,7 @@ export default function AdminPublishedCardRecipientsPanel({
                   subtitle: t.external_user_id.slice(0, 8),
                   status: t.status,
                   responded_at: t.responded_at,
+                  assigned_manually: !!t.assigned_manually,
                 }))} />
                 <Subgroup label="Rejected" items={talentGroups.rejected.map((t) => ({
                   key: t.external_user_id,
@@ -115,12 +131,24 @@ export default function AdminPublishedCardRecipientsPanel({
                   subtitle: t.external_user_id.slice(0, 8),
                   status: t.status,
                   responded_at: t.responded_at,
+                  assigned_manually: !!t.assigned_manually,
+                }))} />
+                <Subgroup label="Pending" items={talentGroups.pending.map((t) => ({
+                  key: t.external_user_id,
+                  name: t.name || 'Unknown talent',
+                  subtitle: t.external_user_id.slice(0, 8),
+                  status: t.status,
+                  responded_at: null,
+                  assigned_manually: !!t.assigned_manually,
                 }))} />
               </Section>
             </>
           )}
         </div>
       </div>
+      {pickerOpen && (
+        <AssignRecipientPicker cardId={cardId} onClose={() => setPickerOpen(false)} />
+      )}
     </div>
   );
 }
@@ -139,7 +167,7 @@ function Subgroup({
   items,
 }: {
   label: 'Accepted' | 'Rejected' | 'Pending';
-  items: { key: string; name: string; subtitle?: string | null; status: 'accepted' | 'rejected' | 'pending'; responded_at: string | null }[];
+  items: { key: string; name: string; subtitle?: string | null; status: 'accepted' | 'rejected' | 'pending'; responded_at: string | null; assigned_manually?: boolean }[];
 }) {
   if (items.length === 0) {
     return (
@@ -166,9 +194,19 @@ function Subgroup({
                 <p className="text-[11px] text-[#90A1B9]">{formatRelative(it.responded_at)}</p>
               )}
             </div>
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_CHIP[it.status]}`}>
-              {it.status}
-            </span>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {it.assigned_manually && (
+                <span
+                  className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]"
+                  title="Hand-picked by an admin (not auto-broadcast)"
+                >
+                  Manual
+                </span>
+              )}
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_CHIP[it.status]}`}>
+                {it.status}
+              </span>
+            </div>
           </li>
         ))}
       </ul>
