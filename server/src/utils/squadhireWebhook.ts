@@ -62,7 +62,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override',
+      'id, state, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -112,13 +112,24 @@ export async function buildSquadhirePayloadForCard(
       supabaseAdmin.from('client_submissions').select('country_id').eq('id', staged.submission_id).maybeSingle(),
       supabaseAdmin
         .from('subscription_plan_deliverables')
-        .select('kind, per_day, per_week, per_month')
+        .select('id, kind, per_day, per_week, per_month')
         .eq('plan_id', staged.plan_id),
     ]);
     subscriptionName = sub?.name ?? null;
     planName = plan?.name ?? null;
     leadCountryId = (submission?.country_id as string | undefined) ?? null;
-    const hoursRow = (planDelivs ?? []).find((d: any) => d.kind === 'hours');
+    // Respect the per-card disable flag — when the salesperson toggles off
+    // the plan's hours-kind deliverable on a card, don't fold it into the
+    // payload. (SquadHub's editor copy promises "the talent sees 'No hourly
+    // commitment'" in that case.)
+    const disabledIds = new Set<string>(
+      Array.isArray(card.disabled_default_deliverable_ids)
+        ? (card.disabled_default_deliverable_ids as string[])
+        : [],
+    );
+    const hoursRow = (planDelivs ?? []).find(
+      (d: any) => d.kind === 'hours' && !disabledIds.has(d.id),
+    );
     if (hoursRow) {
       planHoursDeliverable = {
         per_day: Number(hoursRow.per_day) || 0,
