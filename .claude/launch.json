@@ -134,6 +134,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-task-filters/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3050"],
       "port": 3050
+    },
+    {
+      "name": "Gross Profit Admin Worktree",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-admin-gross-profit/admin && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3001"],
+      "port": 3001
     }
   ]
 }
