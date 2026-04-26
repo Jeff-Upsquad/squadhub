@@ -23,6 +23,7 @@ import EmergencyConfirm from './EmergencyConfirm';
 import TaskStatusPicker from './TaskStatusPicker';
 import ListPickerCombobox from './ListPickerCombobox';
 import TaskAttachments from './TaskAttachments';
+import DesignBriefSection from './DesignBriefSection';
 import { useTaskAttachments } from '../../../hooks/useTaskAttachments';
 
 function parseTimeInput(input: string): number | null {
@@ -629,6 +630,12 @@ export default function TaskDetailPanel({
                   )}
                 </div>
               </div>
+
+              <DesignBriefSection
+                task={task}
+                canEdit={canEdit}
+                onSave={(metadata) => updateTask.mutate({ id: task.id, metadata })}
+              />
 
               {/* Subtitle row — priority only (space + SQ moved to top bar) */}
               {priorityLabel && (
