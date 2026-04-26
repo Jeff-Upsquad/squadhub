@@ -1121,6 +1121,12 @@ export interface ClientSubmissionSubscription {
   // Joined
   subscription?: Subscription;
   plan?: SubscriptionPlanRow;
+  /**
+   * State of the linked subscription_card (1:1 by submission_subscription_id).
+   * null when no card row exists yet. Powers the "Cancel" button — the staged
+   * sub is deleted while draft/none, and the card is closed once published.
+   */
+  card_state?: SubscriptionCardState | null;
 }
 
 // ---- Subscription Cards ----
@@ -1141,6 +1147,11 @@ export interface SubscriptionCardCustomDeliverable {
   per_day: number;
   per_week: number;
   per_month: number;
+  /**
+   * For kind='item', the picked deliverable type (FK to subscription_deliverable_types).
+   * Optional/null on legacy rows that pre-date this field. UI falls back to `name`.
+   */
+  deliverable_type_id?: string | null;
 }
 
 export interface SubscriptionCardTargetRegion {
@@ -1173,7 +1184,10 @@ export interface SubscriptionCard {
   created_at: string;
   updated_at: string;
   // Derived
-  recipient_counts?: { pending: number; accepted: number; rejected: number };
+  recipient_counts?: {
+    partners: { pending: number; accepted: number; rejected: number };
+    talents: { accepted: number; rejected: number };
+  };
   // Joined
   submission_subscription?: ClientSubmissionSubscription;
   submission?: Pick<ClientSubmission, 'id' | 'business_name' | 'country_id' | 'country'> | null;

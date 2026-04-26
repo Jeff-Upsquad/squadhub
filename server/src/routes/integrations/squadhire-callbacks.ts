@@ -53,6 +53,7 @@ const cardResponseSchema = z
     external_id: z.string().min(1),        // SquadHub card id (UUID as string)
     recipient_id: z.string().min(1),        // Profiles' own recipient row id
     talent_user_id: z.string().min(1),      // Profiles' talent user id
+    talent_name: z.string().min(1).optional(), // Display name; older deploys may omit it
     action: z.enum(['accept', 'reject']),
     responded_at: z.string().datetime(),
   })
@@ -92,6 +93,7 @@ router.post(
             external_system: 'squadhire',
             external_recipient_id: body.recipient_id,
             external_user_id: body.talent_user_id,
+            talent_name: body.talent_name ?? null,
             status,
             responded_at: body.responded_at,
           },

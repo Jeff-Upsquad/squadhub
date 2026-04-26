@@ -8,13 +8,20 @@ import type {
   OnboardingLink,
   SalesPerson,
   SubmissionStatus,
+  SubscriptionCard,
 } from '@squadhub/shared';
 import { PIPELINE_STATUSES } from '@squadhub/shared';
 import GenerateLinkDialog from './GenerateLinkDialog';
 import LeadStatusChips, { STATUS_META } from '../../../components/LeadStatusChips';
 import LeadSubscriptionsSection from './LeadSubscriptionsSection';
+import PublishedCardRecipientsPanel from './PublishedCardRecipientsPanel';
 
-type Tab = 'leads' | 'links';
+type Tab = 'leads' | 'links' | 'published';
+
+type PublishedCardItem = SubscriptionCard & {
+  submission?: { id: string; business_name: string; country_id: string; country?: Country | null } | null;
+  submission_subscription?: ClientSubmissionSubscription | null;
+};
 
 type LeadWithRole = ClientSubmission & {
   my_role?: 'primary' | 'secondary';
@@ -36,6 +43,7 @@ export default function SalesLeadsPage() {
   const [tab, setTab] = useState<Tab>('leads');
   const [generateOpen, setGenerateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const { data: leadsRes, isLoading: leadsLoading } = useQuery({
@@ -51,6 +59,24 @@ export default function SalesLeadsPage() {
     enabled: tab === 'links',
   });
   const links: OnboardingLink[] = linksRes?.data || [];
+
+  const { data: cardsRes, isLoading: cardsLoading } = useQuery({
+    queryKey: ['sales-published-cards'],
+    queryFn: () => api.get('/subscription-cards/published-by-me').then((r) => r.data),
+    enabled: tab === 'published',
+  });
+  const publishedCards: PublishedCardItem[] = cardsRes?.data || [];
+
+  const cardGroups = useMemo(() => {
+    const active = publishedCards.filter((c) => c.state === 'published');
+    const cancelled = publishedCards.filter((c) => c.state === 'closed');
+    return { active, cancelled };
+  }, [publishedCards]);
+
+  const selectedCard: PublishedCardItem | null = useMemo(() => {
+    if (!selectedCardId) return null;
+    return publishedCards.find((c) => c.id === selectedCardId) || null;
+  }, [publishedCards, selectedCardId]);
 
   const { data: peopleRes } = useQuery({
     queryKey: ['sales-people'],
@@ -116,11 +142,39 @@ export default function SalesLeadsPage() {
         <div className="flex gap-1">
           <TabButton active={tab === 'leads'} onClick={() => setTab('leads')}>My Leads</TabButton>
           <TabButton active={tab === 'links'} onClick={() => setTab('links')}>My Invite Links</TabButton>
+          <TabButton active={tab === 'published'} onClick={() => setTab('published')}>Published Cards</TabButton>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
-        {tab === 'leads' ? (
+        {tab === 'published' ? (
+          cardsLoading ? (
+            <p className="py-8 text-center text-sm text-[var(--sh-ink-4)]">Loading…</p>
+          ) : publishedCards.length === 0 ? (
+            <div className="rounded-lg border border-[var(--sh-hair)] bg-[var(--surface)] py-12 text-center">
+              <p className="text-sm text-[var(--sh-ink-4)]">No published cards yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {cardGroups.active.length > 0 && (
+                <CardGroup
+                  label="Active"
+                  color="#10B981"
+                  items={cardGroups.active}
+                  onOpen={(id) => setSelectedCardId(id)}
+                />
+              )}
+              {cardGroups.cancelled.length > 0 && (
+                <CardGroup
+                  label="Cancelled"
+                  color="#6B7280"
+                  items={cardGroups.cancelled}
+                  onOpen={(id) => setSelectedCardId(id)}
+                />
+              )}
+            </div>
+          )
+        ) : tab === 'leads' ? (
           leadsLoading ? (
             <p className="py-8 text-center text-sm text-[var(--sh-ink-4)]">Loading…</p>
           ) : leadsByStatus.length === 0 ? (
@@ -229,6 +283,14 @@ export default function SalesLeadsPage() {
       </div>
 
       {selected && <LeadDetailPanelWrapper lead={selected} onClose={() => setSelectedId(null)} />}
+
+      {selectedCard && (
+        <PublishedCardRecipientsPanel
+          cardId={selectedCard.id}
+          title={publishedCardTitle(selectedCard)}
+          onClose={() => setSelectedCardId(null)}
+        />
+      )}
 
       <GenerateLinkDialog
         open={generateOpen}
@@ -358,5 +420,111 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <span className="text-xs text-[var(--sh-ink-4)]">{label}</span>
       <span className="text-right text-sm text-[var(--sh-ink)]">{value}</span>
     </div>
+  );
+}
+
+function publishedCardTitle(card: PublishedCardItem): string {
+  const business = card.submission?.business_name || 'Unknown business';
+  const subName = card.submission_subscription?.subscription?.name;
+  return subName ? `${business} · ${subName}` : business;
+}
+
+function formatPublishedAt(iso: string | null): string {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  const days = Math.floor((Date.now() - then) / 86400000);
+  if (days < 1) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function CardGroup({
+  label, color, items, onOpen,
+}: {
+  label: string;
+  color: string;
+  items: PublishedCardItem[];
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2">
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+          style={{ backgroundColor: `${color}18`, color }}
+        >
+          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+          {label}
+        </span>
+        <span className="text-xs text-[var(--sh-ink-4)]">({items.length})</span>
+      </div>
+      <div className="space-y-1.5">
+        {items.map((card) => (
+          <PublishedCardRow key={card.id} card={card} onOpen={() => onOpen(card.id)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PublishedCardRow({ card, onOpen }: { card: PublishedCardItem; onOpen: () => void }) {
+  const business = card.submission?.business_name || 'Unknown';
+  const subName = card.submission_subscription?.subscription?.name || '—';
+  const plan = card.submission_subscription?.plan;
+  const planLabel = plan ? `${plan.plan} · ${plan.tier}` : '';
+  const partners = card.recipient_counts?.partners ?? { pending: 0, accepted: 0, rejected: 0 };
+  const talents = card.recipient_counts?.talents ?? { accepted: 0, rejected: 0 };
+
+  return (
+    <button
+      onClick={onOpen}
+      className="flex w-full items-center justify-between rounded-lg border border-[var(--sh-hair)] bg-[var(--surface)] px-4 py-3 text-left transition hover:shadow-sm"
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-50 text-violet-600 text-sm font-semibold">
+          {business.charAt(0).toUpperCase()}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-[var(--sh-ink)]">
+            {business} · {subName}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-[var(--sh-ink-3)]">
+            {planLabel}
+            {planLabel && card.published_at ? ' · ' : ''}
+            {card.published_at ? `Published ${formatPublishedAt(card.published_at)}` : ''}
+          </p>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <CountChip label="Partners" accepted={partners.accepted} rejected={partners.rejected} pending={partners.pending} />
+        <CountChip label="Talents" accepted={talents.accepted} rejected={talents.rejected} />
+      </div>
+    </button>
+  );
+}
+
+function CountChip({
+  label, accepted, rejected, pending,
+}: {
+  label: string;
+  accepted: number;
+  rejected: number;
+  pending?: number;
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700"
+      title={
+        pending != null
+          ? `${label}: ${accepted} accepted, ${rejected} rejected, ${pending} pending`
+          : `${label}: ${accepted} accepted, ${rejected} rejected`
+      }
+    >
+      <span className="text-[var(--sh-ink-4)]">{label}</span>
+      <span className="text-emerald-700">{accepted}✓</span>
+      <span className="text-red-600">{rejected}✗</span>
+      {pending != null && <span className="text-amber-700">{pending}⌛</span>}
+    </span>
   );
 }

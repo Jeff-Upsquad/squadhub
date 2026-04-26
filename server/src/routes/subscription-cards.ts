@@ -30,6 +30,9 @@ const customDeliverableSchema = z.object({
   per_day: z.number().min(0),
   per_week: z.number().min(0),
   per_month: z.number().min(0),
+  // Optional FK to subscription_deliverable_types so the UI can show which item
+  // type was picked. Null/missing on legacy rows.
+  deliverable_type_id: z.string().uuid().nullable().optional(),
 });
 
 const patchCardSchema = z.object({
@@ -429,6 +432,207 @@ router.post(
       res.json({ success: true, data: await hydrateCard(updated) });
     } catch (err: any) {
       console.error('Close card error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  },
+);
+
+// ============================================================
+// GET /subscription-cards/published-by-me — list published+closed cards the
+// current sales user published. Powers the Sales Leads "Published cards" tab.
+// ============================================================
+router.get(
+  '/published-by-me',
+  requireSalesLeadsAccess,
+  async (_req: Request, res: Response) => {
+    try {
+      const userId = _req.userId!;
+
+      const { data: cards, error } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('*')
+        .eq('published_by', userId)
+        .in('state', ['published', 'closed'])
+        .order('published_at', { ascending: false });
+      if (error) {
+        res.status(500).json({ success: false, error: error.message });
+        return;
+      }
+
+      const list = cards || [];
+      if (list.length === 0) {
+        res.json({ success: true, data: [] });
+        return;
+      }
+
+      // Hydrate counts/targets, then enrich with submission + staged sub for
+      // display. We pull staged subs in one shot rather than per-card.
+      const stagedIds = list.map((c: any) => c.submission_subscription_id);
+      const { data: stagedRows } = await supabaseAdmin
+        .from('client_submission_subscriptions')
+        .select('*')
+        .in('id', stagedIds);
+      const stagedById: Record<string, any> = {};
+      (stagedRows || []).forEach((r: any) => { stagedById[r.id] = r; });
+
+      const submissionIds = Array.from(
+        new Set((stagedRows || []).map((r: any) => r.submission_id)),
+      );
+      const subscriptionIds = Array.from(
+        new Set((stagedRows || []).map((r: any) => r.subscription_id)),
+      );
+      const planIds = Array.from(
+        new Set((stagedRows || []).map((r: any) => r.plan_id)),
+      );
+
+      const [
+        { data: submissions },
+        { data: subs },
+        { data: plans },
+        { data: pricing },
+        { data: countries },
+      ] = await Promise.all([
+        supabaseAdmin
+          .from('client_submissions')
+          .select('id, business_name, country_id')
+          .in('id', submissionIds.length ? submissionIds : ['00000000-0000-0000-0000-000000000000']),
+        supabaseAdmin
+          .from('subscriptions')
+          .select('id, name')
+          .in('id', subscriptionIds.length ? subscriptionIds : ['00000000-0000-0000-0000-000000000000']),
+        supabaseAdmin
+          .from('subscription_plans')
+          .select('id, plan, tier')
+          .in('id', planIds.length ? planIds : ['00000000-0000-0000-0000-000000000000']),
+        supabaseAdmin
+          .from('subscription_plan_pricing')
+          .select('plan_id, country_id, price')
+          .in('plan_id', planIds.length ? planIds : ['00000000-0000-0000-0000-000000000000']),
+        supabaseAdmin.from('countries').select('id, name, currency'),
+      ]);
+
+      const submissionById: Record<string, any> = {};
+      (submissions || []).forEach((s: any) => { submissionById[s.id] = s; });
+      const subById: Record<string, any> = {};
+      (subs || []).forEach((s: any) => { subById[s.id] = s; });
+      const planById: Record<string, any> = {};
+      (plans || []).forEach((p: any) => { planById[p.id] = p; });
+      const countryById: Record<string, any> = {};
+      (countries || []).forEach((c: any) => { countryById[c.id] = c; });
+      const pricingByPlan: Record<string, any[]> = {};
+      (pricing || []).forEach((p: any) => {
+        (pricingByPlan[p.plan_id] = pricingByPlan[p.plan_id] || []).push(p);
+      });
+
+      const hydrated = await Promise.all(list.map(async (card: any) => {
+        const staged = stagedById[card.submission_subscription_id] || null;
+        const submission = staged ? submissionById[staged.submission_id] || null : null;
+        const country = submission ? countryById[submission.country_id] || null : null;
+        const plan = staged ? planById[staged.plan_id] || null : null;
+        const subscription = staged ? subById[staged.subscription_id] || null : null;
+        const planPricing = staged ? pricingByPlan[staged.plan_id] || [] : [];
+        const priceForCountry = country
+          ? planPricing.find((pr: any) => pr.country_id === country.id) || null
+          : null;
+
+        const base = await hydrateCard(card);
+        return {
+          ...base,
+          submission: submission
+            ? { ...submission, country }
+            : null,
+          submission_subscription: staged
+            ? {
+                ...staged,
+                subscription,
+                plan: plan
+                  ? {
+                      ...plan,
+                      pricing: priceForCountry
+                        ? [{ ...priceForCountry, country }]
+                        : [],
+                    }
+                  : null,
+              }
+            : null,
+        };
+      }));
+
+      res.json({ success: true, data: hydrated });
+    } catch (err: any) {
+      console.error('List published cards error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  },
+);
+
+// ============================================================
+// GET /subscription-cards/:id/recipients — names + statuses for the side panel
+// ============================================================
+router.get(
+  '/:id/recipients',
+  requireSalesLeadsAccess,
+  async (req: Request, res: Response) => {
+    try {
+      const cardId = req.params.id as string;
+      const loaded = await loadCardForUser(cardId, req.userId!, res);
+      if (!loaded) return;
+      // Only the publisher of the card sees its recipients.
+      if (loaded.card.published_by && loaded.card.published_by !== req.userId) {
+        res.status(403).json({ success: false, error: 'Not your card' });
+        return;
+      }
+
+      const [
+        { data: partnerRows, error: pErr },
+        { data: talentRows, error: tErr },
+      ] = await Promise.all([
+        supabaseAdmin
+          .from('subscription_card_recipients')
+          .select('partner_id, status, responded_at')
+          .eq('card_id', cardId),
+        supabaseAdmin
+          .from('subscription_card_external_recipients')
+          .select('external_user_id, talent_name, status, responded_at')
+          .eq('card_id', cardId),
+      ]);
+      if (pErr) {
+        res.status(500).json({ success: false, error: pErr.message });
+        return;
+      }
+      if (tErr) {
+        res.status(500).json({ success: false, error: tErr.message });
+        return;
+      }
+
+      const partnerIds = Array.from(new Set((partnerRows || []).map((r: any) => r.partner_id)));
+      const { data: users } = await supabaseAdmin
+        .from('users')
+        .select('id, display_name, email')
+        .in('id', partnerIds.length ? partnerIds : ['00000000-0000-0000-0000-000000000000']);
+      const userById: Record<string, any> = {};
+      (users || []).forEach((u: any) => { userById[u.id] = u; });
+
+      const partners = (partnerRows || []).map((r: any) => {
+        const u = userById[r.partner_id];
+        return {
+          id: r.partner_id,
+          name: u?.display_name || u?.email || r.partner_id,
+          status: r.status,
+          responded_at: r.responded_at,
+        };
+      });
+
+      const talents = (talentRows || []).map((r: any) => ({
+        external_user_id: r.external_user_id,
+        name: r.talent_name || null,
+        status: r.status,
+        responded_at: r.responded_at,
+      }));
+
+      res.json({ success: true, data: { partners, talents } });
+    } catch (err: any) {
+      console.error('List card recipients error:', err);
       res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
     }
   },
