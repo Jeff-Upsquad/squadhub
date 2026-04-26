@@ -41,8 +41,10 @@ function EditUserSlider({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const originalUserType = ((user as any).user_type as string) || 'internal';
   const [name, setName] = useState(user.display_name);
   const [email, setEmail] = useState(user.email);
+  const [userType, setUserType] = useState<string>(originalUserType);
   const [roleId, setRoleId] = useState(user.custom_role?.id || '');
   const [secondaryRoleIds, setSecondaryRoleIds] = useState<string[]>(
     (user.secondary_roles || []).map((r) => r.id),
@@ -82,7 +84,19 @@ function EditUserSlider({
     },
   });
 
-  const isSaving = profileMutation.isPending || customRoleMutation.isPending;
+  const userTypeMutation = useMutation({
+    mutationFn: (newType: string) =>
+      api.put(`/admin/users/${user.id}/user-type`, { user_type: newType }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+    },
+    onError: (err: any) => {
+      setError(err?.response?.data?.error || 'Failed to update user type');
+    },
+  });
+
+  const isSaving = profileMutation.isPending || customRoleMutation.isPending || userTypeMutation.isPending;
 
   const originalSecondaryIds = (user.secondary_roles || []).map((r) => r.id).sort().join(',');
   const currentSecondaryIds = [...secondaryRoleIds].sort().join(',');
@@ -98,6 +112,9 @@ function EditUserSlider({
     try {
       if (Object.keys(profileUpdates).length > 0) {
         await profileMutation.mutateAsync(profileUpdates);
+      }
+      if (userType !== originalUserType) {
+        await userTypeMutation.mutateAsync(userType);
       }
       if (rolesChanged) {
         const payload: { role_id?: string; secondary_role_ids: string[] } = {
@@ -201,6 +218,30 @@ function EditUserSlider({
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2.5 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
               />
+            </div>
+
+            {/* User Type */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">User type</label>
+              <select
+                value={userType}
+                onChange={(e) => setUserType(e.target.value)}
+                className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2.5 text-sm text-[#0F172B] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
+              >
+                <option value="internal">Internal</option>
+                <option value="client">Client</option>
+                <option value="client_staff">Client Staff</option>
+                <option value="partner">Partner</option>
+                <option value="partner_employee">Partner Employee</option>
+              </select>
+              {userType !== originalUserType && userType !== 'internal' && user.is_admin && (
+                <p className="mt-1 text-[11px] text-amber-600">Saving will also remove this user's admin access.</p>
+              )}
+              {userType !== originalUserType && (
+                <p className="mt-1 text-[11px] text-[#90A1B9]">
+                  Workspace role won't change automatically — re-pick a primary role below if needed.
+                </p>
+              )}
             </div>
 
             {/* Primary Role */}

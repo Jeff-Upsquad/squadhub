@@ -474,6 +474,49 @@ router.put('/users/:id/role', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /admin/users/:id/user-type — change a user's user_type classification.
+const updateUserTypeSchema = z.object({
+  user_type: z.enum(['internal', 'client', 'client_staff', 'partner', 'partner_employee']),
+});
+
+router.put('/users/:id/user-type', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const body = updateUserTypeSchema.parse(req.body);
+
+    if (id === req.userId && body.user_type !== 'internal') {
+      res.status(400).json({ success: false, error: 'You cannot change your own user_type away from internal' });
+      return;
+    }
+
+    // is_admin is only valid for 'internal' users (see PUT /role above).
+    // Mirror /ban and /suspend: when the new type can't hold admin, clear is_admin.
+    const updates: Record<string, unknown> = { user_type: body.user_type };
+    if (body.user_type !== 'internal') updates.is_admin = false;
+
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Admin update user_type error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // PUT /admin/users/:id/suspend — suspend or unsuspend a user.
 // Softer than /ban: app-level block only (login + auth middleware reject),
 // no Supabase Auth ban_duration applied, so it's reversible without re-issuing tokens.
