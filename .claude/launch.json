@@ -158,6 +158,13 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-partner-employee/admin && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3060"],
       "port": 3060
+    },
+    {
+      "name": "Profile Access Worktree Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-profile-access/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3000"],
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }

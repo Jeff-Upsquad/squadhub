@@ -15,8 +15,9 @@ import GenerateLinkDialog from './GenerateLinkDialog';
 import LeadStatusChips, { STATUS_META } from '../../../components/LeadStatusChips';
 import LeadSubscriptionsSection from './LeadSubscriptionsSection';
 import PublishedCardRecipientsPanel from './PublishedCardRecipientsPanel';
+import ProfileAccessTab from './ProfileAccessTab';
 
-type Tab = 'leads' | 'links' | 'published';
+type Tab = 'leads' | 'links' | 'published' | 'profile-access';
 
 type PublishedCardItem = SubscriptionCard & {
   submission?: { id: string; business_name: string; country_id: string; country?: Country | null } | null;
@@ -146,6 +147,7 @@ export default function SalesLeadsPage() {
           <TabButton active={tab === 'leads'} onClick={() => setTab('leads')}>My Leads</TabButton>
           <TabButton active={tab === 'links'} onClick={() => setTab('links')}>My Invite Links</TabButton>
           <TabButton active={tab === 'published'} onClick={() => setTab('published')}>Published Cards</TabButton>
+          <TabButton active={tab === 'profile-access'} onClick={() => setTab('profile-access')}>Profile Access</TabButton>
         </div>
       </div>
 
@@ -267,7 +269,7 @@ export default function SalesLeadsPage() {
               })}
             </div>
           )
-        ) : (
+        ) : tab === 'links' ? (
           linksLoading ? (
             <p className="py-8 text-center text-sm text-[var(--sh-ink-4)]">Loading…</p>
           ) : links.length === 0 ? (
@@ -315,7 +317,9 @@ export default function SalesLeadsPage() {
               </table>
             </div>
           )
-        )}
+        ) : tab === 'profile-access' ? (
+          <ProfileAccessTab />
+        ) : null}
       </div>
 
       {selected && <LeadDetailPanelWrapper lead={selected} onClose={() => setSelectedId(null)} />}

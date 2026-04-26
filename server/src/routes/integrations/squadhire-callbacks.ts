@@ -116,4 +116,103 @@ router.post(
   },
 );
 
+// ------------------------------------------------------------
+// Profile access grants: inbound sync from Profiles → SquadHub
+// ------------------------------------------------------------
+
+const grantUpsertSchema = z
+  .object({
+    profiles_grant_id: z.string().uuid(),
+    email: z.string().email(),
+    category_ids: z.array(z.string().uuid()),
+    expires_at: z.string().datetime(),
+    revoked_at: z.string().datetime().nullable().optional(),
+    notes: z.string().nullable().optional(),
+    // When SquadHub originated this grant, Profiles echoes back the
+    // originating SquadHub user id so we can rebind it on the mirror row.
+    // Otherwise NULL = the row is admin-only on the SquadHub side.
+    created_by_squadhub_user_id: z.string().uuid().nullable().optional(),
+    action: z.enum(['create', 'update', 'revoke']).default('update'),
+  })
+  .strict();
+
+const grantDeleteSchema = z
+  .object({
+    profiles_grant_id: z.string().uuid(),
+  })
+  .strict();
+
+router.post(
+  '/grant-upserts',
+  verifySquadhireCallbackSecret,
+  async (req: Request, res: Response) => {
+    try {
+      const body = grantUpsertSchema.parse(req.body);
+
+      // Idempotent on profiles_grant_id (UNIQUE). When SquadHub originated
+      // the grant, the row already exists locally and was synced; the upsert
+      // here is the round-trip echo confirming receipt — we re-apply the
+      // canonical fields so any drift in the meantime is corrected.
+      const upsertData: Record<string, unknown> = {
+        profiles_grant_id: body.profiles_grant_id,
+        email: body.email.toLowerCase(),
+        category_ids: body.category_ids,
+        expires_at: body.expires_at,
+        revoked_at: body.revoked_at ?? null,
+        notes: body.notes ?? null,
+        // Mark the row as already synced — Profiles is the originator on this
+        // path, so there's nothing for our outbound sweeper to push back.
+        profiles_synced_at: new Date().toISOString(),
+        profiles_sync_last_error: null,
+      };
+      if (body.created_by_squadhub_user_id !== undefined) {
+        upsertData.created_by = body.created_by_squadhub_user_id;
+      }
+
+      const { error: upErr } = await supabaseAdmin
+        .from('profile_access_grants')
+        .upsert(upsertData, { onConflict: 'profiles_grant_id' });
+      if (upErr) {
+        res.status(500).json({ success: false, error: upErr.message });
+        return;
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ success: false, error: err.errors[0].message });
+        return;
+      }
+      console.error('[squadhire-callback grant-upserts] error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  },
+);
+
+router.post(
+  '/grant-deletes',
+  verifySquadhireCallbackSecret,
+  async (req: Request, res: Response) => {
+    try {
+      const body = grantDeleteSchema.parse(req.body);
+      const { error } = await supabaseAdmin
+        .from('profile_access_grants')
+        .delete()
+        .eq('profiles_grant_id', body.profiles_grant_id);
+      if (error) {
+        res.status(500).json({ success: false, error: error.message });
+        return;
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ success: false, error: err.errors[0].message });
+        return;
+      }
+      console.error('[squadhire-callback grant-deletes] error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  },
+);
+
 export default router;
