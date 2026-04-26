@@ -1282,6 +1282,7 @@ export interface ClientSubscription {
   subscription_id: string;
   plan_id: string;
   status: ClientSubscriptionStatus;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
   // Joined

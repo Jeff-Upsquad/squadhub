@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import type { Client, Country, Subscription, ClientStatus, SalesPerson } from '@squadhub/shared';
@@ -30,8 +30,7 @@ export default function ClientsModule() {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
-  const [addSubOpen, setAddSubOpen] = useState(false);
-  const [addPlanIds, setAddPlanIds] = useState<string[]>([]);
+  const [showArchivedSubs, setShowArchivedSubs] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<typeof EMPTY_CREATE_FORM>(EMPTY_CREATE_FORM);
   const [createPlanIds, setCreatePlanIds] = useState<string[]>([]);
@@ -102,18 +101,6 @@ export default function ClientsModule() {
     },
   });
 
-  const addSubsMutation = useMutation({
-    mutationFn: ({ clientId, plan_ids }: { clientId: string; plan_ids: string[] }) =>
-      api.post(`/admin/clients/${clientId}/subscriptions`, { plan_ids }),
-    onSuccess: () => {
-      invalidateAll();
-      setAddSubOpen(false);
-      setAddPlanIds([]);
-      if (selectedClient) refreshClient(selectedClient.id);
-    },
-    onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed to add'),
-  });
-
   const subStatusMutation = useMutation({
     mutationFn: ({ clientId, csId, status }: { clientId: string; csId: string; status: string }) =>
       api.put(`/admin/clients/${clientId}/subscriptions/${csId}/status`, { status }),
@@ -123,9 +110,18 @@ export default function ClientsModule() {
     },
   });
 
-  const removeSubMutation = useMutation({
+  const archiveSubMutation = useMutation({
     mutationFn: ({ clientId, csId }: { clientId: string; csId: string }) =>
       api.delete(`/admin/clients/${clientId}/subscriptions/${csId}`),
+    onSuccess: () => {
+      invalidateAll();
+      if (selectedClient) refreshClient(selectedClient.id);
+    },
+  });
+
+  const unarchiveSubMutation = useMutation({
+    mutationFn: ({ clientId, csId }: { clientId: string; csId: string }) =>
+      api.post(`/admin/clients/${clientId}/subscriptions/${csId}/unarchive`),
     onSuccess: () => {
       invalidateAll();
       if (selectedClient) refreshClient(selectedClient.id);
@@ -174,23 +170,29 @@ export default function ClientsModule() {
     setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   }
 
-  async function refreshClient(id: string) {
-    const res = await api.get(`/admin/clients/${id}`);
+  const refreshClient = useCallback(async (id: string, includeArchived?: boolean) => {
+    const flag = includeArchived ?? showArchivedSubs;
+    const res = await api.get(`/admin/clients/${id}`, { params: flag ? { include_archived: 1 } : {} });
     if (res.data?.data) setSelectedClient(res.data.data);
-  }
+  }, [showArchivedSubs]);
+
+  // Refetch the open client whenever the "Show archived" toggle flips so we either
+  // pick up archived rows from the server or drop them again.
+  useEffect(() => {
+    if (selectedClient) refreshClient(selectedClient.id, showArchivedSubs);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showArchivedSubs]);
 
   function openClient(client: Client) {
     setSelectedClient(client);
     setEditing(false);
-    setAddSubOpen(false);
-    setAddPlanIds([]);
+    setShowArchivedSubs(false);
   }
 
   function closeSlider() {
     setSelectedClient(null);
     setEditing(false);
-    setAddSubOpen(false);
-    setAddPlanIds([]);
+    setShowArchivedSubs(false);
   }
 
   function startEdit() {
@@ -215,11 +217,14 @@ export default function ClientsModule() {
     c.contact_person.toLowerCase().includes(search.toLowerCase())
   );
 
+  const sections: { key: ClientStatus; label: string; clients: Client[] }[] = [
+    { key: 'active',    label: 'Active clients',    clients: filtered.filter((c) => c.status === 'active') },
+    { key: 'paused',    label: 'Paused clients',    clients: filtered.filter((c) => c.status === 'paused') },
+    { key: 'cancelled', label: 'Cancelled clients', clients: filtered.filter((c) => c.status === 'cancelled') },
+  ];
+
   const createSelectedCountry = activeCountries.find((c) => c.id === createForm.country_id) || null;
   const selectedClientCountry = selectedClient ? countries.find((c) => c.id === selectedClient.country_id) || null : null;
-
-  const assignedSubscriptionIds = new Set((selectedClient?.subscriptions || []).map((cs) => cs.subscription_id));
-  const addCatalog = catalog.filter((s) => s.is_active && !assignedSubscriptionIds.has(s.id));
 
   return (
     <div>
@@ -253,45 +258,58 @@ export default function ClientsModule() {
           <p className="text-sm text-[#90A1B9]">{search ? 'No matching clients.' : 'No clients yet. Click + New Client to add one, or share the onboarding link.'}</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {filtered.map((client) => {
-            const countryName = client.country?.name || countries.find((c) => c.id === client.country_id)?.name || '—';
-            return (
-              <button
-                key={client.id}
-                onClick={() => openClient(client)}
-                className={`flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 text-left transition hover:shadow-sm ${
-                  client.status === 'cancelled' ? 'opacity-50' : ''
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600 text-sm font-semibold">
-                    {client.business_name.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-[#0F172B]">{client.business_name}</p>
-                    <p className="mt-0.5 text-xs text-[#62748E]">{client.contact_person}</p>
-                  </div>
+        <div className="space-y-6">
+          {sections.map((section) => (
+            <div key={section.key}>
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">
+                {section.label} ({section.clients.length})
+              </h4>
+              {section.clients.length === 0 ? (
+                <p className="py-3 text-xs text-[#90A1B9]">No {section.label.toLowerCase()}.</p>
+              ) : (
+                <div className="space-y-2">
+                  {section.clients.map((client) => {
+                    const countryName = client.country?.name || countries.find((c) => c.id === client.country_id)?.name || '—';
+                    return (
+                      <button
+                        key={client.id}
+                        onClick={() => openClient(client)}
+                        className={`flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 text-left transition hover:shadow-sm ${
+                          client.status === 'cancelled' ? 'opacity-50' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600 text-sm font-semibold">
+                            {client.business_name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-[#0F172B]">{client.business_name}</p>
+                            <p className="mt-0.5 text-xs text-[#62748E]">{client.contact_person}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {client.primary_sales_person && (
+                            <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-700">
+                              SP: {client.primary_sales_person.display_name}
+                            </span>
+                          )}
+                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                            {countryName}
+                          </span>
+                          <span className="text-xs text-[#90A1B9]">
+                            {client.subscriptions?.filter((s) => s.status === 'active').length || 0} active subs
+                          </span>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[client.status]}`}>
+                            {client.status}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="flex items-center gap-3">
-                  {client.primary_sales_person && (
-                    <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-700">
-                      SP: {client.primary_sales_person.display_name}
-                    </span>
-                  )}
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                    {countryName}
-                  </span>
-                  <span className="text-xs text-[#90A1B9]">
-                    {client.subscriptions?.filter((s) => s.status === 'active').length || 0} active subs
-                  </span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[client.status]}`}>
-                    {client.status}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -427,31 +445,21 @@ export default function ClientsModule() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Subscriptions</h4>
-                <button onClick={() => setAddSubOpen(!addSubOpen)} className="text-xs text-[#2962FF] hover:underline">
-                  + Add Subscription
-                </button>
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-[#62748E]">
+                  <input
+                    type="checkbox"
+                    checked={showArchivedSubs}
+                    onChange={(e) => setShowArchivedSubs(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-[#E2E8F0] text-[#2962FF] focus:ring-[#2962FF]"
+                  />
+                  Show archived
+                </label>
               </div>
 
-              {addSubOpen && (
-                <div className="mb-3 space-y-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-                  <PlanPicker
-                    catalog={addCatalog}
-                    country={selectedClientCountry}
-                    selectedPlanIds={addPlanIds}
-                    onToggle={(id) => togglePlanFor(addPlanIds, setAddPlanIds, id)}
-                  />
-                  <button
-                    onClick={() => addSubsMutation.mutate({ clientId: selectedClient.id, plan_ids: addPlanIds })}
-                    disabled={addPlanIds.length === 0 || addSubsMutation.isPending}
-                    className="w-full rounded-md bg-[#0F172B] px-3 py-2 text-xs font-medium text-white hover:bg-[#1E293B] disabled:opacity-50"
-                  >
-                    {addSubsMutation.isPending ? 'Adding...' : `Add ${addPlanIds.length} Plan(s)`}
-                  </button>
-                </div>
-              )}
-
               {(!selectedClient.subscriptions || selectedClient.subscriptions.length === 0) ? (
-                <p className="py-4 text-center text-xs text-[#90A1B9]">No subscriptions assigned yet.</p>
+                <p className="py-4 text-center text-xs text-[#90A1B9]">
+                  {showArchivedSubs ? 'No subscriptions yet.' : 'No subscriptions assigned yet.'}
+                </p>
               ) : (
                 <div className="space-y-2">
                   {selectedClient.subscriptions.map((cs) => {
@@ -461,10 +469,11 @@ export default function ClientsModule() {
                     const priceLabel = priceRow
                       ? `${sym}${priceRow.price.toLocaleString(locale)}/mo`
                       : 'No price set';
+                    const isArchived = !!cs.archived_at;
                     return (
                       <div
                         key={cs.id}
-                        className={`rounded-lg border border-[#E2E8F0] bg-white px-4 py-3 ${cs.status === 'cancelled' ? 'opacity-50' : ''}`}
+                        className={`rounded-lg border border-[#E2E8F0] bg-white px-4 py-3 ${cs.status === 'cancelled' || isArchived ? 'opacity-50' : ''}`}
                       >
                         <div className="flex items-center justify-between">
                           <div>
@@ -473,27 +482,38 @@ export default function ClientsModule() {
                               {cs.plan?.plan || '—'} · {cs.plan?.tier || '—'} · {priceLabel}
                             </p>
                           </div>
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[cs.status]}`}>
-                            {cs.status}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {isArchived && (
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                                Archived
+                              </span>
+                            )}
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[cs.status]}`}>
+                              {cs.status}
+                            </span>
+                          </div>
                         </div>
                         <div className="mt-2 flex gap-1.5">
-                          {cs.status === 'active' && (
+                          {!isArchived && cs.status === 'active' && (
                             <>
                               <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'paused' })} className="rounded bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100">Pause</button>
                               <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'cancelled' })} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
                             </>
                           )}
-                          {cs.status === 'paused' && (
+                          {!isArchived && cs.status === 'paused' && (
                             <>
                               <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'active' })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Resume</button>
                               <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'cancelled' })} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
                             </>
                           )}
-                          {cs.status === 'cancelled' && (
+                          {!isArchived && cs.status === 'cancelled' && (
                             <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'active' })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Reactivate</button>
                           )}
-                          <button onClick={() => removeSubMutation.mutate({ clientId: selectedClient.id, csId: cs.id })} className="rounded bg-[#F1F5F9] px-2 py-1 text-[10px] font-medium text-[#62748E] hover:bg-[#E2E8F0]">Remove</button>
+                          {isArchived ? (
+                            <button onClick={() => unarchiveSubMutation.mutate({ clientId: selectedClient.id, csId: cs.id })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Unarchive</button>
+                          ) : (
+                            <button onClick={() => archiveSubMutation.mutate({ clientId: selectedClient.id, csId: cs.id })} className="rounded bg-[#F1F5F9] px-2 py-1 text-[10px] font-medium text-[#62748E] hover:bg-[#E2E8F0]">Archive</button>
+                          )}
                         </div>
                       </div>
                     );
