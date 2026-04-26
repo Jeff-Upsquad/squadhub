@@ -81,7 +81,7 @@ async function assignPlansToClient(clientId: string, planIds: string[]) {
   return { error: null };
 }
 
-async function enrichClient(client: any) {
+async function enrichClient(client: any, opts: { includeArchived?: boolean } = {}) {
   // Hydrate the country
   let country: any = null;
   if (client.country_id) {
@@ -108,11 +108,12 @@ async function enrichClient(client: any) {
     secondary_sales_person = client.secondary_sales_person_id ? map[client.secondary_sales_person_id] || null : null;
   }
 
-  const { data: cs } = await supabaseAdmin
+  let csQuery = supabaseAdmin
     .from('client_subscriptions')
     .select('*')
-    .eq('client_id', client.id)
-    .order('created_at');
+    .eq('client_id', client.id);
+  if (!opts.includeArchived) csQuery = csQuery.is('archived_at', null);
+  const { data: cs } = await csQuery.order('created_at');
 
   if (!cs || cs.length === 0) {
     return { ...client, country, primary_sales_person, secondary_sales_person, subscriptions: [] };
@@ -568,7 +569,7 @@ router.get('/', async (_req: Request, res: Response) => {
       return;
     }
 
-    const enriched = await Promise.all((data || []).map(enrichClient));
+    const enriched = await Promise.all((data || []).map((c: any) => enrichClient(c)));
     res.json({ success: true, data: enriched });
   } catch (err) {
     console.error('List clients error:', err);
@@ -606,7 +607,8 @@ router.get('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const enriched = await enrichClient(data);
+    const includeArchived = req.query.include_archived === '1';
+    const enriched = await enrichClient(data, { includeArchived });
     res.json({ success: true, data: enriched });
   } catch (err) {
     console.error('Get client error:', err);
@@ -754,11 +756,33 @@ router.put('/:clientId/subscriptions/:csId/status', async (req: Request, res: Re
   }
 });
 
+// Archive a client subscription (soft-delete via archived_at).
+// Kept on DELETE to avoid breaking existing callers; behavior is now archive, not hard-delete.
 router.delete('/:clientId/subscriptions/:csId', async (req: Request, res: Response) => {
   try {
     const { error } = await supabaseAdmin
       .from('client_subscriptions')
-      .delete()
+      .update({ archived_at: new Date().toISOString() })
+      .eq('id', req.params.csId)
+      .eq('client_id', req.params.clientId)
+      .is('archived_at', null);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, message: 'Subscription archived' });
+  } catch (err) {
+    console.error('Archive client subscription error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+router.post('/:clientId/subscriptions/:csId/unarchive', async (req: Request, res: Response) => {
+  try {
+    const { error } = await supabaseAdmin
+      .from('client_subscriptions')
+      .update({ archived_at: null })
       .eq('id', req.params.csId)
       .eq('client_id', req.params.clientId);
 
@@ -766,9 +790,9 @@ router.delete('/:clientId/subscriptions/:csId', async (req: Request, res: Respon
       res.status(500).json({ success: false, error: error.message });
       return;
     }
-    res.json({ success: true, message: 'Subscription removed' });
+    res.json({ success: true, message: 'Subscription unarchived' });
   } catch (err) {
-    console.error('Remove client subscription error:', err);
+    console.error('Unarchive client subscription error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
