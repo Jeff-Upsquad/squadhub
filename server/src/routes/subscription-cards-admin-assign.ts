@@ -233,10 +233,13 @@ router.get('/talents/search', async (req: Request, res: Response) => {
       return;
     }
 
-    // SquadHire owns this endpoint; we just proxy. The base URL points
-    // at the webhook ingest path; talent search lives under /external.
-    const origin = new URL(baseUrl).origin;
-    const url = new URL('/external/talents/search', origin);
+    // SquadHire owns this endpoint; we just proxy. The webhook URL points at
+    // .../api/webhooks/squadhub/cards — derive the talent search path from
+    // the same origin, mirroring the convention used by the categories proxy
+    // (server/src/routes/integrations/squadhire-categories.ts).
+    const url = new URL(baseUrl);
+    url.pathname = '/api/integrations/squadhub/talents/search';
+    url.search = '';
     url.searchParams.set('q', q);
 
     const controller = new AbortController();
@@ -254,12 +257,16 @@ router.get('/talents/search', async (req: Request, res: Response) => {
         res.status(503).json({ success: false, error: `SquadHire returned ${upstream.status}` });
         return;
       }
+      // SquadHire returns { talents: [...] } to mirror the categories shape.
+      // Tolerate { data: [...] } or a bare array for forward-compat.
       const body = (await upstream.json().catch(() => ({}))) as any;
-      const list = Array.isArray(body?.data)
-        ? body.data
-        : Array.isArray(body)
-          ? body
-          : [];
+      const list = Array.isArray(body?.talents)
+        ? body.talents
+        : Array.isArray(body?.data)
+          ? body.data
+          : Array.isArray(body)
+            ? body
+            : [];
       res.json({
         success: true,
         data: list.map((t: any) => ({
@@ -267,6 +274,7 @@ router.get('/talents/search', async (req: Request, res: Response) => {
           name: t.name ?? t.display_name ?? '',
           email: t.email ?? null,
           country: t.country ?? t.country_name ?? null,
+          tier: t.tier ?? null,
         })),
       });
     } catch (err: any) {
