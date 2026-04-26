@@ -5,12 +5,13 @@ import { requireUserType } from '../middleware/userType';
 import { supabaseAdmin } from '../supabase';
 import { nowIST, todayIST, formatTimeIST, isNonWorkingDay } from '../utils/ist';
 import { getUserRoleIds } from '../utils/roles';
+import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
 
 // All check-in routes require auth and a user type in scope
 router.use(requireAuth);
-router.use(requireUserType('internal', 'partner'));
+router.use(requireUserType('internal', ...PARTNER_USER_TYPES));
 
 /** Resolve the on-time deadline for a user: office_timing.from_time → user_checkin_settings.deadline_time → '10:00' */
 async function resolveDeadlineTime(userId: string): Promise<string> {

@@ -4,10 +4,11 @@ import { requireAuth } from '../middleware/auth';
 import { requireUserType } from '../middleware/userType';
 import { supabaseAdmin } from '../supabase';
 import { hydrateStagedSubscriptions } from '../utils/stagedSubscriptions';
+import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
 
-router.use(requireAuth, requireUserType('partner'));
+router.use(requireAuth, requireUserType(...PARTNER_USER_TYPES));
 
 // ============================================================
 // GET /partner/opportunities?status=pending|accepted|rejected

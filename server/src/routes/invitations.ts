@@ -72,7 +72,7 @@ router.get('/', async (req: Request, res: Response) => {
 const createSchema = z.object({
   email: z.string().email(),
   role_id: z.string().uuid().optional(),
-  user_type: z.enum(['internal', 'client', 'client_staff', 'partner']).optional().default('internal'),
+  user_type: z.enum(['internal', 'client', 'client_staff', 'partner', 'partner_employee']).optional().default('internal'),
   client_id: z.string().uuid().optional(),
 });
 

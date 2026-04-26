@@ -31,7 +31,7 @@ router.get('/users', async (req: Request, res: Response) => {
       query = query.or(`display_name.ilike.%${search}%,email.ilike.%${search}%`);
     }
 
-    if (userType && ['internal', 'client', 'client_staff', 'partner'].includes(userType)) {
+    if (userType && ['internal', 'client', 'client_staff', 'partner', 'partner_employee'].includes(userType)) {
       query = query.eq('user_type', userType);
     }
 
@@ -93,7 +93,7 @@ router.get('/users', async (req: Request, res: Response) => {
 // GET /admin/stats — basic platform stats
 router.get('/stats', async (_req: Request, res: Response) => {
   try {
-    const [usersRes, workspacesRes, channelsRes, messagesRes, pendingRes, internalRes, clientRes, clientStaffRes, partnerRes] = await Promise.all([
+    const [usersRes, workspacesRes, channelsRes, messagesRes, pendingRes, internalRes, clientRes, clientStaffRes, partnerRes, partnerEmployeeRes] = await Promise.all([
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('workspaces').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('channels').select('*', { count: 'exact', head: true }),
@@ -103,6 +103,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('user_type', 'client'),
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('user_type', 'client_staff'),
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('user_type', 'partner'),
+      supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('user_type', 'partner_employee'),
     ]);
 
     res.json({
@@ -118,6 +119,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
           client: clientRes.count || 0,
           client_staff: clientStaffRes.count || 0,
           partner: partnerRes.count || 0,
+          partner_employee: partnerEmployeeRes.count || 0,
         },
       },
     });

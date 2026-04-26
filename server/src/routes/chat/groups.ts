@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { loadChatContext } from '../../middleware/chat';
 import { supabaseAdmin } from '../../supabase-chat';
-import type { ChatGroup } from '@squadhub/shared';
+import type { ChatGroup, UserType } from '@squadhub/shared';
+import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
 
@@ -203,7 +204,7 @@ router.post('/:id/members', async (req: Request, res: Response) => {
       const ok =
         group.app_scope === 'clients'
           ? u.user_type === 'client' || u.user_type === 'client_staff'
-          : u.user_type === 'partner' || u.user_type === 'internal' || u.is_admin;
+          : PARTNER_USER_TYPES.includes(u.user_type as UserType) || u.user_type === 'internal' || u.is_admin;
       if (ok) allowed.push(u.id);
     }
 

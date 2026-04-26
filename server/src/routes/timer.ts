@@ -5,10 +5,11 @@ import { requireUserType } from '../middleware/userType';
 import { getPrimaryRolePermissions } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 import { nowIST, todayIST, IST_OFFSET_MS } from '../utils/ist';
+import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
 router.use(requireAuth);
-router.use(requireUserType('internal', 'partner'));
+router.use(requireUserType('internal', ...PARTNER_USER_TYPES));
 
 // ---- Helpers ----
 

@@ -4,11 +4,12 @@ import { requireAuth } from '../middleware/auth';
 import { requireUserType } from '../middleware/userType';
 import { supabaseAdmin } from '../supabase';
 import { generateR2DownloadUrl } from '../r2';
+import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
 
-// All routes require auth + partner user type
-router.use(requireAuth, requireUserType('partner'));
+// All routes require auth + partner-tier user type
+router.use(requireAuth, requireUserType(...PARTNER_USER_TYPES));
 
 // Helper: verify partner has access to a specific client
 async function verifyClientAccess(userId: string, clientId: string): Promise<boolean> {

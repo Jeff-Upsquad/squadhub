@@ -4,7 +4,7 @@ import { supabaseAdmin } from '../supabase';
 export function systemKeyForUserType(userType: UserType): SystemRoleKey {
   if (userType === 'internal') return 'member';
   if (userType === 'client_staff') return 'guest';
-  // client, partner
+  // client, partner, partner_employee
   return 'user';
 }
 

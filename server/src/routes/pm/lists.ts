@@ -5,10 +5,11 @@ import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { requirePermission, checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
+import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
 router.use(requireAuth);
-router.use(requireUserType('internal', 'partner', 'client', 'client_staff'));
+router.use(requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_staff'));
 
 const createSchema = z.object({
   space_id: z.string().uuid(),

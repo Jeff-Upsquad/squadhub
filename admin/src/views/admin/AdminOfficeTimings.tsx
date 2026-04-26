@@ -4,9 +4,11 @@ import api from '../../services/api';
 import type { UserOfficeTiming, UserType } from '@squadhub/shared';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const DEFAULT_LABELS: Record<'internal' | 'partner', string> = {
+type EligibleUserType = 'internal' | 'partner' | 'partner_employee';
+const DEFAULT_LABELS: Record<EligibleUserType, string> = {
   internal: 'Office Timing',
   partner: 'Virtual Office Timing',
+  partner_employee: 'Virtual Office Timing',
 };
 
 type UserRow = {
@@ -29,7 +31,7 @@ type FormState = {
   is_active: boolean;
 };
 
-function emptyForm(userType: 'internal' | 'partner'): FormState {
+function emptyForm(userType: EligibleUserType): FormState {
   return {
     label: DEFAULT_LABELS[userType],
     from_time: '10:00',
@@ -75,7 +77,7 @@ function summarizeTiming(t: UserOfficeTiming): string {
 
 export default function AdminOfficeTimings() {
   const queryClient = useQueryClient();
-  const [userTypeFilter, setUserTypeFilter] = useState<'all' | 'internal' | 'partner'>('all');
+  const [userTypeFilter, setUserTypeFilter] = useState<'all' | EligibleUserType>('all');
   const [search, setSearch] = useState('');
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
@@ -113,7 +115,7 @@ export default function AdminOfficeTimings() {
 
   function openDrawer(row: UserRow) {
     setEditingUserId(row.user.id);
-    const userType = (row.user.user_type as 'internal' | 'partner');
+    const userType = (row.user.user_type as EligibleUserType);
     setForm(row.timing ? fromTiming(row.timing) : emptyForm(userType));
   }
 
@@ -164,7 +166,7 @@ export default function AdminOfficeTimings() {
 
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex gap-1 rounded-lg bg-[#F1F5F9] p-1">
-          {(['all', 'internal', 'partner'] as const).map(tab => (
+          {(['all', 'internal', 'partner', 'partner_employee'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setUserTypeFilter(tab)}
@@ -172,7 +174,7 @@ export default function AdminOfficeTimings() {
                 userTypeFilter === tab ? 'bg-white text-[#0F172B] shadow-sm' : 'text-[#62748E] hover:text-[#0F172B]'
               }`}
             >
-              {tab === 'all' ? 'All' : tab === 'internal' ? 'Internal' : 'Partner'}
+              {tab === 'all' ? 'All' : tab === 'internal' ? 'Internal' : tab === 'partner' ? 'Partner' : 'Partner Employee'}
             </button>
           ))}
         </div>
@@ -210,9 +212,13 @@ export default function AdminOfficeTimings() {
                   </td>
                   <td className="px-5 py-3">
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                      row.user.user_type === 'partner' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'
+                      row.user.user_type === 'partner' ? 'bg-blue-50 text-blue-700' :
+                      row.user.user_type === 'partner_employee' ? 'bg-violet-50 text-violet-700' :
+                      'bg-emerald-50 text-emerald-700'
                     }`}>
-                      {row.user.user_type === 'partner' ? 'Partner' : 'Internal'}
+                      {row.user.user_type === 'partner' ? 'Partner' :
+                       row.user.user_type === 'partner_employee' ? 'Partner Employee' :
+                       'Internal'}
                     </span>
                   </td>
                   <td className="px-5 py-3 text-sm text-[#62748E]">

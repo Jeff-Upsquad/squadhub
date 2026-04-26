@@ -20,6 +20,12 @@ export function useIsClientStaff(): boolean {
   return useUserType() === 'client_staff';
 }
 
+// Returns true for both partner and partner_employee — they share access.
 export function useIsPartner(): boolean {
-  return useUserType() === 'partner';
+  const t = useUserType();
+  return t === 'partner' || t === 'partner_employee';
+}
+
+export function useIsPartnerEmployee(): boolean {
+  return useUserType() === 'partner_employee';
 }

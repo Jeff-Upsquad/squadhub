@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { loadChatContext, requireTeamVariant } from '../../middleware/chat';
 import { supabaseAdmin } from '../../supabase-chat';
+import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
 
@@ -148,12 +149,12 @@ router.get('/contacts', async (req: Request, res: Response) => {
     .eq('status', 'active')
     .neq('id', req.userId!);
 
-  if (me.user_type === 'partner') {
-    // partner -> contacts are internal users + any admin
+  if (PARTNER_USER_TYPES.includes(me.user_type)) {
+    // partner / partner_employee -> contacts are internal users + any admin
     query = query.or('user_type.eq.internal,is_admin.eq.true');
   } else {
-    // internal / admin -> contacts are partners
-    query = query.eq('user_type', 'partner');
+    // internal / admin -> contacts are partner-tier users
+    query = query.in('user_type', PARTNER_USER_TYPES as unknown as string[]);
   }
 
   const { data, error } = await query.order('display_name');

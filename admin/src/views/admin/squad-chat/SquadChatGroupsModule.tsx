@@ -21,7 +21,7 @@ interface UserRow {
   email: string;
   display_name: string;
   avatar_url: string | null;
-  user_type: 'internal' | 'client' | 'client_staff' | 'partner';
+  user_type: 'internal' | 'client' | 'client_staff' | 'partner' | 'partner_employee';
   is_admin: boolean;
 }
 
@@ -162,7 +162,7 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
   const allowedUsers = users.filter((u) =>
     scope === 'clients'
       ? u.user_type === 'client' || u.user_type === 'client_staff' || u.user_type === 'internal' || u.is_admin
-      : u.user_type === 'partner' || u.user_type === 'internal' || u.is_admin,
+      : u.user_type === 'partner' || u.user_type === 'partner_employee' || u.user_type === 'internal' || u.is_admin,
   );
   const filteredUsers = search
     ? allowedUsers.filter((u) =>
@@ -369,7 +369,7 @@ function EditGroupDialog({ groupId, onClose, onChanged }: { groupId: string; onC
     if (memberIds.has(u.id)) return false;
     return group.app_scope === 'clients'
       ? u.user_type === 'client' || u.user_type === 'client_staff' || u.user_type === 'internal' || u.is_admin
-      : u.user_type === 'partner' || u.user_type === 'internal' || u.is_admin;
+      : u.user_type === 'partner' || u.user_type === 'partner_employee' || u.user_type === 'internal' || u.is_admin;
   });
 
   return (

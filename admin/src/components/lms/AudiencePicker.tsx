@@ -15,6 +15,7 @@ const ALL_USER_TYPES: { value: UserType; label: string; description: string }[] 
   { value: 'client', label: 'Clients', description: 'Primary client contacts' },
   { value: 'client_staff', label: 'Client staff', description: 'Client team members' },
   { value: 'partner', label: 'Partners', description: 'External partners / contractors' },
+  { value: 'partner_employee', label: 'Partner employees', description: 'Staff working under a partner' },
 ];
 
 export default function AudiencePicker({ userTypes, userIds, onChange }: Props) {

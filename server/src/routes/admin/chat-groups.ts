@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/admin';
 import { supabaseAdmin } from '../../supabase-chat';
-import type { ChatAppVariant } from '@squadhub/shared';
+import type { ChatAppVariant, UserType } from '@squadhub/shared';
+import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -55,7 +56,7 @@ router.post('/', async (req: Request, res: Response) => {
     const scopeOk = (u: { user_type: string; is_admin: boolean | null }) =>
       body.app_scope === 'clients'
         ? u.user_type === 'client' || u.user_type === 'client_staff' || u.user_type === 'internal' || u.is_admin
-        : u.user_type === 'partner' || u.user_type === 'internal' || u.is_admin;
+        : PARTNER_USER_TYPES.includes(u.user_type as UserType) || u.user_type === 'internal' || u.is_admin;
     const allowedIds = new Set((users || []).filter(scopeOk).map((u: any) => u.id));
 
     const { data: group, error } = await supabaseAdmin
@@ -176,7 +177,7 @@ router.post('/:id/members', async (req: Request, res: Response) => {
     const ok = (u: { user_type: string; is_admin: boolean | null }) =>
       g.app_scope === 'clients'
         ? u.user_type === 'client' || u.user_type === 'client_staff' || u.user_type === 'internal' || u.is_admin
-        : u.user_type === 'partner' || u.user_type === 'internal' || u.is_admin;
+        : PARTNER_USER_TYPES.includes(u.user_type as UserType) || u.user_type === 'internal' || u.is_admin;
     const allowed = (users || []).filter(ok).map((u: any) => u.id);
     if (allowed.length === 0) {
       res.status(400).json({ success: false, error: 'No users match this group\'s app scope' });
