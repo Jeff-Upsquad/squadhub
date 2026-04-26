@@ -45,15 +45,18 @@ export default function PublishedCardRecipientsPanel({
   cardId,
   title,
   onClose,
+  endpoint,
 }: {
   cardId: string;
   title: string;
   onClose: () => void;
+  endpoint?: string;
 }) {
+  const url = endpoint ?? `/subscription-cards/${cardId}/recipients`;
   const { data, isLoading, error } = useQuery({
-    queryKey: ['card-recipients', cardId],
+    queryKey: ['card-recipients', cardId, url],
     queryFn: () =>
-      api.get(`/subscription-cards/${cardId}/recipients`).then((r) => r.data?.data as RecipientsResponse),
+      api.get(url).then((r) => r.data?.data as RecipientsResponse),
   });
 
   const partnerGroups = useMemo(() => {

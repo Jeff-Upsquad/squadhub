@@ -73,9 +73,29 @@ export async function getOrCreateDraftCard(submissionSubscriptionId: string) {
   if (selErr) throw selErr;
   if (existing) return hydrateCard(existing);
 
+  // Pre-fill squadhire_category_ids from the canonical subscription's mapping
+  // (subscription_squadhire_profiles). Sales can still override per card.
+  const { data: stagedRow } = await supabaseAdmin
+    .from('client_submission_subscriptions')
+    .select('subscription_id')
+    .eq('id', submissionSubscriptionId)
+    .maybeSingle();
+
+  let prefillCategoryIds: string[] = [];
+  if (stagedRow?.subscription_id) {
+    const { data: mappings } = await supabaseAdmin
+      .from('subscription_squadhire_profiles')
+      .select('squadhire_category_id')
+      .eq('subscription_id', stagedRow.subscription_id);
+    prefillCategoryIds = (mappings || []).map((m: any) => m.squadhire_category_id);
+  }
+
   const { data: created, error: insErr } = await supabaseAdmin
     .from('subscription_cards')
-    .insert({ submission_subscription_id: submissionSubscriptionId })
+    .insert({
+      submission_subscription_id: submissionSubscriptionId,
+      squadhire_category_ids: prefillCategoryIds,
+    })
     .select('*')
     .single();
   if (insErr) throw insErr;
