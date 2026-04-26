@@ -1,30 +1,13 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
+import type { ClientSubmissionSubscription, Country, SubscriptionCard } from '@squadhub/shared';
 import PublishedCardRecipientsPanel from '../sales/PublishedCardRecipientsPanel';
 
-interface PublishedCard {
-  id: string;
-  state: 'published';
-  published_at: string | null;
-  brand_name: string | null;
-  business_nature: string | null;
-  notes: string | null;
-  submission: {
-    id: string;
-    business_name: string;
-    country: { id: string; name: string; currency: string } | null;
-  } | null;
-  submission_subscription: {
-    id: string;
-    subscription: { id: string; name: string } | null;
-    plan: { id: string; plan: string; tier: string } | null;
-  } | null;
-  recipient_counts: {
-    partners: { pending: number; accepted: number; rejected: number };
-    talents: { accepted: number; rejected: number };
-  };
-}
+type PublishedCard = SubscriptionCard & {
+  submission?: { id: string; business_name: string; country_id: string; country?: Country | null } | null;
+  submission_subscription?: ClientSubmissionSubscription | null;
+};
 
 function formatRelative(iso: string | null): string {
   if (!iso) return '';
@@ -78,8 +61,8 @@ export default function ClientPublishedCards() {
                 const planLabel = c.submission_subscription?.plan
                   ? `${c.submission_subscription.plan.plan} · ${c.submission_subscription.plan.tier}`
                   : null;
-                const partners = c.recipient_counts.partners;
-                const talents = c.recipient_counts.talents;
+                const partners = c.recipient_counts?.partners ?? { pending: 0, accepted: 0, rejected: 0 };
+                const talents = c.recipient_counts?.talents ?? { accepted: 0, rejected: 0 };
                 return (
                   <li key={c.id}>
                     <button
@@ -134,7 +117,7 @@ export default function ClientPublishedCards() {
 
       {openCard && (
         <PublishedCardRecipientsPanel
-          cardId={openCard.id}
+          card={openCard}
           title={`${openCard.submission?.business_name || 'Business'} · ${openCard.submission_subscription?.subscription?.name || 'Subscription'}`}
           onClose={() => setOpenCard(null)}
           endpoint={`/users/me/published-cards/${openCard.id}/recipients`}
