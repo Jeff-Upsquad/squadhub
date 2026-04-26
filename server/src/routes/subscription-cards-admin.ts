@@ -177,11 +177,11 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
     const [{ data: partnerRows }, { data: talentRows }] = await Promise.all([
       supabaseAdmin
         .from('subscription_card_recipients')
-        .select('partner_id, status, responded_at')
+        .select('partner_id, status, responded_at, assigned_manually')
         .eq('card_id', cardId),
       supabaseAdmin
         .from('subscription_card_external_recipients')
-        .select('external_user_id, talent_name, status, responded_at')
+        .select('external_user_id, talent_name, status, responded_at, assigned_manually')
         .eq('card_id', cardId),
     ]);
 
@@ -200,6 +200,7 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
         name: u?.display_name || u?.email || r.partner_id,
         status: r.status,
         responded_at: r.responded_at,
+        assigned_manually: !!r.assigned_manually,
       };
     });
 
@@ -208,6 +209,7 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
       name: r.talent_name || null,
       status: r.status,
       responded_at: r.responded_at,
+      assigned_manually: !!r.assigned_manually,
     }));
 
     res.json({ success: true, data: { partners, talents } });

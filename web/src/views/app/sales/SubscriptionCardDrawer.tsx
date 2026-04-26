@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   ClientSubmissionSubscription,
@@ -92,11 +92,16 @@ export default function SubscriptionCardDrawer({
   });
 
   const publishMutation = useMutation({
-    mutationFn: () => api.post(`/subscription-cards/${card!.id}/publish`),
-    onSuccess: (res: any) => {
+    mutationFn: (distribution: 'broadcast' | 'manual') =>
+      api.post(`/subscription-cards/${card!.id}/publish`, { distribution }),
+    onSuccess: (res: any, distribution: 'broadcast' | 'manual') => {
       invalidate();
-      const n = res?.data?.matched_count ?? 0;
-      alert(`Published. Sent to ${n} matching partner${n === 1 ? '' : 's'}.`);
+      if (distribution === 'manual') {
+        alert('Soft published. Add partners or talents from the recipients panel.');
+      } else {
+        const n = res?.data?.matched_count ?? 0;
+        alert(`Published. Sent to ${n} matching partner${n === 1 ? '' : 's'}.`);
+      }
     },
     onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Publish failed'),
   });
@@ -197,8 +202,31 @@ export default function SubscriptionCardDrawer({
   const pendingCount = partnerCounts?.pending ?? 0;
   const rejectedCount = (partnerCounts?.rejected ?? 0) + (talentCounts?.rejected ?? 0);
 
-  const [confirmPublish, setConfirmPublish] = useState(false);
+  const [pendingPublishMode, setPendingPublishMode] = useState<'broadcast' | 'manual' | null>(null);
+  const [publishMenuOpen, setPublishMenuOpen] = useState(false);
+  const publishMenuRef = useRef<HTMLDivElement>(null);
   const [confirmClose, setConfirmClose] = useState(false);
+
+  // Close the publish menu on outside click / Escape — same pattern used by
+  // SalesPersonSelect and ListPickerCombobox elsewhere in the app.
+  useEffect(() => {
+    if (!publishMenuOpen) return;
+    function onDoc(e: MouseEvent) {
+      if (!publishMenuRef.current) return;
+      if (!publishMenuRef.current.contains(e.target as Node)) {
+        setPublishMenuOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setPublishMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [publishMenuOpen]);
 
   function saveDraft() {
     if (!card) return;
@@ -224,10 +252,10 @@ export default function SubscriptionCardDrawer({
     });
   }
 
-  function handlePublish() {
+  function handlePublish(distribution: 'broadcast' | 'manual') {
     // Flush current edits, then publish.
     saveDraft();
-    setTimeout(() => publishMutation.mutate(), 150);
+    setTimeout(() => publishMutation.mutate(distribution), 150);
   }
 
   return (
@@ -624,13 +652,53 @@ export default function SubscriptionCardDrawer({
                     >
                       Save draft
                     </button>
-                    <button
-                      onClick={() => setConfirmPublish(true)}
-                      disabled={publishMutation.isPending}
-                      className="rounded-md bg-[var(--sh-ink)] px-3 py-1.5 text-xs font-medium text-[var(--surface)] hover:opacity-90 disabled:opacity-50"
-                    >
-                      Publish
-                    </button>
+                    {/*
+                     * Split button: primary "Publish" + chevron that opens a
+                     * single-item menu for "Soft publish". Soft publish skips
+                     * the auto-fan-out to partners and tells SquadHire not to
+                     * broadcast to talents — admins then hand-pick recipients
+                     * from the recipients panel.
+                     */}
+                    <div ref={publishMenuRef} className="relative inline-flex">
+                      <button
+                        onClick={() => setPendingPublishMode('broadcast')}
+                        disabled={publishMutation.isPending}
+                        className="rounded-l-md bg-[var(--sh-ink)] px-3 py-1.5 text-xs font-medium text-[var(--surface)] hover:opacity-90 disabled:opacity-50"
+                      >
+                        Publish
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPublishMenuOpen((v) => !v)}
+                        disabled={publishMutation.isPending}
+                        aria-label="More publish options"
+                        aria-haspopup="menu"
+                        aria-expanded={publishMenuOpen}
+                        className="rounded-r-md border-l border-white/20 bg-[var(--sh-ink)] px-1.5 py-1.5 text-[var(--surface)] hover:opacity-90 disabled:opacity-50"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {publishMenuOpen && (
+                        <div
+                          role="menu"
+                          className="absolute bottom-full right-0 mb-1 w-56 overflow-hidden rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg"
+                        >
+                          <button
+                            role="menuitem"
+                            onClick={() => {
+                              setPublishMenuOpen(false);
+                              setPendingPublishMode('manual');
+                            }}
+                            className="block w-full px-3 py-2 text-left text-xs hover:bg-[var(--sh-hair-3)]"
+                          >
+                            <div className="font-medium text-[var(--sh-ink)]">Soft publish</div>
+                            <div className="text-[var(--sh-ink-3)]">No broadcast — hand-pick recipients</div>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
                 {card.state === 'published' && (
@@ -657,15 +725,24 @@ export default function SubscriptionCardDrawer({
             </div>
 
             <ConfirmRemoveDialog
-              open={confirmPublish}
-              title="Publish subscription card"
-              description={`This will send the card to all matching partners (tiers ${targetTiers.length === 0 ? 'Any' : targetTiers.join(', ')}, min ${parseInt(minExp || '0', 10) || 0}y, ${targetCountryIds.length || 'all'} countries). You can recall it only before anyone accepts.`}
-              confirmWord="PUBLISH"
+              open={pendingPublishMode !== null}
+              title={
+                pendingPublishMode === 'manual'
+                  ? 'Soft publish subscription card'
+                  : 'Publish subscription card'
+              }
+              description={
+                pendingPublishMode === 'manual'
+                  ? "Soft publish — no auto fan-out. The card will appear in the Published Cards list and on SquadHire's admin, but partners and talents won't see it until you hand-pick them from the recipients panel. You can recall it only before anyone accepts."
+                  : `This will send the card to all matching partners (tiers ${targetTiers.length === 0 ? 'Any' : targetTiers.join(', ')}, min ${parseInt(minExp || '0', 10) || 0}y, ${targetCountryIds.length || 'all'} countries). You can recall it only before anyone accepts.`
+              }
+              confirmWord={pendingPublishMode === 'manual' ? 'SOFT PUBLISH' : 'PUBLISH'}
               loading={publishMutation.isPending}
-              onClose={() => setConfirmPublish(false)}
+              onClose={() => setPendingPublishMode(null)}
               onConfirm={() => {
-                setConfirmPublish(false);
-                handlePublish();
+                const mode = pendingPublishMode;
+                setPendingPublishMode(null);
+                if (mode) handlePublish(mode);
               }}
             />
             <ConfirmRemoveDialog

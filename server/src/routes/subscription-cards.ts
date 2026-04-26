@@ -257,11 +257,22 @@ router.put(
 // ============================================================
 // POST /subscription-cards/:id/publish — match partners and mark published
 // ============================================================
+const publishBodySchema = z.object({
+  distribution: z.enum(['broadcast', 'manual']).default('broadcast'),
+});
+
 router.post(
   '/:id/publish',
   requireSalesLeadsAccess,
   async (req: Request, res: Response) => {
     try {
+      const parsed = publishBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
+        return;
+      }
+      const { distribution } = parsed.data;
+
       const loaded = await loadCardForUser(req.params.id as string, req.userId!, res);
       if (!loaded) return;
       if (loaded.card.state !== 'draft') {
@@ -269,13 +280,21 @@ router.post(
         return;
       }
 
-      const matched = await matchPartnersForCard(req.params.id as string);
+      // Manual distribution skips the auto-fan-out. The card still flips to
+      // 'published' so it's visible in the admin Published Cards list and in
+      // the client portal; admins then hand-pick recipients via the
+      // assign-partner / assign-talent endpoints.
+      const matched =
+        distribution === 'broadcast'
+          ? await matchPartnersForCard(req.params.id as string)
+          : [];
 
       // Flip state; reject if something else raced us.
       const { data: updated, error: updErr } = await supabaseAdmin
         .from('subscription_cards')
         .update({
           state: 'published',
+          distribution,
           published_at: new Date().toISOString(),
           published_by: req.userId!,
         })
@@ -295,7 +314,10 @@ router.post(
       // Fan out to SquadHire. Fire-and-forget from the user's point of view:
       // the admin sees "published" immediately; delivery runs in the
       // background with inline retries and the sweeper as the safety net.
-      // Never block or fail the publish response on this call.
+      // Never block or fail the publish response on this call. The payload
+      // includes `distribution` so SquadHire knows whether to broadcast to
+      // talents (broadcast) or only show in its admin Published Cards list
+      // (manual).
       buildSquadhirePayloadForCard(updated.id)
         .then((payload) => {
           if (payload) {
@@ -310,6 +332,7 @@ router.post(
         success: true,
         data: await hydrateCard(updated),
         matched_count: matched.length,
+        distribution,
       });
     } catch (err: any) {
       console.error('Publish card error:', err);
@@ -591,11 +614,11 @@ router.get(
       ] = await Promise.all([
         supabaseAdmin
           .from('subscription_card_recipients')
-          .select('partner_id, status, responded_at')
+          .select('partner_id, status, responded_at, assigned_manually')
           .eq('card_id', cardId),
         supabaseAdmin
           .from('subscription_card_external_recipients')
-          .select('external_user_id, talent_name, status, responded_at')
+          .select('external_user_id, talent_name, status, responded_at, assigned_manually')
           .eq('card_id', cardId),
       ]);
       if (pErr) {
@@ -622,6 +645,7 @@ router.get(
           name: u?.display_name || u?.email || r.partner_id,
           status: r.status,
           responded_at: r.responded_at,
+          assigned_manually: !!r.assigned_manually,
         };
       });
 
@@ -630,6 +654,7 @@ router.get(
         name: r.talent_name || null,
         status: r.status,
         responded_at: r.responded_at,
+        assigned_manually: !!r.assigned_manually,
       }));
 
       res.json({ success: true, data: { partners, talents } });
