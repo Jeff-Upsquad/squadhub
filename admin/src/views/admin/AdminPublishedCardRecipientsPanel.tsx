@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import AssignRecipientPicker from './AssignRecipientPicker';
 import type { PublishedCard } from './AdminPublishedCards';
@@ -66,12 +66,46 @@ export default function AdminPublishedCardRecipientsPanel({
 }) {
   const cardId = card.id;
   const [pickerOpen, setPickerOpen] = useState(false);
+  const qc = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['admin-card-recipients', cardId],
     queryFn: () =>
       api.get(`/admin/subscription-cards/${cardId}/recipients`).then((r) => r.data?.data as RecipientsResponse),
   });
+
+  const removePartner = useMutation({
+    mutationFn: (partnerId: string) =>
+      api.delete(`/admin/subscription-cards/${cardId}/recipients/${partnerId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', cardId] });
+    },
+    onError: (err: any) =>
+      alert(err?.response?.data?.error || err.message || 'Failed to remove partner'),
+  });
+
+  const removeTalent = useMutation({
+    mutationFn: (talentId: string) =>
+      api.delete(`/admin/subscription-cards/${cardId}/external-recipients/${talentId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', cardId] });
+    },
+    onError: (err: any) =>
+      alert(err?.response?.data?.error || err.message || 'Failed to remove talent'),
+  });
+
+  function confirmRemovePartner(partnerId: string, name: string) {
+    if (!window.confirm(`Remove ${name} from this card? They'll stop seeing it in their opportunities.`)) {
+      return;
+    }
+    removePartner.mutate(partnerId);
+  }
+  function confirmRemoveTalent(talentId: string, name: string) {
+    if (!window.confirm(`Remove ${name} from this card? They'll stop seeing it in their subscription tab.`)) {
+      return;
+    }
+    removeTalent.mutate(talentId);
+  }
 
   const { data: countriesRes } = useQuery({
     queryKey: ['public-countries'],
@@ -124,41 +158,71 @@ export default function AdminPublishedCardRecipientsPanel({
             ) : (
               <>
                 <Section title="Partners">
-                  <Subgroup label="Accepted" items={partnerGroups.accepted.map((p) => ({
-                    key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
-                  }))} />
-                  <Subgroup label="Rejected" items={partnerGroups.rejected.map((p) => ({
-                    key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
-                  }))} />
-                  <Subgroup label="Pending" items={partnerGroups.pending.map((p) => ({
-                    key: p.id, name: p.name, status: p.status, responded_at: null, assigned_manually: !!p.assigned_manually,
-                  }))} />
+                  <Subgroup
+                    label="Accepted"
+                    onRemove={(id, name) => confirmRemovePartner(id, name)}
+                    isRemoving={removePartner.isPending}
+                    items={partnerGroups.accepted.map((p) => ({
+                      key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
+                    }))}
+                  />
+                  <Subgroup
+                    label="Rejected"
+                    onRemove={(id, name) => confirmRemovePartner(id, name)}
+                    isRemoving={removePartner.isPending}
+                    items={partnerGroups.rejected.map((p) => ({
+                      key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
+                    }))}
+                  />
+                  <Subgroup
+                    label="Pending"
+                    onRemove={(id, name) => confirmRemovePartner(id, name)}
+                    isRemoving={removePartner.isPending}
+                    items={partnerGroups.pending.map((p) => ({
+                      key: p.id, name: p.name, status: p.status, responded_at: null, assigned_manually: !!p.assigned_manually,
+                    }))}
+                  />
                 </Section>
                 <Section title="Talents">
-                  <Subgroup label="Accepted" items={talentGroups.accepted.map((t) => ({
-                    key: t.external_user_id,
-                    name: t.name || 'Unknown talent',
-                    subtitle: t.external_user_id.slice(0, 8),
-                    status: t.status,
-                    responded_at: t.responded_at,
-                    assigned_manually: !!t.assigned_manually,
-                  }))} />
-                  <Subgroup label="Rejected" items={talentGroups.rejected.map((t) => ({
-                    key: t.external_user_id,
-                    name: t.name || 'Unknown talent',
-                    subtitle: t.external_user_id.slice(0, 8),
-                    status: t.status,
-                    responded_at: t.responded_at,
-                    assigned_manually: !!t.assigned_manually,
-                  }))} />
-                  <Subgroup label="Pending" items={talentGroups.pending.map((t) => ({
-                    key: t.external_user_id,
-                    name: t.name || 'Unknown talent',
-                    subtitle: t.external_user_id.slice(0, 8),
-                    status: t.status,
-                    responded_at: null,
-                    assigned_manually: !!t.assigned_manually,
-                  }))} />
+                  <Subgroup
+                    label="Accepted"
+                    onRemove={(id, name) => confirmRemoveTalent(id, name)}
+                    isRemoving={removeTalent.isPending}
+                    items={talentGroups.accepted.map((t) => ({
+                      key: t.external_user_id,
+                      name: t.name || 'Unknown talent',
+                      subtitle: t.external_user_id.slice(0, 8),
+                      status: t.status,
+                      responded_at: t.responded_at,
+                      assigned_manually: !!t.assigned_manually,
+                    }))}
+                  />
+                  <Subgroup
+                    label="Rejected"
+                    onRemove={(id, name) => confirmRemoveTalent(id, name)}
+                    isRemoving={removeTalent.isPending}
+                    items={talentGroups.rejected.map((t) => ({
+                      key: t.external_user_id,
+                      name: t.name || 'Unknown talent',
+                      subtitle: t.external_user_id.slice(0, 8),
+                      status: t.status,
+                      responded_at: t.responded_at,
+                      assigned_manually: !!t.assigned_manually,
+                    }))}
+                  />
+                  <Subgroup
+                    label="Pending"
+                    onRemove={(id, name) => confirmRemoveTalent(id, name)}
+                    isRemoving={removeTalent.isPending}
+                    items={talentGroups.pending.map((t) => ({
+                      key: t.external_user_id,
+                      name: t.name || 'Unknown talent',
+                      subtitle: t.external_user_id.slice(0, 8),
+                      status: t.status,
+                      responded_at: null,
+                      assigned_manually: !!t.assigned_manually,
+                    }))}
+                  />
                 </Section>
               </>
             )}
@@ -310,9 +374,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Subgroup({
   label,
   items,
+  onRemove,
+  isRemoving,
 }: {
   label: 'Accepted' | 'Rejected' | 'Pending';
   items: { key: string; name: string; subtitle?: string | null; status: 'accepted' | 'rejected' | 'pending'; responded_at: string | null; assigned_manually?: boolean }[];
+  onRemove?: (key: string, name: string) => void;
+  isRemoving?: boolean;
 }) {
   if (items.length === 0) {
     return (
@@ -329,7 +397,7 @@ function Subgroup({
       </p>
       <ul className="divide-y divide-[#E2E8F0] rounded-lg border border-[#E2E8F0]">
         {items.map((it) => (
-          <li key={it.key} className="flex items-center justify-between gap-3 px-3 py-2">
+          <li key={it.key} className="group flex items-center justify-between gap-3 px-3 py-2">
             <div className="min-w-0 flex-1 truncate">
               <p className="truncate text-sm text-[#0F172B]">{it.name}</p>
               {it.subtitle && (
@@ -351,6 +419,20 @@ function Subgroup({
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_CHIP[it.status]}`}>
                 {it.status}
               </span>
+              {onRemove && (
+                <button
+                  type="button"
+                  disabled={isRemoving}
+                  onClick={() => onRemove(it.key, it.name)}
+                  aria-label={`Remove ${it.name}`}
+                  title="Remove from this card"
+                  className="rounded-md p-1 text-[#90A1B9] opacity-0 transition group-hover:opacity-100 hover:bg-[#F8FAFC] hover:text-red-600 disabled:opacity-30"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
             </div>
           </li>
         ))}

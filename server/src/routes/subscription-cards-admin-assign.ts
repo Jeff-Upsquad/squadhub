@@ -4,7 +4,10 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
-import { notifySquadhireOfManualAssignment } from '../utils/squadhireWebhook';
+import {
+  notifySquadhireOfManualAssignment,
+  notifySquadhireOfManualRemoval,
+} from '../utils/squadhireWebhook';
 
 /**
  * Manual recipient assignment for soft-published (or any published)
@@ -169,6 +172,103 @@ router.post('/subscription-cards/:id/assign-talent', async (req: Request, res: R
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
+
+// ============================================================
+// DELETE /admin/subscription-cards/:id/recipients/:partnerId
+// Removes a partner recipient row regardless of how it got there
+// (broadcast fan-out or hand-pick). Idempotent — 404 if the card is
+// gone, 200 with deleted=0 if the row was already missing.
+// ============================================================
+router.delete(
+  '/subscription-cards/:id/recipients/:partnerId',
+  async (req: Request, res: Response) => {
+    try {
+      const cardId = req.params.id as string;
+      const partnerId = req.params.partnerId as string;
+
+      const { data: card, error: cardErr } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id')
+        .eq('id', cardId)
+        .maybeSingle();
+      if (cardErr) {
+        res.status(500).json({ success: false, error: cardErr.message });
+        return;
+      }
+      if (!card) {
+        res.status(404).json({ success: false, error: 'Card not found' });
+        return;
+      }
+
+      const { error: delErr, count } = await supabaseAdmin
+        .from('subscription_card_recipients')
+        .delete({ count: 'exact' })
+        .eq('card_id', cardId)
+        .eq('partner_id', partnerId);
+      if (delErr) {
+        res.status(500).json({ success: false, error: delErr.message });
+        return;
+      }
+
+      res.json({ success: true, deleted: count ?? 0 });
+    } catch (err: any) {
+      console.error('Remove partner recipient error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  },
+);
+
+// ============================================================
+// DELETE /admin/subscription-cards/:id/external-recipients/:talentId
+// Removes a talent (external) recipient row and best-effort notifies
+// SquadHire so the card disappears from the talent's subscription tab.
+// ============================================================
+router.delete(
+  '/subscription-cards/:id/external-recipients/:talentId',
+  async (req: Request, res: Response) => {
+    try {
+      const cardId = req.params.id as string;
+      const talentId = req.params.talentId as string;
+
+      const { data: card, error: cardErr } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id')
+        .eq('id', cardId)
+        .maybeSingle();
+      if (cardErr) {
+        res.status(500).json({ success: false, error: cardErr.message });
+        return;
+      }
+      if (!card) {
+        res.status(404).json({ success: false, error: 'Card not found' });
+        return;
+      }
+
+      const { error: delErr, count } = await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .delete({ count: 'exact' })
+        .eq('card_id', cardId)
+        .eq('external_system', 'squadhire')
+        .eq('external_user_id', talentId);
+      if (delErr) {
+        res.status(500).json({ success: false, error: delErr.message });
+        return;
+      }
+
+      // Best-effort SquadHire mirror — fire-and-forget. We don't block on this:
+      // even if SquadHire's recipient row sticks around, the SquadHub-side
+      // truth is gone, and the next admin retry can replay the call.
+      notifySquadhireOfManualRemoval(cardId, talentId).catch((err) => {
+        console.error('[remove-talent] notify failed', err);
+      });
+
+      res.json({ success: true, deleted: count ?? 0 });
+    } catch (err: any) {
+      console.error('Remove talent recipient error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  },
+);
 
 // ============================================================
 // GET /admin/partners/search?q=...
