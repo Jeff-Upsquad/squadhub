@@ -43,6 +43,8 @@ const patchCardSchema = z.object({
   custom_deliverables: z.array(customDeliverableSchema).optional(),
   // null = clear override and fall back to the plan's default partner price.
   partner_price_override: z.number().int().min(0).nullable().optional(),
+  // FKs to subscription_plan_deliverables that this card has disabled.
+  disabled_default_deliverable_ids: z.array(z.string().uuid()).optional(),
 });
 
 const targetsSchema = z.object({

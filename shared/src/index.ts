@@ -1171,6 +1171,13 @@ export interface SubscriptionCard {
   min_experience_years: number;
   target_languages: string[];
   custom_deliverables: SubscriptionCardCustomDeliverable[];
+  /**
+   * IDs (FK on subscription_plan_deliverables) of the plan's default
+   * deliverables that the sales user has explicitly disabled for this client.
+   * Empty by default. The partner UI filters them out; if no hours-kind
+   * default remains, the partner sees "No hourly commitment".
+   */
+  disabled_default_deliverable_ids: string[];
   target_country_ids: string[];
   target_regions: SubscriptionCardTargetRegion[];
   // SquadHire (Profiles) targeting — UUIDs from SquadHire's categories table.
