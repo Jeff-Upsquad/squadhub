@@ -37,6 +37,7 @@ const nextConfig = {
       { source: '/partner-app/:path+', destination: `${API_URL}/partner-app/:path+` },
       { source: '/notifications/:path*', destination: `${API_URL}/notifications/:path*` },
       { source: '/lms/:path*', destination: `${API_URL}/lms/:path*` },
+      { source: '/profile-access/:path*', destination: `${API_URL}/profile-access/:path*` },
     ],
   }),
 
