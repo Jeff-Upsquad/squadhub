@@ -31,6 +31,7 @@ export default function ClientsModule() {
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
   const [showArchivedSubs, setShowArchivedSubs] = useState(false);
+  const [statusTab, setStatusTab] = useState<ClientStatus>('active');
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<typeof EMPTY_CREATE_FORM>(EMPTY_CREATE_FORM);
   const [createPlanIds, setCreatePlanIds] = useState<string[]>([]);
@@ -218,10 +219,11 @@ export default function ClientsModule() {
   );
 
   const sections: { key: ClientStatus; label: string; clients: Client[] }[] = [
-    { key: 'active',    label: 'Active clients',    clients: filtered.filter((c) => c.status === 'active') },
-    { key: 'paused',    label: 'Paused clients',    clients: filtered.filter((c) => c.status === 'paused') },
-    { key: 'cancelled', label: 'Cancelled clients', clients: filtered.filter((c) => c.status === 'cancelled') },
+    { key: 'active',    label: 'Active',    clients: filtered.filter((c) => c.status === 'active') },
+    { key: 'paused',    label: 'Paused',    clients: filtered.filter((c) => c.status === 'paused') },
+    { key: 'cancelled', label: 'Cancelled', clients: filtered.filter((c) => c.status === 'cancelled') },
   ];
+  const activeSection = sections.find((s) => s.key === statusTab) || sections[0];
 
   const createSelectedCountry = activeCountries.find((c) => c.id === createForm.country_id) || null;
   const selectedClientCountry = selectedClient ? countries.find((c) => c.id === selectedClient.country_id) || null : null;
@@ -258,17 +260,35 @@ export default function ClientsModule() {
           <p className="text-sm text-[#90A1B9]">{search ? 'No matching clients.' : 'No clients yet. Click + New Client to add one, or share the onboarding link.'}</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {sections.map((section) => (
-            <div key={section.key}>
-              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">
-                {section.label} ({section.clients.length})
-              </h4>
-              {section.clients.length === 0 ? (
-                <p className="py-3 text-xs text-[#90A1B9]">No {section.label.toLowerCase()}.</p>
-              ) : (
-                <div className="space-y-2">
-                  {section.clients.map((client) => {
+        <div>
+          <div className="mb-4 flex gap-1 border-b border-[#E2E8F0]">
+            {sections.map((section) => {
+              const isActive = statusTab === section.key;
+              return (
+                <button
+                  key={section.key}
+                  onClick={() => setStatusTab(section.key)}
+                  className={`flex items-center gap-2 border-b-2 px-3 py-2 text-sm transition ${
+                    isActive
+                      ? 'border-[#2962FF] text-[#0F172B] font-medium'
+                      : 'border-transparent text-[#62748E] hover:text-[#0F172B]'
+                  }`}
+                >
+                  <span>{section.label}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    isActive ? 'bg-[#2962FF] text-white' : 'bg-[#F1F5F9] text-[#62748E]'
+                  }`}>
+                    {section.clients.length}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {activeSection.clients.length === 0 ? (
+            <p className="py-8 text-center text-sm text-[#90A1B9]">No {activeSection.label.toLowerCase()} clients.</p>
+          ) : (
+            <div className="space-y-2">
+              {activeSection.clients.map((client) => {
                     const countryName = client.country?.name || countries.find((c) => c.id === client.country_id)?.name || '—';
                     return (
                       <button
@@ -305,11 +325,9 @@ export default function ClientsModule() {
                         </div>
                       </button>
                     );
-                  })}
-                </div>
-              )}
+              })}
             </div>
-          ))}
+          )}
         </div>
       )}
 
