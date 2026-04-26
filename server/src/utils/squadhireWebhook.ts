@@ -44,6 +44,12 @@ export interface SquadhireCardPayload {
   // but is NOT broadcast — talents only see it if hand-picked. Mirrors
   // the SquadHub side of the same lever. Always sent.
   distribution: 'broadcast' | 'manual';
+  // The client lead's email — passed so SquadHire can resolve it to a
+  // business_user and surface accepted talents in that client's dashboard
+  // view. Omitted when the lead has no email or it doesn't look like one;
+  // SquadHire's validator requires a valid email when present and we'd
+  // rather skip the field than fail the whole delivery on a typo.
+  business_email?: string;
 }
 
 interface AttemptOutcome {
@@ -118,12 +124,13 @@ export async function buildSquadhirePayloadForCard(
   let subscriptionName: string | null = null;
   let planName: string | null = null;
   let leadCountryId: string | null = null;
+  let leadEmail: string | null = null;
   let planHoursDeliverable: { per_day: number; per_week: number; per_month: number } | null = null;
   if (staged) {
     const [{ data: sub }, { data: plan }, { data: submission }, { data: planDelivs }] = await Promise.all([
       supabaseAdmin.from('subscriptions').select('name').eq('id', staged.subscription_id).maybeSingle(),
       supabaseAdmin.from('subscription_plans').select('name').eq('id', staged.plan_id).maybeSingle(),
-      supabaseAdmin.from('client_submissions').select('country_id').eq('id', staged.submission_id).maybeSingle(),
+      supabaseAdmin.from('client_submissions').select('country_id, email').eq('id', staged.submission_id).maybeSingle(),
       supabaseAdmin
         .from('subscription_plan_deliverables')
         .select('id, kind, per_day, per_week, per_month')
@@ -132,6 +139,7 @@ export async function buildSquadhirePayloadForCard(
     subscriptionName = sub?.name ?? null;
     planName = plan?.name ?? null;
     leadCountryId = (submission?.country_id as string | undefined) ?? null;
+    leadEmail = (submission?.email as string | undefined)?.trim() || null;
     // Respect the per-card disable flag — when the salesperson toggles off
     // the plan's hours-kind deliverable on a card, don't fold it into the
     // payload. (SquadHub's editor copy promises "the talent sees 'No hourly
@@ -282,6 +290,12 @@ export async function buildSquadhirePayloadForCard(
   const distribution: 'broadcast' | 'manual' =
     card.distribution === 'manual' ? 'manual' : 'broadcast';
 
+  // Skip the field if it's clearly not an email — SquadHire's validator
+  // would 400 on `.email()` and we'd rather lose the dashboard linkage
+  // than the whole delivery.
+  const businessEmail =
+    leadEmail && leadEmail.includes('@') ? leadEmail.toLowerCase() : undefined;
+
   return {
     external_id: card.id as string,
     content,
@@ -289,6 +303,7 @@ export async function buildSquadhirePayloadForCard(
     published_at: publishedAt,
     status,
     distribution,
+    ...(businessEmail ? { business_email: businessEmail } : {}),
   };
 }
 
