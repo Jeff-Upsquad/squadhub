@@ -117,8 +117,18 @@ function OpportunityCard({
   const priceLabel = pricing
     ? `${formatPrice(pricing.price, pricing.country?.currency || 'INR')}/mo`
     : null;
-  const defaultDeliverables: SubscriptionPlanDeliverable[] = plan?.deliverables || [];
+  const allDefaultDeliverables: SubscriptionPlanDeliverable[] = plan?.deliverables || [];
+  const disabledDefaultIds = card.disabled_default_deliverable_ids || [];
+  const defaultDeliverables = allDefaultDeliverables.filter(
+    (d) => !disabledDefaultIds.includes(d.id),
+  );
   const customDeliverables = card.custom_deliverables || [];
+  // "No hourly commitment" copy when this client opted out of every hours-kind
+  // default. Only show it if the plan actually has hours defaults — if the
+  // plan never had any, silence is more accurate than the explicit message.
+  const planHasHoursDefault = allDefaultDeliverables.some((d) => d.kind === 'hours');
+  const enabledHasHoursDefault = defaultDeliverables.some((d) => d.kind === 'hours');
+  const showNoHourlyCommitment = planHasHoursDefault && !enabledHasHoursDefault;
   const workingDays = (card.working_days || []) as WeekDay[];
 
   return (
@@ -140,6 +150,10 @@ function OpportunityCard({
           </p>
         )}
       </div>
+
+      {showNoHourlyCommitment && (
+        <p className="mt-3 text-xs italic text-[var(--sh-ink-3)]">No hourly commitment.</p>
+      )}
 
       {(defaultDeliverables.length > 0 || customDeliverables.length > 0) && (
         <div className="mt-3 flex flex-wrap gap-1.5">

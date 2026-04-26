@@ -119,6 +119,7 @@ export default function SubscriptionCardDrawer({
   const [businessNature, setBusinessNature] = useState('');
   const [notes, setNotes] = useState('');
   const [customDeliverables, setCustomDeliverables] = useState<SubscriptionCardCustomDeliverable[]>([]);
+  const [disabledDefaultIds, setDisabledDefaultIds] = useState<string[]>([]);
 
   const [targetTiers, setTargetTiers] = useState<PartnerTier[]>([]);
   const [minExp, setMinExp] = useState<string>('0');
@@ -148,6 +149,7 @@ export default function SubscriptionCardDrawer({
     setBusinessNature(card.business_nature || '');
     setNotes(card.notes || '');
     setCustomDeliverables(card.custom_deliverables || []);
+    setDisabledDefaultIds(card.disabled_default_deliverable_ids || []);
     setTargetTiers(card.target_tiers || []);
     setMinExp(String(card.min_experience_years ?? 0));
     setTargetLanguages(card.target_languages || []);
@@ -210,6 +212,7 @@ export default function SubscriptionCardDrawer({
       notes: notes || null,
       custom_deliverables: customDeliverables,
       partner_price_override: cleanOverride,
+      disabled_default_deliverable_ids: disabledDefaultIds,
     });
     putTargets.mutate({
       target_tiers: targetTiers,
@@ -286,15 +289,37 @@ export default function SubscriptionCardDrawer({
                       </p>
                     )}
                   </div>
-                  {defaultDeliverables.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {defaultDeliverables.map((d) => (
-                        <DefaultDeliverableChip key={d.id} deliverable={d} />
-                      ))}
-                    </div>
-                  )}
                 </div>
               </Section>
+
+              {/* Default deliverables — sourced from the plan, with a per-card
+                  toggle so the talent doesn't see the ones we've turned off. */}
+              {defaultDeliverables.length > 0 && (
+                <Section title="Default Deliverables">
+                  <ul className="divide-y divide-[var(--sh-hair)] rounded-lg border border-[var(--sh-hair)]">
+                    {defaultDeliverables.map((d) => {
+                      const disabled = disabledDefaultIds.includes(d.id);
+                      return (
+                        <DefaultDeliverableRow
+                          key={d.id}
+                          deliverable={d}
+                          enabled={!disabled}
+                          onToggle={() => {
+                            if (readOnly) return;
+                            setDisabledDefaultIds((prev) =>
+                              disabled ? prev.filter((x) => x !== d.id) : [...prev, d.id],
+                            );
+                          }}
+                          readOnly={readOnly}
+                        />
+                      );
+                    })}
+                  </ul>
+                  <p className="mt-1.5 text-[11px] text-[var(--sh-ink-4)]">
+                    Toggle off to hide a default from the talent. If hours are off, the talent sees "No hourly commitment".
+                  </p>
+                </Section>
+              )}
 
               {/* Partner price (override the plan default) */}
               <Section title="Partner Price">
@@ -690,23 +715,51 @@ function TextField({
   );
 }
 
-function DefaultDeliverableChip({ deliverable }: { deliverable: SubscriptionPlanDeliverable }) {
+function DefaultDeliverableRow({
+  deliverable, enabled, onToggle, readOnly,
+}: {
+  deliverable: SubscriptionPlanDeliverable;
+  enabled: boolean;
+  onToggle: () => void;
+  readOnly: boolean;
+}) {
   const label = deliverable.kind === 'hours' ? 'Hours' : (deliverable.deliverable_type?.name || 'Item');
   const badgeClass = deliverable.kind === 'hours'
     ? 'bg-indigo-100 text-indigo-700'
     : 'bg-purple-100 text-purple-700';
+  const cadence = formatDeliverableCadence(
+    deliverable.per_day,
+    deliverable.per_week,
+    deliverable.per_month,
+    deliverable.kind === 'hours' ? 'hrs' : (deliverable.deliverable_type?.name || 'items'),
+  );
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-md bg-[var(--surface)] px-2 py-0.5 text-[11px] text-[var(--sh-ink)]">
-      <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${badgeClass}`}>{label}</span>
-      <span className="text-[var(--sh-ink-3)]">
-        {formatDeliverableCadence(
-          deliverable.per_day,
-          deliverable.per_week,
-          deliverable.per_month,
-          deliverable.kind === 'hours' ? 'hrs' : (deliverable.deliverable_type?.name || 'items'),
-        )}
-      </span>
-    </span>
+    <li
+      className={`flex items-center justify-between gap-3 px-3 py-2.5 transition ${enabled ? '' : 'opacity-50'}`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${badgeClass}`}>{label}</span>
+        <span className={`text-sm ${enabled ? 'text-[var(--sh-ink)]' : 'line-through text-[var(--sh-ink-3)]'}`}>
+          {cadence}
+        </span>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        onClick={onToggle}
+        disabled={readOnly}
+        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition disabled:cursor-not-allowed disabled:opacity-60 ${
+          enabled ? 'bg-emerald-500' : 'bg-slate-300'
+        }`}
+      >
+        <span
+          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition ${
+            enabled ? 'translate-x-4' : 'translate-x-0'
+          }`}
+        />
+      </button>
+    </li>
   );
 }
 
