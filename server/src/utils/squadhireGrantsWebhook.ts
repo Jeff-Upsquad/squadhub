@@ -84,12 +84,20 @@ async function buildPayload(grantId: string): Promise<GrantPayload | null> {
     .eq('id', grantId)
     .maybeSingle();
   if (!grant) return null;
+  // Postgres / supabase-js return timestamps with the "+00:00" offset form
+  // ("...23:59:59.999+00:00"), which Zod's `.datetime()` validator rejects by
+  // default. Normalise via Date round-trip so we always send the Z-suffix
+  // ISO-8601 the receiver accepts. Same trick the cards webhook uses.
+  const expiresAt = new Date(grant.expires_at as string).toISOString();
+  const revokedAt = grant.revoked_at
+    ? new Date(grant.revoked_at as string).toISOString()
+    : null;
   return {
     squadhub_grant_id: grant.id as string,
     email: grant.email as string,
     category_ids: Array.isArray(grant.category_ids) ? (grant.category_ids as string[]) : [],
-    expires_at: grant.expires_at as string,
-    revoked_at: (grant.revoked_at as string | null) ?? null,
+    expires_at: expiresAt,
+    revoked_at: revokedAt,
     notes: (grant.notes as string | null) ?? null,
     created_by_squadhub_user_id: (grant.created_by as string | null) ?? null,
   };
