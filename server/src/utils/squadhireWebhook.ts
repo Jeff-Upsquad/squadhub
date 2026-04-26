@@ -197,11 +197,21 @@ export async function buildSquadhirePayloadForCard(
     targetCountryIdList.length === 1 ? targetCountryIdList[0] : leadCountryId;
 
   let resolvedMonthlyPrice: number | null = null;
+  let resolvedCustomerMonthlyPrice: number | null = null;
   let resolvedCurrency: string | null = null;
   if (pricingCountryId && staged?.plan_id) {
-    const [{ data: planPartner }, { data: country }] = await Promise.all([
+    const [{ data: planPartner }, { data: planCustomer }, { data: country }] = await Promise.all([
       supabaseAdmin
         .from('subscription_plan_partner_pricing')
+        .select('price')
+        .eq('plan_id', staged.plan_id)
+        .eq('country_id', pricingCountryId)
+        .maybeSingle(),
+      // Customer pricing comes from the canonical plan-pricing table — what
+      // the client actually pays. No per-card override exists for this side
+      // (only partner price is override-able), so we read the plan default.
+      supabaseAdmin
+        .from('subscription_plan_pricing')
         .select('price')
         .eq('plan_id', staged.plan_id)
         .eq('country_id', pricingCountryId)
@@ -218,6 +228,13 @@ export async function buildSquadhirePayloadForCard(
     if (resolved != null && country?.currency) {
       resolvedMonthlyPrice = resolved;
       resolvedCurrency = country.currency as string;
+    }
+    const customer = (planCustomer?.price as number | undefined) ?? null;
+    if (customer != null) {
+      resolvedCustomerMonthlyPrice = customer;
+      // Defensive: if partner pricing was missing but customer is present we
+      // still need a currency to render. Reuse the same country's currency.
+      if (!resolvedCurrency && country?.currency) resolvedCurrency = country.currency as string;
     }
   }
 
@@ -279,6 +296,15 @@ export async function buildSquadhirePayloadForCard(
   if (resolvedMonthlyPrice != null && resolvedCurrency) {
     content.monthly_price = resolvedMonthlyPrice;
     content.currency = resolvedCurrency;
+  }
+  // Customer-facing monthly price — what the client (e.g. Motorola) actually
+  // pays SquadHub each month. Profiles' business dashboard renders this on
+  // the card row; partners/talents only ever see `monthly_price` (their pay).
+  // Send currency too in case partner pricing was missing — keeps the chip
+  // renderable when only customer price exists.
+  if (resolvedCustomerMonthlyPrice != null && resolvedCurrency) {
+    content.customer_monthly_price = resolvedCustomerMonthlyPrice;
+    if (content.currency == null) content.currency = resolvedCurrency;
   }
   // Attach a single-line hours label ("1 hrs/day · 6 hrs/week · 30 hrs/month")
   // when the plan (or a card override) defines an hours-kind deliverable.
