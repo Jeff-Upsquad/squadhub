@@ -807,6 +807,8 @@ function FieldFormModal({
   const [options, setOptions] = useState<TaskTypeFieldOption[]>(field?.options || []);
   const [isRequired, setIsRequired] = useState(field?.is_required ?? false);
   const [helpText, setHelpText] = useState(field?.help_text || '');
+  const [helpUrl, setHelpUrl] = useState(field?.help_url || '');
+  const [allowOther, setAllowOther] = useState(field?.allow_other ?? false);
   const [placeholder, setPlaceholder] = useState(field?.placeholder || '');
 
   useEffect(() => {
@@ -830,7 +832,10 @@ function FieldFormModal({
       : [];
     const payload: any = {
       label: label.trim(), field_type: fieldType, options: cleanOptions,
-      is_required: isRequired, help_text: helpText.trim() || null, placeholder: placeholder.trim() || null,
+      is_required: isRequired, help_text: helpText.trim() || null,
+      help_url: helpUrl.trim() || null,
+      allow_other: showOptions ? allowOther : false,
+      placeholder: placeholder.trim() || null,
     };
     if (!field) payload.key = key.trim();
     onSubmit(payload);
@@ -896,10 +901,21 @@ function FieldFormModal({
                 className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none" />
             </div>
           </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[#62748E]">Help link URL <span className="text-[10px] text-[#90A1B9]">(opens in new tab next to the field)</span></label>
+            <input value={helpUrl} onChange={(e) => setHelpUrl(e.target.value)} placeholder="/help/social-sizes or https://…"
+              className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none" />
+          </div>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={isRequired} onChange={(e) => setIsRequired(e.target.checked)} className="rounded border-[#CBD5E1]" />
             <span className="text-sm text-[#0F172B]">Required field</span>
           </label>
+          {showOptions && (
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={allowOther} onChange={(e) => setAllowOther(e.target.checked)} className="rounded border-[#CBD5E1]" />
+              <span className="text-sm text-[#0F172B]">Allow &quot;Other&quot; (reveals a free-text input when selected)</span>
+            </label>
+          )}
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[#E2E8F0] py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC]">Cancel</button>
             <button type="submit" disabled={!!keyError} className="flex-1 rounded-lg bg-[#0F172B] py-2 text-sm font-medium text-white hover:bg-[#1D293D] disabled:opacity-40">{field ? 'Save' : 'Add Field'}</button>

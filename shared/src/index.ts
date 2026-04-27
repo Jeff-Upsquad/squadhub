@@ -335,6 +335,8 @@ export interface TaskTypeField {
   options: TaskTypeFieldOption[];
   is_required: boolean;
   help_text: string | null;
+  help_url: string | null;
+  allow_other: boolean;
   placeholder: string | null;
   position: number;
   created_at: string;
