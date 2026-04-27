@@ -90,6 +90,13 @@ export default function TaskRow({
     <>
       <div
         draggable={canEdit}
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setActiveTask(task.id);
+          }
+        }}
         onDragStart={canEdit ? (e) => {
           e.dataTransfer.setData('text/plain', task.id);
           e.dataTransfer.effectAllowed = 'move';

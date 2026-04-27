@@ -2138,3 +2138,821 @@ body {
   from { transform: translateX(20px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
 }
+
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SquadHire-feel V3 — fidelity port of /login/talent + /login/business
+   Source: /Users/jeffzeena/Profiles (frontend/src/views/auth/LoginTalent.tsx)
+   Real DNA: rose-50 → white → indigo-50 gradient, glass cards
+   (bg-white/80 backdrop-blur), system sans, gray-900 primary
+   (NOT blue), gray-100/200 hairlines, segmented controls on gray-100.
+   Same layout slots as SquadHub PM views; visual language matched.
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Tailwind palette pinned to hex so it's exact in non-Tailwind contexts */
+  --sq-rose-50:    #fce7f3;
+  --sq-indigo-50:  #e0e7ff;
+  --sq-indigo-500: #4f46e5;
+  --sq-gray-50:    #f9fafb;
+  --sq-gray-100:   #f3f4f6;
+  --sq-gray-200:   #e5e7eb;
+  --sq-gray-300:   #d1d5db;
+  --sq-gray-400:   #9ca3af;
+  --sq-gray-500:   #6b7280;
+  --sq-gray-700:   #374151;
+  --sq-gray-800:   #1f2937;
+  --sq-gray-900:   #111827;
+
+  /* SH-prefixed accent now points at gray-900 (the SquadHire primary) */
+  --sh-accent:        var(--sq-gray-900);
+  --sh-accent-hov:    var(--sq-gray-800);
+  --sh-accent-tint:   rgba(17, 24, 39, 0.04);
+  --sh-accent-tint2:  rgba(17, 24, 39, 0.07);
+  --sh-accent-soft:   rgba(17, 24, 39, 0.18);
+  --sh-card-shadow:   0 1px 2px rgba(15,23,43,0.04), 0 1px 0 rgba(15,23,43,0.02);
+  --sh-card-ring:     0 0 0 1px var(--sq-gray-100);
+  --sh-card-shadow-h: 0 4px 8px -2px rgba(15,23,43,0.08), 0 1px 0 rgba(15,23,43,0.02);
+}
+.dark {
+  --sh-accent:        #f5f5f5;
+  --sh-accent-hov:    #e5e5e5;
+  --sh-accent-tint:   rgba(245, 245, 245, 0.05);
+  --sh-accent-tint2:  rgba(245, 245, 245, 0.10);
+  --sh-accent-soft:   rgba(245, 245, 245, 0.20);
+  --sh-card-shadow:   0 1px 2px rgba(0,0,0,0.40);
+  --sh-card-ring:     0 0 0 1px rgba(255,255,255,0.06);
+  --sh-card-shadow-h: 0 6px 14px -4px rgba(0,0,0,0.55);
+}
+
+/* ── Canvas — exact SquadHire AuthShell gradient ───────────────────────── */
+.lv-canvas {
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(135deg,
+    var(--sq-rose-50) 0%,
+    #ffffff 50%,
+    var(--sq-indigo-50) 100%);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+.dark .lv-canvas {
+  background: linear-gradient(135deg,
+    rgba(244, 114, 182, 0.10) 0%,
+    transparent 50%,
+    rgba(99, 102, 241, 0.12) 100%);
+}
+.lv-canvas > * { position: relative; z-index: 1; }
+
+/* ── List view ─────────────────────────────────────────────────────────── */
+.lv-canvas .lv-wrap {
+  padding: 24px 24px 96px !important;
+  max-width: 1024px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Header row sits as a quiet column-key */
+.lv-canvas .lv-header {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 24px 12px !important;
+  position: static !important;
+  box-shadow: none !important;
+}
+.lv-canvas .lv-header-cell {
+  font-size: 11px !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: var(--sq-gray-500) !important;
+  font-weight: 500 !important;
+}
+
+/* Each group is a glass card on the gradient */
+.lv-canvas .lv-group {
+  background: rgba(255, 255, 255, 0.80);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--sq-gray-100);
+  border-radius: 16px;
+  box-shadow: var(--sh-card-shadow);
+  margin-top: 16px;
+  overflow: hidden;
+  transition: box-shadow .2s ease, border-color .2s ease;
+}
+.dark .lv-canvas .lv-group {
+  background: rgba(22, 27, 34, 0.78);
+  border-color: var(--sh-hair);
+}
+.lv-canvas .lv-group:hover {
+  box-shadow: var(--sh-card-shadow-h);
+  border-color: var(--sq-gray-200);
+}
+.lv-canvas .lv-group + .lv-group { margin-top: 16px; }
+.lv-canvas .lv-group[data-dragover="true"] {
+  box-shadow: var(--sh-card-shadow-h);
+  border-color: var(--sq-gray-900);
+}
+
+/* Group head — exact SquadHire heading: text-2xl semibold gray-900 */
+.lv-canvas .lv-group-head {
+  padding: 20px 24px 16px !important;
+  border-bottom: 1px solid var(--sq-gray-100);
+  align-items: center !important;
+  gap: 10px !important;
+}
+.lv-canvas .lv-group-head .title {
+  font-family: inherit !important;
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.012em !important;
+  color: var(--sq-gray-900) !important;
+  font-style: normal !important;
+  line-height: 1.4 !important;
+}
+.dark .lv-canvas .lv-group-head .title { color: var(--sh-ink) !important; }
+.lv-canvas .lv-group-head .count {
+  font-family: inherit !important;
+  font-size: 13px !important;
+  color: var(--sq-gray-500) !important;
+  letter-spacing: 0 !important;
+  font-weight: 400 !important;
+  text-transform: none !important;
+}
+.lv-canvas .lv-group-head .status-dot {
+  width: 10px; height: 10px;
+  align-self: center !important;
+  box-shadow: 0 0 0 3px color-mix(in oklch, currentColor 14%, transparent);
+}
+.lv-canvas .lv-group-head .caret { align-self: center !important; }
+
+/* Rows — clean dividers, gray-50 hover, gray-900 left edge on active */
+.lv-canvas .lv-group-body { border-top: 0 !important; }
+.lv-canvas .lv-row {
+  padding: 14px 24px !important;
+  border-top: 1px solid var(--sq-gray-100) !important;
+  transition: background .14s ease, box-shadow .14s ease !important;
+}
+.lv-canvas .lv-group-body > .lv-row:first-child { border-top: 0 !important; }
+.lv-canvas .lv-row:hover { background: var(--sq-gray-50) !important; }
+.dark .lv-canvas .lv-row:hover { background: var(--sh-hair-3) !important; }
+.lv-canvas .lv-row:focus-visible {
+  outline: none !important;
+  box-shadow: inset 0 0 0 2px var(--sh-accent-soft) !important;
+}
+.lv-canvas .lv-row[data-active="true"] {
+  background: var(--sq-gray-50) !important;
+  box-shadow: inset 3px 0 0 var(--sq-gray-900) !important;
+}
+.dark .lv-canvas .lv-row[data-active="true"] {
+  background: var(--sh-hair-3) !important;
+  box-shadow: inset 3px 0 0 var(--sh-ink) !important;
+}
+.lv-canvas .lv-row[data-selected="true"]::before {
+  background: var(--sq-gray-900) !important;
+  width: 3px !important;
+}
+.dark .lv-canvas .lv-row[data-selected="true"]::before { background: var(--sh-ink) !important; }
+.lv-canvas .lv-title {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--sq-gray-900);
+}
+.dark .lv-canvas .lv-title { color: var(--sh-ink); }
+
+/* Checkbox: gray-900 on done (matches the primary button in SquadHire) */
+.lv-canvas .lv-glyph[data-done="true"] {
+  background: var(--sq-gray-900) !important;
+  border-color: var(--sq-gray-900) !important;
+}
+.dark .lv-canvas .lv-glyph[data-done="true"] {
+  background: var(--sh-ink) !important;
+  border-color: var(--sh-ink) !important;
+}
+.lv-canvas .lv-glyph[data-done="true"][data-celebrating="true"] {
+  animation: checkboxPop .22s ease-out, checkGlowMono .75s ease-out !important;
+}
+@keyframes checkGlowMono {
+  0%   { box-shadow: 0 0 0 0    rgba(17, 24, 39, 0.7);  }
+  40%  { box-shadow: 0 0 14px 12px rgba(17, 24, 39, 0.30); }
+  100% { box-shadow: 0 0 26px 24px rgba(17, 24, 39, 0);    }
+}
+
+/* Date cells — quiet text, no chips. SquadHire uses plain copy */
+.lv-canvas .lv-cell--date .lv-cell-value {
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--sq-gray-500);
+  background: transparent;
+  padding: 0;
+  height: auto;
+}
+.lv-canvas .lv-cell--date[data-empty="true"] .lv-cell-value { color: var(--sq-gray-400); }
+.lv-canvas .lv-due--today {
+  color: var(--sq-gray-900) !important;
+  background: transparent !important;
+  font-weight: 500 !important;
+}
+.lv-canvas .lv-due--overdue {
+  color: rgb(220, 38, 38) !important;
+  background: transparent !important;
+  font-weight: 500 !important;
+}
+.dark .lv-canvas .lv-due--today { color: var(--sh-ink) !important; }
+.dark .lv-canvas .lv-due--overdue { color: rgb(252, 165, 165) !important; }
+
+/* Avatar ring matches the surface */
+.lv-canvas .av-stack .lv-ava,
+.lv-canvas .av-stack .td-ava-xs {
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.85);
+}
+.dark .lv-canvas .av-stack .lv-ava,
+.dark .lv-canvas .av-stack .td-ava-xs {
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* "Add task" row — quiet ghost, gray-900 on hover */
+.lv-canvas .lv-add {
+  padding: 14px 24px 14px 66px !important;
+  background: transparent !important;
+  border-top: 1px solid var(--sq-gray-100) !important;
+  border-bottom: 0 !important;
+  font-size: 13px !important;
+  font-family: inherit !important;
+  color: var(--sq-gray-500) !important;
+}
+.lv-canvas .lv-add:hover {
+  background: var(--sq-gray-50) !important;
+  color: var(--sq-gray-900) !important;
+}
+.dark .lv-canvas .lv-add:hover {
+  background: var(--sh-hair-3) !important;
+  color: var(--sh-ink) !important;
+}
+
+/* Empty state — glass card, SquadHire heading style */
+.lv-canvas .lv-empty {
+  margin: 56px auto 0;
+  max-width: 448px;
+  padding: 48px 32px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.80);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--sq-gray-100);
+  box-shadow: var(--sh-card-shadow);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  font-style: normal;
+  color: var(--sq-gray-500);
+  line-height: 1.55;
+  letter-spacing: 0;
+  text-align: center;
+}
+.dark .lv-canvas .lv-empty {
+  background: rgba(22, 27, 34, 0.80);
+  border-color: var(--sh-hair);
+  color: var(--sh-ink-3);
+}
+
+/* ── Board view ────────────────────────────────────────────────────────── */
+.bv-board {
+  display: flex;
+  flex: 1;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 24px 24px 32px;
+}
+
+/* Each column is a glass card */
+.bv-column {
+  display: flex;
+  flex-direction: column;
+  width: 304px;
+  flex: none;
+  background: rgba(255, 255, 255, 0.80);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--sq-gray-100);
+  border-radius: 16px;
+  box-shadow: var(--sh-card-shadow);
+  transition: box-shadow .2s ease, border-color .2s ease;
+}
+.dark .bv-column {
+  background: rgba(22, 27, 34, 0.78);
+  border-color: var(--sh-hair);
+}
+.bv-column:hover {
+  box-shadow: var(--sh-card-shadow-h);
+  border-color: var(--sq-gray-200);
+}
+.bv-column[data-dragover="true"] {
+  box-shadow: var(--sh-card-shadow-h);
+  border-color: var(--sq-gray-900);
+}
+.bv-column[data-dragover="true"] .bv-column-head { background: var(--sq-gray-50); }
+
+.bv-column-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 20px 16px;
+  user-select: none;
+  border-bottom: 1px solid var(--sq-gray-100);
+  border-radius: 16px 16px 0 0;
+  transition: background .15s ease;
+}
+.bv-column-head .dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  flex: none;
+  align-self: center;
+  box-shadow: 0 0 0 3px color-mix(in oklch, currentColor 14%, transparent);
+}
+.bv-column-head .title {
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: -0.012em;
+  color: var(--sq-gray-900);
+  line-height: 1.3;
+}
+.dark .bv-column-head .title { color: var(--sh-ink); }
+.bv-column-head .count {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--sq-gray-500);
+  letter-spacing: 0;
+  font-weight: 400;
+  text-transform: none;
+}
+.bv-column-head .col-action {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  color: var(--sq-gray-400);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.bv-column-head .col-action:hover {
+  background: var(--sq-gray-100);
+  color: var(--sq-gray-900);
+}
+
+.bv-cards {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 12px 14px;
+}
+/* Cards inside columns — clean white, gray-900 left edge on hover */
+.bv-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--sq-gray-100);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 2px rgba(15,23,43,0.02);
+  transition: box-shadow .18s ease, border-color .18s ease;
+  cursor: pointer;
+}
+.bv-card:hover {
+  border-color: var(--sq-gray-900);
+  box-shadow: 0 4px 10px -4px rgba(15,23,43,0.10);
+}
+.dark .bv-card {
+  background: var(--surface);
+  border-color: var(--sh-hair);
+}
+.dark .bv-card:hover {
+  border-color: var(--sh-ink);
+  box-shadow: 0 4px 10px -4px rgba(0,0,0,0.50);
+}
+.bv-card::before {
+  content: '';
+  position: absolute;
+  left: -1px; top: 18%; bottom: 18%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: transparent;
+  transition: background .15s ease;
+}
+.bv-card:hover::before { background: var(--sq-gray-900); }
+.dark .bv-card:hover::before { background: var(--sh-ink); }
+.bv-card-title {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--sq-gray-900);
+  letter-spacing: -0.005em;
+  line-height: 1.4;
+}
+.dark .bv-card-title { color: var(--sh-ink); }
+.bv-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--sq-gray-500);
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.bv-add-btn:hover {
+  background: var(--sq-gray-100);
+  color: var(--sq-gray-900);
+}
+.dark .bv-add-btn:hover {
+  background: var(--sh-hair-3);
+  color: var(--sh-ink);
+}
+
+/* ── Task Detail drawer — glass card, SquadHire chrome ─────────────────── */
+.td-panel-luma.apple.td-shell {
+  top: 16px !important;
+  right: 16px !important;
+  bottom: 16px !important;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--sq-gray-100);
+  box-shadow:
+    -16px 24px 56px -20px rgba(15, 23, 43, 0.18),
+    0 1px 0 rgba(15, 23, 43, 0.02);
+  width: min(760px, 95vw) !important;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+.dark .td-panel-luma.apple.td-shell {
+  background: rgba(22, 27, 34, 0.85);
+  border-color: var(--sh-hair);
+  box-shadow:
+    -16px 24px 56px -20px rgba(0, 0, 0, 0.62),
+    0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.td-panel-luma.apple.td-shell::before { display: none; }
+.td-panel-luma.apple.td-shell .td-head-luma {
+  padding: 14px 18px 4px !important;
+}
+.td-panel-luma.apple.td-shell .td-scroll {
+  padding: 14px 32px 36px !important;
+}
+
+/* Top bar pills — match SquadHire's pill links */
+.td-panel-luma.apple.td-shell .td-pill-btn {
+  border-radius: 999px;
+  height: 30px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--sq-gray-100);
+  border: 0;
+  color: var(--sq-gray-700);
+  transition: background .12s, color .12s;
+}
+.td-panel-luma.apple.td-shell .td-pill-btn:hover {
+  background: var(--sq-gray-200);
+  color: var(--sq-gray-900);
+}
+.dark .td-panel-luma.apple.td-shell .td-pill-btn {
+  background: var(--sh-hair-3);
+  color: var(--sh-ink-2);
+}
+.dark .td-panel-luma.apple.td-shell .td-pill-btn:hover {
+  background: var(--sh-hair-2);
+  color: var(--sh-ink);
+}
+
+/* Primary "Mark complete" — bg-gray-900, like SquadHire's Sign In */
+.td-pill-btn[data-accent="true"] {
+  background: var(--sq-gray-900) !important;
+  color: #fff !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  padding: 0 16px !important;
+  height: 32px !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+.td-pill-btn[data-accent="true"]:hover {
+  background: var(--sq-gray-800) !important;
+}
+.dark .td-pill-btn[data-accent="true"] {
+  background: #f5f5f5 !important;
+  color: var(--sq-gray-900) !important;
+}
+.dark .td-pill-btn[data-accent="true"]:hover { background: #ffffff !important; }
+
+/* Nav button (close) — small icon button on gray-100 */
+.td-panel-luma.apple.td-shell .td-nav-btn {
+  width: 30px; height: 30px;
+  border-radius: 999px;
+  background: var(--sq-gray-100);
+  border: 0;
+  color: var(--sq-gray-700);
+}
+.td-panel-luma.apple.td-shell .td-nav-btn:hover {
+  background: var(--sq-gray-200);
+  color: var(--sq-gray-900);
+}
+.dark .td-panel-luma.apple.td-shell .td-nav-btn {
+  background: var(--sh-hair-3);
+  color: var(--sh-ink-2);
+}
+.dark .td-panel-luma.apple.td-shell .td-nav-btn:hover {
+  background: var(--sh-hair-2);
+  color: var(--sh-ink);
+}
+
+/* Hero title — text-2xl semibold, exact SquadHire heading */
+.td-panel-luma.apple.td-shell .td-title-hero {
+  font-family: inherit;
+  font-size: 24px;
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: -0.018em;
+  line-height: 1.3;
+  color: var(--sq-gray-900);
+}
+.dark .td-panel-luma.apple.td-shell .td-title-hero { color: var(--sh-ink); }
+.td-panel-luma.apple.td-shell .td-title-hero[contenteditable], 
+input.td-title-hero {
+  border-bottom-color: var(--sq-gray-900) !important;
+}
+
+/* Big circular checkbox: gray-900 on done */
+.td-panel-luma.apple.td-shell .td-checkbox-lg[data-done="true"] {
+  background: var(--sq-gray-900);
+  border-color: var(--sq-gray-900);
+}
+.dark .td-panel-luma.apple.td-shell .td-checkbox-lg[data-done="true"] {
+  background: var(--sh-ink);
+  border-color: var(--sh-ink);
+}
+.td-panel-luma.apple.td-shell .td-checkbox-lg[data-done="true"][data-celebrating="true"] {
+  animation: checkboxPop .22s ease-out, checkGlowMono .75s ease-out;
+}
+
+/* Sub-meta (host chip · SQ-id · copy) — quiet, like the divider footer */
+.td-submeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 24px 36px;
+  flex-wrap: wrap;
+  font-family: inherit;
+  font-size: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--sq-gray-100);
+}
+.dark .td-submeta { border-bottom-color: var(--sh-hair); }
+.td-submeta .td-host-chip {
+  height: 26px;
+  padding: 0 10px 0 6px;
+  font-family: inherit;
+  font-size: 12px;
+  border-radius: 999px;
+  background: var(--sq-gray-100);
+  border: 0;
+  color: var(--sq-gray-700);
+  font-weight: 500;
+}
+.td-submeta .td-host-chip:hover {
+  background: var(--sq-gray-200);
+  color: var(--sq-gray-900);
+}
+.dark .td-submeta .td-host-chip {
+  background: var(--sh-hair-3);
+  color: var(--sh-ink-2);
+}
+.td-submeta .td-host-chip .logo {
+  width: 18px; height: 18px;
+  font-size: 9px;
+  border-radius: 999px;
+}
+.td-submeta-id {
+  font-family: ui-monospace, 'SF Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--sq-gray-500);
+  font-weight: 500;
+  padding: 0;
+  background: transparent;
+}
+.td-submeta-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sq-gray-500);
+  padding: 0;
+  margin-left: 0;
+  border-radius: 0;
+  transition: color .12s;
+}
+.td-submeta-link:hover { color: var(--sq-gray-900); text-decoration: underline; }
+.dark .td-submeta-link:hover { color: var(--sh-ink); }
+.td-submeta-link svg { opacity: 0.75; }
+
+/* Section eyebrow — small caps, SquadHire-restrained */
+.td-panel-luma.apple.td-shell .td-eyebrow {
+  font-family: inherit;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  margin: 22px 4px 10px;
+  color: var(--sq-gray-500);
+}
+.td-panel-luma.apple.td-shell .td-eyebrow:first-of-type { margin-top: 0; }
+
+/* Description card — cleaner, SquadHire-input-like */
+.td-panel-luma.apple.td-shell .td-lcard.apple {
+  border-radius: 12px;
+  border: 1px solid var(--sq-gray-200);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
+  box-shadow: none;
+}
+.dark .td-panel-luma.apple.td-shell .td-lcard.apple {
+  background: rgba(22, 27, 34, 0.5);
+  border-color: var(--sh-hair);
+}
+.td-panel-luma.apple.td-shell .td-lcard.apple .td-lcard-body {
+  padding: 16px 18px !important;
+}
+.td-panel-luma.apple.td-shell .td-about,
+.td-panel-luma.apple.td-shell .td-lcard.apple .td-about {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--sq-gray-900);
+}
+.dark .td-panel-luma.apple.td-shell .td-about { color: var(--sh-ink); }
+.td-panel-luma.apple.td-shell .td-about.empty {
+  font-style: normal;
+  color: var(--sq-gray-400);
+}
+
+/* Settings card — clean borders, gray-50 hover */
+.td-panel-luma.apple.td-shell .td-settings-card {
+  border-radius: 12px;
+  border: 1px solid var(--sq-gray-200);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
+  box-shadow: none;
+}
+.dark .td-panel-luma.apple.td-shell .td-settings-card {
+  background: rgba(22, 27, 34, 0.5);
+  border-color: var(--sh-hair);
+}
+.td-panel-luma.apple.td-shell .td-settings-row { padding: 12px 18px; }
+.td-panel-luma.apple.td-shell .td-settings-row:hover {
+  background: var(--sq-gray-50);
+}
+.dark .td-panel-luma.apple.td-shell .td-settings-row:hover {
+  background: var(--sh-hair-3);
+}
+.td-panel-luma.apple.td-shell .td-settings-row .k {
+  color: var(--sq-gray-500);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.td-panel-luma.apple.td-shell .td-settings-row .v {
+  font-family: inherit;
+  font-size: 14px;
+  letter-spacing: 0;
+  color: var(--sq-gray-900);
+}
+.dark .td-panel-luma.apple.td-shell .td-settings-row .v { color: var(--sh-ink); }
+.td-panel-luma.apple.td-shell .td-dates-row { min-height: 56px; }
+.td-panel-luma.apple.td-shell .td-date-cell:hover {
+  background: var(--sq-gray-50);
+}
+.dark .td-panel-luma.apple.td-shell .td-date-cell:hover {
+  background: var(--sh-hair-3);
+}
+.td-panel-luma.apple.td-shell .td-date-label {
+  font-family: inherit !important;
+  font-size: 11px !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase;
+  color: var(--sq-gray-500) !important;
+  font-weight: 500 !important;
+}
+.td-panel-luma.apple.td-shell .td-date-value {
+  font-family: inherit !important;
+  font-size: 13px !important;
+  letter-spacing: 0 !important;
+  color: var(--sq-gray-900) !important;
+  font-weight: 400 !important;
+}
+.dark .td-panel-luma.apple.td-shell .td-date-value { color: var(--sh-ink) !important; }
+.td-panel-luma.apple.td-shell .td-date-cell[data-accent="true"] .td-date-value {
+  color: var(--sq-gray-900) !important;
+  font-weight: 600 !important;
+}
+
+/* Tab pills — exact SquadHire "Talent Login / Business Login" segmented control */
+.td-panel-luma.apple.td-shell .td-tabs-pill {
+  background: var(--sq-gray-100);
+  border-radius: 10px;
+  padding: 4px;
+  margin-top: 24px;
+  display: inline-flex;
+  width: auto;
+  gap: 4px;
+}
+.dark .td-panel-luma.apple.td-shell .td-tabs-pill { background: var(--sh-hair-3); }
+.td-panel-luma.apple.td-shell .td-tab-pill {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--sq-gray-500);
+  transition: background .14s ease, color .14s ease, box-shadow .14s ease;
+}
+.td-panel-luma.apple.td-shell .td-tab-pill:hover { color: var(--sq-gray-700); }
+.td-panel-luma.apple.td-shell .td-tab-pill[data-active="true"] {
+  background: #fff;
+  color: var(--sq-gray-900);
+  box-shadow: 0 1px 2px rgba(15,23,43,0.06);
+}
+.dark .td-panel-luma.apple.td-shell .td-tab-pill[data-active="true"] {
+  background: var(--surface);
+  color: var(--sh-ink);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.40);
+}
+
+/* Inputs in the drawer match SquadHire pattern: focus:border-gray-900 focus:ring-0 */
+.td-panel-luma.apple.td-shell input,
+.td-panel-luma.apple.td-shell textarea {
+  font-family: inherit;
+}
+.td-panel-luma.apple.td-shell input:focus-visible,
+.td-panel-luma.apple.td-shell textarea:focus-visible {
+  outline: none;
+  border-color: var(--sq-gray-900) !important;
+  box-shadow: none !important;
+}
+
+/* Body buttons inherit the system stack */
+.td-panel-luma.apple.td-shell button { font-family: inherit; }
+
+/* Focus rings everywhere */
+.td-focus:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sh-accent-soft);
+  border-radius: 8px;
+}
+
+/* Two-column settings card on wide drawers (≥640px) */
+@media (min-width: 640px) {
+  .td-settings-card[data-twocol="true"] {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+  }
+  .td-settings-card[data-twocol="true"] > .td-dates-row {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--sq-gray-100);
+  }
+  .td-settings-card[data-twocol="true"] > .td-settings-row + .td-settings-row::before {
+    display: none;
+  }
+  .td-settings-card[data-twocol="true"] > .td-settings-row {
+    border-top: 1px solid var(--sq-gray-100);
+  }
+  .td-settings-card[data-twocol="true"] > .td-settings-row:nth-of-type(odd) {
+    border-right: 1px solid var(--sq-gray-100);
+  }
+}
