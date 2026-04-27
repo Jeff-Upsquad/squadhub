@@ -587,3 +587,55 @@ export async function notifySquadhireOfManualRemoval(
     clearTimeout(timer);
   }
 }
+
+// ------------------------------------------------------------
+// Public: outbound notification when a card is recalled. The
+// archived-status re-delivery already hides the card from talent
+// queries on SquadHire, but mirror recipient rows on SquadHire's
+// side persist and would re-surface on the next publish. This
+// asks SquadHire to drop those mirror rows in one shot. Best-
+// effort, single attempt; idempotent on the receiving side.
+// ------------------------------------------------------------
+
+export async function notifySquadhireOfCardRecall(cardId: string): Promise<void> {
+  const baseUrl = config.squadhireWebhookUrl;
+  if (!baseUrl) {
+    console.warn('[squadhire-webhook] card-recall skipped: url not configured');
+    return;
+  }
+  if (!config.squadhireWebhookSecret) {
+    console.warn('[squadhire-webhook] card-recall skipped: secret not configured');
+    return;
+  }
+
+  const url = baseUrl.endsWith('/')
+    ? `${baseUrl}cards/recall`
+    : `${baseUrl}/cards/recall`;
+  const body = {
+    type: 'card_recall',
+    card_id: cardId,
+    recalled_at: new Date().toISOString(),
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.warn(`[squadhire-webhook] card-recall http_${res.status}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[squadhire-webhook] card-recall failed', msg);
+  } finally {
+    clearTimeout(timer);
+  }
+}
