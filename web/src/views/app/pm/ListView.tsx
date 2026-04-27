@@ -87,7 +87,7 @@ export default function ListView({
         : 'No tasks yet. Press + to add one.';
 
   return (
-    <div className="relative flex flex-1 flex-col overflow-auto">
+    <div className="lv-canvas relative flex flex-1 flex-col overflow-auto">
       <div className="lv-wrap">
         {/* Column headers — aligned with .lv-row grid */}
         <div className="lv-header" role="row" aria-label="Column headers">

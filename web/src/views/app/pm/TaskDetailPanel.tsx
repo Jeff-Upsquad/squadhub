@@ -419,7 +419,7 @@ export default function TaskDetailPanel({
       {/* Floating drawer */}
       <aside
         onClick={(e) => e.stopPropagation()}
-        className="td-panel td-panel-luma apple absolute flex flex-col"
+        className="td-panel td-panel-luma apple td-shell absolute flex flex-col"
         style={{
           background: 'var(--surface)',
           transform: mounted ? 'translateX(0)' : 'translateX(calc(100% + 24px))',
@@ -439,58 +439,7 @@ export default function TaskDetailPanel({
               <path d="M13 17l5-5-5-5M6 17l5-5-5-5" />
             </svg>
           </button>
-          {task && spaceName && workspaceId && canEdit ? (
-            <ListPickerCombobox
-              workspaceId={workspaceId}
-              selectedListId={listId}
-              selectedListName={null}
-              initialSpaceId={spaceId ?? null}
-              onChange={(newListId) => {
-                if (newListId !== listId) {
-                  updateTask.mutate({ id: task.id, list_id: newListId });
-                }
-              }}
-              renderTrigger={({ toggle }) => (
-                <button
-                  type="button"
-                  onClick={toggle}
-                  className="td-host-chip td-focus"
-                  title="Move to another list"
-                >
-                  <span className="logo" style={{ background: spaceColor || 'var(--sh-ink)' }}>
-                    {initialOf(spaceName)[0]}
-                  </span>
-                  <span>{spaceName}</span>
-                  <svg className="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <path d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              )}
-            />
-          ) : task && spaceName ? (
-            <span className="td-host-chip td-focus" tabIndex={0}>
-              <span className="logo" style={{ background: spaceColor || 'var(--sh-ink)' }}>
-                {initialOf(spaceName)[0]}
-              </span>
-              <span>{spaceName}</span>
-              <svg className="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M9 5l7 7-7 7" />
-              </svg>
-            </span>
-          ) : null}
-          {task && (
-            <span className="text-[11.5px] text-[color:var(--sh-ink-4)] font-medium tracking-[0.01em]">
-              SQ-{String(task.display_number ?? 0).padStart(3, '0')}
-            </span>
-          )}
           <div className="flex-1" />
-          <button type="button" onClick={handleCopyLink} className="td-pill-btn">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
-              <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
-            </svg>
-            Copy Link
-          </button>
           <div className="relative">
             <button type="button" onClick={() => setMoreMenuOpen((v) => !v)} className="td-pill-btn">
               More
@@ -542,7 +491,7 @@ export default function TaskDetailPanel({
               onClick={handleToggleDone}
               disabled={!canEdit}
               className="td-pill-btn"
-              style={isDone ? undefined : { background: 'var(--sh-ink)', color: 'var(--surface)', borderColor: 'var(--sh-ink)' }}
+              data-accent={!isDone ? 'true' : undefined}
               title={isDone ? 'Reopen task' : 'Mark complete'}
             >
               {isDone ? (
@@ -572,7 +521,7 @@ export default function TaskDetailPanel({
           ) : (
             <>
               {/* Title row */}
-              <div className="flex items-start gap-3 mb-3">
+              <div className="flex items-start gap-3 mb-0">
                 <button
                   type="button"
                   onClick={handleToggleDone}
@@ -592,19 +541,70 @@ export default function TaskDetailPanel({
                       if (e.key === 'Escape') setEditing(null);
                     }}
                     onBlur={() => handleSave('title')}
-                    className="flex-1 bg-transparent border-b outline-none text-[26px] leading-[1.2] tracking-[-0.018em] font-semibold text-[color:var(--sh-ink)]"
-                    style={{ borderColor: 'var(--sh-ink)', fontFamily: 'Inter, system-ui, sans-serif' }}
+                    className="td-title-hero flex-1 bg-transparent border-b outline-none m-0"
+                    style={{ borderColor: 'var(--sh-accent)' }}
                   />
                 ) : (
                   <h1
                     onClick={canEdit ? () => { setEditing('title'); setEditValue(task.title); } : undefined}
-                    className={`flex-1 text-[26px] font-semibold leading-[1.2] tracking-[-0.018em] text-[color:var(--sh-ink)] m-0 ${canEdit ? 'cursor-text' : ''} ${isDone ? 'line-through opacity-60' : ''}`}
-                    style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+                    className={`td-title-hero flex-1 m-0 ${canEdit ? 'cursor-text' : ''} ${isDone ? 'line-through opacity-60' : ''}`}
                   >
                     {task.title}
                   </h1>
                 )}
               </div>
+
+              {/* Sub-meta — host chip · SQ-id · copy link (moved from top bar) */}
+              {task && (
+                <div className="td-submeta">
+                  {spaceName && workspaceId && canEdit ? (
+                    <ListPickerCombobox
+                      workspaceId={workspaceId}
+                      selectedListId={listId}
+                      selectedListName={null}
+                      initialSpaceId={spaceId ?? null}
+                      onChange={(newListId) => {
+                        if (newListId !== listId) {
+                          updateTask.mutate({ id: task.id, list_id: newListId });
+                        }
+                      }}
+                      renderTrigger={({ toggle }) => (
+                        <button
+                          type="button"
+                          onClick={toggle}
+                          className="td-host-chip td-focus"
+                          title="Move to another list"
+                        >
+                          <span className="logo" style={{ background: spaceColor || 'var(--sh-ink)' }}>
+                            {initialOf(spaceName)[0]}
+                          </span>
+                          <span>{spaceName}</span>
+                          <svg className="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                            <path d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      )}
+                    />
+                  ) : spaceName ? (
+                    <span className="td-host-chip td-focus" tabIndex={0}>
+                      <span className="logo" style={{ background: spaceColor || 'var(--sh-ink)' }}>
+                        {initialOf(spaceName)[0]}
+                      </span>
+                      <span>{spaceName}</span>
+                    </span>
+                  ) : null}
+                  <span className="td-submeta-id">
+                    SQ-{String(task.display_number ?? 0).padStart(3, '0')}
+                  </span>
+                  <button type="button" onClick={handleCopyLink} className="td-submeta-link" title="Copy link to this task">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                      <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+                    </svg>
+                    Copy link
+                  </button>
+                </div>
+              )}
 
               {/* Description */}
               <div className="td-eyebrow">Description</div>
@@ -658,7 +658,7 @@ export default function TaskDetailPanel({
 
               {/* Meta — macOS Settings-style grouped card */}
               <div className="td-eyebrow">Details</div>
-              <div className="td-settings-card">
+              <div className="td-settings-card" data-twocol="true">
                 <div
                   className="td-settings-row"
                   style={{ cursor: canEdit ? 'pointer' : 'default' }}
