@@ -11,6 +11,7 @@ import {
 import {
   buildSquadhirePayloadForCard,
   deliverCardToSquadhire,
+  notifySquadhireOfCardRecall,
 } from '../utils/squadhireWebhook';
 
 const router = Router();
@@ -378,6 +379,17 @@ router.post(
         .delete()
         .eq('card_id', (req.params.id as string));
 
+      // Drop pending talent (external) recipients too. Mirror table to
+      // subscription_card_recipients but never cleaned up here before, so
+      // hand-picked-but-unanswered rows leaked across recall→republish and
+      // surfaced in the talent feed again. Accepted/rejected rows are kept
+      // for audit; SquadHire's archived-status filter hides them anyway.
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .delete()
+        .eq('card_id', (req.params.id as string))
+        .eq('status', 'pending');
+
       const { data: updated, error: updErr } = await supabaseAdmin
         .from('subscription_cards')
         .update({
@@ -405,6 +417,13 @@ router.post(
         .catch((err) => {
           console.error('[recall] squadhire delivery threw unexpectedly', err);
         });
+
+      // Companion to the archived-status re-delivery above: ask SquadHire to
+      // drop its mirror recipient rows so the same hand-picks don't re-appear
+      // in talent feeds when the card is re-published. Best-effort.
+      notifySquadhireOfCardRecall(updated.id).catch((err) => {
+        console.error('[recall] squadhire recall notification threw', err);
+      });
 
       res.json({ success: true, data: await hydrateCard(updated) });
     } catch (err: any) {
