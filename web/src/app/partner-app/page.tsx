@@ -26,11 +26,14 @@ export default function PartnerAppLanding() {
     <div className="min-h-screen bg-[#F0F2F5] text-[#0F172B]">
       <main className="mx-auto flex min-h-screen max-w-md flex-col px-6 py-12">
         {/* Brand */}
-        <div className="flex items-center gap-2 text-sm font-medium tracking-tight text-[#62748E]">
+        <div className="flex items-start gap-2 text-sm font-medium tracking-tight text-[#62748E]">
           <span className="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-[#0F172B] text-[10px] font-bold text-white">
             SH
           </span>
-          SquadHub
+          <div className="flex flex-col leading-tight">
+            <span>SquadHub</span>
+            <span className="text-[11px]">Powered by UpSquad</span>
+          </div>
         </div>
 
         {/* Hero */}

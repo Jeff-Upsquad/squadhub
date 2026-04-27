@@ -28,9 +28,13 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
     <div className="flex min-h-screen bg-white text-[#0F172B]">
       {/* Sidebar */}
       <aside className="flex w-56 flex-col border-r border-[#E2E8F0] bg-white">
-        <div className="flex items-center gap-2 border-b border-[#E2E8F0] px-5 py-4">
-          <h1 className="font-[family-name:var(--font-display)] text-lg font-bold text-[#0F172B]">SquadHub</h1>
-          <span className="font-[family-name:var(--font-mono)] rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-600">Admin</span>
+        <div className="flex flex-col gap-1 border-b border-[#E2E8F0] px-5 py-4">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-[#0F172B] text-[10px] font-bold text-white">SH</span>
+            <h1 className="font-[family-name:var(--font-display)] text-lg font-bold text-[#0F172B]">SquadHub</h1>
+            <span className="font-[family-name:var(--font-mono)] rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-600">Admin</span>
+          </div>
+          <p className="pl-8 text-[11px] text-[#62748E]">Powered by UpSquad</p>
         </div>
         <nav className="flex-1 p-3 space-y-0.5">
           <NavLink href="/admin" end>
