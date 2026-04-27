@@ -1,9 +1,9 @@
 -- ============================================================
--- Design Brief task type — admin-customizable design fields
+-- Design Task — admin-customizable design fields
 -- 1) Adds help_url + allow_other columns to task_type_fields
--- 2) Promotes design_task → editable, renames to "Design Brief"
+-- 2) Promotes design_task → editable (keeps name "Design Task")
 -- 3) Replaces seeded fields with: brief_type, ratios, usage,
---    target_audience, reference_links
+--    audience_text, reference_links
 -- 4) Backfills existing design-space tasks to this task type
 --    and migrates legacy metadata into metadata.custom.*
 -- Idempotent; safe to re-run.
@@ -14,11 +14,12 @@ ALTER TABLE public.task_type_fields
   ADD COLUMN IF NOT EXISTS help_url    TEXT,
   ADD COLUMN IF NOT EXISTS allow_other BOOLEAN NOT NULL DEFAULT FALSE;
 
--- 2. Promote the design_task type out of system-protection so admins can edit
+-- 2. Promote the design_task type out of system-protection so admins can edit.
+--    Name stays "Design Task" to match the admin module.
 UPDATE public.task_types
    SET is_system   = FALSE,
-       name        = 'Design Brief',
-       description = 'Briefs for design deliverables',
+       name        = 'Design Task',
+       description = 'Visual design deliverables',
        icon        = 'palette'
  WHERE key = 'design_task';
 
@@ -31,7 +32,7 @@ BEGIN
   IF v_type_id IS NULL THEN
     -- Create it if it never existed (clean DBs)
     INSERT INTO public.task_types (key, name, description, icon, color, is_system, is_enabled, position)
-    VALUES ('design_task', 'Design Brief', 'Briefs for design deliverables', 'palette', '#7c3aed', FALSE, TRUE, 1)
+    VALUES ('design_task', 'Design Task', 'Visual design deliverables', 'palette', '#7c3aed', FALSE, TRUE, 1)
     RETURNING id INTO v_type_id;
   END IF;
 

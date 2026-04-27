@@ -187,7 +187,6 @@ export default function TaskDetailPanel({
   const [loggedMinutes, setLoggedMinutes] = useState('');
   const [editingLogged, setEditingLogged] = useState(false);
   const [timerElapsed, setTimerElapsed] = useState(0);
-  const [typeMenuOpen, setTypeMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
@@ -630,7 +629,7 @@ export default function TaskDetailPanel({
                 </div>
               </div>
 
-              {customFields.length > 0 && (
+              {currentType?.key === 'design_task' && customFields.length > 0 && (
                 <>
                   <div className="td-eyebrow">{currentType?.name || 'Brief'}</div>
                   <div className="td-settings-card" style={{ marginBottom: 16 }}>
@@ -1007,58 +1006,36 @@ export default function TaskDetailPanel({
               {/* Tab content */}
               {tab === 'overview' && (
                 <div>
-                  {/* Task Type picker */}
-                  {taskTypes && taskTypes.length > 0 && (
+                  {/* Task type — read-only (cannot be changed after creation) */}
+                  {currentType && (
                     <div className="mb-5">
                       <div className="td-section-label">Type</div>
-                      <div className="relative inline-block">
-                        <button
-                          type="button"
-                          onClick={canEdit ? () => setTypeMenuOpen((v) => !v) : undefined}
-                          disabled={!canEdit}
-                          className="inline-flex items-center gap-2 text-[13px] text-[color:var(--sh-ink)] px-3 py-1.5 rounded-full border"
-                          style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
-                        >
-                          {currentType ? (
-                            <>
-                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: currentType.color }} />
-                              {currentType.name}
-                            </>
-                          ) : (
-                            <span className="text-[color:var(--sh-ink-3)]">Select type</span>
-                          )}
-                        </button>
-                        {typeMenuOpen && (
-                          <>
-                            <div className="fixed inset-0 z-10" onClick={() => setTypeMenuOpen(false)} />
-                            <div
-                              className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-lg border shadow-lg"
-                              style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
-                            >
-                              {taskTypes.map((t) => (
-                                <button
-                                  key={t.id}
-                                  onClick={() => {
-                                    updateTask.mutate({ id: task.id, task_type_id: t.id });
-                                    setTypeMenuOpen(false);
-                                  }}
-                                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)] ${
-                                    currentType?.id === t.id ? 'bg-[color:var(--sh-hair-3)]' : ''
-                                  }`}
-                                >
-                                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: t.color }} />
-                                  <span className="flex-1 text-[color:var(--sh-ink)]">{t.name}</span>
-                                  {t.is_default && <span className="text-[10px] text-[color:var(--sh-ink-4)]">Default</span>}
-                                </button>
-                              ))}
-                            </div>
-                          </>
-                        )}
+                      <div
+                        className="inline-flex items-center gap-2 text-[13px] text-[color:var(--sh-ink)] px-3 py-1.5 rounded-full border"
+                        style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
+                      >
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: currentType.color }} />
+                        {currentType.name}
                       </div>
                     </div>
                   )}
 
-                  {/* Custom fields are rendered above the Details card now */}
+                  {/* Custom fields for non-design_task types render here in Overview */}
+                  {currentType?.key !== 'design_task' && customFields.length > 0 && (
+                    <div className="mb-5">
+                      {customFields.map((field) => (
+                        <CustomFieldRow
+                          key={field.id}
+                          field={field}
+                          value={customValues[field.key]}
+                          onChange={(v) => updateCustomField(field.key, v)}
+                          otherValue={customValues[field.key + '_other']}
+                          onOtherChange={(v) => updateCustomField(field.key + '_other', v)}
+                          canEdit={canEdit}
+                        />
+                      ))}
+                    </div>
+                  )}
 
                   {/* Subtasks */}
                   <div className="td-eyebrow">
