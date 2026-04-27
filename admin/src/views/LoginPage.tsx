@@ -34,9 +34,16 @@ export default function LoginPage() {
 
   return (
     <>
-      <p className="font-[family-name:var(--font-display)] text-sm font-medium tracking-tight text-[#62748E]">
-        SquadHub Admin
-      </p>
+      <div className="flex items-center gap-2">
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-[#0F172B] text-[10px] font-bold text-white">SH</span>
+        <div className="flex flex-col leading-tight">
+          <div className="flex items-center gap-2">
+            <p className="font-[family-name:var(--font-display)] text-sm font-medium tracking-tight text-[#0F172B]">SquadHub</p>
+            <span className="font-[family-name:var(--font-mono)] rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-600">Admin</span>
+          </div>
+          <p className="text-[11px] text-[#62748E]">Powered by UpSquad</p>
+        </div>
+      </div>
       <div className="w-full rounded-2xl border border-[#E2E8F0] bg-white px-8 py-10 shadow-md ring-1 ring-black/5">
         <h1 className="text-center font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-[#0F172B] sm:text-2xl">
           Admin sign in
