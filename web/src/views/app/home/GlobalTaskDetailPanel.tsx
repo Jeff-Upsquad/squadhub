@@ -48,6 +48,7 @@ export default function GlobalTaskDetailPanel() {
       spaceName={spaceData?.name || listData?.name}
       spaceColor={spaceData?.color || null}
       spaceId={spaceId ?? null}
+      listName={listData?.name || null}
     />
   );
 }
