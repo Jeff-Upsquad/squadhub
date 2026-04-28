@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
+import { todayIST, formatTimeIST } from '../utils/ist';
+import { getEligibleUsers, getWorkingCalendar, resolveDeadlineTimes } from '../utils/checkin';
 
 const router = Router();
 
@@ -381,6 +383,188 @@ router.get('/history', async (req: Request, res: Response) => {
     res.json({ success: true, data, total: count || 0, page, limit });
   } catch (err) {
     console.error('Check-in history error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// Check-In Overview (admin dashboard)
+// ============================================================
+
+// GET /admin/checkin/overview?days=N — today's status + N-day trend + per-user leaderboard
+router.get('/overview', async (req: Request, res: Response) => {
+  try {
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days as string) || 30));
+    const today = todayIST();
+    const startDateObj = new Date(today + 'T00:00:00Z');
+    startDateObj.setUTCDate(startDateObj.getUTCDate() - days + 1);
+    const startDate = startDateObj.toISOString().split('T')[0];
+
+    const calendar = await getWorkingCalendar(startDate, today);
+    const workingDateSet = new Set(calendar.workingDates);
+    const todayHoliday = calendar.holidayByDate.get(today) ?? null;
+    const todayIsWorking = workingDateSet.has(today);
+
+    const eligible = await getEligibleUsers();
+    const eligibleIds = eligible.map((u) => u.id);
+
+    // Role lookup (first workspace_member match wins, mirroring resolveDeadline behavior)
+    const { data: members } = await supabaseAdmin
+      .from('workspace_members')
+      .select('user_id, roles(name)')
+      .in('user_id', eligibleIds.length > 0 ? eligibleIds : ['00000000-0000-0000-0000-000000000000']);
+    const roleMap = new Map<string, string | null>();
+    for (const m of (members || []) as any[]) {
+      if (!roleMap.has(m.user_id)) roleMap.set(m.user_id, m.roles?.name ?? null);
+    }
+
+    const deadlines = await resolveDeadlineTimes(eligibleIds);
+
+    // Today's checkins
+    const { data: todayCheckins } = await supabaseAdmin
+      .from('checkins')
+      .select('user_id, status, submitted_at')
+      .eq('date', today);
+    const todayMap = new Map<string, { status: string; submitted_at: string | null }>();
+    for (const c of (todayCheckins || []) as any[]) {
+      todayMap.set(c.user_id, { status: c.status, submitted_at: c.submitted_at ?? null });
+    }
+
+    const currentTimeIST = formatTimeIST(new Date());
+    let onTime = 0;
+    let late = 0;
+    let pending = 0;
+    let missed = 0;
+    const todayList: any[] = [];
+
+    if (todayIsWorking) {
+      for (const u of eligible) {
+        const c = todayMap.get(u.id);
+        const deadline = deadlines.get(u.id) || '10:00';
+        let status: 'on_time' | 'late' | 'pending' | 'no_checkin';
+        let submitted_at: string | null = null;
+
+        if (c) {
+          status = c.status as any;
+          submitted_at = c.submitted_at;
+        } else {
+          status = currentTimeIST <= deadline ? 'pending' : 'no_checkin';
+        }
+
+        if (status === 'on_time') onTime++;
+        else if (status === 'late') late++;
+        else if (status === 'pending') pending++;
+        else missed++;
+
+        todayList.push({
+          user_id: u.id,
+          display_name: u.display_name,
+          email: u.email,
+          avatar_url: u.avatar_url,
+          role: roleMap.get(u.id) ?? null,
+          status,
+          submitted_at,
+          deadline_time: deadline,
+        });
+      }
+    }
+
+    const totalEligible = todayIsWorking ? eligible.length : 0;
+    const attendanceRate = totalEligible > 0 ? (onTime + late) / totalEligible : 0;
+
+    // Range checkins for trend + leaderboard
+    const { data: rangeCheckins } = eligibleIds.length > 0
+      ? await supabaseAdmin
+          .from('checkins')
+          .select('user_id, date, status')
+          .gte('date', startDate)
+          .lte('date', today)
+          .in('user_id', eligibleIds)
+      : { data: [] as any[] };
+
+    // Trend buckets (only seeded for working days)
+    const trendBuckets = new Map<string, { onTime: number; late: number; missed: number }>();
+    for (const date of calendar.workingDates) {
+      trendBuckets.set(date, { onTime: 0, late: 0, missed: 0 });
+    }
+    for (const c of (rangeCheckins || []) as any[]) {
+      const bucket = trendBuckets.get(c.date);
+      if (!bucket) continue;
+      if (c.status === 'on_time') bucket.onTime++;
+      else if (c.status === 'late') bucket.late++;
+      else if (c.status === 'no_checkin') bucket.missed++;
+    }
+    const trend: Array<{ date: string; isWorkingDay: boolean; onTime: number; late: number; missed: number }> = [];
+    {
+      const cursor = new Date(startDate + 'T00:00:00Z');
+      const end = new Date(today + 'T00:00:00Z');
+      while (cursor <= end) {
+        const dateStr = cursor.toISOString().split('T')[0];
+        const isWD = workingDateSet.has(dateStr);
+        const b = trendBuckets.get(dateStr);
+        trend.push({
+          date: dateStr,
+          isWorkingDay: isWD,
+          onTime: b?.onTime ?? 0,
+          late: b?.late ?? 0,
+          missed: b?.missed ?? 0,
+        });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+    }
+
+    // Leaderboard buckets per eligible user
+    const userBuckets = new Map<string, { onTime: number; late: number; missed: number }>();
+    for (const u of eligible) userBuckets.set(u.id, { onTime: 0, late: 0, missed: 0 });
+    for (const c of (rangeCheckins || []) as any[]) {
+      if (!workingDateSet.has(c.date)) continue;
+      const bucket = userBuckets.get(c.user_id);
+      if (!bucket) continue;
+      if (c.status === 'on_time') bucket.onTime++;
+      else if (c.status === 'late') bucket.late++;
+      else if (c.status === 'no_checkin') bucket.missed++;
+    }
+
+    const totalWorkingDays = calendar.workingDates.length;
+    const leaderboard = eligible.map((u) => {
+      const b = userBuckets.get(u.id) || { onTime: 0, late: 0, missed: 0 };
+      const rate = totalWorkingDays > 0 ? (b.onTime + b.late) / totalWorkingDays : 0;
+      return {
+        user_id: u.id,
+        display_name: u.display_name,
+        email: u.email,
+        role: roleMap.get(u.id) ?? null,
+        working_days: totalWorkingDays,
+        on_time: b.onTime,
+        late: b.late,
+        missed: b.missed,
+        attendance_rate: rate,
+      };
+    });
+    leaderboard.sort((a, b) => b.attendance_rate - a.attendance_rate || a.missed - b.missed);
+
+    res.json({
+      success: true,
+      data: {
+        today: {
+          date: today,
+          isWorkingDay: todayIsWorking,
+          holidayName: todayHoliday,
+          totalEligible,
+          onTime,
+          late,
+          pending,
+          missed,
+          attendanceRate,
+          checkins: todayList,
+        },
+        trend,
+        leaderboard,
+        windowDays: days,
+      },
+    });
+  } catch (err) {
+    console.error('Check-in overview error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

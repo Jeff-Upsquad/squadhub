@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '../../services/api';
+import api from '../../../services/api';
 import type { UserOfficeTiming, UserType } from '@squadhub/shared';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -75,7 +75,7 @@ function summarizeTiming(t: UserOfficeTiming): string {
   return `${t.from_time} – ${t.to_time} · ${workingDaysLabel} · ${t.max_break_minutes}m break`;
 }
 
-export default function AdminOfficeTimings() {
+export default function OfficeTimingPanel() {
   const queryClient = useQueryClient();
   const [userTypeFilter, setUserTypeFilter] = useState<'all' | EligibleUserType>('all');
   const [search, setSearch] = useState('');
@@ -159,11 +159,6 @@ export default function AdminOfficeTimings() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Office Timing</h1>
-        <p className="mt-1 text-sm text-[#62748E]">Configure each user&apos;s daily work window. Drives the check-in deadline and the time-tracking progress bar.</p>
-      </div>
-
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex gap-1 rounded-lg bg-[#F1F5F9] p-1">
           {(['all', 'internal', 'partner', 'partner_employee'] as const).map(tab => (

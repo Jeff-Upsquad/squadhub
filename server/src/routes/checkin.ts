@@ -5,6 +5,7 @@ import { requireUserType } from '../middleware/userType';
 import { supabaseAdmin } from '../supabase';
 import { nowIST, todayIST, formatTimeIST, isNonWorkingDay } from '../utils/ist';
 import { getUserRoleIds } from '../utils/roles';
+import { resolveDeadlineTime } from '../utils/checkin';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
@@ -12,24 +13,6 @@ const router = Router();
 // All check-in routes require auth and a user type in scope
 router.use(requireAuth);
 router.use(requireUserType('internal', ...PARTNER_USER_TYPES));
-
-/** Resolve the on-time deadline for a user: office_timing.from_time → user_checkin_settings.deadline_time → '10:00' */
-async function resolveDeadlineTime(userId: string): Promise<string> {
-  const { data: officeTiming } = await supabaseAdmin
-    .from('user_office_timing')
-    .select('from_time')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle();
-  if (officeTiming?.from_time) return officeTiming.from_time;
-
-  const { data: settingsRows } = await supabaseAdmin
-    .from('user_checkin_settings')
-    .select('deadline_time')
-    .eq('user_id', userId)
-    .limit(1);
-  return settingsRows?.[0]?.deadline_time || '10:00';
-}
 
 // POST /checkin/submit — submit daily check-in
 const submitSchema = z.object({
