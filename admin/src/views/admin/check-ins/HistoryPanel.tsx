@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import api from '../../services/api';
+import api from '../../../services/api';
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   on_time: { label: 'On Time', className: 'bg-emerald-50 text-emerald-600' },
@@ -8,7 +8,7 @@ const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   no_checkin: { label: 'Missed', className: 'bg-red-50 text-red-600' },
 };
 
-export default function AdminCheckInHistory() {
+export default function HistoryPanel() {
   const [filters, setFilters] = useState({
     user_id: '',
     role_id: '',
@@ -18,7 +18,6 @@ export default function AdminCheckInHistory() {
     page: 1,
   });
 
-  // Build query params
   const params = new URLSearchParams();
   params.set('page', String(filters.page));
   params.set('limit', '50');
@@ -51,12 +50,6 @@ export default function AdminCheckInHistory() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Check-In History</h1>
-        <p className="mt-1 text-sm text-[#62748E]">View check-in records for all users</p>
-      </div>
-
-      {/* Filters */}
       <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-[#E2E8F0] bg-white p-4">
         <div>
           <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">User</label>
@@ -123,7 +116,6 @@ export default function AdminCheckInHistory() {
         </button>
       </div>
 
-      {/* Results */}
       <div className="rounded-xl border border-[#E2E8F0] bg-white">
         {isLoading ? (
           <div className="p-8 text-center text-sm text-[#90A1B9]">Loading...</div>
@@ -172,7 +164,6 @@ export default function AdminCheckInHistory() {
               </tbody>
             </table>
 
-            {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between border-t border-[#E2E8F0] px-5 py-3">
                 <p className="text-xs text-[#90A1B9]">{total} records total</p>

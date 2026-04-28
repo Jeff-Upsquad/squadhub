@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '../../services/api';
+import api from '../../../services/api';
 import type { Holiday } from '@squadhub/shared';
 
 const MONTH_NAMES = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-export default function AdminHolidays() {
+export default function HolidaysPanel() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -19,21 +19,18 @@ export default function AdminHolidays() {
   });
   const [activeTab, setActiveTab] = useState<'list' | 'calendar' | 'working-days'>('list');
 
-  // Fetch holidays
   const { data: holidaysRes } = useQuery({
     queryKey: ['admin-holidays'],
     queryFn: () => api.get('/admin/checkin/holidays').then((r) => r.data),
   });
   const holidays: Holiday[] = holidaysRes?.data || [];
 
-  // Fetch working days
   const { data: wdRes } = useQuery({
     queryKey: ['admin-working-days'],
     queryFn: () => api.get('/admin/checkin/working-days').then((r) => r.data),
   });
   const workingDays: number[] = wdRes?.data?.working_days || [1, 2, 3, 4, 5, 6];
 
-  // Mutations
   const createMutation = useMutation({
     mutationFn: (data: any) => api.post('/admin/checkin/holidays', data),
     onSuccess: () => {
@@ -104,35 +101,30 @@ export default function AdminHolidays() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Holiday Management</h1>
-          <p className="mt-1 text-sm text-[#62748E]">Configure working days, holidays, and non-working dates</p>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex gap-1 rounded-lg bg-[#F1F5F9] p-1">
+          {(['list', 'calendar', 'working-days'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
+                activeTab === tab ? 'bg-white text-[#0F172B] shadow-sm' : 'text-[#62748E] hover:text-[#0F172B]'
+              }`}
+            >
+              {tab === 'list' ? 'Holidays' : tab === 'calendar' ? 'Calendar' : 'Working Days'}
+            </button>
+          ))}
         </div>
-        <button
-          onClick={() => { resetForm(); setShowForm(true); }}
-          className="rounded-lg bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:bg-[#1D293D]"
-        >
-          Add Holiday
-        </button>
-      </div>
-
-      {/* Tabs */}
-      <div className="mb-4 flex gap-1 rounded-lg bg-[#F1F5F9] p-1">
-        {(['list', 'calendar', 'working-days'] as const).map((tab) => (
+        {activeTab === 'list' && (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
-              activeTab === tab ? 'bg-white text-[#0F172B] shadow-sm' : 'text-[#62748E] hover:text-[#0F172B]'
-            }`}
+            onClick={() => { resetForm(); setShowForm(true); }}
+            className="rounded-lg bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:bg-[#1D293D]"
           >
-            {tab === 'list' ? 'Holidays' : tab === 'calendar' ? 'Calendar' : 'Working Days'}
+            Add Holiday
           </button>
-        ))}
+        )}
       </div>
 
-      {/* Working Days Tab */}
       {activeTab === 'working-days' && (
         <div className="rounded-xl border border-[#E2E8F0] bg-white p-6">
           <h3 className="mb-4 text-sm font-semibold text-[#0F172B]">Default Working Days</h3>
@@ -156,7 +148,6 @@ export default function AdminHolidays() {
         </div>
       )}
 
-      {/* Holiday List Tab */}
       {activeTab === 'list' && (
         <div className="rounded-xl border border-[#E2E8F0] bg-white">
           {holidays.length === 0 ? (
@@ -209,12 +200,10 @@ export default function AdminHolidays() {
         </div>
       )}
 
-      {/* Calendar Tab */}
       {activeTab === 'calendar' && (
         <CalendarTab holidays={holidays} workingDays={workingDays} />
       )}
 
-      {/* Add/Edit Holiday Modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
@@ -302,12 +291,11 @@ export default function AdminHolidays() {
 
 function CalendarTab({ holidays, workingDays }: { holidays: Holiday[]; workingDays: number[] }) {
   const [year, setYear] = useState(new Date().getFullYear());
-  const [month, setMonth] = useState(new Date().getMonth()); // 0-indexed
+  const [month, setMonth] = useState(new Date().getMonth());
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDayOfWeek = new Date(year, month, 1).getDay();
 
-  // Build holiday set for this month
   const holidayDates = new Set<number>();
   holidays.forEach((h) => {
     if (h.is_recurring && h.recurring_month === month + 1) {
