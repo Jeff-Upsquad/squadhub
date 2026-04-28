@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 /* Class-based dark mode — .dark on <html> */
 @variant dark (&:where(.dark, .dark *));
@@ -2955,4 +2955,885 @@ input.td-title-hero {
   .td-settings-card[data-twocol="true"] > .td-settings-row:nth-of-type(odd) {
     border-right: 1px solid var(--sq-gray-100);
   }
+}
+
+/* ── Hashnode-style task open view (panel-scoped redesign) ───────── */
+/* Design tokens scoped to the panel — overrides app theme inside the drawer
+   so the open task view matches the Hashnode-light mock pixel-for-pixel.    */
+.td-panel,
+.td-panel-luma {
+  /* Surfaces */
+  --surface:       #ffffff;
+  --surface-alt:   #f9fafb;
+  /* Ink scale */
+  --sh-ink:        #0f172a;
+  --sh-ink-2:      #334155;
+  --sh-ink-3:      #64748b;
+  --sh-ink-4:      #94a3b8;
+  --sh-ink-5:      #cbd5e1;
+  /* Hairlines */
+  --sh-hair:       #e5e7eb;
+  --sh-hair-2:     #d1d5db;
+  --sh-hair-3:     #eff1f4;
+  /* Status palette */
+  --td-paper:      #ffffff;
+  --td-paper-2:    #f9fafb;
+  --td-paper-3:    #f3f4f6;
+  --td-rule:       #e5e7eb;
+  --td-rule-soft:  #eff1f4;
+  --td-green:      #10b981;
+  --td-green-soft: #ecfdf5;
+  --td-amber:      #f59e0b;
+  --td-amber-soft: #fffbeb;
+  --td-red:        #ef4444;
+  --td-red-soft:   #fef2f2;
+  /* Accent — Hashnode blue */
+  --td-accent:     #2962ff;
+  --td-accent-2:   #1d4ed8;
+  --td-accent-soft: #eef3ff;
+  --td-accent-ring: rgba(41, 98, 255, 0.18);
+  /* Type stack */
+  --td-font-sans: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --td-font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --td-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--td-font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--sh-ink);
+}
+
+/* Re-skin the shell — flush right-edge panel with small left-corner radius */
+.td-panel-luma,
+.td-panel-luma.apple,
+.td-panel-luma.apple.td-shell {
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  border-radius: 12px 0 0 12px !important;
+  width: min(640px, 70vw) !important;
+  background: var(--surface) !important;
+  box-shadow: 0 1px 0 #f1f5f9, -24px 0 60px -30px rgba(15, 23, 42, 0.16), -1px 0 0 #e5e7eb !important;
+  overflow: hidden;
+}
+
+/* Title hero — Plus Jakarta Sans, 22px, weight 700, tight tracking */
+.td-panel .td-title-hero,
+.td-panel-luma .td-title-hero,
+.td-panel-luma.apple.td-shell .td-title-hero {
+  font-family: var(--td-font-sans) !important;
+  font-size: 22px !important;
+  line-height: 1.25 !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.022em !important;
+  color: var(--sh-ink) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Header bar — exact 10px 16px padding, hairline below */
+.td-panel-luma.apple.td-shell .td-head-luma {
+  padding: 10px 16px !important;
+  border-bottom: 1px solid var(--td-rule) !important;
+}
+
+/* Hero check — 22px, 7px radius, accent border, GREEN when done (per design) */
+.td-panel .td-checkbox-lg,
+.td-panel-luma .td-checkbox-lg {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 7px !important;
+  border: 1.8px solid var(--sh-ink-5) !important;
+  background: transparent !important;
+}
+.td-panel .td-checkbox-lg[data-done="true"],
+.td-panel-luma .td-checkbox-lg[data-done="true"] {
+  background: var(--td-green) !important;
+  border-color: var(--td-green) !important;
+}
+
+/* Header pill buttons — match design's 28px height + paper bg */
+.td-panel-luma.apple.td-shell .td-pill-btn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface);
+  border: 1px solid var(--td-rule);
+  color: var(--sh-ink-2);
+  font-family: var(--td-font-sans);
+  box-shadow: 0 1px 1px rgba(15,23,42,0.03);
+}
+/* Mark complete — dark filled when not done; green when done */
+.td-panel-luma.apple.td-shell .td-pill-btn[data-accent="true"] {
+  background: var(--sh-ink) !important;
+  color: white !important;
+  border-color: var(--sh-ink) !important;
+}
+.td-panel-luma.apple.td-shell .td-pill-btn[data-completed="true"] {
+  background: var(--td-green) !important;
+  color: white !important;
+  border-color: var(--td-green) !important;
+}
+.td-panel-luma.apple.td-shell .td-nav-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: transparent;
+  border: none;
+  color: var(--sh-ink-3);
+}
+.td-panel-luma.apple.td-shell .td-nav-btn:hover {
+  background: var(--td-paper-3);
+  color: var(--sh-ink);
+  border: none;
+}
+
+/* Hero / sections paddings — match design's 20/24px rhythm */
+.td-panel-luma.apple.td-shell .td-scroll {
+  padding: 16px 20px 8px !important;
+}
+
+/* Eyebrow tweaks — 11px 700 uppercase 0.06em */
+.td-panel-luma.apple.td-shell .td-eyebrow {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: var(--sh-ink-3) !important;
+  letter-spacing: 0.06em !important;
+  margin: 0 0 10px !important;
+  text-transform: uppercase !important;
+  font-family: var(--td-font-sans);
+}
+.td-panel-luma.apple.td-shell .td-eyebrow .muted {
+  font-family: var(--td-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.td-panel-luma.apple.td-shell .td-eyebrow .action {
+  font-size: 11.5px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: var(--sh-ink-3);
+}
+
+/* Settings card — head bar with DETAILS label */
+.td-panel .td-settings-card,
+.td-panel-luma .td-settings-card,
+.td-panel-luma.apple.td-shell .td-settings-card {
+  border: 1px solid var(--td-rule) !important;
+  border-radius: 10px !important;
+  background: var(--surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  overflow: hidden;
+  box-shadow: none !important;
+  margin-bottom: 0 !important;
+}
+.td-details-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--td-paper-2);
+  border-bottom: 1px solid var(--td-rule);
+  color: var(--sh-ink-3);
+}
+.td-details-head .label {
+  font-family: var(--td-font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--sh-ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Header — task code chip + breadcrumb */
+.td-task-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--surface-alt);
+  border: 1px solid var(--sh-hair-3);
+  border-radius: 7px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+  color: var(--sh-ink-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.td-task-code .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--td-accent);
+  flex: none;
+}
+
+.td-bcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--sh-ink-3);
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: default;
+  font-family: inherit;
+}
+button.td-bcrumb { cursor: pointer; }
+button.td-bcrumb:hover .name { color: var(--sh-ink); }
+.td-bcrumb .emblem {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  color: white;
+  display: grid;
+  place-items: center;
+  font-size: 8px;
+  font-weight: 700;
+  flex: none;
+}
+.td-bcrumb .sep {
+  color: var(--sh-ink-5);
+  font-weight: 400;
+}
+.td-bcrumb .chev { opacity: 0.5; }
+
+/* Description box — bordered with mono mini-label */
+.td-desc-box {
+  border: 1px solid var(--sh-hair);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: text;
+  margin-bottom: 12px;
+  transition: border-color .15s;
+}
+.td-desc-box:hover { border-color: var(--sh-hair-2); }
+.td-desc-box-label {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sh-ink-4);
+}
+
+/* Assignee bar — full-width row above details */
+.td-assignee-bar {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--sh-hair);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+  margin-bottom: 10px;
+}
+.td-assignee-bar:hover { background: color-mix(in oklch, var(--sh-hair-3) 50%, transparent); }
+.td-assignee-bar .label {
+  font-size: 11px;
+  color: var(--sh-ink-3);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.td-assignee-bar .value {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.td-assignee-bar .value .name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sh-ink);
+  letter-spacing: -0.005em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.td-assignee-bar .value .name.muted {
+  color: var(--sh-ink-4);
+  font-weight: 500;
+}
+.td-assignee-bar .reassign {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--sh-ink-3);
+  border: 1px solid var(--sh-hair-3);
+  border-radius: 6px;
+  background: var(--surface-alt);
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.td-assignee-bar .reassign:hover { color: var(--sh-ink); border-color: var(--sh-hair-2); }
+.td-assignee-bar .av-placeholder {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--surface-alt);
+  border: 1.5px dashed var(--sh-hair-2);
+  flex: none;
+}
+
+/* Section divider — full-width hairline between major sections */
+.td-section-rule {
+  height: 1px;
+  background: var(--sh-hair);
+  margin: 16px 0;
+}
+
+/* Prominent section header (Subtasks) */
+.td-section-strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.td-section-strong .title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--sh-ink);
+  letter-spacing: -0.01em;
+}
+.td-section-strong .icon { color: var(--td-accent); flex: none; }
+.td-section-count-strong {
+  font-size: 11.5px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--sh-ink-3);
+  font-weight: 600;
+  padding: 2px 7px;
+  background: var(--surface-alt);
+  border: 1px solid var(--sh-hair-3);
+  border-radius: 6px;
+}
+.td-section-add-strong {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--td-accent);
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--td-accent-soft);
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+.td-section-add-strong:hover { background: color-mix(in oklch, var(--td-accent-soft) 70%, var(--td-accent) 10%); }
+.td-section-add-strong:disabled { opacity: 0.6; cursor: default; }
+
+/* Subtask list — bordered card */
+.td-subtask-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--sh-hair);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.td-subtask-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--sh-hair-3);
+  cursor: pointer;
+  transition: background .1s;
+  background: transparent;
+  border-left: 0; border-right: 0; border-top: 0;
+  text-align: left;
+  font-family: inherit;
+}
+.td-subtask-row:hover { background: var(--surface-alt); }
+.td-subtask-row:last-of-type { border-bottom: 0; }
+.td-subtask-row .title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--sh-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.td-subtask-row[data-done="true"] .title {
+  color: var(--sh-ink-4);
+  text-decoration: line-through;
+}
+.td-subtask-code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--sh-ink-4);
+  font-weight: 500;
+  padding: 1px 6px;
+  background: var(--surface-alt);
+  border: 1px solid var(--sh-hair-3);
+  border-radius: 4px;
+}
+.td-subtask-mini {
+  font-size: 11.5px;
+  color: var(--sh-ink-3);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.td-subtask-add-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--sh-ink-3);
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--surface-alt);
+  border-top: 1px solid var(--sh-hair-3);
+}
+.td-subtask-add-row .kbd {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--sh-ink-4);
+  padding: 1px 6px;
+  background: var(--surface);
+  border: 1px solid var(--sh-hair-3);
+  border-radius: 4px;
+}
+
+/* Files dashed drop-zone wrapper — used as empty-state hint */
+.td-files-empty {
+  padding: 18px 14px;
+  border: 1px dashed var(--sh-hair-2);
+  border-radius: 10px;
+  background: var(--surface-alt);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--sh-ink-3);
+  font-weight: 500;
+  cursor: pointer;
+}
+.td-files-empty .accent { color: var(--td-accent); font-weight: 600; }
+
+/* Comments composer — bordered box, focus ring tinted with panel accent */
+.td-comment-box {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid var(--sh-hair);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface);
+  transition: border-color .15s, box-shadow .15s;
+}
+.td-comment-box[data-focus="true"] {
+  border-color: var(--td-accent-ring);
+  box-shadow: 0 0 0 3px var(--td-accent-soft);
+}
+.td-comment-box .field {
+  flex: 1;
+  min-width: 0;
+}
+.td-comment-send {
+  align-self: flex-end;
+  padding: 5px 12px;
+  background: var(--sh-ink);
+  color: var(--surface);
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.td-comment-send:disabled { opacity: 0.4; cursor: default; }
+
+/* Activity disclosure */
+.td-activity-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sh-ink-3);
+  cursor: pointer;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: none;
+  background: none;
+  font-family: inherit;
+}
+.td-activity-toggle:hover { color: var(--sh-ink); background: var(--surface-alt); }
+.td-activity-toggle .chev {
+  transition: transform .15s;
+}
+.td-activity-toggle[data-open="true"] .chev { transform: rotate(90deg); }
+
+/* Panel-scoped tweak: header uses the panel accent for the timer play icon */
+.td-panel .td-pill-btn .accent-icon { color: var(--td-accent); }
+
+/* Subtle hover for the Details cells (adopt existing settings-row hover) */
+.td-settings-row[data-half="true"] {
+  grid-template-columns: 90px 1fr;
+  min-height: 38px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+}
+.td-settings-row[data-half="true"] .k {
+  font-size: 11.5px;
+  color: var(--sh-ink-3);
+}
+.td-settings-row[data-half="true"] .v {
+  font-size: 12.5px;
+  font-weight: 500;
+  flex-wrap: wrap;
+}
+.td-prop-empty {
+  color: var(--sh-ink-4);
+  font-weight: 500;
+  font-size: 12.5px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+}
+.td-prop-empty:hover { color: var(--sh-ink-3); }
+.td-prop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.td-prop-chip .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+/* Pixel-faithful overrides scoped to .td-panel ───────────────────── */
+
+/* 2-col details grid — design uses bottom + right hairlines on cells */
+.td-panel-luma .td-settings-card[data-twocol="true"],
+.td-panel .td-settings-card[data-twocol="true"],
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  align-items: stretch;
+}
+.td-panel-luma .td-settings-card[data-twocol="true"] > .td-settings-row,
+.td-panel .td-settings-card[data-twocol="true"] > .td-settings-row,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] > .td-settings-row {
+  border-top: 0 !important;
+  border-bottom: 1px solid var(--td-rule-soft) !important;
+  border-right: 1px solid var(--td-rule-soft) !important;
+}
+.td-panel-luma .td-settings-card[data-twocol="true"] > .td-settings-row:nth-of-type(even),
+.td-panel .td-settings-card[data-twocol="true"] > .td-settings-row:nth-of-type(even),
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] > .td-settings-row:nth-of-type(even) {
+  border-right: 0 !important;
+}
+.td-panel-luma .td-settings-card[data-twocol="true"] > .td-settings-row + .td-settings-row::before,
+.td-panel .td-settings-card[data-twocol="true"] > .td-settings-row + .td-settings-row::before,
+.td-panel-luma.apple.td-shell .td-settings-card[data-twocol="true"] > .td-settings-row + .td-settings-row::before {
+  display: none !important;
+}
+
+/* Property cell — exact 90px label / 1fr value, 8x12 padding, 34 min-h */
+.td-panel-luma .td-settings-row[data-half="true"],
+.td-panel .td-settings-row[data-half="true"],
+.td-panel-luma.apple.td-shell .td-settings-row[data-half="true"] {
+  grid-template-columns: 90px 1fr !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 8px 12px !important;
+  min-height: 34px !important;
+  font-size: 12.5px !important;
+}
+.td-panel-luma .td-settings-row[data-half="true"] .k,
+.td-panel .td-settings-row[data-half="true"] .k,
+.td-panel-luma.apple.td-shell .td-settings-row[data-half="true"] .k {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 11.5px !important;
+  color: var(--sh-ink-3) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+}
+.td-panel-luma .td-settings-row[data-half="true"] .k svg,
+.td-panel .td-settings-row[data-half="true"] .k svg,
+.td-panel-luma.apple.td-shell .td-settings-row[data-half="true"] .k svg {
+  color: var(--sh-ink-4) !important;
+  width: 12px !important;
+  height: 12px !important;
+}
+.td-panel-luma .td-settings-row[data-half="true"] .v,
+.td-panel .td-settings-row[data-half="true"] .v,
+.td-panel-luma.apple.td-shell .td-settings-row[data-half="true"] .v {
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  color: var(--sh-ink) !important;
+}
+
+/* Description box — match design (10px 12px, 10 radius, 6 gap) */
+.td-panel .td-desc-box,
+.td-panel-luma .td-desc-box,
+.td-panel-luma.apple.td-shell .td-desc-box {
+  border: 1px solid var(--td-rule) !important;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  background: var(--surface) !important;
+  backdrop-filter: none !important;
+  margin-bottom: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  cursor: text;
+}
+.td-panel .td-desc-box .td-about,
+.td-panel-luma .td-desc-box .td-about,
+.td-panel-luma.apple.td-shell .td-desc-box .td-about {
+  font-family: var(--td-font-body) !important;
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+  color: var(--sh-ink-2) !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.td-panel .td-desc-box .td-about.empty,
+.td-panel-luma .td-desc-box .td-about.empty,
+.td-panel-luma.apple.td-shell .td-desc-box .td-about.empty {
+  color: var(--sh-ink-4) !important;
+  font-style: italic !important;
+}
+
+/* Assignee bar — match exact design padding 10/14, label minWidth 70 */
+.td-panel .td-assignee-bar,
+.td-panel-luma .td-assignee-bar {
+  grid-template-columns: 70px 1fr auto;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+}
+
+/* Subtask square check — design uses 16px / 5px radius / accent border+fill */
+.td-panel .td-subtask-row .td-checkbox,
+.td-panel-luma .td-subtask-row .td-checkbox {
+  width: 16px !important;
+  height: 16px !important;
+  border-radius: 5px !important;
+  border: 1.5px solid var(--sh-ink-5) !important;
+  background: transparent !important;
+}
+.td-panel .td-subtask-row .td-checkbox[data-done="true"],
+.td-panel-luma .td-subtask-row .td-checkbox[data-done="true"] {
+  background: var(--td-accent) !important;
+  border-color: var(--td-accent) !important;
+}
+.td-panel .td-subtask-row .td-checkbox[data-done="true"]::after,
+.td-panel-luma .td-subtask-row .td-checkbox[data-done="true"]::after {
+  border-color: white !important;
+}
+
+/* Section divider — design uses 24px horizontal margin */
+.td-panel .td-section-rule,
+.td-panel-luma .td-section-rule {
+  height: 1px;
+  background: var(--td-rule);
+  margin: 18px 0;
+}
+
+/* Prominent Subtasks count chip + accent CTA */
+.td-panel .td-section-count-strong,
+.td-panel-luma .td-section-count-strong {
+  font-size: 11.5px;
+  font-family: var(--td-font-mono);
+  color: var(--sh-ink-3);
+  font-weight: 600;
+  padding: 2px 7px;
+  background: var(--td-paper-2);
+  border: 1px solid var(--td-rule);
+  border-radius: 6px;
+}
+.td-panel .td-section-add-strong,
+.td-panel-luma .td-section-add-strong {
+  background: var(--td-accent-soft);
+  color: var(--td-accent);
+  font-weight: 600;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+.td-panel .td-section-add-strong:hover,
+.td-panel-luma .td-section-add-strong:hover {
+  background: color-mix(in oklch, var(--td-accent-soft) 70%, var(--td-accent) 12%);
+}
+.td-panel .td-section-strong .title,
+.td-panel-luma .td-section-strong .title {
+  font-family: var(--td-font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--sh-ink);
+}
+
+/* Subtask list overrides — design grid: 18 / 1fr / auto / auto / auto */
+.td-panel .td-subtask-list,
+.td-panel-luma .td-subtask-list {
+  border: 1px solid var(--td-rule);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.td-panel .td-subtask-row,
+.td-panel-luma .td-subtask-row {
+  grid-template-columns: 18px minmax(0, 1fr) auto auto auto;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--td-rule-soft);
+  background: transparent;
+}
+.td-panel .td-subtask-row:hover,
+.td-panel-luma .td-subtask-row:hover {
+  background: var(--td-paper-2);
+}
+.td-panel .td-subtask-row .title,
+.td-panel-luma .td-subtask-row .title {
+  font-family: var(--td-font-sans);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--sh-ink);
+}
+.td-panel .td-subtask-row[data-done="true"] .title,
+.td-panel-luma .td-subtask-row[data-done="true"] .title {
+  color: var(--sh-ink-4);
+  text-decoration: line-through;
+}
+.td-panel .td-subtask-code,
+.td-panel-luma .td-subtask-code {
+  font-family: var(--td-font-mono);
+  font-size: 10.5px;
+  color: var(--sh-ink-4);
+  font-weight: 500;
+  padding: 1px 6px;
+  background: var(--td-paper-2);
+  border: 1px solid var(--td-rule);
+  border-radius: 4px;
+}
+.td-panel .td-subtask-add-row,
+.td-panel-luma .td-subtask-add-row {
+  background: var(--td-paper-2);
+  border-top: 1px solid var(--td-rule-soft);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--sh-ink-3);
+}
+.td-panel .td-subtask-add-row .kbd,
+.td-panel-luma .td-subtask-add-row .kbd {
+  font-family: var(--td-font-mono);
+  font-size: 10.5px;
+  color: var(--sh-ink-4);
+  padding: 1px 6px;
+  background: var(--surface);
+  border: 1px solid var(--td-rule);
+  border-radius: 4px;
+}
+
+/* Files — restyle TaskAttachments' dashed drop zone to match design */
+.td-panel .td-files-wrap > div > div:first-child,
+.td-panel-luma .td-files-wrap > div > div:first-child {
+  padding: 18px 14px !important;
+  border: 1px dashed var(--sh-hair-2) !important;
+  border-radius: 10px !important;
+  background: var(--td-paper-2) !important;
+  font-size: 12.5px !important;
+  color: var(--sh-ink-3) !important;
+  font-weight: 500;
+}
+
+/* Property chip refinement — design uses pill with 6px radius */
+.td-panel .td-prop-chip,
+.td-panel-luma .td-prop-chip {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: var(--td-font-sans);
+}
+
+/* Comments composer + thread — design dimensions */
+.td-panel .td-comment-box,
+.td-panel-luma .td-comment-box {
+  border: 1px solid var(--td-rule);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface);
+}
+.td-panel .td-comment-box[data-focus="true"],
+.td-panel-luma .td-comment-box[data-focus="true"] {
+  border-color: var(--td-accent-ring);
+  box-shadow: 0 0 0 3px var(--td-accent-soft);
+}
+.td-panel .td-comment-send,
+.td-panel-luma .td-comment-send {
+  align-self: flex-end;
+  padding: 5px 12px;
+  background: var(--sh-ink);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  font-family: var(--td-font-sans);
+}
+
+/* Activity disclosure tighter style */
+.td-panel .td-activity-toggle,
+.td-panel-luma .td-activity-toggle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sh-ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 6px 8px;
+}
+
+/* Selection in panel uses accent-soft */
+.td-panel ::selection,
+.td-panel-luma ::selection {
+  background: var(--td-accent-soft);
+  color: var(--td-accent-2);
 }
