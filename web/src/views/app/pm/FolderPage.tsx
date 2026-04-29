@@ -4,10 +4,10 @@ import type { Folder, List, SpaceStatus, Task } from '@squadhub/shared';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useSpace } from '../../../hooks/useSpaces';
-import DashboardTaskRow from '../home/DashboardTaskRow';
-import CompletedSection from './CompletedSection';
+import TaskGroupCard from './TaskGroupCard';
 import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, type GroupBy } from '../../../lib/taskGrouping';
 import FilterBar from '../../../components/pm/FilterBar';
+import GroupByDropdown from '../../../components/pm/GroupByDropdown';
 import {
   EMPTY_FILTER,
   countActiveFilters,
@@ -30,7 +30,6 @@ export default function FolderPage() {
   const scopeKey = activeFolderId ? `folder:${activeFolderId}` : '';
   const filters = (scopeKey && filtersByScope[scopeKey]) || EMPTY_FILTER;
 
-  // Mirror the list filter into the store so the global + button prefills it
   useEffect(() => {
     setContextListId(listFilter === 'all' ? null : listFilter);
   }, [listFilter, setContextListId]);
@@ -46,7 +45,6 @@ export default function FolderPage() {
 
   const lists: List[] = useMemo(() => folder?.lists ?? [], [folder]);
 
-  // Pull the parent space to source the status options for the FilterBar.
   const { data: parentSpace } = useSpace(folder?.space_id ?? null);
   const spaceStatuses: SpaceStatus[] = useMemo(
     () => ((parentSpace as unknown as { space_statuses?: SpaceStatus[] } | undefined)?.space_statuses ?? []),
@@ -90,7 +88,6 @@ export default function FolderPage() {
     return arr;
   }, [allTasks, listFilter, filters, tz]);
 
-  // Options for the FilterBar — derived from the un-filtered set (after the list pill).
   const optionSourceTasks = useMemo(
     () => (listFilter === 'all' ? allTasks : allTasks.filter((t) => t.list?.id === listFilter)),
     [allTasks, listFilter],
@@ -124,7 +121,7 @@ export default function FolderPage() {
 
   const totalCount = allTasks.length;
   const filteredCount = filteredTasks.length;
-  const activeListName = listFilter === 'all' ? null : lists.find((l) => l.id === listFilter)?.name;
+  const noopStatusChange = () => {};
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -139,7 +136,7 @@ export default function FolderPage() {
         </div>
       </div>
 
-      {/* List filter pills */}
+      {/* List filter pills + Filter */}
       <div className="sh-view dl-groupby shrink-0">
         <span className="dl-groupby-lbl">List</span>
         <div
@@ -175,7 +172,17 @@ export default function FolderPage() {
             {l.name}
           </div>
         ))}
-        <span style={{ width: 8, display: 'inline-block' }} />
+      </div>
+
+      {/* Group by dropdown + Filter */}
+      <div className="lv-subtoolbar shrink-0">
+        <span className="st-label">Group by</span>
+        <GroupByDropdown
+          options={GROUP_BY_OPTIONS}
+          value={groupBy}
+          onChange={(v) => setGroupBy(v as GroupBy)}
+        />
+        <div className="st-divider" />
         <FilterBar
           filters={filters}
           onChange={(next) => scopeKey && setScopeFilters(scopeKey, next)}
@@ -185,31 +192,8 @@ export default function FolderPage() {
         />
       </div>
 
-      {/* Group by pills */}
-      <div className="sh-view dl-groupby shrink-0">
-        <span className="dl-groupby-lbl">Group by</span>
-        {GROUP_BY_OPTIONS.map((opt) => (
-          <div
-            key={opt.value}
-            className="pill"
-            data-active={groupBy === opt.value}
-            onClick={() => setGroupBy(opt.value)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                setGroupBy(opt.value);
-              }
-            }}
-          >
-            {opt.label}
-          </div>
-        ))}
-      </div>
-
       {/* Body */}
-      <div className="td-scroll sh-view" style={{ flex: 1, overflowY: 'auto' }}>
+      <div className="td-scroll lv-card-canvas" style={{ flex: 1, overflowY: 'auto' }}>
         {isLoading && allTasks.length === 0 ? (
           <div style={{ padding: 24, fontSize: 12, color: 'var(--sh-ink-3)' }}>Loading…</div>
         ) : lists.length === 0 ? (
@@ -229,8 +213,6 @@ export default function FolderPage() {
                   Clear filters
                 </button>
               </>
-            ) : activeListName ? (
-              `No tasks in ${activeListName}.`
             ) : (
               'No tasks in this folder yet.'
             )}
@@ -238,27 +220,45 @@ export default function FolderPage() {
         ) : (
           <>
             {groupBy === 'none' ? (
-              <div className="today-list">
-                {openTasks.map((t) => (
-                  <DashboardTaskRow key={t.id} task={t} />
-                ))}
-              </div>
+              <TaskGroupCard
+                groupKey="fl-all"
+                label="All tasks"
+                tasks={openTasks}
+                allStatuses={spaceStatuses}
+                listId={null}
+                onStatusChange={noopStatusChange}
+                canEdit
+                showAddRow={false}
+              />
             ) : (
               groups.map((g) => (
-                <div key={g.key} className="today-group">
-                  <div className="today-group-head">
-                    <span>{g.label}</span>
-                    <span className="count">· {g.tasks.length}</span>
-                  </div>
-                  <div className="today-list">
-                    {g.tasks.map((t) => (
-                      <DashboardTaskRow key={t.id} task={t} />
-                    ))}
-                  </div>
-                </div>
+                <TaskGroupCard
+                  key={g.key}
+                  groupKey={`fl:${g.key}`}
+                  label={g.label}
+                  tasks={g.tasks}
+                  allStatuses={spaceStatuses}
+                  listId={null}
+                  onStatusChange={noopStatusChange}
+                  canEdit
+                  showAddRow={false}
+                />
               ))
             )}
-            <CompletedSection tasks={completedTasks} />
+            {completedTasks.length > 0 && (
+              <TaskGroupCard
+                groupKey="fl-completed"
+                label="Completed"
+                dotColor="#10b981"
+                tasks={completedTasks}
+                allStatuses={spaceStatuses}
+                listId={null}
+                onStatusChange={noopStatusChange}
+                canEdit
+                showAddRow={false}
+                defaultCollapsed
+              />
+            )}
           </>
         )}
       </div>

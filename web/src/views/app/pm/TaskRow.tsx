@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Task, SpaceStatus } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
-import { avatarColor, initialOf, formatWhen } from './taskHelpers';
+import { avatarColor, initialOf, formatWhen, nextQuickDate } from './taskHelpers';
 import AssigneePicker from './AssigneePicker';
 import DatePicker from './DatePicker';
 
@@ -29,11 +29,23 @@ export default function TaskRow({
   canEdit?: boolean;
   listId: string;
 }) {
-  const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection } = usePMStore();
-  const updateTask = useUpdateTask(listId);
+  const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, toggleFocusToday, focusedTodayIds, focusedTodayDate } = usePMStore();
+  const isFocused = (() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return focusedTodayDate === today && focusedTodayIds.includes(task.id);
+  })();
+  const effectiveListId = listId || (task as any).list_id || task.list?.id || null;
+  const updateTask = useUpdateTask(effectiveListId);
   const [expanded, setExpanded] = useState(false);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
+
+  // Track in-flight quick-date values so rapid clicks read the most recent sent
+  // value rather than the stale React Query cache. Cleared when the cache
+  // updates (task.work_date / task.due_date change reference).
+  const pendingDates = useRef<{ work?: string | null; due?: string | null }>({});
+  useEffect(() => { pendingDates.current.work = undefined; }, [task.work_date]);
+  useEffect(() => { pendingDates.current.due = undefined; }, [task.due_date]);
 
   // Inline picker anchors — null = closed, DOMRect = open & positioned
   const [assigneeAnchor, setAssigneeAnchor] = useState<DOMRect | null>(null);
@@ -156,6 +168,16 @@ export default function TaskRow({
               </button>
             )}
             <span className="lv-title">{task.title}</span>
+            <button
+              type="button"
+              className="lv-focus-star"
+              data-active={isFocused}
+              onClick={(e) => { e.stopPropagation(); toggleFocusToday(task.id); }}
+              aria-label={isFocused ? 'Focused for today — click to remove' : 'Focus today'}
+              title={isFocused ? 'Focused for today — click to remove' : 'Focus today'}
+            >
+              {isFocused ? '★' : '☆'}
+            </button>
           </div>
         </div>
 
@@ -196,9 +218,31 @@ export default function TaskRow({
           style={{ cursor: canEdit ? 'pointer' : 'default' }}
           title={canEdit ? 'Set work date' : undefined}
         >
-          <span className="lv-cell-value">
+          <span className="lv-cell-value lv-date-text">
             {task.work_date ? workWhen.text : '—'}
           </span>
+          {canEdit && (
+            <button
+              type="button"
+              className="lv-date-today-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                const cur = pendingDates.current.work !== undefined ? pendingDates.current.work : task.work_date;
+                const next = nextQuickDate(cur);
+                pendingDates.current.work = next;
+                updateTask.mutate({ id: task.id, work_date: next } as any);
+              }}
+              aria-label="Set work date to today / tomorrow"
+              title="Click: today · Click again: tomorrow"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Due date cell — clickable, opens DatePicker (datetime) */}
@@ -209,9 +253,47 @@ export default function TaskRow({
           style={{ cursor: canEdit ? 'pointer' : 'default' }}
           title={canEdit ? 'Set due date' : undefined}
         >
-          <span className={dueValueClass}>
+          <span className={`${dueValueClass} lv-date-text`}>
             {task.due_date ? dueWhen.text : '—'}
           </span>
+          {canEdit && (
+            <button
+              type="button"
+              className="lv-date-today-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                const cur = pendingDates.current.due !== undefined ? pendingDates.current.due : task.due_date;
+                const next = nextQuickDate(cur);
+                pendingDates.current.due = next;
+                updateTask.mutate({ id: task.id, due_date: next } as any);
+              }}
+              aria-label="Set due date to today / tomorrow"
+              title="Click: today · Click again: tomorrow"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* More button (6th column) */}
+        <div className="lv-cell--more">
+          <button
+            type="button"
+            className="lv-more-btn"
+            onClick={(e) => e.stopPropagation()}
+            aria-label="More actions"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="1" />
+              <circle cx="19" cy="12" r="1" />
+              <circle cx="5" cy="12" r="1" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -232,7 +314,7 @@ export default function TaskRow({
           taskId={task.id}
           currentAssigneeIds={assignees.map(u => u.id)}
           anchorRect={assigneeAnchor}
-          onChange={(ids) => updateTask.mutate({ id: task.id, assignee_ids: ids } as any)}
+          onChange={(ids) => updateTask.mutate({ id: task.id, assignee_ids: ids, list_id: effectiveListId || undefined } as any)}
           onClose={() => setAssigneeAnchor(null)}
         />
       )}
@@ -242,7 +324,7 @@ export default function TaskRow({
           anchorRect={workDateAnchor}
           value={task.work_date}
           mode="datetime"
-          onChange={(next) => updateTask.mutate({ id: task.id, work_date: next } as any)}
+          onChange={(next) => updateTask.mutate({ id: task.id, work_date: next, list_id: effectiveListId || undefined } as any)}
           onClose={() => setWorkDateAnchor(null)}
         />
       )}
@@ -252,7 +334,7 @@ export default function TaskRow({
           anchorRect={dueDateAnchor}
           value={task.due_date}
           mode="datetime"
-          onChange={(next) => updateTask.mutate({ id: task.id, due_date: next } as any)}
+          onChange={(next) => updateTask.mutate({ id: task.id, due_date: next, list_id: effectiveListId || undefined } as any)}
           onClose={() => setDueDateAnchor(null)}
         />
       )}

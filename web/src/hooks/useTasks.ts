@@ -128,6 +128,70 @@ export function useUpdateTask(listId: string | null) {
       const res = await api.put(`/pm/tasks/${id}`, body);
       return res.data.data;
     },
+    // Optimistic update — patch cached task data immediately so the UI updates
+    // without waiting for the server round-trip. Captures snapshots for rollback.
+    onMutate: async (vars) => {
+      const taskKey = ['task', vars.id];
+      // Cancel in-flight refetches so they don't overwrite our optimistic update
+      await qc.cancelQueries({ queryKey: taskKey });
+
+      const snapshots: Array<[readonly unknown[], unknown]> = [];
+      const patch = (() => {
+        const { id: _id, ...rest } = vars;
+        return rest as Record<string, unknown>;
+      })();
+
+      // Patch single-task cache (open view)
+      const prevTask = qc.getQueryData(taskKey);
+      if (prevTask !== undefined) {
+        snapshots.push([taskKey, prevTask]);
+        qc.setQueryData(taskKey, (old: unknown) => (old && typeof old === 'object' ? { ...(old as object), ...patch } : old));
+      }
+
+      // Patch every list / folder / space task query that contains this task
+      const patchInArray = (arr: unknown): unknown => {
+        if (!Array.isArray(arr)) return arr;
+        let changed = false;
+        const next = arr.map((t) => {
+          if (t && typeof t === 'object' && (t as { id?: string }).id === vars.id) {
+            changed = true;
+            return { ...(t as object), ...patch };
+          }
+          return t;
+        });
+        return changed ? next : arr;
+      };
+
+      for (const [key, data] of qc.getQueriesData({ queryKey: ['tasks'] })) {
+        const next = patchInArray(data);
+        if (next !== data) {
+          snapshots.push([key, data]);
+          qc.setQueryData(key, next);
+        }
+      }
+      for (const queryKey of [['folder-tasks'], ['space-tasks']] as const) {
+        for (const [key, data] of qc.getQueriesData({ queryKey: queryKey as readonly unknown[] })) {
+          // folder-tasks / space-tasks shape: { listId, listName, tasks: Task[], ... }
+          if (data && typeof data === 'object' && 'tasks' in data) {
+            const tasks = (data as { tasks?: unknown }).tasks;
+            const nextTasks = patchInArray(tasks);
+            if (nextTasks !== tasks) {
+              snapshots.push([key, data]);
+              qc.setQueryData(key, { ...(data as object), tasks: nextTasks });
+            }
+          }
+        }
+      }
+      return { snapshots };
+    },
+    onError: (_err, _vars, context) => {
+      const snapshots = (context as { snapshots?: Array<[readonly unknown[], unknown]> } | undefined)?.snapshots;
+      if (snapshots) {
+        for (const [key, data] of snapshots) {
+          qc.setQueryData(key, data);
+        }
+      }
+    },
     onSuccess: (_data, vars) => {
       invalidateTaskLists(qc, listId);
       if (vars.list_id && vars.list_id !== listId) {

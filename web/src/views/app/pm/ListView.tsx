@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
-import type { SpaceStatus, Task } from '@squadhub/shared';
-import { useTasks, useUpdateTask, useCreateTask, groupTasksByStatus } from '../../../hooks/useTasks';
+import { useMemo } from 'react';
+import type { SpaceStatus } from '@squadhub/shared';
+import { useTasks, useUpdateTask, groupTasksByStatus } from '../../../hooks/useTasks';
 import { usePMStore, type ListGroupBy } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
-import { groupTasks as groupTasksGeneric, partitionByCompletion } from '../../../lib/taskGrouping';
+import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, type SortBy } from '../../../lib/taskGrouping';
 import { filterTasks, countActiveFilters, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
-import TaskRow from './TaskRow';
+import TaskGroupCard from './TaskGroupCard';
 
 export default function ListView({
   listId,
@@ -16,6 +16,8 @@ export default function ListView({
   myTasksOnly = false,
   searchQuery = '',
   canEdit = true,
+  sortBy = 'manual',
+  focusToday = false,
 }: {
   listId: string;
   statuses: SpaceStatus[];
@@ -25,12 +27,12 @@ export default function ListView({
   myTasksOnly?: boolean;
   searchQuery?: string;
   canEdit?: boolean;
+  sortBy?: SortBy;
+  focusToday?: boolean;
 }) {
-  // Filtering happens client-side now — pass undefined for server-side filters
-  // so the React Query cache key doesn't fragment per filter selection.
   const { data: tasks, isLoading } = useTasks(listId, undefined);
   const updateTask = useUpdateTask(listId);
-  const { selectedTasks, clearSelection } = usePMStore();
+  const { selectedTasks, clearSelection, focusedTodayIds, focusedTodayDate } = usePMStore();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
@@ -45,8 +47,16 @@ export default function ListView({
         return assignees.some((a) => a.id === currentUserId);
       });
     }
+    if (focusToday) {
+      const today = new Date().toISOString().slice(0, 10);
+      const focusedSet = focusedTodayDate === today ? new Set(focusedTodayIds) : new Set<string>();
+      arr = arr.filter((t) => focusedSet.has(t.id));
+    }
+    if (sortBy !== 'manual') {
+      arr = sortTasks(arr, sortBy);
+    }
     return arr;
-  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz]);
+  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, focusedTodayIds, focusedTodayDate]);
 
   const activeFilterCount = countActiveFilters(filters);
 
@@ -79,7 +89,7 @@ export default function ListView({
 
   const totalVisible = filteredTasks.length;
   const emptyMessage = searchQuery
-    ? `No tasks match “${searchQuery}”.`
+    ? `No tasks match "${searchQuery}".`
     : activeFilterCount > 0
       ? 'No tasks match the current filters.'
       : myTasksOnly
@@ -88,16 +98,7 @@ export default function ListView({
 
   return (
     <div className="lv-canvas relative flex flex-1 flex-col overflow-auto">
-      <div className="lv-wrap">
-        {/* Column headers — aligned with .lv-row grid */}
-        <div className="lv-header" role="row" aria-label="Column headers">
-          <span aria-hidden="true" />
-          <span className="lv-header-cell lv-header-cell--title">Task</span>
-          <span className="lv-header-cell lv-header-cell--assignee">Assignee</span>
-          <span className="lv-header-cell lv-header-cell--date">Work date</span>
-          <span className="lv-header-cell lv-header-cell--date">Due date</span>
-        </div>
-
+      <div className="lv-card-canvas" style={{ flex: 1 }}>
         {totalVisible === 0 ? (
           <div className="lv-empty">
             {emptyMessage}
@@ -116,58 +117,77 @@ export default function ListView({
           </div>
         ) : groupBy === 'status' && statusGroups ? (
           statusGroups.map(({ status, tasks: groupTasks }) => (
-            <StatusGroup
+            <TaskGroupCard
               key={status.id}
-              status={status}
+              groupKey={status.id}
+              label={status.name}
+              dotColor={status.color}
               tasks={groupTasks}
               allStatuses={statuses}
               listId={listId}
               onStatusChange={handleStatusChange}
-              showHeader
-              onDrop={handleStatusChange}
               canEdit={canEdit}
+              showAddRow={canEdit}
+              defaultNewTaskStatus={status.category}
+              onDrop={handleStatusChange}
             />
           ))
         ) : groupBy === 'none' ? (
           <>
-            <StatusGroup
-              status={{ id: 'all', name: 'All tasks', color: '#6b7280', position: 0, space_id: '', is_default: false, category: 'active' as const }}
+            <TaskGroupCard
+              groupKey="all"
+              label="All tasks"
               tasks={openTasks}
               allStatuses={statuses}
               listId={listId}
               onStatusChange={handleStatusChange}
-              showHeader={false}
               canEdit={canEdit}
+              showAddRow={canEdit}
             />
-            <CompletedListGroup
-              tasks={completedTasks}
-              allStatuses={statuses}
-              listId={listId}
-              onStatusChange={handleStatusChange}
-              canEdit={canEdit}
-            />
+            {completedTasks.length > 0 && (
+              <TaskGroupCard
+                groupKey="completed"
+                label="Completed"
+                dotColor="#10b981"
+                tasks={completedTasks}
+                allStatuses={statuses}
+                listId={listId}
+                onStatusChange={handleStatusChange}
+                canEdit={canEdit}
+                showAddRow={false}
+                defaultCollapsed
+              />
+            )}
           </>
         ) : genericGroups ? (
           <>
             {genericGroups.map((g) => (
-              <GenericGroup
+              <TaskGroupCard
                 key={g.key}
-                groupKey={g.key}
+                groupKey={`gg:${g.key}`}
                 label={g.label}
                 tasks={g.tasks}
                 allStatuses={statuses}
                 listId={listId}
                 onStatusChange={handleStatusChange}
                 canEdit={canEdit}
+                showAddRow={false}
               />
             ))}
-            <CompletedListGroup
-              tasks={completedTasks}
-              allStatuses={statuses}
-              listId={listId}
-              onStatusChange={handleStatusChange}
-              canEdit={canEdit}
-            />
+            {completedTasks.length > 0 && (
+              <TaskGroupCard
+                groupKey="completed"
+                label="Completed"
+                dotColor="#10b981"
+                tasks={completedTasks}
+                allStatuses={statuses}
+                listId={listId}
+                onStatusChange={handleStatusChange}
+                canEdit={canEdit}
+                showAddRow={false}
+                defaultCollapsed
+              />
+            )}
           </>
         ) : null}
 
@@ -209,239 +229,6 @@ export default function ListView({
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function StatusGroup({
-  status,
-  tasks,
-  allStatuses,
-  listId,
-  onStatusChange,
-  showHeader = true,
-  onDrop,
-  canEdit = true,
-}: {
-  status: SpaceStatus;
-  tasks: Task[];
-  allStatuses: SpaceStatus[];
-  listId: string;
-  onStatusChange: (taskId: string, statusId: string) => void;
-  showHeader?: boolean;
-  onDrop?: (taskId: string, statusId: string) => void;
-  canEdit?: boolean;
-}) {
-  const { collapsedGroups, toggleGroupCollapse } = usePMStore();
-  const isCollapsed = collapsedGroups[status.id] || false;
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [addTitle, setAddTitle] = useState<string | null>(null);
-  const createTask = useCreateTask(listId);
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setIsDragOver(true);
-  };
-  const handleDragLeave = (e: React.DragEvent) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false);
-  };
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const taskId = e.dataTransfer.getData('text/plain');
-    if (taskId && onDrop) onDrop(taskId, status.category);
-  };
-
-  return (
-    <div
-      className="lv-group"
-      data-dragover={isDragOver}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      {showHeader && (
-        <div
-          className="lv-group-head"
-          data-collapsed={isCollapsed}
-          onClick={() => toggleGroupCollapse(status.id)}
-        >
-          <span className="caret">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M9 5l7 7-7 7" />
-            </svg>
-          </span>
-          <span className="status-dot" style={{ backgroundColor: status.color }} />
-          <span className="title">{status.name}</span>
-          <span className="count">· {tasks.length}</span>
-        </div>
-      )}
-
-      {!isCollapsed && (
-        <div className="lv-group-body">
-          {tasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              statuses={allStatuses}
-              onStatusChange={onStatusChange}
-              canEdit={canEdit}
-              listId={listId}
-            />
-          ))}
-
-          {/* Inline add-task row */}
-          {canEdit && addTitle !== null ? (
-            <div className="lv-add">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              <input
-                autoFocus
-                value={addTitle}
-                placeholder="Task title, Enter to add · Esc to cancel"
-                onChange={(e) => setAddTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const val = addTitle.trim();
-                    if (val) {
-                      createTask.mutate(
-                        { title: val, status: status.category, list_id: listId },
-                        { onSuccess: () => setAddTitle('') }
-                      );
-                    } else setAddTitle(null);
-                  } else if (e.key === 'Escape') {
-                    e.stopPropagation();
-                    setAddTitle(null);
-                  }
-                }}
-                onBlur={() => {
-                  const val = addTitle.trim();
-                  if (val) {
-                    createTask.mutate(
-                      { title: val, status: status.category, list_id: listId },
-                      { onSuccess: () => setAddTitle(null) }
-                    );
-                  } else setAddTitle(null);
-                }}
-              />
-            </div>
-          ) : canEdit && !isCollapsed ? (
-            <div className="lv-add" onClick={() => setAddTitle('')}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              <span>Add task</span>
-            </div>
-          ) : null}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function GenericGroup({
-  groupKey,
-  label,
-  tasks,
-  allStatuses,
-  listId,
-  onStatusChange,
-  canEdit = true,
-}: {
-  groupKey: string;
-  label: string;
-  tasks: Task[];
-  allStatuses: SpaceStatus[];
-  listId: string;
-  onStatusChange: (taskId: string, statusId: string) => void;
-  canEdit?: boolean;
-}) {
-  const { collapsedGroups, toggleGroupCollapse } = usePMStore();
-  const collapseKey = `gg:${groupKey}`;
-  const isCollapsed = collapsedGroups[collapseKey] || false;
-
-  return (
-    <div className="lv-group">
-      <div
-        className="lv-group-head"
-        data-collapsed={isCollapsed}
-        onClick={() => toggleGroupCollapse(collapseKey)}
-      >
-        <span className="caret">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M9 5l7 7-7 7" />
-          </svg>
-        </span>
-        <span className="title">{label}</span>
-        <span className="count">· {tasks.length}</span>
-      </div>
-
-      {!isCollapsed && (
-        <div className="lv-group-body">
-          {tasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              statuses={allStatuses}
-              onStatusChange={onStatusChange}
-              canEdit={canEdit}
-              listId={listId}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CompletedListGroup({
-  tasks,
-  allStatuses,
-  listId,
-  onStatusChange,
-  canEdit = true,
-}: {
-  tasks: Task[];
-  allStatuses: SpaceStatus[];
-  listId: string;
-  onStatusChange: (taskId: string, statusId: string) => void;
-  canEdit?: boolean;
-}) {
-  const [isCollapsed, setIsCollapsed] = useState(true);
-  if (tasks.length === 0) return null;
-
-  return (
-    <div className="lv-group">
-      <div
-        className="lv-group-head"
-        data-collapsed={isCollapsed}
-        onClick={() => setIsCollapsed((v) => !v)}
-      >
-        <span className="caret">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M9 5l7 7-7 7" />
-          </svg>
-        </span>
-        <span className="title">Completed</span>
-        <span className="count">· {tasks.length}</span>
-      </div>
-
-      {!isCollapsed && (
-        <div className="lv-group-body">
-          {tasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              statuses={allStatuses}
-              onStatusChange={onStatusChange}
-              canEdit={canEdit}
-              listId={listId}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }

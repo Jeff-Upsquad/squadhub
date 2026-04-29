@@ -17,6 +17,27 @@ export function initialOf(name: string | undefined | null): string {
 
 export type WhenState = 'overdue' | 'today' | 'tomorrow' | 'later' | 'none';
 
+/**
+ * Returns the next ISO date for the "set to today / advance" quick action.
+ * - If no date set → today (midnight, no time)
+ * - If date is today → tomorrow (midnight, no time)
+ * - Otherwise → today (resets)
+ * Uses midnight so formatWhen doesn't render a time component.
+ */
+export function nextQuickDate(currentIso: string | null | undefined): string {
+  const todayMidnight = new Date();
+  todayMidnight.setHours(0, 0, 0, 0);
+  if (!currentIso) return todayMidnight.toISOString();
+  const cur = new Date(currentIso);
+  cur.setHours(0, 0, 0, 0);
+  if (cur.getTime() === todayMidnight.getTime()) {
+    const tomorrow = new Date(todayMidnight);
+    tomorrow.setDate(todayMidnight.getDate() + 1);
+    return tomorrow.toISOString();
+  }
+  return todayMidnight.toISOString();
+}
+
 export function formatWhen(iso: string | null | undefined): { text: string; state: WhenState } {
   if (!iso) return { text: '', state: 'none' };
   const d = new Date(iso);

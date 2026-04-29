@@ -172,6 +172,12 @@
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/flamboyant-allen-509af1/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3072"],
       "port": 3072,
       "autoPort": true
+    },
+    {
+      "name": "Card List View Worktree",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/condescending-cannon-cbc4a2/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3003"],
+      "port": 3003
     }
   ]
 }
