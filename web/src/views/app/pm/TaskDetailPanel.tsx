@@ -4,6 +4,7 @@ import { usePMStore } from '../../../stores/pmStore';
 import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useUpdateTaskTimeTracked } from '../../../hooks/useTasks';
 import { useTimeStats } from '../../../hooks/useTimer';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
+import { useAuthStore } from '../../../stores/authStore';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import {
   useChecklists,
@@ -167,6 +168,7 @@ export default function TaskDetailPanel({
   const updateTaskTimeTracked = useUpdateTaskTimeTracked(listId);
   const deleteTask = useDeleteTask(listId);
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
+  const currentUser = useAuthStore((s) => s.user);
   const { data: timeStats } = useTimeStats({ workspaceId, context: 'default' });
   const canEditTimeLogs = timeStats?.data?.time_log_edit?.can_edit === true;
   const createTask = useCreateTask(listId);
@@ -649,13 +651,15 @@ export default function TaskDetailPanel({
               )}
 
               {/* Assignee bar — full-width row */}
-              <button
-                type="button"
+              <div
                 className="td-assignee-bar td-focus w-full text-left"
-                onClick={canEdit ? (e) => {
+                role={canEdit && assignees.length > 0 ? 'button' : undefined}
+                tabIndex={canEdit && assignees.length > 0 ? 0 : undefined}
+                onClick={canEdit && assignees.length > 0 ? (e) => {
                   setAssigneeAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
                   setAssigneePickerOpen(v => !v);
                 } : undefined}
+                style={canEdit && assignees.length > 0 ? undefined : { cursor: 'default' }}
               >
                 <span className="label">Assignee</span>
                 <span className="value">
@@ -690,15 +694,42 @@ export default function TaskDetailPanel({
                   )}
                 </span>
                 {canEdit && (
-                  <span className="reassign">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="8" r="4" />
-                      <path d="M4 21a8 8 0 0116 0" />
-                    </svg>
-                    {assignees.length > 0 ? 'Reassign' : 'Assign'}
-                  </span>
+                  assignees.length > 0 ? (
+                    <button
+                      type="button"
+                      className="reassign"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAssigneeAnchorRect((e.currentTarget.parentElement as HTMLElement).getBoundingClientRect());
+                        setAssigneePickerOpen(v => !v);
+                      }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="8" r="4" />
+                        <path d="M4 21a8 8 0 0116 0" />
+                      </svg>
+                      Reassign
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="reassign"
+                      disabled={!currentUser?.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!task || !currentUser?.id) return;
+                        updateTask.mutate({ id: task.id, assignee_ids: [currentUser.id] });
+                      }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="8" r="4" />
+                        <path d="M4 21a8 8 0 0116 0" />
+                      </svg>
+                      Assign to me
+                    </button>
+                  )
                 )}
-              </button>
+              </div>
 
               {/* Details — 2-column property grid (with head bar) */}
               <div className="td-settings-card">
