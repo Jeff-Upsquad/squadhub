@@ -3,7 +3,7 @@ import type { Task } from '@squadhub/shared';
 import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
 import { usePMStore } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
-import { groupTasks, type GroupBy } from '../../../lib/taskGrouping';
+import { groupTasks, isToday, type GroupBy } from '../../../lib/taskGrouping';
 
 const STORAGE_KEY = 'squadhub:todayList:groupBy';
 const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
@@ -19,13 +19,25 @@ export default function TodayList() {
   const { data, isLoading, isError, refetch } = useMyTasks();
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
+  const focusedTodayIds = usePMStore((s) => s.focusedTodayIds);
+  const focusedTodayDate = usePMStore((s) => s.focusedTodayDate);
 
   const openTask = (id: string) => {
     setActiveDashboardTab(null);
     setActiveTask(id);
   };
 
-  const tasks: Task[] = data ? [...data.overdue, ...data.today] : [];
+  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
+
+  // Show ONLY tasks the user has marked Focus today (★) or whose work_date is
+  // today. The pmStore focus list auto-resets when the date rolls over.
+  const tasks: Task[] = useMemo(() => {
+    if (!data) return [];
+    const all = [...data.overdue, ...data.today];
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const focusedSet = focusedTodayDate === todayKey ? new Set(focusedTodayIds) : new Set<string>();
+    return all.filter((t) => focusedSet.has(t.id) || isToday(t.work_date, tz));
+  }, [data, focusedTodayIds, focusedTodayDate, tz]);
 
   const [groupBy, setGroupBy] = useState<GroupBy>(() => {
     if (typeof window === 'undefined') return 'none';
@@ -54,7 +66,6 @@ export default function TodayList() {
     };
   }, [menuOpen]);
 
-  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
   const groups = useMemo(
     () => (groupBy === 'none' ? [] : groupTasks(tasks, groupBy, tz)),
     [tasks, groupBy, tz],
