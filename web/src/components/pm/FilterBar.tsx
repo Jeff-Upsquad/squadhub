@@ -74,19 +74,18 @@ export default function FilterBar({ filters, onChange, statuses, assigneeOptions
       <button
         ref={triggerRef}
         type="button"
-        className="pill"
+        className="lv-toolbtn"
         data-active={activeCount > 0}
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => setOpen((v) => !v)}
         title="Filter tasks"
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: activeCount > 0 ? undefined : 'transparent' }}
       >
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
         </svg>
         Filter
-        {activeCount > 0 && <span style={{ marginLeft: 2 }}>· {activeCount}</span>}
+        {activeCount > 0 && <span className="lv-toolbtn-badge">{activeCount}</span>}
       </button>
 
       {activeCount > 0 && (

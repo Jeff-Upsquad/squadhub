@@ -12,8 +12,15 @@ import SettingsSlider from '../../../components/SettingsSlider';
 import ManageMembersModal from './ManageMembersModal';
 import TaskCreatePanel from './TaskCreatePanel';
 import FilterBar from '../../../components/pm/FilterBar';
-import { LIST_GROUP_BY_OPTIONS } from '../../../lib/taskGrouping';
+import GroupByDropdown from '../../../components/pm/GroupByDropdown';
+import { LIST_GROUP_BY_OPTIONS, SORT_BY_OPTIONS, type SortBy } from '../../../lib/taskGrouping';
 import { EMPTY_FILTER, deriveAssigneeOptions, deriveTagOptions } from '../../../lib/filters';
+
+const SORT_ICON = (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 6h13M3 12h9M3 18h5M17 8v12m0 0l-3-3m3 3l3-3" />
+  </svg>
+);
 
 export default function ListPage() {
   const {
@@ -22,6 +29,8 @@ export default function ListPage() {
     viewMode,
     setViewMode,
     setActiveTask,
+    setActiveSpacePage,
+    setActiveFolder,
     listGroupBy,
     setListGroupBy,
     myTasksOnly,
@@ -34,6 +43,8 @@ export default function ListPage() {
   const [showShare, setShowShare] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreatePanel, setShowCreatePanel] = useState(false);
+  const [sortBy, setSortBy] = useState<SortBy>('manual');
+  const [focusToday, setFocusToday] = useState(false);
 
   const scopeKey = activeListId ? `list:${activeListId}` : '';
   const filters = (scopeKey && filtersByScope[scopeKey]) || EMPTY_FILTER;
@@ -54,6 +65,16 @@ export default function ListPage() {
       return res.data.data;
     },
     enabled: !!activeSpaceId,
+  });
+
+  const folderId: string | null = listData?.folder_id || null;
+  const { data: folderData } = useQuery({
+    queryKey: ['folder', folderId],
+    queryFn: async () => {
+      const res = await api.get(`/pm/folders/${folderId}`);
+      return res.data.data;
+    },
+    enabled: !!folderId,
   });
 
   const statuses: SpaceStatus[] = useMemo(
@@ -88,68 +109,56 @@ export default function ListPage() {
 
   return (
     <div className="flex flex-1 flex-col">
-      {/* View Tabs Bar */}
-      <div className="flex items-center justify-between border-b border-[var(--sh-hair)] bg-[var(--surface)] px-4">
-        {/* Left: tabs */}
-        <div className="flex items-center gap-0">
-          <button
-            onClick={() => setViewMode('list')}
-            className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium transition ${
-              viewMode === 'list'
-                ? 'border-[var(--sh-ink)] text-[var(--sh-ink)]'
-                : 'border-transparent text-[var(--sh-ink-3)] hover:text-[var(--sh-ink-2)]'
-            }`}
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
-            </svg>
-            List
-          </button>
-
-          <button
-            onClick={() => setViewMode('board')}
-            className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium transition ${
-              viewMode === 'board'
-                ? 'border-[var(--sh-ink)] text-[var(--sh-ink)]'
-                : 'border-transparent text-[var(--sh-ink-3)] hover:text-[var(--sh-ink-2)]'
-            }`}
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-            </svg>
-            Board
-          </button>
+      {/* Row 1: Breadcrumb + global actions */}
+      <div className="lv-breadcrumb-row">
+        {/* Left: breadcrumb */}
+        <div className="lv-breadcrumb">
+          {spaceData?.name && activeSpaceId && (
+            <>
+              <button
+                type="button"
+                className="lv-bc-link"
+                onClick={() => setActiveSpacePage(activeSpaceId)}
+                title={`Go to ${spaceData.name}`}
+              >
+                {spaceData.name}
+              </button>
+              <span className="lv-bc-sep">/</span>
+            </>
+          )}
+          {folderData?.name && folderId && (
+            <>
+              <button
+                type="button"
+                className="lv-bc-link"
+                onClick={() => setActiveFolder(folderId)}
+                title={`Go to ${folderData.name}`}
+              >
+                {folderData.name}
+              </button>
+              <span className="lv-bc-sep">/</span>
+            </>
+          )}
+          <span className="lv-bc-current">{listData?.name || 'List'}</span>
         </div>
 
         {/* Right: actions */}
         <div className="flex items-center gap-2">
           {/* Search input */}
-          <div className="flex items-center gap-1.5 rounded border border-[var(--sh-hair)] bg-[var(--surface)] px-2.5 py-1">
-            <svg className="h-3.5 w-3.5 text-[var(--sh-ink-4)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          <div className="lv-search">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="11" cy="11" r="8" />
+              <path d="M21 21l-4.35-4.35" />
             </svg>
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search tasks..."
-              className="w-32 bg-transparent text-xs text-[var(--sh-ink)] placeholder-[var(--sh-ink-4)] outline-none"
             />
+            <kbd>/</kbd>
           </div>
 
-          {/* Share button */}
-          {isManager && (
-            <button
-              onClick={() => setShowShare(true)}
-              className="rounded p-1.5 text-[var(--sh-ink-3)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
-              title="Share list"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-              </svg>
-            </button>
-          )}
-
-          {/* Settings button - list managers + workspace admins */}
+          {/* Settings button */}
           {canAccessSettings && (
             <button
               onClick={() => {
@@ -157,16 +166,14 @@ export default function ListPage() {
                 setShowSettings(next);
                 if (next) setActiveTask(null);
               }}
-              className={`rounded p-1.5 transition ${
-                showSettings
-                  ? 'bg-[var(--sh-hair-3)] text-[var(--sh-ink)]'
-                  : 'text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-              }`}
+              className="lv-icon-btn"
+              data-active={showSettings}
               title="List settings"
+              aria-label="List settings"
             >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <circle cx="12" cy="12" r="3" />
               </svg>
             </button>
           )}
@@ -174,10 +181,9 @@ export default function ListPage() {
           {canEdit ? (
             <button
               onClick={() => setShowCreatePanel(true)}
-              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition"
-              style={{ background: 'var(--sh-ink)', color: 'var(--surface)' }}
+              className="lv-newtask-btn"
             >
-              <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M12 5v14M5 12h14" />
               </svg>
               New task
@@ -186,29 +192,52 @@ export default function ListPage() {
         </div>
       </div>
 
-      {/* Group by pills + Filter + My tasks toggle (List view only) */}
+      {/* Row 2: View Tabs */}
+      <div className="lv-tabs-row">
+        <button
+          onClick={() => setViewMode('list')}
+          className="lv-tab"
+          data-active={viewMode === 'list'}
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+          </svg>
+          List
+        </button>
+        <button
+          onClick={() => setViewMode('board')}
+          className="lv-tab"
+          data-active={viewMode === 'board'}
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+          </svg>
+          Board
+        </button>
+        <button
+          className="lv-tab"
+          data-active={false}
+          disabled
+          title="Timeline view (coming soon)"
+          style={{ opacity: 0.5, cursor: 'not-allowed' }}
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          Timeline
+        </button>
+      </div>
+
+      {/* Group by dropdown + Filter + Sort + Focus today + My tasks toggle (List view only) */}
       {viewMode === 'list' && (
-        <div className="sh-view dl-groupby shrink-0">
-          <span className="dl-groupby-lbl">Group by</span>
-          {LIST_GROUP_BY_OPTIONS.map((opt) => (
-            <div
-              key={opt.value}
-              className="pill"
-              data-active={listGroupBy === opt.value}
-              onClick={() => setListGroupBy(opt.value as typeof listGroupBy)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setListGroupBy(opt.value as typeof listGroupBy);
-                }
-              }}
-            >
-              {opt.label}
-            </div>
-          ))}
-          <span style={{ width: 8, display: 'inline-block' }} />
+        <div className="lv-subtoolbar shrink-0">
+          <span className="st-label">Group by</span>
+          <GroupByDropdown
+            options={LIST_GROUP_BY_OPTIONS}
+            value={listGroupBy}
+            onChange={(v) => setListGroupBy(v as typeof listGroupBy)}
+          />
+          <div className="st-divider" />
           <FilterBar
             filters={filters}
             onChange={(next) => scopeKey && setScopeFilters(scopeKey, next)}
@@ -216,17 +245,38 @@ export default function ListPage() {
             assigneeOptions={assigneeOptions}
             tagOptions={tagOptions}
           />
-          <div style={{ flex: 1 }} />
+          <GroupByDropdown
+            options={SORT_BY_OPTIONS}
+            value={sortBy}
+            onChange={(v) => setSortBy(v as SortBy)}
+            icon={SORT_ICON}
+            menuTitle="Sort tasks by"
+          />
+          <button
+            type="button"
+            onClick={() => setFocusToday(!focusToday)}
+            className="lv-toolbtn lv-toolbtn--outline"
+            data-active={focusToday}
+            aria-pressed={focusToday}
+            title="Show only tasks scheduled for today"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+            Focus today
+          </button>
+          <div className="st-spacer" />
           <button
             type="button"
             onClick={() => setMyTasksOnly(!myTasksOnly)}
-            className="lv-mytasks-toggle"
+            className="lv-toolbtn lv-toolbtn--outline"
             data-active={myTasksOnly}
             aria-pressed={myTasksOnly}
             title="Show only tasks assigned to me"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 6L9 17l-5-5" />
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
             </svg>
             My tasks
           </button>
@@ -258,6 +308,8 @@ export default function ListPage() {
             myTasksOnly={myTasksOnly}
             searchQuery={searchQuery}
             canEdit={canEdit}
+            sortBy={sortBy}
+            focusToday={focusToday}
           />
         ) : (
           <BoardView

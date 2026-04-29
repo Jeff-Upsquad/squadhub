@@ -33,6 +33,8 @@ interface PMState {
   selectedTasks: string[];
   timer: TimerState | null;
   filtersByScope: Record<string, TaskFilterState>;
+  focusedTodayIds: string[];
+  focusedTodayDate: string;
   setActiveSpace: (id: string | null) => void;
   setActiveList: (id: string | null) => void;
   setActiveFolder: (id: string | null) => void;
@@ -53,8 +55,16 @@ interface PMState {
   stopTimer: () => TimerState | null;
   setScopeFilters: (scopeKey: string, next: TaskFilterState) => void;
   clearScopeFilters: (scopeKey: string) => void;
+  toggleFocusToday: (taskId: string) => void;
+  isFocusedToday: (taskId: string) => boolean;
+  resetFocusTodayIfStale: () => void;
   reset: () => void;
 }
+
+const todayKey = (): string => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 export const usePMStore = create<PMState>()(
   persist(
@@ -75,6 +85,8 @@ export const usePMStore = create<PMState>()(
       selectedTasks: [],
       timer: null,
       filtersByScope: {},
+      focusedTodayIds: [],
+      focusedTodayDate: todayKey(),
 
       setActiveSpace: (id) => set({ activeSpaceId: id }),
       setActiveList: (id) => set({ activeListId: id, contextListId: id, selectedTasks: [], activeDesignFolderId: null, activeFolderId: null, activeSpacePageId: null }),
@@ -130,7 +142,30 @@ export const usePMStore = create<PMState>()(
           const { [scopeKey]: _removed, ...rest } = state.filtersByScope;
           return { filtersByScope: rest };
         }),
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], timer: null, filtersByScope: {} }),
+      resetFocusTodayIfStale: () => {
+        const today = todayKey();
+        const state = get();
+        if (state.focusedTodayDate !== today) {
+          set({ focusedTodayIds: [], focusedTodayDate: today });
+        }
+      },
+      toggleFocusToday: (taskId) => {
+        const today = todayKey();
+        set((state) => {
+          const sameDay = state.focusedTodayDate === today;
+          const current = sameDay ? state.focusedTodayIds : [];
+          const next = current.includes(taskId)
+            ? current.filter((id) => id !== taskId)
+            : [...current, taskId];
+          return { focusedTodayIds: next, focusedTodayDate: today };
+        });
+      },
+      isFocusedToday: (taskId) => {
+        const state = get();
+        if (state.focusedTodayDate !== todayKey()) return false;
+        return state.focusedTodayIds.includes(taskId);
+      },
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey() }),
     }),
     {
       name: 'squadhub-pm',
@@ -140,6 +175,8 @@ export const usePMStore = create<PMState>()(
         listGroupBy: state.listGroupBy,
         myTasksOnly: state.myTasksOnly,
         filtersByScope: state.filtersByScope,
+        focusedTodayIds: state.focusedTodayIds,
+        focusedTodayDate: state.focusedTodayDate,
       }),
       version: 2,
       migrate: (persisted: unknown, fromVersion: number) => {

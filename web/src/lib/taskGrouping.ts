@@ -20,6 +20,55 @@ export const LIST_GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'priority', label: 'Priority' },
 ];
 
+export type SortBy = 'manual' | 'title' | 'due_date' | 'priority' | 'recent';
+
+export const SORT_BY_OPTIONS: { value: SortBy; label: string }[] = [
+  { value: 'manual', label: 'Manual' },
+  { value: 'title', label: 'Title (A–Z)' },
+  { value: 'due_date', label: 'Due date' },
+  { value: 'priority', label: 'Priority' },
+  { value: 'recent', label: 'Recently updated' },
+];
+
+export function sortTasks(tasks: Task[], by: SortBy): Task[] {
+  if (by === 'manual') return tasks;
+  const arr = [...tasks];
+  switch (by) {
+    case 'title':
+      return arr.sort((a, b) => a.title.localeCompare(b.title));
+    case 'due_date':
+      return arr.sort((a, b) => {
+        const ax = a.due_date ? new Date(a.due_date).getTime() : Infinity;
+        const bx = b.due_date ? new Date(b.due_date).getTime() : Infinity;
+        return ax - bx;
+      });
+    case 'priority':
+      return arr.sort((a, b) => {
+        const ap = PRIORITY_ORDER[(a.priority as string) || 'none'] ?? 99;
+        const bp = PRIORITY_ORDER[(b.priority as string) || 'none'] ?? 99;
+        return ap - bp;
+      });
+    case 'recent':
+      return arr.sort((a, b) => {
+        const ax = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+        const bx = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+        return bx - ax;
+      });
+    default:
+      return arr;
+  }
+}
+
+export function isToday(dateStr: string | null | undefined, tz: string): boolean {
+  if (!dateStr) return false;
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+  return fmt.format(new Date(dateStr)) === fmt.format(new Date());
+}
+
+export function isTaskForToday(t: Task, tz: string): boolean {
+  return isToday(t.work_date, tz) || isToday(t.due_date, tz);
+}
+
 export const PRIORITY_ORDER: Record<string, number> = {
   emergency: 0,
   urgent: 1,

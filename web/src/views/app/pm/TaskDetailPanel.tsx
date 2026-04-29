@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
 import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useUpdateTaskTimeTracked } from '../../../hooks/useTasks';
@@ -20,6 +20,7 @@ import { getTaskStatusDef } from '@squadhub/shared';
 import AssigneePicker from './AssigneePicker';
 import MentionPicker from '../../../components/MentionPicker';
 import DatePicker from './DatePicker';
+import { nextQuickDate } from './taskHelpers';
 import EmergencyConfirm from './EmergencyConfirm';
 import TaskStatusPicker from './TaskStatusPicker';
 import ListPickerCombobox from './ListPickerCombobox';
@@ -159,12 +160,24 @@ export default function TaskDetailPanel({
   spaceId?: string | null;
   listName?: string | null;
 }) {
-  const { activeTaskId, setActiveTask, timer, startTimer: globalStartTimer, stopTimer: globalStopTimer } = usePMStore();
+  const { activeTaskId, setActiveTask, timer, startTimer: globalStartTimer, stopTimer: globalStopTimer, toggleFocusToday, focusedTodayIds, focusedTodayDate } = usePMStore();
+  const isFocusedToday = (() => {
+    if (!activeTaskId) return false;
+    const today = new Date().toISOString().slice(0, 10);
+    return focusedTodayDate === today && focusedTodayIds.includes(activeTaskId);
+  })();
   const { data: task, isLoading } = useTask(activeTaskId);
   const { data: comments } = useTaskComments(activeTaskId);
   const { data: taskTypes } = useTaskTypes();
   const { data: checklists } = useChecklists(activeTaskId);
   const updateTask = useUpdateTask(listId);
+
+  // Track in-flight quick-date values so rapid clicks read the most recent
+  // sent value rather than the stale React Query cache.
+  const pendingDates = useRef<{ work?: string | null; start?: string | null; due?: string | null }>({});
+  useEffect(() => { pendingDates.current.work = undefined; }, [task?.work_date]);
+  useEffect(() => { pendingDates.current.start = undefined; }, [task?.start_date]);
+  useEffect(() => { pendingDates.current.due = undefined; }, [task?.due_date]);
   const updateTaskTimeTracked = useUpdateTaskTimeTracked(listId);
   const deleteTask = useDeleteTask(listId);
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
@@ -499,6 +512,18 @@ export default function TaskDetailPanel({
             )
           )}
           <div className="flex-1" />
+          {task && (
+            <button
+              type="button"
+              onClick={() => toggleFocusToday(task.id)}
+              className="td-nav-btn td-focus-star"
+              data-active={isFocusedToday}
+              title={isFocusedToday ? 'Focused for today — click to remove' : 'Focus today'}
+              aria-label={isFocusedToday ? 'Focused for today' : 'Focus today'}
+            >
+              <span style={{ fontSize: 14, lineHeight: 1 }}>{isFocusedToday ? '★' : '☆'}</span>
+            </button>
+          )}
           <button type="button" onClick={handleCopyLink} className="td-nav-btn" title="Copy link">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
@@ -832,7 +857,7 @@ export default function TaskDetailPanel({
 
                 {/* Work date */}
                 <div
-                  className="td-settings-row"
+                  className="td-settings-row td-date-row"
                   data-half="true"
                   style={{ cursor: canEdit ? 'pointer' : 'default' }}
                   onClick={canEdit ? (e) => {
@@ -842,17 +867,41 @@ export default function TaskDetailPanel({
                 >
                   <span className="k">{META_ICONS.WorkDate}Work date</span>
                   <span className="v">
-                    {task.work_date ? (
-                      <span>{formatDueRelative(task.work_date).text}</span>
-                    ) : (
-                      <span className="td-prop-empty">Set work date</span>
+                    <span className="td-date-text">
+                      {task.work_date ? (
+                        formatDueRelative(task.work_date).text
+                      ) : (
+                        <span className="td-prop-empty">Set work date</span>
+                      )}
+                    </span>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        className="td-date-today-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const cur = pendingDates.current.work !== undefined ? pendingDates.current.work : task.work_date;
+                          const next = nextQuickDate(cur);
+                          pendingDates.current.work = next;
+                          updateTask.mutate({ id: task.id, work_date: next } as any);
+                        }}
+                        aria-label="Set work date to today / tomorrow"
+                        title="Click: today · Click again: tomorrow"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                          <line x1="16" y1="2" x2="16" y2="6" />
+                          <line x1="8" y1="2" x2="8" y2="6" />
+                          <line x1="3" y1="10" x2="21" y2="10" />
+                        </svg>
+                      </button>
                     )}
                   </span>
                 </div>
 
                 {/* Start date */}
                 <div
-                  className="td-settings-row"
+                  className="td-settings-row td-date-row"
                   data-half="true"
                   style={{ cursor: canEdit ? 'pointer' : 'default' }}
                   onClick={canEdit ? (e) => {
@@ -862,17 +911,41 @@ export default function TaskDetailPanel({
                 >
                   <span className="k">{META_ICONS.StartDate}Start date</span>
                   <span className="v">
-                    {task.start_date ? (
-                      <span>{formatDueRelative(task.start_date).text}</span>
-                    ) : (
-                      <span className="td-prop-empty">Set start date</span>
+                    <span className="td-date-text">
+                      {task.start_date ? (
+                        formatDueRelative(task.start_date).text
+                      ) : (
+                        <span className="td-prop-empty">Set start date</span>
+                      )}
+                    </span>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        className="td-date-today-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const cur = pendingDates.current.start !== undefined ? pendingDates.current.start : task.start_date;
+                          const next = nextQuickDate(cur);
+                          pendingDates.current.start = next;
+                          updateTask.mutate({ id: task.id, start_date: next } as any);
+                        }}
+                        aria-label="Set start date to today / tomorrow"
+                        title="Click: today · Click again: tomorrow"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                          <line x1="16" y1="2" x2="16" y2="6" />
+                          <line x1="8" y1="2" x2="8" y2="6" />
+                          <line x1="3" y1="10" x2="21" y2="10" />
+                        </svg>
+                      </button>
                     )}
                   </span>
                 </div>
 
                 {/* Due date */}
                 <div
-                  className="td-settings-row"
+                  className="td-settings-row td-date-row"
                   data-half="true"
                   style={{ cursor: canEdit ? 'pointer' : 'default' }}
                   onClick={canEdit ? (e) => {
@@ -882,12 +955,36 @@ export default function TaskDetailPanel({
                 >
                   <span className="k">{META_ICONS.Due}Due date</span>
                   <span className="v">
-                    {task.due_date ? (
-                      <span style={{ color: due.accent ? 'oklch(0.55 0.18 25)' : 'var(--sh-ink)' }}>
-                        {due.text}{due.accent ? ' · Overdue' : ''}
-                      </span>
-                    ) : (
-                      <span className="td-prop-empty">Set due date</span>
+                    <span className="td-date-text">
+                      {task.due_date ? (
+                        <span style={{ color: due.accent ? 'oklch(0.55 0.18 25)' : 'var(--sh-ink)' }}>
+                          {due.text}{due.accent ? ' · Overdue' : ''}
+                        </span>
+                      ) : (
+                        <span className="td-prop-empty">Set due date</span>
+                      )}
+                    </span>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        className="td-date-today-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const cur = pendingDates.current.due !== undefined ? pendingDates.current.due : task.due_date;
+                          const next = nextQuickDate(cur);
+                          pendingDates.current.due = next;
+                          updateTask.mutate({ id: task.id, due_date: next } as any);
+                        }}
+                        aria-label="Set due date to today / tomorrow"
+                        title="Click: today · Click again: tomorrow"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                          <line x1="16" y1="2" x2="16" y2="6" />
+                          <line x1="8" y1="2" x2="8" y2="6" />
+                          <line x1="3" y1="10" x2="21" y2="10" />
+                        </svg>
+                      </button>
                     )}
                   </span>
                 </div>
