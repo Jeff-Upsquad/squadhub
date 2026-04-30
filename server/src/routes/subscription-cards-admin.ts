@@ -4,7 +4,11 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import { hydrateCard, matchPartnersForCard } from '../utils/subscriptionCards';
-import { buildSquadhirePayloadForCard, deliverCardToSquadhire } from '../utils/squadhireWebhook';
+import {
+  buildSquadhirePayloadForCard,
+  deliverCardToSquadhire,
+  notifySquadhireOfCardRecall,
+} from '../utils/squadhireWebhook';
 
 const router = Router();
 
@@ -400,6 +404,148 @@ router.post('/:id/close-secondary', async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (err: any) {
     console.error('Admin close secondary card error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/recall
+// Recall any card (primary or secondary). With acceptances the card
+// becomes terminal+recalled (acceptees keep seeing it with the
+// "Recalled" tag); without acceptances primary cards return to draft
+// for re-publish, while secondary cards become terminal+recalled
+// (no draft state for secondaries).
+// ============================================================
+router.post('/:id/recall', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, parent_card_id')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    if (card.state !== 'published') {
+      res.status(409).json({ success: false, error: 'Only published cards can be recalled' });
+      return;
+    }
+
+    const [{ count: acceptedPartners }, { count: acceptedTalents }] = await Promise.all([
+      supabaseAdmin
+        .from('subscription_card_recipients')
+        .select('id', { count: 'exact', head: true })
+        .eq('card_id', cardId)
+        .eq('status', 'accepted'),
+      supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .select('id', { count: 'exact', head: true })
+        .eq('card_id', cardId)
+        .eq('status', 'accepted'),
+    ]);
+    const hasAcceptances = (acceptedPartners || 0) + (acceptedTalents || 0) > 0;
+    const isSecondary = !!card.parent_card_id;
+
+    // Drop only pending recipients.
+    await supabaseAdmin
+      .from('subscription_card_recipients')
+      .delete()
+      .eq('card_id', cardId)
+      .eq('status', 'pending');
+    await supabaseAdmin
+      .from('subscription_card_external_recipients')
+      .delete()
+      .eq('card_id', cardId)
+      .eq('status', 'pending');
+
+    const now = new Date().toISOString();
+    // Primary, no acceptances → draft (re-publishable from sales side).
+    // Secondary, no acceptances → closed (no draft state for secondaries).
+    // Either, with acceptances → closed + recalled_at (acceptees keep
+    // seeing it with the "Recalled" tag).
+    let updatePayload: Record<string, unknown>;
+    if (!hasAcceptances && !isSecondary) {
+      updatePayload = {
+        state: 'draft' as const,
+        published_at: null,
+        published_by: null,
+        squadhire_synced_at: null,
+        squadhire_sync_attempts: 0,
+        squadhire_sync_last_error: null,
+      };
+    } else {
+      updatePayload = {
+        state: 'closed' as const,
+        closed_at: now,
+        squadhire_synced_at: null,
+        squadhire_sync_attempts: 0,
+        squadhire_sync_last_error: null,
+      };
+      if (hasAcceptances) {
+        updatePayload.recalled_at = now;
+      }
+    }
+
+    const { data: updated, error: updErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .update(updatePayload)
+      .eq('id', cardId)
+      .select('*')
+      .single();
+    if (updErr) {
+      res.status(500).json({ success: false, error: updErr.message });
+      return;
+    }
+
+    // Re-deliver card to SquadHire with the new state (and recalled_at if set).
+    buildSquadhirePayloadForCard(updated.id)
+      .then((payload) => payload && deliverCardToSquadhire(updated.id, payload))
+      .catch((err) => console.error('[admin-recall] squadhire delivery error', err));
+
+    // Only drop SquadHire mirror rows on a clean recall (no acceptances).
+    if (!hasAcceptances) {
+      notifySquadhireOfCardRecall(updated.id).catch((err) => {
+        console.error('[admin-recall] squadhire recall notification error', err);
+      });
+    }
+
+    // Cascade-close published secondaries when a primary card is recalled.
+    if (!isSecondary) {
+      const { data: secondaries } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id')
+        .eq('parent_card_id', cardId)
+        .eq('state', 'published');
+
+      if (secondaries && secondaries.length > 0) {
+        await supabaseAdmin
+          .from('subscription_cards')
+          .update({
+            state: 'closed',
+            closed_at: now,
+            squadhire_synced_at: null,
+            squadhire_sync_attempts: 0,
+            squadhire_sync_last_error: null,
+          })
+          .eq('parent_card_id', cardId)
+          .eq('state', 'published');
+
+        for (const s of secondaries) {
+          buildSquadhirePayloadForCard(s.id)
+            .then((payload) => payload && deliverCardToSquadhire(s.id, payload))
+            .catch((err) =>
+              console.error('[admin-recall] cascade squadhire delivery error', err),
+            );
+        }
+      }
+    }
+
+    res.json({ success: true, data: await hydrateCard(updated) });
+  } catch (err: any) {
+    console.error('Admin recall card error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });

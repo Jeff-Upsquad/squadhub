@@ -50,6 +50,11 @@ export interface SquadhireCardPayload {
   // SquadHire's validator requires a valid email when present and we'd
   // rather skip the field than fail the whole delivery on a typo.
   business_email?: string;
+  // ISO timestamp set when an admin recalled a card that already had
+  // acceptances. SquadHire renders a "Recalled" tag on the talent's
+  // accepted view but otherwise keeps the card visible. Absent on
+  // never-recalled cards and on clean recalls (which become drafts).
+  recalled_at?: string;
 }
 
 interface AttemptOutcome {
@@ -73,7 +78,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, distribution, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id',
+      'id, state, distribution, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, recalled_at',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -341,6 +346,8 @@ export async function buildSquadhirePayloadForCard(
   const businessEmail =
     leadEmail && leadEmail.includes('@') ? leadEmail.toLowerCase() : undefined;
 
+  const recalledAt = card.recalled_at as string | null | undefined;
+
   return {
     external_id: card.id as string,
     content,
@@ -349,6 +356,7 @@ export async function buildSquadhirePayloadForCard(
     status,
     distribution,
     ...(businessEmail ? { business_email: businessEmail } : {}),
+    ...(recalledAt ? { recalled_at: new Date(recalledAt).toISOString() } : {}),
   };
 }
 
