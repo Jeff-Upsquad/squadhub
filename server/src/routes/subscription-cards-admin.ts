@@ -207,7 +207,15 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
       };
     });
 
-    const talents = (talentRows || []).map((r: any) => ({
+    const STATUS_RANK: Record<string, number> = { accepted: 2, rejected: 1, pending: 0 };
+    const talentByUser = new Map<string, any>();
+    for (const r of talentRows || []) {
+      const prev = talentByUser.get(r.external_user_id);
+      if (!prev || (STATUS_RANK[r.status] ?? 0) > (STATUS_RANK[prev.status] ?? 0)) {
+        talentByUser.set(r.external_user_id, r);
+      }
+    }
+    const talents = Array.from(talentByUser.values()).map((r: any) => ({
       external_user_id: r.external_user_id,
       name: r.talent_name || null,
       status: r.status,
