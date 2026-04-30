@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/auth';
 import { requireCashBookAccess, requireCashBookAdmin } from '../middleware/cashbook';
 import { supabaseAdmin } from '../supabase';
 import { generateCashBookUploadUrl, generateR2DownloadUrl } from '../r2';
+import { analyzeReceiptImages } from '../utils/receiptAnalyzer';
 
 const router = Router();
 
@@ -1225,6 +1226,54 @@ router.post('/upload/presign', async (req: Request, res: Response) => {
       return;
     }
     console.error('Presign error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /cashbook/analyze-receipts
+// Takes a batch of already-uploaded receipt images (object keys returned by
+// /cashbook/upload/presign) and runs each through Claude vision to extract
+// transaction fields. Returns one result per image — failures are isolated
+// so a single bad image doesn't fail the whole batch.
+const analyzeReceiptsSchema = z.object({
+  images: z
+    .array(
+      z.object({
+        object_key: z.string().min(1),
+        public_url: z.string().min(1),
+        original_filename: z.string().min(1).max(255),
+      }),
+    )
+    .min(1)
+    .max(20),
+});
+
+router.post('/analyze-receipts', async (req: Request, res: Response) => {
+  try {
+    if (!config.anthropicApiKey) {
+      res.status(503).json({ success: false, error: 'Receipt analysis is not configured on this server' });
+      return;
+    }
+
+    const body = analyzeReceiptsSchema.parse(req.body);
+
+    // Tenant isolation: every object_key must belong to the caller's client.
+    const expectedPrefix = `cashbook/${req.cashBookClientId!}/`;
+    for (const img of body.images) {
+      if (!img.object_key.startsWith(expectedPrefix)) {
+        res.status(403).json({ success: false, error: 'Object key not allowed for this client' });
+        return;
+      }
+    }
+
+    const results = await analyzeReceiptImages(body.images);
+    res.json({ success: true, data: { results } });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Analyze receipts error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

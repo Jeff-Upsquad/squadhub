@@ -181,3 +181,19 @@ export async function headR2Object(objectKey: string): Promise<{ contentLength: 
 export async function deleteR2Object(objectKey: string): Promise<void> {
   await r2Client.send(new DeleteObjectCommand({ Bucket: config.r2BucketName, Key: objectKey }));
 }
+
+// Fetch an R2 object's bytes as a base64 string. Used by the cash book
+// receipt analyzer to feed images directly into Anthropic's vision API
+// without going through a public URL.
+export async function fetchR2ObjectAsBase64(
+  objectKey: string,
+): Promise<{ base64: string; contentType: string }> {
+  const result = await r2Client.send(
+    new GetObjectCommand({ Bucket: config.r2BucketName, Key: objectKey }),
+  );
+  const bytes = await result.Body!.transformToByteArray();
+  return {
+    base64: Buffer.from(bytes).toString('base64'),
+    contentType: result.ContentType || 'image/jpeg',
+  };
+}
