@@ -3,6 +3,12 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { config } from './config';
 
 // Cloudflare R2 uses the S3-compatible API
+//
+// `requestChecksumCalculation: 'WHEN_REQUIRED'` reverts the AWS SDK's newer
+// (>=3.7xx) default of adding `x-amz-sdk-checksum-algorithm=CRC32` query
+// params to every presigned PUT URL. R2's bucket CORS config doesn't allow
+// those new query params during the OPTIONS preflight, so browser uploads
+// fail with "No Access-Control-Allow-Origin header" without this opt-out.
 export const r2Client = new S3Client({
   region: 'auto',
   endpoint: `https://${config.r2AccountId}.r2.cloudflarestorage.com`,
@@ -10,6 +16,8 @@ export const r2Client = new S3Client({
     accessKeyId: config.r2AccessKeyId,
     secretAccessKey: config.r2SecretAccessKey,
   },
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+  responseChecksumValidation: 'WHEN_REQUIRED',
 });
 
 // File size limits in bytes
