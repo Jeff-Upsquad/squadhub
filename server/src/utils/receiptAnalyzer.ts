@@ -171,6 +171,8 @@ async function analyzeOne(image: AnalysisInputImage): Promise<AnalysisResult> {
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Analysis failed';
+    console.error(`[receiptAnalyzer] ${image.object_key}: ${message}`);
+    if (err instanceof Error && err.stack) console.error(err.stack);
     return {
       object_key: image.object_key,
       status: 'failed',
