@@ -23,7 +23,10 @@ export default function DashboardListPanel() {
   const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
   const { data, isLoading } = useMyTasksSummary(!!activeDashboardTab);
   const [mounted, setMounted] = useState(false);
-  const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  const groupByScope = usePMStore((s) => s.groupByScope);
+  const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
+  const dashScopeKey = activeDashboardTab ? `dashboard:${activeDashboardTab}` : '';
+  const groupBy = (dashScopeKey && groupByScope[dashScopeKey]) || 'none';
 
   useEffect(() => {
     if (activeDashboardTab) {
@@ -109,13 +112,13 @@ export default function DashboardListPanel() {
               key={opt.value}
               className="pill"
               data-active={groupBy === opt.value}
-              onClick={() => setGroupBy(opt.value)}
+              onClick={() => dashScopeKey && setScopedGroupBy(dashScopeKey, opt.value)}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
-                  setGroupBy(opt.value);
+                  if (dashScopeKey) setScopedGroupBy(dashScopeKey, opt.value);
                 }
               }}
             >

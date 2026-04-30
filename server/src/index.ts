@@ -75,6 +75,7 @@ import squadhireCategoriesRoutes from './routes/integrations/squadhire-categorie
 import subscriptionSquadhireProfilesAdminRoutes from './routes/subscription-squadhire-profiles-admin';
 import profileAccessRoutes from './routes/profile-access';
 import profileAccessAdminRoutes from './routes/profile-access-admin';
+import viewPreferencesRoutes from './routes/view-preferences';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimerCron } from './cron/timer-cron';
 import { startSquadhireSyncSweeper } from './utils/squadhireWebhook';
@@ -180,6 +181,9 @@ app.use('/admin/integrations/squadhire', squadhireCategoriesRoutes);
 // Profile Access — local mirror of SquadHire's talent_access_grants.
 app.use('/profile-access', profileAccessRoutes);
 app.use('/admin/profile-access', profileAccessAdminRoutes);
+
+// User view preferences (filters, groupBy, sort — synced across browsers)
+app.use('/view-preferences', viewPreferencesRoutes);
 
 // 404 handler
 app.use((_req, res) => {

@@ -28,9 +28,12 @@ export default function SpacePage() {
   const filtersByScope = usePMStore((s) => s.filtersByScope);
   const setScopeFilters = usePMStore((s) => s.setScopeFilters);
   const clearScopeFilters = usePMStore((s) => s.clearScopeFilters);
+  const groupByScope = usePMStore((s) => s.groupByScope);
+  const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
   const [folderFilter, setFolderFilter] = useState<string>('all');
   const [listFilter, setListFilter] = useState<string>('all');
-  const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  const groupScopeKey = activeSpacePageId ? `space:${activeSpacePageId}` : '';
+  const groupBy = (groupScopeKey && groupByScope[groupScopeKey]) || 'none';
 
   const scopeKey = activeSpacePageId ? `space:${activeSpacePageId}` : '';
   const filters = (scopeKey && filtersByScope[scopeKey]) || EMPTY_FILTER;
@@ -40,7 +43,6 @@ export default function SpacePage() {
   useEffect(() => {
     setFolderFilter('all');
     setListFilter('all');
-    setGroupBy('none');
   }, [activeSpacePageId]);
 
   useEffect(() => {
@@ -272,7 +274,7 @@ export default function SpacePage() {
         <GroupByDropdown
           options={GROUP_BY_OPTIONS}
           value={groupBy}
-          onChange={(v) => setGroupBy(v as GroupBy)}
+          onChange={(v) => groupScopeKey && setScopedGroupBy(groupScopeKey, v as GroupBy)}
         />
         <div className="st-divider" />
         <FilterBar
