@@ -137,9 +137,19 @@ router.post('/subscription-cards/:id/assign-talent', async (req: Request, res: R
       return;
     }
 
-    // Use talent_id as the external_recipient_id placeholder. When
-    // SquadHire later sends a response callback, its handler can match
-    // by external_user_id and update the same row in place.
+    const { data: existing } = await supabaseAdmin
+      .from('subscription_card_external_recipients')
+      .select('id')
+      .eq('card_id', cardId)
+      .eq('external_user_id', talent_id)
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      res.json({ success: true });
+      return;
+    }
+
     const { error: insErr } = await supabaseAdmin
       .from('subscription_card_external_recipients')
       .upsert(

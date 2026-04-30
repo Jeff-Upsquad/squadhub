@@ -104,6 +104,14 @@ router.post(
         return;
       }
 
+      // Clean up any manual-assignment duplicate for the same talent.
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .delete()
+        .eq('card_id', card.id)
+        .eq('external_user_id', body.talent_user_id)
+        .neq('external_recipient_id', body.recipient_id);
+
       res.json({ success: true });
     } catch (err: any) {
       if (err instanceof z.ZodError) {
