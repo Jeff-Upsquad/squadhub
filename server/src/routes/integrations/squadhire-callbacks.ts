@@ -117,6 +117,159 @@ router.post(
 );
 
 // ------------------------------------------------------------
+// POST /card-selection — SquadHire admin selected a talent
+// ------------------------------------------------------------
+
+const cardSelectionSchema = z
+  .object({
+    external_id: z.string().min(1),
+    recipient_id: z.string().min(1),
+    talent_user_id: z.string().min(1),
+    talent_name: z.string().min(1).optional(),
+    selected_at: z.string().datetime(),
+  })
+  .strict();
+
+router.post(
+  '/card-selection',
+  verifySquadhireCallbackSecret,
+  async (req: Request, res: Response) => {
+    try {
+      const body = cardSelectionSchema.parse(req.body);
+
+      const { data: card, error: cardErr } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id, state, selected_recipient_type')
+        .eq('id', body.external_id)
+        .maybeSingle();
+      if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
+      if (!card) { res.status(200).json({ success: true, ignored: 'card_not_found' }); return; }
+
+      if (card.selected_recipient_type) {
+        res.status(200).json({ success: true, ignored: 'already_selected' });
+        return;
+      }
+
+      const now = body.selected_at;
+
+      // Stamp the selected talent
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .update({ selected_at: now })
+        .eq('card_id', card.id)
+        .eq('external_user_id', body.talent_user_id);
+
+      // Pass over all other accepted external recipients
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .update({ passed_over_at: now })
+        .eq('card_id', card.id)
+        .eq('status', 'accepted')
+        .neq('external_user_id', body.talent_user_id)
+        .is('passed_over_at', null);
+
+      // Pass over all accepted partners
+      await supabaseAdmin
+        .from('subscription_card_recipients')
+        .update({ passed_over_at: now })
+        .eq('card_id', card.id)
+        .eq('status', 'accepted')
+        .is('passed_over_at', null);
+
+      // Close the card
+      await supabaseAdmin
+        .from('subscription_cards')
+        .update({
+          state: 'closed',
+          closed_at: now,
+          selected_recipient_type: 'talent',
+          selected_recipient_id: body.talent_user_id,
+        })
+        .eq('id', card.id);
+
+      res.json({ success: true });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ success: false, error: err.errors[0].message });
+        return;
+      }
+      console.error('[squadhire-callback card-selection] error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  },
+);
+
+// ------------------------------------------------------------
+// POST /card-selection-undo — SquadHire admin undid a selection
+// ------------------------------------------------------------
+
+const cardSelectionUndoSchema = z
+  .object({
+    external_id: z.string().min(1),
+  })
+  .strict();
+
+router.post(
+  '/card-selection-undo',
+  verifySquadhireCallbackSecret,
+  async (req: Request, res: Response) => {
+    try {
+      const body = cardSelectionUndoSchema.parse(req.body);
+
+      const { data: card } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id')
+        .eq('id', body.external_id)
+        .maybeSingle();
+      if (!card) { res.status(200).json({ success: true, ignored: 'card_not_found' }); return; }
+
+      await supabaseAdmin
+        .from('subscription_card_recipients')
+        .update({ selected_at: null, selected_by: null, passed_over_at: null })
+        .eq('card_id', card.id)
+        .not('selected_at', 'is', null);
+
+      await supabaseAdmin
+        .from('subscription_card_recipients')
+        .update({ passed_over_at: null })
+        .eq('card_id', card.id)
+        .not('passed_over_at', 'is', null);
+
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .update({ selected_at: null, selected_by: null, passed_over_at: null })
+        .eq('card_id', card.id)
+        .not('selected_at', 'is', null);
+
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .update({ passed_over_at: null })
+        .eq('card_id', card.id)
+        .not('passed_over_at', 'is', null);
+
+      await supabaseAdmin
+        .from('subscription_cards')
+        .update({
+          state: 'published',
+          closed_at: null,
+          selected_recipient_type: null,
+          selected_recipient_id: null,
+        })
+        .eq('id', card.id);
+
+      res.json({ success: true });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ success: false, error: err.errors[0].message });
+        return;
+      }
+      console.error('[squadhire-callback card-selection-undo] error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  },
+);
+
+// ------------------------------------------------------------
 // Profile access grants: inbound sync from Profiles → SquadHub
 // ------------------------------------------------------------
 

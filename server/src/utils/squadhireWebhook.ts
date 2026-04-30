@@ -589,6 +589,104 @@ export async function notifySquadhireOfManualRemoval(
 }
 
 // ------------------------------------------------------------
+// Public: outbound notification when an admin selects a talent
+// for a card. If talentId is null, the card was closed by
+// selecting a partner (SquadHub-native) — SquadHire just needs
+// to know the card is archived. Best-effort, single attempt.
+// ------------------------------------------------------------
+
+export async function notifySquadhireOfSelection(
+  cardId: string,
+  talentId: string | null,
+  selectedAt: string,
+): Promise<void> {
+  const baseUrl = config.squadhireWebhookUrl;
+  if (!baseUrl || !config.squadhireWebhookSecret) {
+    console.warn('[squadhire-webhook] selection skipped: not configured');
+    return;
+  }
+
+  const url = baseUrl.endsWith('/')
+    ? `${baseUrl}cards/selection`
+    : `${baseUrl}/cards/selection`;
+  const body = {
+    type: 'card_selection',
+    card_id: cardId,
+    talent_id: talentId,
+    selected_at: selectedAt,
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.warn(`[squadhire-webhook] selection http_${res.status}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[squadhire-webhook] selection failed', msg);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ------------------------------------------------------------
+// Public: outbound notification when an admin undoes a selection.
+// SquadHire clears its local selection fields and the card
+// becomes active again. Best-effort, single attempt.
+// ------------------------------------------------------------
+
+export async function notifySquadhireOfSelectionUndo(
+  cardId: string,
+): Promise<void> {
+  const baseUrl = config.squadhireWebhookUrl;
+  if (!baseUrl || !config.squadhireWebhookSecret) {
+    console.warn('[squadhire-webhook] selection-undo skipped: not configured');
+    return;
+  }
+
+  const url = baseUrl.endsWith('/')
+    ? `${baseUrl}cards/undo-selection`
+    : `${baseUrl}/cards/undo-selection`;
+  const body = {
+    type: 'card_selection_undo',
+    card_id: cardId,
+    undone_at: new Date().toISOString(),
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.warn(`[squadhire-webhook] selection-undo http_${res.status}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[squadhire-webhook] selection-undo failed', msg);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ------------------------------------------------------------
 // Public: outbound notification when a card is recalled. The
 // archived-status re-delivery already hides the card from talent
 // queries on SquadHire, but mirror recipient rows on SquadHire's

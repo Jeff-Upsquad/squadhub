@@ -177,11 +177,11 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
     const [{ data: partnerRows }, { data: talentRows }] = await Promise.all([
       supabaseAdmin
         .from('subscription_card_recipients')
-        .select('partner_id, status, responded_at, assigned_manually')
+        .select('partner_id, status, responded_at, assigned_manually, selected_at, selected_by, passed_over_at')
         .eq('card_id', cardId),
       supabaseAdmin
         .from('subscription_card_external_recipients')
-        .select('external_user_id, talent_name, status, responded_at, assigned_manually')
+        .select('external_user_id, talent_name, status, responded_at, assigned_manually, selected_at, selected_by, passed_over_at')
         .eq('card_id', cardId),
     ]);
 
@@ -201,6 +201,9 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
         status: r.status,
         responded_at: r.responded_at,
         assigned_manually: !!r.assigned_manually,
+        selected_at: r.selected_at ?? null,
+        selected_by: r.selected_by ?? null,
+        passed_over_at: r.passed_over_at ?? null,
       };
     });
 
@@ -210,6 +213,9 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
       status: r.status,
       responded_at: r.responded_at,
       assigned_manually: !!r.assigned_manually,
+      selected_at: r.selected_at ?? null,
+      selected_by: r.selected_by ?? null,
+      passed_over_at: r.passed_over_at ?? null,
     }));
 
     res.json({ success: true, data: { partners, talents } });

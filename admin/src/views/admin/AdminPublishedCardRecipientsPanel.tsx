@@ -12,6 +12,9 @@ type PartnerRecipient = {
   status: 'pending' | 'accepted' | 'rejected';
   responded_at: string | null;
   assigned_manually?: boolean;
+  selected_at?: string | null;
+  selected_by?: string | null;
+  passed_over_at?: string | null;
 };
 
 type TalentRecipient = {
@@ -20,6 +23,9 @@ type TalentRecipient = {
   status: 'pending' | 'accepted' | 'rejected';
   responded_at: string | null;
   assigned_manually?: boolean;
+  selected_at?: string | null;
+  selected_by?: string | null;
+  passed_over_at?: string | null;
 };
 
 type RecipientsResponse = {
@@ -94,6 +100,41 @@ export default function AdminPublishedCardRecipientsPanel({
       alert(err?.response?.data?.error || err.message || 'Failed to remove talent'),
   });
 
+  const selectPartner = useMutation({
+    mutationFn: (partnerId: string) =>
+      api.post(`/admin/subscription-cards/${cardId}/select-partner`, { partner_id: partnerId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', cardId] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+    },
+    onError: (err: any) =>
+      alert(err?.response?.data?.error || err.message || 'Failed to select partner'),
+  });
+
+  const selectTalent = useMutation({
+    mutationFn: (talentId: string) =>
+      api.post(`/admin/subscription-cards/${cardId}/select-talent`, { talent_id: talentId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', cardId] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+    },
+    onError: (err: any) =>
+      alert(err?.response?.data?.error || err.message || 'Failed to select talent'),
+  });
+
+  const undoSelection = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${cardId}/undo-selection`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', cardId] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+    },
+    onError: (err: any) =>
+      alert(err?.response?.data?.error || err.message || 'Failed to undo selection'),
+  });
+
+  const hasSelection = card.selected_recipient_type != null;
+
   function confirmRemovePartner(partnerId: string, name: string) {
     if (!window.confirm(`Remove ${name} from this card? They'll stop seeing it in their opportunities.`)) {
       return;
@@ -105,6 +146,18 @@ export default function AdminPublishedCardRecipientsPanel({
       return;
     }
     removeTalent.mutate(talentId);
+  }
+  function confirmSelectPartner(partnerId: string, name: string) {
+    if (!window.confirm(`Select ${name} for this card? Other acceptees will be passed over and the card will close.`)) return;
+    selectPartner.mutate(partnerId);
+  }
+  function confirmSelectTalent(talentId: string, name: string) {
+    if (!window.confirm(`Select ${name} for this card? Other acceptees will be passed over and the card will close.`)) return;
+    selectTalent.mutate(talentId);
+  }
+  function confirmUndoSelection() {
+    if (!window.confirm('Undo the selection? The card will reopen as published.')) return;
+    undoSelection.mutate();
   }
 
   const { data: countriesRes } = useQuery({
@@ -142,13 +195,28 @@ export default function AdminPublishedCardRecipientsPanel({
         <div className="flex-1 overflow-y-auto">
           <CardDetails card={card} countries={countries} />
           <div className="flex items-center justify-between border-y border-[#E2E8F0] bg-[#F8FAFC] px-5 py-2.5">
-            <p className="text-xs text-[#62748E]">Hand-pick a partner or talent for this card.</p>
-            <button
-              onClick={() => setPickerOpen(true)}
-              className="rounded-md bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
-            >
-              Assign
-            </button>
+            {hasSelection ? (
+              <>
+                <p className="text-xs text-blue-700 font-medium">A recipient has been selected for this card.</p>
+                <button
+                  onClick={confirmUndoSelection}
+                  disabled={undoSelection.isPending}
+                  className="rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-medium text-[#62748E] hover:bg-[#F8FAFC] disabled:opacity-50"
+                >
+                  Undo selection
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-[#62748E]">Hand-pick a partner or talent for this card.</p>
+                <button
+                  onClick={() => setPickerOpen(true)}
+                  className="rounded-md bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+                >
+                  Assign
+                </button>
+              </>
+            )}
           </div>
           <div className="p-5 space-y-6 text-sm">
             {isLoading ? (
@@ -162,8 +230,11 @@ export default function AdminPublishedCardRecipientsPanel({
                     label="Accepted"
                     onRemove={(id, name) => confirmRemovePartner(id, name)}
                     isRemoving={removePartner.isPending}
+                    onSelect={!hasSelection && card.state === 'published' ? (id, name) => confirmSelectPartner(id, name) : undefined}
+                    isSelecting={selectPartner.isPending}
                     items={partnerGroups.accepted.map((p) => ({
                       key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
+                      selected_at: p.selected_at ?? null, passed_over_at: p.passed_over_at ?? null,
                     }))}
                   />
                   <Subgroup
@@ -172,6 +243,7 @@ export default function AdminPublishedCardRecipientsPanel({
                     isRemoving={removePartner.isPending}
                     items={partnerGroups.rejected.map((p) => ({
                       key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
+                      selected_at: null, passed_over_at: null,
                     }))}
                   />
                   <Subgroup
@@ -180,6 +252,7 @@ export default function AdminPublishedCardRecipientsPanel({
                     isRemoving={removePartner.isPending}
                     items={partnerGroups.pending.map((p) => ({
                       key: p.id, name: p.name, status: p.status, responded_at: null, assigned_manually: !!p.assigned_manually,
+                      selected_at: null, passed_over_at: null,
                     }))}
                   />
                 </Section>
@@ -188,6 +261,8 @@ export default function AdminPublishedCardRecipientsPanel({
                     label="Accepted"
                     onRemove={(id, name) => confirmRemoveTalent(id, name)}
                     isRemoving={removeTalent.isPending}
+                    onSelect={!hasSelection && card.state === 'published' ? (id, name) => confirmSelectTalent(id, name) : undefined}
+                    isSelecting={selectTalent.isPending}
                     items={talentGroups.accepted.map((t) => ({
                       key: t.external_user_id,
                       name: t.name || 'Unknown talent',
@@ -195,6 +270,7 @@ export default function AdminPublishedCardRecipientsPanel({
                       status: t.status,
                       responded_at: t.responded_at,
                       assigned_manually: !!t.assigned_manually,
+                      selected_at: t.selected_at ?? null, passed_over_at: t.passed_over_at ?? null,
                     }))}
                   />
                   <Subgroup
@@ -208,6 +284,7 @@ export default function AdminPublishedCardRecipientsPanel({
                       status: t.status,
                       responded_at: t.responded_at,
                       assigned_manually: !!t.assigned_manually,
+                      selected_at: null, passed_over_at: null,
                     }))}
                   />
                   <Subgroup
@@ -221,6 +298,7 @@ export default function AdminPublishedCardRecipientsPanel({
                       status: t.status,
                       responded_at: null,
                       assigned_manually: !!t.assigned_manually,
+                      selected_at: null, passed_over_at: null,
                     }))}
                   />
                 </Section>
@@ -376,11 +454,15 @@ function Subgroup({
   items,
   onRemove,
   isRemoving,
+  onSelect,
+  isSelecting,
 }: {
   label: 'Accepted' | 'Rejected' | 'Pending';
-  items: { key: string; name: string; subtitle?: string | null; status: 'accepted' | 'rejected' | 'pending'; responded_at: string | null; assigned_manually?: boolean }[];
+  items: { key: string; name: string; subtitle?: string | null; status: 'accepted' | 'rejected' | 'pending'; responded_at: string | null; assigned_manually?: boolean; selected_at?: string | null; passed_over_at?: string | null }[];
   onRemove?: (key: string, name: string) => void;
   isRemoving?: boolean;
+  onSelect?: (key: string, name: string) => void;
+  isSelecting?: boolean;
 }) {
   if (items.length === 0) {
     return (
@@ -408,6 +490,16 @@ function Subgroup({
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
+              {it.selected_at && (
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
+                  Selected
+                </span>
+              )}
+              {it.passed_over_at && !it.selected_at && (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                  Not selected
+                </span>
+              )}
               {it.assigned_manually && (
                 <span
                   className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]"
@@ -416,9 +508,22 @@ function Subgroup({
                   Manual
                 </span>
               )}
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_CHIP[it.status]}`}>
-                {it.status}
-              </span>
+              {!it.selected_at && !it.passed_over_at && (
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_CHIP[it.status]}`}>
+                  {it.status}
+                </span>
+              )}
+              {onSelect && !it.selected_at && !it.passed_over_at && (
+                <button
+                  type="button"
+                  disabled={isSelecting}
+                  onClick={() => onSelect(it.key, it.name)}
+                  title={`Select ${it.name}`}
+                  className="rounded-md bg-blue-600 px-2 py-0.5 text-[10px] font-medium text-white opacity-0 transition group-hover:opacity-100 hover:bg-blue-700 disabled:opacity-30"
+                >
+                  Select
+                </button>
+              )}
               {onRemove && (
                 <button
                   type="button"
