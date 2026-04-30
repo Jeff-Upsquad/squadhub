@@ -178,6 +178,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/condescending-cannon-cbc4a2/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3003"],
       "port": 3003
+    },
+    {
+      "name": "Create Panel Redesign",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/vigilant-stonebraker-65e4b4/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3080"],
+      "port": 3080
     }
   ]
 }
