@@ -1202,6 +1202,12 @@ export interface SubscriptionCard {
   published_at: string | null;
   published_by: string | null;
   closed_at: string | null;
+  /** Set when an admin recalled a card with acceptances. Acceptees keep
+   *  seeing the card with a "Recalled" tag; pending recipients are dropped. */
+  recalled_at?: string | null;
+  /** Secondary cards link to a primary card via parent_card_id. Primary
+   *  cards have parent_card_id = null. */
+  parent_card_id?: string | null;
   created_at: string;
   updated_at: string;
   // Derived

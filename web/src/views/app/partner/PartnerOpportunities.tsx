@@ -130,14 +130,25 @@ function OpportunityCard({
   const enabledHasHoursDefault = defaultDeliverables.some((d) => d.kind === 'hours');
   const showNoHourlyCommitment = planHasHoursDefault && !enabledHasHoursDefault;
   const workingDays = (card.working_days || []) as WeekDay[];
+  const isRecalled = !!(card as { recalled_at?: string | null }).recalled_at;
 
   return (
-    <li className="rounded-xl border border-[var(--sh-hair)] bg-[var(--surface)] p-4">
+    <li className={`rounded-xl border bg-[var(--surface)] p-4 ${isRecalled ? 'border-orange-300' : 'border-[var(--sh-hair)]'}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-base font-semibold text-[var(--sh-ink)]">
-            {staged?.subscription?.name || 'Subscription card'}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-base font-semibold text-[var(--sh-ink)]">
+              {staged?.subscription?.name || 'Subscription card'}
+            </p>
+            {isRecalled && (
+              <span
+                className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-800"
+                title="This card was recalled by the client. Your acceptance is still on record."
+              >
+                Recalled
+              </span>
+            )}
+          </div>
           <p className="text-xs text-[var(--sh-ink-3)]">
             {plan ? `${plan.plan} · ${plan.tier}` : '—'}
             {priceLabel ? ` · ${priceLabel}` : ''}

@@ -27,6 +27,7 @@ export type PublishedCard = {
   selected_recipient_id?: string | null;
   parent_card_id?: string | null;
   secondary_card_count?: number;
+  recalled_at?: string | null;
   squadhire_synced_at?: string | null;
   squadhire_sync_attempts?: number | null;
   squadhire_sync_last_error?: string | null;
@@ -312,9 +313,17 @@ function PublishedCardRow({ card, onOpen, showCancelledTag }: { card: PublishedC
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        {showCancelledTag && (
+        {showCancelledTag && !card.recalled_at && (
           <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600">
             Cancelled
+          </span>
+        )}
+        {card.recalled_at && (
+          <span
+            className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-800"
+            title="Card was recalled after acceptances. Acceptees keep seeing it with a Recalled tag."
+          >
+            Recalled
           </span>
         )}
         {deliveryState === 'skipped' && (

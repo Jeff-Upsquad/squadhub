@@ -212,16 +212,23 @@ function CardPanelContent({
       alert(err?.response?.data?.error || err.message || 'Failed to undo selection'),
   });
 
-  const closeSecondary = useMutation({
+  const recallCard = useMutation({
     mutationFn: () =>
-      api.post(`/admin/subscription-cards/${activeCardId}/close-secondary`),
+      api.post(`/admin/subscription-cards/${activeCardId}/recall`),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
-      onViewSecondary(null);
+      if (isSecondaryView) onViewSecondary(null);
+      setRecallConfirmOpen(false);
     },
-    onError: (err: any) =>
-      alert(err?.response?.data?.error || err.message || 'Failed to close secondary card'),
+    onError: (err: any) => {
+      alert(err?.response?.data?.error || err.message || 'Failed to recall card');
+      setRecallConfirmOpen(false);
+    },
   });
+
+  const [recallConfirmOpen, setRecallConfirmOpen] = useState(false);
 
   const hasSelection = activeCard.selected_recipient_type != null;
 
@@ -249,9 +256,19 @@ function CardPanelContent({
     if (!window.confirm('Undo the selection? The card will reopen as published.')) return;
     undoSelection.mutate();
   }
-  function confirmCloseSecondary() {
-    if (!window.confirm('Close this secondary card? Recipients will no longer see it.')) return;
-    closeSecondary.mutate();
+
+  // Recall flow: if anyone has accepted, open the extra-confirm modal.
+  // Otherwise a simple confirm() is enough.
+  function startRecall() {
+    const acceptedCount =
+      (data?.partners || []).filter((p) => p.status === 'accepted').length +
+      (data?.talents || []).filter((t) => t.status === 'accepted').length;
+    if (acceptedCount > 0) {
+      setRecallConfirmOpen(true);
+      return;
+    }
+    if (!window.confirm('Recall this card? Pending recipients will stop seeing it.')) return;
+    recallCard.mutate();
   }
 
   const { data: countriesRes } = useQuery({
@@ -279,15 +296,24 @@ function CardPanelContent({
       <div className="flex-1 overflow-y-auto">
         <CardDetails card={card} activeCard={activeCard} isSecondaryView={isSecondaryView} countries={countries} />
 
-        {isSecondaryView && activeCard.state === 'published' && (
+        {activeCard.state === 'published' && (
           <div className="border-b border-[#E2E8F0] px-5 py-2.5">
             <button
-              onClick={confirmCloseSecondary}
-              disabled={closeSecondary.isPending}
-              className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+              onClick={startRecall}
+              disabled={recallCard.isPending}
+              className="rounded-md border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-100 disabled:opacity-50"
             >
-              Close this secondary card
+              {recallCard.isPending ? 'Recalling…' : 'Recall this card'}
             </button>
+          </div>
+        )}
+
+        {activeCard.recalled_at && (
+          <div className="border-b border-[#E2E8F0] bg-orange-50 px-5 py-2.5">
+            <p className="text-xs text-orange-800">
+              <span className="font-semibold">Recalled</span> on {formatFullDateTime(activeCard.recalled_at)}.
+              Acceptees still see this card with a "Recalled" tag.
+            </p>
           </div>
         )}
 
@@ -414,7 +440,69 @@ function CardPanelContent({
       {pickerOpen && (
         <AssignRecipientPicker cardId={activeCardId} onClose={() => setPickerOpen(false)} />
       )}
+      {recallConfirmOpen && (
+        <RecallConfirmModal
+          acceptedPartners={partnerGroups.accepted.length}
+          acceptedTalents={talentGroups.accepted.length}
+          isPending={recallCard.isPending}
+          onCancel={() => setRecallConfirmOpen(false)}
+          onConfirm={() => recallCard.mutate()}
+        />
+      )}
     </>
+  );
+}
+
+function RecallConfirmModal({
+  acceptedPartners,
+  acceptedTalents,
+  isPending,
+  onCancel,
+  onConfirm,
+}: {
+  acceptedPartners: number;
+  acceptedTalents: number;
+  isPending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const total = acceptedPartners + acceptedTalents;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative w-[420px] rounded-lg bg-white p-5 shadow-xl">
+        <h4 className="text-base font-semibold text-[#0F172B]">Recall card with acceptances?</h4>
+        <p className="mt-2 text-sm text-[#62748E]">
+          This card has{' '}
+          <span className="font-semibold text-[#0F172B]">
+            {total} {total === 1 ? 'acceptance' : 'acceptances'}
+          </span>{' '}
+          ({acceptedPartners} partner{acceptedPartners === 1 ? '' : 's'}, {acceptedTalents} talent
+          {acceptedTalents === 1 ? '' : 's'}). Recalling will:
+        </p>
+        <ul className="mt-2 space-y-1 text-xs text-[#62748E]">
+          <li>• Drop pending recipients (they stop seeing the card).</li>
+          <li>• Keep acceptees in their feed with a "Recalled" tag.</li>
+          <li>• Mark the card terminal — no re-publish.</li>
+        </ul>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            disabled={isPending}
+            className="rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-medium text-[#62748E] hover:bg-[#F8FAFC] disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isPending}
+            className="rounded-md bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+          >
+            {isPending ? 'Recalling…' : 'Recall anyway'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -526,8 +614,9 @@ function SecondaryCardsSection({
       {secondaryCards.length > 0 && (
         <ul className="divide-y divide-[#E2E8F0] rounded-lg border border-[#E2E8F0]">
           {secondaryCards.map((sc) => {
-            const stateColor = sc.state === 'published' ? '#10B981' : '#6B7280';
-            const stateLabel = sc.state === 'published' ? 'Active' : 'Closed';
+            const isRecalled = !!sc.recalled_at;
+            const stateColor = sc.state === 'published' ? '#10B981' : isRecalled ? '#EA580C' : '#6B7280';
+            const stateLabel = sc.state === 'published' ? 'Active' : isRecalled ? 'Recalled' : 'Closed';
             const distLabel = sc.distribution === 'manual' ? 'Soft publish' : 'Broadcast';
             const partners = sc.recipient_counts?.partners ?? { pending: 0, accepted: 0, rejected: 0 };
             const talents = sc.recipient_counts?.talents ?? { accepted: 0, rejected: 0 };

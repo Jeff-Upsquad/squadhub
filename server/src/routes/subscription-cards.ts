@@ -386,54 +386,62 @@ router.post(
         return;
       }
 
-      const { count: acceptedCount, error: countErr } = await supabaseAdmin
-        .from('subscription_card_recipients')
-        .select('id', { count: 'exact', head: true })
-        .eq('card_id', (req.params.id as string))
-        .eq('status', 'accepted');
-      if (countErr) {
-        res.status(500).json({ success: false, error: countErr.message });
-        return;
-      }
-      if ((acceptedCount || 0) > 0) {
-        res.status(409).json({
-          success: false,
-          error: 'Cannot recall: partners have already accepted this card',
-        });
-        return;
-      }
+      const cardId = req.params.id as string;
 
+      const [{ count: acceptedPartners }, { count: acceptedTalents }] = await Promise.all([
+        supabaseAdmin
+          .from('subscription_card_recipients')
+          .select('id', { count: 'exact', head: true })
+          .eq('card_id', cardId)
+          .eq('status', 'accepted'),
+        supabaseAdmin
+          .from('subscription_card_external_recipients')
+          .select('id', { count: 'exact', head: true })
+          .eq('card_id', cardId)
+          .eq('status', 'accepted'),
+      ]);
+      const hasAcceptances = (acceptedPartners || 0) + (acceptedTalents || 0) > 0;
+
+      // Drop only pending recipients. Accepted/rejected stay so:
+      //   - history is preserved
+      //   - accepted users keep seeing the card with the "Recalled" tag
       await supabaseAdmin
         .from('subscription_card_recipients')
         .delete()
-        .eq('card_id', (req.params.id as string));
-
-      // Drop pending talent (external) recipients too. Mirror table to
-      // subscription_card_recipients but never cleaned up here before, so
-      // hand-picked-but-unanswered rows leaked across recall→republish and
-      // surfaced in the talent feed again. Accepted/rejected rows are kept
-      // for audit; SquadHire's archived-status filter hides them anyway.
+        .eq('card_id', cardId)
+        .eq('status', 'pending');
       await supabaseAdmin
         .from('subscription_card_external_recipients')
         .delete()
-        .eq('card_id', (req.params.id as string))
+        .eq('card_id', cardId)
         .eq('status', 'pending');
+
+      const now = new Date().toISOString();
+      const updatePayload = hasAcceptances
+        ? {
+            // With acceptances: card becomes terminal (no re-publish path)
+            // but stays visible to acceptees via recalled_at.
+            state: 'closed' as const,
+            closed_at: now,
+            recalled_at: now,
+            squadhire_synced_at: null,
+            squadhire_sync_attempts: 0,
+            squadhire_sync_last_error: null,
+          }
+        : {
+            // Clean recall — back to draft for re-publish.
+            state: 'draft' as const,
+            published_at: null,
+            published_by: null,
+            squadhire_synced_at: null,
+            squadhire_sync_attempts: 0,
+            squadhire_sync_last_error: null,
+          };
 
       const { data: updated, error: updErr } = await supabaseAdmin
         .from('subscription_cards')
-        .update({
-          state: 'draft',
-          published_at: null,
-          published_by: null,
-          // Reset SquadHire sync state so the fire-and-forget below (and the
-          // sweeper, as a safety net) retries delivery with the new state.
-          // buildSquadhirePayloadForCard will compute status='archived' from
-          // the new state='draft'.
-          squadhire_synced_at: null,
-          squadhire_sync_attempts: 0,
-          squadhire_sync_last_error: null,
-        })
-        .eq('id', (req.params.id as string))
+        .update(updatePayload)
+        .eq('id', cardId)
         .select('*')
         .single();
       if (updErr) {
@@ -447,12 +455,13 @@ router.post(
           console.error('[recall] squadhire delivery threw unexpectedly', err);
         });
 
-      // Companion to the archived-status re-delivery above: ask SquadHire to
-      // drop its mirror recipient rows so the same hand-picks don't re-appear
-      // in talent feeds when the card is re-published. Best-effort.
-      notifySquadhireOfCardRecall(updated.id).catch((err) => {
-        console.error('[recall] squadhire recall notification threw', err);
-      });
+      // Only drop SquadHire mirror rows on a CLEAN recall (no acceptances).
+      // Partial recall keeps acceptees in their feed with the Recalled tag.
+      if (!hasAcceptances) {
+        notifySquadhireOfCardRecall(updated.id).catch((err) => {
+          console.error('[recall] squadhire recall notification threw', err);
+        });
+      }
 
       cascadeCloseSecondaryCards(updated.id).catch((err) => {
         console.error('[recall] cascade close secondary cards error', err);
