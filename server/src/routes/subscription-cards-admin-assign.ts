@@ -7,6 +7,8 @@ import { supabaseAdmin } from '../supabase';
 import {
   notifySquadhireOfManualAssignment,
   notifySquadhireOfManualRemoval,
+  buildSquadhirePayloadForCard,
+  deliverCardToSquadhire,
 } from '../utils/squadhireWebhook';
 
 /**
@@ -121,7 +123,7 @@ router.post('/subscription-cards/:id/assign-talent', async (req: Request, res: R
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state')
+      .select('id, state, squadhire_synced_at, squadhire_category_ids')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) {
@@ -137,6 +139,38 @@ router.post('/subscription-cards/:id/assign-talent', async (req: Request, res: R
       return;
     }
 
+    // Pre-flight: ensure the card exists in SquadHire before assigning.
+    if (!card.squadhire_synced_at) {
+      const categoryIds = Array.isArray(card.squadhire_category_ids)
+        ? (card.squadhire_category_ids as string[])
+        : [];
+      if (categoryIds.length === 0) {
+        res.status(409).json({
+          success: false,
+          error: 'Card has no SquadHire categories. Add categories before assigning talent.',
+        });
+        return;
+      }
+
+      const payload = await buildSquadhirePayloadForCard(cardId);
+      if (payload) {
+        await deliverCardToSquadhire(cardId, payload);
+      }
+
+      const { data: recheck } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('squadhire_synced_at')
+        .eq('id', cardId)
+        .maybeSingle();
+      if (!recheck?.squadhire_synced_at) {
+        res.status(503).json({
+          success: false,
+          error: 'Card could not be synced to SquadHire. The system will retry automatically — please try assigning again in a few minutes.',
+        });
+        return;
+      }
+    }
+
     const { data: existing } = await supabaseAdmin
       .from('subscription_card_external_recipients')
       .select('id')
@@ -150,7 +184,7 @@ router.post('/subscription-cards/:id/assign-talent', async (req: Request, res: R
       return;
     }
 
-    const { error: insErr } = await supabaseAdmin
+    const { data: inserted, error: insErr } = await supabaseAdmin
       .from('subscription_card_external_recipients')
       .upsert(
         {
@@ -164,19 +198,25 @@ router.post('/subscription-cards/:id/assign-talent', async (req: Request, res: R
           assigned_manually: true,
         },
         { onConflict: 'card_id,external_system,external_recipient_id', ignoreDuplicates: true },
-      );
+      )
+      .select('id')
+      .single();
     if (insErr) {
       res.status(500).json({ success: false, error: insErr.message });
       return;
     }
 
-    // Best-effort notify SquadHire so it surfaces the card in the
-    // talent's subscription tab. Don't block the response on it.
-    notifySquadhireOfManualAssignment(cardId, talent_id).catch((err) => {
-      console.error('[assign-talent] notify failed', err);
-    });
+    const recipientRowId = inserted?.id as string | undefined;
+    const outcome = await notifySquadhireOfManualAssignment(cardId, talent_id, recipientRowId);
 
-    res.json({ success: true });
+    if (outcome.delivered) {
+      res.json({ success: true });
+    } else {
+      res.json({
+        success: true,
+        warning: 'Assignment saved but SquadHire notification failed. The talent may not see the card immediately — the system will retry automatically.',
+      });
+    }
   } catch (err: any) {
     console.error('Assign talent error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });

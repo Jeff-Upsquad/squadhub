@@ -509,26 +509,16 @@ export function startSquadhireSyncSweeper(): NodeJS.Timeout {
 }
 
 // ------------------------------------------------------------
-// Public: outbound notification when an admin hand-picks a talent
-// for a card from SquadHub. SquadHire upserts a local card-talent
-// assignment row on its side and surfaces the card in the talent's
-// subscription tab. Best-effort, single attempt. Idempotent on the
-// receiving side via (card_id, talent_id).
+// Manual assignment: single POST attempt
 // ------------------------------------------------------------
 
-export async function notifySquadhireOfManualAssignment(
+function postManualAssignmentOnce(
   cardId: string,
   talentId: string,
-): Promise<void> {
+): Promise<AttemptOutcome> {
   const baseUrl = config.squadhireWebhookUrl;
-  if (!baseUrl) {
-    console.warn('[squadhire-webhook] manual-assignment skipped: url not configured');
-    return;
-  }
-  if (!config.squadhireWebhookSecret) {
-    console.warn('[squadhire-webhook] manual-assignment skipped: secret not configured');
-    return;
-  }
+  if (!baseUrl) return Promise.resolve({ delivered: false, error: 'squadhire_webhook_url_not_configured' });
+  if (!config.squadhireWebhookSecret) return Promise.resolve({ delivered: false, error: 'squadhire_webhook_secret_not_configured' });
 
   const url = baseUrl.endsWith('/') ? `${baseUrl}manual-assignments` : `${baseUrl}/manual-assignments`;
   const body = {
@@ -540,25 +530,119 @@ export async function notifySquadhireOfManualAssignment(
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-SquadHub-Signature': config.squadhireWebhookSecret,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      console.warn(`[squadhire-webhook] manual-assignment http_${res.status}`);
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn('[squadhire-webhook] manual-assignment failed', msg);
-  } finally {
-    clearTimeout(timer);
+  return fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-SquadHub-Signature': config.squadhireWebhookSecret,
+    },
+    body: JSON.stringify(body),
+    signal: controller.signal,
+  })
+    .then((res) => {
+      if (!res.ok) return { delivered: false, error: `http_${res.status}` } as AttemptOutcome;
+      return { delivered: true } as AttemptOutcome;
+    })
+    .catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { delivered: false, error: msg.slice(0, 500) } as AttemptOutcome;
+    })
+    .finally(() => clearTimeout(timer));
+}
+
+// ------------------------------------------------------------
+// Manual assignment: persist attempt state onto the recipient row
+// ------------------------------------------------------------
+
+async function persistManualAssignmentResult(
+  recipientRowId: string,
+  outcome: AttemptOutcome,
+  attemptsDelta: number,
+): Promise<void> {
+  const { data: current, error: readErr } = await supabaseAdmin
+    .from('subscription_card_external_recipients')
+    .select('squadhire_notify_attempts')
+    .eq('id', recipientRowId)
+    .maybeSingle();
+  if (readErr) {
+    console.error('[squadhire-webhook] failed to read notify attempts', readErr);
+    return;
   }
+
+  const patch: Record<string, unknown> = {
+    squadhire_notify_attempts: (current?.squadhire_notify_attempts ?? 0) + attemptsDelta,
+    squadhire_notify_error: outcome.delivered ? null : (outcome.error ?? 'unknown_error'),
+  };
+  if (outcome.delivered) {
+    patch.squadhire_notified_at = new Date().toISOString();
+  }
+
+  const { error } = await supabaseAdmin
+    .from('subscription_card_external_recipients')
+    .update(patch)
+    .eq('id', recipientRowId);
+  if (error) {
+    console.error('[squadhire-webhook] failed to persist manual-assignment state', error);
+  }
+}
+
+// ------------------------------------------------------------
+// Public: inline delivery with retries (called from assign-talent).
+// Returns the outcome so the caller can warn the admin on failure.
+// ------------------------------------------------------------
+
+export async function notifySquadhireOfManualAssignment(
+  cardId: string,
+  talentId: string,
+  recipientRowId?: string,
+): Promise<AttemptOutcome> {
+  let lastOutcome: AttemptOutcome = { delivered: false, error: 'not_attempted' };
+  for (let i = 0; i < INLINE_ATTEMPTS; i++) {
+    if (INLINE_BACKOFF_MS[i] > 0) await sleep(INLINE_BACKOFF_MS[i]);
+    lastOutcome = await postManualAssignmentOnce(cardId, talentId);
+    if (lastOutcome.delivered) break;
+  }
+  if (recipientRowId) {
+    await persistManualAssignmentResult(recipientRowId, lastOutcome, INLINE_ATTEMPTS);
+  }
+  return lastOutcome;
+}
+
+// ------------------------------------------------------------
+// Public: background sweeper for manual assignments that never
+// reached SquadHire. Mirrors startSquadhireSyncSweeper.
+// ------------------------------------------------------------
+
+export function startManualAssignmentSweeper(): NodeJS.Timeout {
+  const tick = async () => {
+    try {
+      const { data: rows, error } = await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .select('id, card_id, external_user_id')
+        .eq('assigned_manually', true)
+        .is('squadhire_notified_at', null)
+        .lt('squadhire_notify_attempts', MAX_SYNC_ATTEMPTS)
+        .order('created_at', { ascending: true })
+        .limit(SWEEPER_BATCH_SIZE);
+
+      if (error) {
+        console.error('[squadhire-webhook] manual-assignment sweeper query failed', error);
+        return;
+      }
+      if (!rows || rows.length === 0) return;
+
+      for (const row of rows as { id: string; card_id: string; external_user_id: string }[]) {
+        const outcome = await postManualAssignmentOnce(row.card_id, row.external_user_id);
+        await persistManualAssignmentResult(row.id, outcome, 1);
+      }
+    } catch (err) {
+      console.error('[squadhire-webhook] manual-assignment sweeper tick errored', err);
+    }
+  };
+
+  const handle = setInterval(tick, SWEEPER_INTERVAL_MS);
+  setTimeout(tick, 15_000);
+  return handle;
 }
 
 // ------------------------------------------------------------
