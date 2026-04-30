@@ -12,8 +12,9 @@ import { supabaseAdmin } from '../supabase';
  * Accepts a single card row (raw DB shape). Call-sites usually have the row
  * already; this helper pulls the joined relations in a single round-trip.
  */
-export async function hydrateCard(card: any): Promise<any> {
+export async function hydrateCard(card: any, parentCardId?: string): Promise<any> {
   if (!card) return card;
+  const targetingId = parentCardId ?? card.parent_card_id ?? card.id;
   const [
     { data: countries },
     { data: regions },
@@ -23,11 +24,11 @@ export async function hydrateCard(card: any): Promise<any> {
     supabaseAdmin
       .from('subscription_card_target_countries')
       .select('country_id')
-      .eq('card_id', card.id),
+      .eq('card_id', targetingId),
     supabaseAdmin
       .from('subscription_card_target_regions')
       .select('country_id, region')
-      .eq('card_id', card.id),
+      .eq('card_id', targetingId),
     supabaseAdmin
       .from('subscription_card_recipients')
       .select('status')
@@ -114,11 +115,12 @@ export async function getOrCreateDraftCard(submissionSubscriptionId: string) {
  * stored function. To keep this migration-free we run the match manually in JS
  * using supabaseAdmin queries. Rows are inserted with ON CONFLICT DO NOTHING.
  */
-export async function matchPartnersForCard(cardId: string): Promise<string[]> {
+export async function matchPartnersForCard(cardId: string, targetingCardId?: string): Promise<string[]> {
+  const srcId = targetingCardId ?? cardId;
   const { data: cardRow, error: cardErr } = await supabaseAdmin
     .from('subscription_cards')
     .select('target_tiers, min_experience_years, target_languages')
-    .eq('id', cardId)
+    .eq('id', srcId)
     .single();
   if (cardErr) throw cardErr;
 
@@ -126,11 +128,11 @@ export async function matchPartnersForCard(cardId: string): Promise<string[]> {
     supabaseAdmin
       .from('subscription_card_target_countries')
       .select('country_id')
-      .eq('card_id', cardId),
+      .eq('card_id', srcId),
     supabaseAdmin
       .from('subscription_card_target_regions')
       .select('country_id, region')
-      .eq('card_id', cardId),
+      .eq('card_id', srcId),
   ]);
 
   const targetCountryIds = (countryRows || []).map((r: any) => r.country_id);

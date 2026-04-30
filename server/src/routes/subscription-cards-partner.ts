@@ -59,7 +59,22 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     const cardList = cards || [];
-    const stagedSubIds = cardList.map((c: any) => c.submission_subscription_id);
+
+    // For secondary cards, resolve parent's submission_subscription_id and
+    // use parent's card ID for targeting queries.
+    const parentCardIds = Array.from(new Set(
+      cardList.filter((c: any) => c.parent_card_id && !c.submission_subscription_id).map((c: any) => c.parent_card_id),
+    ));
+    const { data: parentCards } = parentCardIds.length > 0
+      ? await supabaseAdmin.from('subscription_cards').select('id, submission_subscription_id').in('id', parentCardIds)
+      : { data: [] as any[] };
+    const parentById: Record<string, any> = {};
+    (parentCards || []).forEach((p: any) => { parentById[p.id] = p; });
+
+    const stagedSubIds = cardList
+      .map((c: any) => c.submission_subscription_id || parentById[c.parent_card_id]?.submission_subscription_id)
+      .filter(Boolean);
+    const targetingCardIds = cardList.map((c: any) => c.parent_card_id ?? c.id);
 
     const [
       { data: stagedRows },
@@ -75,11 +90,11 @@ router.get('/', async (req: Request, res: Response) => {
       supabaseAdmin
         .from('subscription_card_target_countries')
         .select('card_id, country_id')
-        .in('card_id', cardIds),
+        .in('card_id', targetingCardIds),
       supabaseAdmin
         .from('subscription_card_target_regions')
         .select('card_id, country_id, region')
-        .in('card_id', cardIds),
+        .in('card_id', targetingCardIds),
     ]);
 
     const submissionIds = Array.from(
@@ -128,12 +143,14 @@ router.get('/', async (req: Request, res: Response) => {
 
     const cardById: Record<string, any> = {};
     cardList.forEach((c: any) => {
-      const staged = stagedById[c.submission_subscription_id] || null;
+      const effectiveSubId = c.submission_subscription_id || parentById[c.parent_card_id]?.submission_subscription_id;
+      const targetingId = c.parent_card_id ?? c.id;
+      const staged = effectiveSubId ? stagedById[effectiveSubId] || null : null;
       const submission = staged ? submissionById[staged.submission_id] : null;
       cardById[c.id] = {
         ...c,
-        target_country_ids: countriesByCard[c.id] || [],
-        target_regions: regionsByCard[c.id] || [],
+        target_country_ids: countriesByCard[targetingId] || [],
+        target_regions: regionsByCard[targetingId] || [],
         submission_subscription: staged,
         submission,
       };

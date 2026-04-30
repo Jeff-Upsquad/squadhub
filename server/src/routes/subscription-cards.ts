@@ -18,6 +18,35 @@ const router = Router();
 
 router.use(requireAuth);
 
+async function cascadeCloseSecondaryCards(parentCardId: string): Promise<void> {
+  const { data: secondaries } = await supabaseAdmin
+    .from('subscription_cards')
+    .select('id')
+    .eq('parent_card_id', parentCardId)
+    .eq('state', 'published');
+
+  if (!secondaries || secondaries.length === 0) return;
+
+  const now = new Date().toISOString();
+  await supabaseAdmin
+    .from('subscription_cards')
+    .update({
+      state: 'closed',
+      closed_at: now,
+      squadhire_synced_at: null,
+      squadhire_sync_attempts: 0,
+      squadhire_sync_last_error: null,
+    })
+    .eq('parent_card_id', parentCardId)
+    .eq('state', 'published');
+
+  for (const s of secondaries) {
+    buildSquadhirePayloadForCard(s.id)
+      .then((payload) => payload && deliverCardToSquadhire(s.id, payload))
+      .catch((err) => console.error('[cascade-close] squadhire delivery error', err));
+  }
+}
+
 // ------------------------------------------------------------
 // Schemas
 // ------------------------------------------------------------
@@ -425,6 +454,10 @@ router.post(
         console.error('[recall] squadhire recall notification threw', err);
       });
 
+      cascadeCloseSecondaryCards(updated.id).catch((err) => {
+        console.error('[recall] cascade close secondary cards error', err);
+      });
+
       res.json({ success: true, data: await hydrateCard(updated) });
     } catch (err: any) {
       console.error('Recall card error:', err);
@@ -472,6 +505,10 @@ router.post(
         .catch((err) => {
           console.error('[close] squadhire delivery threw unexpectedly', err);
         });
+
+      cascadeCloseSecondaryCards(updated.id).catch((err) => {
+        console.error('[close] cascade close secondary cards error', err);
+      });
 
       res.json({ success: true, data: await hydrateCard(updated) });
     } catch (err: any) {

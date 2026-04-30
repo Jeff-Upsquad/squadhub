@@ -4,6 +4,8 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import {
+  buildSquadhirePayloadForCard,
+  deliverCardToSquadhire,
   notifySquadhireOfSelection,
   notifySquadhireOfSelectionUndo,
 } from '../utils/squadhireWebhook';
@@ -11,6 +13,35 @@ import {
 const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
+
+async function cascadeCloseSecondaryCards(parentCardId: string): Promise<void> {
+  const { data: secondaries } = await supabaseAdmin
+    .from('subscription_cards')
+    .select('id')
+    .eq('parent_card_id', parentCardId)
+    .eq('state', 'published');
+
+  if (!secondaries || secondaries.length === 0) return;
+
+  const now = new Date().toISOString();
+  await supabaseAdmin
+    .from('subscription_cards')
+    .update({
+      state: 'closed',
+      closed_at: now,
+      squadhire_synced_at: null,
+      squadhire_sync_attempts: 0,
+      squadhire_sync_last_error: null,
+    })
+    .eq('parent_card_id', parentCardId)
+    .eq('state', 'published');
+
+  for (const s of secondaries) {
+    buildSquadhirePayloadForCard(s.id)
+      .then((payload) => payload && deliverCardToSquadhire(s.id, payload))
+      .catch((err) => console.error('[cascade-close] squadhire delivery error', err));
+  }
+}
 
 // ============================================================
 // POST /admin/subscription-cards/:id/select-partner
@@ -97,6 +128,11 @@ router.post('/subscription-cards/:id/select-partner', async (req: Request, res: 
     // Notify SquadHire (card is now archived). Fire-and-forget.
     notifySquadhireOfSelection(cardId, null, now).catch((err) => {
       console.error('[select-partner] notify squadhire failed', err);
+    });
+
+    // Cascade-close published secondary cards (if this is a primary card).
+    cascadeCloseSecondaryCards(cardId).catch((err) => {
+      console.error('[select-partner] cascade close secondary cards error', err);
     });
 
     res.json({ success: true });
@@ -191,6 +227,11 @@ router.post('/subscription-cards/:id/select-talent', async (req: Request, res: R
     // Notify SquadHire with the selected talent id so it stamps its local row.
     notifySquadhireOfSelection(cardId, talent_id, now).catch((err) => {
       console.error('[select-talent] notify squadhire failed', err);
+    });
+
+    // Cascade-close published secondary cards (if this is a primary card).
+    cascadeCloseSecondaryCards(cardId).catch((err) => {
+      console.error('[select-talent] cascade close secondary cards error', err);
     });
 
     res.json({ success: true });

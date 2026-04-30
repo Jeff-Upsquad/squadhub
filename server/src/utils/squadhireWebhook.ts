@@ -73,17 +73,31 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, distribution, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override',
+      'id, state, distribution, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id',
     )
     .eq('id', cardId)
     .maybeSingle();
   if (!card) return null;
 
+  // For secondary cards, resolve content fields from the parent.
+  let contentSource = card;
+  if (card.parent_card_id) {
+    const { data: parent } = await supabaseAdmin
+      .from('subscription_cards')
+      .select(
+        'id, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids',
+      )
+      .eq('id', card.parent_card_id)
+      .maybeSingle();
+    if (!parent) return null;
+    contentSource = parent as any;
+  }
+
   // Skip-if-empty gate: an admin who didn't pick any SquadHire categories
   // doesn't want this card on SquadHire. The publish handler treats a null
   // payload as a no-op, so the outbound fetch + retry loop never starts.
-  const categoryIds = Array.isArray(card.squadhire_category_ids)
-    ? (card.squadhire_category_ids as string[])
+  const categoryIds = Array.isArray(contentSource.squadhire_category_ids)
+    ? (contentSource.squadhire_category_ids as string[])
     : [];
   if (categoryIds.length === 0) {
     // Without this log, a forgotten-checkbox publish is invisible: no fetch,
@@ -101,6 +115,9 @@ export async function buildSquadhirePayloadForCard(
   const status: 'active' | 'archived' =
     card.state === 'published' ? 'active' : 'archived';
 
+  const targetingCardId = contentSource.id as string;
+  const stagedSubId = contentSource.submission_subscription_id;
+
   const [
     { data: countryRows },
     { data: regionRows },
@@ -109,16 +126,18 @@ export async function buildSquadhirePayloadForCard(
     supabaseAdmin
       .from('subscription_card_target_countries')
       .select('country_id')
-      .eq('card_id', cardId),
+      .eq('card_id', targetingCardId),
     supabaseAdmin
       .from('subscription_card_target_regions')
       .select('country_id, region')
-      .eq('card_id', cardId),
-    supabaseAdmin
-      .from('client_submission_subscriptions')
-      .select('subscription_id, plan_id, submission_id')
-      .eq('id', card.submission_subscription_id)
-      .maybeSingle(),
+      .eq('card_id', targetingCardId),
+    stagedSubId
+      ? supabaseAdmin
+          .from('client_submission_subscriptions')
+          .select('subscription_id, plan_id, submission_id')
+          .eq('id', stagedSubId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   let subscriptionName: string | null = null;
@@ -145,8 +164,8 @@ export async function buildSquadhirePayloadForCard(
     // payload. (SquadHub's editor copy promises "the talent sees 'No hourly
     // commitment'" in that case.)
     const disabledIds = new Set<string>(
-      Array.isArray(card.disabled_default_deliverable_ids)
-        ? (card.disabled_default_deliverable_ids as string[])
+      Array.isArray(contentSource.disabled_default_deliverable_ids)
+        ? (contentSource.disabled_default_deliverable_ids as string[])
         : [],
     );
     const hoursRow = (planDelivs ?? []).find(
@@ -164,8 +183,8 @@ export async function buildSquadhirePayloadForCard(
   // Hours resolution: a card's custom_deliverables can carry an hours entry
   // that overrides the plan default (same pattern as partner price). Prefer
   // the card-level override, fall back to the plan deliverable.
-  const cardHoursOverride = Array.isArray(card.custom_deliverables)
-    ? (card.custom_deliverables as any[]).find((d) => d?.kind === 'hours')
+  const cardHoursOverride = Array.isArray(contentSource.custom_deliverables)
+    ? (contentSource.custom_deliverables as any[]).find((d) => d?.kind === 'hours')
     : null;
   const hoursSource = cardHoursOverride
     ? {
@@ -238,16 +257,16 @@ export async function buildSquadhirePayloadForCard(
     }
   }
 
-  const brand = (card.brand_name ?? '').trim();
+  const brand = (contentSource.brand_name ?? '').trim();
   const titleParts = [brand, subscriptionName, planName].filter(Boolean) as string[];
   const title = titleParts.length > 0 ? titleParts.join(' — ') : 'New subscription opportunity';
 
   const descriptionLines: string[] = [];
-  if (card.business_nature) descriptionLines.push(`About: ${card.business_nature}`);
-  if (Array.isArray(card.working_days) && card.working_days.length > 0) {
-    descriptionLines.push(`Working days: ${card.working_days.join(', ')}`);
+  if (contentSource.business_nature) descriptionLines.push(`About: ${contentSource.business_nature}`);
+  if (Array.isArray(contentSource.working_days) && contentSource.working_days.length > 0) {
+    descriptionLines.push(`Working days: ${contentSource.working_days.join(', ')}`);
   }
-  if (card.notes) descriptionLines.push(card.notes);
+  if (contentSource.notes) descriptionLines.push(contentSource.notes);
   const description = descriptionLines.join('\n\n');
 
   // match_rules: `category_ids` is the primary axis SquadHire's matcher
@@ -257,13 +276,13 @@ export async function buildSquadhirePayloadForCard(
   const match_rules: Record<string, unknown> = {
     category_ids: categoryIds,
   };
-  const targetTiers: string[] = Array.isArray(card.target_tiers) ? card.target_tiers : [];
+  const targetTiers: string[] = Array.isArray(contentSource.target_tiers) ? contentSource.target_tiers : [];
   if (targetTiers.length > 0) match_rules.target_tiers = targetTiers;
-  if ((card.min_experience_years ?? 0) > 0) {
-    match_rules.min_experience_years = card.min_experience_years;
+  if ((contentSource.min_experience_years ?? 0) > 0) {
+    match_rules.min_experience_years = contentSource.min_experience_years;
   }
-  if (Array.isArray(card.target_languages) && card.target_languages.length > 0) {
-    match_rules.target_languages = card.target_languages;
+  if (Array.isArray(contentSource.target_languages) && contentSource.target_languages.length > 0) {
+    match_rules.target_languages = contentSource.target_languages;
   }
   const targetCountryIds = (countryRows ?? []).map((r: any) => r.country_id as string);
   if (targetCountryIds.length > 0) match_rules.target_country_ids = targetCountryIds;
@@ -283,13 +302,13 @@ export async function buildSquadhirePayloadForCard(
   const content: Record<string, unknown> = {
     title,
     description,
-    brand_name: card.brand_name ?? null,
-    business_nature: card.business_nature ?? null,
-    working_days: card.working_days ?? [],
-    notes: card.notes ?? null,
+    brand_name: contentSource.brand_name ?? null,
+    business_nature: contentSource.business_nature ?? null,
+    working_days: contentSource.working_days ?? [],
+    notes: contentSource.notes ?? null,
     subscription_name: subscriptionName,
     plan_name: planName,
-    custom_deliverables: card.custom_deliverables ?? [],
+    custom_deliverables: contentSource.custom_deliverables ?? [],
   };
   // Attach the resolved partner price only when we have both amount and
   // currency — Profiles' renderer hides the Payment section on missing data.

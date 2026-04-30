@@ -1,8 +1,10 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
-import { hydrateCard } from '../utils/subscriptionCards';
+import { hydrateCard, matchPartnersForCard } from '../utils/subscriptionCards';
+import { buildSquadhirePayloadForCard, deliverCardToSquadhire } from '../utils/squadhireWebhook';
 
 const router = Router();
 
@@ -23,6 +25,7 @@ router.get('/', async (req: Request, res: Response) => {
     let query = supabaseAdmin
       .from('subscription_cards')
       .select('*')
+      .is('parent_card_id', null)
       .order('published_at', { ascending: false });
 
     if (stateParam === 'published' || stateParam === 'closed') {
@@ -151,6 +154,21 @@ router.get('/', async (req: Request, res: Response) => {
       };
     }));
 
+    // Attach secondary card counts to each primary card.
+    const cardIds = list.map((c: any) => c.id);
+    const { data: secondaryRows } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('parent_card_id')
+      .in('parent_card_id', cardIds.length ? cardIds : ['00000000-0000-0000-0000-000000000000']);
+    const secondaryCounts: Record<string, number> = {};
+    (secondaryRows || []).forEach((r: any) => {
+      secondaryCounts[r.parent_card_id] = (secondaryCounts[r.parent_card_id] || 0) + 1;
+    });
+    hydrated = hydrated.map((c: any) => ({
+      ...c,
+      secondary_card_count: secondaryCounts[c.id] || 0,
+    }));
+
     if (search) {
       const needle = search.toLowerCase();
       hydrated = hydrated.filter((c: any) =>
@@ -229,6 +247,159 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
     res.json({ success: true, data: { partners, talents } });
   } catch (err: any) {
     console.error('Admin get card recipients error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// GET /admin/subscription-cards/:id/secondary-cards
+// List secondary cards for a primary card, hydrated with recipient counts.
+// ============================================================
+router.get('/:id/secondary-cards', async (req: Request, res: Response) => {
+  try {
+    const parentId = req.params.id as string;
+
+    const { data: parent } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, submission_subscription_id')
+      .eq('id', parentId)
+      .is('parent_card_id', null)
+      .maybeSingle();
+    if (!parent) {
+      res.status(404).json({ success: false, error: 'Primary card not found' });
+      return;
+    }
+
+    const { data: secondaries, error } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('*')
+      .eq('parent_card_id', parentId)
+      .order('published_at', { ascending: false });
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const hydrated = await Promise.all(
+      (secondaries || []).map((card: any) => hydrateCard(card, parentId)),
+    );
+
+    res.json({ success: true, data: hydrated });
+  } catch (err: any) {
+    console.error('Admin list secondary cards error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/secondary-cards
+// Create and immediately publish a secondary card.
+// ============================================================
+const createSecondarySchema = z.object({
+  partner_price_override: z.number().int().min(0).nullable().optional(),
+  distribution: z.enum(['broadcast', 'manual']).default('manual'),
+});
+
+router.post('/:id/secondary-cards', async (req: Request, res: Response) => {
+  try {
+    const parentId = req.params.id as string;
+    const parsed = createSecondarySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.errors[0].message });
+      return;
+    }
+    const body = parsed.data;
+
+    const { data: parent } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, squadhire_category_ids')
+      .eq('id', parentId)
+      .is('parent_card_id', null)
+      .maybeSingle();
+    if (!parent) {
+      res.status(404).json({ success: false, error: 'Primary card not found' });
+      return;
+    }
+    if (parent.state !== 'published') {
+      res.status(409).json({ success: false, error: 'Primary card must be published' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const { data: secondary, error: insErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .insert({
+        parent_card_id: parentId,
+        submission_subscription_id: null,
+        state: 'published',
+        distribution: body.distribution,
+        partner_price_override: body.partner_price_override ?? null,
+        published_at: now,
+        published_by: (req as any).userId,
+        squadhire_category_ids: parent.squadhire_category_ids || [],
+      })
+      .select('*')
+      .single();
+    if (insErr) {
+      res.status(500).json({ success: false, error: insErr.message });
+      return;
+    }
+
+    if (body.distribution === 'broadcast') {
+      await matchPartnersForCard(secondary.id, parentId);
+    }
+
+    buildSquadhirePayloadForCard(secondary.id)
+      .then((payload) => payload && deliverCardToSquadhire(secondary.id, payload))
+      .catch((err) =>
+        console.error('[create-secondary] squadhire delivery error', err),
+      );
+
+    const hydrated = await hydrateCard(secondary, parentId);
+    res.json({ success: true, data: hydrated });
+  } catch (err: any) {
+    console.error('Admin create secondary card error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/close-secondary
+// Close a single secondary card independently.
+// ============================================================
+router.post('/:id/close-secondary', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, parent_card_id')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card || !card.parent_card_id) {
+      res.status(404).json({ success: false, error: 'Secondary card not found' });
+      return;
+    }
+    if (card.state !== 'published') {
+      res.status(409).json({ success: false, error: 'Card is not published' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    await supabaseAdmin
+      .from('subscription_cards')
+      .update({ state: 'closed', closed_at: now })
+      .eq('id', cardId);
+
+    buildSquadhirePayloadForCard(cardId)
+      .then((payload) => payload && deliverCardToSquadhire(cardId, payload))
+      .catch((err) =>
+        console.error('[close-secondary] squadhire delivery error', err),
+      );
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Admin close secondary card error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
