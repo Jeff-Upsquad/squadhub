@@ -70,21 +70,97 @@ export default function AdminPublishedCardRecipientsPanel({
   title: string;
   onClose: () => void;
 }) {
-  const cardId = card.id;
+  const [viewingSecondaryId, setViewingSecondaryId] = useState<string | null>(null);
+  const qc = useQueryClient();
+
+  const { data: secondaryCards } = useQuery({
+    queryKey: ['admin-secondary-cards', card.id],
+    queryFn: () =>
+      api.get(`/admin/subscription-cards/${card.id}/secondary-cards`).then((r) => r.data?.data as PublishedCard[]),
+    enabled: !card.parent_card_id,
+  });
+
+  const activeSecondary = useMemo(
+    () => (secondaryCards || []).find((s) => s.id === viewingSecondaryId) || null,
+    [secondaryCards, viewingSecondaryId],
+  );
+
+  const activeCard = activeSecondary || card;
+  const activeCardId = activeCard.id;
+  const isSecondaryView = !!activeSecondary;
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative flex h-full w-[480px] flex-col bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-4">
+          {isSecondaryView ? (
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                onClick={() => setViewingSecondaryId(null)}
+                className="shrink-0 rounded-md p-1 text-[#62748E] hover:bg-[#F8FAFC]"
+                title="Back to primary card"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <h3 className="text-base font-semibold text-[#0F172B] truncate">Secondary Card</h3>
+            </div>
+          ) : (
+            <h3 className="text-base font-semibold text-[#0F172B] truncate">{title}</h3>
+          )}
+          <button onClick={onClose} className="rounded-md p-1 text-[#62748E] hover:bg-[#F8FAFC]">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <CardPanelContent
+          card={card}
+          activeCard={activeCard}
+          activeCardId={activeCardId}
+          isSecondaryView={isSecondaryView}
+          secondaryCards={secondaryCards || []}
+          onViewSecondary={setViewingSecondaryId}
+          onClose={onClose}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CardPanelContent({
+  card,
+  activeCard,
+  activeCardId,
+  isSecondaryView,
+  secondaryCards,
+  onViewSecondary,
+  onClose,
+}: {
+  card: PublishedCard;
+  activeCard: PublishedCard;
+  activeCardId: string;
+  isSecondaryView: boolean;
+  secondaryCards: PublishedCard[];
+  onViewSecondary: (id: string | null) => void;
+  onClose: () => void;
+}) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const qc = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['admin-card-recipients', cardId],
+    queryKey: ['admin-card-recipients', activeCardId],
     queryFn: () =>
-      api.get(`/admin/subscription-cards/${cardId}/recipients`).then((r) => r.data?.data as RecipientsResponse),
+      api.get(`/admin/subscription-cards/${activeCardId}/recipients`).then((r) => r.data?.data as RecipientsResponse),
   });
 
   const removePartner = useMutation({
     mutationFn: (partnerId: string) =>
-      api.delete(`/admin/subscription-cards/${cardId}/recipients/${partnerId}`),
+      api.delete(`/admin/subscription-cards/${activeCardId}/recipients/${partnerId}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-card-recipients', cardId] });
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
     },
     onError: (err: any) =>
       alert(err?.response?.data?.error || err.message || 'Failed to remove partner'),
@@ -92,9 +168,9 @@ export default function AdminPublishedCardRecipientsPanel({
 
   const removeTalent = useMutation({
     mutationFn: (talentId: string) =>
-      api.delete(`/admin/subscription-cards/${cardId}/external-recipients/${talentId}`),
+      api.delete(`/admin/subscription-cards/${activeCardId}/external-recipients/${talentId}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-card-recipients', cardId] });
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
     },
     onError: (err: any) =>
       alert(err?.response?.data?.error || err.message || 'Failed to remove talent'),
@@ -102,10 +178,11 @@ export default function AdminPublishedCardRecipientsPanel({
 
   const selectPartner = useMutation({
     mutationFn: (partnerId: string) =>
-      api.post(`/admin/subscription-cards/${cardId}/select-partner`, { partner_id: partnerId }),
+      api.post(`/admin/subscription-cards/${activeCardId}/select-partner`, { partner_id: partnerId }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-card-recipients', cardId] });
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
       qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
     },
     onError: (err: any) =>
       alert(err?.response?.data?.error || err.message || 'Failed to select partner'),
@@ -113,10 +190,11 @@ export default function AdminPublishedCardRecipientsPanel({
 
   const selectTalent = useMutation({
     mutationFn: (talentId: string) =>
-      api.post(`/admin/subscription-cards/${cardId}/select-talent`, { talent_id: talentId }),
+      api.post(`/admin/subscription-cards/${activeCardId}/select-talent`, { talent_id: talentId }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-card-recipients', cardId] });
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
       qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
     },
     onError: (err: any) =>
       alert(err?.response?.data?.error || err.message || 'Failed to select talent'),
@@ -124,16 +202,28 @@ export default function AdminPublishedCardRecipientsPanel({
 
   const undoSelection = useMutation({
     mutationFn: () =>
-      api.post(`/admin/subscription-cards/${cardId}/undo-selection`),
+      api.post(`/admin/subscription-cards/${activeCardId}/undo-selection`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-card-recipients', cardId] });
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
       qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
     },
     onError: (err: any) =>
       alert(err?.response?.data?.error || err.message || 'Failed to undo selection'),
   });
 
-  const hasSelection = card.selected_recipient_type != null;
+  const closeSecondary = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${activeCardId}/close-secondary`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      onViewSecondary(null);
+    },
+    onError: (err: any) =>
+      alert(err?.response?.data?.error || err.message || 'Failed to close secondary card'),
+  });
+
+  const hasSelection = activeCard.selected_recipient_type != null;
 
   function confirmRemovePartner(partnerId: string, name: string) {
     if (!window.confirm(`Remove ${name} from this card? They'll stop seeing it in their opportunities.`)) {
@@ -159,6 +249,10 @@ export default function AdminPublishedCardRecipientsPanel({
     if (!window.confirm('Undo the selection? The card will reopen as published.')) return;
     undoSelection.mutate();
   }
+  function confirmCloseSecondary() {
+    if (!window.confirm('Close this secondary card? Recipients will no longer see it.')) return;
+    closeSecondary.mutate();
+  }
 
   const { data: countriesRes } = useQuery({
     queryKey: ['public-countries'],
@@ -181,145 +275,320 @@ export default function AdminPublishedCardRecipientsPanel({
   }, [data]);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative flex h-full w-[480px] flex-col bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-4">
-          <h3 className="text-base font-semibold text-[#0F172B]">{title}</h3>
-          <button onClick={onClose} className="rounded-md p-1 text-[#62748E] hover:bg-[#F8FAFC]">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+    <>
+      <div className="flex-1 overflow-y-auto">
+        <CardDetails card={card} activeCard={activeCard} isSecondaryView={isSecondaryView} countries={countries} />
+
+        {isSecondaryView && activeCard.state === 'published' && (
+          <div className="border-b border-[#E2E8F0] px-5 py-2.5">
+            <button
+              onClick={confirmCloseSecondary}
+              disabled={closeSecondary.isPending}
+              className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+            >
+              Close this secondary card
+            </button>
+          </div>
+        )}
+
+        {!isSecondaryView && !card.parent_card_id && (
+          <SecondaryCardsSection
+            parentCard={card}
+            secondaryCards={secondaryCards}
+            onViewSecondary={onViewSecondary}
+          />
+        )}
+
+        <div className="flex items-center justify-between border-y border-[#E2E8F0] bg-[#F8FAFC] px-5 py-2.5">
+          {hasSelection ? (
+            <>
+              <p className="text-xs text-blue-700 font-medium">A recipient has been selected for this card.</p>
+              <button
+                onClick={confirmUndoSelection}
+                disabled={undoSelection.isPending}
+                className="rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-medium text-[#62748E] hover:bg-[#F8FAFC] disabled:opacity-50"
+              >
+                Undo selection
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-[#62748E]">Hand-pick a partner or talent for this card.</p>
+              <button
+                onClick={() => setPickerOpen(true)}
+                className="rounded-md bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+              >
+                Assign
+              </button>
+            </>
+          )}
         </div>
-        <div className="flex-1 overflow-y-auto">
-          <CardDetails card={card} countries={countries} />
-          <div className="flex items-center justify-between border-y border-[#E2E8F0] bg-[#F8FAFC] px-5 py-2.5">
-            {hasSelection ? (
-              <>
-                <p className="text-xs text-blue-700 font-medium">A recipient has been selected for this card.</p>
-                <button
-                  onClick={confirmUndoSelection}
-                  disabled={undoSelection.isPending}
-                  className="rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-medium text-[#62748E] hover:bg-[#F8FAFC] disabled:opacity-50"
-                >
-                  Undo selection
-                </button>
-              </>
-            ) : (
-              <>
-                <p className="text-xs text-[#62748E]">Hand-pick a partner or talent for this card.</p>
-                <button
-                  onClick={() => setPickerOpen(true)}
-                  className="rounded-md bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
-                >
-                  Assign
-                </button>
-              </>
-            )}
-          </div>
-          <div className="p-5 space-y-6 text-sm">
-            {isLoading ? (
-              <p className="text-center text-xs text-[#90A1B9]">Loading…</p>
-            ) : error ? (
-              <p className="text-center text-xs text-red-600">Failed to load recipients.</p>
-            ) : (
-              <>
-                <Section title="Partners">
-                  <Subgroup
-                    label="Accepted"
-                    onRemove={(id, name) => confirmRemovePartner(id, name)}
-                    isRemoving={removePartner.isPending}
-                    onSelect={!hasSelection && card.state === 'published' ? (id, name) => confirmSelectPartner(id, name) : undefined}
-                    isSelecting={selectPartner.isPending}
-                    items={partnerGroups.accepted.map((p) => ({
-                      key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
-                      selected_at: p.selected_at ?? null, passed_over_at: p.passed_over_at ?? null,
-                    }))}
-                  />
-                  <Subgroup
-                    label="Rejected"
-                    onRemove={(id, name) => confirmRemovePartner(id, name)}
-                    isRemoving={removePartner.isPending}
-                    items={partnerGroups.rejected.map((p) => ({
-                      key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
-                      selected_at: null, passed_over_at: null,
-                    }))}
-                  />
-                  <Subgroup
-                    label="Pending"
-                    onRemove={(id, name) => confirmRemovePartner(id, name)}
-                    isRemoving={removePartner.isPending}
-                    items={partnerGroups.pending.map((p) => ({
-                      key: p.id, name: p.name, status: p.status, responded_at: null, assigned_manually: !!p.assigned_manually,
-                      selected_at: null, passed_over_at: null,
-                    }))}
-                  />
-                </Section>
-                <Section title="Talents">
-                  <Subgroup
-                    label="Accepted"
-                    onRemove={(id, name) => confirmRemoveTalent(id, name)}
-                    isRemoving={removeTalent.isPending}
-                    onSelect={!hasSelection && card.state === 'published' ? (id, name) => confirmSelectTalent(id, name) : undefined}
-                    isSelecting={selectTalent.isPending}
-                    items={talentGroups.accepted.map((t) => ({
-                      key: t.external_user_id,
-                      name: t.name || 'Unknown talent',
-                      subtitle: t.external_user_id.slice(0, 8),
-                      status: t.status,
-                      responded_at: t.responded_at,
-                      assigned_manually: !!t.assigned_manually,
-                      selected_at: t.selected_at ?? null, passed_over_at: t.passed_over_at ?? null,
-                    }))}
-                  />
-                  <Subgroup
-                    label="Rejected"
-                    onRemove={(id, name) => confirmRemoveTalent(id, name)}
-                    isRemoving={removeTalent.isPending}
-                    items={talentGroups.rejected.map((t) => ({
-                      key: t.external_user_id,
-                      name: t.name || 'Unknown talent',
-                      subtitle: t.external_user_id.slice(0, 8),
-                      status: t.status,
-                      responded_at: t.responded_at,
-                      assigned_manually: !!t.assigned_manually,
-                      selected_at: null, passed_over_at: null,
-                    }))}
-                  />
-                  <Subgroup
-                    label="Pending"
-                    onRemove={(id, name) => confirmRemoveTalent(id, name)}
-                    isRemoving={removeTalent.isPending}
-                    items={talentGroups.pending.map((t) => ({
-                      key: t.external_user_id,
-                      name: t.name || 'Unknown talent',
-                      subtitle: t.external_user_id.slice(0, 8),
-                      status: t.status,
-                      responded_at: null,
-                      assigned_manually: !!t.assigned_manually,
-                      selected_at: null, passed_over_at: null,
-                    }))}
-                  />
-                </Section>
-              </>
-            )}
-          </div>
+        <div className="p-5 space-y-6 text-sm">
+          {isLoading ? (
+            <p className="text-center text-xs text-[#90A1B9]">Loading…</p>
+          ) : error ? (
+            <p className="text-center text-xs text-red-600">Failed to load recipients.</p>
+          ) : (
+            <>
+              <Section title="Partners">
+                <Subgroup
+                  label="Accepted"
+                  onRemove={(id, name) => confirmRemovePartner(id, name)}
+                  isRemoving={removePartner.isPending}
+                  onSelect={!hasSelection && activeCard.state === 'published' ? (id, name) => confirmSelectPartner(id, name) : undefined}
+                  isSelecting={selectPartner.isPending}
+                  items={partnerGroups.accepted.map((p) => ({
+                    key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
+                    selected_at: p.selected_at ?? null, passed_over_at: p.passed_over_at ?? null,
+                  }))}
+                />
+                <Subgroup
+                  label="Rejected"
+                  onRemove={(id, name) => confirmRemovePartner(id, name)}
+                  isRemoving={removePartner.isPending}
+                  items={partnerGroups.rejected.map((p) => ({
+                    key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
+                    selected_at: null, passed_over_at: null,
+                  }))}
+                />
+                <Subgroup
+                  label="Pending"
+                  onRemove={(id, name) => confirmRemovePartner(id, name)}
+                  isRemoving={removePartner.isPending}
+                  items={partnerGroups.pending.map((p) => ({
+                    key: p.id, name: p.name, status: p.status, responded_at: null, assigned_manually: !!p.assigned_manually,
+                    selected_at: null, passed_over_at: null,
+                  }))}
+                />
+              </Section>
+              <Section title="Talents">
+                <Subgroup
+                  label="Accepted"
+                  onRemove={(id, name) => confirmRemoveTalent(id, name)}
+                  isRemoving={removeTalent.isPending}
+                  onSelect={!hasSelection && activeCard.state === 'published' ? (id, name) => confirmSelectTalent(id, name) : undefined}
+                  isSelecting={selectTalent.isPending}
+                  items={talentGroups.accepted.map((t) => ({
+                    key: t.external_user_id,
+                    name: t.name || 'Unknown talent',
+                    subtitle: t.external_user_id.slice(0, 8),
+                    status: t.status,
+                    responded_at: t.responded_at,
+                    assigned_manually: !!t.assigned_manually,
+                    selected_at: t.selected_at ?? null, passed_over_at: t.passed_over_at ?? null,
+                  }))}
+                />
+                <Subgroup
+                  label="Rejected"
+                  onRemove={(id, name) => confirmRemoveTalent(id, name)}
+                  isRemoving={removeTalent.isPending}
+                  items={talentGroups.rejected.map((t) => ({
+                    key: t.external_user_id,
+                    name: t.name || 'Unknown talent',
+                    subtitle: t.external_user_id.slice(0, 8),
+                    status: t.status,
+                    responded_at: t.responded_at,
+                    assigned_manually: !!t.assigned_manually,
+                    selected_at: null, passed_over_at: null,
+                  }))}
+                />
+                <Subgroup
+                  label="Pending"
+                  onRemove={(id, name) => confirmRemoveTalent(id, name)}
+                  isRemoving={removeTalent.isPending}
+                  items={talentGroups.pending.map((t) => ({
+                    key: t.external_user_id,
+                    name: t.name || 'Unknown talent',
+                    subtitle: t.external_user_id.slice(0, 8),
+                    status: t.status,
+                    responded_at: null,
+                    assigned_manually: !!t.assigned_manually,
+                    selected_at: null, passed_over_at: null,
+                  }))}
+                />
+              </Section>
+            </>
+          )}
         </div>
       </div>
       {pickerOpen && (
-        <AssignRecipientPicker cardId={cardId} onClose={() => setPickerOpen(false)} />
+        <AssignRecipientPicker cardId={activeCardId} onClose={() => setPickerOpen(false)} />
+      )}
+    </>
+  );
+}
+
+// ============================================================
+// Secondary Cards Section
+// ============================================================
+
+function SecondaryCardsSection({
+  parentCard,
+  secondaryCards,
+  onViewSecondary,
+}: {
+  parentCard: PublishedCard;
+  secondaryCards: PublishedCard[];
+  onViewSecondary: (id: string) => void;
+}) {
+  const [formOpen, setFormOpen] = useState(false);
+  const [price, setPrice] = useState<string>('');
+  const [distribution, setDistribution] = useState<'broadcast' | 'manual'>('manual');
+  const qc = useQueryClient();
+
+  const createSecondary = useMutation({
+    mutationFn: (body: { partner_price_override?: number | null; distribution: string }) =>
+      api.post(`/admin/subscription-cards/${parentCard.id}/secondary-cards`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', parentCard.id] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      setFormOpen(false);
+      setPrice('');
+      setDistribution('manual');
+    },
+    onError: (err: any) =>
+      alert(err?.response?.data?.error || err.message || 'Failed to create secondary card'),
+  });
+
+  function handleCreate() {
+    const priceVal = price.trim() ? parseInt(price, 10) : null;
+    if (priceVal !== null && (isNaN(priceVal) || priceVal < 0)) {
+      alert('Price must be a positive number');
+      return;
+    }
+    createSecondary.mutate({
+      partner_price_override: priceVal,
+      distribution,
+    });
+  }
+
+  const plan = parentCard.submission_subscription?.plan;
+  const planPrice = plan?.pricing?.[0];
+  const priceCurrency = planPrice?.country?.currency || parentCard.submission?.country?.currency || '';
+
+  return (
+    <div className="border-b border-[#E2E8F0] px-5 py-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-[11px] font-semibold uppercase tracking-wider text-[#90A1B9]">
+          Secondary Cards ({secondaryCards.length})
+        </h4>
+        {parentCard.state === 'published' && (
+          <button
+            onClick={() => setFormOpen(!formOpen)}
+            className="rounded-md bg-indigo-600 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-indigo-700"
+          >
+            {formOpen ? 'Cancel' : 'Create'}
+          </button>
+        )}
+      </div>
+
+      {formOpen && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-3 space-y-2.5">
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-[#62748E] w-24 shrink-0">Partner price</label>
+            <div className="flex items-center gap-1 flex-1">
+              {priceCurrency && <span className="text-xs text-[#90A1B9]">{priceCurrency}</span>}
+              <input
+                type="number"
+                min={0}
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="Same as primary"
+                className="w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs text-[#0F172B] placeholder:text-[#90A1B9] focus:outline-none focus:ring-1 focus:ring-indigo-300"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-[#62748E] w-24 shrink-0">Distribution</label>
+            <select
+              value={distribution}
+              onChange={(e) => setDistribution(e.target.value as 'broadcast' | 'manual')}
+              className="flex-1 rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs text-[#0F172B] focus:outline-none focus:ring-1 focus:ring-indigo-300"
+            >
+              <option value="manual">Soft publish (manual)</option>
+              <option value="broadcast">Broadcast</option>
+            </select>
+          </div>
+          <button
+            onClick={handleCreate}
+            disabled={createSecondary.isPending}
+            className="w-full rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {createSecondary.isPending ? 'Creating…' : 'Create & Publish'}
+          </button>
+        </div>
+      )}
+
+      {secondaryCards.length === 0 && !formOpen && (
+        <p className="text-xs text-[#90A1B9]">No secondary cards yet.</p>
+      )}
+
+      {secondaryCards.length > 0 && (
+        <ul className="divide-y divide-[#E2E8F0] rounded-lg border border-[#E2E8F0]">
+          {secondaryCards.map((sc) => {
+            const stateColor = sc.state === 'published' ? '#10B981' : '#6B7280';
+            const stateLabel = sc.state === 'published' ? 'Active' : 'Closed';
+            const distLabel = sc.distribution === 'manual' ? 'Soft publish' : 'Broadcast';
+            const partners = sc.recipient_counts?.partners ?? { pending: 0, accepted: 0, rejected: 0 };
+            const talents = sc.recipient_counts?.talents ?? { accepted: 0, rejected: 0 };
+            return (
+              <li key={sc.id}>
+                <button
+                  onClick={() => onViewSecondary(sc.id)}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-[#F8FAFC] transition"
+                >
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold"
+                        style={{ backgroundColor: `${stateColor}18`, color: stateColor }}
+                      >
+                        <span className="h-1 w-1 rounded-full" style={{ backgroundColor: stateColor }} />
+                        {stateLabel}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-600">
+                        {distLabel}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#0F172B]">
+                      {sc.partner_price_override != null
+                        ? `${priceCurrency} ${sc.partner_price_override.toLocaleString()}`
+                        : 'Same price as primary'}
+                    </p>
+                    <p className="text-[10px] text-[#90A1B9]">
+                      Published {formatRelative(sc.published_at)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-700">
+                      <span className="text-emerald-700">{partners.accepted + talents.accepted}&#10003;</span>
+                      <span className="text-red-600">{partners.rejected + talents.rejected}&#10007;</span>
+                      <span className="text-amber-700">{partners.pending}&#9203;</span>
+                    </span>
+                    <svg className="h-3.5 w-3.5 text-[#90A1B9]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );
 }
 
-function CardDetails({ card, countries }: { card: PublishedCard; countries: Country[] }) {
+// ============================================================
+// Card Details
+// ============================================================
+
+function CardDetails({ card, activeCard, isSecondaryView, countries }: { card: PublishedCard; activeCard: PublishedCard; isSecondaryView: boolean; countries: Country[] }) {
   const plan = card.submission_subscription?.plan;
   const planLabel = plan ? `${plan.plan} · ${plan.tier}` : '';
-  const stateColor = card.state === 'published' ? '#10B981' : '#6B7280';
-  const stateLabel = card.state === 'published' ? 'Active' : 'Cancelled';
-  const distLabel = card.distribution === 'manual' ? 'Soft publish' : 'Broadcast';
+  const stateColor = activeCard.state === 'published' ? '#10B981' : '#6B7280';
+  const stateLabel = activeCard.state === 'published' ? 'Active' : 'Cancelled';
+  const distLabel = activeCard.distribution === 'manual' ? 'Soft publish' : 'Broadcast';
   const publisher = card.published_by_user;
 
   const countryNameById = useMemo(() => {
@@ -343,6 +612,14 @@ function CardDetails({ card, countries }: { card: PublishedCard; countries: Coun
 
   return (
     <div className="border-b border-[#E2E8F0] px-5 py-4 space-y-4 text-sm">
+      {isSecondaryView && (
+        <div className="rounded-md bg-indigo-50 border border-indigo-200 px-3 py-2">
+          <p className="text-[11px] font-medium text-indigo-700">
+            Secondary card — content inherited from primary
+          </p>
+        </div>
+      )}
+
       <div className="space-y-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
           <span
@@ -356,7 +633,7 @@ function CardDetails({ card, countries }: { card: PublishedCard; countries: Coun
         </div>
         {planLabel && <p className="text-xs text-[#62748E]">{planLabel}</p>}
         <p className="text-xs text-[#62748E]">
-          Published {formatFullDateTime(card.published_at)}
+          Published {formatFullDateTime(activeCard.published_at || card.published_at)}
           {publisher && (
             <> by {publisher.display_name || publisher.email || publisher.id.slice(0, 8)}</>
           )}
@@ -397,14 +674,16 @@ function CardDetails({ card, countries }: { card: PublishedCard; countries: Coun
         </DetailSection>
       )}
 
-      {(planPrice || card.partner_price_override != null) && (
-        <DetailSection title="Pricing">
-          {planPrice && <DetailRow label="Plan price" value={`${priceCurrency} ${planPrice.price.toLocaleString()}`} />}
-          {card.partner_price_override != null && (
-            <DetailRow label="Partner override" value={`${priceCurrency} ${card.partner_price_override.toLocaleString()}`} />
-          )}
-        </DetailSection>
-      )}
+      <DetailSection title="Pricing">
+        {planPrice && <DetailRow label="Plan price" value={`${priceCurrency} ${planPrice.price.toLocaleString()}`} />}
+        {activeCard.partner_price_override != null ? (
+          <DetailRow label="Partner price" value={`${priceCurrency} ${activeCard.partner_price_override.toLocaleString()}`} />
+        ) : isSecondaryView ? (
+          <DetailRow label="Partner price" value="Same as primary" />
+        ) : card.partner_price_override != null ? (
+          <DetailRow label="Partner override" value={`${priceCurrency} ${card.partner_price_override.toLocaleString()}`} />
+        ) : null}
+      </DetailSection>
     </div>
   );
 }

@@ -25,6 +25,8 @@ export type PublishedCard = {
   squadhire_category_ids?: string[] | null;
   selected_recipient_type?: 'partner' | 'talent' | null;
   selected_recipient_id?: string | null;
+  parent_card_id?: string | null;
+  secondary_card_count?: number;
   squadhire_synced_at?: string | null;
   squadhire_sync_attempts?: number | null;
   squadhire_sync_last_error?: string | null;
@@ -338,6 +340,11 @@ function PublishedCardRow({ card, onOpen, showCancelledTag }: { card: PublishedC
         {card.selected_recipient_type && (
           <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
             Selected ({card.selected_recipient_type})
+          </span>
+        )}
+        {(card.secondary_card_count ?? 0) > 0 && (
+          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-800">
+            {card.secondary_card_count} secondary
           </span>
         )}
         <CountChip label="Partners" accepted={partners.accepted} rejected={partners.rejected} pending={partners.pending} />

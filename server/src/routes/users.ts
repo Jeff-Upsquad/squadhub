@@ -380,18 +380,36 @@ router.get('/me/published-cards/:cardId/recipients', requireAuth, async (req: Re
       return;
     }
 
+    // Aggregate recipients from primary + all secondary cards.
+    const allCardIds = [card.id];
+    const { data: secondaries } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id')
+      .eq('parent_card_id', card.id);
+    (secondaries || []).forEach((s: any) => allCardIds.push(s.id));
+
     const [{ data: partnerRows }, { data: talentRows }] = await Promise.all([
       supabaseAdmin
         .from('subscription_card_recipients')
         .select('partner_id, status, responded_at, assigned_manually')
-        .eq('card_id', card.id),
+        .in('card_id', allCardIds),
       supabaseAdmin
         .from('subscription_card_external_recipients')
         .select('external_user_id, talent_name, status, responded_at, assigned_manually')
-        .eq('card_id', card.id),
+        .in('card_id', allCardIds),
     ]);
 
-    const partnerIds = Array.from(new Set((partnerRows || []).map((r: any) => r.partner_id)));
+    // Deduplicate partners by partner_id, keeping best status.
+    const STATUS_RANK: Record<string, number> = { accepted: 2, pending: 1, rejected: 0 };
+    const partnerMap = new Map<string, any>();
+    for (const r of partnerRows || []) {
+      const prev = partnerMap.get(r.partner_id);
+      if (!prev || (STATUS_RANK[r.status] ?? 0) > (STATUS_RANK[prev.status] ?? 0)) {
+        partnerMap.set(r.partner_id, r);
+      }
+    }
+
+    const partnerIds = Array.from(partnerMap.keys());
     const { data: users } = await supabaseAdmin
       .from('users')
       .select('id, display_name, email')
@@ -399,7 +417,7 @@ router.get('/me/published-cards/:cardId/recipients', requireAuth, async (req: Re
     const userById: Record<string, any> = {};
     (users || []).forEach((u: any) => { userById[u.id] = u; });
 
-    const partners = (partnerRows || []).map((r: any) => {
+    const partners = Array.from(partnerMap.values()).map((r: any) => {
       const u = userById[r.partner_id];
       return {
         id: r.partner_id,
@@ -410,7 +428,15 @@ router.get('/me/published-cards/:cardId/recipients', requireAuth, async (req: Re
       };
     });
 
-    const talents = (talentRows || []).map((r: any) => ({
+    // Deduplicate talents by external_user_id, keeping best status.
+    const talentMap = new Map<string, any>();
+    for (const r of talentRows || []) {
+      const prev = talentMap.get(r.external_user_id);
+      if (!prev || (STATUS_RANK[r.status] ?? 0) > (STATUS_RANK[prev.status] ?? 0)) {
+        talentMap.set(r.external_user_id, r);
+      }
+    }
+    const talents = Array.from(talentMap.values()).map((r: any) => ({
       external_user_id: r.external_user_id,
       name: r.talent_name || null,
       status: r.status,
