@@ -5,7 +5,6 @@ import { usePMStore } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
 import { groupTasks, isToday, type GroupBy } from '../../../lib/taskGrouping';
 
-const STORAGE_KEY = 'squadhub:todayList:groupBy';
 const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'priority', label: 'Priority' },
@@ -39,18 +38,10 @@ export default function TodayList() {
     return all.filter((t) => focusedSet.has(t.id) || isToday(t.work_date, tz));
   }, [data, focusedTodayIds, focusedTodayDate, tz]);
 
-  const [groupBy, setGroupBy] = useState<GroupBy>(() => {
-    if (typeof window === 'undefined') return 'none';
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    const allowed = GROUP_OPTIONS.map((o) => o.value) as string[];
-    return raw && allowed.includes(raw) ? (raw as GroupBy) : 'none';
-  });
+  const groupBy = usePMStore((s) => s.todayListGroupBy);
+  const setTodayListGroupBy = usePMStore((s) => s.setTodayListGroupBy);
   const [menuOpen, setMenuOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    try { window.localStorage.setItem(STORAGE_KEY, groupBy); } catch { /* ignore */ }
-  }, [groupBy]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -112,7 +103,7 @@ export default function TodayList() {
                   key={opt.value}
                   type="button"
                   role="menuitem"
-                  onClick={() => { setGroupBy(opt.value); setMenuOpen(false); }}
+                  onClick={() => { setTodayListGroupBy(opt.value); setMenuOpen(false); }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',

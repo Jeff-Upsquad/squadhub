@@ -38,6 +38,7 @@ const nextConfig = {
       { source: '/notifications/:path*', destination: `${API_URL}/notifications/:path*` },
       { source: '/lms/:path*', destination: `${API_URL}/lms/:path*` },
       { source: '/profile-access/:path*', destination: `${API_URL}/profile-access/:path*` },
+      { source: '/view-preferences/:path*', destination: `${API_URL}/view-preferences/:path*` },
     ],
   }),
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { GroupBy } from '../lib/taskGrouping';
+import type { GroupBy, SortBy } from '../lib/taskGrouping';
 import type { TaskFilterState } from '../lib/filters';
 import { isFilterEmpty } from '../lib/filters';
 
@@ -35,6 +35,10 @@ interface PMState {
   filtersByScope: Record<string, TaskFilterState>;
   focusedTodayIds: string[];
   focusedTodayDate: string;
+  groupByScope: Record<string, GroupBy>;
+  sortByScope: Record<string, SortBy>;
+  focusTodayScope: Record<string, boolean>;
+  todayListGroupBy: GroupBy;
   setActiveSpace: (id: string | null) => void;
   setActiveList: (id: string | null) => void;
   setActiveFolder: (id: string | null) => void;
@@ -55,9 +59,15 @@ interface PMState {
   stopTimer: () => TimerState | null;
   setScopeFilters: (scopeKey: string, next: TaskFilterState) => void;
   clearScopeFilters: (scopeKey: string) => void;
+  setScopedGroupBy: (scopeKey: string, value: GroupBy) => void;
+  setScopedSortBy: (scopeKey: string, value: SortBy) => void;
+  setScopedFocusToday: (scopeKey: string, value: boolean) => void;
+  setTodayListGroupBy: (value: GroupBy) => void;
   toggleFocusToday: (taskId: string) => void;
   isFocusedToday: (taskId: string) => boolean;
   resetFocusTodayIfStale: () => void;
+  _hydrateFromServer: (prefs: Record<string, unknown>) => void;
+  _getServerPayload: () => Record<string, unknown>;
   reset: () => void;
 }
 
@@ -65,6 +75,14 @@ const todayKey = (): string => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
+
+let _debouncedSave: (() => void) | null = null;
+export function _setDebouncedSave(fn: () => void) {
+  _debouncedSave = fn;
+}
+function triggerSave() {
+  _debouncedSave?.();
+}
 
 export const usePMStore = create<PMState>()(
   persist(
@@ -87,6 +105,10 @@ export const usePMStore = create<PMState>()(
       filtersByScope: {},
       focusedTodayIds: [],
       focusedTodayDate: todayKey(),
+      groupByScope: {},
+      sortByScope: {},
+      focusTodayScope: {},
+      todayListGroupBy: 'none',
 
       setActiveSpace: (id) => set({ activeSpaceId: id }),
       setActiveList: (id) => set({ activeListId: id, contextListId: id, selectedTasks: [], activeDesignFolderId: null, activeFolderId: null, activeSpacePageId: null }),
@@ -98,8 +120,8 @@ export const usePMStore = create<PMState>()(
       setActiveClient: (id) => set({ activeClientId: id }),
       setActiveDashboardTab: (tab) => set({ activeDashboardTab: tab }),
       setViewMode: (mode) => set({ viewMode: mode }),
-      setListGroupBy: (g) => set({ listGroupBy: g }),
-      setMyTasksOnly: (v) => set({ myTasksOnly: v }),
+      setListGroupBy: (g) => { set({ listGroupBy: g }); triggerSave(); },
+      setMyTasksOnly: (v) => { set({ myTasksOnly: v }); triggerSave(); },
       toggleGroupCollapse: (statusId) =>
         set((state) => ({
           collapsedGroups: {
@@ -127,7 +149,7 @@ export const usePMStore = create<PMState>()(
         set({ timer: null });
         return prev;
       },
-      setScopeFilters: (scopeKey, next) =>
+      setScopeFilters: (scopeKey, next) => {
         set((state) => {
           if (isFilterEmpty(next)) {
             if (!(scopeKey in state.filtersByScope)) return state;
@@ -135,13 +157,39 @@ export const usePMStore = create<PMState>()(
             return { filtersByScope: rest };
           }
           return { filtersByScope: { ...state.filtersByScope, [scopeKey]: next } };
-        }),
-      clearScopeFilters: (scopeKey) =>
+        });
+        triggerSave();
+      },
+      clearScopeFilters: (scopeKey) => {
         set((state) => {
           if (!(scopeKey in state.filtersByScope)) return state;
           const { [scopeKey]: _removed, ...rest } = state.filtersByScope;
           return { filtersByScope: rest };
-        }),
+        });
+        triggerSave();
+      },
+      setScopedGroupBy: (scopeKey, value) => {
+        set((state) => ({
+          groupByScope: { ...state.groupByScope, [scopeKey]: value },
+        }));
+        triggerSave();
+      },
+      setScopedSortBy: (scopeKey, value) => {
+        set((state) => ({
+          sortByScope: { ...state.sortByScope, [scopeKey]: value },
+        }));
+        triggerSave();
+      },
+      setScopedFocusToday: (scopeKey, value) => {
+        set((state) => ({
+          focusTodayScope: { ...state.focusTodayScope, [scopeKey]: value },
+        }));
+        triggerSave();
+      },
+      setTodayListGroupBy: (value) => {
+        set({ todayListGroupBy: value });
+        triggerSave();
+      },
       resetFocusTodayIfStale: () => {
         const today = todayKey();
         const state = get();
@@ -165,7 +213,30 @@ export const usePMStore = create<PMState>()(
         if (state.focusedTodayDate !== todayKey()) return false;
         return state.focusedTodayIds.includes(taskId);
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey() }),
+      _hydrateFromServer: (prefs) => {
+        const patch: Partial<PMState> = {};
+        if (prefs.listGroupBy !== undefined) patch.listGroupBy = prefs.listGroupBy as ListGroupBy;
+        if (prefs.myTasksOnly !== undefined) patch.myTasksOnly = prefs.myTasksOnly as boolean;
+        if (prefs.filtersByScope !== undefined) patch.filtersByScope = prefs.filtersByScope as Record<string, TaskFilterState>;
+        if (prefs.groupByScope !== undefined) patch.groupByScope = prefs.groupByScope as Record<string, GroupBy>;
+        if (prefs.sortByScope !== undefined) patch.sortByScope = prefs.sortByScope as Record<string, SortBy>;
+        if (prefs.focusTodayScope !== undefined) patch.focusTodayScope = prefs.focusTodayScope as Record<string, boolean>;
+        if (prefs.todayListGroupBy !== undefined) patch.todayListGroupBy = prefs.todayListGroupBy as GroupBy;
+        if (Object.keys(patch).length > 0) set(patch);
+      },
+      _getServerPayload: () => {
+        const s = get();
+        return {
+          listGroupBy: s.listGroupBy,
+          myTasksOnly: s.myTasksOnly,
+          filtersByScope: s.filtersByScope,
+          groupByScope: s.groupByScope,
+          sortByScope: s.sortByScope,
+          focusTodayScope: s.focusTodayScope,
+          todayListGroupBy: s.todayListGroupBy,
+        };
+      },
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none' }),
     }),
     {
       name: 'squadhub-pm',
@@ -177,12 +248,19 @@ export const usePMStore = create<PMState>()(
         filtersByScope: state.filtersByScope,
         focusedTodayIds: state.focusedTodayIds,
         focusedTodayDate: state.focusedTodayDate,
+        groupByScope: state.groupByScope,
+        sortByScope: state.sortByScope,
+        focusTodayScope: state.focusTodayScope,
+        todayListGroupBy: state.todayListGroupBy,
       }),
-      version: 2,
+      version: 3,
       migrate: (persisted: unknown, fromVersion: number) => {
         const p = (persisted ?? {}) as Partial<PMState>;
         if (fromVersion < 2) {
-          return { ...p, filtersByScope: {} };
+          return { ...p, filtersByScope: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none' };
+        }
+        if (fromVersion < 3) {
+          return { ...p, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none' };
         }
         return p;
       },

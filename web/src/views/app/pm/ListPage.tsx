@@ -43,8 +43,13 @@ export default function ListPage() {
   const [showShare, setShowShare] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreatePanel, setShowCreatePanel] = useState(false);
-  const [sortBy, setSortBy] = useState<SortBy>('manual');
-  const [focusToday, setFocusToday] = useState(false);
+  const sortByScope = usePMStore((s) => s.sortByScope);
+  const setScopedSortBy = usePMStore((s) => s.setScopedSortBy);
+  const focusTodayScope = usePMStore((s) => s.focusTodayScope);
+  const setScopedFocusToday = usePMStore((s) => s.setScopedFocusToday);
+  const listScopeKey = activeListId ? `list:${activeListId}` : '';
+  const sortBy = (listScopeKey && sortByScope[listScopeKey]) || 'manual' as SortBy;
+  const focusToday = !!(listScopeKey && focusTodayScope[listScopeKey]);
 
   const scopeKey = activeListId ? `list:${activeListId}` : '';
   const filters = (scopeKey && filtersByScope[scopeKey]) || EMPTY_FILTER;
@@ -248,13 +253,13 @@ export default function ListPage() {
           <GroupByDropdown
             options={SORT_BY_OPTIONS}
             value={sortBy}
-            onChange={(v) => setSortBy(v as SortBy)}
+            onChange={(v) => listScopeKey && setScopedSortBy(listScopeKey, v as SortBy)}
             icon={SORT_ICON}
             menuTitle="Sort tasks by"
           />
           <button
             type="button"
-            onClick={() => setFocusToday(!focusToday)}
+            onClick={() => listScopeKey && setScopedFocusToday(listScopeKey, !focusToday)}
             className="lv-toolbtn lv-toolbtn--outline"
             data-active={focusToday}
             aria-pressed={focusToday}

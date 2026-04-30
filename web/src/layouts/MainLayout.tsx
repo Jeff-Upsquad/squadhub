@@ -6,6 +6,7 @@ const ADMIN_APP_URL = process.env.NEXT_PUBLIC_ADMIN_URL || (process.env.NODE_ENV
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useAuthStore } from '../stores/authStore';
 import { usePMStore } from '../stores/pmStore';
+import { loadViewPreferences } from '../stores/viewPreferencesSync';
 import type { Workspace, Channel, RoleHomeView } from '@squadhub/shared';
 import { connectSocket, disconnectSocket } from '../services/socket';
 import ChatPanel from '../views/app/chat/ChatPanel';
@@ -201,6 +202,8 @@ export default function MainLayout() {
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [timesheetOpen, setTimesheetOpen] = useState(false);
   const [timesheetAnchor, setTimesheetAnchor] = useState<DOMRect | null>(null);
+
+  useEffect(() => { loadViewPreferences(); }, []);
 
   // Auto-switch to tasks view when a list is selected
   useEffect(() => {
