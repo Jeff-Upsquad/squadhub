@@ -464,7 +464,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 function publishedCardTitle(card: PublishedCardItem): string {
-  const business = card.submission?.business_name || 'Unknown business';
+  const business = card.submission?.business_name || card.brand_name || 'Untitled lead';
   const subName = card.submission_subscription?.subscription?.name;
   return subName ? `${business} · ${subName}` : business;
 }
@@ -473,8 +473,10 @@ function formatPublishedAt(iso: string | null): string {
   if (!iso) return '';
   const date = new Date(iso);
   const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  const days = Math.floor((Date.now() - date.getTime()) / 86400000);
-  if (days < 1) return `today at ${time}`;
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const days = Math.floor((startOfToday - new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / 86400000);
+  if (days <= 0) return `today at ${time}`;
   if (days === 1) return `yesterday at ${time}`;
   if (days < 7) return `${days}d ago at ${time}`;
   return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${time}`;
@@ -540,8 +542,8 @@ function CardGroup({
 }
 
 function PublishedCardRow({ card, onOpen, showCancelledTag }: { card: PublishedCardItem; onOpen: () => void; showCancelledTag: boolean }) {
-  const business = card.submission?.business_name || 'Unknown';
-  const subName = card.submission_subscription?.subscription?.name || '—';
+  const business = card.submission?.business_name || card.brand_name || 'Untitled lead';
+  const subName = card.submission_subscription?.subscription?.name || '';
   const plan = card.submission_subscription?.plan;
   const planLabel = plan ? `${plan.plan} · ${plan.tier}` : '';
   const partners = card.recipient_counts?.partners ?? { pending: 0, accepted: 0, rejected: 0 };
@@ -558,7 +560,7 @@ function PublishedCardRow({ card, onOpen, showCancelledTag }: { card: PublishedC
         </div>
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-[var(--sh-ink)]">
-            {business} · {subName}
+            {subName ? `${business} · ${subName}` : business}
           </p>
           <p className="mt-0.5 truncate text-xs text-[var(--sh-ink-3)]">
             {planLabel}
