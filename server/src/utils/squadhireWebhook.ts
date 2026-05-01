@@ -152,13 +152,17 @@ export async function buildSquadhirePayloadForCard(
 
   let subscriptionName: string | null = null;
   let planName: string | null = null;
+  let planTier: string | null = null;
   let leadCountryId: string | null = null;
   let leadEmail: string | null = null;
   let planHoursDeliverable: { per_day: number; per_week: number; per_month: number } | null = null;
   if (staged) {
     const [{ data: sub }, { data: plan }, { data: submission }, { data: planDelivs }] = await Promise.all([
       supabaseAdmin.from('subscriptions').select('name').eq('id', staged.subscription_id).maybeSingle(),
-      supabaseAdmin.from('subscription_plans').select('name').eq('id', staged.plan_id).maybeSingle(),
+      // subscription_plans has columns `plan` (Starter/Basic/Plus/Pro/Personal)
+      // and `tier` (Junior/Pro/Elite). The earlier `select('name')` was a typo
+      // — there's no `name` column, so plan_name was always null on Profiles.
+      supabaseAdmin.from('subscription_plans').select('plan, tier').eq('id', staged.plan_id).maybeSingle(),
       supabaseAdmin.from('client_submissions').select('country_id, email').eq('id', staged.submission_id).maybeSingle(),
       supabaseAdmin
         .from('subscription_plan_deliverables')
@@ -166,7 +170,8 @@ export async function buildSquadhirePayloadForCard(
         .eq('plan_id', staged.plan_id),
     ]);
     subscriptionName = sub?.name ?? null;
-    planName = plan?.name ?? null;
+    planName = (plan?.plan as string | null | undefined) ?? null;
+    planTier = (plan?.tier as string | null | undefined) ?? null;
     leadCountryId = (submission?.country_id as string | undefined) ?? null;
     leadEmail = (submission?.email as string | undefined)?.trim() || null;
     // Respect the per-card disable flag — when the salesperson toggles off
@@ -318,6 +323,10 @@ export async function buildSquadhirePayloadForCard(
     notes: contentSource.notes ?? null,
     subscription_name: subscriptionName,
     plan_name: planName,
+    // Tier is the partner-skill bracket (Junior/Pro/Elite). Sent as a
+    // separate field so SquadHire can show it next to plan_name on the
+    // business dashboard ("Pro · Elite") without parsing a combined string.
+    plan_tier: planTier,
     custom_deliverables: contentSource.custom_deliverables ?? [],
   };
   // Attach the resolved partner price only when we have both amount and
