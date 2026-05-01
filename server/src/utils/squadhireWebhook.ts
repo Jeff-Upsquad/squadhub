@@ -55,6 +55,11 @@ export interface SquadhireCardPayload {
   // accepted view but otherwise keeps the card visible. Absent on
   // never-recalled cards and on clean recalls (which become drafts).
   recalled_at?: string;
+  // True when this card was created by SquadHub as a secondary (child of
+  // another card via parent_card_id). SquadHire's business dashboard hides
+  // secondaries from the published-cards list — only the primary surfaces.
+  // Always sent so SquadHire can flip the flag both ways without ambiguity.
+  is_secondary: boolean;
 }
 
 interface AttemptOutcome {
@@ -355,6 +360,7 @@ export async function buildSquadhirePayloadForCard(
     published_at: publishedAt,
     status,
     distribution,
+    is_secondary: card.parent_card_id != null,
     ...(businessEmail ? { business_email: businessEmail } : {}),
     ...(recalledAt ? { recalled_at: new Date(recalledAt).toISOString() } : {}),
   };
