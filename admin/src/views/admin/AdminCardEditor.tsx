@@ -547,7 +547,7 @@ export default function AdminCardEditor({
 
           {/* Pricing */}
           <Section title="Pricing">
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <Field label="Proposed Price (₹/mo)">
                 <input
                   type="number"
@@ -589,11 +589,6 @@ export default function AdminCardEditor({
                   {partnerPrice != null ? `₹${partnerPrice.toLocaleString()}` : '—'}
                 </div>
                 <p className="mt-1 text-[11px] text-[#90A1B9]">= Proposed − Margin</p>
-              </Field>
-              <Field label="Display Price (₹/mo)">
-                <div className="flex h-[38px] items-center rounded-md border border-[#E2E8F0] bg-slate-50 px-3 text-sm font-semibold text-[#0F172B]">
-                  ₹{(proposedPrice || 0).toLocaleString()}
-                </div>
               </Field>
             </div>
           </Section>
