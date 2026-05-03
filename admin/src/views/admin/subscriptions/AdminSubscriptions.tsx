@@ -577,12 +577,15 @@ function PricingAndMarginInput({
   }
 
   function commitMargin(nextType?: 'fixed' | 'percent') {
-    if (!country || !current) return;
-    const n = parseInt(price, 10);
+    if (!country) return;
     const m = parseInt(marginValue, 10);
     const t = nextType ?? marginType;
-    if (isNaN(n) || isNaN(m)) return;
-    if (current.price === n && current.margin_value === m && current.margin_type === t) return;
+    if (isNaN(m) || m < 0) return;
+    // When no pricing row exists yet, default price to 0 so the row can be
+    // created from a margin-only edit. Admin can fill in the min price later.
+    const n = price.trim() === '' ? 0 : parseInt(price, 10);
+    if (isNaN(n) || n < 0) return;
+    if (current && current.price === n && current.margin_value === m && current.margin_type === t) return;
     upsert.mutate({ country_id: country.id, price: n, margin_value: m, margin_type: t });
   }
 
@@ -623,7 +626,7 @@ function PricingAndMarginInput({
           onChange={(e) => setMarginValue(e.target.value)}
           onBlur={() => commitMargin()}
           placeholder="0"
-          disabled={!country || !current}
+          disabled={!country}
           className="w-16 rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none disabled:cursor-not-allowed disabled:bg-[#F8FAFC]"
         />
         <button
@@ -633,7 +636,7 @@ function PricingAndMarginInput({
             setMarginType(next);
             commitMargin(next);
           }}
-          disabled={!country || !current}
+          disabled={!country}
           className="rounded-md border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-semibold text-[#0F172B] hover:bg-[#F1F5F9] disabled:cursor-not-allowed disabled:opacity-50"
           title="Toggle margin type"
         >
