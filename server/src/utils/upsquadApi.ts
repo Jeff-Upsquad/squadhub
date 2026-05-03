@@ -15,6 +15,14 @@ export interface SubscriptionRequest {
   phone: string;
   status: string;
   created_at: string;
+  // Step-5 fields (added 2026 — older rows may have empty strings)
+  country: string;
+  states_csv: string;
+  languages_csv: string;
+  brand_name: string;
+  nature_of_business: string;
+  short_note: string;
+  location_of_business: string;
 }
 
 interface ListResult {

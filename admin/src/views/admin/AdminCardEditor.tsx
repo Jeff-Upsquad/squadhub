@@ -74,6 +74,7 @@ interface CardData {
   customer_email: string | null;
   customer_company: string | null;
   customer_phone: string | null;
+  customer_location: string | null;
   service_type: string | null;
   plan_name: string | null;
   subscription_request_id: number | null;
@@ -140,6 +141,7 @@ export default function AdminCardEditor({
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerLocation, setCustomerLocation] = useState('');
   const [proposedPrice, setProposedPrice] = useState<number>(0);
   const [markup, setMarkup] = useState<number>(0);
   const [publishTargets, setPublishTargets] = useState<string[]>(['partner', 'talent']);
@@ -148,6 +150,9 @@ export default function AdminCardEditor({
   const [businessNature, setBusinessNature] = useState('');
   const [notes, setNotes] = useState('');
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
+  const [targetCountryIds, setTargetCountryIds] = useState<string[]>([]);
+  const [targetRegions, setTargetRegions] = useState<{ country_id: string; region: string }[]>([]);
+  const [targetLanguages, setTargetLanguages] = useState<string[]>([]);
 
   // Populate form from loaded card
   useEffect(() => {
@@ -160,6 +165,7 @@ export default function AdminCardEditor({
     setCustomerName(card.customer_name || '');
     setCustomerEmail(card.customer_email || '');
     setCustomerPhone(card.customer_phone || '');
+    setCustomerLocation(card.customer_location || '');
     setProposedPrice(card.proposed_price || 0);
     setOriginalProposedPrice(card.proposed_price);
     setMarkup(card.markup || 0);
@@ -169,6 +175,9 @@ export default function AdminCardEditor({
     setBusinessNature(card.business_nature || '');
     setNotes(card.notes || '');
     setDeliverables(card.custom_deliverables || []);
+    setTargetCountryIds(card.target_country_ids || []);
+    setTargetRegions(card.target_regions || []);
+    setTargetLanguages(card.target_languages || []);
   }, [card]);
 
   // Catalog lookup: when service + plan + first selected tier are known,
@@ -230,6 +239,7 @@ export default function AdminCardEditor({
         plan_name: planName || null,
         working_days: workingDays,
         customer_company: customerCompany || null,
+        customer_location: customerLocation || null,
         customer_name: customerName || null,
         customer_email: customerEmail || null,
         customer_phone: customerPhone || null,
@@ -251,11 +261,23 @@ export default function AdminCardEditor({
     mutationFn: () =>
       api.put(`/admin/subscription-cards/${cardId}/targets`, {
         target_tiers: tiers,
+        target_languages: targetLanguages,
+        target_country_ids: targetCountryIds,
+        target_regions: targetRegions,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-card-editor', cardId] });
     },
   });
+
+  // Countries list (for the Location section)
+  const countriesQuery = useQuery({
+    queryKey: ['admin-countries'],
+    queryFn: () => api.get('/admin/countries').then((r) => r.data?.data || []),
+  });
+  const countries: Array<{ id: string; name: string }> = countriesQuery.data || [];
+  const countryById: Record<string, { id: string; name: string }> = {};
+  countries.forEach((c) => { countryById[c.id] = c; });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
@@ -434,6 +456,108 @@ export default function AdminCardEditor({
           </Section>
 
           {/* Customer */}
+          {/* Location & Language */}
+          <Section title="Location & Language">
+            <Field label="Country">
+              <select
+                value={targetCountryIds[0] || ''}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setTargetCountryIds(id ? [id] : []);
+                  // Drop any region rows tied to a different country
+                  setTargetRegions((prev) => prev.filter((r) => r.country_id === id));
+                }}
+                disabled={!isDraft}
+                className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50"
+              >
+                <option value="">No country preference</option>
+                {countries.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="States / regions">
+              {targetRegions.length === 0 ? (
+                <p className="text-xs text-[#90A1B9]">
+                  {targetCountryIds[0]
+                    ? 'No states selected — type below or paste comma-separated.'
+                    : 'Pick a country above to enable.'}
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {targetRegions.map((r) => (
+                    <span key={r.region} className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-1 text-xs text-indigo-700">
+                      {r.region}
+                      {isDraft && (
+                        <button
+                          type="button"
+                          onClick={() => setTargetRegions((prev) => prev.filter((x) => x.region !== r.region))}
+                          className="hover:text-indigo-900"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {isDraft && targetCountryIds[0] && (
+                <input
+                  type="text"
+                  placeholder="Add a state and press Enter"
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    const value = (e.target as HTMLInputElement).value.trim();
+                    if (!value) return;
+                    const country_id = targetCountryIds[0];
+                    if (!country_id) return;
+                    if (targetRegions.some((r) => r.region.toLowerCase() === value.toLowerCase())) return;
+                    setTargetRegions((prev) => [...prev, { country_id, region: value }]);
+                    (e.target as HTMLInputElement).value = '';
+                  }}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm"
+                />
+              )}
+            </Field>
+            <Field label="Languages">
+              {targetLanguages.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {targetLanguages.map((lang) => (
+                    <span key={lang} className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">
+                      {lang}
+                      {isDraft && (
+                        <button
+                          type="button"
+                          onClick={() => setTargetLanguages((prev) => prev.filter((l) => l !== lang))}
+                          className="hover:text-amber-900"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {isDraft && (
+                <input
+                  type="text"
+                  placeholder="Add a language and press Enter"
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    const value = (e.target as HTMLInputElement).value.trim();
+                    if (!value) return;
+                    if (targetLanguages.some((l) => l.toLowerCase() === value.toLowerCase())) return;
+                    setTargetLanguages((prev) => [...prev, value]);
+                    (e.target as HTMLInputElement).value = '';
+                  }}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm"
+                />
+              )}
+            </Field>
+          </Section>
+
           <Section title="Customer">
             <div className="grid grid-cols-2 gap-4">
               <Field label="Company">
@@ -468,6 +592,17 @@ export default function AdminCardEditor({
                   className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                 />
               </Field>
+              <div className="col-span-2">
+                <Field label="Location of Business">
+                  <input
+                    value={customerLocation}
+                    onChange={(e) => setCustomerLocation(e.target.value)}
+                    disabled={!isDraft || isReadOnlyCustomer}
+                    placeholder="e.g. Bangalore, India"
+                    className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                  />
+                </Field>
+              </div>
             </div>
           </Section>
 
