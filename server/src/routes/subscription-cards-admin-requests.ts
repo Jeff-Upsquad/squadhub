@@ -20,6 +20,24 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
+// Map upsquad's tier vocabulary (Juniors/Pros/Elites) to SquadHub's enum
+// (Junior/Pro/Elite/Custom). Unknown values are dropped.
+const TIER_MAP: Record<string, string> = {
+  juniors: 'Junior',
+  junior: 'Junior',
+  pros: 'Pro',
+  pro: 'Pro',
+  elites: 'Elite',
+  elite: 'Elite',
+  custom: 'Custom',
+};
+function normalizeTiers(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((t) => TIER_MAP[t.trim().toLowerCase()])
+    .filter((t): t is string => Boolean(t));
+}
+
 // ============================================================
 // GET /admin/subscription-requests — proxy list from upsquad
 // ============================================================
@@ -102,7 +120,7 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
     }
 
     // Parse tiers and working days from comma-separated strings
-    const tiers = requestData.tier.split(',').map((t: string) => t.trim()).filter(Boolean);
+    const tiers = normalizeTiers(requestData.tier || '');
     const days = requestData.working_days
       ? requestData.working_days.split(',').map((d: string) => d.trim()).filter(Boolean)
       : [];
