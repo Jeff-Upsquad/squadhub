@@ -617,31 +617,47 @@ function PricingAndMarginInput({
         <span className="text-[10px] text-[#CBD5E1]">/ mo</span>
       </div>
 
-      <div className="flex items-center gap-1">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">Margin</span>
-        <input
-          type="number"
-          min={0}
-          value={marginValue}
-          onChange={(e) => setMarginValue(e.target.value)}
-          onBlur={() => commitMargin()}
-          placeholder="0"
-          disabled={!country}
-          className="w-16 rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none disabled:cursor-not-allowed disabled:bg-[#F8FAFC]"
-        />
-        <button
-          type="button"
-          onClick={() => {
-            const next = marginType === 'fixed' ? 'percent' : 'fixed';
-            setMarginType(next);
-            commitMargin(next);
-          }}
-          disabled={!country}
-          className="rounded-md border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-semibold text-[#0F172B] hover:bg-[#F1F5F9] disabled:cursor-not-allowed disabled:opacity-50"
-          title="Toggle margin type"
-        >
-          {marginType === 'fixed' ? currencySymbol(country?.currency) : '%'}
-        </button>
+      <div className="flex flex-col items-start gap-0.5">
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">Margin</span>
+          <input
+            type="number"
+            min={0}
+            value={marginValue}
+            onChange={(e) => setMarginValue(e.target.value)}
+            onBlur={() => commitMargin()}
+            placeholder="0"
+            disabled={!country}
+            className="w-16 rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none disabled:cursor-not-allowed disabled:bg-[#F8FAFC]"
+          />
+        </div>
+        <div className="flex items-center gap-1 pl-[3.25rem]">
+          <button
+            type="button"
+            onClick={() => {
+              if (marginType === 'fixed') return;
+              setMarginType('fixed');
+              commitMargin('fixed');
+            }}
+            disabled={!country}
+            className={`text-[10px] font-medium ${marginType === 'fixed' ? 'text-[#0F172B]' : 'text-[#90A1B9]'} hover:underline disabled:cursor-not-allowed disabled:opacity-50`}
+          >
+            flat ({currencySymbol(country?.currency)})
+          </button>
+          <span className="text-[10px] text-[#CBD5E1]">|</span>
+          <button
+            type="button"
+            onClick={() => {
+              if (marginType === 'percent') return;
+              setMarginType('percent');
+              commitMargin('percent');
+            }}
+            disabled={!country}
+            className={`text-[10px] font-medium ${marginType === 'percent' ? 'text-[#0F172B]' : 'text-[#90A1B9]'} hover:underline disabled:cursor-not-allowed disabled:opacity-50`}
+          >
+            percent (%)
+          </button>
+        </div>
       </div>
 
       {partnerPreview != null && current && (

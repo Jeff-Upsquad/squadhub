@@ -197,12 +197,31 @@ export default function AdminCardEditor({
     return Number((dailyHours * days).toFixed(2));
   }, [dailyHours, workingDays]);
 
-  // Partner price uses the first available country row's margin (typically India).
+  // Catalog gives the default margin per (plan, country); typically the first
+  // pricing row (India). Card-level edit lives in the existing markup column.
   const catalogPricingRow = catalog?.pricing?.[0] || null;
-  const partnerPrice = useMemo(() => {
+  const catalogMarginInRupees = useMemo(() => {
     if (!catalogPricingRow || proposedPrice <= 0) return null;
-    return computePartnerPrice(proposedPrice, catalogPricingRow.margin_value, catalogPricingRow.margin_type);
+    return catalogPricingRow.margin_type === 'percent'
+      ? Math.round((proposedPrice * catalogPricingRow.margin_value) / 100)
+      : catalogPricingRow.margin_value;
   }, [catalogPricingRow, proposedPrice]);
+
+  // Seed margin from catalog when admin hasn't set one yet (markup === 0 on
+  // load and proposed price is known). Only fires once per card load via the
+  // [card?.id, catalogPricingRow] dep — won't clobber a manual edit.
+  useEffect(() => {
+    if (!card) return;
+    if ((card.markup ?? 0) > 0) return;
+    if (catalogMarginInRupees == null) return;
+    setMarkup(catalogMarginInRupees);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card?.id, catalogPricingRow?.plan_id, proposedPrice]);
+
+  const partnerPrice = useMemo(() => {
+    if (proposedPrice <= 0) return null;
+    return Math.max(0, proposedPrice - (markup || 0));
+  }, [proposedPrice, markup]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -528,7 +547,7 @@ export default function AdminCardEditor({
 
           {/* Pricing */}
           <Section title="Pricing">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <Field label="Proposed Price (₹/mo)">
                 <input
                   type="number"
@@ -548,17 +567,28 @@ export default function AdminCardEditor({
                   </p>
                 )}
               </Field>
+              <Field label="Margin (₹/mo)">
+                <input
+                  type="number"
+                  min={0}
+                  value={markup || ''}
+                  onChange={(e) => setMarkup(parseInt(e.target.value) || 0)}
+                  disabled={!isDraft}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50"
+                />
+                {catalogPricingRow && (
+                  <p className="mt-1 text-[11px] text-[#90A1B9]">
+                    Catalog: {catalogPricingRow.margin_type === 'percent'
+                      ? `${catalogPricingRow.margin_value}% (= ₹${(catalogMarginInRupees ?? 0).toLocaleString()})`
+                      : `₹${catalogPricingRow.margin_value.toLocaleString()} (flat)`}
+                  </p>
+                )}
+              </Field>
               <Field label="Partner Price (₹/mo)">
                 <div className="flex h-[38px] items-center rounded-md border border-[#E2E8F0] bg-slate-50 px-3 text-sm font-semibold text-[#0F172B]">
                   {partnerPrice != null ? `₹${partnerPrice.toLocaleString()}` : '—'}
                 </div>
-                {catalogPricingRow && (
-                  <p className="mt-1 text-[11px] text-[#90A1B9]">
-                    Margin: {catalogPricingRow.margin_type === 'percent'
-                      ? `${catalogPricingRow.margin_value}%`
-                      : `₹${catalogPricingRow.margin_value.toLocaleString()}`} (from catalog)
-                  </p>
-                )}
+                <p className="mt-1 text-[11px] text-[#90A1B9]">= Proposed − Margin</p>
               </Field>
               <Field label="Display Price (₹/mo)">
                 <div className="flex h-[38px] items-center rounded-md border border-[#E2E8F0] bg-slate-50 px-3 text-sm font-semibold text-[#0F172B]">
