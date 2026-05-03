@@ -8,6 +8,7 @@ import type {
   Subscription,
   SubscriptionPlan,
   SubscriptionPlanRow,
+  SubscriptionPlanPricing,
   SubscriptionDeliverableType,
   SubscriptionPlanDeliverable,
   SubscriptionTier,
@@ -453,17 +454,9 @@ function PlanRow({
 
   const delivs = plan.deliverables || [];
   const pricing = plan.pricing || [];
-  const partnerPricing = plan.partner_pricing || [];
   const currentPriceRow = selectedCountry
     ? pricing.find((p) => p.country_id === selectedCountry.id) || null
     : null;
-  const currentPartnerPriceRow = selectedCountry
-    ? partnerPricing.find((p) => p.country_id === selectedCountry.id) || null
-    : null;
-  const grossProfit =
-    currentPriceRow && currentPartnerPriceRow
-      ? currentPriceRow.price - currentPartnerPriceRow.price
-      : null;
 
   return (
     <div className={`rounded-lg border border-[#E2E8F0] bg-white ${plan.is_active ? '' : 'opacity-60'}`}>
@@ -484,29 +477,18 @@ function PlanRow({
           {plan.tier || 'Junior'}
         </span>
 
-        <InlinePriceInput
-          mode="customer"
+        <PricingAndMarginInput
           planId={plan.id}
           country={selectedCountry}
-          current={currentPriceRow?.price ?? null}
+          current={currentPriceRow}
         />
 
-        <InlinePriceInput
-          mode="partner"
+        <HoursInput
+          subscriptionId={subscriptionId}
           planId={plan.id}
-          country={selectedCountry}
-          current={currentPartnerPriceRow?.price ?? null}
+          dailyHours={plan.daily_hours}
+          weeklyHours={plan.weekly_hours}
         />
-
-        {grossProfit != null && grossProfit !== 0 && (
-          <span
-            className={`text-[10px] font-medium ${grossProfit > 0 ? 'text-emerald-600' : 'text-rose-600'}`}
-            title="Gross profit = customer price − partner price"
-          >
-            GP: {currencySymbol(selectedCountry?.currency)}
-            {grossProfit.toLocaleString()}
-          </span>
-        )}
 
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-[#90A1B9]">{delivs.length} deliverable{delivs.length === 1 ? '' : 's'}</span>
@@ -539,73 +521,209 @@ function PlanRow({
 }
 
 // ============================================================
-// Inline Price Input — one number per plan, for the selected country
+// Min price + margin (₹/%) per (plan × country)
+// Partner price is derived at use time as proposed - margin.
 // ============================================================
 
-function InlinePriceInput({
-  mode = 'customer', planId, country, current,
+function PricingAndMarginInput({
+  planId, country, current,
 }: {
-  /**
-   * Which pricing table this input edits.
-   *   'customer' → subscription_plan_pricing (what the customer pays us)
-   *   'partner'  → subscription_plan_partner_pricing (what we pay the partner)
-   */
-  mode?: 'customer' | 'partner';
   planId: string;
   country: Country | null;
-  current: number | null;
+  current: SubscriptionPlanPricing | null;
 }) {
   const queryClient = useQueryClient();
-  const [value, setValue] = useState<string>(current == null ? '' : String(current));
+  const [price, setPrice] = useState<string>(current?.price == null ? '' : String(current.price));
+  const [marginValue, setMarginValue] = useState<string>(
+    current?.margin_value == null ? '0' : String(current.margin_value),
+  );
+  const [marginType, setMarginType] = useState<'fixed' | 'percent'>(current?.margin_type || 'fixed');
 
-  useEffect(() => setValue(current == null ? '' : String(current)), [current, country?.id]);
+  useEffect(() => {
+    setPrice(current?.price == null ? '' : String(current.price));
+    setMarginValue(current?.margin_value == null ? '0' : String(current.margin_value));
+    setMarginType(current?.margin_type || 'fixed');
+  }, [current?.id, country?.id]);
 
-  const endpoint = mode === 'partner' ? 'partner-pricing' : 'pricing';
-
-  const upsertPrice = useMutation({
-    mutationFn: (body: { country_id: string; price: number }) =>
-      api.post(`/admin/subscriptions/plans/${planId}/${endpoint}`, body),
+  const upsert = useMutation({
+    mutationFn: (body: { country_id: string; price: number; margin_value: number; margin_type: 'fixed' | 'percent' }) =>
+      api.post(`/admin/subscriptions/plans/${planId}/pricing`, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-subs-catalog'] }),
     onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed'),
   });
 
-  const deletePrice = useMutation({
+  const removeRow = useMutation({
     mutationFn: (countryId: string) =>
-      api.delete(`/admin/subscriptions/plans/${planId}/${endpoint}/${countryId}`),
+      api.delete(`/admin/subscriptions/plans/${planId}/pricing/${countryId}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-subs-catalog'] }),
   });
 
-  function commit() {
+  function commitPrice() {
     if (!country) return;
-    if (value.trim() === '') {
-      if (current != null) deletePrice.mutate(country.id);
+    if (price.trim() === '') {
+      if (current) removeRow.mutate(country.id);
       return;
     }
-    const n = parseInt(value, 10);
+    const n = parseInt(price, 10);
     if (isNaN(n) || n < 0) return;
-    if (current === n) return;
-    upsertPrice.mutate({ country_id: country.id, price: n });
+    const m = parseInt(marginValue, 10);
+    if (current && current.price === n && current.margin_value === (isNaN(m) ? 0 : m) && current.margin_type === marginType) return;
+    upsert.mutate({
+      country_id: country.id,
+      price: n,
+      margin_value: isNaN(m) ? 0 : m,
+      margin_type: marginType,
+    });
   }
 
-  const label = mode === 'partner' ? 'Partner' : 'Customer';
+  function commitMargin(nextType?: 'fixed' | 'percent') {
+    if (!country || !current) return;
+    const n = parseInt(price, 10);
+    const m = parseInt(marginValue, 10);
+    const t = nextType ?? marginType;
+    if (isNaN(n) || isNaN(m)) return;
+    if (current.price === n && current.margin_value === m && current.margin_type === t) return;
+    upsert.mutate({ country_id: country.id, price: n, margin_value: m, margin_type: t });
+  }
+
+  // Live partner-price preview using min price as the example basis.
+  const minPriceN = parseInt(price, 10);
+  const marginN = parseInt(marginValue, 10);
+  const partnerPreview =
+    !isNaN(minPriceN) && !isNaN(marginN)
+      ? marginType === 'percent'
+        ? Math.max(0, Math.round(minPriceN - (minPriceN * marginN) / 100))
+        : Math.max(0, minPriceN - marginN)
+      : null;
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">Min</span>
+        <span className="text-[11px] text-[#90A1B9]">{currencySymbol(country?.currency)}</span>
+        <input
+          type="number"
+          min={0}
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          onBlur={commitPrice}
+          placeholder="—"
+          disabled={!country}
+          className="w-20 rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none disabled:cursor-not-allowed disabled:bg-[#F8FAFC]"
+        />
+        <span className="text-[10px] text-[#CBD5E1]">/ mo</span>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">Margin</span>
+        <input
+          type="number"
+          min={0}
+          value={marginValue}
+          onChange={(e) => setMarginValue(e.target.value)}
+          onBlur={() => commitMargin()}
+          placeholder="0"
+          disabled={!country || !current}
+          className="w-16 rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none disabled:cursor-not-allowed disabled:bg-[#F8FAFC]"
+        />
+        <button
+          type="button"
+          onClick={() => {
+            const next = marginType === 'fixed' ? 'percent' : 'fixed';
+            setMarginType(next);
+            commitMargin(next);
+          }}
+          disabled={!country || !current}
+          className="rounded-md border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-semibold text-[#0F172B] hover:bg-[#F1F5F9] disabled:cursor-not-allowed disabled:opacity-50"
+          title="Toggle margin type"
+        >
+          {marginType === 'fixed' ? currencySymbol(country?.currency) : '%'}
+        </button>
+      </div>
+
+      {partnerPreview != null && current && (
+        <span
+          className="text-[10px] text-[#10B981] font-medium"
+          title="Partner price at min subscription price (= min − margin). Live partner price uses the customer's proposed price."
+        >
+          → Partner {currencySymbol(country?.currency)}{partnerPreview.toLocaleString()}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Daily / weekly hours per plan (admin-editable defaults)
+// ============================================================
+
+function HoursInput({
+  subscriptionId, planId, dailyHours, weeklyHours,
+}: {
+  subscriptionId: string;
+  planId: string;
+  dailyHours: number | null;
+  weeklyHours: number | null;
+}) {
+  const queryClient = useQueryClient();
+  const [daily, setDaily] = useState<string>(dailyHours == null ? '' : String(dailyHours));
+  const [weekly, setWeekly] = useState<string>(weeklyHours == null ? '' : String(weeklyHours));
+
+  useEffect(() => {
+    setDaily(dailyHours == null ? '' : String(dailyHours));
+    setWeekly(weeklyHours == null ? '' : String(weeklyHours));
+  }, [dailyHours, weeklyHours]);
+
+  const update = useMutation({
+    mutationFn: (body: { daily_hours?: number | null; weekly_hours?: number | null }) =>
+      api.put(`/admin/subscriptions/${subscriptionId}/plans/${planId}`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-subs-catalog'] }),
+    onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed'),
+  });
+
+  function commitDaily() {
+    const n = daily.trim() === '' ? null : Number(daily);
+    if (n != null && (isNaN(n) || n < 0 || n > 24)) return;
+    if ((dailyHours ?? null) === (n ?? null)) return;
+    update.mutate({ daily_hours: n });
+  }
+
+  function commitWeekly() {
+    const n = weekly.trim() === '' ? null : Number(weekly);
+    if (n != null && (isNaN(n) || n < 0 || n > 168)) return;
+    if ((weeklyHours ?? null) === (n ?? null)) return;
+    update.mutate({ weekly_hours: n });
+  }
 
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">
-        {label}
-      </span>
-      <span className="text-[11px] text-[#90A1B9]">{currencySymbol(country?.currency)}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">Hrs</span>
       <input
         type="number"
+        step="0.5"
         min={0}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={commit}
-        placeholder="—"
-        disabled={!country}
-        className="w-24 rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none disabled:cursor-not-allowed disabled:bg-[#F8FAFC]"
+        max={24}
+        value={daily}
+        onChange={(e) => setDaily(e.target.value)}
+        onBlur={commitDaily}
+        placeholder="d"
+        title="Daily hours"
+        className="w-12 rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
       />
-      <span className="text-[10px] text-[#CBD5E1]">/ mo</span>
+      <span className="text-[10px] text-[#CBD5E1]">/d</span>
+      <input
+        type="number"
+        step="0.5"
+        min={0}
+        max={168}
+        value={weekly}
+        onChange={(e) => setWeekly(e.target.value)}
+        onBlur={commitWeekly}
+        placeholder="w"
+        title="Weekly hours"
+        className="w-12 rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+      />
+      <span className="text-[10px] text-[#CBD5E1]">/w</span>
     </div>
   );
 }

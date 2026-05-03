@@ -1,8 +1,58 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
+
+// Map the upsquad-style service_type label to the subscriptions catalog slug.
+const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
+  Designers: 'designer',
+  Editors: 'video_editor',
+  'Designer plus Editor': 'designer',
+};
+
+const PLAN_TO_CANONICAL: Record<string, string> = {
+  starter: 'Starter', basic: 'Basic', plus: 'Plus', pro: 'Pro', personal: 'Personal',
+};
+
+interface PlanLookupRow {
+  plan: {
+    id: string;
+    daily_hours: number | null;
+    weekly_hours: number | null;
+    plan: string;
+    tier: string;
+  };
+  pricing: Array<{
+    plan_id: string;
+    country_id: string;
+    price: number;
+    margin_value: number;
+    margin_type: 'fixed' | 'percent';
+    country?: { id: string; name: string; currency: string };
+  }>;
+}
+
+function workingDaysThisMonth(workingDays: string[]): number {
+  if (workingDays.length === 0) return 0;
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const dayMap: Record<number, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
+  let count = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const wd = new Date(year, month, d).getDay();
+    if (workingDays.includes(dayMap[wd])) count++;
+  }
+  return count;
+}
+
+function computePartnerPrice(proposed: number, marginValue: number, marginType: 'fixed' | 'percent'): number {
+  if (proposed <= 0) return 0;
+  if (marginType === 'percent') return Math.max(0, Math.round(proposed - (proposed * marginValue) / 100));
+  return Math.max(0, proposed - marginValue);
+}
 
 interface CardData {
   id: string;
@@ -83,6 +133,7 @@ export default function AdminCardEditor({
   // Local form state
   const [serviceType, setServiceType] = useState('');
   const [planName, setPlanName] = useState('');
+  const [originalProposedPrice, setOriginalProposedPrice] = useState<number | null>(null);
   const [tiers, setTiers] = useState<string[]>([]);
   const [workingDays, setWorkingDays] = useState<string[]>([]);
   const [customerCompany, setCustomerCompany] = useState('');
@@ -110,6 +161,7 @@ export default function AdminCardEditor({
     setCustomerEmail(card.customer_email || '');
     setCustomerPhone(card.customer_phone || '');
     setProposedPrice(card.proposed_price || 0);
+    setOriginalProposedPrice(card.proposed_price);
     setMarkup(card.markup || 0);
     setPublishTargets(card.publish_targets || ['partner', 'talent']);
     setDistribution(card.distribution || 'broadcast');
@@ -118,6 +170,39 @@ export default function AdminCardEditor({
     setNotes(card.notes || '');
     setDeliverables(card.custom_deliverables || []);
   }, [card]);
+
+  // Catalog lookup: when service + plan + first selected tier are known,
+  // pull daily/weekly hours and the per-country margin from subscriptions.
+  const catalogServiceSlug = SERVICE_TYPE_TO_SLUG[serviceType] || '';
+  const catalogPlan = planName ? PLAN_TO_CANONICAL[planName.toLowerCase()] || '' : '';
+  const catalogTier = tiers[0] || '';
+  const catalogQuery = useQuery<PlanLookupRow | null>({
+    queryKey: ['admin-card-plan-lookup', catalogServiceSlug, catalogTier, catalogPlan],
+    enabled: !!catalogServiceSlug && !!catalogPlan && !!catalogTier,
+    queryFn: () =>
+      api
+        .get('/admin/subscriptions/lookup', {
+          params: { service: catalogServiceSlug, tier: catalogTier, plan: catalogPlan },
+        })
+        .then((r) => r.data?.data || null)
+        .catch(() => null),
+  });
+
+  const catalog = catalogQuery.data || null;
+  const dailyHours = catalog?.plan?.daily_hours ?? null;
+  const weeklyHours = catalog?.plan?.weekly_hours ?? null;
+  const monthlyHours = useMemo(() => {
+    if (dailyHours == null) return null;
+    const days = workingDaysThisMonth(workingDays);
+    return Number((dailyHours * days).toFixed(2));
+  }, [dailyHours, workingDays]);
+
+  // Partner price uses the first available country row's margin (typically India).
+  const catalogPricingRow = catalog?.pricing?.[0] || null;
+  const partnerPrice = useMemo(() => {
+    if (!catalogPricingRow || proposedPrice <= 0) return null;
+    return computePartnerPrice(proposedPrice, catalogPricingRow.margin_value, catalogPricingRow.margin_type);
+  }, [catalogPricingRow, proposedPrice]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -192,7 +277,6 @@ export default function AdminCardEditor({
     setDeliverables((prev) => prev.filter((d) => d.id !== id));
   };
 
-  const displayPrice = (proposedPrice || 0) + markup;
   const isReadOnlyCustomer = card?.source === 'request';
   const isDraft = card?.state === 'draft';
 
@@ -368,74 +452,29 @@ export default function AdminCardEditor({
             </div>
           </Section>
 
-          {/* Pricing */}
-          <Section title="Pricing">
-            <div className="grid grid-cols-3 gap-4">
-              <Field label="Proposed Price (₹/mo)">
-                <input
-                  type="number"
-                  value={proposedPrice || ''}
-                  onChange={(e) => setProposedPrice(parseInt(e.target.value) || 0)}
-                  disabled={!isDraft || isReadOnlyCustomer}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
-                />
-              </Field>
-              <Field label="Markup (₹/mo)">
-                <input
-                  type="number"
-                  min={0}
-                  value={markup || ''}
-                  onChange={(e) => setMarkup(parseInt(e.target.value) || 0)}
-                  disabled={!isDraft}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm"
-                />
-              </Field>
-              <Field label="Display Price (₹/mo)">
-                <div className="flex items-center rounded-md border border-[#E2E8F0] bg-slate-50 px-3 py-2 text-sm font-semibold text-[#0F172B]">
-                  ₹{displayPrice.toLocaleString()}
-                </div>
-              </Field>
-            </div>
-            {proposedPrice > 0 && markup > 0 && (
-              <p className="mt-2 text-xs text-[#62748E]">
-                Margin: ₹{markup.toLocaleString()} ({((markup / displayPrice) * 100).toFixed(1)}% of display price)
+          {/* Plan Deliverables (read-only, derived from catalog) */}
+          <Section title="Plan Deliverables">
+            {dailyHours == null ? (
+              <p className="text-xs text-[#90A1B9]">
+                Pick service, plan, and at least one tier to see hours from the catalog.
               </p>
+            ) : (
+              <>
+                <div className="grid grid-cols-3 gap-4">
+                  <ReadOnlyField label="Daily Hours">{dailyHours} hr/day</ReadOnlyField>
+                  <ReadOnlyField label="Weekly Hours">{weeklyHours ?? '—'} hr/wk</ReadOnlyField>
+                  <ReadOnlyField label={`Monthly (${workingDaysThisMonth(workingDays)} days)`}>
+                    {monthlyHours != null ? `${monthlyHours} hr/mo` : '—'}
+                  </ReadOnlyField>
+                </div>
+                <p className="mt-2 text-[11px] text-[#90A1B9]">
+                  Editable from the Subscriptions module ({catalog?.plan?.tier} · {catalog?.plan?.plan}).
+                </p>
+              </>
             )}
           </Section>
 
-          {/* Client Brief */}
-          <Section title="Client Brief">
-            <div className="grid grid-cols-1 gap-4">
-              <Field label="Brand Name">
-                <input
-                  value={brandName}
-                  onChange={(e) => setBrandName(e.target.value)}
-                  disabled={!isDraft}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm"
-                />
-              </Field>
-              <Field label="Business Nature">
-                <textarea
-                  value={businessNature}
-                  onChange={(e) => setBusinessNature(e.target.value)}
-                  disabled={!isDraft}
-                  rows={2}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm resize-none"
-                />
-              </Field>
-              <Field label="Notes">
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  disabled={!isDraft}
-                  rows={3}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm resize-none"
-                />
-              </Field>
-            </div>
-          </Section>
-
-          {/* Custom Deliverables */}
+          {/* Custom Deliverables (moved here, below the auto-derived block) */}
           <Section title="Custom Deliverables">
             <div className="space-y-3">
               {deliverables.map((d) => (
@@ -484,6 +523,80 @@ export default function AdminCardEditor({
                   + Add Deliverable
                 </button>
               )}
+            </div>
+          </Section>
+
+          {/* Pricing */}
+          <Section title="Pricing">
+            <div className="grid grid-cols-3 gap-4">
+              <Field label="Proposed Price (₹/mo)">
+                <input
+                  type="number"
+                  value={proposedPrice || ''}
+                  onChange={(e) => setProposedPrice(parseInt(e.target.value) || 0)}
+                  disabled={!isDraft}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50"
+                />
+                {originalProposedPrice != null && originalProposedPrice !== proposedPrice && (
+                  <p className="mt-1 text-[11px] text-[#90A1B9]">
+                    Originally <span className="line-through">₹{originalProposedPrice.toLocaleString()}</span>
+                  </p>
+                )}
+                {catalogPricingRow && (
+                  <p className="mt-1 text-[11px] text-[#90A1B9]">
+                    Catalog min: ₹{catalogPricingRow.price.toLocaleString()}
+                  </p>
+                )}
+              </Field>
+              <Field label="Partner Price (₹/mo)">
+                <div className="flex h-[38px] items-center rounded-md border border-[#E2E8F0] bg-slate-50 px-3 text-sm font-semibold text-[#0F172B]">
+                  {partnerPrice != null ? `₹${partnerPrice.toLocaleString()}` : '—'}
+                </div>
+                {catalogPricingRow && (
+                  <p className="mt-1 text-[11px] text-[#90A1B9]">
+                    Margin: {catalogPricingRow.margin_type === 'percent'
+                      ? `${catalogPricingRow.margin_value}%`
+                      : `₹${catalogPricingRow.margin_value.toLocaleString()}`} (from catalog)
+                  </p>
+                )}
+              </Field>
+              <Field label="Display Price (₹/mo)">
+                <div className="flex h-[38px] items-center rounded-md border border-[#E2E8F0] bg-slate-50 px-3 text-sm font-semibold text-[#0F172B]">
+                  ₹{(proposedPrice || 0).toLocaleString()}
+                </div>
+              </Field>
+            </div>
+          </Section>
+
+          {/* Client Brief */}
+          <Section title="Client Brief">
+            <div className="grid grid-cols-1 gap-4">
+              <Field label="Brand Name">
+                <input
+                  value={brandName}
+                  onChange={(e) => setBrandName(e.target.value)}
+                  disabled={!isDraft}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm"
+                />
+              </Field>
+              <Field label="Business Nature">
+                <textarea
+                  value={businessNature}
+                  onChange={(e) => setBusinessNature(e.target.value)}
+                  disabled={!isDraft}
+                  rows={2}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm resize-none"
+                />
+              </Field>
+              <Field label="Notes">
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  disabled={!isDraft}
+                  rows={3}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm resize-none"
+                />
+              </Field>
             </div>
           </Section>
 
@@ -550,6 +663,17 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <label className="mb-1 block text-xs font-medium text-[#62748E]">{label}</label>
       {children}
+    </div>
+  );
+}
+
+function ReadOnlyField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-[#62748E]">{label}</label>
+      <div className="flex h-[38px] items-center rounded-md border border-[#E2E8F0] bg-slate-50 px-3 text-sm font-semibold text-[#0F172B]">
+        {children}
+      </div>
     </div>
   );
 }

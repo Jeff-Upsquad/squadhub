@@ -1006,6 +1006,8 @@ export interface SubscriptionPlanRow {
   tier: SubscriptionTier;
   is_active: boolean;
   sort_order: number;
+  daily_hours: number | null;
+  weekly_hours: number | null;
   created_at: string;
   updated_at: string;
   // Joined
@@ -1029,7 +1031,11 @@ export interface SubscriptionPlanPricing {
   id: string;
   plan_id: string;
   country_id: string;
+  /** Minimum customer price for this plan in this country (was "customer price" in v1). */
   price: number;
+  /** Margin admin keeps from the customer's proposed price; partner price = proposed - margin. */
+  margin_value: number;
+  margin_type: 'fixed' | 'percent';
   created_at: string;
   updated_at: string;
   // Joined
