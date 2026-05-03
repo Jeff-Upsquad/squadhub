@@ -314,13 +314,11 @@ export async function buildSquadhirePayloadForCard(
   const titleParts = [brand, subscriptionName, planName].filter(Boolean) as string[];
   const title = titleParts.length > 0 ? titleParts.join(' — ') : 'New subscription opportunity';
 
-  const descriptionLines: string[] = [];
-  if (contentSource.business_nature) descriptionLines.push(`About: ${contentSource.business_nature}`);
-  if (Array.isArray(contentSource.working_days) && contentSource.working_days.length > 0) {
-    descriptionLines.push(`Working days: ${contentSource.working_days.join(', ')}`);
-  }
-  if (contentSource.notes) descriptionLines.push(contentSource.notes);
-  const description = descriptionLines.join('\n\n');
+  // SquadHire's renderer shows business_nature and working_days as their own
+  // labelled fields, so don't echo them here. `description` is just the
+  // free-form notes the customer typed; if there's no note, send empty so the
+  // renderer skips the section entirely instead of showing a duplicate.
+  const description = (contentSource.notes ?? '').toString();
 
   // match_rules: `category_ids` is the primary axis SquadHire's matcher
   // currently honours. Everything else is pass-through — SquadHire logs-and-
@@ -366,6 +364,9 @@ export async function buildSquadhirePayloadForCard(
     // business dashboard ("Pro · Elite") without parsing a combined string.
     plan_tier: planTier,
     custom_deliverables: contentSource.custom_deliverables ?? [],
+    // Customer-facing context the talent finds useful before accepting:
+    customer_company: leadCompany,
+    customer_location: (contentSource as any).customer_location ?? null,
   };
   // Attach the resolved partner price only when we have both amount and
   // currency — Profiles' renderer hides the Payment section on missing data.
