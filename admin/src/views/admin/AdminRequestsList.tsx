@@ -18,6 +18,7 @@ interface SubscriptionRequest {
   phone: string;
   status: string;
   created_at: string;
+  card_id: string | null;
 }
 
 export default function AdminRequestsList() {
@@ -103,8 +104,14 @@ export default function AdminRequestsList() {
               <RequestRow
                 key={req.id}
                 request={req}
-                onCreateCard={() => createCardMutation.mutate(req.id)}
-                isCreating={createCardMutation.isPending}
+                onAction={() => {
+                  if (req.card_id) {
+                    setEditingCardId(req.card_id);
+                  } else {
+                    createCardMutation.mutate(req.id);
+                  }
+                }}
+                isPending={createCardMutation.isPending}
               />
             ))}
           </div>
@@ -116,13 +123,28 @@ export default function AdminRequestsList() {
 
 function RequestRow({
   request,
-  onCreateCard,
-  isCreating,
+  onAction,
+  isPending,
 }: {
   request: SubscriptionRequest;
-  onCreateCard: () => void;
-  isCreating: boolean;
+  onAction: () => void;
+  isPending: boolean;
 }) {
+  const hasCard = !!request.card_id;
+  const buttonLabel = hasCard
+    ? 'View Card'
+    : request.status === 'pending'
+    ? isPending
+      ? 'Creating…'
+      : 'Review'
+    : request.status === 'in_review'
+    ? 'Continue'
+    : 'Review';
+  const buttonClass = hasCard
+    ? 'ml-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100'
+    : request.status === 'in_review'
+    ? 'ml-2 rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-medium text-[#0F172B] transition hover:bg-slate-50 disabled:opacity-50'
+    : 'ml-2 rounded-md bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[#1E293B] disabled:opacity-50';
   const statusColors: Record<string, string> = {
     pending: '#F59E0B',
     in_review: '#3B82F6',
@@ -168,24 +190,13 @@ function RequestRow({
         <span className="text-[11px] text-[#90A1B9]">
           {new Date(request.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
         </span>
-        {request.status === 'pending' && (
-          <button
-            onClick={onCreateCard}
-            disabled={isCreating}
-            className="ml-2 rounded-md bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[#1E293B] disabled:opacity-50"
-          >
-            {isCreating ? 'Creating…' : 'Review'}
-          </button>
-        )}
-        {request.status === 'in_review' && (
-          <button
-            onClick={onCreateCard}
-            disabled={isCreating}
-            className="ml-2 rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-medium text-[#0F172B] transition hover:bg-slate-50 disabled:opacity-50"
-          >
-            Continue
-          </button>
-        )}
+        <button
+          onClick={onAction}
+          disabled={isPending}
+          className={buttonClass}
+        >
+          {buttonLabel}
+        </button>
       </div>
     </div>
   );

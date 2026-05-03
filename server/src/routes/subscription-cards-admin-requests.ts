@@ -54,7 +54,27 @@ router.get('/subscription-requests', async (req: Request, res: Response) => {
       limit: limit ? parseInt(String(limit), 10) : undefined,
       offset: offset ? parseInt(String(offset), 10) : undefined,
     });
-    res.json({ success: true, data: result.items, total: result.total });
+
+    // Enrich each request with the local card_id (if any) so the UI can
+    // show "View Card" instead of "Review" and recover from orphan
+    // upsquad-published requests that never created a local card.
+    const ids = result.items.map((r: any) => r.id).filter(Boolean);
+    let cardByRequestId = new Map<number, string>();
+    if (ids.length > 0) {
+      const { data: cards } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id, subscription_request_id')
+        .in('subscription_request_id', ids);
+      cardByRequestId = new Map(
+        (cards ?? []).map((c: any) => [c.subscription_request_id as number, c.id as string]),
+      );
+    }
+    const enriched = result.items.map((r: any) => ({
+      ...r,
+      card_id: cardByRequestId.get(r.id) ?? null,
+    }));
+
+    res.json({ success: true, data: enriched, total: result.total });
   } catch (err: any) {
     console.error('Proxy list subscription requests error:', err);
     res.status(502).json({ success: false, error: err?.message || 'Failed to reach upsquad' });
