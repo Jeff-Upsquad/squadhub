@@ -50,6 +50,13 @@ export interface SquadhireCardPayload {
   // SquadHire's validator requires a valid email when present and we'd
   // rather skip the field than fail the whole delivery on a typo.
   business_email?: string;
+  // Sent so SquadHire can either find a matching business_user by phone
+  // or, if neither email nor phone resolve to an existing user, create a
+  // pending invitation with these contact details. Phone is sent as the
+  // raw string the customer typed; SquadHire normalises it on its side.
+  business_phone?: string;
+  business_contact_name?: string;
+  business_company?: string;
   // ISO timestamp set when an admin recalled a card that already had
   // acceptances. SquadHire renders a "Recalled" tag on the talent's
   // accepted view but otherwise keeps the card visible. Absent on
@@ -155,6 +162,9 @@ export async function buildSquadhirePayloadForCard(
   let planTier: string | null = null;
   let leadCountryId: string | null = null;
   let leadEmail: string | null = null;
+  let leadPhone: string | null = null;
+  let leadContactName: string | null = null;
+  let leadCompany: string | null = null;
   let planHoursDeliverable: { per_day: number; per_week: number; per_month: number } | null = null;
 
   // For request/custom-sourced cards, read metadata from the card itself
@@ -163,6 +173,9 @@ export async function buildSquadhirePayloadForCard(
     subscriptionName = (contentSource as any).service_type ?? null;
     planName = (contentSource as any).plan_name ?? null;
     leadEmail = (contentSource as any).customer_email ?? null;
+    leadPhone = (contentSource as any).customer_phone ?? null;
+    leadContactName = (contentSource as any).customer_name ?? null;
+    leadCompany = (contentSource as any).customer_company ?? null;
   } else if (staged) {
     const [{ data: sub }, { data: plan }, { data: submission }, { data: planDelivs }] = await Promise.all([
       supabaseAdmin.from('subscriptions').select('name').eq('id', staged.subscription_id).maybeSingle(),
@@ -170,7 +183,11 @@ export async function buildSquadhirePayloadForCard(
       // and `tier` (Junior/Pro/Elite). The earlier `select('name')` was a typo
       // — there's no `name` column, so plan_name was always null on Profiles.
       supabaseAdmin.from('subscription_plans').select('plan, tier').eq('id', staged.plan_id).maybeSingle(),
-      supabaseAdmin.from('client_submissions').select('country_id, email').eq('id', staged.submission_id).maybeSingle(),
+      supabaseAdmin
+        .from('client_submissions')
+        .select('country_id, email, contact_number, contact_person, business_name')
+        .eq('id', staged.submission_id)
+        .maybeSingle(),
       supabaseAdmin
         .from('subscription_plan_deliverables')
         .select('id, kind, per_day, per_week, per_month')
@@ -181,6 +198,9 @@ export async function buildSquadhirePayloadForCard(
     planTier = (plan?.tier as string | null | undefined) ?? null;
     leadCountryId = (submission?.country_id as string | undefined) ?? null;
     leadEmail = (submission?.email as string | undefined)?.trim() || null;
+    leadPhone = (submission?.contact_number as string | undefined)?.trim() || null;
+    leadContactName = (submission?.contact_person as string | undefined)?.trim() || null;
+    leadCompany = (submission?.business_name as string | undefined)?.trim() || null;
     // Respect the per-card disable flag — when the salesperson toggles off
     // the plan's hours-kind deliverable on a card, don't fold it into the
     // payload. (SquadHub's editor copy promises "the talent sees 'No hourly
@@ -380,6 +400,10 @@ export async function buildSquadhirePayloadForCard(
 
   const recalledAt = card.recalled_at as string | null | undefined;
 
+  const businessPhone = leadPhone && leadPhone.length >= 6 ? leadPhone : undefined;
+  const businessContactName = leadContactName && leadContactName.length > 0 ? leadContactName : undefined;
+  const businessCompany = leadCompany && leadCompany.length > 0 ? leadCompany : undefined;
+
   return {
     external_id: card.id as string,
     content,
@@ -389,6 +413,9 @@ export async function buildSquadhirePayloadForCard(
     distribution,
     is_secondary: card.parent_card_id != null,
     ...(businessEmail ? { business_email: businessEmail } : {}),
+    ...(businessPhone ? { business_phone: businessPhone } : {}),
+    ...(businessContactName ? { business_contact_name: businessContactName } : {}),
+    ...(businessCompany ? { business_company: businessCompany } : {}),
     ...(recalledAt ? { recalled_at: new Date(recalledAt).toISOString() } : {}),
   };
 }
