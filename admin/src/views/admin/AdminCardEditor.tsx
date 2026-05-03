@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
+import { STATES_BY_COUNTRY_NAME, LANGUAGE_OPTIONS } from './locationLanguageOptions';
 
 // Map the upsquad-style service_type label to the subscriptions catalog slug.
 const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
@@ -477,84 +478,73 @@ export default function AdminCardEditor({
               </select>
             </Field>
             <Field label="States / regions">
-              {targetRegions.length === 0 ? (
-                <p className="text-xs text-[#90A1B9]">
-                  {targetCountryIds[0]
-                    ? 'No states selected — type below or paste comma-separated.'
-                    : 'Pick a country above to enable.'}
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {targetRegions.map((r) => (
-                    <span key={r.region} className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-1 text-xs text-indigo-700">
-                      {r.region}
-                      {isDraft && (
+              {(() => {
+                const selectedCountryId = targetCountryIds[0];
+                const selectedCountry = selectedCountryId ? countryById[selectedCountryId] : null;
+                const stateOptions = selectedCountry ? STATES_BY_COUNTRY_NAME[selectedCountry.name] || [] : [];
+                if (!selectedCountry) {
+                  return <p className="text-xs text-[#90A1B9]">Pick a country above to enable.</p>;
+                }
+                if (stateOptions.length === 0) {
+                  return <p className="text-xs text-[#90A1B9]">No state list configured for {selectedCountry.name}.</p>;
+                }
+                const selectedRegions = new Set(targetRegions.map((r) => r.region));
+                return (
+                  <div className="flex flex-wrap gap-2">
+                    {stateOptions.map((state) => {
+                      const active = selectedRegions.has(state);
+                      return (
                         <button
+                          key={state}
                           type="button"
-                          onClick={() => setTargetRegions((prev) => prev.filter((x) => x.region !== r.region))}
-                          className="hover:text-indigo-900"
+                          onClick={() => {
+                            if (!isDraft) return;
+                            setTargetRegions((prev) => {
+                              if (active) return prev.filter((r) => r.region !== state);
+                              return [...prev, { country_id: selectedCountryId, region: state }];
+                            });
+                          }}
+                          disabled={!isDraft}
+                          className={`rounded-full px-3 py-1 text-xs transition border ${
+                            active
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-white text-[#0F172B] border-[#E2E8F0] hover:bg-indigo-50'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
-                          ×
+                          {active && '✓ '}{state}
                         </button>
-                      )}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {isDraft && targetCountryIds[0] && (
-                <input
-                  type="text"
-                  placeholder="Add a state and press Enter"
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter') return;
-                    e.preventDefault();
-                    const value = (e.target as HTMLInputElement).value.trim();
-                    if (!value) return;
-                    const country_id = targetCountryIds[0];
-                    if (!country_id) return;
-                    if (targetRegions.some((r) => r.region.toLowerCase() === value.toLowerCase())) return;
-                    setTargetRegions((prev) => [...prev, { country_id, region: value }]);
-                    (e.target as HTMLInputElement).value = '';
-                  }}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm"
-                />
-              )}
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </Field>
             <Field label="Languages">
-              {targetLanguages.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {targetLanguages.map((lang) => (
-                    <span key={lang} className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">
-                      {lang}
-                      {isDraft && (
-                        <button
-                          type="button"
-                          onClick={() => setTargetLanguages((prev) => prev.filter((l) => l !== lang))}
-                          className="hover:text-amber-900"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {isDraft && (
-                <input
-                  type="text"
-                  placeholder="Add a language and press Enter"
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter') return;
-                    e.preventDefault();
-                    const value = (e.target as HTMLInputElement).value.trim();
-                    if (!value) return;
-                    if (targetLanguages.some((l) => l.toLowerCase() === value.toLowerCase())) return;
-                    setTargetLanguages((prev) => [...prev, value]);
-                    (e.target as HTMLInputElement).value = '';
-                  }}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm"
-                />
-              )}
+              <div className="flex flex-wrap gap-2">
+                {LANGUAGE_OPTIONS.map((lang) => {
+                  const active = targetLanguages.includes(lang);
+                  return (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => {
+                        if (!isDraft) return;
+                        setTargetLanguages((prev) =>
+                          active ? prev.filter((l) => l !== lang) : [...prev, lang],
+                        );
+                      }}
+                      disabled={!isDraft}
+                      className={`rounded-full px-3 py-1 text-xs transition border ${
+                        active
+                          ? 'bg-amber-500 text-white border-amber-500'
+                          : 'bg-white text-[#0F172B] border-[#E2E8F0] hover:bg-amber-50'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {active && '✓ '}{lang}
+                    </button>
+                  );
+                })}
+              </div>
             </Field>
           </Section>
 
