@@ -35,6 +35,66 @@ router.get('/', async (_req: Request, res: Response) => {
   }
 });
 
+// ============================================================
+// Plan lookup for the card editor: given service slug + tier + plan,
+// return the plan row plus pricing+margin per country and the
+// admin-set daily/weekly hours. Used by AdminCardEditor to derive
+// the "Deliverables (from plan)" block and the partner price.
+//
+// MUST be defined before `GET /:id` so Express doesn't match
+// `/lookup` against the :id wildcard.
+// ============================================================
+router.get('/lookup', async (req: Request, res: Response) => {
+  try {
+    const service = String(req.query.service || '').trim();
+    const tier = String(req.query.tier || '').trim();
+    const plan = String(req.query.plan || '').trim();
+    if (!service || !tier || !plan) {
+      res.status(400).json({ success: false, error: 'service, tier, and plan are required' });
+      return;
+    }
+
+    const { data: sub } = await supabaseAdmin
+      .from('subscriptions')
+      .select('id, slug, name')
+      .eq('slug', service)
+      .maybeSingle();
+    if (!sub) {
+      res.status(404).json({ success: false, error: 'Subscription not found' });
+      return;
+    }
+
+    const { data: planRow } = await supabaseAdmin
+      .from('subscription_plans')
+      .select('*')
+      .eq('subscription_id', (sub as any).id)
+      .eq('plan', plan)
+      .eq('tier', tier)
+      .maybeSingle();
+    if (!planRow) {
+      res.status(404).json({ success: false, error: 'Plan not found' });
+      return;
+    }
+
+    const { data: pricing } = await supabaseAdmin
+      .from('subscription_plan_pricing')
+      .select('*, country:countries(*)')
+      .eq('plan_id', (planRow as any).id);
+
+    res.json({
+      success: true,
+      data: {
+        subscription: sub,
+        plan: planRow,
+        pricing: pricing || [],
+      },
+    });
+  } catch (err) {
+    console.error('Plan lookup error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // GET /admin/subscriptions/:id
 router.get('/:id', async (req: Request, res: Response) => {
   try {
@@ -128,63 +188,6 @@ const upsertPricingSchema = z.object({
   price: z.number().int().min(0),
   margin_value: z.number().int().min(0).optional(),
   margin_type: z.enum(['fixed', 'percent']).optional(),
-});
-
-// ============================================================
-// Plan lookup for the card editor: given service slug + tier + plan,
-// return the plan row plus pricing+margin per country and the
-// admin-set daily/weekly hours. Used by AdminCardEditor to derive
-// the "Deliverables (from plan)" block and the partner price.
-// ============================================================
-router.get('/lookup', async (req: Request, res: Response) => {
-  try {
-    const service = String(req.query.service || '').trim();
-    const tier = String(req.query.tier || '').trim();
-    const plan = String(req.query.plan || '').trim();
-    if (!service || !tier || !plan) {
-      res.status(400).json({ success: false, error: 'service, tier, and plan are required' });
-      return;
-    }
-
-    const { data: sub } = await supabaseAdmin
-      .from('subscriptions')
-      .select('id, slug, name')
-      .eq('slug', service)
-      .maybeSingle();
-    if (!sub) {
-      res.status(404).json({ success: false, error: 'Subscription not found' });
-      return;
-    }
-
-    const { data: planRow } = await supabaseAdmin
-      .from('subscription_plans')
-      .select('*')
-      .eq('subscription_id', (sub as any).id)
-      .eq('plan', plan)
-      .eq('tier', tier)
-      .maybeSingle();
-    if (!planRow) {
-      res.status(404).json({ success: false, error: 'Plan not found' });
-      return;
-    }
-
-    const { data: pricing } = await supabaseAdmin
-      .from('subscription_plan_pricing')
-      .select('*, country:countries(*)')
-      .eq('plan_id', (planRow as any).id);
-
-    res.json({
-      success: true,
-      data: {
-        subscription: sub,
-        plan: planRow,
-        pricing: pricing || [],
-      },
-    });
-  } catch (err) {
-    console.error('Plan lookup error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
 });
 
 router.post('/plans/:planId/pricing', async (req: Request, res: Response) => {
