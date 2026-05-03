@@ -83,7 +83,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, distribution, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, recalled_at',
+      'id, state, distribution, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, recalled_at, source, proposed_price, markup, customer_company, customer_email, service_type, plan_name',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -156,7 +156,14 @@ export async function buildSquadhirePayloadForCard(
   let leadCountryId: string | null = null;
   let leadEmail: string | null = null;
   let planHoursDeliverable: { per_day: number; per_week: number; per_month: number } | null = null;
-  if (staged) {
+
+  // For request/custom-sourced cards, read metadata from the card itself
+  const cardSource = (contentSource as any).source as string | undefined;
+  if (!staged && (cardSource === 'request' || cardSource === 'custom')) {
+    subscriptionName = (contentSource as any).service_type ?? null;
+    planName = (contentSource as any).plan_name ?? null;
+    leadEmail = (contentSource as any).customer_email ?? null;
+  } else if (staged) {
     const [{ data: sub }, { data: plan }, { data: submission }, { data: planDelivs }] = await Promise.all([
       supabaseAdmin.from('subscriptions').select('name').eq('id', staged.subscription_id).maybeSingle(),
       // subscription_plans has columns `plan` (Starter/Basic/Plus/Pro/Personal)
@@ -272,7 +279,18 @@ export async function buildSquadhirePayloadForCard(
     }
   }
 
-  const brand = (contentSource.brand_name ?? '').trim();
+  // For request/custom cards: use proposed_price + markup as display price (INR)
+  if (!staged && (cardSource === 'request' || cardSource === 'custom')) {
+    const proposedPrice = (contentSource as any).proposed_price as number | null;
+    const markup = (contentSource as any).markup as number | null;
+    if (proposedPrice) {
+      resolvedMonthlyPrice = proposedPrice + (markup || 0);
+      resolvedCustomerMonthlyPrice = proposedPrice + (markup || 0);
+      resolvedCurrency = 'INR';
+    }
+  }
+
+  const brand = ((contentSource as any).customer_company || contentSource.brand_name || '').trim();
   const titleParts = [brand, subscriptionName, planName].filter(Boolean) as string[];
   const title = titleParts.length > 0 ? titleParts.join(' — ') : 'New subscription opportunity';
 

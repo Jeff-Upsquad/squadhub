@@ -25,17 +25,21 @@ router.get('/', async (req: Request, res: Response) => {
     const stateParam = String(req.query.state || '').trim();
     const publishedBy = String(req.query.published_by || '').trim();
     const search = String(req.query.search || '').trim();
+    const sourceParam = String(req.query.source || '').trim();
 
     let query = supabaseAdmin
       .from('subscription_cards')
       .select('*')
       .is('parent_card_id', null)
-      .order('published_at', { ascending: false });
+      .order('published_at', { ascending: false, nullsFirst: false });
 
-    if (stateParam === 'published' || stateParam === 'closed') {
+    if (stateParam === 'published' || stateParam === 'closed' || stateParam === 'draft') {
       query = query.eq('state', stateParam);
     } else {
       query = query.in('state', ['published', 'closed']);
+    }
+    if (sourceParam === 'request' || sourceParam === 'custom' || sourceParam === 'submission') {
+      query = query.eq('source', sourceParam);
     }
     if (publishedBy) query = query.eq('published_by', publishedBy);
 
@@ -175,9 +179,11 @@ router.get('/', async (req: Request, res: Response) => {
 
     if (search) {
       const needle = search.toLowerCase();
-      hydrated = hydrated.filter((c: any) =>
-        (c.submission?.business_name || '').toLowerCase().includes(needle),
-      );
+      hydrated = hydrated.filter((c: any) => {
+        const businessName = (c.submission?.business_name || '').toLowerCase();
+        const customerCompany = (c.customer_company || '').toLowerCase();
+        return businessName.includes(needle) || customerCompany.includes(needle);
+      });
     }
 
     res.json({ success: true, data: hydrated });
