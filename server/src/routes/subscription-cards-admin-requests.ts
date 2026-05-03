@@ -149,6 +149,33 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
     const states = splitCsv((requestData as any).states_csv);
     const languages = splitCsv((requestData as any).languages_csv);
 
+    // Map upsquad's service_type label to a SquadHub subscription slug, then
+    // resolve the SquadHire category IDs the admin has wired through the
+    // "SquadHire Profiles" dropdown (subscription_squadhire_profiles). With
+    // this prefill, request-source cards behave like sales-source cards: the
+    // squadhireWebhook gate sees a non-empty array and actually delivers.
+    const serviceToSlug: Record<string, string> = {
+      Designers: 'designer',
+      Editors: 'video_editor',
+      'Designer plus Editor': 'designer_video_editor',
+    };
+    const subscriptionSlug = serviceToSlug[requestData.service_type] || '';
+    let squadhireCategoryIds: string[] = [];
+    if (subscriptionSlug) {
+      const { data: subRow } = await supabaseAdmin
+        .from('subscriptions')
+        .select('id')
+        .eq('slug', subscriptionSlug)
+        .maybeSingle();
+      if (subRow?.id) {
+        const { data: profileRows } = await supabaseAdmin
+          .from('subscription_squadhire_profiles')
+          .select('squadhire_category_id')
+          .eq('subscription_id', subRow.id);
+        squadhireCategoryIds = (profileRows || []).map((r: any) => r.squadhire_category_id);
+      }
+    }
+
     // Look up the country row for the upsquad country code, if any. Used to
     // populate target_country_ids / target_regions on the card.
     let countryId: string | null = null;
@@ -190,6 +217,7 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
         customer_company: requestData.company || null,
         customer_phone: requestData.phone,
         target_languages: languages,
+        squadhire_category_ids: squadhireCategoryIds,
         brand_name: (requestData as any).brand_name || null,
         business_nature: (requestData as any).nature_of_business || null,
         notes: (requestData as any).short_note || null,

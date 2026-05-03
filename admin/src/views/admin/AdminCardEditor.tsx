@@ -9,7 +9,7 @@ import { STATES_BY_COUNTRY_NAME, LANGUAGE_OPTIONS } from './locationLanguageOpti
 const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
   Designers: 'designer',
   Editors: 'video_editor',
-  'Designer plus Editor': 'designer',
+  'Designer plus Editor': 'designer_video_editor',
 };
 
 const PLAN_TO_CANONICAL: Record<string, string> = {
@@ -154,6 +154,7 @@ export default function AdminCardEditor({
   const [targetCountryIds, setTargetCountryIds] = useState<string[]>([]);
   const [targetRegions, setTargetRegions] = useState<{ country_id: string; region: string }[]>([]);
   const [targetLanguages, setTargetLanguages] = useState<string[]>([]);
+  const [squadhireCategoryIds, setSquadhireCategoryIds] = useState<string[]>([]);
 
   // Populate form from loaded card
   useEffect(() => {
@@ -179,6 +180,7 @@ export default function AdminCardEditor({
     setTargetCountryIds(card.target_country_ids || []);
     setTargetRegions(card.target_regions || []);
     setTargetLanguages(card.target_languages || []);
+    setSquadhireCategoryIds(card.squadhire_category_ids || []);
   }, [card]);
 
   // Catalog lookup: when service + plan + first selected tier are known,
@@ -265,6 +267,7 @@ export default function AdminCardEditor({
         target_languages: targetLanguages,
         target_country_ids: targetCountryIds,
         target_regions: targetRegions,
+        squadhire_category_ids: squadhireCategoryIds,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-card-editor', cardId] });
@@ -279,6 +282,17 @@ export default function AdminCardEditor({
   const countries: Array<{ id: string; name: string }> = countriesQuery.data || [];
   const countryById: Record<string, { id: string; name: string }> = {};
   countries.forEach((c) => { countryById[c.id] = c; });
+
+  // SquadHire categories — drives the publish gate. Empty = card is not
+  // delivered to SquadHire (the "Not on SquadHire" badge in the list view).
+  // Same query key the Subscriptions module uses, so the cache is shared.
+  const squadhireCategoriesQuery = useQuery({
+    queryKey: ['squadhire-categories'],
+    queryFn: () => api.get('/admin/integrations/squadhire/categories').then((r) => r.data?.data || []),
+    staleTime: 10 * 60 * 1000,
+  });
+  const squadhireCategories: Array<{ id: string; name: string; slug: string }> =
+    squadhireCategoriesQuery.data || [];
 
   const publishMutation = useMutation({
     mutationFn: async () => {
@@ -545,6 +559,43 @@ export default function AdminCardEditor({
                   );
                 })}
               </div>
+            </Field>
+            <Field label="SquadHire Categories">
+              <p className="mb-2 text-[11px] text-[#90A1B9]">
+                The card is only delivered to SquadHire when at least one
+                category is picked — talents subscribed to these categories
+                see the card. Pre-filled from the matching subscription's
+                SquadHire Profile when available.
+              </p>
+              {squadhireCategories.length === 0 ? (
+                <p className="text-xs text-[#90A1B9]">No categories loaded.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {squadhireCategories.map((cat) => {
+                    const active = squadhireCategoryIds.includes(cat.id);
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          if (!isDraft) return;
+                          setSquadhireCategoryIds((prev) =>
+                            active ? prev.filter((id) => id !== cat.id) : [...prev, cat.id],
+                          );
+                        }}
+                        disabled={!isDraft}
+                        className={`rounded-full px-3 py-1 text-xs transition border ${
+                          active
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-white text-[#0F172B] border-[#E2E8F0] hover:bg-emerald-50'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        {active && '✓ '}{cat.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </Field>
           </Section>
 
