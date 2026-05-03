@@ -1,0 +1,555 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import api from '@/services/api';
+
+interface CardData {
+  id: string;
+  state: string;
+  source: string;
+  distribution: string;
+  working_days: string[];
+  brand_name: string | null;
+  business_nature: string | null;
+  notes: string | null;
+  target_tiers: string[];
+  min_experience_years: number;
+  target_languages: string[];
+  custom_deliverables: Deliverable[];
+  proposed_price: number | null;
+  markup: number;
+  publish_targets: string[];
+  customer_name: string | null;
+  customer_email: string | null;
+  customer_company: string | null;
+  customer_phone: string | null;
+  service_type: string | null;
+  plan_name: string | null;
+  subscription_request_id: number | null;
+  squadhire_category_ids: string[] | null;
+  target_country_ids: string[];
+  target_regions: { country_id: string; region: string }[];
+}
+
+interface Deliverable {
+  id: string;
+  name: string;
+  kind: 'hours' | 'item';
+  per_day: number;
+  per_week: number;
+  per_month: number;
+}
+
+const VALID_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const VALID_TIERS = ['Junior', 'Pro', 'Elite', 'Custom'];
+const VALID_PLANS = ['starter', 'basic', 'plus', 'pro', 'personal'];
+const SERVICE_TYPES = ['Designers', 'Editors', 'Designer plus Editor'];
+
+export default function AdminCardEditor({
+  cardId,
+  onClose,
+}: {
+  cardId: string;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+
+  const { data: cardRes, isLoading } = useQuery({
+    queryKey: ['admin-card-editor', cardId],
+    queryFn: () =>
+      api.get('/admin/subscription-cards', { params: { state: 'draft', source: 'request' } })
+        .then((r) => {
+          const cards = r.data?.data || [];
+          return cards.find((c: any) => c.id === cardId) || null;
+        }),
+    enabled: !!cardId,
+  });
+
+  // Also try custom source
+  const { data: customCardRes } = useQuery({
+    queryKey: ['admin-card-editor-custom', cardId],
+    queryFn: () =>
+      api.get('/admin/subscription-cards', { params: { state: 'draft', source: 'custom' } })
+        .then((r) => {
+          const cards = r.data?.data || [];
+          return cards.find((c: any) => c.id === cardId) || null;
+        }),
+    enabled: !!cardId && !cardRes,
+  });
+
+  const card: CardData | null = cardRes || customCardRes || null;
+
+  // Local form state
+  const [serviceType, setServiceType] = useState('');
+  const [planName, setPlanName] = useState('');
+  const [tiers, setTiers] = useState<string[]>([]);
+  const [workingDays, setWorkingDays] = useState<string[]>([]);
+  const [customerCompany, setCustomerCompany] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [proposedPrice, setProposedPrice] = useState<number>(0);
+  const [markup, setMarkup] = useState<number>(0);
+  const [publishTargets, setPublishTargets] = useState<string[]>(['partner', 'talent']);
+  const [distribution, setDistribution] = useState<string>('broadcast');
+  const [brandName, setBrandName] = useState('');
+  const [businessNature, setBusinessNature] = useState('');
+  const [notes, setNotes] = useState('');
+  const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
+
+  // Populate form from loaded card
+  useEffect(() => {
+    if (!card) return;
+    setServiceType(card.service_type || '');
+    setPlanName(card.plan_name || '');
+    setTiers(card.target_tiers || []);
+    setWorkingDays(card.working_days || []);
+    setCustomerCompany(card.customer_company || '');
+    setCustomerName(card.customer_name || '');
+    setCustomerEmail(card.customer_email || '');
+    setCustomerPhone(card.customer_phone || '');
+    setProposedPrice(card.proposed_price || 0);
+    setMarkup(card.markup || 0);
+    setPublishTargets(card.publish_targets || ['partner', 'talent']);
+    setDistribution(card.distribution || 'broadcast');
+    setBrandName(card.brand_name || '');
+    setBusinessNature(card.business_nature || '');
+    setNotes(card.notes || '');
+    setDeliverables(card.custom_deliverables || []);
+  }, [card]);
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      api.patch(`/admin/subscription-cards/${cardId}/edit`, {
+        service_type: serviceType || null,
+        plan_name: planName || null,
+        working_days: workingDays,
+        customer_company: customerCompany || null,
+        customer_name: customerName || null,
+        customer_email: customerEmail || null,
+        customer_phone: customerPhone || null,
+        proposed_price: proposedPrice || null,
+        markup,
+        publish_targets: publishTargets,
+        distribution,
+        brand_name: brandName || null,
+        business_nature: businessNature || null,
+        notes: notes || null,
+        custom_deliverables: deliverables,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-card-editor', cardId] });
+    },
+  });
+
+  const targetsMutation = useMutation({
+    mutationFn: () =>
+      api.put(`/admin/subscription-cards/${cardId}/targets`, {
+        target_tiers: tiers,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-card-editor', cardId] });
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      await saveMutation.mutateAsync();
+      await targetsMutation.mutateAsync();
+      return api.post(`/admin/subscription-cards/${cardId}/publish`, { distribution });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      onClose();
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.delete(`/admin/subscription-cards/${cardId}`),
+    onSuccess: onClose,
+  });
+
+  const handleSave = useCallback(async () => {
+    await saveMutation.mutateAsync();
+    await targetsMutation.mutateAsync();
+  }, [saveMutation, targetsMutation]);
+
+  const addDeliverable = () => {
+    setDeliverables((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), name: '', kind: 'item', per_day: 0, per_week: 0, per_month: 0 },
+    ]);
+  };
+
+  const updateDeliverable = (id: string, field: string, value: any) => {
+    setDeliverables((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, [field]: value } : d)),
+    );
+  };
+
+  const removeDeliverable = (id: string) => {
+    setDeliverables((prev) => prev.filter((d) => d.id !== id));
+  };
+
+  const displayPrice = (proposedPrice || 0) + markup;
+  const isReadOnlyCustomer = card?.source === 'request';
+  const isDraft = card?.state === 'draft';
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm text-[#90A1B9]">Loading card…</p>
+      </div>
+    );
+  }
+
+  if (!card) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4">
+        <p className="text-sm text-[#90A1B9]">Card not found.</p>
+        <button onClick={onClose} className="text-sm text-blue-600 hover:underline">Go back</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-[#E2E8F0] bg-white px-6 py-4">
+        <div>
+          <button onClick={onClose} className="text-sm text-[#62748E] hover:text-[#0F172B]">
+            ← Back
+          </button>
+          <h1 className="mt-1 text-lg font-semibold text-[#0F172B]">
+            {card.source === 'request' ? 'Card from Request' : 'Custom Card'}
+            {card.subscription_request_id && (
+              <span className="ml-2 text-sm font-normal text-[#62748E]">
+                (Request #{card.subscription_request_id})
+              </span>
+            )}
+          </h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {isDraft && (
+            <>
+              <button
+                onClick={() => deleteMutation.mutate()}
+                disabled={deleteMutation.isPending}
+                className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+              >
+                Delete
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saveMutation.isPending}
+                className="rounded-md border border-[#E2E8F0] px-3 py-2 text-sm font-medium text-[#0F172B] transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                {saveMutation.isPending ? 'Saving…' : 'Save Draft'}
+              </button>
+              <button
+                onClick={() => publishMutation.mutate()}
+                disabled={publishMutation.isPending}
+                className="rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E293B] disabled:opacity-50"
+              >
+                {publishMutation.isPending ? 'Publishing…' : 'Publish'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Form */}
+      <div className="flex-1 overflow-y-auto px-6 py-6">
+        <div className="mx-auto max-w-3xl space-y-8">
+          {/* Plan Basics */}
+          <Section title="Plan Basics">
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Service Type">
+                <select
+                  value={serviceType}
+                  onChange={(e) => setServiceType(e.target.value)}
+                  disabled={!isDraft}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">Select…</option>
+                  {SERVICE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
+              <Field label="Plan">
+                <select
+                  value={planName}
+                  onChange={(e) => setPlanName(e.target.value)}
+                  disabled={!isDraft}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">Select…</option>
+                  {VALID_PLANS.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+                </select>
+              </Field>
+            </div>
+            <Field label="Tiers">
+              <div className="flex flex-wrap gap-2">
+                {VALID_TIERS.map((tier) => (
+                  <label key={tier} className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={tiers.includes(tier)}
+                      onChange={(e) =>
+                        setTiers(e.target.checked
+                          ? [...tiers, tier]
+                          : tiers.filter((t) => t !== tier))
+                      }
+                      disabled={!isDraft}
+                      className="rounded border-[#E2E8F0]"
+                    />
+                    {tier}
+                  </label>
+                ))}
+              </div>
+            </Field>
+            <Field label="Working Days">
+              <div className="flex flex-wrap gap-2">
+                {VALID_DAYS.map((day) => (
+                  <label key={day} className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={workingDays.includes(day)}
+                      onChange={(e) =>
+                        setWorkingDays(e.target.checked
+                          ? [...workingDays, day]
+                          : workingDays.filter((d) => d !== day))
+                      }
+                      disabled={!isDraft}
+                      className="rounded border-[#E2E8F0]"
+                    />
+                    {day}
+                  </label>
+                ))}
+              </div>
+            </Field>
+          </Section>
+
+          {/* Customer */}
+          <Section title="Customer">
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Company">
+                <input
+                  value={customerCompany}
+                  onChange={(e) => setCustomerCompany(e.target.value)}
+                  disabled={!isDraft || isReadOnlyCustomer}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                />
+              </Field>
+              <Field label="Contact Name">
+                <input
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  disabled={!isDraft || isReadOnlyCustomer}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                />
+              </Field>
+              <Field label="Email">
+                <input
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  disabled={!isDraft || isReadOnlyCustomer}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                />
+              </Field>
+              <Field label="Phone">
+                <input
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  disabled={!isDraft || isReadOnlyCustomer}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                />
+              </Field>
+            </div>
+          </Section>
+
+          {/* Pricing */}
+          <Section title="Pricing">
+            <div className="grid grid-cols-3 gap-4">
+              <Field label="Proposed Price (₹/mo)">
+                <input
+                  type="number"
+                  value={proposedPrice || ''}
+                  onChange={(e) => setProposedPrice(parseInt(e.target.value) || 0)}
+                  disabled={!isDraft || isReadOnlyCustomer}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                />
+              </Field>
+              <Field label="Markup (₹/mo)">
+                <input
+                  type="number"
+                  min={0}
+                  value={markup || ''}
+                  onChange={(e) => setMarkup(parseInt(e.target.value) || 0)}
+                  disabled={!isDraft}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm"
+                />
+              </Field>
+              <Field label="Display Price (₹/mo)">
+                <div className="flex items-center rounded-md border border-[#E2E8F0] bg-slate-50 px-3 py-2 text-sm font-semibold text-[#0F172B]">
+                  ₹{displayPrice.toLocaleString()}
+                </div>
+              </Field>
+            </div>
+            {proposedPrice > 0 && markup > 0 && (
+              <p className="mt-2 text-xs text-[#62748E]">
+                Margin: ₹{markup.toLocaleString()} ({((markup / displayPrice) * 100).toFixed(1)}% of display price)
+              </p>
+            )}
+          </Section>
+
+          {/* Client Brief */}
+          <Section title="Client Brief">
+            <div className="grid grid-cols-1 gap-4">
+              <Field label="Brand Name">
+                <input
+                  value={brandName}
+                  onChange={(e) => setBrandName(e.target.value)}
+                  disabled={!isDraft}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm"
+                />
+              </Field>
+              <Field label="Business Nature">
+                <textarea
+                  value={businessNature}
+                  onChange={(e) => setBusinessNature(e.target.value)}
+                  disabled={!isDraft}
+                  rows={2}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm resize-none"
+                />
+              </Field>
+              <Field label="Notes">
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  disabled={!isDraft}
+                  rows={3}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm resize-none"
+                />
+              </Field>
+            </div>
+          </Section>
+
+          {/* Custom Deliverables */}
+          <Section title="Custom Deliverables">
+            <div className="space-y-3">
+              {deliverables.map((d) => (
+                <div key={d.id} className="flex items-start gap-2 rounded-lg border border-[#E2E8F0] bg-white p-3">
+                  <div className="flex-1 grid grid-cols-4 gap-2">
+                    <input
+                      value={d.name}
+                      onChange={(e) => updateDeliverable(d.id, 'name', e.target.value)}
+                      placeholder="Name"
+                      disabled={!isDraft}
+                      className="col-span-2 rounded-md border border-[#E2E8F0] px-2 py-1.5 text-sm"
+                    />
+                    <select
+                      value={d.kind}
+                      onChange={(e) => updateDeliverable(d.id, 'kind', e.target.value)}
+                      disabled={!isDraft}
+                      className="rounded-md border border-[#E2E8F0] px-2 py-1.5 text-sm"
+                    >
+                      <option value="item">Item</option>
+                      <option value="hours">Hours</option>
+                    </select>
+                    <input
+                      type="number"
+                      value={d.per_month || ''}
+                      onChange={(e) => updateDeliverable(d.id, 'per_month', parseInt(e.target.value) || 0)}
+                      placeholder="/mo"
+                      disabled={!isDraft}
+                      className="rounded-md border border-[#E2E8F0] px-2 py-1.5 text-sm"
+                    />
+                  </div>
+                  {isDraft && (
+                    <button
+                      onClick={() => removeDeliverable(d.id)}
+                      className="mt-1.5 text-sm text-red-500 hover:text-red-700"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              {isDraft && (
+                <button
+                  onClick={addDeliverable}
+                  className="rounded-md border border-dashed border-[#E2E8F0] px-3 py-2 text-sm text-[#62748E] hover:border-[#0F172B] hover:text-[#0F172B]"
+                >
+                  + Add Deliverable
+                </button>
+              )}
+            </div>
+          </Section>
+
+          {/* Publish Settings */}
+          <Section title="Publish Settings">
+            <Field label="Publish To">
+              <div className="flex gap-4">
+                {['partner', 'talent'].map((target) => (
+                  <label key={target} className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={publishTargets.includes(target)}
+                      onChange={(e) =>
+                        setPublishTargets(e.target.checked
+                          ? [...publishTargets, target]
+                          : publishTargets.filter((t) => t !== target))
+                      }
+                      disabled={!isDraft}
+                      className="rounded border-[#E2E8F0]"
+                    />
+                    {target.charAt(0).toUpperCase() + target.slice(1)}
+                  </label>
+                ))}
+              </div>
+            </Field>
+            <Field label="Distribution">
+              <div className="flex gap-4">
+                {(['broadcast', 'manual'] as const).map((mode) => (
+                  <label key={mode} className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="radio"
+                      name="distribution"
+                      value={mode}
+                      checked={distribution === mode}
+                      onChange={() => setDistribution(mode)}
+                      disabled={!isDraft}
+                      className="border-[#E2E8F0]"
+                    />
+                    {mode === 'broadcast' ? 'Broadcast (auto-match)' : 'Manual (hand-pick)'}
+                  </label>
+                ))}
+              </div>
+            </Field>
+          </Section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h2 className="mb-3 text-sm font-semibold text-[#0F172B] uppercase tracking-wide">{title}</h2>
+      <div className="space-y-4 rounded-lg border border-[#E2E8F0] bg-white p-4">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-[#62748E]">{label}</label>
+      {children}
+    </div>
+  );
+}

@@ -46,6 +46,11 @@ export const config = {
   squadhireWebhookSecret: process.env.SQUADHIRE_WEBHOOK_SECRET || '',
   squadhireCallbackSecret: process.env.SQUADHIRE_CALLBACK_SECRET || '',
 
+  // upsquad website — admin API for subscription requests.
+  // When unset, the proxy endpoints return 503 and local dev works without it.
+  upsquadApiUrl: process.env.UPSQUAD_API_URL || '',
+  upsquadApiToken: process.env.UPSQUAD_API_TOKEN || '',
+
   // Anthropic — used by the cash book receipt analyzer. When unset the
   // /cashbook/analyze-receipts endpoint returns 503 instead of crashing.
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',

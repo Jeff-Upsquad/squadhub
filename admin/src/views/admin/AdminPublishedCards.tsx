@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
 import AdminPublishedCardRecipientsPanel from './AdminPublishedCardRecipientsPanel';
+import AdminRequestsList from './AdminRequestsList';
+import AdminCustomCardsList from './AdminCustomCardsList';
 
 export type PublishedCard = {
   id: string;
@@ -110,7 +112,10 @@ function publishedCardTitle(card: PublishedCard): string {
   return subName ? `${business} · ${subName}` : business;
 }
 
+type Tab = 'published' | 'requests' | 'custom';
+
 export default function AdminPublishedCards() {
+  const [activeTab, setActiveTab] = useState<Tab>('published');
   const [stateFilter, setStateFilter] = useState<'all' | 'published' | 'closed'>('all');
   const [publishedBy, setPublishedBy] = useState<string>('');
   const [search, setSearch] = useState<string>('');
@@ -148,12 +153,30 @@ export default function AdminPublishedCards() {
     [cards, selectedCardId],
   );
 
+  if (activeTab === 'requests') return <AdminRequestsList />;
+  if (activeTab === 'custom') return <AdminCustomCardsList />;
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-[#E2E8F0] bg-white px-6 pt-5 pb-4">
         <div className="mb-4">
           <h1 className="text-xl font-semibold text-[#0F172B]">Published Cards</h1>
           <p className="mt-0.5 text-sm text-[#62748E]">All subscription cards published across the org.</p>
+        </div>
+        <div className="mb-4 flex gap-1 rounded-lg bg-slate-100 p-1">
+          {([['published', 'Published'], ['requests', 'From Requests'], ['custom', 'Custom']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
+                activeTab === key
+                  ? 'bg-white text-[#0F172B] shadow-sm'
+                  : 'text-[#62748E] hover:text-[#0F172B]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select
