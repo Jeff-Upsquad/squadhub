@@ -139,11 +139,39 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
       return;
     }
 
-    // Parse tiers and working days from comma-separated strings
+    // Parse tiers, days, languages, states from upsquad's CSV-style fields.
     const tiers = normalizeTiers(requestData.tier || '');
-    const days = requestData.working_days
-      ? requestData.working_days.split(',').map((d: string) => d.trim()).filter(Boolean)
-      : [];
+    const splitCsv = (s: any) =>
+      typeof s === 'string'
+        ? s.split(',').map((x: string) => x.trim()).filter(Boolean)
+        : [];
+    const days = splitCsv((requestData as any).working_days);
+    const states = splitCsv((requestData as any).states_csv);
+    const languages = splitCsv((requestData as any).languages_csv);
+
+    // Look up the country row for the upsquad country code, if any. Used to
+    // populate target_country_ids / target_regions on the card.
+    let countryId: string | null = null;
+    const upsquadCountryCode = String((requestData as any).country || '').toUpperCase();
+    if (upsquadCountryCode) {
+      const codeToName: Record<string, string> = {
+        IN: 'India', US: 'United States', GB: 'United Kingdom',
+        AE: 'United Arab Emirates', SG: 'Singapore', AU: 'Australia', CA: 'Canada',
+      };
+      const countryName = codeToName[upsquadCountryCode] || '';
+      if (countryName) {
+        const { data: countryRow } = await supabaseAdmin
+          .from('countries')
+          .select('id')
+          .ilike('name', countryName)
+          .maybeSingle();
+        countryId = (countryRow as any)?.id ?? null;
+      }
+    }
+    const targetRegions =
+      countryId && states.length > 0
+        ? states.map((region) => ({ country_id: countryId, region }))
+        : [];
 
     const { data: card, error } = await supabaseAdmin
       .from('subscription_cards')
@@ -161,6 +189,11 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
         customer_email: requestData.email,
         customer_company: requestData.company || null,
         customer_phone: requestData.phone,
+        target_languages: languages,
+        brand_name: (requestData as any).brand_name || null,
+        business_nature: (requestData as any).nature_of_business || null,
+        notes: (requestData as any).short_note || null,
+        customer_location: (requestData as any).location_of_business || null,
         publish_targets: ['partner', 'talent'],
       })
       .select('*')
@@ -169,6 +202,20 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
+    }
+
+    // Country/region targeting lives in join tables; populate them now.
+    if (countryId) {
+      await supabaseAdmin
+        .from('subscription_card_target_countries')
+        .insert({ card_id: (card as any).id, country_id: countryId });
+    }
+    if (targetRegions.length > 0) {
+      await supabaseAdmin
+        .from('subscription_card_target_regions')
+        .insert(
+          targetRegions.map((r) => ({ card_id: (card as any).id, country_id: r.country_id, region: r.region })),
+        );
     }
 
     // Mark request as in_review (fire-and-forget)
@@ -258,6 +305,7 @@ const editCardSchema = z.object({
   customer_name: z.string().nullable().optional(),
   customer_email: z.string().nullable().optional(),
   customer_phone: z.string().nullable().optional(),
+  customer_location: z.string().nullable().optional(),
   service_type: z.string().nullable().optional(),
   plan_name: z.string().nullable().optional(),
 });
@@ -305,6 +353,7 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
     if (body.customer_name !== undefined) updates.customer_name = body.customer_name;
     if (body.customer_email !== undefined) updates.customer_email = body.customer_email;
     if (body.customer_phone !== undefined) updates.customer_phone = body.customer_phone;
+    if (body.customer_location !== undefined) updates.customer_location = body.customer_location;
     if (body.service_type !== undefined) updates.service_type = body.service_type;
     if (body.plan_name !== undefined) updates.plan_name = body.plan_name;
 
