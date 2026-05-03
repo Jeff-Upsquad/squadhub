@@ -88,6 +88,8 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 const updatePlanSchema = z.object({
   is_active: z.boolean().optional(),
+  daily_hours: z.number().min(0).max(24).nullable().optional(),
+  weekly_hours: z.number().min(0).max(168).nullable().optional(),
   // tier is immutable: plans exist at all three tiers and are part of the row identity
 });
 
@@ -124,18 +126,82 @@ router.put('/:id/plans/:planId', async (req: Request, res: Response) => {
 const upsertPricingSchema = z.object({
   country_id: z.string().uuid(),
   price: z.number().int().min(0),
+  margin_value: z.number().int().min(0).optional(),
+  margin_type: z.enum(['fixed', 'percent']).optional(),
+});
+
+// ============================================================
+// Plan lookup for the card editor: given service slug + tier + plan,
+// return the plan row plus pricing+margin per country and the
+// admin-set daily/weekly hours. Used by AdminCardEditor to derive
+// the "Deliverables (from plan)" block and the partner price.
+// ============================================================
+router.get('/lookup', async (req: Request, res: Response) => {
+  try {
+    const service = String(req.query.service || '').trim();
+    const tier = String(req.query.tier || '').trim();
+    const plan = String(req.query.plan || '').trim();
+    if (!service || !tier || !plan) {
+      res.status(400).json({ success: false, error: 'service, tier, and plan are required' });
+      return;
+    }
+
+    const { data: sub } = await supabaseAdmin
+      .from('subscriptions')
+      .select('id, slug, name')
+      .eq('slug', service)
+      .maybeSingle();
+    if (!sub) {
+      res.status(404).json({ success: false, error: 'Subscription not found' });
+      return;
+    }
+
+    const { data: planRow } = await supabaseAdmin
+      .from('subscription_plans')
+      .select('*')
+      .eq('subscription_id', (sub as any).id)
+      .eq('plan', plan)
+      .eq('tier', tier)
+      .maybeSingle();
+    if (!planRow) {
+      res.status(404).json({ success: false, error: 'Plan not found' });
+      return;
+    }
+
+    const { data: pricing } = await supabaseAdmin
+      .from('subscription_plan_pricing')
+      .select('*, country:countries(*)')
+      .eq('plan_id', (planRow as any).id);
+
+    res.json({
+      success: true,
+      data: {
+        subscription: sub,
+        plan: planRow,
+        pricing: pricing || [],
+      },
+    });
+  } catch (err) {
+    console.error('Plan lookup error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
 });
 
 router.post('/plans/:planId/pricing', async (req: Request, res: Response) => {
   try {
     const body = upsertPricingSchema.parse(req.body);
 
+    const row: Record<string, unknown> = {
+      plan_id: req.params.planId,
+      country_id: body.country_id,
+      price: body.price,
+    };
+    if (body.margin_value !== undefined) row.margin_value = body.margin_value;
+    if (body.margin_type !== undefined) row.margin_type = body.margin_type;
+
     const { data, error } = await supabaseAdmin
       .from('subscription_plan_pricing')
-      .upsert(
-        { plan_id: req.params.planId, country_id: body.country_id, price: body.price },
-        { onConflict: 'plan_id,country_id' },
-      )
+      .upsert(row, { onConflict: 'plan_id,country_id' })
       .select()
       .single();
 
