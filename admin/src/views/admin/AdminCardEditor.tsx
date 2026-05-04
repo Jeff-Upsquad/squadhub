@@ -109,28 +109,18 @@ export default function AdminCardEditor({
 
   const { data: cardRes, isLoading } = useQuery({
     queryKey: ['admin-card-editor', cardId],
-    queryFn: () =>
-      api.get('/admin/subscription-cards', { params: { state: 'draft', source: 'request' } })
-        .then((r) => {
-          const cards = r.data?.data || [];
-          return cards.find((c: any) => c.id === cardId) || null;
-        }),
+    queryFn: async () => {
+      for (const state of ['draft', 'published', 'closed']) {
+        const r = await api.get('/admin/subscription-cards', { params: { state } });
+        const found = (r.data?.data || []).find((c: any) => c.id === cardId);
+        if (found) return found;
+      }
+      return null;
+    },
     enabled: !!cardId,
   });
 
-  // Also try custom source
-  const { data: customCardRes } = useQuery({
-    queryKey: ['admin-card-editor-custom', cardId],
-    queryFn: () =>
-      api.get('/admin/subscription-cards', { params: { state: 'draft', source: 'custom' } })
-        .then((r) => {
-          const cards = r.data?.data || [];
-          return cards.find((c: any) => c.id === cardId) || null;
-        }),
-    enabled: !!cardId && !cardRes,
-  });
-
-  const card: CardData | null = cardRes || customCardRes || null;
+  const card: CardData | null = cardRes || null;
 
   // Local form state
   const [serviceType, setServiceType] = useState('');
