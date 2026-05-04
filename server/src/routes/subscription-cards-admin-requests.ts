@@ -578,6 +578,65 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
 });
 
 // ============================================================
+// POST /admin/subscription-cards/:id/broadcast — upgrade a soft-published
+// (manual) card to broadcast, running auto-match for partners & talents
+// ============================================================
+router.post('/subscription-cards/:id/broadcast', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('*')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    if (card.state !== 'published') {
+      res.status(409).json({ success: false, error: 'Only published cards can be broadcast' });
+      return;
+    }
+    if (card.distribution !== 'manual') {
+      res.status(409).json({ success: false, error: 'Card is already broadcast' });
+      return;
+    }
+
+    const { data: updated, error: updErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .update({ distribution: 'broadcast' })
+      .eq('id', cardId)
+      .select('*')
+      .single();
+    if (updErr) {
+      res.status(500).json({ success: false, error: updErr.message });
+      return;
+    }
+
+    const publishTargets: string[] = card.publish_targets || ['partner', 'talent'];
+
+    if (publishTargets.includes('partner')) {
+      await matchPartnersForCard(cardId);
+    }
+
+    if (publishTargets.includes('talent')) {
+      buildSquadhirePayloadForCard(cardId)
+        .then((payload) => payload && deliverCardToSquadhire(cardId, payload))
+        .catch((err) =>
+          console.error('[broadcast-card] squadhire delivery error', err),
+        );
+    }
+
+    const hydrated = await hydrateCard(updated);
+    res.json({ success: true, data: hydrated });
+  } catch (err: any) {
+    console.error('Broadcast card error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
 // DELETE /admin/subscription-cards/:id — hard delete draft only
 // ============================================================
 router.delete('/subscription-cards/:id', async (req: Request, res: Response) => {

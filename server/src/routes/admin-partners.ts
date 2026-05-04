@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import { PARTNER_USER_TYPES, type UserType } from '@squadhub/shared';
+import { matchCardsForPartner } from '../utils/subscriptionCards';
 
 const router = Router();
 
@@ -260,7 +261,7 @@ const targetingSchema = z.object({
 
 router.patch('/:userId/targeting', async (req: Request, res: Response) => {
   try {
-    const userId = req.params.userId;
+    const userId = req.params.userId as string;
     const body = targetingSchema.parse(req.body);
 
     const { data: user } = await supabaseAdmin
@@ -289,6 +290,10 @@ router.patch('/:userId/targeting', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+    matchCardsForPartner(userId).catch((err) =>
+      console.error('[partner-targeting] retroactive card match error:', err),
+    );
+
     res.json({ success: true, data: updated });
   } catch (err: any) {
     if (err instanceof z.ZodError) {

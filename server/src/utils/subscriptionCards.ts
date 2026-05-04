@@ -194,3 +194,86 @@ export async function matchPartnersForCard(cardId: string, targetingCardId?: str
 
   return matchingIds;
 }
+
+/**
+ * Inverse of matchPartnersForCard: given a partner, find all active published
+ * cards they qualify for and upsert them as recipients. Idempotent.
+ */
+export async function matchCardsForPartner(userId: string): Promise<string[]> {
+  const { data: user, error: userErr } = await supabaseAdmin
+    .from('users')
+    .select('id, user_type, status, tier, min_experience_years, country_id, state_region, languages')
+    .eq('id', userId)
+    .single();
+  if (userErr) throw userErr;
+  if (!user || !['partner', 'partner_employee'].includes(user.user_type)) return [];
+  if (user.status !== 'active' || !user.tier) return [];
+
+  const { data: cards, error: cardsErr } = await supabaseAdmin
+    .from('subscription_cards')
+    .select('id, target_tiers, min_experience_years, target_languages')
+    .eq('state', 'published');
+  if (cardsErr) throw cardsErr;
+  if (!cards || cards.length === 0) return [];
+
+  const cardIds = cards.map((c: any) => c.id);
+  const [{ data: countryRows }, { data: regionRows }] = await Promise.all([
+    supabaseAdmin
+      .from('subscription_card_target_countries')
+      .select('card_id, country_id')
+      .in('card_id', cardIds),
+    supabaseAdmin
+      .from('subscription_card_target_regions')
+      .select('card_id, country_id, region')
+      .in('card_id', cardIds),
+  ]);
+
+  const countriesByCard: Record<string, string[]> = {};
+  (countryRows || []).forEach((r: any) => {
+    (countriesByCard[r.card_id] = countriesByCard[r.card_id] || []).push(r.country_id);
+  });
+
+  const regionsByCard: Record<string, Record<string, string[]>> = {};
+  (regionRows || []).forEach((r: any) => {
+    const byCountry = (regionsByCard[r.card_id] = regionsByCard[r.card_id] || {});
+    (byCountry[r.country_id] = byCountry[r.country_id] || []).push(String(r.region).toLowerCase());
+  });
+
+  const matchedCardIds: string[] = [];
+  for (const card of cards) {
+    const tiers: string[] = Array.isArray(card.target_tiers) ? card.target_tiers : [];
+    if (tiers.length > 0 && !tiers.includes(user.tier)) continue;
+
+    if (card.min_experience_years > 0) {
+      if ((user.min_experience_years || 0) < card.min_experience_years) continue;
+    }
+
+    const cIds = countriesByCard[card.id] || [];
+    if (cIds.length > 0 && !cIds.includes(user.country_id)) continue;
+
+    const regMap = regionsByCard[card.id] || {};
+    const regions = user.country_id ? regMap[user.country_id] : undefined;
+    if (regions && regions.length > 0) {
+      if (!user.state_region) continue;
+      if (!regions.includes(String(user.state_region).toLowerCase())) continue;
+    }
+
+    const langs: string[] = Array.isArray(card.target_languages) ? card.target_languages : [];
+    if (langs.length > 0) {
+      const pLangs: string[] = Array.isArray(user.languages) ? user.languages : [];
+      if (!pLangs.some((l: string) => langs.includes(l))) continue;
+    }
+
+    matchedCardIds.push(card.id);
+  }
+
+  if (matchedCardIds.length > 0) {
+    const rows = matchedCardIds.map((cid) => ({ card_id: cid, partner_id: userId }));
+    const { error: insErr } = await supabaseAdmin
+      .from('subscription_card_recipients')
+      .upsert(rows, { onConflict: 'card_id,partner_id', ignoreDuplicates: true });
+    if (insErr) throw insErr;
+  }
+
+  return matchedCardIds;
+}
