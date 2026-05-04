@@ -6,7 +6,7 @@ import api from '@/services/api';
 import AssignRecipientPicker from './AssignRecipientPicker';
 import type { PublishedCard } from './AdminPublishedCards';
 
-type PartnerRecipient = {
+export type PartnerRecipient = {
   id: string;
   name: string;
   status: 'pending' | 'accepted' | 'rejected';
@@ -17,7 +17,7 @@ type PartnerRecipient = {
   passed_over_at?: string | null;
 };
 
-type TalentRecipient = {
+export type TalentRecipient = {
   external_user_id: string;
   name: string | null;
   status: 'pending' | 'accepted' | 'rejected';
@@ -28,7 +28,7 @@ type TalentRecipient = {
   passed_over_at?: string | null;
 };
 
-type RecipientsResponse = {
+export type RecipientsResponse = {
   partners: PartnerRecipient[];
   talents: TalentRecipient[];
 };
