@@ -56,7 +56,7 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     // Hydrate the related rows in batches (one query per relation, not N+1).
-    const stagedIds = list.map((c: any) => c.submission_subscription_id);
+    const stagedIds = list.map((c: any) => c.submission_subscription_id).filter(Boolean);
     const publisherIds = Array.from(
       new Set(list.map((c: any) => c.published_by).filter(Boolean)),
     );
@@ -80,13 +80,13 @@ router.get('/', async (req: Request, res: Response) => {
     (publishers || []).forEach((u: any) => { publisherById[u.id] = u; });
 
     const submissionIds = Array.from(
-      new Set((stagedRows || []).map((r: any) => r.submission_id)),
+      new Set((stagedRows || []).map((r: any) => r.submission_id).filter(Boolean)),
     );
     const subscriptionIds = Array.from(
-      new Set((stagedRows || []).map((r: any) => r.subscription_id)),
+      new Set((stagedRows || []).map((r: any) => r.subscription_id).filter(Boolean)),
     );
     const planIds = Array.from(
-      new Set((stagedRows || []).map((r: any) => r.plan_id)),
+      new Set((stagedRows || []).map((r: any) => r.plan_id).filter(Boolean)),
     );
 
     const [
