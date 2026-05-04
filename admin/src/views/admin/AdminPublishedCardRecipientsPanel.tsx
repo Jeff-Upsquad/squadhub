@@ -228,6 +228,18 @@ function CardPanelContent({
     },
   });
 
+  const broadcastCard = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${activeCardId}/broadcast`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+    },
+    onError: (err: any) =>
+      alert(err?.response?.data?.error || err.message || 'Failed to broadcast card'),
+  });
+
   const [recallConfirmOpen, setRecallConfirmOpen] = useState(false);
 
   const hasSelection = activeCard.selected_recipient_type != null;
@@ -304,7 +316,7 @@ function CardPanelContent({
         <CardDetails card={card} activeCard={activeCard} isSecondaryView={isSecondaryView} countries={countries} squadhireCategories={squadhireCategories} />
 
         {activeCard.state === 'published' && (
-          <div className="border-b border-[#E2E8F0] px-5 py-2.5">
+          <div className="flex items-center gap-2 border-b border-[#E2E8F0] px-5 py-2.5">
             <button
               onClick={startRecall}
               disabled={recallCard.isPending}
@@ -312,6 +324,18 @@ function CardPanelContent({
             >
               {recallCard.isPending ? 'Recalling…' : 'Recall this card'}
             </button>
+            {activeCard.distribution === 'manual' && (
+              <button
+                onClick={() => {
+                  if (!window.confirm('This will broadcast the card to all matching partners and talents based on the targeting criteria. Continue?')) return;
+                  broadcastCard.mutate();
+                }}
+                disabled={broadcastCard.isPending}
+                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {broadcastCard.isPending ? 'Publishing…' : 'Publish to all'}
+              </button>
+            )}
           </div>
         )}
 
