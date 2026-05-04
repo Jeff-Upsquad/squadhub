@@ -166,6 +166,7 @@ export async function buildSquadhirePayloadForCard(
   let leadContactName: string | null = null;
   let leadCompany: string | null = null;
   let planHoursDeliverable: { per_day: number; per_week: number; per_month: number } | null = null;
+  let planItemDeliverables: Array<{ kind: string; name: string; deliverable_type_id: string | null; per_day: number; per_week: number; per_month: number }> = [];
 
   // For request/custom-sourced cards, read metadata from the card itself
   const cardSource = (contentSource as any).source as string | undefined;
@@ -177,7 +178,7 @@ export async function buildSquadhirePayloadForCard(
     leadContactName = (contentSource as any).customer_name ?? null;
     leadCompany = (contentSource as any).customer_company ?? null;
   } else if (staged) {
-    const [{ data: sub }, { data: plan }, { data: submission }, { data: planDelivs }] = await Promise.all([
+    const [{ data: sub }, { data: plan }, { data: submission }, { data: planDelivs }, { data: delivTypes }] = await Promise.all([
       supabaseAdmin.from('subscriptions').select('name').eq('id', staged.subscription_id).maybeSingle(),
       // subscription_plans has columns `plan` (Starter/Basic/Plus/Pro/Personal)
       // and `tier` (Junior/Pro/Elite). The earlier `select('name')` was a typo
@@ -190,8 +191,12 @@ export async function buildSquadhirePayloadForCard(
         .maybeSingle(),
       supabaseAdmin
         .from('subscription_plan_deliverables')
-        .select('id, kind, per_day, per_week, per_month')
+        .select('id, kind, per_day, per_week, per_month, deliverable_type_id')
         .eq('plan_id', staged.plan_id),
+      supabaseAdmin
+        .from('subscription_deliverable_types')
+        .select('id, name')
+        .eq('subscription_id', staged.subscription_id),
     ]);
     subscriptionName = sub?.name ?? null;
     planName = (plan?.plan as string | null | undefined) ?? null;
@@ -220,6 +225,20 @@ export async function buildSquadhirePayloadForCard(
         per_month: Number(hoursRow.per_month) || 0,
       };
     }
+
+    const typeNameMap: Record<string, string> = {};
+    (delivTypes ?? []).forEach((t: any) => { typeNameMap[t.id] = t.name; });
+
+    planItemDeliverables = (planDelivs ?? [])
+      .filter((d: any) => d.kind === 'item' && !disabledIds.has(d.id))
+      .map((d: any) => ({
+        kind: 'item',
+        name: typeNameMap[d.deliverable_type_id] || 'Deliverable',
+        deliverable_type_id: d.deliverable_type_id ?? null,
+        per_day: Number(d.per_day) || 0,
+        per_week: Number(d.per_week) || 0,
+        per_month: Number(d.per_month) || 0,
+      }));
   }
 
   // Hours resolution: a card's custom_deliverables can carry an hours entry
@@ -363,7 +382,21 @@ export async function buildSquadhirePayloadForCard(
     // separate field so SquadHire can show it next to plan_name on the
     // business dashboard ("Pro · Elite") without parsing a combined string.
     plan_tier: planTier,
-    custom_deliverables: contentSource.custom_deliverables ?? [],
+    custom_deliverables: (() => {
+      const cardDelivs: any[] = Array.isArray(contentSource.custom_deliverables)
+        ? (contentSource.custom_deliverables as any[])
+        : [];
+      if (planItemDeliverables.length === 0) return cardDelivs;
+      const cardItemTypeIds = new Set(
+        cardDelivs
+          .filter((d) => d?.kind === 'item' && d?.deliverable_type_id)
+          .map((d) => d.deliverable_type_id),
+      );
+      const planOnly = planItemDeliverables.filter(
+        (d) => !d.deliverable_type_id || !cardItemTypeIds.has(d.deliverable_type_id),
+      );
+      return [...cardDelivs, ...planOnly];
+    })(),
     // Customer-facing context the talent finds useful before accepting:
     customer_company: leadCompany,
     customer_location: (contentSource as any).customer_location ?? null,
