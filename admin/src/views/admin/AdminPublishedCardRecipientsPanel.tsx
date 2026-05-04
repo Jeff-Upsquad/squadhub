@@ -277,6 +277,13 @@ function CardPanelContent({
   });
   const countries: Country[] = countriesRes?.data || [];
 
+  const { data: squadhireCategoriesRes } = useQuery({
+    queryKey: ['squadhire-categories'],
+    queryFn: () => api.get('/admin/integrations/squadhire/categories').then((r) => r.data?.data || []),
+    staleTime: 10 * 60 * 1000,
+  });
+  const squadhireCategories: Array<{ id: string; name: string }> = squadhireCategoriesRes || [];
+
   const partnerGroups = useMemo(() => {
     const accepted = (data?.partners || []).filter((p) => p.status === 'accepted');
     const rejected = (data?.partners || []).filter((p) => p.status === 'rejected');
@@ -294,7 +301,7 @@ function CardPanelContent({
   return (
     <>
       <div className="flex-1 overflow-y-auto">
-        <CardDetails card={card} activeCard={activeCard} isSecondaryView={isSecondaryView} countries={countries} />
+        <CardDetails card={card} activeCard={activeCard} isSecondaryView={isSecondaryView} countries={countries} squadhireCategories={squadhireCategories} />
 
         {activeCard.state === 'published' && (
           <div className="border-b border-[#E2E8F0] px-5 py-2.5">
@@ -672,13 +679,18 @@ function SecondaryCardsSection({
 // Card Details
 // ============================================================
 
-function CardDetails({ card, activeCard, isSecondaryView, countries }: { card: PublishedCard; activeCard: PublishedCard; isSecondaryView: boolean; countries: Country[] }) {
+function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCategories }: { card: PublishedCard; activeCard: PublishedCard; isSecondaryView: boolean; countries: Country[]; squadhireCategories: Array<{ id: string; name: string }> }) {
   const plan = card.submission_subscription?.plan;
   const planLabel = plan ? `${plan.plan} · ${plan.tier}` : '';
+  const fallbackPlanLabel = !planLabel
+    ? [card.service_type, card.plan_name].filter(Boolean).join(' · ')
+    : '';
   const stateColor = activeCard.state === 'published' ? '#10B981' : '#6B7280';
   const stateLabel = activeCard.state === 'published' ? 'Active' : 'Cancelled';
   const distLabel = activeCard.distribution === 'manual' ? 'Soft publish' : 'Broadcast';
   const publisher = card.published_by_user;
+  const sourceBadge =
+    card.source === 'request' ? 'From request' : card.source === 'custom' ? 'Custom' : null;
 
   const countryNameById = useMemo(() => {
     const m: Record<string, string> = {};
@@ -719,14 +731,29 @@ function CardDetails({ card, activeCard, isSecondaryView, countries }: { card: P
             {stateLabel}
           </span>
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">{distLabel}</span>
+          {sourceBadge && (
+            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">{sourceBadge}</span>
+          )}
         </div>
-        {planLabel && <p className="text-xs text-[#62748E]">{planLabel}</p>}
+        {(planLabel || fallbackPlanLabel) && (
+          <p className="text-xs text-[#62748E]">{planLabel || fallbackPlanLabel}</p>
+        )}
         <p className="text-xs text-[#62748E]">
           Published {formatFullDateTime(activeCard.published_at || card.published_at)}
           {publisher && (
             <> by {publisher.display_name || publisher.email || publisher.id.slice(0, 8)}</>
           )}
         </p>
+        {card.publish_targets && card.publish_targets.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-[11px] text-[#90A1B9]">Published to:</span>
+            {card.publish_targets.map((t) => (
+              <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {(card.working_days?.length || card.brand_name || card.business_nature || card.notes) && (
@@ -738,7 +765,17 @@ function CardDetails({ card, activeCard, isSecondaryView, countries }: { card: P
         </DetailSection>
       )}
 
-      {(card.target_tiers?.length || card.min_experience_years > 0 || card.target_languages?.length || targetCountries.length || Object.keys(regionsByCountry).length > 0) && (
+      {(card.customer_company || card.customer_name || card.customer_email || card.customer_phone || card.customer_location) && (
+        <DetailSection title="Customer">
+          {card.customer_company && <DetailRow label="Company" value={card.customer_company} />}
+          {card.customer_name && <DetailRow label="Contact" value={card.customer_name} />}
+          {card.customer_email && <DetailRow label="Email" value={card.customer_email} />}
+          {card.customer_phone && <DetailRow label="Phone" value={card.customer_phone} />}
+          {card.customer_location && <DetailRow label="Location" value={card.customer_location} />}
+        </DetailSection>
+      )}
+
+      {(card.target_tiers?.length || card.min_experience_years > 0 || card.target_languages?.length || targetCountries.length || Object.keys(regionsByCountry).length > 0 || (card.squadhire_category_ids?.length || 0) > 0) && (
         <DetailSection title="Targeting">
           {card.target_tiers?.length > 0 && <DetailRow label="Tiers" value={card.target_tiers.join(' · ')} />}
           {card.min_experience_years > 0 && <DetailRow label="Min experience" value={`${card.min_experience_years}+ years`} />}
@@ -747,6 +784,14 @@ function CardDetails({ card, activeCard, isSecondaryView, countries }: { card: P
           {Object.entries(regionsByCountry).map(([country, regions]) => (
             <DetailRow key={country} label={country} value={regions.join(', ')} />
           ))}
+          {card.squadhire_category_ids && card.squadhire_category_ids.length > 0 && (
+            <DetailRow
+              label="SquadHire categories"
+              value={card.squadhire_category_ids
+                .map((id) => squadhireCategories.find((c) => c.id === id)?.name || id.slice(0, 8))
+                .join(', ')}
+            />
+          )}
         </DetailSection>
       )}
 
@@ -765,12 +810,24 @@ function CardDetails({ card, activeCard, isSecondaryView, countries }: { card: P
 
       <DetailSection title="Pricing">
         {planPrice && <DetailRow label="Plan price" value={`${priceCurrency} ${planPrice.price.toLocaleString()}`} />}
+        {card.proposed_price != null && card.proposed_price > 0 && (
+          <DetailRow label="Proposed price" value={`₹${card.proposed_price.toLocaleString()}/mo`} />
+        )}
+        {card.markup != null && card.markup > 0 && (
+          <DetailRow label="Margin" value={`₹${card.markup.toLocaleString()}/mo`} />
+        )}
+        {card.proposed_price != null && card.proposed_price > 0 && (
+          <DetailRow
+            label="Partner price (computed)"
+            value={`₹${Math.max(0, card.proposed_price - (card.markup || 0)).toLocaleString()}/mo`}
+          />
+        )}
         {activeCard.partner_price_override != null ? (
-          <DetailRow label="Partner price" value={`${priceCurrency} ${activeCard.partner_price_override.toLocaleString()}`} />
+          <DetailRow label="Partner price override" value={`${priceCurrency || '₹'} ${activeCard.partner_price_override.toLocaleString()}`} />
         ) : isSecondaryView ? (
           <DetailRow label="Partner price" value="Same as primary" />
         ) : card.partner_price_override != null ? (
-          <DetailRow label="Partner override" value={`${priceCurrency} ${card.partner_price_override.toLocaleString()}`} />
+          <DetailRow label="Partner override" value={`${priceCurrency || '₹'} ${card.partner_price_override.toLocaleString()}`} />
         ) : null}
       </DetailSection>
     </div>
