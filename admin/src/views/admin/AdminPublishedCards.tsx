@@ -33,6 +33,10 @@ export type PublishedCard = {
   squadhire_synced_at?: string | null;
   squadhire_sync_attempts?: number | null;
   squadhire_sync_last_error?: string | null;
+  customer_company?: string | null;
+  plan_name?: string | null;
+  service_type?: string | null;
+  source?: 'submission' | 'request' | 'custom' | null;
   submission?: {
     id: string;
     business_name: string;
@@ -107,8 +111,8 @@ function bucketByDate<T extends { state: 'published' | 'closed'; published_at: s
 }
 
 function publishedCardTitle(card: PublishedCard): string {
-  const business = card.submission?.business_name || 'Unknown business';
-  const subName = card.submission_subscription?.subscription?.name;
+  const business = card.submission?.business_name || card.customer_company || 'Unknown business';
+  const subName = card.submission_subscription?.subscription?.name || card.plan_name;
   return subName ? `${business} · ${subName}` : business;
 }
 
@@ -301,8 +305,8 @@ function CardGroup({
 }
 
 function PublishedCardRow({ card, onOpen, showCancelledTag }: { card: PublishedCard; onOpen: () => void; showCancelledTag: boolean }) {
-  const business = card.submission?.business_name || 'Unknown';
-  const subName = card.submission_subscription?.subscription?.name || '—';
+  const business = card.submission?.business_name || card.customer_company || 'Unknown';
+  const subName = card.submission_subscription?.subscription?.name || card.plan_name || '—';
   const plan = card.submission_subscription?.plan;
   const planLabel = plan ? `${plan.plan} · ${plan.tier}` : '';
   const partners = card.recipient_counts?.partners ?? { pending: 0, accepted: 0, rejected: 0 };
