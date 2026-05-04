@@ -34,6 +34,13 @@ export type PublishedCard = {
   squadhire_sync_attempts?: number | null;
   squadhire_sync_last_error?: string | null;
   customer_company?: string | null;
+  customer_name?: string | null;
+  customer_email?: string | null;
+  customer_phone?: string | null;
+  customer_location?: string | null;
+  proposed_price?: number | null;
+  markup?: number | null;
+  publish_targets?: string[] | null;
   plan_name?: string | null;
   service_type?: string | null;
   source?: 'submission' | 'request' | 'custom' | null;
