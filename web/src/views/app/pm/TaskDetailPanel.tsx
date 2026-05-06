@@ -678,13 +678,13 @@ export default function TaskDetailPanel({
               {/* Assignee bar — full-width row */}
               <div
                 className="td-assignee-bar td-focus w-full text-left"
-                role={canEdit && assignees.length > 0 ? 'button' : undefined}
-                tabIndex={canEdit && assignees.length > 0 ? 0 : undefined}
-                onClick={canEdit && assignees.length > 0 ? (e) => {
+                role={canEdit ? 'button' : undefined}
+                tabIndex={canEdit ? 0 : undefined}
+                onClick={canEdit ? (e) => {
                   setAssigneeAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
                   setAssigneePickerOpen(v => !v);
                 } : undefined}
-                style={canEdit && assignees.length > 0 ? undefined : { cursor: 'default' }}
+                style={canEdit ? undefined : { cursor: 'default' }}
               >
                 <span className="label">Assignee</span>
                 <span className="value">
