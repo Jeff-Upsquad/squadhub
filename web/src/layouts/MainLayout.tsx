@@ -43,6 +43,7 @@ import MyTasksView from '../views/app/MyTasksView';
 import LearningShell from '../views/app/learning/LearningShell';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
 import { useUnreadCount } from '../hooks/useUnreadCount';
+import { useNotificationSocket } from '../hooks/useNotificationSocket';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'learning' | 'more';
@@ -196,6 +197,7 @@ export default function MainLayout() {
   const [activeSection, setActiveSection] = useState<ActiveSection>('home');
   const [homeView, setHomeView] = useState<HomeView>('hub');
   const { data: unreadCount = 0 } = useUnreadCount();
+  useNotificationSocket();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
