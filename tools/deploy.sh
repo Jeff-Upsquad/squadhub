@@ -146,6 +146,12 @@ if echo "$CHANGED_FILES" | grep -qE '^Caddyfile$'; then
     echo "Reloading Caddy configuration..."
     docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
 fi
+
+if echo "$CHANGED_FILES" | grep -qE '^tools/set-r2-cors\.ts$'; then
+    echo ""
+    echo "R2 CORS config changed — applying..."
+    npx tsx tools/set-r2-cors.ts
+fi
 REMOTE
 RC=$?
 set -e
