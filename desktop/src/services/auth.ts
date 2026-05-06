@@ -1,4 +1,4 @@
-const API_URL = 'https://squadhub.in';
+const API_URL = 'https://api.squadhub.in';
 
 interface LoginResponse {
   success: boolean;

@@ -3,7 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 import { refreshTokens } from './auth';
 import { showNotification } from './notifications';
 
-const SERVER_URL = 'https://squadhub.in';
+const SERVER_URL = 'https://api.squadhub.in';
 
 let socket: Socket | null = null;
 let reconnectAttempts = 0;
