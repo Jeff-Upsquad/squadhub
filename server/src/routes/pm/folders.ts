@@ -349,6 +349,13 @@ router.post('/folders', requirePermission('can_create_folders'), async (req: Req
       return;
     }
 
+    await supabaseAdmin.from('resource_memberships').insert({
+      resource_type: 'folder',
+      resource_id: data.id,
+      user_id: req.userId!,
+      access_level: 'manager',
+    });
+
     // Auto-create child lists from profile template
     if (profile && profile.template?.lists) {
       const templateLists = profile.template.lists as Array<{ name: string; position: number; default_view?: string }>;

@@ -202,6 +202,13 @@ router.post('/spaces', requirePermission('can_create_spaces'), async (req: Reque
       return;
     }
 
+    await supabaseAdmin.from('resource_memberships').insert({
+      resource_type: 'space',
+      resource_id: inserted.id,
+      user_id: req.userId!,
+      access_level: 'manager',
+    });
+
     // Fetch the space with statuses separately (trigger-created rows
     // may not be visible in the same insert statement's RETURNING clause)
     const { data, error } = await supabaseAdmin

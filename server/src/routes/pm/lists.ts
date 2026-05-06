@@ -253,6 +253,13 @@ router.post('/lists', requirePermission('can_create_lists'), async (req: Request
       return;
     }
 
+    await supabaseAdmin.from('resource_memberships').insert({
+      resource_type: 'list',
+      resource_id: data.id,
+      user_id: req.userId!,
+      access_level: 'manager',
+    });
+
     res.status(201).json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) {
