@@ -12,6 +12,8 @@ import EmergencyConfirm from './EmergencyConfirm';
 import ListPickerCombobox from './ListPickerCombobox';
 import TaskStatusPicker from './TaskStatusPicker';
 import { nextQuickDate } from './taskHelpers';
+import { useDraftTaskStore, type SerializableDraft } from '../../../stores/draftTaskStore';
+import { showToast } from '../../../components/Toast';
 
 /* -------------------------------------------------------------------------- */
 /* Helpers (duplicated from TaskDetailPanel — keep in sync if they change)    */
@@ -217,6 +219,22 @@ function makeDraft(defaultStatus: string | undefined): Draft {
   };
 }
 
+function isDraftNonEmpty(d: Draft): boolean {
+  return (
+    d.title.trim().length > 0 ||
+    d.description.trim().length > 0 ||
+    d.assignee_ids.length > 0 ||
+    d.subtasks.length > 0 ||
+    d.checklists.length > 0 ||
+    d.pendingFiles.length > 0 ||
+    d.work_date !== null ||
+    d.start_date !== null ||
+    d.due_date !== null ||
+    d.time_estimate !== null ||
+    d.priority !== 'none'
+  );
+}
+
 export default function TaskCreatePanel({
   statuses,
   listId,
@@ -229,6 +247,7 @@ export default function TaskCreatePanel({
   workspaceId,
   initialSpaceId,
   initialListId,
+  initialDraft,
 }: {
   statuses?: SpaceStatus[];
   listId?: string;
@@ -243,6 +262,8 @@ export default function TaskCreatePanel({
   workspaceId?: string;
   initialSpaceId?: string | null;
   initialListId?: string | null;
+  /** Pre-fill with a saved draft. _draftId is used to clean up on submit/re-save. */
+  initialDraft?: SerializableDraft & { _draftId?: string };
 }) {
   // Picker-mode state — spaceId is derived from the selected list (combobox hands both back)
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(initialSpaceId ?? null);
@@ -277,7 +298,12 @@ export default function TaskCreatePanel({
   const currentUser = useAuthStore((s) => s.user);
 
   const initialStatus = defaultStatus || effectiveStatuses[0]?.category || 'todo';
-  const [draft, setDraft] = useState<Draft>(() => makeDraft(initialStatus));
+  const [draft, setDraft] = useState<Draft>(() => {
+    if (initialDraft) {
+      return { ...initialDraft, pendingFiles: [] };
+    }
+    return makeDraft(initialStatus);
+  });
   const [mounted, setMounted] = useState(false);
 
   // When the task type resolves (or changes) normalize draft.status.
@@ -339,19 +365,6 @@ export default function TaskCreatePanel({
     return () => cancelAnimationFrame(id);
   }, []);
 
-  // Escape to close — ignore when focus is in an editable element
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      const el = document.activeElement as HTMLElement | null;
-      const tag = el?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
-      onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const currentStatus = useMemo(
     () => effectiveStatuses.find((s) => s.category === draft.status),
     [effectiveStatuses, draft.status],
@@ -364,6 +377,39 @@ export default function TaskCreatePanel({
   const dueInfo = formatDueRelative(draft.due_date);
 
   const canSubmit = draft.title.trim().length > 0 && !!effectiveListId && !submitting;
+
+  const handleClose = () => {
+    if (isDraftNonEmpty(draft)) {
+      // If resuming an existing draft, remove the old version first
+      if (initialDraft?._draftId) {
+        useDraftTaskStore.getState().removeDraft(initialDraft._draftId);
+      }
+      const { pendingFiles, ...serializable } = draft;
+      useDraftTaskStore.getState().saveDraft(serializable, selectedSpaceId, effectiveListId);
+      showToast('Draft saved');
+    } else if (initialDraft?._draftId) {
+      // Draft was emptied out — remove the old one
+      useDraftTaskStore.getState().removeDraft(initialDraft._draftId);
+    }
+    onClose();
+  };
+
+  // Keep a stable ref to handleClose so the ESC listener doesn't re-register on every draft change
+  const handleCloseRef = useRef(handleClose);
+  handleCloseRef.current = handleClose;
+
+  // Escape to close — ignore when focus is in an editable element
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const el = document.activeElement as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+      handleCloseRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const handleSubmit = async () => {
     const title = draft.title.trim();
@@ -449,6 +495,10 @@ export default function TaskCreatePanel({
         }
       }
 
+      // Clean up the draft if we were resuming one
+      if (initialDraft?._draftId) {
+        useDraftTaskStore.getState().removeDraft(initialDraft._draftId);
+      }
       onCreated?.(newTask);
       onClose();
     } catch (err) {
@@ -545,7 +595,7 @@ export default function TaskCreatePanel({
           opacity: mounted ? 1 : 0,
           background: 'rgba(10,10,10,0.18)',
         }}
-        onClick={onClose}
+        onClick={handleClose}
       />
 
       {/* Floating drawer */}
@@ -563,7 +613,7 @@ export default function TaskCreatePanel({
         <div className="td-head td-head-luma flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="td-nav-btn"
             title="Close"
           >

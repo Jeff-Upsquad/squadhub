@@ -12,6 +12,9 @@ import { connectSocket, disconnectSocket } from '../services/socket';
 import ChatPanel from '../views/app/chat/ChatPanel';
 import CreateChannelModal from '../views/app/chat/CreateChannelModal';
 import GlobalCreateTaskModal from '../views/app/pm/GlobalCreateTaskModal';
+import type { SavedDraft } from '../stores/draftTaskStore';
+import ToastContainer from '../components/Toast';
+import DraftTasksWidget from '../components/DraftTasksWidget';
 import ListPage from '../views/app/pm/ListPage';
 import FolderPage from '../views/app/pm/FolderPage';
 import SpacePage from '../views/app/pm/SpacePage';
@@ -202,6 +205,7 @@ export default function MainLayout() {
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
+  const [resumingDraft, setResumingDraft] = useState<SavedDraft | null>(null);
   const [timesheetOpen, setTimesheetOpen] = useState(false);
   const [timesheetAnchor, setTimesheetAnchor] = useState<DOMRect | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -677,8 +681,22 @@ export default function MainLayout() {
 
       {/* Universal create task modal — opens from the global + button */}
       {showCreateTaskModal && (
-        <GlobalCreateTaskModal onClose={() => setShowCreateTaskModal(false)} />
+        <GlobalCreateTaskModal
+          onClose={() => { setShowCreateTaskModal(false); setResumingDraft(null); }}
+          resumeDraft={resumingDraft}
+        />
       )}
+
+      {/* Floating draft tasks widget */}
+      <DraftTasksWidget
+        onResumeDraft={(saved) => {
+          setResumingDraft(saved);
+          setShowCreateTaskModal(true);
+        }}
+      />
+
+      {/* Toast notifications */}
+      <ToastContainer />
     </div>
   );
 }

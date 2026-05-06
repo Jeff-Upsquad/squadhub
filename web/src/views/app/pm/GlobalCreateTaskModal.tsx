@@ -1,8 +1,15 @@
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { usePMStore } from '../../../stores/pmStore';
+import type { SavedDraft } from '../../../stores/draftTaskStore';
 import TaskCreatePanel from './TaskCreatePanel';
 
-export default function GlobalCreateTaskModal({ onClose }: { onClose: () => void }) {
+export default function GlobalCreateTaskModal({
+  onClose,
+  resumeDraft,
+}: {
+  onClose: () => void;
+  resumeDraft?: SavedDraft | null;
+}) {
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const activeSpaceId = usePMStore((s) => s.activeSpaceId);
   const activeListId = usePMStore((s) => s.activeListId);
@@ -14,8 +21,9 @@ export default function GlobalCreateTaskModal({ onClose }: { onClose: () => void
     <TaskCreatePanel
       pickable
       workspaceId={workspaceId}
-      initialSpaceId={activeSpaceId}
-      initialListId={activeListId ?? contextListId}
+      initialSpaceId={resumeDraft?.spaceId ?? activeSpaceId}
+      initialListId={resumeDraft?.listId ?? activeListId ?? contextListId}
+      initialDraft={resumeDraft ? { ...resumeDraft.draft, _draftId: resumeDraft.id } : undefined}
       onClose={onClose}
     />
   );
