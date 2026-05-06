@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../services/api';
 
@@ -202,6 +202,19 @@ export default function MainLayout() {
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [timesheetOpen, setTimesheetOpen] = useState(false);
   const [timesheetAnchor, setTimesheetAnchor] = useState<DOMRect | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!profileOpen) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [profileOpen]);
 
   useEffect(() => { loadViewPreferences(); }, []);
 
@@ -280,6 +293,21 @@ export default function MainLayout() {
       return () => { disconnectSocket(); };
     }
   }, [currentWorkspace]);
+
+  // Deep link handler — desktop companion app opens URLs with query params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const openTask = params.get('open_task');
+    const openChannel = params.get('open_channel');
+    if (openTask) {
+      usePMStore.getState().setActiveTask(openTask);
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (openChannel) {
+      setActiveChannel(openChannel);
+      setHomeView('chat');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [setActiveChannel]);
 
   // Handlers for HomeSidebar
   const handleSelectChannel = (channelId: string) => {
@@ -390,30 +418,51 @@ export default function MainLayout() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Bottom group: theme + logout + avatar */}
+        {/* Bottom group: theme + avatar with profile popover */}
         <div className="flex w-full flex-col items-center gap-[2px]">
           <div className="grid h-10 w-10 place-items-center">
             <ThemeToggle />
           </div>
-          <button
-            onClick={() => {
-              logout();
-              pmReset();
-            }}
-            className="grid h-10 w-10 place-items-center rounded-[9px] text-[var(--sh-ink-3)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
-            title="Log out"
-          >
-            <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-              <path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3-3h-9m9 0l-3-3m3 3l-3 3" />
-            </svg>
-          </button>
-          <div
-            className="mt-1 grid h-8 w-8 place-items-center rounded-full bg-[var(--sh-ink)] text-[var(--sidebar)] text-[11px] font-semibold relative"
-            style={{ border: '2px solid var(--icon-bar)' }}
-            title={user?.display_name || user?.email || 'Me'}
-          >
-            {(user?.display_name || user?.email || 'ME').split(/[ @]/).slice(0, 2).map((s) => s.charAt(0).toUpperCase()).join('').slice(0, 2) || 'ME'}
-            <span className="absolute -right-[2px] -bottom-[2px] h-[10px] w-[10px] rounded-full bg-[var(--icon-bar)]" style={{ border: '2px solid var(--sh-ink)' }} />
+          <div ref={profileRef} className="relative">
+            <button
+              onClick={() => setProfileOpen((v) => !v)}
+              className="mt-1 grid h-8 w-8 place-items-center rounded-full bg-[var(--sh-ink)] text-[var(--sidebar)] text-[11px] font-semibold relative cursor-pointer"
+              style={{ border: '2px solid var(--icon-bar)' }}
+              title={user?.display_name || user?.email || 'Me'}
+            >
+              {(user?.display_name || user?.email || 'ME').split(/[ @]/).slice(0, 2).map((s) => s.charAt(0).toUpperCase()).join('').slice(0, 2) || 'ME'}
+              <span className="absolute -right-[2px] -bottom-[2px] h-[10px] w-[10px] rounded-full bg-[var(--icon-bar)]" style={{ border: '2px solid var(--sh-ink)' }} />
+            </button>
+
+            {profileOpen && (
+              <div className="absolute bottom-0 left-[calc(100%+10px)] w-[220px] rounded-lg bg-[var(--surface)] border border-[var(--sh-hair)] shadow-lg z-50 overflow-hidden">
+                <div className="px-3 py-3 border-b border-[var(--sh-hair)]">
+                  <p className="text-[13px] font-medium text-[var(--foreground)] truncate">{user?.display_name || 'User'}</p>
+                  <p className="text-[11px] text-[var(--foreground-dim)] truncate">{user?.email}</p>
+                </div>
+                <div className="py-1">
+                  <a
+                    href="/download-app"
+                    className="flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--foreground)] hover:bg-[var(--sh-hair-3)] transition"
+                    onClick={() => setProfileOpen(false)}
+                  >
+                    <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                      <path d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.07 7.409A2.25 2.25 0 012 5.493V5.25" />
+                    </svg>
+                    Download Desktop App
+                  </a>
+                  <button
+                    onClick={() => { logout(); pmReset(); setProfileOpen(false); }}
+                    className="flex items-center gap-2 px-3 py-2 text-[13px] text-red-500 hover:bg-[var(--sh-hair-3)] transition w-full text-left"
+                  >
+                    <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                      <path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3-3h-9m9 0l-3-3m3 3l-3 3" />
+                    </svg>
+                    Log Out
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

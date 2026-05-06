@@ -7,6 +7,7 @@ import type {
   ClientToServerEvents,
   ChatServerToClientEvents,
   ChatClientToServerEvents,
+  Notification,
 } from '@squadhub/shared';
 
 // Socket.io type intersections so one connection handles workspace + chat events.
@@ -20,8 +21,8 @@ export function setupSocketIO(httpServer: HttpServer) {
   const io = new Server<AllClientToServer, AllServerToClient>(httpServer, {
     cors: {
       origin: config.nodeEnv === 'production'
-        ? [config.clientUrl, config.adminUrl].filter(Boolean)
-        : [config.clientUrl, config.adminUrl],
+        ? [config.clientUrl, config.adminUrl, config.desktopUrl].filter(Boolean)
+        : [config.clientUrl, config.adminUrl, config.desktopUrl],
       methods: ['GET', 'POST'],
       credentials: true,
     },
@@ -198,6 +199,25 @@ export function setupSocketIO(httpServer: HttpServer) {
       }
     });
   });
+
+  // Bridge: Supabase Realtime → Socket.IO for notifications.
+  // Notifications are created by PostgreSQL triggers, so we subscribe to INSERTs
+  // and fan out via Socket.IO to the target user's connected clients.
+  supabaseAdmin
+    .channel('notifications-realtime')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'notifications' },
+      (payload) => {
+        const notification = payload.new as Notification;
+        io.to(`chat_user:${notification.user_id}`).emit('new_notification', notification);
+      },
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('[socket] Supabase Realtime notifications bridge active');
+      }
+    });
 
   return io;
 }

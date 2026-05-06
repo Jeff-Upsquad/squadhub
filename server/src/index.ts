@@ -97,7 +97,7 @@ app.set('io', io); // Make io accessible in route handlers
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: [config.clientUrl, config.adminUrl, config.cashbookUrl].filter(Boolean),
+  origin: [config.clientUrl, config.adminUrl, config.cashbookUrl, config.desktopUrl].filter(Boolean),
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
