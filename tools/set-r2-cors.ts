@@ -61,15 +61,24 @@ async function main() {
     }
   }
 
+  // Mirrors the policy currently set on the bucket via the Cloudflare
+  // dashboard — any divergence here will silently break uploads from one of
+  // the apps next time someone runs the script. Update both places together.
   const nextRules = [
     {
       AllowedOrigins: [
         'https://squadhub.in',
         'https://admin.squadhub.in',
+        'https://cashbook.squadhub.in',
+        'https://www.upsquadconnect.com',
+        'https://upsquadconnect.com',
         'http://localhost:3000',
         'http://localhost:3001',
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:8081',
       ],
-      AllowedMethods: ['GET', 'PUT', 'HEAD'],
+      AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
       AllowedHeaders: ['*'],
       ExposeHeaders: ['ETag'],
       MaxAgeSeconds: 3600,

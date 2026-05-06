@@ -161,7 +161,9 @@ fi
 if echo "$CHANGED_FILES" | grep -qE '^tools/set-r2-cors\.ts$'; then
     echo ""
     echo "R2 CORS config changed — applying..."
-    npx tsx tools/set-r2-cors.ts
+    # Non-fatal: prod R2 token has object perms only, not bucket admin. If this
+    # fails, set CORS via Cloudflare dashboard to match the script.
+    npx tsx tools/set-r2-cors.ts || echo "⚠ R2 CORS auto-apply failed — set it manually in the Cloudflare dashboard"
 fi
 REMOTE
 RC=$?
