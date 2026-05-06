@@ -141,6 +141,17 @@ for svc in server web admin; do
     fi
 done
 
+# Habit: prune old deploy tags — keep the last 5 for rollback, delete the rest.
+# Caps disk growth. Older rollback still works via git checkout + rebuild.
+KEEP_DEPLOYS=5
+for prune_svc in server web admin; do
+    docker images --format '{{.Repository}}:{{.Tag}}' \
+        | grep -E "^squadhub-${prune_svc}:[0-9]{8}-[0-9]{6}$" \
+        | sort -r \
+        | tail -n +$((KEEP_DEPLOYS+1)) \
+        | xargs -r docker rmi 2>/dev/null || true
+done
+
 if echo "$CHANGED_FILES" | grep -qE '^Caddyfile$'; then
     echo ""
     echo "Reloading Caddy configuration..."
