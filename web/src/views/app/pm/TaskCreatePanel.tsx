@@ -428,7 +428,14 @@ export default function TaskCreatePanel({
             xhr.open('PUT', upload_url);
             xhr.setRequestHeader('Content-Type', df.file.type || 'application/octet-stream');
             xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`)));
-            xhr.onerror = () => reject(new Error('Network error'));
+            xhr.onerror = () => {
+              try {
+                const isCrossOrigin = new URL(upload_url).origin !== window.location.origin;
+                reject(new Error(isCrossOrigin
+                  ? 'Upload blocked — storage CORS not configured for this domain'
+                  : 'Network error — check your connection and try again'));
+              } catch { reject(new Error('Upload failed')); }
+            };
             xhr.send(df.file);
           });
           await api.post('/pm/task-attachments/confirm', {
