@@ -133,6 +133,8 @@ export default function AdminCardEditor({
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerLocation, setCustomerLocation] = useState('');
+  const [emailEditable, setEmailEditable] = useState(false);
+  const [phoneEditable, setPhoneEditable] = useState(false);
   const [proposedPrice, setProposedPrice] = useState<number>(0);
   const [markup, setMarkup] = useState<number>(0);
   const [publishTargets, setPublishTargets] = useState<string[]>(['partner', 'talent']);
@@ -158,6 +160,8 @@ export default function AdminCardEditor({
     setCustomerEmail(card.customer_email || '');
     setCustomerPhone(card.customer_phone || '');
     setCustomerLocation(card.customer_location || '');
+    setEmailEditable(false);
+    setPhoneEditable(false);
     setProposedPrice(card.proposed_price || 0);
     setOriginalProposedPrice(card.proposed_price);
     setMarkup(card.markup || 0);
@@ -323,7 +327,6 @@ export default function AdminCardEditor({
     setDeliverables((prev) => prev.filter((d) => d.id !== id));
   };
 
-  const isReadOnlyCustomer = card?.source === 'request';
   const isDraft = card?.state === 'draft';
 
   if (isLoading) {
@@ -595,7 +598,7 @@ export default function AdminCardEditor({
                 <input
                   value={customerCompany}
                   onChange={(e) => setCustomerCompany(e.target.value)}
-                  disabled={!isDraft || isReadOnlyCustomer}
+                  disabled={!isDraft}
                   className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                 />
               </Field>
@@ -603,24 +606,24 @@ export default function AdminCardEditor({
                 <input
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  disabled={!isDraft || isReadOnlyCustomer}
+                  disabled={!isDraft}
                   className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                 />
               </Field>
-              <Field label="Email">
+              <Field label="Email" onEditClick={isDraft ? () => setEmailEditable(true) : undefined} editActive={emailEditable}>
                 <input
                   value={customerEmail}
                   onChange={(e) => setCustomerEmail(e.target.value)}
-                  disabled={!isDraft || isReadOnlyCustomer}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                  disabled={!isDraft || !emailEditable}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm transition-colors disabled:bg-slate-50 disabled:text-slate-500"
                 />
               </Field>
-              <Field label="Phone">
+              <Field label="Phone" onEditClick={isDraft ? () => setPhoneEditable(true) : undefined} editActive={phoneEditable}>
                 <input
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
-                  disabled={!isDraft || isReadOnlyCustomer}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                  disabled={!isDraft || !phoneEditable}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm transition-colors disabled:bg-slate-50 disabled:text-slate-500"
                 />
               </Field>
               <div className="col-span-2">
@@ -628,7 +631,7 @@ export default function AdminCardEditor({
                   <input
                     value={customerLocation}
                     onChange={(e) => setCustomerLocation(e.target.value)}
-                    disabled={!isDraft || isReadOnlyCustomer}
+                    disabled={!isDraft}
                     placeholder="e.g. Bangalore, India"
                     className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                   />
@@ -849,10 +852,20 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, onEditClick, editActive }: { label: string; children: React.ReactNode; onEditClick?: () => void; editActive?: boolean }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-[#62748E]">{label}</label>
+      <div className="mb-1 flex items-center gap-1.5">
+        <label className="text-xs font-medium text-[#62748E]">{label}</label>
+        {onEditClick && !editActive && (
+          <button type="button" onClick={onEditClick} className="text-[#90A1B9] transition hover:text-[#2962FF]" title={`Edit ${label}`}>
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+            </svg>
+          </button>
+        )}
+      </div>
       {children}
     </div>
   );
