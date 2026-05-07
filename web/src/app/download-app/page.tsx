@@ -149,6 +149,43 @@ export default function DownloadAppPage() {
           </div>
         </div>
 
+        {platform === 'macos' && (
+          <div style={{
+            marginTop: 40,
+            padding: 20,
+            background: 'rgba(99,102,241,0.06)',
+            border: '1px solid rgba(99,102,241,0.18)',
+            borderRadius: 12,
+            textAlign: 'left',
+            fontSize: 13,
+            lineHeight: 1.6,
+          }}>
+            <p style={{ fontWeight: 600, marginBottom: 10, color: '#a5b4fc' }}>
+              ⚠️ macOS install instructions
+            </p>
+            <p style={{ opacity: 0.75, marginBottom: 8 }}>
+              macOS may say <em>"SquadHub is damaged and can't be opened"</em> on first launch — this is expected for unsigned apps. Open Terminal and run:
+            </p>
+            <code style={{
+              display: 'block',
+              padding: '10px 12px',
+              background: 'rgba(0,0,0,0.3)',
+              borderRadius: 6,
+              fontSize: 12,
+              fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+              opacity: 0.9,
+              userSelect: 'all',
+              overflowX: 'auto',
+              whiteSpace: 'nowrap',
+            }}>
+              xattr -cr /Applications/SquadHub.app
+            </code>
+            <p style={{ opacity: 0.6, marginTop: 10, fontSize: 12 }}>
+              Then open the app from Applications. You'll only need to do this once.
+            </p>
+          </div>
+        )}
+
         <button
           onClick={() => router.back()}
           style={{
