@@ -22,7 +22,8 @@ interface Notification {
   created_at: string;
 }
 
-const pendingUrls = new Map<string, string>();
+const pendingUrls = new Map<number, string>();
+let notifCounter = 0;
 
 function getNotificationUrl(n: Notification): string {
   const ws = (n.metadata?.workspace_id as string) || '';
@@ -68,8 +69,8 @@ export async function ensurePermission(): Promise<boolean> {
 
 export function setupNotificationClickHandler() {
   onAction((event) => {
-    const id = event.id?.toString();
-    if (!id) return;
+    const id = typeof event.id === 'number' ? event.id : parseInt(String(event.id), 10);
+    if (isNaN(id)) return;
     const url = pendingUrls.get(id);
     if (url) {
       open(url);
@@ -83,16 +84,18 @@ export async function showNotification(n: Notification) {
   if (!granted) return;
 
   const url = getNotificationUrl(n);
+  const numericId = ++notifCounter;
 
-  pendingUrls.set(n.id, url);
+  pendingUrls.set(numericId, url);
 
   // Clean up old entries (keep last 50)
   if (pendingUrls.size > 50) {
     const oldest = pendingUrls.keys().next().value;
-    if (oldest) pendingUrls.delete(oldest);
+    if (oldest !== undefined) pendingUrls.delete(oldest);
   }
 
   sendNotification({
+    id: numericId,
     title: n.title,
     body: n.body || getNotificationSubtitle(n.type),
   });
