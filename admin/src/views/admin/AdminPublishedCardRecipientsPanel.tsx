@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import AssignRecipientPicker from './AssignRecipientPicker';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { showToast } from '@/components/Toast';
 import type { PublishedCard } from './AdminPublishedCards';
 
 export type PartnerRecipient = {
@@ -156,14 +158,20 @@ function CardPanelContent({
       api.get(`/admin/subscription-cards/${activeCardId}/recipients`).then((r) => r.data?.data as RecipientsResponse),
   });
 
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const clearConfirm = () => setConfirmAction(null);
+
   const removePartner = useMutation({
     mutationFn: (partnerId: string) =>
       api.delete(`/admin/subscription-cards/${activeCardId}/recipients/${partnerId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
+      clearConfirm();
     },
-    onError: (err: any) =>
-      alert(err?.response?.data?.error || err.message || 'Failed to remove partner'),
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to remove partner', 'error');
+      clearConfirm();
+    },
   });
 
   const removeTalent = useMutation({
@@ -171,9 +179,12 @@ function CardPanelContent({
       api.delete(`/admin/subscription-cards/${activeCardId}/external-recipients/${talentId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
+      clearConfirm();
     },
-    onError: (err: any) =>
-      alert(err?.response?.data?.error || err.message || 'Failed to remove talent'),
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to remove talent', 'error');
+      clearConfirm();
+    },
   });
 
   const selectPartner = useMutation({
@@ -183,9 +194,12 @@ function CardPanelContent({
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
       qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      clearConfirm();
     },
-    onError: (err: any) =>
-      alert(err?.response?.data?.error || err.message || 'Failed to select partner'),
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to select partner', 'error');
+      clearConfirm();
+    },
   });
 
   const selectTalent = useMutation({
@@ -195,9 +209,12 @@ function CardPanelContent({
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
       qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      clearConfirm();
     },
-    onError: (err: any) =>
-      alert(err?.response?.data?.error || err.message || 'Failed to select talent'),
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to select talent', 'error');
+      clearConfirm();
+    },
   });
 
   const undoSelection = useMutation({
@@ -207,9 +224,12 @@ function CardPanelContent({
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
       qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      clearConfirm();
     },
-    onError: (err: any) =>
-      alert(err?.response?.data?.error || err.message || 'Failed to undo selection'),
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to undo selection', 'error');
+      clearConfirm();
+    },
   });
 
   const recallCard = useMutation({
@@ -220,11 +240,11 @@ function CardPanelContent({
       qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       if (isSecondaryView) onViewSecondary(null);
-      setRecallConfirmOpen(false);
+      clearConfirm();
     },
     onError: (err: any) => {
-      alert(err?.response?.data?.error || err.message || 'Failed to recall card');
-      setRecallConfirmOpen(false);
+      showToast(err?.response?.data?.error || err.message || 'Failed to recall card', 'error');
+      clearConfirm();
     },
   });
 
@@ -235,53 +255,15 @@ function CardPanelContent({
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
       qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      clearConfirm();
     },
-    onError: (err: any) =>
-      alert(err?.response?.data?.error || err.message || 'Failed to broadcast card'),
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to broadcast card', 'error');
+      clearConfirm();
+    },
   });
 
-  const [recallConfirmOpen, setRecallConfirmOpen] = useState(false);
-
   const hasSelection = activeCard.selected_recipient_type != null;
-
-  function confirmRemovePartner(partnerId: string, name: string) {
-    if (!window.confirm(`Remove ${name} from this card? They'll stop seeing it in their opportunities.`)) {
-      return;
-    }
-    removePartner.mutate(partnerId);
-  }
-  function confirmRemoveTalent(talentId: string, name: string) {
-    if (!window.confirm(`Remove ${name} from this card? They'll stop seeing it in their subscription tab.`)) {
-      return;
-    }
-    removeTalent.mutate(talentId);
-  }
-  function confirmSelectPartner(partnerId: string, name: string) {
-    if (!window.confirm(`Select ${name} for this card? Other acceptees will be passed over and the card will close.`)) return;
-    selectPartner.mutate(partnerId);
-  }
-  function confirmSelectTalent(talentId: string, name: string) {
-    if (!window.confirm(`Select ${name} for this card? Other acceptees will be passed over and the card will close.`)) return;
-    selectTalent.mutate(talentId);
-  }
-  function confirmUndoSelection() {
-    if (!window.confirm('Undo the selection? The card will reopen as published.')) return;
-    undoSelection.mutate();
-  }
-
-  // Recall flow: if anyone has accepted, open the extra-confirm modal.
-  // Otherwise a simple confirm() is enough.
-  function startRecall() {
-    const acceptedCount =
-      (data?.partners || []).filter((p) => p.status === 'accepted').length +
-      (data?.talents || []).filter((t) => t.status === 'accepted').length;
-    if (acceptedCount > 0) {
-      setRecallConfirmOpen(true);
-      return;
-    }
-    if (!window.confirm('Recall this card? Pending recipients will stop seeing it.')) return;
-    recallCard.mutate();
-  }
 
   const { data: countriesRes } = useQuery({
     queryKey: ['public-countries'],
@@ -318,7 +300,7 @@ function CardPanelContent({
         {activeCard.state === 'published' && (
           <div className="flex items-center gap-2 border-b border-[#E2E8F0] px-5 py-2.5">
             <button
-              onClick={startRecall}
+              onClick={() => setConfirmAction({ kind: 'recall' })}
               disabled={recallCard.isPending}
               className="rounded-md border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-100 disabled:opacity-50"
             >
@@ -326,10 +308,7 @@ function CardPanelContent({
             </button>
             {activeCard.distribution === 'manual' && (
               <button
-                onClick={() => {
-                  if (!window.confirm('This will broadcast the card to all matching partners and talents based on the targeting criteria. Continue?')) return;
-                  broadcastCard.mutate();
-                }}
+                onClick={() => setConfirmAction({ kind: 'broadcast' })}
                 disabled={broadcastCard.isPending}
                 className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
@@ -361,7 +340,7 @@ function CardPanelContent({
             <>
               <p className="text-xs text-blue-700 font-medium">A recipient has been selected for this card.</p>
               <button
-                onClick={confirmUndoSelection}
+                onClick={() => setConfirmAction({ kind: 'undoSelection' })}
                 disabled={undoSelection.isPending}
                 className="rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-medium text-[#62748E] hover:bg-[#F8FAFC] disabled:opacity-50"
               >
@@ -390,9 +369,9 @@ function CardPanelContent({
               <Section title="Partners">
                 <Subgroup
                   label="Accepted"
-                  onRemove={(id, name) => confirmRemovePartner(id, name)}
+                  onRemove={(id, name) => setConfirmAction({ kind: 'removePartner', id, name })}
                   isRemoving={removePartner.isPending}
-                  onSelect={!hasSelection && activeCard.state === 'published' ? (id, name) => confirmSelectPartner(id, name) : undefined}
+                  onSelect={!hasSelection && activeCard.state === 'published' ? (id, name) => setConfirmAction({ kind: 'selectPartner', id, name }) : undefined}
                   isSelecting={selectPartner.isPending}
                   items={partnerGroups.accepted.map((p) => ({
                     key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
@@ -401,7 +380,7 @@ function CardPanelContent({
                 />
                 <Subgroup
                   label="Rejected"
-                  onRemove={(id, name) => confirmRemovePartner(id, name)}
+                  onRemove={(id, name) => setConfirmAction({ kind: 'removePartner', id, name })}
                   isRemoving={removePartner.isPending}
                   items={partnerGroups.rejected.map((p) => ({
                     key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
@@ -410,7 +389,7 @@ function CardPanelContent({
                 />
                 <Subgroup
                   label="Pending"
-                  onRemove={(id, name) => confirmRemovePartner(id, name)}
+                  onRemove={(id, name) => setConfirmAction({ kind: 'removePartner', id, name })}
                   isRemoving={removePartner.isPending}
                   items={partnerGroups.pending.map((p) => ({
                     key: p.id, name: p.name, status: p.status, responded_at: null, assigned_manually: !!p.assigned_manually,
@@ -421,9 +400,9 @@ function CardPanelContent({
               <Section title="Talents">
                 <Subgroup
                   label="Accepted"
-                  onRemove={(id, name) => confirmRemoveTalent(id, name)}
+                  onRemove={(id, name) => setConfirmAction({ kind: 'removeTalent', id, name })}
                   isRemoving={removeTalent.isPending}
-                  onSelect={!hasSelection && activeCard.state === 'published' ? (id, name) => confirmSelectTalent(id, name) : undefined}
+                  onSelect={!hasSelection && activeCard.state === 'published' ? (id, name) => setConfirmAction({ kind: 'selectTalent', id, name }) : undefined}
                   isSelecting={selectTalent.isPending}
                   items={talentGroups.accepted.map((t) => ({
                     key: t.external_user_id,
@@ -437,7 +416,7 @@ function CardPanelContent({
                 />
                 <Subgroup
                   label="Rejected"
-                  onRemove={(id, name) => confirmRemoveTalent(id, name)}
+                  onRemove={(id, name) => setConfirmAction({ kind: 'removeTalent', id, name })}
                   isRemoving={removeTalent.isPending}
                   items={talentGroups.rejected.map((t) => ({
                     key: t.external_user_id,
@@ -451,7 +430,7 @@ function CardPanelContent({
                 />
                 <Subgroup
                   label="Pending"
-                  onRemove={(id, name) => confirmRemoveTalent(id, name)}
+                  onRemove={(id, name) => setConfirmAction({ kind: 'removeTalent', id, name })}
                   isRemoving={removeTalent.isPending}
                   items={talentGroups.pending.map((t) => ({
                     key: t.external_user_id,
@@ -471,69 +450,152 @@ function CardPanelContent({
       {pickerOpen && (
         <AssignRecipientPicker cardId={activeCardId} onClose={() => setPickerOpen(false)} />
       )}
-      {recallConfirmOpen && (
-        <RecallConfirmModal
-          acceptedPartners={partnerGroups.accepted.length}
-          acceptedTalents={talentGroups.accepted.length}
-          isPending={recallCard.isPending}
-          onCancel={() => setRecallConfirmOpen(false)}
-          onConfirm={() => recallCard.mutate()}
-        />
-      )}
+      <ConfirmActionDialog
+        confirmAction={confirmAction}
+        onCancel={clearConfirm}
+        acceptedPartners={partnerGroups.accepted.length}
+        acceptedTalents={talentGroups.accepted.length}
+        isPending={{
+          removePartner: removePartner.isPending,
+          removeTalent: removeTalent.isPending,
+          selectPartner: selectPartner.isPending,
+          selectTalent: selectTalent.isPending,
+          undoSelection: undoSelection.isPending,
+          recall: recallCard.isPending,
+          broadcast: broadcastCard.isPending,
+        }}
+        onConfirm={(action) => {
+          switch (action.kind) {
+            case 'removePartner': removePartner.mutate(action.id); break;
+            case 'removeTalent': removeTalent.mutate(action.id); break;
+            case 'selectPartner': selectPartner.mutate(action.id); break;
+            case 'selectTalent': selectTalent.mutate(action.id); break;
+            case 'undoSelection': undoSelection.mutate(); break;
+            case 'recall': recallCard.mutate(); break;
+            case 'broadcast': broadcastCard.mutate(); break;
+          }
+        }}
+      />
     </>
   );
 }
 
-function RecallConfirmModal({
+type ConfirmAction =
+  | { kind: 'removePartner'; id: string; name: string }
+  | { kind: 'removeTalent'; id: string; name: string }
+  | { kind: 'selectPartner'; id: string; name: string }
+  | { kind: 'selectTalent'; id: string; name: string }
+  | { kind: 'undoSelection' }
+  | { kind: 'recall' }
+  | { kind: 'broadcast' };
+
+function ConfirmActionDialog({
+  confirmAction,
+  onCancel,
+  onConfirm,
   acceptedPartners,
   acceptedTalents,
   isPending,
-  onCancel,
-  onConfirm,
 }: {
+  confirmAction: ConfirmAction | null;
+  onCancel: () => void;
+  onConfirm: (action: ConfirmAction) => void;
   acceptedPartners: number;
   acceptedTalents: number;
-  isPending: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
+  isPending: Record<ConfirmAction['kind'], boolean>;
 }) {
+  if (!confirmAction) return null;
+
+  const k = confirmAction.kind;
+  const hasAcceptances = k === 'recall' && (acceptedPartners + acceptedTalents) > 0;
   const total = acceptedPartners + acceptedTalents;
+
+  const DIALOG_CONFIG: Record<ConfirmAction['kind'], { title: string; description: string; confirmLabel: string; pendingLabel: string; variant: 'default' | 'danger' | 'warning' }> = {
+    removePartner: {
+      title: 'Remove partner?',
+      description: `Remove ${'name' in confirmAction ? confirmAction.name : ''} from this card? They'll stop seeing it in their opportunities.`,
+      confirmLabel: 'Remove',
+      pendingLabel: 'Removing…',
+      variant: 'danger',
+    },
+    removeTalent: {
+      title: 'Remove talent?',
+      description: `Remove ${'name' in confirmAction ? confirmAction.name : ''} from this card? They'll stop seeing it in their subscription tab.`,
+      confirmLabel: 'Remove',
+      pendingLabel: 'Removing…',
+      variant: 'danger',
+    },
+    selectPartner: {
+      title: 'Select partner?',
+      description: `Select ${'name' in confirmAction ? confirmAction.name : ''} for this card? Other acceptees will be passed over and the card will close.`,
+      confirmLabel: 'Select',
+      pendingLabel: 'Selecting…',
+      variant: 'warning',
+    },
+    selectTalent: {
+      title: 'Select talent?',
+      description: `Select ${'name' in confirmAction ? confirmAction.name : ''} for this card? Other acceptees will be passed over and the card will close.`,
+      confirmLabel: 'Select',
+      pendingLabel: 'Selecting…',
+      variant: 'warning',
+    },
+    undoSelection: {
+      title: 'Undo selection?',
+      description: 'The card will reopen as published.',
+      confirmLabel: 'Undo',
+      pendingLabel: 'Undoing…',
+      variant: 'warning',
+    },
+    recall: {
+      title: hasAcceptances ? 'Recall card with acceptances?' : 'Recall this card?',
+      description: hasAcceptances
+        ? ''
+        : 'Pending recipients will stop seeing it.',
+      confirmLabel: hasAcceptances ? 'Recall anyway' : 'Recall',
+      pendingLabel: 'Recalling…',
+      variant: 'warning',
+    },
+    broadcast: {
+      title: 'Broadcast this card?',
+      description: 'This will broadcast the card to all matching partners and talents based on the targeting criteria.',
+      confirmLabel: 'Broadcast',
+      pendingLabel: 'Broadcasting…',
+      variant: 'default',
+    },
+  };
+
+  const cfg = DIALOG_CONFIG[k];
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
-      <div className="relative w-[420px] rounded-lg bg-white p-5 shadow-xl">
-        <h4 className="text-base font-semibold text-[#0F172B]">Recall card with acceptances?</h4>
-        <p className="mt-2 text-sm text-[#62748E]">
-          This card has{' '}
-          <span className="font-semibold text-[#0F172B]">
-            {total} {total === 1 ? 'acceptance' : 'acceptances'}
-          </span>{' '}
-          ({acceptedPartners} partner{acceptedPartners === 1 ? '' : 's'}, {acceptedTalents} talent
-          {acceptedTalents === 1 ? '' : 's'}). Recalling will:
-        </p>
-        <ul className="mt-2 space-y-1 text-xs text-[#62748E]">
-          <li>• Drop pending recipients (they stop seeing the card).</li>
-          <li>• Keep acceptees in their feed with a "Recalled" tag.</li>
-          <li>• Mark the card terminal — no re-publish.</li>
-        </ul>
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            onClick={onCancel}
-            disabled={isPending}
-            className="rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-medium text-[#62748E] hover:bg-[#F8FAFC] disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={isPending}
-            className="rounded-md bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700 disabled:opacity-50"
-          >
-            {isPending ? 'Recalling…' : 'Recall anyway'}
-          </button>
-        </div>
-      </div>
-    </div>
+    <ConfirmDialog
+      open
+      title={cfg.title}
+      description={cfg.description || undefined}
+      confirmLabel={cfg.confirmLabel}
+      pendingLabel={cfg.pendingLabel}
+      variant={cfg.variant}
+      isPending={isPending[k]}
+      onCancel={onCancel}
+      onConfirm={() => onConfirm(confirmAction)}
+    >
+      {hasAcceptances && (
+        <>
+          <p className="mt-2 text-sm text-[#62748E]">
+            This card has{' '}
+            <span className="font-semibold text-[#0F172B]">
+              {total} {total === 1 ? 'acceptance' : 'acceptances'}
+            </span>{' '}
+            ({acceptedPartners} partner{acceptedPartners === 1 ? '' : 's'}, {acceptedTalents} talent
+            {acceptedTalents === 1 ? '' : 's'}). Recalling will:
+          </p>
+          <ul className="mt-2 space-y-1 text-xs text-[#62748E]">
+            <li>• Drop pending recipients (they stop seeing the card).</li>
+            <li>• Keep acceptees in their feed with a "Recalled" tag.</li>
+            <li>• Mark the card terminal — no re-publish.</li>
+          </ul>
+        </>
+      )}
+    </ConfirmDialog>
   );
 }
 
@@ -566,13 +628,13 @@ function SecondaryCardsSection({
       setDistribution('manual');
     },
     onError: (err: any) =>
-      alert(err?.response?.data?.error || err.message || 'Failed to create secondary card'),
+      showToast(err?.response?.data?.error || err.message || 'Failed to create secondary card', 'error'),
   });
 
   function handleCreate() {
     const priceVal = price.trim() ? parseInt(price, 10) : null;
     if (priceVal !== null && (isNaN(priceVal) || priceVal < 0)) {
-      alert('Price must be a positive number');
+      showToast('Price must be a positive number', 'error');
       return;
     }
     createSecondary.mutate({
