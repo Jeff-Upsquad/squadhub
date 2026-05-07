@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import api from '../../services/api';
 import { usePMStore } from '../../stores/pmStore';
@@ -95,6 +95,27 @@ export default function InboxView({
 
   const [filter, setFilter] = useState<Filter>('all');
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  // Deep-link: desktop companion sets window.__pendingInboxNotificationId
+  const [pendingDeepLink, setPendingDeepLink] = useState<string | null>(null);
+  useEffect(() => {
+    const pending = window.__pendingInboxNotificationId;
+    if (pending) {
+      setActiveId(pending);
+      setPendingDeepLink(pending);
+      delete window.__pendingInboxNotificationId;
+    }
+  }, []);
+
+  // Once items load, mark the deep-linked notification as read
+  useEffect(() => {
+    if (!pendingDeepLink || items.length === 0) return;
+    const target = items.find((n) => n.id === pendingDeepLink);
+    if (target && !target.is_read) {
+      markRead.mutate(target.id);
+    }
+    setPendingDeepLink(null);
+  }, [pendingDeepLink, items]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: items = [], isLoading } = useQuery<Notification[]>({
     queryKey: ['notifications', 'list'],
