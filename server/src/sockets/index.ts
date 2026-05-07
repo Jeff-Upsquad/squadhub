@@ -219,9 +219,13 @@ export function setupSocketIO(httpServer: HttpServer) {
       }
 
       if (newNotifications && newNotifications.length > 0) {
+        console.log(`[socket] poll found ${newNotifications.length} new notification(s)`);
         lastPollTime = newNotifications[newNotifications.length - 1].created_at;
         for (const notification of newNotifications) {
-          io.to(`chat_user:${notification.user_id}`).emit('new_notification', notification);
+          const room = `chat_user:${notification.user_id}`;
+          const sockets = io.sockets.adapter.rooms.get(room);
+          console.log(`[socket] emitting to ${room} (${sockets?.size || 0} clients): ${notification.title}`);
+          io.to(room).emit('new_notification', notification);
         }
       }
     } catch (e) {
