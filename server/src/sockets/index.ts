@@ -203,21 +203,28 @@ export function setupSocketIO(httpServer: HttpServer) {
   // Bridge: Supabase Realtime → Socket.IO for notifications.
   // Notifications are created by PostgreSQL triggers, so we subscribe to INSERTs
   // and fan out via Socket.IO to the target user's connected clients.
-  supabaseAdmin
-    .channel('notifications-realtime')
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'notifications' },
-      (payload) => {
-        const notification = payload.new as Notification;
-        io.to(`chat_user:${notification.user_id}`).emit('new_notification', notification);
-      },
-    )
-    .subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        console.log('[socket] Supabase Realtime notifications bridge active');
-      }
-    });
+  function subscribeNotifications(attempt = 1) {
+    supabaseAdmin
+      .channel(`notifications-realtime${attempt > 1 ? `-${attempt}` : ''}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications' },
+        (payload) => {
+          const notification = payload.new as Notification;
+          io.to(`chat_user:${notification.user_id}`).emit('new_notification', notification);
+        },
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[socket] Supabase Realtime notifications bridge active');
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          const delay = Math.min(5000 * attempt, 30000);
+          console.warn(`[socket] Realtime subscription ${status}, retrying in ${delay / 1000}s (attempt ${attempt})`);
+          setTimeout(() => subscribeNotifications(attempt + 1), delay);
+        }
+      });
+  }
+  subscribeNotifications();
 
   return io;
 }

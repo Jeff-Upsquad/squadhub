@@ -46,6 +46,9 @@ services:
       - CASHBOOK_DOWNLOAD_URL=${CASHBOOK_DOWNLOAD_URL:-}
       - PARTNER_APP_MIN_VERSION=${PARTNER_APP_MIN_VERSION:-1.0.0}
       - PARTNER_APP_DOWNLOAD_URL=${PARTNER_APP_DOWNLOAD_URL:-}
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
