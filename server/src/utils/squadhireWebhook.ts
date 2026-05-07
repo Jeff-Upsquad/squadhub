@@ -318,15 +318,15 @@ export async function buildSquadhirePayloadForCard(
     }
   }
 
-  // For request/custom cards: proposed_price is the talent's monthly pay,
-  // markup (displayed as "Margin") is the platform commission added on top
-  // for the customer-facing price.
+  // For request/custom cards: proposed_price is what the customer pays/sees,
+  // markup (displayed as "Margin") is the platform commission, and the talent
+  // earns the remainder (proposed - margin).
   if (!staged && (cardSource === 'request' || cardSource === 'custom')) {
     const proposedPrice = (contentSource as any).proposed_price as number | null;
     const markup = (contentSource as any).markup as number | null;
     if (proposedPrice) {
-      resolvedMonthlyPrice = proposedPrice;
-      resolvedCustomerMonthlyPrice = proposedPrice + (markup || 0);
+      resolvedMonthlyPrice = Math.max(0, proposedPrice - (markup || 0));
+      resolvedCustomerMonthlyPrice = proposedPrice;
       resolvedCurrency = 'INR';
     }
   }
