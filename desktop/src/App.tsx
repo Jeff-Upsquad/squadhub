@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { useAuthStore } from './stores/authStore';
 import { connectSocket, disconnectSocket } from './services/socket';
-import { ensurePermission, setupNotificationClickHandler } from './services/notifications';
 import Login from './Login';
 import Settings from './Settings';
 
@@ -10,7 +9,6 @@ export default function App() {
 
   useEffect(() => {
     hydrate();
-    setupNotificationClickHandler();
   }, [hydrate]);
 
   useEffect(() => {
@@ -19,7 +17,6 @@ export default function App() {
       return;
     }
 
-    ensurePermission();
     connectSocket();
 
     return () => {
