@@ -203,8 +203,21 @@ export function setupSocketIO(httpServer: HttpServer) {
   // Notifications are created by PostgreSQL triggers (not app code), so we
   // poll for new rows every 2 seconds and fan out via Socket.IO.
   let lastPollTime = new Date().toISOString();
+  let pollCount = 0;
+
+  // One-time startup test: check if we can query notifications at all
+  (async () => {
+    const { data, error } = await supabaseAdmin
+      .from('notifications')
+      .select('id, created_at')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    console.log('[socket] poll startup test:', error ? `ERROR: ${error.message}` : `latest notification: ${JSON.stringify(data?.[0] || 'none')}`);
+    console.log('[socket] poll starting from:', lastPollTime);
+  })();
 
   setInterval(async () => {
+    pollCount++;
     try {
       const { data: newNotifications, error } = await supabaseAdmin
         .from('notifications')
@@ -216,6 +229,11 @@ export function setupSocketIO(httpServer: HttpServer) {
       if (error) {
         console.error('[socket] notification poll error:', error.message);
         return;
+      }
+
+      // Log every 30th poll (once per minute) to confirm it's running
+      if (pollCount % 30 === 0) {
+        console.log(`[socket] poll #${pollCount} — watching from ${lastPollTime}, found ${newNotifications?.length || 0}`);
       }
 
       if (newNotifications && newNotifications.length > 0) {
