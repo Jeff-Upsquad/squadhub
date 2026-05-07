@@ -1,10 +1,4 @@
-import {
-  isPermissionGranted,
-  requestPermission,
-  sendNotification,
-  onAction,
-} from '@tauri-apps/plugin-notification';
-import { open } from '@tauri-apps/plugin-shell';
+import { invoke } from '@tauri-apps/api/core';
 
 const WEB_URL = 'https://squadhub.in';
 
@@ -21,9 +15,6 @@ interface Notification {
   is_read: boolean;
   created_at: string;
 }
-
-const pendingUrls = new Map<number, string>();
-let notifCounter = 0;
 
 function getNotificationUrl(n: Notification): string {
   const ws = (n.metadata?.workspace_id as string) || '';
@@ -46,45 +37,12 @@ function getNotificationSubtitle(type: string): string {
   return labels[type] || 'Notification';
 }
 
-export async function ensurePermission(): Promise<boolean> {
-  let granted = await isPermissionGranted();
-  if (!granted) {
-    const permission = await requestPermission();
-    granted = permission === 'granted';
-  }
-  return granted;
-}
-
-export function setupNotificationClickHandler() {
-  onAction((event) => {
-    const id = typeof event.id === 'number' ? event.id : parseInt(String(event.id), 10);
-    if (isNaN(id)) return;
-    const url = pendingUrls.get(id);
-    if (url) {
-      open(url);
-      pendingUrls.delete(id);
-    }
-  });
-}
-
 export async function showNotification(n: Notification) {
-  const granted = await ensurePermission();
-  if (!granted) return;
-
   const url = getNotificationUrl(n);
-  const numericId = ++notifCounter;
 
-  pendingUrls.set(numericId, url);
-
-  // Clean up old entries (keep last 50)
-  if (pendingUrls.size > 50) {
-    const oldest = pendingUrls.keys().next().value;
-    if (oldest !== undefined) pendingUrls.delete(oldest);
-  }
-
-  sendNotification({
-    id: numericId,
+  await invoke('send_notification', {
     title: n.title,
     body: n.body || getNotificationSubtitle(n.type),
+    url,
   });
 }
