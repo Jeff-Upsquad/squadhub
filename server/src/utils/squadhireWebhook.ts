@@ -27,6 +27,18 @@ const MAX_SYNC_ATTEMPTS = 10;
 const SWEEPER_INTERVAL_MS = 5 * 60 * 1_000;
 const SWEEPER_BATCH_SIZE = 20;
 
+// Default hours/day per standard plan name. Used as a fallback for
+// request/custom cards that aren't linked to a subscription_plan and don't
+// have an explicit hours deliverable. Mirrors PLAN_HOURS in Profiles'
+// request-cards.controller so both sides agree on the talent-facing label.
+const PLAN_HOURS: Record<string, number> = {
+  starter: 1,
+  basic: 2.5,
+  plus: 4.5,
+  pro: 6.5,
+  personal: 8,
+};
+
 export interface SquadhireCardPayload {
   external_id: string;
   content: Record<string, unknown>;
@@ -264,6 +276,29 @@ export async function buildSquadhirePayloadForCard(
     );
   }
 
+  // Fallback for request/custom cards: derive hours from the standard plan
+  // name (Starter/Basic/Plus/Pro/Personal) since these cards aren't linked
+  // to a subscription_plan and the admin typically doesn't add a manual
+  // hours deliverable. Without this, the talent's "Work commitment" panel
+  // is hidden entirely on freshly published-from-request cards.
+  if (
+    !hoursLabel &&
+    !staged &&
+    (cardSource === 'request' || cardSource === 'custom') &&
+    typeof planName === 'string'
+  ) {
+    const hpd = PLAN_HOURS[planName.toLowerCase().trim()];
+    if (hpd) {
+      const workingDays = Array.isArray(contentSource.working_days)
+        ? (contentSource.working_days as string[])
+        : [];
+      const days = workingDays.length || 5;
+      const perWeek = hpd * days;
+      const perMonth = perWeek * 4;
+      hoursLabel = `${hpd} hrs/day · ${perWeek} hrs/week · ${perMonth} hrs/month`;
+    }
+  }
+
   // Resolve partner price for the card's country.
   //
   // Country resolution: cards can target multiple countries via
@@ -423,6 +458,19 @@ export async function buildSquadhirePayloadForCard(
   // Profiles' renderer promotes this to the HOURS section above description.
   if (hoursLabel) {
     content.hours_label = hoursLabel;
+  }
+
+  // For request/custom cards, default to "No specific deliverables" so the
+  // talent's Work Commitment panel renders even when the admin didn't add
+  // any custom deliverables. Skip if custom_deliverables already has items.
+  if (!staged && (cardSource === 'request' || cardSource === 'custom')) {
+    const customDelivs = Array.isArray(contentSource.custom_deliverables)
+      ? (contentSource.custom_deliverables as any[])
+      : [];
+    const hasItems = customDelivs.some((d) => d?.kind === 'item');
+    if (!hasItems) {
+      content.deliverables_label = 'No specific deliverables';
+    }
   }
 
   const distribution: 'broadcast' | 'manual' =
