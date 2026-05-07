@@ -318,12 +318,12 @@ export async function buildSquadhirePayloadForCard(
     }
   }
 
-  // For request/custom cards: use proposed_price + markup as display price (INR)
+  // For request/custom cards: talent sees proposed_price, client pays proposed + markup
   if (!staged && (cardSource === 'request' || cardSource === 'custom')) {
     const proposedPrice = (contentSource as any).proposed_price as number | null;
     const markup = (contentSource as any).markup as number | null;
     if (proposedPrice) {
-      resolvedMonthlyPrice = proposedPrice + (markup || 0);
+      resolvedMonthlyPrice = proposedPrice;
       resolvedCustomerMonthlyPrice = proposedPrice + (markup || 0);
       resolvedCurrency = 'INR';
     }
