@@ -638,6 +638,26 @@ export default function TaskCreatePanel({
           <div className="flex-1" />
           <button
             type="button"
+            onClick={() => {
+              if (initialDraft?._draftId) {
+                useDraftTaskStore.getState().removeDraft(initialDraft._draftId);
+                showToast('Draft deleted');
+              }
+              onClose();
+            }}
+            className="td-pill-btn"
+            style={{ opacity: 0.6 }}
+            title="Discard"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+              <path d="M10 11v6M14 11v6" />
+              <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+            </svg>
+          </button>
+          <button
+            type="button"
             onClick={handleSubmit}
             disabled={!canSubmit}
             className="td-pill-btn"
