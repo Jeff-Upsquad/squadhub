@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCreateTask } from '../../../hooks/useTasks';
+import { useAssignableUsersByList } from '../../../hooks/useAssignableUsers';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useSpace } from '../../../hooks/useSpaces';
 import { useAuthStore } from '../../../stores/authStore';
@@ -286,6 +287,7 @@ export default function TaskCreatePanel({
 
   // Derived effective values — switch between prop-fed (fixed mode) and state-fed (picker mode)
   const effectiveListId = pickable ? selectedListId : (listId ?? null);
+  const needsListForAssignee = pickable && !effectiveListId;
   const effectiveStatuses = useMemo<SpaceStatus[]>(
     () => (pickable ? (spaceData?.statuses || []) : (statuses || [])),
     [pickable, spaceData?.statuses, statuses],
@@ -294,6 +296,12 @@ export default function TaskCreatePanel({
   const effectiveSpaceColor = pickable ? (spaceData?.color ?? null) : (spaceColor ?? null);
 
   const createTask = useCreateTask(effectiveListId);
+  const { data: assignableUsers = [] } = useAssignableUsersByList(effectiveListId);
+  const assignableMap = useMemo(() => {
+    const m = new Map<string, { display_name: string; email?: string }>();
+    for (const u of assignableUsers) m.set(u.id, { display_name: u.display_name || u.email || '', email: u.email });
+    return m;
+  }, [assignableUsers]);
   const { data: taskTypes } = useTaskTypes();
   const currentUser = useAuthStore((s) => s.user);
 
@@ -727,40 +735,45 @@ export default function TaskCreatePanel({
           {/* Assignee bar — full-width row */}
           <div
             className="td-assignee-bar td-focus w-full text-left"
-            role={draft.assignee_ids.length > 0 ? 'button' : undefined}
-            tabIndex={draft.assignee_ids.length > 0 ? 0 : undefined}
-            onClick={draft.assignee_ids.length > 0 ? (e) => {
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              if (needsListForAssignee) { showToast('Select a list or folder to add assignee'); return; }
               setAssigneeAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
               setAssigneePickerOpen(v => !v);
-            } : undefined}
-            style={draft.assignee_ids.length > 0 ? undefined : { cursor: 'default' }}
+            }}
           >
             <span className="label">Assignee</span>
             <span className="value">
               {draft.assignee_ids.length > 0 ? (
                 <>
                   <span className="av-stack">
-                    {draft.assignee_ids.slice(0, 3).map((id) => (
-                      <span
-                        key={id}
-                        className="td-ava-xs"
-                        style={{ background: avatarColor(id), width: 28, height: 28, fontSize: 11 }}
-                      >
-                        ?
-                      </span>
-                    ))}
+                    {draft.assignee_ids.slice(0, 3).map((id) => {
+                      const u = assignableMap.get(id);
+                      return (
+                        <span
+                          key={id}
+                          className="td-ava-xs"
+                          style={{ background: avatarColor(id), width: 28, height: 28, fontSize: 11 }}
+                        >
+                          {initialOf(u?.display_name)}
+                        </span>
+                      );
+                    })}
                     {draft.assignee_ids.length > 3 && (
                       <span className="av-more">+{draft.assignee_ids.length - 3}</span>
                     )}
                   </span>
                   <span className="name">
-                    {draft.assignee_ids.length === 1 ? '1 assignee' : `${draft.assignee_ids.length} assignees`}
+                    {draft.assignee_ids.length === 1
+                      ? (assignableMap.get(draft.assignee_ids[0])?.display_name || '1 assignee')
+                      : `${draft.assignee_ids.length} assignees`}
                   </span>
                 </>
               ) : (
                 <>
                   <span className="av-placeholder" aria-hidden />
-                  <span className="name muted">Unassigned</span>
+                  <span className="name muted">{needsListForAssignee ? 'Select a list or folder to add assignee' : 'Unassigned'}</span>
                 </>
               )}
             </span>
@@ -770,6 +783,7 @@ export default function TaskCreatePanel({
                 className="reassign"
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (needsListForAssignee) { showToast('Select a list or folder to add assignee'); return; }
                   setAssigneeAnchorRect((e.currentTarget.parentElement as HTMLElement).getBoundingClientRect());
                   setAssigneePickerOpen(v => !v);
                 }}
@@ -784,18 +798,18 @@ export default function TaskCreatePanel({
               <button
                 type="button"
                 className="reassign"
-                disabled={!currentUser?.id}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (!currentUser?.id) return;
-                  setDraft((d) => ({ ...d, assignee_ids: [currentUser!.id!] }));
+                  if (needsListForAssignee) { showToast('Select a list or folder to add assignee'); return; }
+                  setAssigneeAnchorRect((e.currentTarget.parentElement as HTMLElement).getBoundingClientRect());
+                  setAssigneePickerOpen(v => !v);
                 }}
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="8" r="4" />
                   <path d="M4 21a8 8 0 0116 0" />
                 </svg>
-                Assign to me
+                Add assignee
               </button>
             )}
           </div>
