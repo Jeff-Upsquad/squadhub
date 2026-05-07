@@ -44,12 +44,12 @@ export default function DownloadAppPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'var(--bg, #0f1117)',
+      background: '#F0F2F5',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      color: 'var(--foreground, #e4e6ef)',
+      color: '#1a1d23',
       padding: 24,
     }}>
       <div style={{
@@ -61,7 +61,7 @@ export default function DownloadAppPage() {
         <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>
           SquadHub Desktop
         </h1>
-        <p style={{ fontSize: 15, opacity: 0.6, marginBottom: 40, lineHeight: 1.6 }}>
+        <p style={{ fontSize: 15, color: '#5a6373', marginBottom: 40, lineHeight: 1.6 }}>
           Never miss a notification. Get real-time desktop alerts for task assignments,
           mentions, messages, and more — right in your menu bar.
         </p>
@@ -134,18 +134,18 @@ export default function DownloadAppPage() {
         }}>
           <div>
             <div style={{ fontSize: 24, marginBottom: 6 }}>🔔</div>
-            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Native Notifications</p>
-            <p style={{ fontSize: 12, opacity: 0.5 }}>Alerts appear in your system notification center</p>
+            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: '#1a1d23' }}>Native Notifications</p>
+            <p style={{ fontSize: 12, color: '#6b7280' }}>Alerts appear in your system notification center</p>
           </div>
           <div>
             <div style={{ fontSize: 24, marginBottom: 6 }}>🖱️</div>
-            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Click to Open</p>
-            <p style={{ fontSize: 12, opacity: 0.5 }}>Each notification opens the relevant page instantly</p>
+            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: '#1a1d23' }}>Click to Open</p>
+            <p style={{ fontSize: 12, color: '#6b7280' }}>Each notification opens the relevant page instantly</p>
           </div>
           <div>
             <div style={{ fontSize: 24, marginBottom: 6 }}>⚡</div>
-            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Lightweight</p>
-            <p style={{ fontSize: 12, opacity: 0.5 }}>Runs quietly in your menu bar, under 10 MB</p>
+            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: '#1a1d23' }}>Lightweight</p>
+            <p style={{ fontSize: 12, color: '#6b7280' }}>Runs quietly in your menu bar, under 10 MB</p>
           </div>
         </div>
 
@@ -153,35 +153,36 @@ export default function DownloadAppPage() {
           <div style={{
             marginTop: 40,
             padding: 20,
-            background: 'rgba(99,102,241,0.06)',
-            border: '1px solid rgba(99,102,241,0.18)',
+            background: '#fff',
+            border: '1px solid #e5e7eb',
             borderRadius: 12,
             textAlign: 'left',
             fontSize: 13,
             lineHeight: 1.6,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
           }}>
-            <p style={{ fontWeight: 600, marginBottom: 10, color: '#a5b4fc' }}>
+            <p style={{ fontWeight: 600, marginBottom: 10, color: '#4f46e5' }}>
               ⚠️ macOS install instructions
             </p>
-            <p style={{ opacity: 0.75, marginBottom: 8 }}>
-              macOS may say <em>"SquadHub is damaged and can't be opened"</em> on first launch — this is expected for unsigned apps. Open Terminal and run:
+            <p style={{ color: '#374151', marginBottom: 8 }}>
+              macOS may say <em>&ldquo;SquadHub is damaged and can&rsquo;t be opened&rdquo;</em> on first launch — this is expected for unsigned apps. Open Terminal and run:
             </p>
             <code style={{
               display: 'block',
               padding: '10px 12px',
-              background: 'rgba(0,0,0,0.3)',
+              background: '#1f2937',
+              color: '#e5e7eb',
               borderRadius: 6,
               fontSize: 12,
               fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-              opacity: 0.9,
               userSelect: 'all',
               overflowX: 'auto',
               whiteSpace: 'nowrap',
             }}>
               xattr -cr /Applications/SquadHub.app
             </code>
-            <p style={{ opacity: 0.6, marginTop: 10, fontSize: 12 }}>
-              Then open the app from Applications. You'll only need to do this once.
+            <p style={{ color: '#6b7280', marginTop: 10, fontSize: 12 }}>
+              Then open the app from Applications. You&rsquo;ll only need to do this once.
             </p>
           </div>
         )}
@@ -192,8 +193,7 @@ export default function DownloadAppPage() {
             marginTop: 40,
             background: 'none',
             border: 'none',
-            color: 'inherit',
-            opacity: 0.5,
+            color: '#6b7280',
             cursor: 'pointer',
             fontSize: 13,
           }}
