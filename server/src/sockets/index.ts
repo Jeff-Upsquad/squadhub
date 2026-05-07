@@ -7,7 +7,6 @@ import type {
   ClientToServerEvents,
   ChatServerToClientEvents,
   ChatClientToServerEvents,
-  Notification,
 } from '@squadhub/shared';
 
 // Socket.io type intersections so one connection handles workspace + chat events.
@@ -200,31 +199,37 @@ export function setupSocketIO(httpServer: HttpServer) {
     });
   });
 
-  // Bridge: Supabase Realtime → Socket.IO for notifications.
-  // Notifications are created by PostgreSQL triggers, so we subscribe to INSERTs
-  // and fan out via Socket.IO to the target user's connected clients.
-  function subscribeNotifications(attempt = 1) {
-    supabaseAdmin
-      .channel(`notifications-realtime${attempt > 1 ? `-${attempt}` : ''}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications' },
-        (payload) => {
-          const notification = payload.new as Notification;
+  // Bridge: Poll notifications table → Socket.IO.
+  // Notifications are created by PostgreSQL triggers (not app code), so we
+  // poll for new rows every 2 seconds and fan out via Socket.IO.
+  let lastPollTime = new Date().toISOString();
+
+  setInterval(async () => {
+    try {
+      const { data: newNotifications, error } = await supabaseAdmin
+        .from('notifications')
+        .select('*')
+        .gt('created_at', lastPollTime)
+        .order('created_at', { ascending: true })
+        .limit(50);
+
+      if (error) {
+        console.error('[socket] notification poll error:', error.message);
+        return;
+      }
+
+      if (newNotifications && newNotifications.length > 0) {
+        lastPollTime = newNotifications[newNotifications.length - 1].created_at;
+        for (const notification of newNotifications) {
           io.to(`chat_user:${notification.user_id}`).emit('new_notification', notification);
-        },
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[socket] Supabase Realtime notifications bridge active');
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          const delay = Math.min(5000 * attempt, 30000);
-          console.warn(`[socket] Realtime subscription ${status}, retrying in ${delay / 1000}s (attempt ${attempt})`);
-          setTimeout(() => subscribeNotifications(attempt + 1), delay);
         }
-      });
-  }
-  subscribeNotifications();
+      }
+    } catch (e) {
+      console.error('[socket] notification poll error:', e);
+    }
+  }, 2000);
+
+  console.log('[socket] Notification polling bridge active (2s interval)');
 
   return io;
 }
