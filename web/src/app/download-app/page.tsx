@@ -179,7 +179,7 @@ export default function DownloadAppPage() {
               overflowX: 'auto',
               whiteSpace: 'nowrap',
             }}>
-              xattr -cr /Applications/SquadHub.app
+              xattr -d com.apple.quarantine /Applications/SquadHub.app
             </code>
             <p style={{ color: '#6b7280', marginTop: 10, fontSize: 12 }}>
               Then open the app from Applications. You&rsquo;ll only need to do this once.
