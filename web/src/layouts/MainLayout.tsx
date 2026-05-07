@@ -305,7 +305,14 @@ export default function MainLayout() {
     const params = new URLSearchParams(window.location.search);
     const openTask = params.get('open_task');
     const openChannel = params.get('open_channel');
-    if (openTask) {
+    const openInbox = params.get('open_inbox');
+    if (openInbox) {
+      setActiveSection('home');
+      setHomeView('inbox');
+      // Store the notification ID so InboxView can auto-select it
+      window.__pendingInboxNotificationId = openInbox;
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (openTask) {
       usePMStore.getState().setActiveTask(openTask);
       window.history.replaceState({}, '', window.location.pathname);
     } else if (openChannel) {

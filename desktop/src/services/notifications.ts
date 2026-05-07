@@ -28,20 +28,8 @@ let notifCounter = 0;
 function getNotificationUrl(n: Notification): string {
   const ws = (n.metadata?.workspace_id as string) || '';
   const base = ws ? `${WEB_URL}/app/workspace/${ws}` : `${WEB_URL}/app`;
-
-  switch (n.reference_type) {
-    case 'task':
-      return n.metadata?.task_id
-        ? `${base}?open_task=${n.metadata.task_id}`
-        : base;
-    case 'message':
-    case 'chat_message':
-      return n.metadata?.channel_id
-        ? `${base}?open_channel=${n.metadata.channel_id}`
-        : base;
-    default:
-      return base;
-  }
+  // Always open the inbox with this notification selected
+  return `${base}?open_inbox=${n.id}`;
 }
 
 function getNotificationSubtitle(type: string): string {
