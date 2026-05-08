@@ -156,7 +156,7 @@ function CardDetails({ card, countries }: { card: PublishedCardItem; countries: 
   const planLabel = plan ? `${plan.plan} · ${plan.tier}` : '';
   const stateColor = card.state === 'published' ? '#10B981' : '#6B7280';
   const stateLabel = card.state === 'published' ? 'Active' : 'Cancelled';
-  const distLabel = card.distribution === 'manual' ? 'Soft publish' : 'Broadcast';
+  const distLabel = card.distribution === 'manual' ? 'Published' : 'Broadcast';
 
   const countryNameById = useMemo(() => {
     const m: Record<string, string> = {};

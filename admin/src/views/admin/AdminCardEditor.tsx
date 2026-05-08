@@ -829,7 +829,7 @@ export default function AdminCardEditor({
                       disabled={!isDraft}
                       className="border-[#E2E8F0]"
                     />
-                    {mode === 'broadcast' ? 'Broadcast (auto-match)' : 'Manual (hand-pick)'}
+                    {mode === 'broadcast' ? 'Broadcast (all matching users)' : 'Publish (share manually)'}
                   </label>
                 ))}
               </div>
