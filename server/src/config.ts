@@ -46,6 +46,7 @@ export const config = {
   squadhireWebhookUrl: process.env.SQUADHIRE_WEBHOOK_URL || '',
   squadhireWebhookSecret: process.env.SQUADHIRE_WEBHOOK_SECRET || '',
   squadhireCallbackSecret: process.env.SQUADHIRE_CALLBACK_SECRET || '',
+  squadhireAdminUrl: process.env.SQUADHIRE_ADMIN_URL || '',
 
   // upsquad website — admin API for subscription requests.
   // When unset, the proxy endpoints return 503 and local dev works without it.
