@@ -312,7 +312,7 @@ function CardPanelContent({
                 disabled={broadcastCard.isPending}
                 className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
-                {broadcastCard.isPending ? 'Publishing…' : 'Publish to all'}
+                {broadcastCard.isPending ? 'Broadcasting…' : 'Broadcast to all'}
               </button>
             )}
           </div>
@@ -686,7 +686,7 @@ function SecondaryCardsSection({
               onChange={(e) => setDistribution(e.target.value as 'broadcast' | 'manual')}
               className="flex-1 rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs text-[#0F172B] focus:outline-none focus:ring-1 focus:ring-indigo-300"
             >
-              <option value="manual">Soft publish (manual)</option>
+              <option value="manual">Publish (manual)</option>
               <option value="broadcast">Broadcast</option>
             </select>
           </div>
@@ -710,7 +710,7 @@ function SecondaryCardsSection({
             const isRecalled = !!sc.recalled_at;
             const stateColor = sc.state === 'published' ? '#10B981' : isRecalled ? '#EA580C' : '#6B7280';
             const stateLabel = sc.state === 'published' ? 'Active' : isRecalled ? 'Recalled' : 'Closed';
-            const distLabel = sc.distribution === 'manual' ? 'Soft publish' : 'Broadcast';
+            const distLabel = sc.distribution === 'manual' ? 'Published' : 'Broadcast';
             const partners = sc.recipient_counts?.partners ?? { pending: 0, accepted: 0, rejected: 0 };
             const talents = sc.recipient_counts?.talents ?? { accepted: 0, rejected: 0 };
             return (
@@ -773,7 +773,7 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
     : '';
   const stateColor = activeCard.state === 'published' ? '#10B981' : '#6B7280';
   const stateLabel = activeCard.state === 'published' ? 'Active' : 'Cancelled';
-  const distLabel = activeCard.distribution === 'manual' ? 'Soft publish' : 'Broadcast';
+  const distLabel = activeCard.distribution === 'manual' ? 'Published' : 'Broadcast';
   const publisher = card.published_by_user;
   const sourceBadge =
     card.source === 'request' ? 'From request' : card.source === 'custom' ? 'Custom' : null;

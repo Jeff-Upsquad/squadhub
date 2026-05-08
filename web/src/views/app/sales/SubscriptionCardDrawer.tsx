@@ -97,10 +97,10 @@ export default function SubscriptionCardDrawer({
     onSuccess: (res: any, distribution: 'broadcast' | 'manual') => {
       invalidate();
       if (distribution === 'manual') {
-        alert('Soft published. Add partners or talents from the recipients panel.');
+        alert('Published. Add partners or talents from the recipients panel.');
       } else {
         const n = res?.data?.matched_count ?? 0;
-        alert(`Published. Sent to ${n} matching partner${n === 1 ? '' : 's'}.`);
+        alert(`Broadcast to ${n} matching partner${n === 1 ? '' : 's'}.`);
       }
     },
     onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Publish failed'),
@@ -653,15 +653,14 @@ export default function SubscriptionCardDrawer({
                       Save draft
                     </button>
                     {/*
-                     * Split button: primary "Publish" + chevron that opens a
-                     * single-item menu for "Soft publish". Soft publish skips
-                     * the auto-fan-out to partners and tells SquadHire not to
-                     * broadcast to talents — admins then hand-pick recipients
-                     * from the recipients panel.
+                     * Split button: primary "Publish" (manual distribution) +
+                     * chevron that opens a menu for "Broadcast". Publish makes
+                     * the card available without fan-out — admins hand-pick
+                     * recipients. Broadcast auto-sends to all matching users.
                      */}
                     <div ref={publishMenuRef} className="relative inline-flex">
                       <button
-                        onClick={() => setPendingPublishMode('broadcast')}
+                        onClick={() => setPendingPublishMode('manual')}
                         disabled={publishMutation.isPending}
                         className="rounded-l-md bg-[var(--sh-ink)] px-3 py-1.5 text-xs font-medium text-[var(--surface)] hover:opacity-90 disabled:opacity-50"
                       >
@@ -689,12 +688,12 @@ export default function SubscriptionCardDrawer({
                             role="menuitem"
                             onClick={() => {
                               setPublishMenuOpen(false);
-                              setPendingPublishMode('manual');
+                              setPendingPublishMode('broadcast');
                             }}
                             className="block w-full px-3 py-2 text-left text-xs hover:bg-[var(--sh-hair-3)]"
                           >
-                            <div className="font-medium text-[var(--sh-ink)]">Soft publish</div>
-                            <div className="text-[var(--sh-ink-3)]">No broadcast — hand-pick recipients</div>
+                            <div className="font-medium text-[var(--sh-ink)]">Broadcast</div>
+                            <div className="text-[var(--sh-ink-3)]">Publish to all matching partners and talents</div>
                           </button>
                         </div>
                       )}
@@ -728,13 +727,13 @@ export default function SubscriptionCardDrawer({
               open={pendingPublishMode !== null}
               title={
                 pendingPublishMode === 'manual'
-                  ? 'Soft publish subscription card'
-                  : 'Publish subscription card'
+                  ? 'Publish subscription card'
+                  : 'Broadcast subscription card'
               }
               description={(() => {
                 const baseDescription =
                   pendingPublishMode === 'manual'
-                    ? "Soft publish — no auto fan-out. The card will appear in the Published Cards list and on SquadHire's admin, but partners and talents won't see it until you hand-pick them from the recipients panel. You can recall it only before anyone accepts."
+                    ? "The card will appear in the Published Cards list and on SquadHire's admin, but partners and talents won't see it until you hand-pick them from the recipients panel. You can recall it only before anyone accepts."
                     : `This will send the card to all matching partners (tiers ${targetTiers.length === 0 ? 'Any' : targetTiers.join(', ')}, min ${parseInt(minExp || '0', 10) || 0}y, ${targetCountryIds.length || 'all'} countries). You can recall it only before anyone accepts.`;
                 // Loud-on-purpose warning when no SquadHire categories are
                 // selected — silent skip is the bug we're guarding against.
@@ -743,7 +742,7 @@ export default function SubscriptionCardDrawer({
                 }
                 return baseDescription;
               })()}
-              confirmWord={pendingPublishMode === 'manual' ? 'SOFT PUBLISH' : 'PUBLISH'}
+              confirmWord={pendingPublishMode === 'manual' ? 'PUBLISH' : 'BROADCAST'}
               loading={publishMutation.isPending}
               onClose={() => setPendingPublishMode(null)}
               onConfirm={() => {

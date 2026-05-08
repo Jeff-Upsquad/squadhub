@@ -175,7 +175,7 @@ export default function MobileCardDetail({
                 {isActive ? 'Active' : 'Cancelled'}
               </span>
               <span className="rounded-full border border-black/20 bg-[#F7F6F3] px-2.5 py-1 text-xs font-bold text-[#525252]">
-                {activeCard.distribution === 'manual' ? 'Soft publish' : 'Broadcast'}
+                {activeCard.distribution === 'manual' ? 'Published' : 'Broadcast'}
               </span>
             </div>
 
@@ -283,7 +283,7 @@ export default function MobileCardDetail({
                               {scActive ? 'Active' : scRecalled ? 'Recalled' : 'Closed'}
                             </span>
                             <span className="text-[9px] font-semibold text-[#a3a3a3]">
-                              {sc.distribution === 'manual' ? 'Soft' : 'Broadcast'}
+                              {sc.distribution === 'manual' ? 'Published' : 'Broadcast'}
                             </span>
                           </div>
                           <p className="text-xs text-[#0a0a0a]">
