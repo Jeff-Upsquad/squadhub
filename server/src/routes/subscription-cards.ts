@@ -542,7 +542,7 @@ router.get(
         .from('subscription_cards')
         .select('*')
         .eq('published_by', userId)
-        .in('state', ['published', 'closed'])
+        .in('state', ['published', 'assigned', 'closed'])
         .order('published_at', { ascending: false });
       if (error) {
         res.status(500).json({ success: false, error: error.message });

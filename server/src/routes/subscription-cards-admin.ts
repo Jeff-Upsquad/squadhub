@@ -34,10 +34,10 @@ router.get('/', async (req: Request, res: Response) => {
       .is('parent_card_id', null)
       .order('published_at', { ascending: false, nullsFirst: false });
 
-    if (stateParam === 'published' || stateParam === 'closed' || stateParam === 'draft') {
+    if (stateParam === 'published' || stateParam === 'assigned' || stateParam === 'closed' || stateParam === 'draft') {
       query = query.eq('state', stateParam);
     } else {
-      query = query.in('state', ['published', 'closed']);
+      query = query.in('state', ['published', 'assigned', 'closed']);
     }
     if (sourceParam === 'request' || sourceParam === 'custom' || sourceParam === 'submission') {
       query = query.eq('source', sourceParam);
