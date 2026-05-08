@@ -219,7 +219,7 @@ router.get('/folders/:id', async (req: Request, res: Response) => {
 
     const { data: folder, error } = await supabaseAdmin
       .from('folders')
-      .select('*, lists(*), custom_profiles:profile_id(id, slug, name, category, target_type, template, version)')
+      .select('*, lists(*), custom_profiles:profile_id(id, slug, name, category, target_type, template, version), client_space_template:client_space_template_id(id, slug, name, icon)')
       .eq('id', id)
       .is('deleted_at', null)
       .single();

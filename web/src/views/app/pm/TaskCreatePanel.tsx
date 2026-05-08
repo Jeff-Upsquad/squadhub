@@ -250,6 +250,7 @@ export default function TaskCreatePanel({
   initialListId,
   initialDraft,
   isDesignTask = false,
+  customTaskTypeKey = 'design_task',
   designTaskTypeId,
 }: {
   statuses?: SpaceStatus[];
@@ -267,9 +268,11 @@ export default function TaskCreatePanel({
   initialListId?: string | null;
   /** Pre-fill with a saved draft. _draftId is used to clean up on submit/re-save. */
   initialDraft?: SerializableDraft & { _draftId?: string };
-  /** When true, show "Design Details" section with design-specific custom fields. */
+  /** When true, show the structured-brief section with type-specific custom fields. */
   isDesignTask?: boolean;
-  /** The task type ID for design_task. Used when isDesignTask is true. */
+  /** Which task type to render the brief for. Defaults to 'design_task' for back-compat. */
+  customTaskTypeKey?: 'design_task' | 'video_edit_task';
+  /** The task type ID. Used when isDesignTask is true. */
   designTaskTypeId?: string | null;
 }) {
   // Picker-mode state — spaceId is derived from the selected list (combobox hands both back)
@@ -312,9 +315,10 @@ export default function TaskCreatePanel({
   const currentUser = useAuthStore((s) => s.user);
 
   const designType = useMemo(
-    () => (isDesignTask ? taskTypes?.find((t) => t.key === 'design_task') || null : null),
-    [isDesignTask, taskTypes],
+    () => (isDesignTask ? taskTypes?.find((t) => t.key === customTaskTypeKey) || null : null),
+    [isDesignTask, customTaskTypeKey, taskTypes],
   );
+  const isVideoTask = isDesignTask && customTaskTypeKey === 'video_edit_task';
   const designFields: TaskTypeField[] = designType?.fields || [];
   const [designCustom, setDesignCustom] = useState<Record<string, unknown>>({});
   const setDesignField = (key: string, v: unknown) =>
@@ -684,7 +688,7 @@ export default function TaskCreatePanel({
             </span>
           )}
           <span className="text-[11.5px] text-[color:var(--sh-ink-4)] font-medium tracking-[0.01em]">
-            {isDesignTask ? 'NEW DESIGN TASK' : 'NEW TASK'}
+            {isDesignTask ? (isVideoTask ? 'NEW VIDEO TASK' : 'NEW DESIGN TASK') : 'NEW TASK'}
           </span>
           <div className="flex-1" />
           <button
@@ -713,12 +717,12 @@ export default function TaskCreatePanel({
             disabled={!canSubmit}
             className="td-pill-btn"
             style={canSubmit ? { background: 'var(--sh-ink)', color: 'var(--surface)', borderColor: 'var(--sh-ink)' } : { opacity: 0.5 }}
-            title={isDesignTask ? 'Create design task' : 'Create task'}
+            title={isDesignTask ? (isVideoTask ? 'Create video task' : 'Create design task') : 'Create task'}
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M5 12l5 5 9-11" />
             </svg>
-            {submitting ? 'Creating…' : isDesignTask ? 'Create design task' : 'Create task'}
+            {submitting ? 'Creating…' : isDesignTask ? (isVideoTask ? 'Create video task' : 'Create design task') : 'Create task'}
           </button>
         </div>
 
@@ -860,14 +864,20 @@ export default function TaskCreatePanel({
             )}
           </div>
 
-          {/* Design Details section — only for design tasks */}
+          {/* Brief section — only for design / video tasks */}
           {isDesignTask && (
             <>
               <div className="td-section-strong">
-                <svg className="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-                <span className="title">Design Details</span>
+                {isVideoTask ? (
+                  <svg className="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                ) : (
+                  <svg className="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                )}
+                <span className="title">{isVideoTask ? 'Video Editing Brief' : 'Design Details'}</span>
               </div>
               <div className="td-settings-card">
                 <div className="td-settings-row" style={{ gridColumn: '1 / -1', borderRight: 'none' }}>
