@@ -154,11 +154,11 @@ export async function buildSquadhirePayloadForCard(
   ] = await Promise.all([
     supabaseAdmin
       .from('subscription_card_target_countries')
-      .select('country_id')
+      .select('country_id, countries!inner(name)')
       .eq('card_id', targetingCardId),
     supabaseAdmin
       .from('subscription_card_target_regions')
-      .select('country_id, region')
+      .select('country_id, region, countries!inner(name)')
       .eq('card_id', targetingCardId),
     stagedSubId
       ? supabaseAdmin
@@ -393,8 +393,13 @@ export async function buildSquadhirePayloadForCard(
   }
   const targetCountryIds = (countryRows ?? []).map((r: any) => r.country_id as string);
   if (targetCountryIds.length > 0) match_rules.target_country_ids = targetCountryIds;
+  const targetCountryNames = (countryRows ?? [])
+    .map((r: any) => (r.countries?.name as string) ?? '')
+    .filter(Boolean);
+  if (targetCountryNames.length > 0) match_rules.target_country_names = targetCountryNames;
   const targetRegions = (regionRows ?? []).map((r: any) => ({
     country_id: r.country_id as string,
+    country_name: (r.countries?.name as string) ?? '',
     region: r.region as string,
   }));
   if (targetRegions.length > 0) match_rules.target_regions = targetRegions;
