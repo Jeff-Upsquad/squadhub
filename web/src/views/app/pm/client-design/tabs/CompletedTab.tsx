@@ -1,18 +1,22 @@
+import type { SpaceStatus } from '@squadhub/shared';
 import RequestsTab from './RequestsTab';
 import type { RequestRowData } from '../atoms/RequestRow';
 
 export default function CompletedTab({
   requests,
-  onOpenRequest,
+  statuses,
+  listByStatus,
 }: {
   requests: RequestRowData[];
-  onOpenRequest: (r: RequestRowData) => void;
+  statuses: SpaceStatus[];
+  listByStatus: Record<string, { id: string; name: string } | null>;
 }) {
   return (
     <RequestsTab
       requests={requests.filter((r) => r._derivedStatus === 'done')}
-      onOpenRequest={onOpenRequest}
       filterStatus="done"
+      statuses={statuses}
+      listByStatus={listByStatus}
     />
   );
 }

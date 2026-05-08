@@ -107,6 +107,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
   ];
 
   const briefsListId = listByStatus.queued?.id || null;
+  const effectiveStatuses = space?.statuses || [];
 
   return (
     <div className="flex flex-1 flex-col">
@@ -200,12 +201,16 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
                 <DashboardTab
                   requests={filteredRequests}
                   plan={plan}
-                  onOpenRequest={(r) => openRequest(r.id)}
-                  onSwitchTab={(t) => setTab(t as TabKey)}
+                  statuses={effectiveStatuses}
+                  listByStatus={listByStatus}
                 />
               )}
               {tab === 'requests' && (
-                <RequestsTab requests={filteredRequests} onOpenRequest={(r) => openRequest(r.id)} />
+                <RequestsTab
+                  requests={filteredRequests}
+                  statuses={effectiveStatuses}
+                  listByStatus={listByStatus}
+                />
               )}
               {tab === 'board' && (
                 <BoardTab
@@ -216,7 +221,11 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
               )}
               {tab === 'reports' && <ReportsTab requests={filteredRequests} plan={plan} />}
               {tab === 'completed' && (
-                <CompletedTab requests={filteredRequests} onOpenRequest={(r) => openRequest(r.id)} />
+                <CompletedTab
+                  requests={filteredRequests}
+                  statuses={effectiveStatuses}
+                  listByStatus={listByStatus}
+                />
               )}
             </>
           )}

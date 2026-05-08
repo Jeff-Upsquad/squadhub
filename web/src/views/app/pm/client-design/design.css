@@ -50,12 +50,33 @@
   font-family: var(--cd-font-ui);
   font-size: 13px;
   line-height: 1.5;
-  color: var(--cd-fg-0);
-  background: var(--cd-bg-0);
+  color: var(--sh-ink);
   font-feature-settings: 'ss01', 'cv11';
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   min-height: 0;
+}
+
+.dark .cd-root {
+  --cd-bg-0: #0c0e14;
+  --cd-bg-1: #151820;
+  --cd-bg-2: #1a1d26;
+  --cd-bg-3: #22252f;
+  --cd-bg-4: #2c303c;
+
+  --cd-fg-0: #e0e0e6;
+  --cd-fg-1: #a0a0aa;
+  --cd-fg-2: #787882;
+  --cd-fg-3: #585862;
+
+  --cd-br-0: rgba(255, 255, 255, 0.07);
+  --cd-br-1: rgba(255, 255, 255, 0.11);
+  --cd-br-2: rgba(255, 255, 255, 0.18);
+
+  --cd-acc: #e0e0e6;
+  --cd-acc-soft: rgba(224, 224, 230, 0.08);
+  --cd-acc-dim: rgba(224, 224, 230, 0.35);
+  --cd-acc-fg: #0c0e14;
 }
 
 .cd-root *,
