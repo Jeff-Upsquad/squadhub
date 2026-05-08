@@ -196,6 +196,18 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/strange-lumiere-e8b376/admin && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3003"],
       "port": 3003
+    },
+    {
+      "name": "Video Editing Space Server",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/zen-visvesvaraya-964e46/server && PORT=4002 exec npm run dev"],
+      "port": 4002
+    },
+    {
+      "name": "Video Editing Space Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/zen-visvesvaraya-964e46/web && INTERNAL_API_URL=http://localhost:4002 exec npx next dev -p 3092"],
+      "port": 3092
     }
   ]
 }

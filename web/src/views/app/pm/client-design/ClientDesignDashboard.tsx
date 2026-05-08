@@ -62,9 +62,15 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
   const { data: space } = useSpace(folder?.space_id ?? null);
   const openRequest = (id: string) => setActiveTask(id);
 
+  const templateSlug = (folder as any)?.client_space_template?.slug as string | undefined;
+  const isVideo = templateSlug === 'video-editing-space';
+  const taskTypeKey = isVideo ? 'video_edit_task' : 'design_task';
+  const breadcrumbLabel = isVideo ? 'Video editing workspace' : 'Design workspace';
+  const newTaskLabel = isVideo ? 'New Video Task' : 'New Design Task';
+
   const designType = useMemo(
-    () => taskTypes?.find((t) => t.key === 'design_task') || null,
-    [taskTypes],
+    () => taskTypes?.find((t) => t.key === taskTypeKey) || null,
+    [taskTypes, taskTypeKey],
   );
 
   const isManager = canAtLeast(folder?.my_access_level, 'manager');
@@ -114,7 +120,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
       {/* Row 1: Breadcrumb + global actions */}
       <div className="lv-breadcrumb-row">
         <div className="lv-breadcrumb">
-          <span className="lv-bc-link">Design workspace</span>
+          <span className="lv-bc-link">{breadcrumbLabel}</span>
           <span className="lv-bc-sep">/</span>
           <span className="lv-bc-current">{folder?.name || 'Loading…'}</span>
         </div>
@@ -156,7 +162,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M12 5v14M5 12h14" />
             </svg>
-            New Design Task
+            {newTaskLabel}
           </button>
         </div>
       </div>
@@ -239,6 +245,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
           spaceColor={null}
           onClose={() => setShowCreatePanel(false)}
           isDesignTask
+          customTaskTypeKey={taskTypeKey}
           designTaskTypeId={designType?.id || null}
           statuses={space?.statuses}
         />
