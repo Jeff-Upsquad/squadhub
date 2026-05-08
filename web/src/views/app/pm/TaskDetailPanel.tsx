@@ -677,19 +677,6 @@ export default function TaskDetailPanel({
                     ))}
                   </div>
 
-                  {audioAttachments.length > 0 && (
-                    <>
-                      <div className="td-eyebrow" style={{ marginBottom: 6 }}>
-                        Voice Notes
-                        <span className="muted">· {audioAttachments.length}</span>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
-                        {audioAttachments.map((a) => (
-                          <AudioAttachmentPlayer key={a.id} attachment={a} canEdit={canEdit} taskId={task!.id} />
-                        ))}
-                      </div>
-                    </>
-                  )}
                 </>
               )}
 
@@ -1417,13 +1404,23 @@ export default function TaskDetailPanel({
                     className="w-full bg-transparent text-[13px] text-[color:var(--sh-ink)] placeholder:text-[color:var(--sh-ink-3)] focus:outline-none"
                   />
                 </div>
-                {canEdit && task && (
-                  <VoiceNoteRecordButton taskId={task.id} onUploaded={() => refetchAttachments()} />
-                )}
                 {commentText.trim() && (
                   <button onClick={handleAddComment} className="td-comment-send">Send</button>
                 )}
               </div>
+
+              {canEdit && task && (
+                <VoiceNoteRecorder taskId={task.id} onUploaded={() => refetchAttachments()} />
+              )}
+
+              {audioAttachments.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                  {audioAttachments.map((a) => (
+                    <AudioAttachmentPlayer key={a.id} attachment={a} canEdit={canEdit} taskId={task!.id} />
+                  ))}
+                </div>
+              )}
+
               {comments && comments.length > 0 ? (
                 <div className="flex flex-col gap-3 mt-3">
                   {comments.map((c) => (
@@ -1446,9 +1443,9 @@ export default function TaskDetailPanel({
                     </div>
                   ))}
                 </div>
-              ) : (
+              ) : audioAttachments.length === 0 ? (
                 <div className="text-[12.5px] text-[color:var(--sh-ink-4)] mt-3">No comments yet.</div>
-              )}
+              ) : null}
 
               <div className="td-section-rule" />
 
@@ -2060,80 +2057,171 @@ function AudioAttachmentPlayer({
   );
 }
 
-function VoiceNoteRecordButton({ taskId, onUploaded }: { taskId: string; onUploaded: () => void }) {
-  const [recording, setRecording] = useState(false);
-  const [uploading, setUploading] = useState(false);
+type VNRState = 'idle' | 'recording' | 'preview' | 'uploading';
+
+function VoiceNoteRecorder({ taskId, onUploaded }: { taskId: string; onUploaded: () => void }) {
+  const [state, setState] = useState<VNRState>('idle');
+  const [elapsed, setElapsed] = useState(0);
+  const [previewPlaying, setPreviewPlaying] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState(0);
   const mrRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const blobRef = useRef<Blob | null>(null);
+  const mimeRef = useRef('audio/webm');
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const rafRef = useRef<number>(0);
 
-  const toggle = async () => {
-    if (recording) {
-      mrRef.current?.stop();
-      return;
-    }
+  const clearTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
+  const clearPreview = () => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
+    audioRef.current = null;
+    cancelAnimationFrame(rafRef.current);
+    setPreviewPlaying(false);
+    setPreviewProgress(0);
+  };
+
+  const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mr = new MediaRecorder(stream, {
         mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm',
       });
       chunksRef.current = [];
+      mimeRef.current = mr.mimeType;
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      mr.onstop = async () => {
+      mr.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
-        setRecording(false);
+        clearTimer();
         const blob = new Blob(chunksRef.current, { type: mr.mimeType });
-        if (blob.size < 1000) return;
-        const ext = mr.mimeType.includes('webm') ? 'webm' : 'ogg';
-        const file = new File([blob], `voice-note-${Date.now()}.${ext}`, { type: mr.mimeType });
-        setUploading(true);
-        try {
-          const presignRes = await api.post('/pm/task-attachments/presign', {
-            task_id: taskId,
-            filename: file.name,
-            content_type: file.type,
-            file_size: file.size,
-          });
-          const { upload_url, key } = presignRes.data.data;
-          await fetch(upload_url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
-          await api.post('/pm/task-attachments/confirm', {
-            task_id: taskId,
-            object_key: key,
-            file_name: file.name,
-            mime_type: file.type,
-          });
-          onUploaded();
-        } catch (err) {
-          console.error('Voice note upload failed:', err);
-        } finally {
-          setUploading(false);
-        }
+        blobRef.current = blob;
+        if (blob.size < 500) { setState('idle'); return; }
+        const audio = new Audio(URL.createObjectURL(blob));
+        audioRef.current = audio;
+        audio.addEventListener('ended', () => { setPreviewPlaying(false); setPreviewProgress(0); });
+        setState('preview');
       };
       mr.start();
       mrRef.current = mr;
-      setRecording(true);
+      setElapsed(0);
+      const start = Date.now();
+      timerRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 200);
+      setState('recording');
     } catch (err) {
       console.error('Mic access denied:', err);
     }
   };
 
-  return (
-    <button
-      type="button"
-      onClick={toggle}
-      disabled={uploading}
-      className="td-voice-rec-btn shrink-0"
-      style={recording ? { color: '#ef4444' } : undefined}
-      title={recording ? 'Stop recording' : uploading ? 'Uploading…' : 'Record voice note'}
-    >
-      {uploading ? (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="animate-spin"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" /></svg>
-      ) : (
+  const stopRecording = () => { mrRef.current?.stop(); };
+
+  const togglePreviewPlay = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (previewPlaying) {
+      a.pause(); setPreviewPlaying(false); cancelAnimationFrame(rafRef.current);
+    } else {
+      a.play(); setPreviewPlaying(true);
+      const tick = () => {
+        if (a.duration) setPreviewProgress(a.currentTime / a.duration);
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    }
+  };
+
+  const discard = () => { clearPreview(); blobRef.current = null; setState('idle'); setElapsed(0); };
+
+  const send = async () => {
+    const blob = blobRef.current;
+    if (!blob) return;
+    clearPreview();
+    setState('uploading');
+    const ext = mimeRef.current.includes('webm') ? 'webm' : 'ogg';
+    const file = new File([blob], `voice-note-${Date.now()}.${ext}`, { type: mimeRef.current });
+    try {
+      const presignRes = await api.post('/pm/task-attachments/presign', {
+        task_id: taskId, filename: file.name, content_type: file.type, file_size: file.size,
+      });
+      const { upload_url, key } = presignRes.data.data;
+      await fetch(upload_url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+      await api.post('/pm/task-attachments/confirm', {
+        task_id: taskId, object_key: key, file_name: file.name, mime_type: file.type,
+      });
+      onUploaded();
+    } catch (err) {
+      console.error('Voice note upload failed:', err);
+    }
+    blobRef.current = null;
+    setState('idle');
+    setElapsed(0);
+  };
+
+  const fmtTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+  if (state === 'idle') {
+    return (
+      <button type="button" onClick={startRecording} className="td-voice-rec-btn" style={{ marginTop: 8 }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="9" y="1" width="6" height="12" rx="3" />
           <path d="M19 10v1a7 7 0 01-14 0v-1M12 19v4M8 23h8" />
         </svg>
-      )}
-      {recording && <span className="td-voice-pulse" />}
-    </button>
+        Record voice note
+      </button>
+    );
+  }
+
+  if (state === 'recording') {
+    return (
+      <div className="td-voice-note" style={{ marginTop: 8, background: 'color-mix(in oklch, oklch(0.55 0.22 25) 6%, var(--surface))' }}>
+        <span className="td-voice-pulse" />
+        <span style={{ color: '#ef4444', fontWeight: 600, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{fmtTime(elapsed)}</span>
+        <span style={{ flex: 1, fontSize: 11, color: 'var(--sh-ink-3)' }}>Recording…</span>
+        <button type="button" onClick={stopRecording} className="td-voice-speed" style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+          Stop
+        </button>
+      </div>
+    );
+  }
+
+  if (state === 'preview') {
+    return (
+      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className="td-voice-note">
+          <button type="button" onClick={togglePreviewPlay} className="td-voice-play">
+            {previewPlaying ? (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>
+            )}
+          </button>
+          <div className="td-voice-track" onClick={(e) => {
+            const a = audioRef.current;
+            if (!a || !a.duration) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            a.currentTime = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * a.duration;
+            setPreviewProgress(a.currentTime / a.duration);
+          }}>
+            <div className="td-voice-track-fill" style={{ width: `${previewProgress * 100}%` }} />
+          </div>
+          <span className="td-voice-time">{fmtTime(elapsed)}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+          <button type="button" onClick={discard} className="td-voice-speed" style={{ color: 'var(--sh-ink-3)' }}>
+            Delete
+          </button>
+          <button type="button" onClick={send} className="td-voice-speed" style={{ background: 'var(--sh-ink)', color: 'var(--surface)', borderColor: 'var(--sh-ink)' }}>
+            Send
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="td-voice-note" style={{ marginTop: 8, opacity: 0.6 }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="animate-spin"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" /></svg>
+      <span style={{ fontSize: 12, color: 'var(--sh-ink-3)' }}>Uploading voice note…</span>
+    </div>
   );
 }
