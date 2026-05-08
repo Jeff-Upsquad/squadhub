@@ -1,22 +1,21 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
+import { requireAdmin } from '../../middleware/admin';
 import { requireSalesLeadsAccess } from '../onboarding-links';
 import {
   fetchSquadhireCategories,
   clearSquadhireCategoriesCache,
 } from '../../utils/squadhireCategories';
+import { lookupSquadhireUsers } from '../../utils/squadhireLookup';
+import { config } from '../../config';
 
 /**
- * Signed read-through proxy for SquadHire's category list.
+ * Admin-facing proxy for SquadHire integration data.
  *
- * The subscription-card drawer uses this to populate a multi-select picker
- * so admins pick real SquadHire category IDs (which then flow into
- * match_rules.category_ids on publish). Gated behind the same sales-leads
- * app gate as the card editor itself.
- *
- * The actual fetch + cache live in utils/squadhireCategories.ts so the
- * profile-access list-hydration path can share the same cache without
- * doing internal HTTP roundtrips.
+ * /categories     — category picker for subscription cards
+ * /config         — tells the frontend whether SquadHire linking is available
+ * /lookup-users   — batch email→talent lookup for partner↔talent linking
  */
 
 const router = Router();
@@ -33,6 +32,39 @@ router.get('/categories', requireSalesLeadsAccess, async (_req: Request, res: Re
       success: false,
       error: err?.message || 'Failed to load SquadHire categories',
     });
+  }
+});
+
+// ── SquadHire config (admin-only) ──
+
+router.get('/config', requireAdmin, (_req: Request, res: Response) => {
+  const adminUrl = config.squadhireAdminUrl || null;
+  const configured = !!(adminUrl && config.squadhireWebhookUrl && config.squadhireWebhookSecret);
+  res.json({ success: true, data: { admin_url: adminUrl, configured } });
+});
+
+// ── Batch email→talent lookup (admin-only) ──
+
+const lookupSchema = z.object({
+  emails: z.array(z.string().email()).min(1).max(50),
+});
+
+router.post('/lookup-users', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const body = lookupSchema.parse(req.body);
+    const results = await lookupSquadhireUsers(body.emails);
+    const data: Record<string, { talent_user_id: string; name: string }> = {};
+    for (const [email, match] of results) {
+      data[email] = match;
+    }
+    res.json({ success: true, data });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('[squadhire-lookup] error:', err);
+    res.json({ success: true, data: {}, note: err?.message || 'Lookup failed' });
   }
 });
 

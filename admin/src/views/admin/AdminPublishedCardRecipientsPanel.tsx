@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
+import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import AssignRecipientPicker from './AssignRecipientPicker';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { showToast } from '@/components/Toast';
@@ -151,6 +152,7 @@ function CardPanelContent({
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const qc = useQueryClient();
+  const { adminUrl, configured: shConfigured } = useSquadhireConfig();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['admin-card-recipients', activeCardId],
@@ -412,6 +414,7 @@ function CardPanelContent({
                     responded_at: t.responded_at,
                     assigned_manually: !!t.assigned_manually,
                     selected_at: t.selected_at ?? null, passed_over_at: t.passed_over_at ?? null,
+                    externalUrl: shConfigured && adminUrl ? `${adminUrl}/admin/users/${t.external_user_id}` : undefined,
                   }))}
                 />
                 <Subgroup
@@ -426,6 +429,7 @@ function CardPanelContent({
                     responded_at: t.responded_at,
                     assigned_manually: !!t.assigned_manually,
                     selected_at: null, passed_over_at: null,
+                    externalUrl: shConfigured && adminUrl ? `${adminUrl}/admin/users/${t.external_user_id}` : undefined,
                   }))}
                 />
                 <Subgroup
@@ -440,6 +444,7 @@ function CardPanelContent({
                     responded_at: null,
                     assigned_manually: !!t.assigned_manually,
                     selected_at: null, passed_over_at: null,
+                    externalUrl: shConfigured && adminUrl ? `${adminUrl}/admin/users/${t.external_user_id}` : undefined,
                   }))}
                 />
               </Section>
@@ -969,7 +974,7 @@ function Subgroup({
   isSelecting,
 }: {
   label: 'Accepted' | 'Rejected' | 'Pending';
-  items: { key: string; name: string; subtitle?: string | null; status: 'accepted' | 'rejected' | 'pending'; responded_at: string | null; assigned_manually?: boolean; selected_at?: string | null; passed_over_at?: string | null }[];
+  items: { key: string; name: string; subtitle?: string | null; status: 'accepted' | 'rejected' | 'pending'; responded_at: string | null; assigned_manually?: boolean; selected_at?: string | null; passed_over_at?: string | null; externalUrl?: string }[];
   onRemove?: (key: string, name: string) => void;
   isRemoving?: boolean;
   onSelect?: (key: string, name: string) => void;
@@ -1001,6 +1006,20 @@ function Subgroup({
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
+              {it.externalUrl && (
+                <a
+                  href={it.externalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="View in SquadHire"
+                  className="rounded-md p-1 text-[#90A1B9] hover:bg-purple-50 hover:text-purple-600 transition"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                  </svg>
+                </a>
+              )}
               {it.selected_at && (
                 <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
                   Selected

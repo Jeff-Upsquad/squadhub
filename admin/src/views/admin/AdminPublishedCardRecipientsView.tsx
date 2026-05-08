@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import api from '@/services/api';
+import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import type { PublishedCard } from './AdminPublishedCards';
 import type { RecipientsResponse } from './AdminPublishedCardRecipientsPanel';
 
@@ -61,6 +62,7 @@ export default function AdminPublishedCardRecipientsView({
   const [activeTab, setActiveTab] = useState<StatusTab>('all');
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
+  const { adminUrl, configured: shConfigured } = useSquadhireConfig();
 
   // Fetch local recipients (partners from SquadHub + talents who responded via callback)
   const { data, isLoading } = useQuery({
@@ -392,6 +394,19 @@ export default function AdminPublishedCardRecipientsView({
                         }`}>
                           {r.type === 'partner' ? 'Partner' : 'Talent'}
                         </span>
+                        {r.type === 'talent' && shConfigured && adminUrl && (
+                          <a
+                            href={`${adminUrl}/admin/users/${r.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="View in SquadHire"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded text-[#90A1B9] hover:bg-purple-50 hover:text-purple-600 transition"
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                            </svg>
+                          </a>
+                        )}
                         {r.assigned_manually && (
                           <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
                             Manual

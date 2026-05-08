@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { useSquadhireConfig, useSquadhireUserLookup } from '../../hooks/useSquadhireConfig';
 import type { User, Role } from '@squadhub/shared';
 
 interface UserWithRole extends User {
@@ -35,10 +36,14 @@ function EditUserSlider({
   user,
   roles,
   onClose,
+  squadhireMatch,
+  squadhireAdminUrl,
 }: {
   user: UserWithRole;
   roles: Role[];
   onClose: () => void;
+  squadhireMatch?: { talent_user_id: string; name: string };
+  squadhireAdminUrl?: string | null;
 }) {
   const queryClient = useQueryClient();
   const originalUserType = ((user as any).user_type as string) || 'internal';
@@ -337,6 +342,31 @@ function EditUserSlider({
             </div>
           </div>
 
+          {/* SquadHire link */}
+          {squadhireMatch && squadhireAdminUrl && (
+            <div className="mt-5 rounded-lg border border-purple-200 bg-purple-50/50 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-purple-800">SquadHire Profile</p>
+                  <p className="mt-0.5 text-[11px] text-purple-600">
+                    Matched as <span className="font-medium">{squadhireMatch.name}</span>
+                  </p>
+                </div>
+                <a
+                  href={`${squadhireAdminUrl}/admin/users/${squadhireMatch.talent_user_id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-700 transition"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                  </svg>
+                  View in SquadHire
+                </a>
+              </div>
+            </div>
+          )}
+
           {/* Error */}
           {error && (
             <div className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
@@ -373,12 +403,16 @@ function UserRow({
   roles,
   onAction,
   onEdit,
+  squadhireMatch,
+  squadhireAdminUrl,
 }: {
   user: UserWithRole;
   currentUserId: string;
   roles: Role[];
   onAction: () => void;
   onEdit: (user: UserWithRole) => void;
+  squadhireMatch?: { talent_user_id: string; name: string };
+  squadhireAdminUrl?: string | null;
 }) {
   const queryClient = useQueryClient();
   const isSelf = user.id === currentUserId;
@@ -489,6 +523,19 @@ function UserRow({
           >
             Edit
           </button>
+          {squadhireMatch && squadhireAdminUrl && (
+            <a
+              href={`${squadhireAdminUrl}/admin/users/${squadhireMatch.talent_user_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700 hover:bg-purple-100 transition"
+            >
+              <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+              SquadHire
+            </a>
+          )}
           {!isSelf && (
             <>
               {!isBanned && !isSuspended && (
@@ -570,6 +617,20 @@ export default function AdminUsers() {
   const total: number = usersRes?.total || 0;
   const totalPages = Math.ceil(total / 20);
 
+  const { adminUrl, configured: shConfigured } = useSquadhireConfig();
+
+  const partnerEmails = useMemo(
+    () =>
+      users
+        .filter((u) => {
+          const ut = (u as any).user_type;
+          return ut === 'partner' || ut === 'partner_employee';
+        })
+        .map((u) => u.email),
+    [users],
+  );
+  const { matches: shMatches } = useSquadhireUserLookup(partnerEmails, shConfigured);
+
   const refreshStats = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
   };
@@ -631,6 +692,8 @@ export default function AdminUsers() {
                     roles={roles}
                     onAction={refreshStats}
                     onEdit={setEditingUser}
+                    squadhireMatch={shMatches[user.email]}
+                    squadhireAdminUrl={adminUrl}
                   />
                 ))}
               </tbody>
@@ -666,6 +729,8 @@ export default function AdminUsers() {
           user={editingUser}
           roles={roles}
           onClose={() => setEditingUser(null)}
+          squadhireMatch={shMatches[editingUser.email]}
+          squadhireAdminUrl={adminUrl}
         />
       )}
     </div>
