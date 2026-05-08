@@ -4,7 +4,7 @@ import { useAssignableUsersByList } from '../../../hooks/useAssignableUsers';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useSpace } from '../../../hooks/useSpaces';
 import { useAuthStore } from '../../../stores/authStore';
-import type { SpaceStatus, Task, TaskPriority, TaskStatusKey } from '@squadhub/shared';
+import type { SpaceStatus, Task, TaskPriority, TaskStatusKey, TaskTypeField } from '@squadhub/shared';
 import { getTaskStatusDef } from '@squadhub/shared';
 import api from '../../../services/api';
 import AssigneePicker from './AssigneePicker';
@@ -249,6 +249,8 @@ export default function TaskCreatePanel({
   initialSpaceId,
   initialListId,
   initialDraft,
+  isDesignTask = false,
+  designTaskTypeId,
 }: {
   statuses?: SpaceStatus[];
   listId?: string;
@@ -265,6 +267,10 @@ export default function TaskCreatePanel({
   initialListId?: string | null;
   /** Pre-fill with a saved draft. _draftId is used to clean up on submit/re-save. */
   initialDraft?: SerializableDraft & { _draftId?: string };
+  /** When true, show "Design Details" section with design-specific custom fields. */
+  isDesignTask?: boolean;
+  /** The task type ID for design_task. Used when isDesignTask is true. */
+  designTaskTypeId?: string | null;
 }) {
   // Picker-mode state — spaceId is derived from the selected list (combobox hands both back)
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(initialSpaceId ?? null);
@@ -304,6 +310,20 @@ export default function TaskCreatePanel({
   }, [assignableUsers]);
   const { data: taskTypes } = useTaskTypes();
   const currentUser = useAuthStore((s) => s.user);
+
+  const designType = useMemo(
+    () => (isDesignTask ? taskTypes?.find((t) => t.key === 'design_task') || null : null),
+    [isDesignTask, taskTypes],
+  );
+  const designFields: TaskTypeField[] = designType?.fields || [];
+  const [designCustom, setDesignCustom] = useState<Record<string, unknown>>({});
+  const setDesignField = (key: string, v: unknown) =>
+    setDesignCustom((prev) => {
+      const next = { ...prev };
+      if (v == null || (Array.isArray(v) && v.length === 0) || v === '') delete next[key];
+      else next[key] = v;
+      return next;
+    });
 
   const initialStatus = defaultStatus || effectiveStatuses[0]?.category || 'todo';
   const [draft, setDraft] = useState<Draft>(() => {
@@ -362,10 +382,14 @@ export default function TaskCreatePanel({
   // Default task type, once the list of types is available.
   useEffect(() => {
     if (!taskTypes || !taskTypes.length) return;
+    if (isDesignTask && designType) {
+      if (draft.task_type_id !== designType.id) setDraft((d) => ({ ...d, task_type_id: designType.id }));
+      return;
+    }
     if (draft.task_type_id) return;
     const def = taskTypes.find((t) => t.is_default) || taskTypes[0];
     if (def) setDraft((d) => ({ ...d, task_type_id: def.id }));
-  }, [taskTypes, draft.task_type_id]);
+  }, [taskTypes, draft.task_type_id, isDesignTask, designType]);
 
   // Slide-in mount animation, matches TaskDetailPanel
   useEffect(() => {
@@ -384,7 +408,10 @@ export default function TaskCreatePanel({
   const priorityLabel = PRIORITY_LABEL[draft.priority];
   const dueInfo = formatDueRelative(draft.due_date);
 
-  const canSubmit = draft.title.trim().length > 0 && !!effectiveListId && !submitting;
+  const canSubmit = draft.title.trim().length > 0
+    && !!effectiveListId
+    && !submitting
+    && (!isDesignTask || draft.description.trim().length > 0);
 
   const handleClose = () => {
     if (isDraftNonEmpty(draft)) {
@@ -424,6 +451,21 @@ export default function TaskCreatePanel({
     if (!title || !effectiveListId) return;
     setSubmitting(true);
     try {
+      // Build design metadata if this is a design task
+      let metadata: Record<string, unknown> | undefined;
+      if (isDesignTask && Object.keys(designCustom).length > 0) {
+        const briefTypeField = designFields.find((f) => f.key === 'brief_type');
+        const briefTypeArr = (designCustom['brief_type'] as string[] | undefined) || [];
+        const categoryLabel = briefTypeArr
+          .map((v) =>
+            v === '__other__'
+              ? (designCustom['brief_type_other'] as string) || 'Other'
+              : briefTypeField?.options.find((o) => o.value === v)?.label || v
+          )
+          .filter(Boolean)[0];
+        metadata = { custom: designCustom, ...(categoryLabel ? { category: categoryLabel } : {}) };
+      }
+
       const newTask = await createTask.mutateAsync({
         title,
         description: draft.description.trim() || undefined,
@@ -433,8 +475,9 @@ export default function TaskCreatePanel({
         work_date: draft.work_date || undefined,
         start_date: draft.start_date || undefined,
         due_date: draft.due_date || undefined,
-        task_type_id: draft.task_type_id || undefined,
+        task_type_id: isDesignTask ? (designTaskTypeId || designType?.id || draft.task_type_id || undefined) : (draft.task_type_id || undefined),
         list_id: effectiveListId,
+        ...(metadata ? { metadata } : {}),
       });
 
       // Subtasks
@@ -641,7 +684,7 @@ export default function TaskCreatePanel({
             </span>
           )}
           <span className="text-[11.5px] text-[color:var(--sh-ink-4)] font-medium tracking-[0.01em]">
-            NEW TASK
+            {isDesignTask ? 'NEW DESIGN TASK' : 'NEW TASK'}
           </span>
           <div className="flex-1" />
           <button
@@ -670,12 +713,12 @@ export default function TaskCreatePanel({
             disabled={!canSubmit}
             className="td-pill-btn"
             style={canSubmit ? { background: 'var(--sh-ink)', color: 'var(--surface)', borderColor: 'var(--sh-ink)' } : { opacity: 0.5 }}
-            title="Create task"
+            title={isDesignTask ? 'Create design task' : 'Create task'}
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M5 12l5 5 9-11" />
             </svg>
-            {submitting ? 'Creating…' : 'Create task'}
+            {submitting ? 'Creating…' : isDesignTask ? 'Create design task' : 'Create task'}
           </button>
         </div>
 
@@ -720,17 +763,19 @@ export default function TaskCreatePanel({
             />
           </div>
 
-          {/* Description — boxed right under title */}
-          <div className="td-desc-box">
-            <span className="td-desc-box-label">Description</span>
-            <textarea
-              value={draft.description}
-              onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-              placeholder="Click to add a description…"
-              rows={4}
-              className="td-about w-full resize-none bg-transparent outline-none"
-            />
-          </div>
+          {/* Description — boxed right under title (hidden for design tasks, Brief replaces it) */}
+          {!isDesignTask && (
+            <div className="td-desc-box">
+              <span className="td-desc-box-label">Description</span>
+              <textarea
+                value={draft.description}
+                onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+                placeholder="Click to add a description…"
+                rows={4}
+                className="td-about w-full resize-none bg-transparent outline-none"
+              />
+            </div>
+          )}
 
           {/* Assignee bar — full-width row */}
           <div
@@ -814,6 +859,49 @@ export default function TaskCreatePanel({
               </button>
             )}
           </div>
+
+          {/* Design Details section — only for design tasks */}
+          {isDesignTask && (
+            <>
+              <div className="td-section-strong">
+                <svg className="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                <span className="title">Design Details</span>
+              </div>
+              <div className="td-settings-card">
+                <div className="td-settings-row" style={{ gridColumn: '1 / -1', borderRight: 'none' }}>
+                  <span className="k">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 4h12l4 4v12H4z" />
+                      <path d="M8 8h8M8 12h6" />
+                    </svg>
+                    Brief<span style={{ color: 'oklch(0.55 0.18 25)', marginLeft: 2 }}>*</span>
+                  </span>
+                  <span className="v" style={{ display: 'block' }}>
+                    <textarea
+                      value={draft.description}
+                      onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+                      placeholder="Describe what you want. Goals, context, what success looks like."
+                      rows={3}
+                      className="td-about w-full resize-none bg-transparent outline-none"
+                    />
+                  </span>
+                </div>
+                {designFields.map((field) => (
+                  <DesignFieldRow
+                    key={field.id}
+                    field={field}
+                    value={designCustom[field.key]}
+                    otherValue={designCustom[field.key + '_other']}
+                    onChange={(v) => setDesignField(field.key, v)}
+                    onOtherChange={(v) => setDesignField(field.key + '_other', v)}
+                  />
+                ))}
+                <VoiceNoteRecorder onAddFile={(f) => addDraftFiles([f])} />
+              </div>
+            </>
+          )}
 
           {/* Details — 2-column property grid (with head bar) */}
           <div className="td-settings-card">
@@ -1066,8 +1154,8 @@ export default function TaskCreatePanel({
                 </span>
               </div>
 
-              {/* Type */}
-              {taskTypes && taskTypes.length > 0 && (
+              {/* Type (hidden for design tasks — auto-set to design_task) */}
+              {!isDesignTask && taskTypes && taskTypes.length > 0 && (
                 <div
                   className="td-settings-row"
                   data-half="true"
@@ -1487,6 +1575,421 @@ export default function TaskCreatePanel({
           onCancel={() => setPendingEmergency(false)}
         />
       )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* DesignFieldRow — renders a single design_task custom field inside the panel */
+/* -------------------------------------------------------------------------- */
+
+function DesignFieldRow({
+  field,
+  value,
+  otherValue,
+  onChange,
+  onOtherChange,
+}: {
+  field: TaskTypeField;
+  value: unknown;
+  otherValue: unknown;
+  onChange: (v: unknown) => void;
+  onOtherChange: (v: unknown) => void;
+}) {
+  const str = typeof value === 'string' ? value : value == null ? '' : String(value);
+  const otherStr = typeof otherValue === 'string' ? otherValue : '';
+
+  let control: React.ReactNode = null;
+
+  switch (field.field_type) {
+    case 'multi_select': {
+      const arr: string[] = Array.isArray(value) ? (value as string[]) : [];
+      const otherSelected = arr.includes('__other__') || (field.allow_other && !!otherStr);
+      control = (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="flex flex-wrap gap-1.5">
+            {field.options.map((o) => {
+              const on = arr.includes(o.value);
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => onChange(on ? arr.filter((v) => v !== o.value) : [...arr, o.value])}
+                  className="td-prop-chip"
+                  style={{
+                    background: on ? 'var(--sh-ink)' : 'var(--surface-alt)',
+                    color: on ? 'var(--surface)' : 'var(--sh-ink-2)',
+                    border: `1px solid ${on ? 'var(--sh-ink)' : 'var(--sh-hair-3)'}`,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+            {field.allow_other && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (otherSelected) {
+                    onChange(arr.filter((v) => v !== '__other__'));
+                    onOtherChange(null);
+                  } else if (!arr.includes('__other__')) {
+                    onChange([...arr, '__other__']);
+                  }
+                }}
+                className="td-prop-chip"
+                style={{
+                  background: otherSelected ? 'var(--sh-ink)' : 'var(--surface-alt)',
+                  color: otherSelected ? 'var(--surface)' : 'var(--sh-ink-2)',
+                  border: `1px solid ${otherSelected ? 'var(--sh-ink)' : 'var(--sh-hair-3)'}`,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                }}
+              >
+                Other
+              </button>
+            )}
+          </div>
+          {field.allow_other && otherSelected && (
+            <input
+              type="text"
+              value={otherStr}
+              placeholder="Describe…"
+              onChange={(e) => onOtherChange(e.target.value || null)}
+              className="text-[12.5px] bg-transparent border rounded-lg px-2.5 py-1.5 outline-none w-full"
+              style={{ borderColor: 'var(--sh-hair)' }}
+            />
+          )}
+        </div>
+      );
+      break;
+    }
+    case 'select':
+      control = (
+        <select
+          value={str}
+          onChange={(e) => onChange(e.target.value || null)}
+          className="text-[12.5px] bg-transparent border rounded-lg px-2.5 py-1.5 outline-none"
+          style={{ borderColor: 'var(--sh-hair)' }}
+        >
+          <option value="">—</option>
+          {field.options.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      );
+      break;
+    case 'textarea':
+      control = (
+        <textarea
+          rows={2}
+          placeholder={field.placeholder || ''}
+          value={str}
+          onChange={(e) => onChange(e.target.value || null)}
+          className="td-about w-full resize-none bg-transparent outline-none text-[12.5px]"
+        />
+      );
+      break;
+    case 'number':
+      control = (
+        <input
+          type="number"
+          placeholder={field.placeholder || ''}
+          value={str}
+          onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+          className="text-[12.5px] bg-transparent border-b outline-none w-28"
+          style={{ borderColor: 'var(--sh-hair)' }}
+        />
+      );
+      break;
+    case 'date':
+      control = (
+        <input
+          type="date"
+          value={str}
+          onChange={(e) => onChange(e.target.value || null)}
+          className="text-[12.5px] bg-transparent border rounded-lg px-2.5 py-1.5 outline-none"
+          style={{ borderColor: 'var(--sh-hair)' }}
+        />
+      );
+      break;
+    case 'url':
+      control = (
+        <input
+          type="url"
+          placeholder={field.placeholder || 'https://'}
+          value={str}
+          onChange={(e) => onChange(e.target.value || null)}
+          className="text-[12.5px] bg-transparent border rounded-lg px-2.5 py-1.5 outline-none w-full"
+          style={{ borderColor: 'var(--sh-hair)' }}
+        />
+      );
+      break;
+    case 'checkbox':
+      control = (
+        <input
+          type="checkbox"
+          checked={!!value}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+      );
+      break;
+    case 'text':
+    default:
+      control = (
+        <input
+          type="text"
+          placeholder={field.placeholder || ''}
+          value={str}
+          onChange={(e) => onChange(e.target.value || null)}
+          className="text-[12.5px] bg-transparent border rounded-lg px-2.5 py-1.5 outline-none w-full"
+          style={{ borderColor: 'var(--sh-hair)' }}
+        />
+      );
+  }
+
+  return (
+    <div className="td-settings-row" style={{ gridColumn: '1 / -1', borderRight: 'none' }}>
+      <span className="k" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span>
+          {field.label}
+          {field.is_required && <span style={{ color: 'oklch(0.55 0.18 25)', marginLeft: 2 }}>*</span>}
+        </span>
+        {field.help_url && (
+          <a
+            href={field.help_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 10.5, color: 'var(--sh-ink-4)', textDecoration: 'underline' }}
+          >
+            View size chart
+          </a>
+        )}
+      </span>
+      <span className="v" style={{ display: 'block' }}>{control}</span>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* VoiceNoteRecorder                                                          */
+/* -------------------------------------------------------------------------- */
+
+type VoiceNote = {
+  id: string;
+  blob: Blob;
+  url: string;
+  duration: number;
+  createdAt: number;
+};
+
+function VoiceNoteRecorder({ onAddFile }: { onAddFile: (file: File) => void }) {
+  const [notes, setNotes] = useState<VoiceNote[]>([]);
+  const [recording, setRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startTimeRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      timerRef.current && clearInterval(timerRef.current);
+      for (const n of notes) URL.revokeObjectURL(n.url);
+    };
+  }, []);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm' });
+      chunksRef.current = [];
+
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType });
+        const url = URL.createObjectURL(blob);
+        const dur = (Date.now() - startTimeRef.current) / 1000;
+        const id = tempId();
+        setNotes((prev) => [...prev, { id, blob, url, duration: dur, createdAt: Date.now() }]);
+        const ext = mr.mimeType.includes('webm') ? 'webm' : 'ogg';
+        const file = new File([blob], `voice-note-${Date.now()}.${ext}`, { type: mr.mimeType });
+        onAddFile(file);
+      };
+
+      mr.start(250);
+      recorderRef.current = mr;
+      startTimeRef.current = Date.now();
+      setRecording(true);
+      setElapsed(0);
+      timerRef.current = setInterval(() => setElapsed((Date.now() - startTimeRef.current) / 1000), 200);
+    } catch {
+      showToast('Microphone access denied');
+    }
+  };
+
+  const stopRecording = () => {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setRecording(false);
+    timerRef.current && clearInterval(timerRef.current);
+    timerRef.current = null;
+  };
+
+  const removeNote = (id: string) => {
+    setNotes((prev) => {
+      const n = prev.find((x) => x.id === id);
+      if (n) URL.revokeObjectURL(n.url);
+      return prev.filter((x) => x.id !== id);
+    });
+  };
+
+  const fmtTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="td-settings-row" style={{ gridColumn: '1 / -1', borderRight: 'none' }}>
+      <span className="k">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+          <path d="M19 10v2a7 7 0 01-14 0v-2" />
+          <line x1="12" y1="19" x2="12" y2="23" />
+          <line x1="8" y1="23" x2="16" y2="23" />
+        </svg>
+        Voice notes
+      </span>
+      <span className="v" style={{ display: 'block' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {notes.map((n) => (
+            <VoiceNotePlayer key={n.id} note={n} onRemove={() => removeNote(n.id)} />
+          ))}
+
+          {recording ? (
+            <button
+              type="button"
+              onClick={stopRecording}
+              className="td-voice-rec-btn recording"
+            >
+              <span className="td-voice-pulse" />
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtTime(elapsed)}</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+              Stop
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={startRecording}
+              className="td-voice-rec-btn"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+                <path d="M19 10v2a7 7 0 01-14 0v-2" />
+              </svg>
+              Record voice note
+            </button>
+          )}
+        </div>
+      </span>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* VoiceNotePlayer                                                            */
+/* -------------------------------------------------------------------------- */
+
+const SPEEDS = [0.5, 1, 1.5, 2] as const;
+
+function VoiceNotePlayer({ note, onRemove }: { note: VoiceNote; onRemove: () => void }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [speed, setSpeed] = useState<number>(1);
+  const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    const audio = new Audio(note.url);
+    audioRef.current = audio;
+    audio.playbackRate = speed;
+    audio.addEventListener('ended', () => { setPlaying(false); setProgress(0); });
+    return () => { audio.pause(); audio.src = ''; cancelAnimationFrame(rafRef.current); };
+  }, [note.url]);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = speed;
+  }, [speed]);
+
+  const tick = () => {
+    const a = audioRef.current;
+    if (a && a.duration) setProgress(a.currentTime / a.duration);
+    if (playing) rafRef.current = requestAnimationFrame(tick);
+  };
+
+  const togglePlay = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) {
+      a.pause();
+      setPlaying(false);
+      cancelAnimationFrame(rafRef.current);
+    } else {
+      a.play();
+      setPlaying(true);
+      rafRef.current = requestAnimationFrame(tick);
+    }
+  };
+
+  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const a = audioRef.current;
+    if (!a || !a.duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    a.currentTime = pct * a.duration;
+    setProgress(pct);
+  };
+
+  const cycleSpeed = () => {
+    const idx = SPEEDS.indexOf(speed as typeof SPEEDS[number]);
+    setSpeed(SPEEDS[(idx + 1) % SPEEDS.length]);
+  };
+
+  const fmtTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  const currentTime = audioRef.current?.currentTime || 0;
+
+  return (
+    <div className="td-voice-note">
+      <button type="button" onClick={togglePlay} className="td-voice-play">
+        {playing ? (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
+        ) : (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>
+        )}
+      </button>
+
+      <div className="td-voice-track" onClick={seek}>
+        <div className="td-voice-track-fill" style={{ width: `${progress * 100}%` }} />
+      </div>
+
+      <span className="td-voice-time">{fmtTime(playing ? currentTime : note.duration)}</span>
+
+      <button type="button" onClick={cycleSpeed} className="td-voice-speed">
+        {speed}x
+      </button>
+
+      <button type="button" onClick={onRemove} className="td-voice-del" title="Delete voice note">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+      </button>
     </div>
   );
 }

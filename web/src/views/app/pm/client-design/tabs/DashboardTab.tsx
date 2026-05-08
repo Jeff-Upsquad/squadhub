@@ -1,9 +1,18 @@
 import { useMemo } from 'react';
 import type { RequestRowData } from '../atoms/RequestRow';
 import RequestRow from '../atoms/RequestRow';
-import HoursBars from '../atoms/HoursBars';
-import Avatar from '../atoms/Avatar';
+import { STATUS_LABELS } from '../atoms/StatusPill';
+import type { RequestStatus } from '../atoms/StatusPill';
 import type { DesignPlan } from '../../../../../hooks/useClientDesignPlan';
+import { IconCaret } from '../atoms/Icons';
+
+const STATUS_ORDER: RequestStatus[] = ['progress', 'review', 'queued', 'done'];
+const STATUS_COLOR: Record<RequestStatus, string> = {
+  queued: 'var(--cd-queued)',
+  progress: 'var(--cd-progress)',
+  review: 'var(--cd-review)',
+  done: 'var(--cd-done)',
+};
 
 export default function DashboardTab({
   requests,
@@ -68,43 +77,17 @@ export default function DashboardTab({
     },
   ];
 
-  // Designer roster = unique assignees across active work
-  const designers = useMemo(() => {
-    const seen = new Map<string, NonNullable<RequestRowData['assignees']>[number]>();
-    for (const r of active) {
-      for (const a of r.assignees || []) {
-        if (!seen.has(a.id)) seen.set(a.id, a);
-      }
+  const groups = useMemo(() => {
+    const by: Record<string, RequestRowData[]> = {};
+    for (const r of requests) {
+      (by[r._derivedStatus] = by[r._derivedStatus] || []).push(r);
     }
-    return Array.from(seen.values());
-  }, [active]);
-
-  // Activity = last 7 updated_at (mock messages based on status)
-  const activity = useMemo(() => {
-    const sorted = [...requests]
-      .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
-      .slice(0, 7);
-    return sorted.map((r) => {
-      const actor = r.assignees?.[0] || r.creator;
-      let verb = 'updated';
-      if (r._derivedStatus === 'progress') verb = 'started';
-      else if (r._derivedStatus === 'review') verb = 'moved to review';
-      else if (r._derivedStatus === 'done') verb = 'completed';
-      else verb = 'submitted';
-      return { r, actor, verb };
-    });
+    return STATUS_ORDER.filter((k) => by[k] && by[k].length > 0).map((k) => ({
+      key: k,
+      label: STATUS_LABELS[k],
+      items: by[k],
+    }));
   }, [requests]);
-
-  function relTime(iso: string): string {
-    const delta = Date.now() - new Date(iso).getTime();
-    const min = Math.floor(delta / 60000);
-    if (min < 1) return 'now';
-    if (min < 60) return `${min}m`;
-    const hr = Math.floor(min / 60);
-    if (hr < 24) return `${hr}h`;
-    const d = Math.floor(hr / 24);
-    return `${d}d`;
-  }
 
   return (
     <>
@@ -129,18 +112,39 @@ export default function DashboardTab({
         ))}
       </div>
 
-      <div className="cd-ov-cols">
-        <div className="cd-ov-col">
-          <div className="cd-section-head">
-            <div className="cd-section-title">
-              Active work
-              <span className="mono-count">{active.length}</span>
-            </div>
-            <button className="cd-section-action" onClick={() => onSwitchTab('requests')}>
-              View all →
-            </button>
+      <div>
+        {groups.length === 0 && (
+          <div
+            style={{
+              padding: 24,
+              fontFamily: 'var(--cd-font-mono)',
+              fontSize: 11,
+              color: 'var(--cd-fg-3)',
+              border: '1px dashed var(--cd-br-1)',
+              borderRadius: 6,
+              textAlign: 'center',
+              marginTop: 4,
+            }}
+          >
+            No design requests yet. Press <b style={{ color: 'var(--cd-fg-1)' }}>N</b> to submit one.
           </div>
-          {active.length > 0 && (
+        )}
+
+        {groups.map((g) => (
+          <div key={g.key} className="cd-list-group">
+            <div className="cd-list-group-head">
+              <IconCaret size={12} className="caret" />
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: STATUS_COLOR[g.key],
+                }}
+              />
+              {g.label}
+              <span className="mono">{g.items.length}</span>
+            </div>
             <div className="cd-list-head-row">
               <span />
               <span>Title</span>
@@ -149,125 +153,12 @@ export default function DashboardTab({
               <span className="right">Due</span>
               <span />
             </div>
-          )}
-          {active.slice(0, 7).map((r) => (
-            <RequestRow key={r.id} request={r} onClick={() => onOpenRequest(r)} />
-          ))}
-          {active.length === 0 && (
-            <div
-              style={{
-                padding: 24,
-                fontFamily: 'var(--cd-font-mono)',
-                fontSize: 11,
-                color: 'var(--cd-fg-3)',
-                border: '1px dashed var(--cd-br-1)',
-                borderRadius: 6,
-                textAlign: 'center',
-                marginTop: 4,
-              }}
-            >
-              No active design requests. Press <b style={{ color: 'var(--cd-fg-1)' }}>N</b> to submit one.
-            </div>
-          )}
-
-          <div style={{ marginTop: 28 }}>
-            <div className="cd-section-head">
-              <div className="cd-section-title">
-                Hours this week
-                <span className="mono-count">
-                  {plan.usedWeek}h / {plan.weeklyHours}h
-                </span>
-              </div>
-              <button className="cd-section-action" onClick={() => onSwitchTab('reports')}>
-                See report →
-              </button>
-            </div>
-            <HoursBars days={plan.days} />
+            {g.items.map((r) => (
+              <RequestRow key={r.id} request={r} onClick={() => onOpenRequest(r)} />
+            ))}
           </div>
-        </div>
-
-        <div className="cd-ov-col">
-          <div className="cd-section-head">
-            <div className="cd-section-title">
-              Your squad
-              <span className="mono-count">{designers.length}</span>
-            </div>
-          </div>
-          {designers.length === 0 && (
-            <div
-              style={{
-                padding: 16,
-                fontFamily: 'var(--cd-font-mono)',
-                fontSize: 11,
-                color: 'var(--cd-fg-3)',
-                border: '1px dashed var(--cd-br-1)',
-                borderRadius: 6,
-                textAlign: 'center',
-              }}
-            >
-              No designers assigned yet
-            </div>
-          )}
-          {designers.map((d) => {
-            const onTask = active.find((r) =>
-              r.assignees?.some((a) => a.id === d.id) && r._derivedStatus === 'progress',
-            );
-            return (
-              <div key={d.id} className="cd-designer-card">
-                <Avatar person={d} size="lg" />
-                <div className="cd-designer-info">
-                  <div className="cd-designer-name">{d.display_name || d.email}</div>
-                  <div className="cd-designer-role">{'designer'}</div>
-                  {onTask && (
-                    <div className="cd-designer-now">
-                      <span
-                        style={{
-                          width: 6,
-                          height: 6,
-                          borderRadius: '50%',
-                          background: 'var(--cd-progress)',
-                          display: 'inline-block',
-                        }}
-                      />
-                      Working on {onTask.title.slice(0, 32)}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-
-          <div className="cd-section-head" style={{ marginTop: 24 }}>
-            <div className="cd-section-title">Activity</div>
-          </div>
-          {activity.length === 0 && (
-            <div
-              style={{
-                padding: 16,
-                fontFamily: 'var(--cd-font-mono)',
-                fontSize: 11,
-                color: 'var(--cd-fg-3)',
-                border: '1px dashed var(--cd-br-1)',
-                borderRadius: 6,
-                textAlign: 'center',
-              }}
-            >
-              No activity yet
-            </div>
-          )}
-          {activity.map(({ r, actor, verb }, i) => (
-            <div key={r.id + '-' + i} className="cd-activity-item">
-              <div className="cd-activity-avatar">
-                {actor ? <Avatar person={actor} size="xs" /> : <span className="cd-avatar xs">?</span>}
-              </div>
-              <div className="cd-activity-text">
-                <b>{actor?.display_name || actor?.email || 'Someone'}</b> {verb}{' '}
-                <span className="ref">{r.title.slice(0, 40)}</span>
-              </div>
-              <div className="cd-activity-time">{relTime(r.updated_at)}</div>
-            </div>
-          ))}
-        </div>
+        ))}
+        <div style={{ height: 40 }} />
       </div>
     </>
   );
