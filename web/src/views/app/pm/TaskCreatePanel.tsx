@@ -798,18 +798,19 @@ export default function TaskCreatePanel({
               <button
                 type="button"
                 className="reassign"
+                disabled={!currentUser?.id}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (needsListForAssignee) { showToast('Select a list or folder to add assignee'); return; }
-                  setAssigneeAnchorRect((e.currentTarget.parentElement as HTMLElement).getBoundingClientRect());
-                  setAssigneePickerOpen(v => !v);
+                  if (!currentUser?.id) return;
+                  setDraft((d) => ({ ...d, assignee_ids: [currentUser!.id!] }));
                 }}
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="8" r="4" />
                   <path d="M4 21a8 8 0 0116 0" />
                 </svg>
-                Add assignee
+                Assign to me
               </button>
             )}
           </div>
