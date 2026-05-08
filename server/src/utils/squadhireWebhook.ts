@@ -50,7 +50,7 @@ export interface SquadhireCardPayload {
   // archived cards out of talent-facing queries, so the talents stop
   // seeing the card. Always sent so reruns of the same delivery stay
   // idempotent.
-  status: 'active' | 'archived';
+  status: 'active' | 'assigned' | 'archived';
   // `broadcast` (default) = SquadHire broadcasts the card to talents.
   // `manual` = card appears in SquadHire's admin Published Cards list
   // but is NOT broadcast — talents only see it if hand-picked. Mirrors
@@ -139,10 +139,11 @@ export async function buildSquadhirePayloadForCard(
     return null;
   }
 
-  // Map SquadHub state → SquadHire status. Published = visible to talents;
-  // anything else (draft after recall, closed) = archived and hidden.
-  const status: 'active' | 'archived' =
-    card.state === 'published' ? 'active' : 'archived';
+  // Map SquadHub state → SquadHire status.
+  const status: 'active' | 'assigned' | 'archived' =
+    card.state === 'published' ? 'active'
+      : card.state === 'assigned' ? 'assigned'
+        : 'archived';
 
   const targetingCardId = contentSource.id as string;
   const stagedSubId = contentSource.submission_subscription_id;
@@ -857,7 +858,7 @@ export async function notifySquadhireOfManualRemoval(
 
 export async function notifySquadhireOfSelection(
   cardId: string,
-  talentId: string | null,
+  talentIds: string[],
   selectedAt: string,
 ): Promise<void> {
   const baseUrl = config.squadhireWebhookUrl;
@@ -872,7 +873,8 @@ export async function notifySquadhireOfSelection(
   const body = {
     type: 'card_selection',
     card_id: cardId,
-    talent_id: talentId,
+    talent_ids: talentIds,
+    card_status: 'assigned',
     selected_at: selectedAt,
   };
 

@@ -10,7 +10,7 @@ import AdminCustomCardsList from './AdminCustomCardsList';
 
 export type PublishedCard = {
   id: string;
-  state: 'published' | 'closed';
+  state: 'published' | 'assigned' | 'closed';
   distribution: 'broadcast' | 'manual';
   published_at: string | null;
   working_days: string[];
@@ -97,7 +97,7 @@ function formatPublishedAt(iso: string | null): string {
 
 type GroupBy = 'status' | 'date';
 
-function bucketByDate<T extends { state: 'published' | 'closed'; published_at: string | null }>(
+function bucketByDate<T extends { state: 'published' | 'assigned' | 'closed'; published_at: string | null }>(
   cards: T[],
 ): { today: T[]; yesterday: T[]; thisWeek: T[]; earlier: T[] } {
   const now = new Date();
@@ -129,7 +129,7 @@ type Tab = 'published' | 'requests' | 'custom';
 
 export default function AdminPublishedCards() {
   const [activeTab, setActiveTab] = useState<Tab>('published');
-  const [stateFilter, setStateFilter] = useState<'all' | 'published' | 'closed'>('all');
+  const [stateFilter, setStateFilter] = useState<'all' | 'published' | 'assigned' | 'closed'>('all');
   const [publishedBy, setPublishedBy] = useState<string>('');
   const [search, setSearch] = useState<string>('');
   const [groupBy, setGroupBy] = useState<GroupBy>('status');
@@ -157,6 +157,7 @@ export default function AdminPublishedCards() {
 
   const groups = useMemo(() => ({
     active: cards.filter((c) => c.state === 'published'),
+    assigned: cards.filter((c) => c.state === 'assigned'),
     cancelled: cards.filter((c) => c.state === 'closed'),
   }), [cards]);
 
@@ -196,11 +197,12 @@ export default function AdminPublishedCards() {
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={stateFilter}
-                onChange={(e) => setStateFilter(e.target.value as 'all' | 'published' | 'closed')}
+                onChange={(e) => setStateFilter(e.target.value as 'all' | 'published' | 'assigned' | 'closed')}
                 className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
               >
                 <option value="all">All states</option>
                 <option value="published">Active</option>
+                <option value="assigned">Assigned</option>
                 <option value="closed">Cancelled</option>
               </select>
               <select
@@ -254,6 +256,9 @@ export default function AdminPublishedCards() {
                 <>
                   {groups.active.length > 0 && (
                     <CardGroup label="Active" color="#10B981" items={groups.active} onOpen={setSelectedCardId} showCancelledTag={false} />
+                  )}
+                  {groups.assigned.length > 0 && (
+                    <CardGroup label="Assigned" color="#0EA5E9" items={groups.assigned} onOpen={setSelectedCardId} showCancelledTag={false} />
                   )}
                   {groups.cancelled.length > 0 && (
                     <CardGroup label="Cancelled" color="#6B7280" items={groups.cancelled} onOpen={setSelectedCardId} showCancelledTag={false} />
@@ -398,7 +403,12 @@ function PublishedCardRow({ card, onOpen, showCancelledTag }: { card: PublishedC
             SquadHire pending
           </span>
         )}
-        {card.selected_recipient_type && (
+        {card.state === 'assigned' && (
+          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+            Assigned
+          </span>
+        )}
+        {card.selected_recipient_type && card.state !== 'assigned' && (
           <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
             Selected ({card.selected_recipient_type})
           </span>

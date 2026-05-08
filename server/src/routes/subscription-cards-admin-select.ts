@@ -4,8 +4,6 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import {
-  buildSquadhirePayloadForCard,
-  deliverCardToSquadhire,
   notifySquadhireOfSelection,
   notifySquadhireOfSelectionUndo,
 } from '../utils/squadhireWebhook';
@@ -14,235 +12,132 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
-async function cascadeCloseSecondaryCards(parentCardId: string): Promise<void> {
-  const { data: secondaries } = await supabaseAdmin
-    .from('subscription_cards')
-    .select('id')
-    .eq('parent_card_id', parentCardId)
-    .eq('state', 'published');
-
-  if (!secondaries || secondaries.length === 0) return;
-
-  const now = new Date().toISOString();
-  await supabaseAdmin
-    .from('subscription_cards')
-    .update({
-      state: 'closed',
-      closed_at: now,
-      squadhire_synced_at: null,
-      squadhire_sync_attempts: 0,
-      squadhire_sync_last_error: null,
-    })
-    .eq('parent_card_id', parentCardId)
-    .eq('state', 'published');
-
-  for (const s of secondaries) {
-    buildSquadhirePayloadForCard(s.id)
-      .then((payload) => payload && deliverCardToSquadhire(s.id, payload))
-      .catch((err) => console.error('[cascade-close] squadhire delivery error', err));
-  }
-}
-
 // ============================================================
-// POST /admin/subscription-cards/:id/select-partner
+// POST /admin/subscription-cards/:id/assign
+//
+// Batch-assign multiple accepted recipients. Card transitions
+// from published → assigned on first call. Subsequent calls add
+// more selections (re-stamps passed_over on non-selected).
 // ============================================================
-const selectPartnerSchema = z.object({
-  partner_id: z.string().uuid(),
+const assignSchema = z.object({
+  partner_ids: z.array(z.string().uuid()).default([]),
+  talent_ids: z.array(z.string().min(1)).default([]),
 });
 
-router.post('/subscription-cards/:id/select-partner', async (req: Request, res: Response) => {
+router.post('/subscription-cards/:id/assign', async (req: Request, res: Response) => {
   try {
-    const parsed = selectPartnerSchema.safeParse(req.body ?? {});
+    const parsed = assignSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
       return;
     }
     const cardId = req.params.id as string;
-    const { partner_id } = parsed.data;
+    const { partner_ids, talent_ids } = parsed.data;
     const adminId = (req as any).user?.id as string;
+
+    if (partner_ids.length === 0 && talent_ids.length === 0) {
+      res.status(400).json({ success: false, error: 'At least one partner or talent must be selected' });
+      return;
+    }
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, selected_recipient_type')
+      .select('id, state')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
     if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
-    if (card.state !== 'published') {
-      res.status(409).json({ success: false, error: 'Card must be published to select a recipient' });
-      return;
-    }
-    if (card.selected_recipient_type) {
-      res.status(409).json({ success: false, error: 'A recipient has already been selected for this card' });
-      return;
-    }
-
-    const { data: recipient } = await supabaseAdmin
-      .from('subscription_card_recipients')
-      .select('partner_id, status')
-      .eq('card_id', cardId)
-      .eq('partner_id', partner_id)
-      .maybeSingle();
-    if (!recipient || recipient.status !== 'accepted') {
-      res.status(400).json({ success: false, error: 'Partner must have accepted before they can be selected' });
+    if (card.state !== 'published' && card.state !== 'assigned') {
+      res.status(409).json({ success: false, error: 'Card must be published or assigned' });
       return;
     }
 
     const now = new Date().toISOString();
 
-    // Stamp the selected partner
-    await supabaseAdmin
-      .from('subscription_card_recipients')
-      .update({ selected_at: now, selected_by: adminId })
-      .eq('card_id', cardId)
-      .eq('partner_id', partner_id);
+    // ── Partners ──
+    if (partner_ids.length > 0) {
+      // Stamp selected
+      await supabaseAdmin
+        .from('subscription_card_recipients')
+        .update({ selected_at: now, selected_by: adminId, passed_over_at: null })
+        .eq('card_id', cardId)
+        .eq('status', 'accepted')
+        .in('partner_id', partner_ids);
 
-    // Pass over all other accepted partners
-    await supabaseAdmin
-      .from('subscription_card_recipients')
-      .update({ passed_over_at: now })
-      .eq('card_id', cardId)
-      .eq('status', 'accepted')
-      .neq('partner_id', partner_id)
-      .is('passed_over_at', null);
+      // Pass over non-selected accepted partners
+      await supabaseAdmin
+        .from('subscription_card_recipients')
+        .update({ passed_over_at: now })
+        .eq('card_id', cardId)
+        .eq('status', 'accepted')
+        .is('selected_at', null)
+        .is('passed_over_at', null);
+    }
 
-    // Pass over all accepted talents
-    await supabaseAdmin
-      .from('subscription_card_external_recipients')
-      .update({ passed_over_at: now })
-      .eq('card_id', cardId)
-      .eq('status', 'accepted')
-      .is('passed_over_at', null);
+    // ── Talents (SquadHire) ──
+    if (talent_ids.length > 0) {
+      // Stamp selected
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .update({ selected_at: now, selected_by: adminId, passed_over_at: null })
+        .eq('card_id', cardId)
+        .eq('status', 'accepted')
+        .in('external_user_id', talent_ids);
 
-    // Close the card
+      // Pass over non-selected accepted talents
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .update({ passed_over_at: now })
+        .eq('card_id', cardId)
+        .eq('status', 'accepted')
+        .is('selected_at', null)
+        .is('passed_over_at', null);
+    }
+
+    // If only partners were selected, still pass over non-selected talents (and vice versa)
+    if (partner_ids.length > 0 && talent_ids.length === 0) {
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .update({ passed_over_at: now })
+        .eq('card_id', cardId)
+        .eq('status', 'accepted')
+        .is('selected_at', null)
+        .is('passed_over_at', null);
+    }
+    if (talent_ids.length > 0 && partner_ids.length === 0) {
+      await supabaseAdmin
+        .from('subscription_card_recipients')
+        .update({ passed_over_at: now })
+        .eq('card_id', cardId)
+        .eq('status', 'accepted')
+        .is('selected_at', null)
+        .is('passed_over_at', null);
+    }
+
+    // Transition card to assigned
+    const cardUpdate: Record<string, unknown> = { state: 'assigned' };
+    if (card.state === 'published') cardUpdate.assigned_at = now;
     await supabaseAdmin
       .from('subscription_cards')
-      .update({
-        state: 'closed',
-        closed_at: now,
-        selected_recipient_type: 'partner',
-        selected_recipient_id: partner_id,
-      })
+      .update(cardUpdate)
       .eq('id', cardId);
 
-    // Notify SquadHire (card is now archived). Fire-and-forget.
-    notifySquadhireOfSelection(cardId, null, now).catch((err) => {
-      console.error('[select-partner] notify squadhire failed', err);
-    });
-
-    // Cascade-close published secondary cards (if this is a primary card).
-    cascadeCloseSecondaryCards(cardId).catch((err) => {
-      console.error('[select-partner] cascade close secondary cards error', err);
+    // Notify SquadHire. Fire-and-forget.
+    notifySquadhireOfSelection(cardId, talent_ids, now).catch((err) => {
+      console.error('[assign] notify squadhire failed', err);
     });
 
     res.json({ success: true });
   } catch (err: any) {
-    console.error('Select partner error:', err);
-    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
-  }
-});
-
-// ============================================================
-// POST /admin/subscription-cards/:id/select-talent
-// ============================================================
-const selectTalentSchema = z.object({
-  talent_id: z.string().min(1),
-});
-
-router.post('/subscription-cards/:id/select-talent', async (req: Request, res: Response) => {
-  try {
-    const parsed = selectTalentSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
-      return;
-    }
-    const cardId = req.params.id as string;
-    const { talent_id } = parsed.data;
-    const adminId = (req as any).user?.id as string;
-
-    const { data: card, error: cardErr } = await supabaseAdmin
-      .from('subscription_cards')
-      .select('id, state, selected_recipient_type')
-      .eq('id', cardId)
-      .maybeSingle();
-    if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
-    if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
-    if (card.state !== 'published') {
-      res.status(409).json({ success: false, error: 'Card must be published to select a recipient' });
-      return;
-    }
-    if (card.selected_recipient_type) {
-      res.status(409).json({ success: false, error: 'A recipient has already been selected for this card' });
-      return;
-    }
-
-    const { data: recipient } = await supabaseAdmin
-      .from('subscription_card_external_recipients')
-      .select('external_user_id, status')
-      .eq('card_id', cardId)
-      .eq('external_user_id', talent_id)
-      .maybeSingle();
-    if (!recipient || recipient.status !== 'accepted') {
-      res.status(400).json({ success: false, error: 'Talent must have accepted before they can be selected' });
-      return;
-    }
-
-    const now = new Date().toISOString();
-
-    // Stamp the selected talent
-    await supabaseAdmin
-      .from('subscription_card_external_recipients')
-      .update({ selected_at: now, selected_by: adminId })
-      .eq('card_id', cardId)
-      .eq('external_user_id', talent_id);
-
-    // Pass over all other accepted talents
-    await supabaseAdmin
-      .from('subscription_card_external_recipients')
-      .update({ passed_over_at: now })
-      .eq('card_id', cardId)
-      .eq('status', 'accepted')
-      .neq('external_user_id', talent_id)
-      .is('passed_over_at', null);
-
-    // Pass over all accepted partners
-    await supabaseAdmin
-      .from('subscription_card_recipients')
-      .update({ passed_over_at: now })
-      .eq('card_id', cardId)
-      .eq('status', 'accepted')
-      .is('passed_over_at', null);
-
-    // Close the card
-    await supabaseAdmin
-      .from('subscription_cards')
-      .update({
-        state: 'closed',
-        closed_at: now,
-        selected_recipient_type: 'talent',
-        selected_recipient_id: talent_id,
-      })
-      .eq('id', cardId);
-
-    // Notify SquadHire with the selected talent id so it stamps its local row.
-    notifySquadhireOfSelection(cardId, talent_id, now).catch((err) => {
-      console.error('[select-talent] notify squadhire failed', err);
-    });
-
-    // Cascade-close published secondary cards (if this is a primary card).
-    cascadeCloseSecondaryCards(cardId).catch((err) => {
-      console.error('[select-talent] cascade close secondary cards error', err);
-    });
-
-    res.json({ success: true });
-  } catch (err: any) {
-    console.error('Select talent error:', err);
+    console.error('Assign error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
 
 // ============================================================
 // POST /admin/subscription-cards/:id/undo-selection
+//
+// Clears all selections and reverts card to published.
 // ============================================================
 router.post('/subscription-cards/:id/undo-selection', async (req: Request, res: Response) => {
   try {
@@ -250,13 +145,13 @@ router.post('/subscription-cards/:id/undo-selection', async (req: Request, res: 
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, selected_recipient_type')
+      .select('id, state')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
     if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
-    if (!card.selected_recipient_type) {
-      res.status(409).json({ success: false, error: 'No selection to undo' });
+    if (card.state !== 'assigned') {
+      res.status(409).json({ success: false, error: 'Card is not assigned' });
       return;
     }
 
@@ -286,12 +181,12 @@ router.post('/subscription-cards/:id/undo-selection', async (req: Request, res: 
       .eq('card_id', cardId)
       .not('passed_over_at', 'is', null);
 
-    // Reopen the card
+    // Revert card to published
     await supabaseAdmin
       .from('subscription_cards')
       .update({
         state: 'published',
-        closed_at: null,
+        assigned_at: null,
         selected_recipient_type: null,
         selected_recipient_id: null,
       })

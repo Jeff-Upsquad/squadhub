@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import api from '@/services/api';
 import type { PublishedCard } from './AdminPublishedCards';
 import type { RecipientsResponse } from './AdminPublishedCardRecipientsPanel';
@@ -59,6 +59,8 @@ export default function AdminPublishedCardRecipientsView({
   onOpenPanel: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<StatusTab>('all');
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const queryClient = useQueryClient();
 
   // Fetch local recipients (partners from SquadHub + talents who responded via callback)
   const { data, isLoading } = useQuery({
@@ -128,6 +130,60 @@ export default function AdminPublishedCardRecipientsView({
     return [...partners, ...localTalents, ...remoteTalents];
   }, [data, squadhireTalents]);
 
+  const canAssign = card.state === 'published' || card.state === 'assigned';
+
+  // Pre-check already-selected recipients
+  useEffect(() => {
+    if (!canAssign) return;
+    const preChecked = new Set<string>();
+    for (const r of allRecipients) {
+      if (r.status === 'accepted' && r.selected_at) {
+        preChecked.add(`${r.type}-${r.id}`);
+      }
+    }
+    setCheckedIds(preChecked);
+  }, [allRecipients, canAssign]);
+
+  const toggleCheck = (key: string) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const assignMutation = useMutation({
+    mutationFn: () => {
+      const partnerIds: string[] = [];
+      const talentIds: string[] = [];
+      for (const key of checkedIds) {
+        const [type, ...rest] = key.split('-');
+        const id = rest.join('-');
+        if (type === 'partner') partnerIds.push(id);
+        else talentIds.push(id);
+      }
+      return api.post(`/admin/subscription-cards/${card.id}/assign`, {
+        partner_ids: partnerIds,
+        talent_ids: talentIds,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+    },
+  });
+
+  const undoMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${card.id}/undo-selection`),
+    onSuccess: () => {
+      setCheckedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+    },
+  });
+
   const counts = useMemo(() => ({
     accepted: allRecipients.filter((r) => r.status === 'accepted').length,
     rejected: allRecipients.filter((r) => r.status === 'rejected').length,
@@ -140,8 +196,8 @@ export default function AdminPublishedCardRecipientsView({
     [allRecipients, activeTab],
   );
 
-  const stateColor = card.state === 'published' ? '#10B981' : '#6B7280';
-  const stateLabel = card.state === 'published' ? 'Active' : 'Cancelled';
+  const stateColor = card.state === 'published' ? '#10B981' : card.state === 'assigned' ? '#0EA5E9' : '#6B7280';
+  const stateLabel = card.state === 'published' ? 'Active' : card.state === 'assigned' ? 'Assigned' : 'Cancelled';
   const distLabel = card.distribution === 'manual' ? 'Published' : 'Broadcast';
   const publisher = card.published_by_user;
 
@@ -192,6 +248,15 @@ export default function AdminPublishedCardRecipientsView({
             <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-800">
               Recalled
             </span>
+          )}
+          {card.state === 'assigned' && (
+            <button
+              onClick={() => undoMutation.mutate()}
+              disabled={undoMutation.isPending}
+              className="rounded-full bg-red-50 px-2.5 py-0.5 text-[10px] font-medium text-red-700 hover:bg-red-100 transition disabled:opacity-50"
+            >
+              {undoMutation.isPending ? 'Reverting...' : 'Undo Assignment'}
+            </button>
           )}
           {card.published_at && (
             <span className="text-xs text-[#90A1B9]">
@@ -291,8 +356,18 @@ export default function AdminPublishedCardRecipientsView({
               <div className="rounded-lg border border-[#E2E8F0] bg-white divide-y divide-[#E2E8F0]">
                 {filtered.map((r) => {
                   const statusCfg = STATUS_COLORS[r.status];
+                  const rowKey = `${r.type}-${r.id}`;
+                  const showCheckbox = canAssign && r.status === 'accepted';
                   return (
-                    <div key={`${r.type}-${r.id}`} className="flex items-center gap-3 px-4 py-3">
+                    <div key={rowKey} className="flex items-center gap-3 px-4 py-3">
+                      {showCheckbox && (
+                        <input
+                          type="checkbox"
+                          checked={checkedIds.has(rowKey)}
+                          onChange={() => toggleCheck(rowKey)}
+                          className="h-4 w-4 shrink-0 rounded border-gray-300 text-sky-600 focus:ring-sky-500 cursor-pointer"
+                        />
+                      )}
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-600 text-sm font-semibold">
                         {r.name.charAt(0).toUpperCase()}
                       </div>
@@ -341,6 +416,32 @@ export default function AdminPublishedCardRecipientsView({
           </>
         )}
       </div>
+
+      {/* Floating Assign bar */}
+      {canAssign && checkedIds.size > 0 && (
+        <div className="sticky bottom-0 border-t border-[#E2E8F0] bg-white px-6 py-3 flex items-center justify-between shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
+          <span className="text-sm text-[#62748E]">
+            {checkedIds.size} recipient{checkedIds.size !== 1 ? 's' : ''} selected
+          </span>
+          <button
+            onClick={() => assignMutation.mutate()}
+            disabled={assignMutation.isPending}
+            className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-5 py-2 text-sm font-semibold text-white hover:bg-sky-700 transition disabled:opacity-50"
+          >
+            {assignMutation.isPending ? (
+              <>
+                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Assigning...
+              </>
+            ) : (
+              `Assign (${checkedIds.size})`
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
