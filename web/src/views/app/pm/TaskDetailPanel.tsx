@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
 import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useUpdateTaskTimeTracked } from '../../../hooks/useTasks';
@@ -321,9 +322,10 @@ export default function TaskDetailPanel({
       ? (catalogDef
           ? ({ color: catalogDef.color, name: catalogDef.label } as Pick<SpaceStatus, 'color' | 'name'> as SpaceStatus)
           : undefined)
-      : statuses.find((s) => s.category === taskStatusCategory)
+      : statuses.find((s) => s.name === taskStatusCategory) || statuses.find((s) => s.category === taskStatusCategory)
     : undefined;
-  const isDone = catalogDef?.category === 'closed' || taskStatusCategory === 'done' || taskStatusCategory === 'closed';
+  const matchedStatus = !isTaskType ? (statuses.find((s) => s.name === taskStatusCategory) || statuses.find((s) => s.category === taskStatusCategory)) : null;
+  const isDone = catalogDef?.category === 'closed' || taskStatusCategory === 'done' || taskStatusCategory === 'closed' || matchedStatus?.category === 'done' || matchedStatus?.category === 'closed';
 
   const handleSave = (field: 'title' | 'description') => {
     if (!task) return;
@@ -771,7 +773,7 @@ export default function TaskDetailPanel({
                   className="td-settings-row"
                   data-half="true"
                   style={{ cursor: canEdit ? 'pointer' : 'default' }}
-                  onClick={canEdit && !isTaskType ? () => setStatusMenuOpen((v) => !v) : undefined}
+                  onClick={undefined}
                 >
                   <span className="k">{META_ICONS.Status}Status</span>
                   <span className="v">
@@ -783,43 +785,15 @@ export default function TaskDetailPanel({
                         }}
                       />
                     ) : (
-                      <div className="relative">
-                        <button
-                          type="button"
-                          onClick={canEdit ? (e) => { e.stopPropagation(); setStatusMenuOpen((v) => !v); } : undefined}
-                          className="td-prop-chip"
-                          style={{
-                            background: status?.color ? `color-mix(in oklch, ${status.color} 14%, transparent)` : 'var(--surface-alt)',
-                            color: status?.color || 'var(--sh-ink-3)',
-                          }}
-                        >
-                          <span className="dot" style={{ background: status?.color || 'var(--sh-ink-4)' }} />
-                          {status?.name || taskStatusCategory || 'No status'}
-                        </button>
-                        {statusMenuOpen && (
-                          <>
-                            <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
-                            <div
-                              className="absolute left-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-xl border shadow-lg"
-                              style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
-                            >
-                              {statuses.map((s) => (
-                                <button
-                                  key={s.id}
-                                  onClick={() => {
-                                    updateTask.mutate({ id: task.id, status: s.category } as any);
-                                    setStatusMenuOpen(false);
-                                  }}
-                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)]"
-                                >
-                                  <span className="td-dot" style={{ background: s.color }} />
-                                  {s.name}
-                                </button>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
+                      <SpaceStatusPicker
+                        statuses={statuses}
+                        current={status ?? null}
+                        taskStatusCategory={taskStatusCategory}
+                        canEdit={canEdit}
+                        onPick={(s) => {
+                          updateTask.mutate({ id: task.id, status: s.name } as any);
+                        }}
+                      />
                     )}
                   </span>
                 </div>
@@ -1873,4 +1847,108 @@ function CustomFieldRow({
   );
 }
 
+function SpaceStatusPicker({
+  statuses,
+  current,
+  taskStatusCategory,
+  canEdit,
+  onPick,
+}: {
+  statuses: SpaceStatus[];
+  current: SpaceStatus | null;
+  taskStatusCategory: string | undefined;
+  canEdit: boolean;
+  onPick: (s: SpaceStatus) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
 
+  const toggle = useCallback(() => {
+    if (open) { setOpen(false); return; }
+    if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
+    setOpen(true);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (popRef.current?.contains(e.target as Node)) return;
+      if (btnRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const reposition = () => {
+      if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
+    };
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    return () => {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  }, [open]);
+
+  const popStyle = useMemo<React.CSSProperties>(() => {
+    if (!rect) return { visibility: 'hidden' as const };
+    const maxH = 360;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < 200 && rect.top > spaceBelow;
+    return {
+      position: 'fixed',
+      top: openUp ? Math.max(8, rect.top - maxH - 4) : rect.bottom + 4,
+      left: rect.left,
+      width: 200,
+      maxHeight: maxH,
+      zIndex: 9999,
+      borderColor: 'var(--sh-hair)',
+      background: 'var(--surface)',
+    };
+  }, [rect]);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={canEdit ? toggle : undefined}
+        className="td-prop-chip"
+        style={{
+          background: current?.color ? `color-mix(in oklch, ${current.color} 14%, transparent)` : 'var(--surface-alt)',
+          color: current?.color || 'var(--sh-ink-3)',
+        }}
+      >
+        <span className="dot" style={{ background: current?.color || 'var(--sh-ink-4)' }} />
+        {current?.name || taskStatusCategory || 'No status'}
+      </button>
+      {open && createPortal(
+        <>
+          <div className="fixed inset-0" style={{ zIndex: 9998 }} onClick={() => setOpen(false)} />
+          <div
+            ref={popRef}
+            className="overflow-y-auto rounded-xl border shadow-lg"
+            style={popStyle}
+          >
+            {statuses.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => { onPick(s); setOpen(false); }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)]"
+              >
+                <span className="td-dot" style={{ background: s.color }} />
+                {s.name}
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body,
+      )}
+    </>
+  );
+}

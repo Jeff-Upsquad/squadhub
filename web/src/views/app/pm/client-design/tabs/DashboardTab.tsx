@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
+import type { SpaceStatus } from '@squadhub/shared';
 import type { RequestRowData } from '../atoms/RequestRow';
-import RequestRow from '../atoms/RequestRow';
 import { STATUS_LABELS } from '../atoms/StatusPill';
 import type { RequestStatus } from '../atoms/StatusPill';
 import type { DesignPlan } from '../../../../../hooks/useClientDesignPlan';
-import { IconCaret } from '../atoms/Icons';
+import TaskGroupCard from '../../TaskGroupCard';
 
 const STATUS_ORDER: RequestStatus[] = ['progress', 'review', 'queued', 'done'];
 const STATUS_COLOR: Record<RequestStatus, string> = {
@@ -17,13 +17,13 @@ const STATUS_COLOR: Record<RequestStatus, string> = {
 export default function DashboardTab({
   requests,
   plan,
-  onOpenRequest,
-  onSwitchTab,
+  statuses,
+  listByStatus,
 }: {
   requests: RequestRowData[];
   plan: DesignPlan;
-  onOpenRequest: (r: RequestRowData) => void;
-  onSwitchTab: (tab: string) => void;
+  statuses: SpaceStatus[];
+  listByStatus: Record<string, { id: string; name: string } | null>;
 }) {
   const active = useMemo(() => requests.filter((r) => r._derivedStatus !== 'done'), [requests]);
   const inProgress = useMemo(() => requests.filter((r) => r._derivedStatus === 'progress'), [requests]);
@@ -85,9 +85,13 @@ export default function DashboardTab({
     return STATUS_ORDER.filter((k) => by[k] && by[k].length > 0).map((k) => ({
       key: k,
       label: STATUS_LABELS[k],
+      color: STATUS_COLOR[k],
       items: by[k],
+      listId: listByStatus[k]?.id || null,
     }));
-  }, [requests]);
+  }, [requests, listByStatus]);
+
+  const noop = () => {};
 
   return (
     <>
@@ -131,32 +135,16 @@ export default function DashboardTab({
         )}
 
         {groups.map((g) => (
-          <div key={g.key} className="cd-list-group">
-            <div className="cd-list-group-head">
-              <IconCaret size={12} className="caret" />
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: STATUS_COLOR[g.key],
-                }}
-              />
-              {g.label}
-              <span className="mono">{g.items.length}</span>
-            </div>
-            <div className="cd-list-head-row">
-              <span />
-              <span>Title</span>
-              <span>Assigned</span>
-              <span>Timer</span>
-              <span className="right">Due</span>
-              <span />
-            </div>
-            {g.items.map((r) => (
-              <RequestRow key={r.id} request={r} onClick={() => onOpenRequest(r)} />
-            ))}
-          </div>
+          <TaskGroupCard
+            key={g.key}
+            groupKey={`design-dashboard-${g.key}`}
+            label={g.label}
+            dotColor={g.color}
+            tasks={g.items}
+            allStatuses={statuses}
+            listId={g.listId}
+            onStatusChange={noop}
+          />
         ))}
         <div style={{ height: 40 }} />
       </div>

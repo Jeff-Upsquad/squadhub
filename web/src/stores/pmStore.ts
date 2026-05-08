@@ -242,6 +242,13 @@ export const usePMStore = create<PMState>()(
       name: 'squadhub-pm',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
+        activeSpaceId: state.activeSpaceId,
+        activeListId: state.activeListId,
+        activeFolderId: state.activeFolderId,
+        activeSpacePageId: state.activeSpacePageId,
+        activeDesignFolderId: state.activeDesignFolderId,
+        activeClientId: state.activeClientId,
+        contextListId: state.contextListId,
         timer: state.timer,
         listGroupBy: state.listGroupBy,
         myTasksOnly: state.myTasksOnly,
