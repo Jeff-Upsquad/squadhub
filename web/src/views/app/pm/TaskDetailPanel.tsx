@@ -26,7 +26,7 @@ import EmergencyConfirm from './EmergencyConfirm';
 import TaskStatusPicker from './TaskStatusPicker';
 import ListPickerCombobox from './ListPickerCombobox';
 import TaskAttachments from './TaskAttachments';
-import { useTaskAttachments } from '../../../hooks/useTaskAttachments';
+import { useTaskAttachments, useDeleteTaskAttachment } from '../../../hooks/useTaskAttachments';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -399,8 +399,10 @@ export default function TaskDetailPanel({
   const priorityLabel = task ? PRIORITY_LABEL[(task.priority || 'none') as TaskPriority] : null;
   const assignees = task?.assignees || [];
   const due = formatDueRelative(task?.due_date);
-  const { data: attachmentsData = [] } = useTaskAttachments(task?.id || null);
-  const attachmentCount = attachmentsData.length;
+  const { data: attachmentsData = [], refetch: refetchAttachments } = useTaskAttachments(task?.id || null);
+  const audioAttachments = attachmentsData.filter((a) => a.mime_type?.startsWith('audio/'));
+  const nonAudioAttachments = attachmentsData.filter((a) => !a.mime_type?.startsWith('audio/'));
+  const attachmentCount = nonAudioAttachments.length;
   const subtasks = task?.subtasks || [];
   const subtaskDone = subtasks.filter((s: any) => s.status === 'done' || s.status === 'closed').length;
 
@@ -674,6 +676,20 @@ export default function TaskDetailPanel({
                       />
                     ))}
                   </div>
+
+                  {audioAttachments.length > 0 && (
+                    <>
+                      <div className="td-eyebrow" style={{ marginBottom: 6 }}>
+                        Voice Notes
+                        <span className="muted">· {audioAttachments.length}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                        {audioAttachments.map((a) => (
+                          <AudioAttachmentPlayer key={a.id} attachment={a} canEdit={canEdit} taskId={task!.id} />
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </>
               )}
 
@@ -1369,7 +1385,7 @@ export default function TaskDetailPanel({
               </div>
               {task && (
                 <div className="td-files-wrap">
-                  <TaskAttachments taskId={task.id} canEdit={canEdit} />
+                  <TaskAttachments taskId={task.id} canEdit={canEdit} excludeAudio />
                 </div>
               )}
 
@@ -1401,6 +1417,9 @@ export default function TaskDetailPanel({
                     className="w-full bg-transparent text-[13px] text-[color:var(--sh-ink)] placeholder:text-[color:var(--sh-ink-3)] focus:outline-none"
                   />
                 </div>
+                {canEdit && task && (
+                  <VoiceNoteRecordButton taskId={task.id} onUploaded={() => refetchAttachments()} />
+                )}
                 {commentText.trim() && (
                   <button onClick={handleAddComment} className="td-comment-send">Send</button>
                 )}
@@ -1950,5 +1969,171 @@ function SpaceStatusPicker({
         document.body,
       )}
     </>
+  );
+}
+
+const AUDIO_SPEEDS = [0.5, 1, 1.5, 2] as const;
+
+function AudioAttachmentPlayer({
+  attachment,
+  canEdit,
+  taskId,
+}: {
+  attachment: import('@squadhub/shared').TaskAttachment;
+  canEdit: boolean;
+  taskId: string;
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const rafRef = useRef<number>(0);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [speed, setSpeed] = useState<number>(1);
+  const deleteMut = useDeleteTaskAttachment(taskId);
+
+  useEffect(() => {
+    const audio = new Audio(attachment.file_url);
+    audioRef.current = audio;
+    audio.playbackRate = speed;
+    audio.addEventListener('loadedmetadata', () => setDuration(audio.duration));
+    audio.addEventListener('ended', () => { setPlaying(false); setProgress(0); });
+    return () => { audio.pause(); audio.src = ''; cancelAnimationFrame(rafRef.current); };
+  }, [attachment.file_url]);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = speed;
+  }, [speed]);
+
+  const tick = () => {
+    const a = audioRef.current;
+    if (a && a.duration) setProgress(a.currentTime / a.duration);
+    rafRef.current = requestAnimationFrame(tick);
+  };
+
+  const togglePlay = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) {
+      a.pause(); setPlaying(false); cancelAnimationFrame(rafRef.current);
+    } else {
+      a.play(); setPlaying(true); rafRef.current = requestAnimationFrame(tick);
+    }
+  };
+
+  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const a = audioRef.current;
+    if (!a || !a.duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    a.currentTime = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * a.duration;
+    setProgress(a.currentTime / a.duration);
+  };
+
+  const fmtTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  const onDelete = async () => {
+    if (!confirm('Delete this voice note?')) return;
+    await deleteMut.mutateAsync(attachment.id);
+  };
+
+  return (
+    <div className="td-voice-note">
+      <button type="button" onClick={togglePlay} className="td-voice-play">
+        {playing ? (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
+        ) : (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>
+        )}
+      </button>
+      <div className="td-voice-track" onClick={seek}>
+        <div className="td-voice-track-fill" style={{ width: `${progress * 100}%` }} />
+      </div>
+      <span className="td-voice-time">{fmtTime(playing ? (audioRef.current?.currentTime || 0) : duration)}</span>
+      <button type="button" onClick={() => { const i = AUDIO_SPEEDS.indexOf(speed as typeof AUDIO_SPEEDS[number]); setSpeed(AUDIO_SPEEDS[(i + 1) % AUDIO_SPEEDS.length]); }} className="td-voice-speed">{speed}x</button>
+      {canEdit && (
+        <button type="button" onClick={onDelete} disabled={deleteMut.isPending} className="td-voice-del" title="Delete">×</button>
+      )}
+    </div>
+  );
+}
+
+function VoiceNoteRecordButton({ taskId, onUploaded }: { taskId: string; onUploaded: () => void }) {
+  const [recording, setRecording] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const mrRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  const toggle = async () => {
+    if (recording) {
+      mrRef.current?.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm',
+      });
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setRecording(false);
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType });
+        if (blob.size < 1000) return;
+        const ext = mr.mimeType.includes('webm') ? 'webm' : 'ogg';
+        const file = new File([blob], `voice-note-${Date.now()}.${ext}`, { type: mr.mimeType });
+        setUploading(true);
+        try {
+          const presignRes = await api.post('/pm/task-attachments/presign', {
+            task_id: taskId,
+            filename: file.name,
+            content_type: file.type,
+            file_size: file.size,
+          });
+          const { upload_url, key } = presignRes.data.data;
+          await fetch(upload_url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+          await api.post('/pm/task-attachments/confirm', {
+            task_id: taskId,
+            object_key: key,
+            file_name: file.name,
+            mime_type: file.type,
+          });
+          onUploaded();
+        } catch (err) {
+          console.error('Voice note upload failed:', err);
+        } finally {
+          setUploading(false);
+        }
+      };
+      mr.start();
+      mrRef.current = mr;
+      setRecording(true);
+    } catch (err) {
+      console.error('Mic access denied:', err);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={uploading}
+      className="td-voice-rec-btn shrink-0"
+      style={recording ? { color: '#ef4444' } : undefined}
+      title={recording ? 'Stop recording' : uploading ? 'Uploading…' : 'Record voice note'}
+    >
+      {uploading ? (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="animate-spin"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" /></svg>
+      ) : (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="9" y="1" width="6" height="12" rx="3" />
+          <path d="M19 10v1a7 7 0 01-14 0v-1M12 19v4M8 23h8" />
+        </svg>
+      )}
+      {recording && <span className="td-voice-pulse" />}
+    </button>
   );
 }

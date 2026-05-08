@@ -1,8 +1,12 @@
 'use client';
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import api from '../../../services/api';
 import type { TaskAttachment } from '@squadhub/shared';
 import { useTaskAttachments, useDeleteTaskAttachment } from '../../../hooks/useTaskAttachments';
+
+function isAudioMime(mime: string | null | undefined): boolean {
+  return !!mime && mime.startsWith('audio/');
+}
 
 const MAX_BYTES = 100 * 1024 * 1024;
 
@@ -27,14 +31,16 @@ function fileExtension(name: string): string {
 interface Props {
   taskId: string;
   canEdit: boolean;
+  excludeAudio?: boolean;
 }
 
-export default function TaskAttachments({ taskId, canEdit }: Props) {
+export default function TaskAttachments({ taskId, canEdit, excludeAudio }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [inFlight, setInFlight] = useState<InFlight[]>([]);
   const [dragOver, setDragOver] = useState(false);
 
-  const { data: attachments = [], refetch } = useTaskAttachments(taskId);
+  const { data: allAttachments = [], refetch } = useTaskAttachments(taskId);
+  const attachments = excludeAudio ? allAttachments.filter((a) => !isAudioMime(a.mime_type)) : allAttachments;
   const deleteMut = useDeleteTaskAttachment(taskId);
 
   const updateInFlight = useCallback((id: string, patch: Partial<InFlight>) => {
@@ -202,40 +208,154 @@ export default function TaskAttachments({ taskId, canEdit }: Props) {
         </div>
       ))}
 
-      {attachments.length > 0 ? attachments.map((f) => (
-        <div
-          key={f.id}
-          className="td-file flex items-center gap-3 p-3 rounded-xl border"
-          style={{ borderColor: 'var(--sh-hair-3)' }}
-        >
-          <div className="td-doc-icon">{fileExtension(f.file_name)}</div>
-          <div className="flex-1 min-w-0">
-            <a
-              href={f.file_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-[13.5px] font-medium text-[color:var(--sh-ink)] truncate hover:underline"
-            >
-              {f.file_name}
-            </a>
-            <div className="text-[11.5px] text-[color:var(--sh-ink-3)] mt-0.5">{formatSize(f.file_size)}</div>
+      {attachments.length > 0 ? attachments.map((f) =>
+        isAudioMime(f.mime_type) ? (
+          <AudioAttachment key={f.id} attachment={f} canEdit={canEdit} onDelete={() => onDelete(f)} deleting={deleteMut.isPending} />
+        ) : (
+          <div
+            key={f.id}
+            className="td-file flex items-center gap-3 p-3 rounded-xl border"
+            style={{ borderColor: 'var(--sh-hair-3)' }}
+          >
+            <div className="td-doc-icon">{fileExtension(f.file_name)}</div>
+            <div className="flex-1 min-w-0">
+              <a
+                href={f.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-[13.5px] font-medium text-[color:var(--sh-ink)] truncate hover:underline"
+              >
+                {f.file_name}
+              </a>
+              <div className="text-[11.5px] text-[color:var(--sh-ink-3)] mt-0.5">{formatSize(f.file_size)}</div>
+            </div>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => onDelete(f)}
+                disabled={deleteMut.isPending}
+                className="text-[14px] leading-none w-7 h-7 rounded text-[color:var(--sh-ink-3)] hover:text-red-600 hover:bg-[color:var(--sh-hair-1)] disabled:opacity-40"
+                title="Delete"
+                aria-label="Delete attachment"
+              >
+                ×
+              </button>
+            )}
           </div>
-          {canEdit && (
-            <button
-              type="button"
-              onClick={() => onDelete(f)}
-              disabled={deleteMut.isPending}
-              className="text-[14px] leading-none w-7 h-7 rounded text-[color:var(--sh-ink-3)] hover:text-red-600 hover:bg-[color:var(--sh-hair-1)] disabled:opacity-40"
-              title="Delete"
-              aria-label="Delete attachment"
-            >
-              ×
-            </button>
-          )}
-        </div>
-      )) : inFlight.length === 0 ? (
+        )
+      ) : inFlight.length === 0 ? (
         <div className="text-[13px] text-[color:var(--sh-ink-3)] py-2">No files yet.</div>
       ) : null}
+    </div>
+  );
+}
+
+const SPEEDS = [0.5, 1, 1.5, 2] as const;
+
+function AudioAttachment({
+  attachment,
+  canEdit,
+  onDelete,
+  deleting,
+}: {
+  attachment: TaskAttachment;
+  canEdit: boolean;
+  onDelete: () => void;
+  deleting: boolean;
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const rafRef = useRef<number>(0);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [speed, setSpeed] = useState<number>(1);
+
+  useEffect(() => {
+    const audio = new Audio(attachment.file_url);
+    audioRef.current = audio;
+    audio.playbackRate = speed;
+    audio.addEventListener('loadedmetadata', () => setDuration(audio.duration));
+    audio.addEventListener('ended', () => { setPlaying(false); setProgress(0); });
+    return () => { audio.pause(); audio.src = ''; cancelAnimationFrame(rafRef.current); };
+  }, [attachment.file_url]);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = speed;
+  }, [speed]);
+
+  const tick = () => {
+    const a = audioRef.current;
+    if (a && a.duration) setProgress(a.currentTime / a.duration);
+    rafRef.current = requestAnimationFrame(tick);
+  };
+
+  const togglePlay = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) {
+      a.pause();
+      setPlaying(false);
+      cancelAnimationFrame(rafRef.current);
+    } else {
+      a.play();
+      setPlaying(true);
+      rafRef.current = requestAnimationFrame(tick);
+    }
+  };
+
+  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const a = audioRef.current;
+    if (!a || !a.duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    a.currentTime = pct * a.duration;
+    setProgress(pct);
+  };
+
+  const cycleSpeed = () => {
+    const idx = SPEEDS.indexOf(speed as typeof SPEEDS[number]);
+    setSpeed(SPEEDS[(idx + 1) % SPEEDS.length]);
+  };
+
+  const fmtTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  const currentTime = audioRef.current?.currentTime || 0;
+
+  return (
+    <div className="td-voice-note">
+      <button type="button" onClick={togglePlay} className="td-voice-play">
+        {playing ? (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
+        ) : (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>
+        )}
+      </button>
+
+      <div className="td-voice-track" onClick={seek}>
+        <div className="td-voice-track-fill" style={{ width: `${progress * 100}%` }} />
+      </div>
+
+      <span className="td-voice-time">{fmtTime(playing ? currentTime : duration)}</span>
+
+      <button type="button" onClick={cycleSpeed} className="td-voice-speed">
+        {speed}x
+      </button>
+
+      {canEdit && (
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deleting}
+          className="td-voice-del"
+          title="Delete"
+        >
+          ×
+        </button>
+      )}
     </div>
   );
 }
