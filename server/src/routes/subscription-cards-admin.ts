@@ -9,7 +9,7 @@ import {
   deliverCardToSquadhire,
   notifySquadhireOfCardRecall,
 } from '../utils/squadhireWebhook';
-import config from '../config';
+import { config } from '../config';
 
 const router = Router();
 
@@ -304,7 +304,7 @@ router.get('/:id/squadhire-recipients', async (req: Request, res: Response) => {
       return res.json({ success: true, data: [], note: `SquadHire returned ${response.status}` });
     }
 
-    const result = await response.json();
+    const result = (await response.json()) as { data?: unknown[] };
     res.json({ success: true, data: result.data || [] });
   } catch (err: any) {
     console.error('Admin get SquadHire recipients error:', err);
