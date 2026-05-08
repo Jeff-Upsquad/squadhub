@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
 import AdminPublishedCardRecipientsPanel from './AdminPublishedCardRecipientsPanel';
+import AdminPublishedCardRecipientsView from './AdminPublishedCardRecipientsView';
 import AdminRequestsList from './AdminRequestsList';
 import AdminCustomCardsList from './AdminCustomCardsList';
 
@@ -33,6 +34,7 @@ export type PublishedCard = {
   squadhire_synced_at?: string | null;
   squadhire_sync_attempts?: number | null;
   squadhire_sync_last_error?: string | null;
+  squadhire_recipient_count?: number | null;
   customer_company?: string | null;
   customer_name?: string | null;
   customer_email?: string | null;
@@ -132,6 +134,7 @@ export default function AdminPublishedCards() {
   const [search, setSearch] = useState<string>('');
   const [groupBy, setGroupBy] = useState<GroupBy>('status');
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [showPanel, setShowPanel] = useState(false);
 
   const { data: cardsRes, isLoading } = useQuery({
     queryKey: ['admin-published-cards', stateFilter, publishedBy, search],
@@ -164,69 +167,80 @@ export default function AdminPublishedCards() {
     [cards, selectedCardId],
   );
 
+  const showDetailView = activeTab === 'published' && !!selectedCard;
+
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-[#E2E8F0] bg-white px-6 pt-5 pb-4">
-        <div className="mb-4">
-          <h1 className="text-xl font-semibold text-[#0F172B]">Published Cards</h1>
-          <p className="mt-0.5 text-sm text-[#62748E]">All subscription cards published across the org.</p>
-        </div>
-        <div className="mb-4 flex gap-1 rounded-lg bg-slate-100 p-1">
-          {([['published', 'Published'], ['requests', 'From Requests'], ['custom', 'Custom']] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
-                activeTab === key
-                  ? 'bg-white text-[#0F172B] shadow-sm'
-                  : 'text-[#62748E] hover:text-[#0F172B]'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {activeTab === 'published' && (
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={stateFilter}
-              onChange={(e) => setStateFilter(e.target.value as 'all' | 'published' | 'closed')}
-              className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
-            >
-              <option value="all">All states</option>
-              <option value="published">Active</option>
-              <option value="closed">Cancelled</option>
-            </select>
-            <select
-              value={publishedBy}
-              onChange={(e) => setPublishedBy(e.target.value)}
-              className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
-            >
-              <option value="">All sales people</option>
-              {salesPeople.map((p) => (
-                <option key={p.id} value={p.id}>{p.display_name || p.email || p.id.slice(0, 8)}</option>
-              ))}
-            </select>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search business name…"
-              className="flex-1 min-w-[200px] rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder:text-[#90A1B9] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
-            />
-            <select
-              value={groupBy}
-              onChange={(e) => setGroupBy(e.target.value as GroupBy)}
-              className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
-            >
-              <option value="status">Group by status</option>
-              <option value="date">Group by date</option>
-            </select>
+      {!showDetailView && (
+        <div className="border-b border-[#E2E8F0] bg-white px-6 pt-5 pb-4">
+          <div className="mb-4">
+            <h1 className="text-xl font-semibold text-[#0F172B]">Published Cards</h1>
+            <p className="mt-0.5 text-sm text-[#62748E]">All subscription cards published across the org.</p>
           </div>
-        )}
-      </div>
+          <div className="mb-4 flex gap-1 rounded-lg bg-slate-100 p-1">
+            {([['published', 'Published'], ['requests', 'From Requests'], ['custom', 'Custom']] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
+                  activeTab === key
+                    ? 'bg-white text-[#0F172B] shadow-sm'
+                    : 'text-[#62748E] hover:text-[#0F172B]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {activeTab === 'published' && (
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={stateFilter}
+                onChange={(e) => setStateFilter(e.target.value as 'all' | 'published' | 'closed')}
+                className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
+              >
+                <option value="all">All states</option>
+                <option value="published">Active</option>
+                <option value="closed">Cancelled</option>
+              </select>
+              <select
+                value={publishedBy}
+                onChange={(e) => setPublishedBy(e.target.value)}
+                className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
+              >
+                <option value="">All sales people</option>
+                {salesPeople.map((p) => (
+                  <option key={p.id} value={p.id}>{p.display_name || p.email || p.id.slice(0, 8)}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search business name…"
+                className="flex-1 min-w-[200px] rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder:text-[#90A1B9] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
+              />
+              <select
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+                className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
+              >
+                <option value="status">Group by status</option>
+                <option value="date">Group by date</option>
+              </select>
+            </div>
+          )}
+        </div>
+      )}
 
-      {activeTab === 'published' && (
+      {activeTab === 'published' && selectedCard ? (
+        <AdminPublishedCardRecipientsView
+          card={selectedCard}
+          title={publishedCardTitle(selectedCard)}
+          onBack={() => { setSelectedCardId(null); setShowPanel(false); }}
+          onOpenPanel={() => setShowPanel(true)}
+        />
+      ) : activeTab === 'published' ? (
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {isLoading ? (
             <p className="py-8 text-center text-sm text-[#90A1B9]">Loading…</p>
@@ -264,16 +278,16 @@ export default function AdminPublishedCards() {
             </div>
           )}
         </div>
-      )}
+      ) : null}
 
       {activeTab === 'requests' && <AdminRequestsList />}
       {activeTab === 'custom' && <AdminCustomCardsList />}
 
-      {selectedCard && (
+      {selectedCard && showPanel && (
         <AdminPublishedCardRecipientsPanel
           card={selectedCard}
           title={publishedCardTitle(selectedCard)}
-          onClose={() => setSelectedCardId(null)}
+          onClose={() => setShowPanel(false)}
         />
       )}
     </div>

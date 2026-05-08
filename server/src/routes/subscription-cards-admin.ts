@@ -9,6 +9,7 @@ import {
   deliverCardToSquadhire,
   notifySquadhireOfCardRecall,
 } from '../utils/squadhireWebhook';
+import config from '../config';
 
 const router = Router();
 
@@ -258,6 +259,57 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Admin get card recipients error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// GET /admin/subscription-cards/:id/squadhire-recipients
+// Fetch the full talent recipient list from SquadHire for this card.
+// Calls SquadHire's webhook endpoint to get all broadcasted talents
+// (including those who haven't responded yet).
+// ============================================================
+router.get('/:id/squadhire-recipients', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    // We need the card's ID as the external_id SquadHire knows
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) return res.status(404).json({ success: false, error: 'Card not found' });
+
+    const baseUrl = config.squadhireWebhookUrl;
+    if (!baseUrl || !config.squadhireWebhookSecret) {
+      return res.json({ success: true, data: [], note: 'SquadHire integration not configured' });
+    }
+
+    // The webhook URL points to /api/webhooks/squadhub/cards — derive the recipients URL
+    const recipientsUrl = baseUrl.replace(/\/cards\/?$/, '/cards/recipients');
+
+    const response = await fetch(recipientsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify({ external_id: cardId }),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      console.error(`SquadHire recipients fetch failed: ${response.status} ${text}`);
+      return res.json({ success: true, data: [], note: `SquadHire returned ${response.status}` });
+    }
+
+    const result = await response.json();
+    res.json({ success: true, data: result.data || [] });
+  } catch (err: any) {
+    console.error('Admin get SquadHire recipients error:', err);
+    // Non-fatal: return empty list so the UI still works
+    res.json({ success: true, data: [], note: err?.message || 'Failed to reach SquadHire' });
   }
 });
 
