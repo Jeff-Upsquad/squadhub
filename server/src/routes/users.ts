@@ -254,6 +254,7 @@ router.get('/me/published-cards', requireAuth, async (req: Request, res: Respons
       .select('*')
       .in('submission_subscription_id', stagedIds)
       .eq('state', 'published')
+      .is('archived_at', null)
       .order('published_at', { ascending: false });
     if (error) {
       res.status(500).json({ success: false, error: error.message });

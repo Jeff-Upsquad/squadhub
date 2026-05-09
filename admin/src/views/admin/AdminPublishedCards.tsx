@@ -32,6 +32,7 @@ export type PublishedCard = {
   secondary_card_count?: number;
   recalled_at?: string | null;
   cancelled_at?: string | null;
+  archived_at?: string | null;
   squadhire_synced_at?: string | null;
   squadhire_sync_attempts?: number | null;
   squadhire_sync_last_error?: string | null;
@@ -126,7 +127,7 @@ function publishedCardTitle(card: PublishedCard): string {
   return subName ? `${business} · ${subName}` : business;
 }
 
-type Tab = 'published' | 'requests' | 'custom';
+type Tab = 'published' | 'requests' | 'custom' | 'archive';
 
 export default function AdminPublishedCards() {
   const [activeTab, setActiveTab] = useState<Tab>('published');
@@ -137,15 +138,19 @@ export default function AdminPublishedCards() {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [showPanel, setShowPanel] = useState(false);
 
+  const isArchiveTab = activeTab === 'archive';
+
   const { data: cardsRes, isLoading } = useQuery({
-    queryKey: ['admin-published-cards', stateFilter, publishedBy, search],
+    queryKey: ['admin-published-cards', stateFilter, publishedBy, search, isArchiveTab ? 'archived' : 'active'],
     queryFn: () => {
       const params: Record<string, string> = {};
       if (stateFilter !== 'all') params.state = stateFilter;
       if (publishedBy) params.published_by = publishedBy;
       if (search.trim()) params.search = search.trim();
+      if (isArchiveTab) params.archived = 'true';
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
+    enabled: activeTab === 'published' || activeTab === 'archive',
   });
   const cards: PublishedCard[] = cardsRes?.data || [];
 
@@ -169,7 +174,7 @@ export default function AdminPublishedCards() {
     [cards, selectedCardId],
   );
 
-  const showDetailView = activeTab === 'published' && !!selectedCard;
+  const showDetailView = (activeTab === 'published' || activeTab === 'archive') && !!selectedCard;
 
   return (
     <div className="flex h-full flex-col">
@@ -180,10 +185,10 @@ export default function AdminPublishedCards() {
             <p className="mt-0.5 text-sm text-[#62748E]">All subscription cards published across the org.</p>
           </div>
           <div className="mb-4 flex gap-1 rounded-lg bg-slate-100 p-1">
-            {([['published', 'Published'], ['requests', 'From Requests'], ['custom', 'Custom']] as const).map(([key, label]) => (
+            {([['published', 'Published'], ['requests', 'From Requests'], ['custom', 'Custom'], ['archive', 'Archive']] as const).map(([key, label]) => (
               <button
                 key={key}
-                onClick={() => setActiveTab(key)}
+                onClick={() => { setActiveTab(key); setSelectedCardId(null); }}
                 className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
                   activeTab === key
                     ? 'bg-white text-[#0F172B] shadow-sm'
@@ -194,7 +199,7 @@ export default function AdminPublishedCards() {
               </button>
             ))}
           </div>
-          {activeTab === 'published' && (
+          {(activeTab === 'published' || activeTab === 'archive') && (
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={stateFilter}
@@ -236,7 +241,7 @@ export default function AdminPublishedCards() {
         </div>
       )}
 
-      {activeTab === 'published' && selectedCard ? (
+      {(activeTab === 'published' || activeTab === 'archive') && selectedCard ? (
         <AdminPublishedCardRecipientsView
           card={selectedCard}
           title={publishedCardTitle(selectedCard)}
@@ -284,6 +289,18 @@ export default function AdminPublishedCards() {
             </div>
           )}
         </div>
+      ) : activeTab === 'archive' ? (
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {isLoading ? (
+            <p className="py-8 text-center text-sm text-[#90A1B9]">Loading…</p>
+          ) : cards.length === 0 ? (
+            <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
+              <p className="text-sm text-[#90A1B9]">No archived cards yet.</p>
+            </div>
+          ) : (
+            <CardGroup label="Archived" color="#7C3AED" items={cards} onOpen={setSelectedCardId} showCancelledTag={false} showArchivedTag />
+          )}
+        </div>
       ) : null}
 
       {activeTab === 'requests' && <AdminRequestsList />}
@@ -301,13 +318,14 @@ export default function AdminPublishedCards() {
 }
 
 function CardGroup({
-  label, color, items, onOpen, showCancelledTag,
+  label, color, items, onOpen, showCancelledTag, showArchivedTag,
 }: {
   label: string;
   color: string;
   items: PublishedCard[];
   onOpen: (id: string) => void;
   showCancelledTag: boolean;
+  showArchivedTag?: boolean;
 }) {
   return (
     <div>
@@ -328,6 +346,7 @@ function CardGroup({
             card={card}
             onOpen={() => onOpen(card.id)}
             showCancelledTag={showCancelledTag && card.state === 'closed'}
+            showArchivedTag={!!showArchivedTag && !!card.archived_at}
           />
         ))}
       </div>
@@ -335,7 +354,7 @@ function CardGroup({
   );
 }
 
-function PublishedCardRow({ card, onOpen, showCancelledTag }: { card: PublishedCard; onOpen: () => void; showCancelledTag: boolean }) {
+function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: { card: PublishedCard; onOpen: () => void; showCancelledTag: boolean; showArchivedTag?: boolean }) {
   const business = card.submission?.business_name || card.customer_company || 'Unknown';
   const subName = card.submission_subscription?.subscription?.name || card.plan_name || '—';
   const plan = card.submission_subscription?.plan;
@@ -371,6 +390,14 @@ function PublishedCardRow({ card, onOpen, showCancelledTag }: { card: PublishedC
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
+        {showArchivedTag && (
+          <span
+            className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700"
+            title={`Archived${card.archived_at ? ' on ' + new Date(card.archived_at).toLocaleString() : ''}. Hidden from talent feeds and the default Published list.`}
+          >
+            Archived
+          </span>
+        )}
         {showCancelledTag && !card.recalled_at && (
           <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600">
             Cancelled

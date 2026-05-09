@@ -51,10 +51,13 @@ router.get('/', async (req: Request, res: Response) => {
     // Include published cards AND recalled/cancelled cards (state='closed'
     // with recalled_at or cancelled_at set) so accepted partners keep
     // seeing their opportunity with the "Recalled" or "Cancelled" tag.
+    // Archived cards are always excluded — archive is a hard hide from
+    // partner feeds.
     const { data: cards, error: cardsErr } = await supabaseAdmin
       .from('subscription_cards')
       .select('*')
       .in('id', cardIds)
+      .is('archived_at', null)
       .or('state.eq.published,recalled_at.not.is.null,cancelled_at.not.is.null');
     if (cardsErr) {
       res.status(500).json({ success: false, error: cardsErr.message });
