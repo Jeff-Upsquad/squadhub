@@ -24,6 +24,15 @@ export type PublishedCard = {
   target_regions: { country_id: string; region: string }[];
   custom_deliverables: { id: string; name: string; kind: 'hours' | 'item'; per_day: number; per_week: number; per_month: number }[];
   disabled_default_deliverable_ids: string[];
+  plan_default_deliverables?: {
+    id: string;
+    kind: 'hours' | 'item';
+    deliverable_type_id: string | null;
+    deliverable_type_name: string | null;
+    per_day: number;
+    per_week: number;
+    per_month: number;
+  }[];
   partner_price_override: number | null;
   squadhire_category_ids?: string[] | null;
   selected_recipient_type?: 'partner' | 'talent' | null;
@@ -32,6 +41,11 @@ export type PublishedCard = {
   secondary_card_count?: number;
   recalled_at?: string | null;
   cancelled_at?: string | null;
+  closed_at?: string | null;
+  assigned_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  subscription_request_id?: number | null;
   squadhire_synced_at?: string | null;
   squadhire_sync_attempts?: number | null;
   squadhire_sync_last_error?: string | null;
