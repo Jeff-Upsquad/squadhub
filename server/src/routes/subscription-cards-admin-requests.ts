@@ -222,6 +222,7 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
         business_nature: (requestData as any).nature_of_business || null,
         notes: (requestData as any).short_note || null,
         customer_location: (requestData as any).location_of_business || null,
+        requirement_note: (requestData as any).requirement_note || null,
         publish_targets: ['partner', 'talent'],
       })
       .select('*')
@@ -315,6 +316,7 @@ const editCardSchema = z.object({
   brand_name: z.string().nullable().optional(),
   business_nature: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  requirement_note: z.string().nullable().optional(),
   working_days: z.array(z.string()).optional(),
   custom_deliverables: z.array(z.object({
     id: z.string(),
@@ -370,6 +372,7 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
     if (body.brand_name !== undefined) updates.brand_name = body.brand_name;
     if (body.business_nature !== undefined) updates.business_nature = body.business_nature;
     if (body.notes !== undefined) updates.notes = body.notes;
+    if (body.requirement_note !== undefined) updates.requirement_note = body.requirement_note;
     if (body.working_days !== undefined) updates.working_days = body.working_days;
     if (body.custom_deliverables !== undefined) updates.custom_deliverables = body.custom_deliverables;
     if (body.proposed_price !== undefined) updates.proposed_price = body.proposed_price;
@@ -555,8 +558,9 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       await matchPartnersForCard(cardId);
     }
 
-    // SquadHire delivery (if target includes talent)
-    if (publishTargets.includes('talent')) {
+    // SquadHire delivery (only on broadcast — manual/soft publishes sync
+    // lazily on first manual talent assignment).
+    if (publishTargets.includes('talent') && distribution === 'broadcast') {
       buildSquadhirePayloadForCard(cardId)
         .then((payload) => payload && deliverCardToSquadhire(cardId, payload))
         .catch((err) =>

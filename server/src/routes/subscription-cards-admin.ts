@@ -8,6 +8,7 @@ import {
   buildSquadhirePayloadForCard,
   deliverCardToSquadhire,
   notifySquadhireOfCardRecall,
+  notifySquadhireOfManualAssignment,
 } from '../utils/squadhireWebhook';
 import { config } from '../config';
 
@@ -114,11 +115,11 @@ router.get('/', async (req: Request, res: Response) => {
         .in('id', submissionIds.length ? submissionIds : ['00000000-0000-0000-0000-000000000000']),
       supabaseAdmin
         .from('subscriptions')
-        .select('id, name')
+        .select('id, slug, name')
         .in('id', subscriptionIds.length ? subscriptionIds : ['00000000-0000-0000-0000-000000000000']),
       supabaseAdmin
         .from('subscription_plans')
-        .select('id, plan, tier')
+        .select('id, subscription_id, plan, tier')
         .in('id', planIds.length ? planIds : ['00000000-0000-0000-0000-000000000000']),
       supabaseAdmin
         .from('subscription_plan_pricing')
@@ -140,6 +141,107 @@ router.get('/', async (req: Request, res: Response) => {
       (pricingByPlan[p.plan_id] = pricingByPlan[p.plan_id] || []).push(p);
     });
 
+    // Resolve plan_id for request/custom cards that aren't linked via
+    // submission_subscription_id. They store service_type + plan_name on the
+    // card itself; mirror AdminCardEditor's catalog lookup (slug + canonical
+    // plan + first target tier) to find the matching subscription_plans row.
+    const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
+      Designers: 'designer',
+      Editors: 'video_editor',
+      'Designer plus Editor': 'designer_video_editor',
+    };
+    const PLAN_NAME_TO_CANONICAL: Record<string, string> = {
+      starter: 'Starter', basic: 'Basic', plus: 'Plus', pro: 'Pro', personal: 'Personal',
+    };
+    const resolveByCardId: Record<string, { slug: string; plan: string; tier: string }> = {};
+    const slugsToLookup = new Set<string>();
+    for (const c of list) {
+      if (c.submission_subscription_id) continue;
+      if (c.source !== 'request' && c.source !== 'custom') continue;
+      const slug = SERVICE_TYPE_TO_SLUG[c.service_type ?? ''];
+      const canonicalPlan = PLAN_NAME_TO_CANONICAL[String(c.plan_name ?? '').toLowerCase()];
+      const tier = Array.isArray(c.target_tiers) ? c.target_tiers[0] : null;
+      if (slug && canonicalPlan && tier) {
+        resolveByCardId[c.id] = { slug, plan: canonicalPlan, tier };
+        slugsToLookup.add(slug);
+      }
+    }
+
+    const cardIdToResolvedPlanId: Record<string, string> = {};
+    if (slugsToLookup.size > 0) {
+      const { data: subRows } = await supabaseAdmin
+        .from('subscriptions')
+        .select('id, slug')
+        .in('slug', Array.from(slugsToLookup));
+      const subBySlug: Record<string, string> = {};
+      (subRows || []).forEach((s: any) => { subBySlug[s.slug] = s.id; });
+      const resolvedSubIds = (subRows || []).map((s: any) => s.id);
+      if (resolvedSubIds.length > 0) {
+        const { data: planRows } = await supabaseAdmin
+          .from('subscription_plans')
+          .select('id, subscription_id, plan, tier')
+          .in('subscription_id', resolvedSubIds);
+        const planByKey: Record<string, any> = {};
+        (planRows || []).forEach((p: any) => {
+          planByKey[`${p.subscription_id}|${p.plan}|${p.tier}`] = p;
+          if (!planById[p.id]) planById[p.id] = p;
+        });
+        for (const [cardId, key] of Object.entries(resolveByCardId)) {
+          const subId = subBySlug[key.slug];
+          if (!subId) continue;
+          const plan = planByKey[`${subId}|${key.plan}|${key.tier}`];
+          if (plan) cardIdToResolvedPlanId[cardId] = plan.id;
+        }
+      }
+    }
+
+    // Fetch plan default deliverables (and the deliverable-type catalog needed
+    // to label item rows) for every plan_id we touch — both staged and
+    // request/custom-resolved.
+    const allPlanIds = Array.from(new Set([
+      ...planIds,
+      ...Object.values(cardIdToResolvedPlanId),
+    ]));
+    const delivsByPlan: Record<string, any[]> = {};
+    const delivTypeById: Record<string, { id: string; name: string }> = {};
+    if (allPlanIds.length > 0) {
+      const subscriptionIdsForDelivTypes = Array.from(new Set(
+        allPlanIds.map((pid) => planById[pid]?.subscription_id).filter(Boolean) as string[],
+      ));
+      const [{ data: planDelivs }, { data: delivTypes }] = await Promise.all([
+        supabaseAdmin
+          .from('subscription_plan_deliverables')
+          .select('id, plan_id, kind, deliverable_type_id, per_day, per_week, per_month, sort_order')
+          .in('plan_id', allPlanIds)
+          .order('sort_order'),
+        subscriptionIdsForDelivTypes.length
+          ? supabaseAdmin
+              .from('subscription_deliverable_types')
+              .select('id, name')
+              .in('subscription_id', subscriptionIdsForDelivTypes)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+      (planDelivs || []).forEach((d: any) => {
+        (delivsByPlan[d.plan_id] = delivsByPlan[d.plan_id] || []).push(d);
+      });
+      (delivTypes || []).forEach((t: any) => { delivTypeById[t.id] = t; });
+    }
+
+    const buildPlanDefaultDeliverables = (planId: string | null) => {
+      if (!planId) return [];
+      return (delivsByPlan[planId] || []).map((d: any) => ({
+        id: d.id,
+        kind: d.kind,
+        deliverable_type_id: d.deliverable_type_id ?? null,
+        deliverable_type_name: d.deliverable_type_id
+          ? delivTypeById[d.deliverable_type_id]?.name ?? null
+          : null,
+        per_day: Number(d.per_day) || 0,
+        per_week: Number(d.per_week) || 0,
+        per_month: Number(d.per_month) || 0,
+      }));
+    };
+
     let hydrated = await Promise.all(list.map(async (card: any) => {
       const staged = stagedById[card.submission_subscription_id] || null;
       const submission = staged ? submissionById[staged.submission_id] || null : null;
@@ -151,6 +253,9 @@ router.get('/', async (req: Request, res: Response) => {
         ? planPricing.find((pr: any) => pr.country_id === country.id) || null
         : null;
       const publisher = card.published_by ? publisherById[card.published_by] || null : null;
+
+      const planIdForDelivs = staged?.plan_id ?? cardIdToResolvedPlanId[card.id] ?? null;
+      const planDefaults = buildPlanDefaultDeliverables(planIdForDelivs);
 
       const base = await hydrateCard(card);
       return {
@@ -171,6 +276,7 @@ router.get('/', async (req: Request, res: Response) => {
         published_by_user: publisher
           ? { id: publisher.id, display_name: publisher.display_name, email: publisher.email }
           : null,
+        plan_default_deliverables: planDefaults,
       };
     }));
 
@@ -221,7 +327,7 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
         .eq('card_id', cardId),
       supabaseAdmin
         .from('subscription_card_external_recipients')
-        .select('external_user_id, talent_name, status, responded_at, assigned_manually, selected_at, selected_by, passed_over_at')
+        .select('external_user_id, talent_name, status, responded_at, assigned_manually, selected_at, selected_by, passed_over_at, notified_at')
         .eq('card_id', cardId),
     ]);
 
@@ -264,6 +370,7 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
       selected_at: r.selected_at ?? null,
       selected_by: r.selected_by ?? null,
       passed_over_at: r.passed_over_at ?? null,
+      notified_at: r.notified_at ?? null,
     }));
 
     res.json({ success: true, data: { partners, talents } });
@@ -321,6 +428,127 @@ router.get('/:id/squadhire-recipients', async (req: Request, res: Response) => {
     console.error('Admin get SquadHire recipients error:', err);
     // Non-fatal: return empty list so the UI still works
     res.json({ success: true, data: [], note: err?.message || 'Failed to reach SquadHire' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/broadcast-pending
+// Release all queued (notified_at IS NULL) talent recipients on a
+// soft-published (manual) card: lazy-deliver the card to SquadHire if
+// it's never been synced, then per-row notifySquadhireOfManualAssignment.
+// Successful rows share a single `notified_at` timestamp so the UI can
+// group them as one batch; failed rows stay queued for retry.
+// ============================================================
+router.post('/:id/broadcast-pending', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    const { data: card, error: cardErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, distribution, squadhire_synced_at, squadhire_category_ids')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (cardErr) {
+      res.status(500).json({ success: false, error: cardErr.message });
+      return;
+    }
+    if (!card) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    if (card.state !== 'published') {
+      res.status(409).json({ success: false, error: 'Card must be published' });
+      return;
+    }
+    if (card.distribution !== 'manual') {
+      res.status(409).json({ success: false, error: 'This action only applies to soft-published cards' });
+      return;
+    }
+
+    const { data: queued, error: qErr } = await supabaseAdmin
+      .from('subscription_card_external_recipients')
+      .select('id, external_user_id')
+      .eq('card_id', cardId)
+      .is('notified_at', null);
+    if (qErr) {
+      res.status(500).json({ success: false, error: qErr.message });
+      return;
+    }
+    if (!queued || queued.length === 0) {
+      res.status(409).json({ success: false, error: 'No queued talents to broadcast' });
+      return;
+    }
+
+    if (!card.squadhire_synced_at) {
+      const categoryIds = Array.isArray(card.squadhire_category_ids)
+        ? (card.squadhire_category_ids as string[])
+        : [];
+      if (categoryIds.length === 0) {
+        res.status(409).json({
+          success: false,
+          error: 'Card has no SquadHire categories. Add categories before broadcasting.',
+        });
+        return;
+      }
+      const payload = await buildSquadhirePayloadForCard(cardId);
+      if (payload) {
+        await deliverCardToSquadhire(cardId, payload);
+      }
+      const { data: recheck } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('squadhire_synced_at')
+        .eq('id', cardId)
+        .maybeSingle();
+      if (!recheck?.squadhire_synced_at) {
+        res.status(503).json({
+          success: false,
+          error: 'Card could not be synced to SquadHire. Try again in a few minutes.',
+        });
+        return;
+      }
+    }
+
+    const successfulIds: string[] = [];
+    const failures: { talent_id: string; error: string }[] = [];
+    for (const row of queued) {
+      const outcome = await notifySquadhireOfManualAssignment(
+        cardId,
+        row.external_user_id as string,
+        row.id as string,
+      );
+      if (outcome.delivered) {
+        successfulIds.push(row.id as string);
+      } else {
+        failures.push({ talent_id: row.external_user_id as string, error: outcome.error || 'unknown_error' });
+      }
+    }
+
+    if (successfulIds.length > 0) {
+      const now = new Date().toISOString();
+      const { error: updErr } = await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .update({ notified_at: now })
+        .in('id', successfulIds);
+      if (updErr) {
+        // We notified SquadHire but failed to record it. Log and surface so
+        // the admin knows to retry; the next call will hit duplicate-notify
+        // territory but SquadHire's mirror table is idempotent on (card,
+        // recipient).
+        console.error('[broadcast-pending] notified rows but failed to set notified_at', updErr);
+        res.status(500).json({ success: false, error: 'Notified SquadHire but failed to record state. Please retry.' });
+        return;
+      }
+    }
+
+    res.json({
+      success: true,
+      notified: successfulIds.length,
+      failed: failures.length,
+      ...(failures.length > 0 ? { failures } : {}),
+    });
+  } catch (err: any) {
+    console.error('Admin broadcast-pending error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
 

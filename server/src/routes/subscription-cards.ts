@@ -341,22 +341,22 @@ router.post(
         return;
       }
 
-      // Fan out to SquadHire. Fire-and-forget from the user's point of view:
-      // the admin sees "published" immediately; delivery runs in the
-      // background with inline retries and the sweeper as the safety net.
-      // Never block or fail the publish response on this call. The payload
-      // includes `distribution` so SquadHire knows whether to broadcast to
-      // talents (broadcast) or only show in its admin Published Cards list
-      // (manual).
-      buildSquadhirePayloadForCard(updated.id)
-        .then((payload) => {
-          if (payload) {
-            return deliverCardToSquadhire(updated.id, payload);
-          }
-        })
-        .catch((err) => {
-          console.error('[publish] squadhire delivery threw unexpectedly', err);
-        });
+      // Fan out to SquadHire only on broadcast. Soft-published (manual) cards
+      // stay local; SquadHire learns about them lazily when an admin manually
+      // assigns a talent (see assign-talent endpoint). Fire-and-forget — the
+      // admin sees "published" immediately; delivery runs in the background
+      // with inline retries and the sweeper as the safety net.
+      if (distribution === 'broadcast') {
+        buildSquadhirePayloadForCard(updated.id)
+          .then((payload) => {
+            if (payload) {
+              return deliverCardToSquadhire(updated.id, payload);
+            }
+          })
+          .catch((err) => {
+            console.error('[publish] squadhire delivery threw unexpectedly', err);
+          });
+      }
 
       res.json({
         success: true,

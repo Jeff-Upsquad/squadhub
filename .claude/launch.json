@@ -208,6 +208,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/zen-visvesvaraya-964e46/web && INTERNAL_API_URL=http://localhost:4002 exec npx next dev -p 3092"],
       "port": 3092
+    },
+    {
+      "name": "UpSquad Website Client",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/upsquad website/upsquad/client' && exec npx next dev -p 3110"],
+      "port": 3110
     }
   ]
 }

@@ -16,6 +16,11 @@ type UnifiedRecipient = {
   assigned_manually: boolean;
   selected_at: string | null;
   passed_over_at: string | null;
+  // Soft-publish staged broadcast: NULL = queued (not yet sent to SquadHire),
+  // non-NULL = sent at this exact moment (rows in the same batch share a
+  // timestamp). Always null for partners and for live-fetched SquadHire
+  // matches (remoteTalents).
+  notified_at: string | null;
 };
 
 type SquadHireTalent = {
@@ -94,6 +99,7 @@ export default function AdminPublishedCardRecipientsView({
       assigned_manually: !!p.assigned_manually,
       selected_at: p.selected_at ?? null,
       passed_over_at: p.passed_over_at ?? null,
+      notified_at: null,
     }));
 
     // Build a set of talent IDs we already have from the local callback table
@@ -112,6 +118,7 @@ export default function AdminPublishedCardRecipientsView({
       assigned_manually: !!t.assigned_manually,
       selected_at: t.selected_at ?? null,
       passed_over_at: t.passed_over_at ?? null,
+      notified_at: t.notified_at ?? null,
     }));
 
     // Talents from SquadHire that are NOT already in local data
@@ -127,6 +134,7 @@ export default function AdminPublishedCardRecipientsView({
         assigned_manually: false,
         selected_at: null,
         passed_over_at: null,
+        notified_at: null,
       }));
 
     return [...partners, ...localTalents, ...remoteTalents];
@@ -186,6 +194,16 @@ export default function AdminPublishedCardRecipientsView({
     },
   });
 
+  const broadcastMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${card.id}/broadcast-pending`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+    },
+  });
+
   const counts = useMemo(() => ({
     accepted: allRecipients.filter((r) => r.status === 'accepted').length,
     rejected: allRecipients.filter((r) => r.status === 'rejected').length,
@@ -196,6 +214,43 @@ export default function AdminPublishedCardRecipientsView({
   const filtered = useMemo(
     () => activeTab === 'all' ? allRecipients : allRecipients.filter((r) => r.status === activeTab),
     [allRecipients, activeTab],
+  );
+
+  const isManual = card.distribution === 'manual';
+
+  // For manual cards: split talents into the pending-broadcast queue and one
+  // group per distinct notified_at timestamp (one per batch). Partners stay
+  // in their own flat section above the talent groups.
+  const grouped = useMemo(() => {
+    if (!isManual) return null;
+    const partners = filtered.filter((r) => r.type === 'partner');
+    const talents = filtered.filter((r) => r.type === 'talent');
+    const pending: UnifiedRecipient[] = [];
+    const sentMap = new Map<string, UnifiedRecipient[]>();
+    for (const t of talents) {
+      if (!t.notified_at) {
+        pending.push(t);
+      } else {
+        const arr = sentMap.get(t.notified_at) ?? [];
+        arr.push(t);
+        sentMap.set(t.notified_at, arr);
+      }
+    }
+    const sentBatches = Array.from(sentMap.entries())
+      .map(([notifiedAt, items]) => ({ notifiedAt, items }))
+      .sort((a, b) => b.notifiedAt.localeCompare(a.notifiedAt));
+    return { partners, pending, sentBatches };
+  }, [filtered, isManual]);
+
+  // Pending count is independent of the active status tab — the "Broadcast
+  // to these N users" button needs the total queue size, not the filtered
+  // view. (In practice all queued rows are status='pending' anyway.)
+  const totalPendingTalents = useMemo(
+    () =>
+      isManual
+        ? allRecipients.filter((r) => r.type === 'talent' && !r.notified_at).length
+        : 0,
+    [allRecipients, isManual],
   );
 
   const stateColor = card.state === 'published' ? '#10B981' : card.state === 'assigned' ? '#0EA5E9' : '#6B7280';
@@ -348,86 +403,172 @@ export default function AdminPublishedCardRecipientsView({
             </div>
 
             {/* Recipient list */}
-            {filtered.length === 0 ? (
-              <div className="rounded-lg border border-[#E2E8F0] bg-white py-10 text-center">
-                <p className="text-sm text-[#90A1B9]">
-                  {activeTab === 'all' ? 'No recipients yet.' : `No ${activeTab} recipients.`}
-                </p>
-              </div>
-            ) : (
-              <div className="rounded-lg border border-[#E2E8F0] bg-white divide-y divide-[#E2E8F0]">
-                {filtered.map((r) => {
-                  const statusCfg = STATUS_COLORS[r.status];
-                  const rowKey = `${r.type}-${r.id}`;
-                  const showCheckbox = canAssign && r.status === 'accepted';
-                  return (
-                    <div key={rowKey} className="flex items-center gap-3 px-4 py-3">
-                      {showCheckbox && (
-                        <input
-                          type="checkbox"
-                          checked={checkedIds.has(rowKey)}
-                          onChange={() => toggleCheck(rowKey)}
-                          className="h-4 w-4 shrink-0 rounded border-gray-300 text-sky-600 focus:ring-sky-500 cursor-pointer"
-                        />
-                      )}
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-600 text-sm font-semibold">
-                        {r.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-[#0F172B]">{r.name}</p>
-                        {r.responded_at ? (
-                          <p className="text-[11px] text-[#90A1B9]">Responded {formatRelative(r.responded_at)}</p>
-                        ) : r.status === 'pending' ? (
-                          <p className="text-[11px] text-[#90A1B9]">Awaiting response</p>
-                        ) : null}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        {activeTab === 'all' && (
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusCfg.chipBg} ${statusCfg.chipText}`}>
-                            {r.status}
-                          </span>
-                        )}
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          r.type === 'partner'
-                            ? 'bg-blue-50 text-blue-700'
-                            : 'bg-purple-50 text-purple-700'
-                        }`}>
-                          {r.type === 'partner' ? 'Partner' : 'Talent'}
+            {(() => {
+              const renderRow = (r: UnifiedRecipient) => {
+                const statusCfg = STATUS_COLORS[r.status];
+                const rowKey = `${r.type}-${r.id}`;
+                const showCheckbox = canAssign && r.status === 'accepted';
+                return (
+                  <div key={rowKey} className="flex items-center gap-3 px-4 py-3">
+                    {showCheckbox && (
+                      <input
+                        type="checkbox"
+                        checked={checkedIds.has(rowKey)}
+                        onChange={() => toggleCheck(rowKey)}
+                        className="h-4 w-4 shrink-0 rounded border-gray-300 text-sky-600 focus:ring-sky-500 cursor-pointer"
+                      />
+                    )}
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-600 text-sm font-semibold">
+                      {r.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-[#0F172B]">{r.name}</p>
+                      {r.responded_at ? (
+                        <p className="text-[11px] text-[#90A1B9]">Responded {formatRelative(r.responded_at)}</p>
+                      ) : r.status === 'pending' ? (
+                        <p className="text-[11px] text-[#90A1B9]">Awaiting response</p>
+                      ) : null}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {activeTab === 'all' && (
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusCfg.chipBg} ${statusCfg.chipText}`}>
+                          {r.status}
                         </span>
-                        {r.type === 'talent' && shConfigured && adminUrl && (
-                          <a
-                            href={`${adminUrl}/admin/users/${r.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="View in SquadHire"
-                            className="inline-flex h-6 w-6 items-center justify-center rounded text-[#90A1B9] hover:bg-purple-50 hover:text-purple-600 transition"
-                          >
-                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                            </svg>
-                          </a>
-                        )}
-                        {r.assigned_manually && (
-                          <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
-                            Manual
-                          </span>
-                        )}
-                        {r.selected_at && (
-                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
-                            Selected
-                          </span>
-                        )}
-                        {r.passed_over_at && !r.selected_at && (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                            Not selected
-                          </span>
-                        )}
-                      </div>
+                      )}
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        r.type === 'partner'
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'bg-purple-50 text-purple-700'
+                      }`}>
+                        {r.type === 'partner' ? 'Partner' : 'Talent'}
+                      </span>
+                      {r.type === 'talent' && shConfigured && adminUrl && (
+                        <a
+                          href={`${adminUrl}/admin/users/${r.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="View in SquadHire"
+                          className="inline-flex h-6 w-6 items-center justify-center rounded text-[#90A1B9] hover:bg-purple-50 hover:text-purple-600 transition"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                          </svg>
+                        </a>
+                      )}
+                      {r.assigned_manually && (
+                        <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
+                          Manual
+                        </span>
+                      )}
+                      {r.selected_at && (
+                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
+                          Selected
+                        </span>
+                      )}
+                      {r.passed_over_at && !r.selected_at && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                          Not selected
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              };
+
+              if (!grouped) {
+                if (filtered.length === 0) {
+                  return (
+                    <div className="rounded-lg border border-[#E2E8F0] bg-white py-10 text-center">
+                      <p className="text-sm text-[#90A1B9]">
+                        {activeTab === 'all' ? 'No recipients yet.' : `No ${activeTab} recipients.`}
+                      </p>
                     </div>
                   );
-                })}
-              </div>
-            )}
+                }
+                return (
+                  <div className="rounded-lg border border-[#E2E8F0] bg-white divide-y divide-[#E2E8F0]">
+                    {filtered.map(renderRow)}
+                  </div>
+                );
+              }
+
+              const { partners: gPartners, pending: gPending, sentBatches } = grouped;
+              const totalGroups = (gPartners.length > 0 ? 1 : 0) + (gPending.length > 0 ? 1 : 0) + sentBatches.length;
+              if (totalGroups === 0) {
+                return (
+                  <div className="rounded-lg border border-[#E2E8F0] bg-white py-10 text-center">
+                    <p className="text-sm text-[#90A1B9]">
+                      {activeTab === 'all' ? 'No recipients yet.' : `No ${activeTab} recipients.`}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-5">
+                  {gPartners.length > 0 && (
+                    <section>
+                      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#62748E]">
+                        Partners ({gPartners.length})
+                      </h3>
+                      <div className="rounded-lg border border-[#E2E8F0] bg-white divide-y divide-[#E2E8F0]">
+                        {gPartners.map(renderRow)}
+                      </div>
+                    </section>
+                  )}
+
+                  {gPending.length > 0 && (
+                    <section>
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">
+                          Pending broadcast ({gPending.length})
+                        </h3>
+                      </div>
+                      <div className="rounded-lg border border-amber-200 bg-amber-50/40 divide-y divide-amber-100">
+                        {gPending.map(renderRow)}
+                      </div>
+                      {totalPendingTalents > 0 && canAssign && (
+                        <div className="mt-2 flex justify-end">
+                          <button
+                            onClick={() => broadcastMutation.mutate()}
+                            disabled={broadcastMutation.isPending}
+                            className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 transition disabled:opacity-50"
+                          >
+                            {broadcastMutation.isPending ? (
+                              <>
+                                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                                Broadcasting...
+                              </>
+                            ) : (
+                              `Broadcast to these ${totalPendingTalents} user${totalPendingTalents !== 1 ? 's' : ''}`
+                            )}
+                          </button>
+                        </div>
+                      )}
+                      {broadcastMutation.isError && (
+                        <p className="mt-2 text-right text-[11px] text-red-600">
+                          {(broadcastMutation.error as any)?.response?.data?.error || 'Broadcast failed. Try again.'}
+                        </p>
+                      )}
+                    </section>
+                  )}
+
+                  {sentBatches.map((batch) => (
+                    <section key={batch.notifiedAt}>
+                      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#62748E]">
+                        Sent {formatRelative(batch.notifiedAt)} · {batch.items.length} talent{batch.items.length !== 1 ? 's' : ''}
+                      </h3>
+                      <div className="rounded-lg border border-[#E2E8F0] bg-white divide-y divide-[#E2E8F0]">
+                        {batch.items.map(renderRow)}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              );
+            })()}
           </>
         )}
       </div>

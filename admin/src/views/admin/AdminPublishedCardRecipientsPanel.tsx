@@ -29,6 +29,7 @@ export type TalentRecipient = {
   selected_at?: string | null;
   selected_by?: string | null;
   passed_over_at?: string | null;
+  notified_at?: string | null;
 };
 
 export type RecipientsResponse = {
@@ -1025,82 +1026,165 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
         )}
       </div>
 
-      {(card.working_days?.length || card.brand_name || card.business_nature || card.notes) && (
-        <DetailSection title="Working & business">
-          {card.working_days?.length > 0 && <DetailRow label="Working days" value={card.working_days.join(' · ')} />}
-          {card.brand_name && <DetailRow label="Brand" value={card.brand_name} />}
-          {card.business_nature && <DetailRow label="Nature" value={card.business_nature} />}
-          {card.notes && <DetailRow label="Notes" value={card.notes} multiline />}
-        </DetailSection>
-      )}
+      <DetailSection title="Working & business">
+        <DetailRow label="Working days" value={card.working_days?.length ? card.working_days.join(' · ') : EMPTY} />
+        <DetailRow label="Brand" value={card.brand_name || EMPTY} />
+        <DetailRow label="Nature" value={card.business_nature || EMPTY} />
+        <DetailRow label="Notes" value={card.notes || EMPTY} multiline />
+      </DetailSection>
 
-      {(card.customer_company || card.customer_name || card.customer_email || card.customer_phone || card.customer_location) && (
-        <DetailSection title="Customer">
-          {card.customer_company && <DetailRow label="Company" value={card.customer_company} />}
-          {card.customer_name && <DetailRow label="Contact" value={card.customer_name} />}
-          {card.customer_email && <DetailRow label="Email" value={card.customer_email} />}
-          {card.customer_phone && <DetailRow label="Phone" value={card.customer_phone} />}
-          {card.customer_location && <DetailRow label="Location" value={card.customer_location} />}
-        </DetailSection>
-      )}
+      <DetailSection title="Customer">
+        <DetailRow label="Company" value={card.customer_company || EMPTY} />
+        <DetailRow label="Contact" value={card.customer_name || EMPTY} />
+        <DetailRow label="Email" value={card.customer_email || EMPTY} />
+        <DetailRow label="Phone" value={card.customer_phone || EMPTY} />
+        <DetailRow label="Location" value={card.customer_location || EMPTY} />
+      </DetailSection>
 
-      {(card.target_tiers?.length || card.min_experience_years > 0 || card.target_languages?.length || targetCountries.length || Object.keys(regionsByCountry).length > 0 || (card.squadhire_category_ids?.length || 0) > 0) && (
-        <DetailSection title="Targeting">
-          {card.target_tiers?.length > 0 && <DetailRow label="Tiers" value={card.target_tiers.join(' · ')} />}
-          {card.min_experience_years > 0 && <DetailRow label="Min experience" value={`${card.min_experience_years}+ years`} />}
-          {card.target_languages?.length > 0 && <DetailRow label="Languages" value={card.target_languages.join(' · ')} />}
-          {targetCountries.length > 0 && <DetailRow label="Countries" value={targetCountries.join(', ')} />}
-          {Object.entries(regionsByCountry).map(([country, regions]) => (
-            <DetailRow key={country} label={country} value={regions.join(', ')} />
-          ))}
-          {card.squadhire_category_ids && card.squadhire_category_ids.length > 0 && (
-            <DetailRow
-              label="SquadHire categories"
-              value={card.squadhire_category_ids
-                .map((id) => squadhireCategories.find((c) => c.id === id)?.name || id.slice(0, 8))
-                .join(', ')}
-            />
-          )}
-        </DetailSection>
-      )}
+      <DetailSection title="Targeting">
+        <DetailRow label="Tiers" value={card.target_tiers?.length ? card.target_tiers.join(' · ') : EMPTY} />
+        <DetailRow
+          label="Min experience"
+          value={card.min_experience_years > 0 ? `${card.min_experience_years}+ years` : 'Any'}
+        />
+        <DetailRow label="Languages" value={card.target_languages?.length ? card.target_languages.join(' · ') : EMPTY} />
+        <DetailRow label="Countries" value={targetCountries.length ? targetCountries.join(', ') : EMPTY} />
+        {Object.entries(regionsByCountry).map(([country, regions]) => (
+          <DetailRow key={country} label={country} value={regions.join(', ')} />
+        ))}
+        <DetailRow
+          label="SquadHire categories"
+          value={
+            card.squadhire_category_ids?.length
+              ? card.squadhire_category_ids
+                  .map((id) => squadhireCategories.find((c) => c.id === id)?.name || id.slice(0, 8))
+                  .join(', ')
+              : EMPTY
+          }
+        />
+      </DetailSection>
 
-      {(card.custom_deliverables?.length > 0 || (card.disabled_default_deliverable_ids?.length || 0) > 0) && (
-        <DetailSection title="Deliverables">
-          {(card.custom_deliverables || []).map((d) => (
-            <DetailRow key={d.id} label={d.name} value={formatDeliverable(d)} />
-          ))}
-          {(card.disabled_default_deliverable_ids?.length || 0) > 0 && (
-            <p className="text-[11px] text-[#90A1B9]">
-              {card.disabled_default_deliverable_ids.length} plan default{card.disabled_default_deliverable_ids.length === 1 ? '' : 's'} disabled
-            </p>
-          )}
-        </DetailSection>
-      )}
+      <DetailSection title="Deliverables">
+        {((card.plan_default_deliverables?.length || 0) === 0 && (card.custom_deliverables?.length || 0) === 0) ? (
+          <DetailRow label="Deliverables" value={EMPTY} />
+        ) : (
+          <>
+            {(card.plan_default_deliverables || []).map((d) => {
+              const disabled = card.disabled_default_deliverable_ids?.includes(d.id) ?? false;
+              const label = d.kind === 'hours' ? 'Hours' : (d.deliverable_type_name || 'Deliverable');
+              return (
+                <DetailRow
+                  key={d.id}
+                  label={disabled ? `${label} (disabled)` : label}
+                  value={formatDeliverable(d)}
+                  strikethrough={disabled}
+                />
+              );
+            })}
+            {(card.custom_deliverables || []).map((d) => (
+              <DetailRow key={d.id} label={d.name} value={formatDeliverable(d)} />
+            ))}
+          </>
+        )}
+      </DetailSection>
 
       <DetailSection title="Pricing">
-        {planPrice && <DetailRow label="Plan price" value={`${priceCurrency} ${planPrice.price.toLocaleString()}`} />}
-        {card.proposed_price != null && card.proposed_price > 0 && (
-          <DetailRow label="Proposed price" value={`₹${card.proposed_price.toLocaleString()}/mo`} />
-        )}
-        {card.markup != null && card.markup > 0 && (
-          <DetailRow label="Margin" value={`₹${card.markup.toLocaleString()}/mo`} />
-        )}
-        {card.proposed_price != null && card.proposed_price > 0 && (
-          <DetailRow
-            label="Partner price (computed)"
-            value={`₹${Math.max(0, card.proposed_price - (card.markup || 0)).toLocaleString()}/mo`}
-          />
-        )}
-        {activeCard.partner_price_override != null ? (
-          <DetailRow label="Partner price override" value={`${priceCurrency || '₹'} ${activeCard.partner_price_override.toLocaleString()}`} />
-        ) : isSecondaryView ? (
-          <DetailRow label="Partner price" value="Same as primary" />
-        ) : card.partner_price_override != null ? (
-          <DetailRow label="Partner override" value={`${priceCurrency || '₹'} ${card.partner_price_override.toLocaleString()}`} />
-        ) : null}
+        <DetailRow
+          label="Plan price"
+          value={planPrice ? `${priceCurrency} ${planPrice.price.toLocaleString()}` : EMPTY}
+        />
+        <DetailRow
+          label="Proposed price"
+          value={card.proposed_price ? `₹${card.proposed_price.toLocaleString()}/mo` : EMPTY}
+        />
+        <DetailRow
+          label="Margin"
+          value={card.markup ? `₹${card.markup.toLocaleString()}/mo` : EMPTY}
+        />
+        <DetailRow
+          label="Partner price (computed)"
+          value={
+            card.proposed_price
+              ? `₹${Math.max(0, card.proposed_price - (card.markup || 0)).toLocaleString()}/mo`
+              : EMPTY
+          }
+        />
+        <DetailRow
+          label="Partner price override"
+          value={
+            activeCard.partner_price_override != null
+              ? `${priceCurrency || '₹'} ${activeCard.partner_price_override.toLocaleString()}`
+              : isSecondaryView
+                ? 'Same as primary'
+                : card.partner_price_override != null
+                  ? `${priceCurrency || '₹'} ${card.partner_price_override.toLocaleString()}`
+                  : EMPTY
+          }
+        />
+      </DetailSection>
+
+      <DetailSection title="Lifecycle">
+        <DetailRow label="Source" value={sourceLabel(card.source)} />
+        <DetailRow
+          label="Subscription request #"
+          value={card.subscription_request_id != null ? String(card.subscription_request_id) : EMPTY}
+        />
+        <DetailRow label="Assigned at" value={card.assigned_at ? formatFullDateTime(card.assigned_at) : EMPTY} />
+        <DetailRow label="Recalled at" value={card.recalled_at ? formatFullDateTime(card.recalled_at) : EMPTY} />
+        <DetailRow label="Cancelled at" value={card.cancelled_at ? formatFullDateTime(card.cancelled_at) : EMPTY} />
+        <DetailRow label="Closed at" value={card.closed_at ? formatFullDateTime(card.closed_at) : EMPTY} />
+        <DetailRow
+          label="Selected recipient"
+          value={
+            card.selected_recipient_type
+              ? `${card.selected_recipient_type}${card.selected_recipient_id ? ` · ${card.selected_recipient_id.slice(0, 8)}` : ''}`
+              : EMPTY
+          }
+        />
+        <DetailRow label="Secondary cards" value={card.secondary_card_count != null ? String(card.secondary_card_count) : EMPTY} />
+      </DetailSection>
+
+      <DetailSection title="SquadHire delivery">
+        <DetailRow label="Status" value={squadhireStatusLabel(card)} />
+        <DetailRow
+          label="Last synced"
+          value={card.squadhire_synced_at ? formatFullDateTime(card.squadhire_synced_at) : EMPTY}
+        />
+        <DetailRow
+          label="Sync attempts"
+          value={card.squadhire_sync_attempts != null ? String(card.squadhire_sync_attempts) : EMPTY}
+        />
+        <DetailRow label="Last error" value={card.squadhire_sync_last_error || EMPTY} multiline />
+        <DetailRow
+          label="Recipient count"
+          value={card.squadhire_recipient_count != null ? String(card.squadhire_recipient_count) : EMPTY}
+        />
+      </DetailSection>
+
+      <DetailSection title="Metadata">
+        <DetailRow label="Card ID" value={card.id} />
+        <DetailRow label="Created" value={card.created_at ? formatFullDateTime(card.created_at) : EMPTY} />
+        <DetailRow label="Updated" value={card.updated_at ? formatFullDateTime(card.updated_at) : EMPTY} />
       </DetailSection>
     </div>
   );
+}
+
+const EMPTY = '—';
+
+function sourceLabel(source: PublishedCard['source']): string {
+  if (source === 'request') return 'From request';
+  if (source === 'custom') return 'Custom';
+  if (source === 'submission') return 'From submission';
+  return EMPTY;
+}
+
+function squadhireStatusLabel(card: PublishedCard): string {
+  if (card.squadhire_synced_at) return 'Delivered';
+  const hasCategories = (card.squadhire_category_ids?.length || 0) > 0;
+  if (!hasCategories) return 'Skipped (no categories)';
+  if (card.squadhire_sync_last_error) return 'Error';
+  return 'Pending';
 }
 
 function formatDeliverable(d: { kind: 'hours' | 'item'; per_day: number; per_week: number; per_month: number }): string {
@@ -1125,11 +1209,11 @@ function DetailSection({ title, children }: { title: string; children: React.Rea
   );
 }
 
-function DetailRow({ label, value, multiline }: { label: string; value: string; multiline?: boolean }) {
+function DetailRow({ label, value, multiline, strikethrough }: { label: string; value: string; multiline?: boolean; strikethrough?: boolean }) {
   return (
     <div className={`flex gap-3 ${multiline ? 'flex-col' : 'justify-between'}`}>
-      <span className="text-xs text-[#90A1B9]">{label}</span>
-      <span className={`text-xs text-[#0F172B] ${multiline ? '' : 'text-right'}`}>{value}</span>
+      <span className={`text-xs text-[#90A1B9] ${strikethrough ? 'line-through' : ''}`}>{label}</span>
+      <span className={`text-xs ${strikethrough ? 'text-[#90A1B9] line-through' : 'text-[#0F172B]'} ${multiline ? '' : 'text-right'}`}>{value}</span>
     </div>
   );
 }
