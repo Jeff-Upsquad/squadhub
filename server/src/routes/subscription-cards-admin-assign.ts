@@ -6,6 +6,7 @@ import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { sharePartnerWithCardClient } from '../utils/sharePartnerWithClient';
+import { findPartnerEmployeeByTalentId } from '../utils/partnerEmployeeSquadhireIds';
 import {
   notifySquadhireOfManualAssignment,
   notifySquadhireOfManualRemoval,
@@ -609,6 +610,204 @@ router.post(
       res.json({ success: true });
     } catch (err: any) {
       console.error('Auto-accept partner error:', err);
+      res.status(500).json({
+        success: false,
+        error: err?.message || 'Internal server error',
+      });
+    }
+  },
+);
+
+// ============================================================
+// POST /admin/subscription-cards/:id/auto-accept-talent
+//
+// SquadHire-side counterpart to /auto-accept-partner. The matching
+// algorithm in SquadHire surfaces talents that are also internal
+// SquadHub partner-employees (cross-referenced by email). For those
+// rows the admin gets an Auto-accept button on the recipients page;
+// clicking it accepts on their behalf so they're visible to the
+// business user without a SquadHire round-trip the talent will never
+// see (partner-employees use SquadHub directly, not SquadHire).
+//
+// Gated to:
+//   - card.state === 'published' AND card.distribution === 'manual'
+//   - talent_id resolves to a SquadHub user with user_type='partner_employee'
+//   - existing recipient row in 'pending' (idempotent on 'accepted',
+//     409 on 'rejected'). If no row yet (talent came from live SquadHire
+//     match, never assigned on our side), one is created in 'accepted'.
+//
+// Side effects:
+//   - Sets notified_at=NOW() on the recipient row so the broadcast queue
+//     skips it (the talent is no longer awaiting our nudge).
+//   - Calls sharePartnerWithCardClient with the SquadHub user_id so the
+//     business user sees the partner immediately, just like a real accept.
+//
+// Limitation: SquadHire's mirror row stays in whatever state it was in
+// (usually 'pending'). For partner-employees this is fine — they don't
+// log into SquadHire as talents.
+// ============================================================
+const autoAcceptTalentSchema = z.object({
+  talent_id: z.string().min(1),
+  talent_name: z.string().min(1).max(200).optional(),
+});
+
+router.post(
+  '/subscription-cards/:id/auto-accept-talent',
+  async (req: Request, res: Response) => {
+    try {
+      const parsed = autoAcceptTalentSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        res.status(400).json({
+          success: false,
+          error: parsed.error.issues[0]?.message ?? 'Invalid body',
+        });
+        return;
+      }
+      const cardId = req.params.id as string;
+      const { talent_id, talent_name } = parsed.data;
+
+      const { data: card, error: cardErr } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id, state, distribution, squadhire_synced_at, squadhire_category_ids')
+        .eq('id', cardId)
+        .maybeSingle();
+      if (cardErr) {
+        res.status(500).json({ success: false, error: cardErr.message });
+        return;
+      }
+      if (!card) {
+        res.status(404).json({ success: false, error: 'Card not found' });
+        return;
+      }
+      if (card.state !== 'published') {
+        res.status(409).json({ success: false, error: 'Card must be published' });
+        return;
+      }
+      if (card.distribution !== 'manual') {
+        res.status(409).json({
+          success: false,
+          error: 'Auto-accept only applies to soft-published (manual) cards',
+        });
+        return;
+      }
+
+      const employee = await findPartnerEmployeeByTalentId(talent_id);
+      if (!employee) {
+        res.status(400).json({
+          success: false,
+          error: 'Talent does not match a SquadHub partner-employee',
+        });
+        return;
+      }
+
+      const categoryIds = Array.isArray(card.squadhire_category_ids)
+        ? (card.squadhire_category_ids as string[])
+        : [];
+      if (categoryIds.length === 0) {
+        res.status(409).json({
+          success: false,
+          error: 'Card has no SquadHire categories. Add categories before auto-accepting talent.',
+        });
+        return;
+      }
+
+      // Defensive lazy-deliver: SquadHire normally already has the card
+      // (otherwise this talent wouldn't be in their recipient list), but
+      // when it doesn't we deliver before flipping our row so the two
+      // sides agree the card exists.
+      if (!card.squadhire_synced_at) {
+        const payload = await buildSquadhirePayloadForCard(cardId);
+        if (payload) {
+          await deliverCardToSquadhire(cardId, payload);
+        }
+      }
+
+      const now = new Date().toISOString();
+      const { data: existing, error: existingErr } = await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .select('id, status')
+        .eq('card_id', cardId)
+        .eq('external_system', 'squadhire')
+        .eq('external_user_id', talent_id)
+        .maybeSingle();
+      if (existingErr) {
+        res.status(500).json({ success: false, error: existingErr.message });
+        return;
+      }
+
+      if (existing?.status === 'rejected') {
+        res.status(409).json({
+          success: false,
+          error: 'Talent has already rejected this card',
+        });
+        return;
+      }
+
+      if (existing?.status === 'accepted') {
+        // Idempotent — re-share with client in case the prior run failed that step.
+        await sharePartnerWithCardClient(employee.id, cardId);
+        res.json({ success: true, alreadyAccepted: true });
+        return;
+      }
+
+      if (existing) {
+        // Existing 'pending' row — flip with status guard to avoid clobbering
+        // a concurrent reject that landed between our read and write.
+        const { error: updErr, count } = await supabaseAdmin
+          .from('subscription_card_external_recipients')
+          .update(
+            {
+              status: 'accepted',
+              responded_at: now,
+              notified_at: now,
+              assigned_manually: true,
+            },
+            { count: 'exact' },
+          )
+          .eq('id', existing.id)
+          .eq('status', 'pending');
+        if (updErr) {
+          res.status(500).json({ success: false, error: updErr.message });
+          return;
+        }
+        if (!count) {
+          res.status(409).json({
+            success: false,
+            error: 'Recipient status changed before auto-accept could complete. Please refresh and try again.',
+          });
+          return;
+        }
+      } else {
+        // No local row yet (talent came from live SquadHire match). Create
+        // one directly in accepted state. ON CONFLICT DO NOTHING handles a
+        // concurrent insert from elsewhere; we re-read to recover the id.
+        const { error: insErr } = await supabaseAdmin
+          .from('subscription_card_external_recipients')
+          .upsert(
+            {
+              card_id: cardId,
+              external_system: 'squadhire',
+              external_recipient_id: talent_id,
+              external_user_id: talent_id,
+              talent_name: talent_name ?? null,
+              status: 'accepted',
+              responded_at: now,
+              notified_at: now,
+              assigned_manually: true,
+            },
+            { onConflict: 'card_id,external_system,external_recipient_id', ignoreDuplicates: true },
+          );
+        if (insErr) {
+          res.status(500).json({ success: false, error: insErr.message });
+          return;
+        }
+      }
+
+      await sharePartnerWithCardClient(employee.id, cardId);
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('Auto-accept talent error:', err);
       res.status(500).json({
         success: false,
         error: err?.message || 'Internal server error',
