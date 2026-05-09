@@ -608,4 +608,126 @@ router.post('/:id/recall', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================================
+// POST /admin/subscription-cards/:id/cancel
+// Terminal cancel for a published card. Mirrors recall's flow
+// (drop pending recipients, cascade to published secondaries,
+// re-deliver to SquadHire) but always closes — no draft return
+// path. Acceptees keep seeing the card with a "Cancelled" tag.
+// ============================================================
+router.post('/:id/cancel', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, parent_card_id')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    if (card.state !== 'published') {
+      res.status(409).json({ success: false, error: 'Only published cards can be cancelled' });
+      return;
+    }
+
+    const [{ count: acceptedPartners }, { count: acceptedTalents }] = await Promise.all([
+      supabaseAdmin
+        .from('subscription_card_recipients')
+        .select('id', { count: 'exact', head: true })
+        .eq('card_id', cardId)
+        .eq('status', 'accepted'),
+      supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .select('id', { count: 'exact', head: true })
+        .eq('card_id', cardId)
+        .eq('status', 'accepted'),
+    ]);
+    const hasAcceptances = (acceptedPartners || 0) + (acceptedTalents || 0) > 0;
+    const isSecondary = !!card.parent_card_id;
+
+    // Drop only pending recipients (same as recall).
+    await supabaseAdmin
+      .from('subscription_card_recipients')
+      .delete()
+      .eq('card_id', cardId)
+      .eq('status', 'pending');
+    await supabaseAdmin
+      .from('subscription_card_external_recipients')
+      .delete()
+      .eq('card_id', cardId)
+      .eq('status', 'pending');
+
+    const now = new Date().toISOString();
+    const { data: updated, error: updErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .update({
+        state: 'closed' as const,
+        closed_at: now,
+        cancelled_at: now,
+        squadhire_synced_at: null,
+        squadhire_sync_attempts: 0,
+        squadhire_sync_last_error: null,
+      })
+      .eq('id', cardId)
+      .select('*')
+      .single();
+    if (updErr) {
+      res.status(500).json({ success: false, error: updErr.message });
+      return;
+    }
+
+    // Re-deliver card to SquadHire with the new state (and cancelled_at).
+    buildSquadhirePayloadForCard(updated.id)
+      .then((payload) => payload && deliverCardToSquadhire(updated.id, payload))
+      .catch((err) => console.error('[admin-cancel] squadhire delivery error', err));
+
+    // Only drop SquadHire mirror rows on a clean cancel (no acceptances).
+    if (!hasAcceptances) {
+      notifySquadhireOfCardRecall(updated.id).catch((err) => {
+        console.error('[admin-cancel] squadhire recall notification error', err);
+      });
+    }
+
+    // Cascade-cancel published secondaries when a primary card is cancelled.
+    if (!isSecondary) {
+      const { data: secondaries } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id')
+        .eq('parent_card_id', cardId)
+        .eq('state', 'published');
+
+      if (secondaries && secondaries.length > 0) {
+        await supabaseAdmin
+          .from('subscription_cards')
+          .update({
+            state: 'closed',
+            closed_at: now,
+            cancelled_at: now,
+            squadhire_synced_at: null,
+            squadhire_sync_attempts: 0,
+            squadhire_sync_last_error: null,
+          })
+          .eq('parent_card_id', cardId)
+          .eq('state', 'published');
+
+        for (const s of secondaries) {
+          buildSquadhirePayloadForCard(s.id)
+            .then((payload) => payload && deliverCardToSquadhire(s.id, payload))
+            .catch((err) =>
+              console.error('[admin-cancel] cascade squadhire delivery error', err),
+            );
+        }
+      }
+    }
+
+    res.json({ success: true, data: await hydrateCard(updated) });
+  } catch (err: any) {
+    console.error('Admin cancel card error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
 export default router;

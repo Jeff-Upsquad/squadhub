@@ -31,6 +31,7 @@ export type PublishedCard = {
   parent_card_id?: string | null;
   secondary_card_count?: number;
   recalled_at?: string | null;
+  cancelled_at?: string | null;
   squadhire_synced_at?: string | null;
   squadhire_sync_attempts?: number | null;
   squadhire_sync_last_error?: string | null;
