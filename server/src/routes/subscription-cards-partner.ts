@@ -48,14 +48,14 @@ router.get('/', async (req: Request, res: Response) => {
       return;
     }
 
-    // Include published cards AND recalled cards (state='closed' with
-    // recalled_at set) so accepted partners keep seeing their opportunity
-    // with the "Recalled" tag.
+    // Include published cards AND recalled/cancelled cards (state='closed'
+    // with recalled_at or cancelled_at set) so accepted partners keep
+    // seeing their opportunity with the "Recalled" or "Cancelled" tag.
     const { data: cards, error: cardsErr } = await supabaseAdmin
       .from('subscription_cards')
       .select('*')
       .in('id', cardIds)
-      .or('state.eq.published,recalled_at.not.is.null');
+      .or('state.eq.published,recalled_at.not.is.null,cancelled_at.not.is.null');
     if (cardsErr) {
       res.status(500).json({ success: false, error: cardsErr.message });
       return;

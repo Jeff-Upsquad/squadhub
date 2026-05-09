@@ -250,6 +250,22 @@ function CardPanelContent({
     },
   });
 
+  const cancelCard = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${activeCardId}/cancel`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      if (isSecondaryView) onViewSecondary(null);
+      clearConfirm();
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to cancel card', 'error');
+      clearConfirm();
+    },
+  });
+
   const broadcastCard = useMutation({
     mutationFn: () =>
       api.post(`/admin/subscription-cards/${activeCardId}/broadcast`),
@@ -308,6 +324,13 @@ function CardPanelContent({
             >
               {recallCard.isPending ? 'Recalling…' : 'Recall this card'}
             </button>
+            <button
+              onClick={() => setConfirmAction({ kind: 'cancel' })}
+              disabled={cancelCard.isPending}
+              className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+            >
+              {cancelCard.isPending ? 'Cancelling…' : 'Cancel this card'}
+            </button>
             {activeCard.distribution === 'manual' && (
               <button
                 onClick={() => setConfirmAction({ kind: 'broadcast' })}
@@ -325,6 +348,15 @@ function CardPanelContent({
             <p className="text-xs text-orange-800">
               <span className="font-semibold">Recalled</span> on {formatFullDateTime(activeCard.recalled_at)}.
               Acceptees still see this card with a "Recalled" tag.
+            </p>
+          </div>
+        )}
+
+        {activeCard.cancelled_at && (
+          <div className="border-b border-[#E2E8F0] bg-red-50 px-5 py-2.5">
+            <p className="text-xs text-red-800">
+              <span className="font-semibold">Cancelled</span> on {formatFullDateTime(activeCard.cancelled_at)}.
+              Acceptees still see this card with a "Cancelled" tag.
             </p>
           </div>
         )}
@@ -467,6 +499,7 @@ function CardPanelContent({
           selectTalent: selectTalent.isPending,
           undoSelection: undoSelection.isPending,
           recall: recallCard.isPending,
+          cancel: cancelCard.isPending,
           broadcast: broadcastCard.isPending,
         }}
         onConfirm={(action) => {
@@ -477,6 +510,7 @@ function CardPanelContent({
             case 'selectTalent': selectTalent.mutate(action.id); break;
             case 'undoSelection': undoSelection.mutate(); break;
             case 'recall': recallCard.mutate(); break;
+            case 'cancel': cancelCard.mutate(); break;
             case 'broadcast': broadcastCard.mutate(); break;
           }
         }}
@@ -492,6 +526,7 @@ type ConfirmAction =
   | { kind: 'selectTalent'; id: string; name: string }
   | { kind: 'undoSelection' }
   | { kind: 'recall' }
+  | { kind: 'cancel' }
   | { kind: 'broadcast' };
 
 function ConfirmActionDialog({
@@ -512,8 +547,11 @@ function ConfirmActionDialog({
   if (!confirmAction) return null;
 
   const k = confirmAction.kind;
-  const hasAcceptances = k === 'recall' && (acceptedPartners + acceptedTalents) > 0;
+  const isTerminalKind = k === 'recall' || k === 'cancel';
+  const hasAcceptances = isTerminalKind && (acceptedPartners + acceptedTalents) > 0;
   const total = acceptedPartners + acceptedTalents;
+  const terminalVerb = k === 'cancel' ? 'Cancelling' : 'Recalling';
+  const terminalTag = k === 'cancel' ? 'Cancelled' : 'Recalled';
 
   const DIALOG_CONFIG: Record<ConfirmAction['kind'], { title: string; description: string; confirmLabel: string; pendingLabel: string; variant: 'default' | 'danger' | 'warning' }> = {
     removePartner: {
@@ -560,6 +598,15 @@ function ConfirmActionDialog({
       pendingLabel: 'Recalling…',
       variant: 'warning',
     },
+    cancel: {
+      title: hasAcceptances ? 'Cancel card with acceptances?' : 'Cancel this card?',
+      description: hasAcceptances
+        ? ''
+        : 'Pending recipients will stop seeing it. This is terminal — the card cannot be re-published.',
+      confirmLabel: hasAcceptances ? 'Cancel anyway' : 'Cancel',
+      pendingLabel: 'Cancelling…',
+      variant: 'danger',
+    },
     broadcast: {
       title: 'Broadcast this card?',
       description: 'This will broadcast the card to all matching partners and talents based on the targeting criteria.',
@@ -591,11 +638,11 @@ function ConfirmActionDialog({
               {total} {total === 1 ? 'acceptance' : 'acceptances'}
             </span>{' '}
             ({acceptedPartners} partner{acceptedPartners === 1 ? '' : 's'}, {acceptedTalents} talent
-            {acceptedTalents === 1 ? '' : 's'}). Recalling will:
+            {acceptedTalents === 1 ? '' : 's'}). {terminalVerb} will:
           </p>
           <ul className="mt-2 space-y-1 text-xs text-[#62748E]">
             <li>• Drop pending recipients (they stop seeing the card).</li>
-            <li>• Keep acceptees in their feed with a "Recalled" tag.</li>
+            <li>• Keep acceptees in their feed with a "{terminalTag}" tag.</li>
             <li>• Mark the card terminal — no re-publish.</li>
           </ul>
         </>
