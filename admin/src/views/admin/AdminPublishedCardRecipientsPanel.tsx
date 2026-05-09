@@ -24,6 +24,7 @@ export type PartnerRecipient = {
 export type TalentRecipient = {
   external_user_id: string;
   name: string | null;
+  email?: string | null;
   status: 'pending' | 'accepted' | 'rejected';
   responded_at: string | null;
   assigned_manually?: boolean;

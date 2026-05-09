@@ -327,7 +327,7 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
         .eq('card_id', cardId),
       supabaseAdmin
         .from('subscription_card_external_recipients')
-        .select('external_user_id, talent_name, status, responded_at, assigned_manually, selected_at, selected_by, passed_over_at, notified_at')
+        .select('external_user_id, talent_name, email, status, responded_at, assigned_manually, selected_at, selected_by, passed_over_at, notified_at')
         .eq('card_id', cardId),
     ]);
 
@@ -365,6 +365,7 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
     const talents = Array.from(talentByUser.values()).map((r: any) => ({
       external_user_id: r.external_user_id,
       name: r.talent_name || null,
+      email: r.email ?? null,
       status: r.status,
       responded_at: r.responded_at,
       assigned_manually: !!r.assigned_manually,

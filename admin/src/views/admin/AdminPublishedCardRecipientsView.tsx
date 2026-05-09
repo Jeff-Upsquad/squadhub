@@ -135,7 +135,10 @@ export default function AdminPublishedCardRecipientsView({
       selected_at: t.selected_at ?? null,
       passed_over_at: t.passed_over_at ?? null,
       notified_at: t.notified_at ?? null,
-      email: emailByTalentId.get(t.external_user_id) ?? null,
+      // Prefer the email persisted on our row (written by /assign-talent or
+      // /auto-accept-talent); fall back to SquadHire's matched-recipient
+      // email when our row predates the email column.
+      email: t.email ?? emailByTalentId.get(t.external_user_id) ?? null,
     }));
 
     // Talents from SquadHire that are NOT already in local data

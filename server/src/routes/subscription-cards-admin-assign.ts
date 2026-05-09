@@ -121,7 +121,7 @@ router.post('/subscription-cards/:id/assign-talent', async (req: Request, res: R
       return;
     }
     const cardId = req.params.id as string;
-    const { talent_id, talent_name } = parsed.data;
+    const { talent_id, talent_name, talent_email } = parsed.data;
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
@@ -209,6 +209,7 @@ router.post('/subscription-cards/:id/assign-talent', async (req: Request, res: R
           external_recipient_id: talent_id,
           external_user_id: talent_id,
           talent_name: talent_name ?? null,
+          email: talent_email ?? null,
           status: 'pending',
           responded_at: null,
           assigned_manually: true,
@@ -646,7 +647,10 @@ router.post(
 // ============================================================
 const autoAcceptTalentSchema = z.object({
   talent_id: z.string().min(1),
-  email: z.string().email(),
+  // Optional now: the existing recipient row may already carry the email
+  // (persisted by /assign-talent). Body-supplied email is a fallback for
+  // talents that came through SquadHire matching and have no local row yet.
+  email: z.string().email().optional(),
   talent_name: z.string().min(1).max(200).optional(),
 });
 
@@ -663,13 +667,27 @@ router.post(
         return;
       }
       const cardId = req.params.id as string;
-      const { talent_id, email, talent_name } = parsed.data;
+      const { talent_id, email: bodyEmail, talent_name } = parsed.data;
 
-      const { data: card, error: cardErr } = await supabaseAdmin
-        .from('subscription_cards')
-        .select('id, state, distribution, squadhire_synced_at, squadhire_category_ids')
-        .eq('id', cardId)
-        .maybeSingle();
+      // Card and existing recipient row in parallel — we need both before
+      // we can pick the right email source.
+      const [
+        { data: card, error: cardErr },
+        { data: existing, error: existingErr },
+      ] = await Promise.all([
+        supabaseAdmin
+          .from('subscription_cards')
+          .select('id, state, distribution, squadhire_synced_at, squadhire_category_ids')
+          .eq('id', cardId)
+          .maybeSingle(),
+        supabaseAdmin
+          .from('subscription_card_external_recipients')
+          .select('id, status, email')
+          .eq('card_id', cardId)
+          .eq('external_system', 'squadhire')
+          .eq('external_user_id', talent_id)
+          .maybeSingle(),
+      ]);
       if (cardErr) {
         res.status(500).json({ success: false, error: cardErr.message });
         return;
@@ -686,6 +704,23 @@ router.post(
         res.status(409).json({
           success: false,
           error: 'Auto-accept only applies to soft-published (manual) cards',
+        });
+        return;
+      }
+      if (existingErr) {
+        res.status(500).json({ success: false, error: existingErr.message });
+        return;
+      }
+
+      // Email source priority: existing recipient row > body. The local row's
+      // email is written by /assign-talent and is the authoritative source
+      // for manually-assigned talents. Body-supplied email handles SquadHire-
+      // matched talents that don't have a local row yet.
+      const email = (existing?.email as string | undefined) || bodyEmail;
+      if (!email) {
+        res.status(400).json({
+          success: false,
+          error: 'No email on file for this talent — cannot resolve to a SquadHub user.',
         });
         return;
       }
@@ -737,17 +772,6 @@ router.post(
       }
 
       const now = new Date().toISOString();
-      const { data: existing, error: existingErr } = await supabaseAdmin
-        .from('subscription_card_external_recipients')
-        .select('id, status')
-        .eq('card_id', cardId)
-        .eq('external_system', 'squadhire')
-        .eq('external_user_id', talent_id)
-        .maybeSingle();
-      if (existingErr) {
-        res.status(500).json({ success: false, error: existingErr.message });
-        return;
-      }
 
       if (existing?.status === 'rejected') {
         res.status(409).json({
@@ -804,6 +828,7 @@ router.post(
               external_recipient_id: talent_id,
               external_user_id: talent_id,
               talent_name: talent_name ?? null,
+              email,
               status: 'accepted',
               responded_at: now,
               notified_at: now,
