@@ -217,14 +217,29 @@ export async function buildSquadhirePayloadForCard(
         .maybeSingle();
 
       if (subRow?.id) {
+        // Disambiguate by tier. plan_name (Starter/Basic/Plus/Pro/Personal)
+        // exists for multiple tiers (Junior/Pro/Elite) — without a tier
+        // filter the lookup hits 3 rows and `.maybeSingle()` returns null,
+        // dropping us into the PLAN_HOURS fallback. The card's target_tiers
+        // controls which tier the talent will be drawn from; pick the first
+        // entry. Default to 'Junior' when target_tiers is empty so we still
+        // resolve to a row instead of nothing.
+        const targetTiers = Array.isArray((contentSource as any).target_tiers)
+          ? ((contentSource as any).target_tiers as string[]).filter(Boolean)
+          : [];
+        const targetTier = targetTiers[0] || 'Junior';
         const { data: planRow } = await supabaseAdmin
           .from('subscription_plans')
-          .select('id')
+          .select('id, tier')
           .eq('subscription_id', subRow.id)
           .ilike('plan', planName)
+          .ilike('tier', targetTier)
           .maybeSingle();
 
         if (planRow?.id) {
+          // Surface the resolved tier on the payload so SquadHire can render
+          // "Basic · Pro" alongside the plan name (parity with staged cards).
+          planTier = (planRow.tier as string | null | undefined) ?? planTier;
           const [{ data: planDelivs }, { data: delivTypes }] = await Promise.all([
             supabaseAdmin
               .from('subscription_plan_deliverables')
