@@ -267,6 +267,57 @@ function CardPanelContent({
     },
   });
 
+  const archiveCard = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${activeCardId}/archive`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      if (isSecondaryView) onViewSecondary(null);
+      clearConfirm();
+      onClose();
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to archive card', 'error');
+      clearConfirm();
+    },
+  });
+
+  const republishCard = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${activeCardId}/republish`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      if (isSecondaryView) onViewSecondary(null);
+      clearConfirm();
+      showToast('Card republished as manual — broadcast or hand-pick from here.', 'success');
+      onClose();
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to republish card', 'error');
+      clearConfirm();
+    },
+  });
+
+  const deleteCard = useMutation({
+    mutationFn: () =>
+      api.delete(`/admin/subscription-cards/${activeCardId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      clearConfirm();
+      showToast('Card deleted permanently.', 'success');
+      onClose();
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to delete card', 'error');
+      clearConfirm();
+    },
+  });
+
   const broadcastCard = useMutation({
     mutationFn: () =>
       api.post(`/admin/subscription-cards/${activeCardId}/broadcast`),
@@ -316,7 +367,7 @@ function CardPanelContent({
       <div className="flex-1 overflow-y-auto">
         <CardDetails card={card} activeCard={activeCard} isSecondaryView={isSecondaryView} countries={countries} squadhireCategories={squadhireCategories} />
 
-        {activeCard.state === 'published' && (
+        {activeCard.state === 'published' && !activeCard.archived_at && (
           <div className="flex items-center gap-2 border-b border-[#E2E8F0] px-5 py-2.5">
             <button
               onClick={() => setConfirmAction({ kind: 'recall' })}
@@ -362,7 +413,16 @@ function CardPanelContent({
           </div>
         )}
 
-        {!isSecondaryView && !card.parent_card_id && (
+        {activeCard.archived_at && (
+          <div className="border-b border-[#E2E8F0] bg-violet-50 px-5 py-2.5">
+            <p className="text-xs text-violet-800">
+              <span className="font-semibold">Archived</span> on {formatFullDateTime(activeCard.archived_at)}.
+              Hidden from talent feeds and the default Published list. Republish to bring it back as a manual card, or delete it permanently.
+            </p>
+          </div>
+        )}
+
+        {!isSecondaryView && !card.parent_card_id && !activeCard.archived_at && (
           <SecondaryCardsSection
             parentCard={card}
             secondaryCards={secondaryCards}
@@ -370,6 +430,7 @@ function CardPanelContent({
           />
         )}
 
+        {!activeCard.archived_at && (
         <div className="flex items-center justify-between border-y border-[#E2E8F0] bg-[#F8FAFC] px-5 py-2.5">
           {hasSelection ? (
             <>
@@ -394,6 +455,7 @@ function CardPanelContent({
             </>
           )}
         </div>
+        )}
         <div className="p-5 space-y-6 text-sm">
           {isLoading ? (
             <p className="text-center text-xs text-[#90A1B9]">Loading…</p>
@@ -484,6 +546,45 @@ function CardPanelContent({
             </>
           )}
         </div>
+
+        <div className="border-t border-[#E2E8F0] bg-[#F8FAFC] px-5 py-3">
+          {!activeCard.archived_at ? (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-[#62748E]">
+                Move this card to the Archive tab. Hidden from talent feeds; reversible.
+              </p>
+              <button
+                onClick={() => setConfirmAction({ kind: 'archive' })}
+                disabled={archiveCard.isPending}
+                className="shrink-0 rounded-md border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+              >
+                {archiveCard.isPending ? 'Archiving…' : 'Archive this card'}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-[#62748E]">
+                Republish this card as a manual draft, or delete it permanently.
+              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  onClick={() => setConfirmAction({ kind: 'republish' })}
+                  disabled={republishCard.isPending}
+                  className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {republishCard.isPending ? 'Republishing…' : 'Republish'}
+                </button>
+                <button
+                  onClick={() => setConfirmAction({ kind: 'deletePermanent' })}
+                  disabled={deleteCard.isPending}
+                  className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                >
+                  {deleteCard.isPending ? 'Deleting…' : 'Delete permanently'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
       {pickerOpen && (
         <AssignRecipientPicker cardId={activeCardId} onClose={() => setPickerOpen(false)} />
@@ -501,6 +602,9 @@ function CardPanelContent({
           undoSelection: undoSelection.isPending,
           recall: recallCard.isPending,
           cancel: cancelCard.isPending,
+          archive: archiveCard.isPending,
+          republish: republishCard.isPending,
+          deletePermanent: deleteCard.isPending,
           broadcast: broadcastCard.isPending,
         }}
         onConfirm={(action) => {
@@ -512,6 +616,9 @@ function CardPanelContent({
             case 'undoSelection': undoSelection.mutate(); break;
             case 'recall': recallCard.mutate(); break;
             case 'cancel': cancelCard.mutate(); break;
+            case 'archive': archiveCard.mutate(); break;
+            case 'republish': republishCard.mutate(); break;
+            case 'deletePermanent': deleteCard.mutate(); break;
             case 'broadcast': broadcastCard.mutate(); break;
           }
         }}
@@ -528,6 +635,9 @@ type ConfirmAction =
   | { kind: 'undoSelection' }
   | { kind: 'recall' }
   | { kind: 'cancel' }
+  | { kind: 'archive' }
+  | { kind: 'republish' }
+  | { kind: 'deletePermanent' }
   | { kind: 'broadcast' };
 
 function ConfirmActionDialog({
@@ -606,6 +716,27 @@ function ConfirmActionDialog({
         : 'Pending recipients will stop seeing it. This is terminal — the card cannot be re-published.',
       confirmLabel: hasAcceptances ? 'Cancel anyway' : 'Cancel',
       pendingLabel: 'Cancelling…',
+      variant: 'danger',
+    },
+    archive: {
+      title: 'Archive this card?',
+      description: 'Hides the card from talents and from the default Published list. You can republish it as a manual draft or delete it from the Archive tab.',
+      confirmLabel: 'Archive',
+      pendingLabel: 'Archiving…',
+      variant: 'warning',
+    },
+    republish: {
+      title: 'Republish this card?',
+      description: 'Brings the card back as state="published" with distribution="manual". All previous accept/reject/pending recipients are cleared. You will need to broadcast or hand-pick recipients.',
+      confirmLabel: 'Republish',
+      pendingLabel: 'Republishing…',
+      variant: 'warning',
+    },
+    deletePermanent: {
+      title: 'Delete this card permanently?',
+      description: 'This cannot be undone. Recipients and any secondary cards will be deleted with it.',
+      confirmLabel: 'Delete forever',
+      pendingLabel: 'Deleting…',
       variant: 'danger',
     },
     broadcast: {

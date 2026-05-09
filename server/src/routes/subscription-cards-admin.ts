@@ -28,6 +28,8 @@ router.get('/', async (req: Request, res: Response) => {
     const publishedBy = String(req.query.published_by || '').trim();
     const search = String(req.query.search || '').trim();
     const sourceParam = String(req.query.source || '').trim();
+    const archivedParam = String(req.query.archived || '').trim();
+    const showArchived = archivedParam === 'true';
 
     let query = supabaseAdmin
       .from('subscription_cards')
@@ -35,8 +37,17 @@ router.get('/', async (req: Request, res: Response) => {
       .is('parent_card_id', null)
       .order('published_at', { ascending: false, nullsFirst: false });
 
+    if (showArchived) {
+      query = query.not('archived_at', 'is', null);
+    } else {
+      query = query.is('archived_at', null);
+    }
+
     if (stateParam === 'published' || stateParam === 'assigned' || stateParam === 'closed' || stateParam === 'draft') {
       query = query.eq('state', stateParam);
+    } else if (showArchived) {
+      // Archive view shows every state, including drafts.
+      query = query.in('state', ['draft', 'published', 'assigned', 'closed']);
     } else {
       query = query.in('state', ['published', 'assigned', 'closed']);
     }
@@ -954,6 +965,187 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
     res.json({ success: true, data: await hydrateCard(updated) });
   } catch (err: any) {
     console.error('Admin cancel card error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/archive
+// Soft-hide any card. Sets archived_at; the card stops appearing
+// in the default Published Cards list and is dropped from talent
+// feeds. State is preserved so we can describe what was archived
+// in the Archive tab; republish/delete-permanent decide its fate.
+// ============================================================
+router.post('/:id/archive', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, archived_at')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    if (card.archived_at) {
+      res.status(409).json({ success: false, error: 'Card is already archived' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const { data: updated, error: updErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .update({
+        archived_at: now,
+        squadhire_synced_at: null,
+        squadhire_sync_attempts: 0,
+        squadhire_sync_last_error: null,
+      })
+      .eq('id', cardId)
+      .select('*')
+      .single();
+    if (updErr) {
+      res.status(500).json({ success: false, error: updErr.message });
+      return;
+    }
+
+    // Tell SquadHire to drop its mirror rows so talents stop seeing it.
+    notifySquadhireOfCardRecall(updated.id).catch((err) => {
+      console.error('[admin-archive] squadhire mirror drop error', err);
+    });
+
+    res.json({ success: true, data: await hydrateCard(updated) });
+  } catch (err: any) {
+    console.error('Admin archive card error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/republish
+// Bring an archived card back as a fresh manual-published card.
+// Clears every recipient row (both partner + external), wipes
+// closure timestamps, sets state='published' + distribution='manual'
+// + archived_at=null, sets published_at/published_by to now/caller,
+// and re-delivers to SquadHire. The user must explicitly broadcast
+// or hand-pick from there.
+// ============================================================
+router.post('/:id/republish', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, archived_at')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    if (!card.archived_at) {
+      res.status(409).json({ success: false, error: 'Only archived cards can be republished' });
+      return;
+    }
+
+    // Wipe every recipient row from both tables.
+    await supabaseAdmin
+      .from('subscription_card_recipients')
+      .delete()
+      .eq('card_id', cardId);
+    await supabaseAdmin
+      .from('subscription_card_external_recipients')
+      .delete()
+      .eq('card_id', cardId);
+
+    const now = new Date().toISOString();
+    const { data: updated, error: updErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .update({
+        state: 'published' as const,
+        distribution: 'manual' as const,
+        archived_at: null,
+        recalled_at: null,
+        cancelled_at: null,
+        closed_at: null,
+        assigned_at: null,
+        selected_recipient_type: null,
+        selected_recipient_id: null,
+        published_at: now,
+        published_by: req.userId || null,
+        squadhire_synced_at: null,
+        squadhire_sync_attempts: 0,
+        squadhire_sync_last_error: null,
+      })
+      .eq('id', cardId)
+      .select('*')
+      .single();
+    if (updErr) {
+      res.status(500).json({ success: false, error: updErr.message });
+      return;
+    }
+
+    // Drop any leftover SquadHire mirror rows, then re-deliver fresh.
+    notifySquadhireOfCardRecall(updated.id)
+      .catch((err) => console.error('[admin-republish] squadhire mirror drop error', err))
+      .finally(() => {
+        buildSquadhirePayloadForCard(updated.id)
+          .then((payload) => payload && deliverCardToSquadhire(updated.id, payload))
+          .catch((err) => console.error('[admin-republish] squadhire delivery error', err));
+      });
+
+    res.json({ success: true, data: await hydrateCard(updated) });
+  } catch (err: any) {
+    console.error('Admin republish card error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// DELETE /admin/subscription-cards/:id
+// Permanently delete an archived card. Recipients (partner +
+// external) and secondaries cascade-delete via FK. Notifies
+// SquadHire to drop its mirrors. Only allowed on archived cards
+// so deletion is always intentional and never racey with
+// active-card flows.
+// ============================================================
+router.delete('/:id', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, archived_at')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    if (!card.archived_at) {
+      res.status(409).json({ success: false, error: 'Only archived cards can be deleted permanently. Archive it first.' });
+      return;
+    }
+
+    // Drop SquadHire mirror rows before we lose the card row.
+    notifySquadhireOfCardRecall(cardId).catch((err) => {
+      console.error('[admin-delete-card] squadhire mirror drop error', err);
+    });
+
+    const { error: delErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .delete()
+      .eq('id', cardId);
+    if (delErr) {
+      res.status(500).json({ success: false, error: delErr.message });
+      return;
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Admin delete card error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });

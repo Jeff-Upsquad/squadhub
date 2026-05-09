@@ -543,6 +543,7 @@ router.get(
         .select('*')
         .eq('published_by', userId)
         .in('state', ['published', 'assigned', 'closed'])
+        .is('archived_at', null)
         .order('published_at', { ascending: false });
       if (error) {
         res.status(500).json({ success: false, error: error.message });
