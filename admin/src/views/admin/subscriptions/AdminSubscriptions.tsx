@@ -483,13 +483,6 @@ function PlanRow({
           current={currentPriceRow}
         />
 
-        <HoursInput
-          subscriptionId={subscriptionId}
-          planId={plan.id}
-          dailyHours={plan.daily_hours}
-          weeklyHours={plan.weekly_hours}
-        />
-
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-[#90A1B9]">{delivs.length} deliverable{delivs.length === 1 ? '' : 's'}</span>
           <button
@@ -668,81 +661,6 @@ function PricingAndMarginInput({
           → Partner {currencySymbol(country?.currency)}{partnerPreview.toLocaleString()}
         </span>
       )}
-    </div>
-  );
-}
-
-// ============================================================
-// Daily / weekly hours per plan (admin-editable defaults)
-// ============================================================
-
-function HoursInput({
-  subscriptionId, planId, dailyHours, weeklyHours,
-}: {
-  subscriptionId: string;
-  planId: string;
-  dailyHours: number | null;
-  weeklyHours: number | null;
-}) {
-  const queryClient = useQueryClient();
-  const [daily, setDaily] = useState<string>(dailyHours == null ? '' : String(dailyHours));
-  const [weekly, setWeekly] = useState<string>(weeklyHours == null ? '' : String(weeklyHours));
-
-  useEffect(() => {
-    setDaily(dailyHours == null ? '' : String(dailyHours));
-    setWeekly(weeklyHours == null ? '' : String(weeklyHours));
-  }, [dailyHours, weeklyHours]);
-
-  const update = useMutation({
-    mutationFn: (body: { daily_hours?: number | null; weekly_hours?: number | null }) =>
-      api.put(`/admin/subscriptions/${subscriptionId}/plans/${planId}`, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-subs-catalog'] }),
-    onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed'),
-  });
-
-  function commitDaily() {
-    const n = daily.trim() === '' ? null : Number(daily);
-    if (n != null && (isNaN(n) || n < 0 || n > 24)) return;
-    if ((dailyHours ?? null) === (n ?? null)) return;
-    update.mutate({ daily_hours: n });
-  }
-
-  function commitWeekly() {
-    const n = weekly.trim() === '' ? null : Number(weekly);
-    if (n != null && (isNaN(n) || n < 0 || n > 168)) return;
-    if ((weeklyHours ?? null) === (n ?? null)) return;
-    update.mutate({ weekly_hours: n });
-  }
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">Hrs</span>
-      <input
-        type="number"
-        step="0.5"
-        min={0}
-        max={24}
-        value={daily}
-        onChange={(e) => setDaily(e.target.value)}
-        onBlur={commitDaily}
-        placeholder="d"
-        title="Daily hours"
-        className="w-12 rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
-      />
-      <span className="text-[10px] text-[#CBD5E1]">/d</span>
-      <input
-        type="number"
-        step="0.5"
-        min={0}
-        max={168}
-        value={weekly}
-        onChange={(e) => setWeekly(e.target.value)}
-        onBlur={commitWeekly}
-        placeholder="w"
-        title="Weekly hours"
-        className="w-12 rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
-      />
-      <span className="text-[10px] text-[#CBD5E1]">/w</span>
     </div>
   );
 }
