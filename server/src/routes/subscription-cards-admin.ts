@@ -1127,11 +1127,11 @@ router.post('/:id/republish', async (req: Request, res: Response) => {
 
 // ============================================================
 // DELETE /admin/subscription-cards/:id
-// Permanently delete an archived card. Recipients (partner +
-// external) and secondaries cascade-delete via FK. Notifies
-// SquadHire to drop its mirrors. Only allowed on archived cards
-// so deletion is always intentional and never racey with
-// active-card flows.
+// Permanently delete a draft or archived card. Recipients
+// (partner + external) and secondaries cascade-delete via FK.
+// Notifies SquadHire to drop its mirrors. Drafts have never been
+// broadcast; archived cards have already been recalled — both are
+// safe to remove without racing active-card flows.
 // ============================================================
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
@@ -1139,15 +1139,15 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, archived_at')
+      .select('id, state, archived_at')
       .eq('id', cardId)
       .maybeSingle();
     if (!card) {
       res.status(404).json({ success: false, error: 'Card not found' });
       return;
     }
-    if (!card.archived_at) {
-      res.status(409).json({ success: false, error: 'Only archived cards can be deleted permanently. Archive it first.' });
+    if (!card.archived_at && card.state !== 'draft') {
+      res.status(409).json({ success: false, error: 'Only draft or archived cards can be deleted permanently. Archive it first.' });
       return;
     }
 
