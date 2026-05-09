@@ -306,7 +306,14 @@ export default function AdminCardEditor({
 
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/admin/subscription-cards/${cardId}`),
-    onSuccess: onClose,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      onClose();
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error || err?.message || 'Unknown error';
+      alert(`Delete failed: ${msg}`);
+    },
   });
 
   const handleSave = useCallback(async () => {
@@ -371,11 +378,15 @@ export default function AdminCardEditor({
           {isDraft && (
             <>
               <button
-                onClick={() => deleteMutation.mutate()}
+                onClick={() => {
+                  if (window.confirm('Delete this draft card permanently? This cannot be undone.')) {
+                    deleteMutation.mutate();
+                  }
+                }}
                 disabled={deleteMutation.isPending}
                 className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
               >
-                Delete
+                {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
               </button>
               <button
                 onClick={handleSave}
