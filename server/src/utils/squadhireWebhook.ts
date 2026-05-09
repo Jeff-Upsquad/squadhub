@@ -373,12 +373,19 @@ export async function buildSquadhirePayloadForCard(
     : planHoursDeliverable;
   let hoursLabel: string | null = null;
   if (hoursSource && (hoursSource.per_day || hoursSource.per_week || hoursSource.per_month)) {
-    hoursLabel = formatDeliverableCadence(
-      hoursSource.per_day,
-      hoursSource.per_week,
-      hoursSource.per_month,
-      'hrs',
-    );
+    // The Subscriptions admin editor only exposes per_day and per_week, so
+    // per_month is almost always 0 in the DB. Without derivation the talent
+    // sees "X hrs/day · Y hrs/week · 0 hrs/month", which reads as "no monthly
+    // commitment". Fill in the missing values so all three numbers reflect
+    // the same cadence: per_week from per_day × working_days, per_month from
+    // per_week × 4.
+    const workingDays = Array.isArray(contentSource.working_days)
+      ? ((contentSource.working_days as string[]).length || 5)
+      : 5;
+    const perDay = hoursSource.per_day || 0;
+    const perWeek = hoursSource.per_week || perDay * workingDays;
+    const perMonth = hoursSource.per_month || perWeek * 4;
+    hoursLabel = formatDeliverableCadence(perDay, perWeek, perMonth, 'hrs');
   }
 
   // Fallback for request/custom cards: derive hours from the standard plan
