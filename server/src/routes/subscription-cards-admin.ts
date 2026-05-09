@@ -103,11 +103,11 @@ router.get('/', async (req: Request, res: Response) => {
         .in('id', submissionIds.length ? submissionIds : ['00000000-0000-0000-0000-000000000000']),
       supabaseAdmin
         .from('subscriptions')
-        .select('id, name')
+        .select('id, slug, name')
         .in('id', subscriptionIds.length ? subscriptionIds : ['00000000-0000-0000-0000-000000000000']),
       supabaseAdmin
         .from('subscription_plans')
-        .select('id, plan, tier')
+        .select('id, subscription_id, plan, tier')
         .in('id', planIds.length ? planIds : ['00000000-0000-0000-0000-000000000000']),
       supabaseAdmin
         .from('subscription_plan_pricing')
@@ -129,6 +129,107 @@ router.get('/', async (req: Request, res: Response) => {
       (pricingByPlan[p.plan_id] = pricingByPlan[p.plan_id] || []).push(p);
     });
 
+    // Resolve plan_id for request/custom cards that aren't linked via
+    // submission_subscription_id. They store service_type + plan_name on the
+    // card itself; mirror AdminCardEditor's catalog lookup (slug + canonical
+    // plan + first target tier) to find the matching subscription_plans row.
+    const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
+      Designers: 'designer',
+      Editors: 'video_editor',
+      'Designer plus Editor': 'designer_video_editor',
+    };
+    const PLAN_NAME_TO_CANONICAL: Record<string, string> = {
+      starter: 'Starter', basic: 'Basic', plus: 'Plus', pro: 'Pro', personal: 'Personal',
+    };
+    const resolveByCardId: Record<string, { slug: string; plan: string; tier: string }> = {};
+    const slugsToLookup = new Set<string>();
+    for (const c of list) {
+      if (c.submission_subscription_id) continue;
+      if (c.source !== 'request' && c.source !== 'custom') continue;
+      const slug = SERVICE_TYPE_TO_SLUG[c.service_type ?? ''];
+      const canonicalPlan = PLAN_NAME_TO_CANONICAL[String(c.plan_name ?? '').toLowerCase()];
+      const tier = Array.isArray(c.target_tiers) ? c.target_tiers[0] : null;
+      if (slug && canonicalPlan && tier) {
+        resolveByCardId[c.id] = { slug, plan: canonicalPlan, tier };
+        slugsToLookup.add(slug);
+      }
+    }
+
+    const cardIdToResolvedPlanId: Record<string, string> = {};
+    if (slugsToLookup.size > 0) {
+      const { data: subRows } = await supabaseAdmin
+        .from('subscriptions')
+        .select('id, slug')
+        .in('slug', Array.from(slugsToLookup));
+      const subBySlug: Record<string, string> = {};
+      (subRows || []).forEach((s: any) => { subBySlug[s.slug] = s.id; });
+      const resolvedSubIds = (subRows || []).map((s: any) => s.id);
+      if (resolvedSubIds.length > 0) {
+        const { data: planRows } = await supabaseAdmin
+          .from('subscription_plans')
+          .select('id, subscription_id, plan, tier')
+          .in('subscription_id', resolvedSubIds);
+        const planByKey: Record<string, any> = {};
+        (planRows || []).forEach((p: any) => {
+          planByKey[`${p.subscription_id}|${p.plan}|${p.tier}`] = p;
+          if (!planById[p.id]) planById[p.id] = p;
+        });
+        for (const [cardId, key] of Object.entries(resolveByCardId)) {
+          const subId = subBySlug[key.slug];
+          if (!subId) continue;
+          const plan = planByKey[`${subId}|${key.plan}|${key.tier}`];
+          if (plan) cardIdToResolvedPlanId[cardId] = plan.id;
+        }
+      }
+    }
+
+    // Fetch plan default deliverables (and the deliverable-type catalog needed
+    // to label item rows) for every plan_id we touch — both staged and
+    // request/custom-resolved.
+    const allPlanIds = Array.from(new Set([
+      ...planIds,
+      ...Object.values(cardIdToResolvedPlanId),
+    ]));
+    const delivsByPlan: Record<string, any[]> = {};
+    const delivTypeById: Record<string, { id: string; name: string }> = {};
+    if (allPlanIds.length > 0) {
+      const subscriptionIdsForDelivTypes = Array.from(new Set(
+        allPlanIds.map((pid) => planById[pid]?.subscription_id).filter(Boolean) as string[],
+      ));
+      const [{ data: planDelivs }, { data: delivTypes }] = await Promise.all([
+        supabaseAdmin
+          .from('subscription_plan_deliverables')
+          .select('id, plan_id, kind, deliverable_type_id, per_day, per_week, per_month, sort_order')
+          .in('plan_id', allPlanIds)
+          .order('sort_order'),
+        subscriptionIdsForDelivTypes.length
+          ? supabaseAdmin
+              .from('subscription_deliverable_types')
+              .select('id, name')
+              .in('subscription_id', subscriptionIdsForDelivTypes)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+      (planDelivs || []).forEach((d: any) => {
+        (delivsByPlan[d.plan_id] = delivsByPlan[d.plan_id] || []).push(d);
+      });
+      (delivTypes || []).forEach((t: any) => { delivTypeById[t.id] = t; });
+    }
+
+    const buildPlanDefaultDeliverables = (planId: string | null) => {
+      if (!planId) return [];
+      return (delivsByPlan[planId] || []).map((d: any) => ({
+        id: d.id,
+        kind: d.kind,
+        deliverable_type_id: d.deliverable_type_id ?? null,
+        deliverable_type_name: d.deliverable_type_id
+          ? delivTypeById[d.deliverable_type_id]?.name ?? null
+          : null,
+        per_day: Number(d.per_day) || 0,
+        per_week: Number(d.per_week) || 0,
+        per_month: Number(d.per_month) || 0,
+      }));
+    };
+
     let hydrated = await Promise.all(list.map(async (card: any) => {
       const staged = stagedById[card.submission_subscription_id] || null;
       const submission = staged ? submissionById[staged.submission_id] || null : null;
@@ -140,6 +241,9 @@ router.get('/', async (req: Request, res: Response) => {
         ? planPricing.find((pr: any) => pr.country_id === country.id) || null
         : null;
       const publisher = card.published_by ? publisherById[card.published_by] || null : null;
+
+      const planIdForDelivs = staged?.plan_id ?? cardIdToResolvedPlanId[card.id] ?? null;
+      const planDefaults = buildPlanDefaultDeliverables(planIdForDelivs);
 
       const base = await hydrateCard(card);
       return {
@@ -160,6 +264,7 @@ router.get('/', async (req: Request, res: Response) => {
         published_by_user: publisher
           ? { id: publisher.id, display_name: publisher.display_name, email: publisher.email }
           : null,
+        plan_default_deliverables: planDefaults,
       };
     }));
 
