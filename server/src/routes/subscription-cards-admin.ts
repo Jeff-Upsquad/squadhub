@@ -8,6 +8,7 @@ import {
   buildSquadhirePayloadForCard,
   deliverCardToSquadhire,
   notifySquadhireOfCardRecall,
+  notifySquadhireOfManualAssignment,
 } from '../utils/squadhireWebhook';
 import { config } from '../config';
 
@@ -210,7 +211,7 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
         .eq('card_id', cardId),
       supabaseAdmin
         .from('subscription_card_external_recipients')
-        .select('external_user_id, talent_name, status, responded_at, assigned_manually, selected_at, selected_by, passed_over_at')
+        .select('external_user_id, talent_name, status, responded_at, assigned_manually, selected_at, selected_by, passed_over_at, notified_at')
         .eq('card_id', cardId),
     ]);
 
@@ -253,6 +254,7 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
       selected_at: r.selected_at ?? null,
       selected_by: r.selected_by ?? null,
       passed_over_at: r.passed_over_at ?? null,
+      notified_at: r.notified_at ?? null,
     }));
 
     res.json({ success: true, data: { partners, talents } });
@@ -310,6 +312,127 @@ router.get('/:id/squadhire-recipients', async (req: Request, res: Response) => {
     console.error('Admin get SquadHire recipients error:', err);
     // Non-fatal: return empty list so the UI still works
     res.json({ success: true, data: [], note: err?.message || 'Failed to reach SquadHire' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/broadcast-pending
+// Release all queued (notified_at IS NULL) talent recipients on a
+// soft-published (manual) card: lazy-deliver the card to SquadHire if
+// it's never been synced, then per-row notifySquadhireOfManualAssignment.
+// Successful rows share a single `notified_at` timestamp so the UI can
+// group them as one batch; failed rows stay queued for retry.
+// ============================================================
+router.post('/:id/broadcast-pending', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    const { data: card, error: cardErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, distribution, squadhire_synced_at, squadhire_category_ids')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (cardErr) {
+      res.status(500).json({ success: false, error: cardErr.message });
+      return;
+    }
+    if (!card) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    if (card.state !== 'published') {
+      res.status(409).json({ success: false, error: 'Card must be published' });
+      return;
+    }
+    if (card.distribution !== 'manual') {
+      res.status(409).json({ success: false, error: 'This action only applies to soft-published cards' });
+      return;
+    }
+
+    const { data: queued, error: qErr } = await supabaseAdmin
+      .from('subscription_card_external_recipients')
+      .select('id, external_user_id')
+      .eq('card_id', cardId)
+      .is('notified_at', null);
+    if (qErr) {
+      res.status(500).json({ success: false, error: qErr.message });
+      return;
+    }
+    if (!queued || queued.length === 0) {
+      res.status(409).json({ success: false, error: 'No queued talents to broadcast' });
+      return;
+    }
+
+    if (!card.squadhire_synced_at) {
+      const categoryIds = Array.isArray(card.squadhire_category_ids)
+        ? (card.squadhire_category_ids as string[])
+        : [];
+      if (categoryIds.length === 0) {
+        res.status(409).json({
+          success: false,
+          error: 'Card has no SquadHire categories. Add categories before broadcasting.',
+        });
+        return;
+      }
+      const payload = await buildSquadhirePayloadForCard(cardId);
+      if (payload) {
+        await deliverCardToSquadhire(cardId, payload);
+      }
+      const { data: recheck } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('squadhire_synced_at')
+        .eq('id', cardId)
+        .maybeSingle();
+      if (!recheck?.squadhire_synced_at) {
+        res.status(503).json({
+          success: false,
+          error: 'Card could not be synced to SquadHire. Try again in a few minutes.',
+        });
+        return;
+      }
+    }
+
+    const successfulIds: string[] = [];
+    const failures: { talent_id: string; error: string }[] = [];
+    for (const row of queued) {
+      const outcome = await notifySquadhireOfManualAssignment(
+        cardId,
+        row.external_user_id as string,
+        row.id as string,
+      );
+      if (outcome.delivered) {
+        successfulIds.push(row.id as string);
+      } else {
+        failures.push({ talent_id: row.external_user_id as string, error: outcome.error || 'unknown_error' });
+      }
+    }
+
+    if (successfulIds.length > 0) {
+      const now = new Date().toISOString();
+      const { error: updErr } = await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .update({ notified_at: now })
+        .in('id', successfulIds);
+      if (updErr) {
+        // We notified SquadHire but failed to record it. Log and surface so
+        // the admin knows to retry; the next call will hit duplicate-notify
+        // territory but SquadHire's mirror table is idempotent on (card,
+        // recipient).
+        console.error('[broadcast-pending] notified rows but failed to set notified_at', updErr);
+        res.status(500).json({ success: false, error: 'Notified SquadHire but failed to record state. Please retry.' });
+        return;
+      }
+    }
+
+    res.json({
+      success: true,
+      notified: successfulIds.length,
+      failed: failures.length,
+      ...(failures.length > 0 ? { failures } : {}),
+    });
+  } catch (err: any) {
+    console.error('Admin broadcast-pending error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
 
