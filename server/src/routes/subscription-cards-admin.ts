@@ -334,7 +334,7 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
     const partnerIds = Array.from(new Set((partnerRows || []).map((r: any) => r.partner_id)));
     const { data: users } = await supabaseAdmin
       .from('users')
-      .select('id, display_name, email')
+      .select('id, display_name, email, user_type')
       .in('id', partnerIds.length ? partnerIds : ['00000000-0000-0000-0000-000000000000']);
     const userById: Record<string, any> = {};
     (users || []).forEach((u: any) => { userById[u.id] = u; });
@@ -344,6 +344,7 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
       return {
         id: r.partner_id,
         name: u?.display_name || u?.email || r.partner_id,
+        user_type: u?.user_type ?? null,
         status: r.status,
         responded_at: r.responded_at,
         assigned_manually: !!r.assigned_manually,

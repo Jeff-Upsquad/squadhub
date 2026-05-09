@@ -12,6 +12,7 @@ import type { PublishedCard } from './AdminPublishedCards';
 export type PartnerRecipient = {
   id: string;
   name: string;
+  user_type?: 'partner' | 'partner_employee' | null;
   status: 'pending' | 'accepted' | 'rejected';
   responded_at: string | null;
   assigned_manually?: boolean;
@@ -201,6 +202,22 @@ function CardPanelContent({
     },
     onError: (err: any) => {
       showToast(err?.response?.data?.error || err.message || 'Failed to select partner', 'error');
+      clearConfirm();
+    },
+  });
+
+  const autoAcceptPartner = useMutation({
+    mutationFn: (partnerId: string) =>
+      api.post(`/admin/subscription-cards/${activeCardId}/auto-accept-partner`, { partner_id: partnerId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      clearConfirm();
+      showToast('Partner-employee accepted on their behalf.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to auto-accept partner', 'error');
       clearConfirm();
     },
   });
@@ -471,7 +488,7 @@ function CardPanelContent({
                   onSelect={!hasSelection && activeCard.state === 'published' ? (id, name) => setConfirmAction({ kind: 'selectPartner', id, name }) : undefined}
                   isSelecting={selectPartner.isPending}
                   items={partnerGroups.accepted.map((p) => ({
-                    key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
+                    key: p.id, name: p.name, user_type: p.user_type ?? null, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
                     selected_at: p.selected_at ?? null, passed_over_at: p.passed_over_at ?? null,
                   }))}
                 />
@@ -480,7 +497,7 @@ function CardPanelContent({
                   onRemove={(id, name) => setConfirmAction({ kind: 'removePartner', id, name })}
                   isRemoving={removePartner.isPending}
                   items={partnerGroups.rejected.map((p) => ({
-                    key: p.id, name: p.name, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
+                    key: p.id, name: p.name, user_type: p.user_type ?? null, status: p.status, responded_at: p.responded_at, assigned_manually: !!p.assigned_manually,
                     selected_at: null, passed_over_at: null,
                   }))}
                 />
@@ -488,8 +505,14 @@ function CardPanelContent({
                   label="Pending"
                   onRemove={(id, name) => setConfirmAction({ kind: 'removePartner', id, name })}
                   isRemoving={removePartner.isPending}
+                  onAutoAccept={
+                    activeCard.distribution === 'manual' && activeCard.state === 'published'
+                      ? (id, name) => setConfirmAction({ kind: 'autoAcceptPartner', id, name })
+                      : undefined
+                  }
+                  isAutoAccepting={autoAcceptPartner.isPending}
                   items={partnerGroups.pending.map((p) => ({
-                    key: p.id, name: p.name, status: p.status, responded_at: null, assigned_manually: !!p.assigned_manually,
+                    key: p.id, name: p.name, user_type: p.user_type ?? null, status: p.status, responded_at: null, assigned_manually: !!p.assigned_manually,
                     selected_at: null, passed_over_at: null,
                   }))}
                 />
@@ -599,6 +622,7 @@ function CardPanelContent({
           removeTalent: removeTalent.isPending,
           selectPartner: selectPartner.isPending,
           selectTalent: selectTalent.isPending,
+          autoAcceptPartner: autoAcceptPartner.isPending,
           undoSelection: undoSelection.isPending,
           recall: recallCard.isPending,
           cancel: cancelCard.isPending,
@@ -613,6 +637,7 @@ function CardPanelContent({
             case 'removeTalent': removeTalent.mutate(action.id); break;
             case 'selectPartner': selectPartner.mutate(action.id); break;
             case 'selectTalent': selectTalent.mutate(action.id); break;
+            case 'autoAcceptPartner': autoAcceptPartner.mutate(action.id); break;
             case 'undoSelection': undoSelection.mutate(); break;
             case 'recall': recallCard.mutate(); break;
             case 'cancel': cancelCard.mutate(); break;
@@ -632,6 +657,7 @@ type ConfirmAction =
   | { kind: 'removeTalent'; id: string; name: string }
   | { kind: 'selectPartner'; id: string; name: string }
   | { kind: 'selectTalent'; id: string; name: string }
+  | { kind: 'autoAcceptPartner'; id: string; name: string }
   | { kind: 'undoSelection' }
   | { kind: 'recall' }
   | { kind: 'cancel' }
@@ -692,6 +718,13 @@ function ConfirmActionDialog({
       confirmLabel: 'Select',
       pendingLabel: 'Selecting…',
       variant: 'warning',
+    },
+    autoAcceptPartner: {
+      title: 'Auto-accept partner-employee?',
+      description: `Accept this card on behalf of ${'name' in confirmAction ? confirmAction.name : ''}. They'll skip the manual accept step and become visible to the business user immediately.`,
+      confirmLabel: 'Auto-accept',
+      pendingLabel: 'Accepting…',
+      variant: 'default',
     },
     undoSelection: {
       title: 'Undo selection?',
@@ -1232,13 +1265,17 @@ function Subgroup({
   isRemoving,
   onSelect,
   isSelecting,
+  onAutoAccept,
+  isAutoAccepting,
 }: {
   label: 'Accepted' | 'Rejected' | 'Pending';
-  items: { key: string; name: string; subtitle?: string | null; status: 'accepted' | 'rejected' | 'pending'; responded_at: string | null; assigned_manually?: boolean; selected_at?: string | null; passed_over_at?: string | null; externalUrl?: string }[];
+  items: { key: string; name: string; subtitle?: string | null; user_type?: 'partner' | 'partner_employee' | null; status: 'accepted' | 'rejected' | 'pending'; responded_at: string | null; assigned_manually?: boolean; selected_at?: string | null; passed_over_at?: string | null; externalUrl?: string }[];
   onRemove?: (key: string, name: string) => void;
   isRemoving?: boolean;
   onSelect?: (key: string, name: string) => void;
   isSelecting?: boolean;
+  onAutoAccept?: (key: string, name: string) => void;
+  isAutoAccepting?: boolean;
 }) {
   if (items.length === 0) {
     return (
@@ -1290,6 +1327,14 @@ function Subgroup({
                   Not selected
                 </span>
               )}
+              {it.user_type === 'partner_employee' && (
+                <span
+                  className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700"
+                  title="Internal partner-employee user"
+                >
+                  Employee
+                </span>
+              )}
               {it.assigned_manually && (
                 <span
                   className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]"
@@ -1302,6 +1347,17 @@ function Subgroup({
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_CHIP[it.status]}`}>
                   {it.status}
                 </span>
+              )}
+              {onAutoAccept && it.status === 'pending' && it.user_type === 'partner_employee' && !it.selected_at && !it.passed_over_at && (
+                <button
+                  type="button"
+                  disabled={isAutoAccepting}
+                  onClick={() => onAutoAccept(it.key, it.name)}
+                  title={`Accept on behalf of ${it.name}`}
+                  className="rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-medium text-white opacity-0 transition group-hover:opacity-100 hover:bg-emerald-700 disabled:opacity-30"
+                >
+                  Auto-accept
+                </button>
               )}
               {onSelect && !it.selected_at && !it.passed_over_at && (
                 <button

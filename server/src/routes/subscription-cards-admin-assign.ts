@@ -4,6 +4,8 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
+import { PARTNER_USER_TYPES } from '@squadhub/shared';
+import { sharePartnerWithCardClient } from '../utils/sharePartnerWithClient';
 import {
   notifySquadhireOfManualAssignment,
   notifySquadhireOfManualRemoval,
@@ -70,7 +72,7 @@ router.post('/subscription-cards/:id/assign-partner', async (req: Request, res: 
       .select('id, user_type, status')
       .eq('id', partner_id)
       .maybeSingle();
-    if (!partner || partner.user_type !== 'partner') {
+    if (!partner || !PARTNER_USER_TYPES.includes(partner.user_type)) {
       res.status(400).json({ success: false, error: 'Target user is not a partner' });
       return;
     }
@@ -356,8 +358,8 @@ router.get('/partners/search', async (req: Request, res: Response) => {
 
     const { data, error } = await supabaseAdmin
       .from('users')
-      .select('id, display_name, email, tier, country_id')
-      .eq('user_type', 'partner')
+      .select('id, display_name, email, tier, country_id, user_type')
+      .in('user_type', PARTNER_USER_TYPES as readonly string[])
       .eq('status', 'active')
       .or(`display_name.ilike.${pattern},email.ilike.${pattern}`)
       .limit(20);
@@ -374,6 +376,7 @@ router.get('/partners/search', async (req: Request, res: Response) => {
         email: u.email,
         tier: u.tier ?? null,
         country_id: u.country_id ?? null,
+        user_type: u.user_type,
       })),
     });
   } catch (err: any) {
@@ -459,5 +462,159 @@ router.get('/talents/search', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
+
+// ============================================================
+// POST /admin/subscription-cards/:id/auto-accept-partner
+//
+// Accept a soft-published card on behalf of a partner-employee
+// recipient. Use case: an admin hand-picks an internal partner-employee
+// for a manual-distribution card and wants to skip the manual-accept
+// step (the admin and the partner-employee are effectively the same
+// operational unit, so the round-trip adds friction without value).
+//
+// Gated to:
+//   - card.state === 'published' AND card.distribution === 'manual'
+//   - target user.user_type === 'partner_employee'
+//   - existing recipient row in status 'pending' (idempotent on 'accepted',
+//     409 on 'rejected')
+//
+// Side effect: shares the partner with the card's owning client via
+// partner_client_assignments, mirroring the regular partner accept flow.
+// ============================================================
+const autoAcceptPartnerSchema = z.object({
+  partner_id: z.string().uuid(),
+});
+
+router.post(
+  '/subscription-cards/:id/auto-accept-partner',
+  async (req: Request, res: Response) => {
+    try {
+      const parsed = autoAcceptPartnerSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        res.status(400).json({
+          success: false,
+          error: parsed.error.issues[0]?.message ?? 'Invalid body',
+        });
+        return;
+      }
+      const cardId = req.params.id as string;
+      const { partner_id } = parsed.data;
+
+      // Three independent lookups — fire in parallel, validate sequentially
+      // so error precedence stays consistent (card → partner → recipient).
+      const [
+        { data: card, error: cardErr },
+        { data: partner, error: partnerErr },
+        { data: recipient, error: recErr },
+      ] = await Promise.all([
+        supabaseAdmin
+          .from('subscription_cards')
+          .select('id, state, distribution')
+          .eq('id', cardId)
+          .maybeSingle(),
+        supabaseAdmin
+          .from('users')
+          .select('id, user_type')
+          .eq('id', partner_id)
+          .maybeSingle(),
+        supabaseAdmin
+          .from('subscription_card_recipients')
+          .select('id, status')
+          .eq('card_id', cardId)
+          .eq('partner_id', partner_id)
+          .maybeSingle(),
+      ]);
+      if (cardErr) {
+        res.status(500).json({ success: false, error: cardErr.message });
+        return;
+      }
+      if (!card) {
+        res.status(404).json({ success: false, error: 'Card not found' });
+        return;
+      }
+      if (card.state !== 'published') {
+        res.status(409).json({ success: false, error: 'Card must be published' });
+        return;
+      }
+      if (card.distribution !== 'manual') {
+        res.status(409).json({
+          success: false,
+          error: 'Auto-accept only applies to soft-published (manual) cards',
+        });
+        return;
+      }
+      if (partnerErr) {
+        res.status(500).json({ success: false, error: partnerErr.message });
+        return;
+      }
+      if (!partner) {
+        res.status(404).json({ success: false, error: 'Partner not found' });
+        return;
+      }
+      if (partner.user_type !== 'partner_employee') {
+        res.status(400).json({
+          success: false,
+          error: 'Auto-accept is only available for partner-employee users',
+        });
+        return;
+      }
+      if (recErr) {
+        res.status(500).json({ success: false, error: recErr.message });
+        return;
+      }
+      if (!recipient) {
+        res.status(404).json({
+          success: false,
+          error: 'Partner is not a recipient on this card. Assign them first.',
+        });
+        return;
+      }
+      if (recipient.status === 'accepted') {
+        // Re-share with the client in case the prior run failed that step.
+        await sharePartnerWithCardClient(partner_id, cardId);
+        res.json({ success: true, alreadyAccepted: true });
+        return;
+      }
+      if (recipient.status === 'rejected') {
+        res.status(409).json({
+          success: false,
+          error: 'Partner has already rejected this card',
+        });
+        return;
+      }
+
+      // Conditional update guards against the partner accepting/rejecting
+      // between our read and our write. If the row is no longer 'pending',
+      // count comes back 0 and we surface a 409 instead of clobbering it.
+      const now = new Date().toISOString();
+      const { error: updErr, count } = await supabaseAdmin
+        .from('subscription_card_recipients')
+        .update({ status: 'accepted', responded_at: now }, { count: 'exact' })
+        .eq('id', recipient.id)
+        .eq('status', 'pending');
+      if (updErr) {
+        res.status(500).json({ success: false, error: updErr.message });
+        return;
+      }
+      if (!count) {
+        res.status(409).json({
+          success: false,
+          error: 'Recipient status changed before auto-accept could complete. Please refresh and try again.',
+        });
+        return;
+      }
+
+      await sharePartnerWithCardClient(partner_id, cardId);
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('Auto-accept partner error:', err);
+      res.status(500).json({
+        success: false,
+        error: err?.message || 'Internal server error',
+      });
+    }
+  },
+);
 
 export default router;
