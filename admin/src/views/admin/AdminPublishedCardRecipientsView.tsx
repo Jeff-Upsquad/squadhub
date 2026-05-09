@@ -23,10 +23,10 @@ type UnifiedRecipient = {
   // timestamp). Always null for partners and for live-fetched SquadHire
   // matches (remoteTalents).
   notified_at: string | null;
-  // Server-enriched: true when this talent's SquadHire account maps to an
-  // internal SquadHub partner-employee (user_type='partner_employee'),
-  // resolved by email cross-reference. Drives the Auto-accept button.
-  is_partner_employee?: boolean;
+  // Registration email — passed back from SquadHire's recipients endpoint so
+  // the Auto-accept flow can resolve a talent to a SquadHub user by matching
+  // email. Null when SquadHire couldn't fetch it.
+  email: string | null;
 };
 
 type SquadHireTalent = {
@@ -35,7 +35,7 @@ type SquadHireTalent = {
   status: 'pending' | 'accepted' | 'rejected';
   responded_at: string | null;
   created_at: string;
-  is_partner_employee?: boolean;
+  email?: string | null;
 };
 
 function formatRelative(iso: string | null): string {
@@ -107,6 +107,7 @@ export default function AdminPublishedCardRecipientsView({
       selected_at: p.selected_at ?? null,
       passed_over_at: p.passed_over_at ?? null,
       notified_at: null,
+      email: null,
     }));
 
     // Build a set of talent IDs we already have from the local callback table
@@ -115,10 +116,12 @@ export default function AdminPublishedCardRecipientsView({
       (data.talents || []).map((t) => t.external_user_id)
     );
 
-    // Build a quick lookup so localTalents can inherit is_partner_employee
-    // from the SquadHire-side enrichment when SquadHire knows about them too.
-    const partnerEmployeeIds = new Set(
-      squadhireTalents.filter((t) => t.is_partner_employee).map((t) => t.talent_user_id),
+    // Email lookup keyed by SquadHire talent_user_id. SquadHire is the
+    // source of truth for talent emails; our local table doesn't store them,
+    // so we cross-reference for any localTalent that also appears on the
+    // SquadHire side.
+    const emailByTalentId = new Map(
+      squadhireTalents.map((t) => [t.talent_user_id, t.email ?? null] as const),
     );
 
     // Talents from local callback table (responded via webhook)
@@ -132,7 +135,7 @@ export default function AdminPublishedCardRecipientsView({
       selected_at: t.selected_at ?? null,
       passed_over_at: t.passed_over_at ?? null,
       notified_at: t.notified_at ?? null,
-      is_partner_employee: partnerEmployeeIds.has(t.external_user_id),
+      email: emailByTalentId.get(t.external_user_id) ?? null,
     }));
 
     // Talents from SquadHire that are NOT already in local data
@@ -149,7 +152,7 @@ export default function AdminPublishedCardRecipientsView({
         selected_at: null,
         passed_over_at: null,
         notified_at: null,
-        is_partner_employee: !!t.is_partner_employee,
+        email: t.email ?? null,
       }));
 
     return [...partners, ...localTalents, ...remoteTalents];
@@ -219,20 +222,21 @@ export default function AdminPublishedCardRecipientsView({
     },
   });
 
-  const [autoAcceptTarget, setAutoAcceptTarget] = useState<{ id: string; name: string } | null>(null);
+  const [autoAcceptTarget, setAutoAcceptTarget] = useState<{ id: string; name: string; email: string } | null>(null);
 
   const autoAcceptTalentMutation = useMutation({
-    mutationFn: ({ talentId, talentName }: { talentId: string; talentName: string }) =>
+    mutationFn: ({ talentId, talentName, email }: { talentId: string; talentName: string; email: string }) =>
       api.post(`/admin/subscription-cards/${card.id}/auto-accept-talent`, {
         talent_id: talentId,
         talent_name: talentName,
+        email,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
       setAutoAcceptTarget(null);
-      showToast('Partner-employee accepted on their behalf.', 'success');
+      showToast('Talent accepted on their behalf.', 'success');
     },
     onError: (err: any) => {
       showToast(err?.response?.data?.error || err.message || 'Failed to auto-accept talent', 'error');
@@ -483,14 +487,6 @@ export default function AdminPublishedCardRecipientsView({
                       }`}>
                         {r.type === 'partner' ? 'Partner' : 'Talent'}
                       </span>
-                      {r.is_partner_employee && (
-                        <span
-                          className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700"
-                          title="Internal SquadHub partner-employee (matched by email)"
-                        >
-                          Employee
-                        </span>
-                      )}
                       {r.type === 'talent' && shConfigured && adminUrl && (
                         <a
                           href={`${adminUrl}/admin/users/${r.id}`}
@@ -521,15 +517,15 @@ export default function AdminPublishedCardRecipientsView({
                       )}
                       {isManual
                         && r.type === 'talent'
-                        && r.is_partner_employee
                         && r.status === 'pending'
                         && !r.selected_at
                         && !r.passed_over_at
                         && card.state === 'published'
+                        && r.email
                         && (
                           <button
                             type="button"
-                            onClick={() => setAutoAcceptTarget({ id: r.id, name: r.name })}
+                            onClick={() => setAutoAcceptTarget({ id: r.id, name: r.name, email: r.email! })}
                             disabled={autoAcceptTalentMutation.isPending}
                             title={`Accept on behalf of ${r.name}`}
                             className="rounded-md bg-emerald-600 px-2.5 py-0.5 text-[10px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-30"
@@ -673,8 +669,8 @@ export default function AdminPublishedCardRecipientsView({
       {autoAcceptTarget && (
         <ConfirmDialog
           open
-          title="Auto-accept partner-employee?"
-          description={`Accept this card on behalf of ${autoAcceptTarget.name}. They'll be visible to the business user immediately and won't need to respond on SquadHire.`}
+          title="Auto-accept talent?"
+          description={`Accept this card on behalf of ${autoAcceptTarget.name} (${autoAcceptTarget.email}). They'll be visible to the business user immediately and won't need to respond on SquadHire. Requires a matching SquadHub user account.`}
           confirmLabel="Auto-accept"
           pendingLabel="Accepting…"
           variant="default"
@@ -684,6 +680,7 @@ export default function AdminPublishedCardRecipientsView({
             autoAcceptTalentMutation.mutate({
               talentId: autoAcceptTarget.id,
               talentName: autoAcceptTarget.name,
+              email: autoAcceptTarget.email,
             })
           }
         />

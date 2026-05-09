@@ -10,7 +10,6 @@ import {
   notifySquadhireOfCardRecall,
   notifySquadhireOfManualAssignment,
 } from '../utils/squadhireWebhook';
-import { getPartnerEmployeeSquadhireIds } from '../utils/partnerEmployeeSquadhireIds';
 import { config } from '../config';
 
 const router = Router();
@@ -424,25 +423,12 @@ router.get('/:id/squadhire-recipients', async (req: Request, res: Response) => {
       return res.json({ success: true, data: [], note: `SquadHire returned ${response.status}` });
     }
 
+    // SquadHire's response now includes `email` per talent (added in Profiles
+    // 1424f61). The admin UI uses it to call /auto-accept-talent for any
+    // pending row whose email matches a SquadHub user. Pass the payload
+    // through unchanged.
     const result = (await response.json()) as { data?: any[] };
-    const talents = result.data || [];
-
-    // Cross-reference SquadHire talent_user_ids against SquadHub partner-employees
-    // so the admin UI can render an Auto-accept button on the right rows.
-    // Failures here are non-fatal — fall back to no flagging.
-    let partnerEmployeeIds = new Set<string>();
-    try {
-      partnerEmployeeIds = await getPartnerEmployeeSquadhireIds();
-    } catch (err) {
-      console.error('Partner-employee resolver failed:', err);
-    }
-
-    const enriched = talents.map((t: any) => ({
-      ...t,
-      is_partner_employee: partnerEmployeeIds.has(String(t.talent_user_id)),
-    }));
-
-    res.json({ success: true, data: enriched });
+    res.json({ success: true, data: result.data || [] });
   } catch (err: any) {
     console.error('Admin get SquadHire recipients error:', err);
     // Non-fatal: return empty list so the UI still works

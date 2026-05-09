@@ -6,7 +6,6 @@ import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { sharePartnerWithCardClient } from '../utils/sharePartnerWithClient';
-import { findPartnerEmployeeByTalentId } from '../utils/partnerEmployeeSquadhireIds';
 import {
   notifySquadhireOfManualAssignment,
   notifySquadhireOfManualRemoval,
@@ -621,17 +620,16 @@ router.post(
 // ============================================================
 // POST /admin/subscription-cards/:id/auto-accept-talent
 //
-// SquadHire-side counterpart to /auto-accept-partner. The matching
-// algorithm in SquadHire surfaces talents that are also internal
-// SquadHub partner-employees (cross-referenced by email). For those
-// rows the admin gets an Auto-accept button on the recipients page;
-// clicking it accepts on their behalf so they're visible to the
-// business user without a SquadHire round-trip the talent will never
-// see (partner-employees use SquadHub directly, not SquadHire).
+// SquadHire-side counterpart to /auto-accept-partner. Lets an admin
+// accept a soft-published card on behalf of a SquadHire talent who
+// also has a SquadHub user account (matched by registration email).
+// The talent is then visible to the business user without ever having
+// to respond on SquadHire — useful when the talent is internal staff
+// who does their work through SquadHub.
 //
 // Gated to:
 //   - card.state === 'published' AND card.distribution === 'manual'
-//   - talent_id resolves to a SquadHub user with user_type='partner_employee'
+//   - the email passed in body resolves to an active SquadHub user
 //   - existing recipient row in 'pending' (idempotent on 'accepted',
 //     409 on 'rejected'). If no row yet (talent came from live SquadHire
 //     match, never assigned on our side), one is created in 'accepted'.
@@ -639,15 +637,16 @@ router.post(
 // Side effects:
 //   - Sets notified_at=NOW() on the recipient row so the broadcast queue
 //     skips it (the talent is no longer awaiting our nudge).
-//   - Calls sharePartnerWithCardClient with the SquadHub user_id so the
-//     business user sees the partner immediately, just like a real accept.
+//   - Calls sharePartnerWithCardClient with the matched SquadHub user_id
+//     so the business user sees the partner immediately.
 //
 // Limitation: SquadHire's mirror row stays in whatever state it was in
-// (usually 'pending'). For partner-employees this is fine — they don't
-// log into SquadHire as talents.
+// (usually 'pending'). The talent will see the card as pending if they
+// log into SquadHire — fine for internal staff who use SquadHub directly.
 // ============================================================
 const autoAcceptTalentSchema = z.object({
   talent_id: z.string().min(1),
+  email: z.string().email(),
   talent_name: z.string().min(1).max(200).optional(),
 });
 
@@ -664,7 +663,7 @@ router.post(
         return;
       }
       const cardId = req.params.id as string;
-      const { talent_id, talent_name } = parsed.data;
+      const { talent_id, email, talent_name } = parsed.data;
 
       const { data: card, error: cardErr } = await supabaseAdmin
         .from('subscription_cards')
@@ -691,14 +690,29 @@ router.post(
         return;
       }
 
-      const employee = await findPartnerEmployeeByTalentId(talent_id);
-      if (!employee) {
+      // Email-based resolution: find the SquadHub user registered with the
+      // same email SquadHire returned for this talent. No user_type gate —
+      // any active user qualifies, since "should the admin be allowed to
+      // accept on this person's behalf" is governed by the admin's auth,
+      // not the user's role.
+      const { data: matchedUser, error: userErr } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .ilike('email', email)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (userErr) {
+        res.status(500).json({ success: false, error: userErr.message });
+        return;
+      }
+      if (!matchedUser) {
         res.status(400).json({
           success: false,
-          error: 'Talent does not match a SquadHub partner-employee',
+          error: 'Talent has no matching SquadHub user account. Add them in Users → Add User first.',
         });
         return;
       }
+      const employee = { id: matchedUser.id as string, email };
 
       const categoryIds = Array.isArray(card.squadhire_category_ids)
         ? (card.squadhire_category_ids as string[])
