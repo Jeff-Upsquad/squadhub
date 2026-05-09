@@ -769,10 +769,17 @@ export async function notifySquadhireOfManualAssignment(
 export function startManualAssignmentSweeper(): NodeJS.Timeout {
   const tick = async () => {
     try {
+      // Only sweep rows the admin has explicitly released. `notified_at IS
+      // NULL` means a soft-publish queue entry that hasn't been broadcast yet
+      // — the staged-broadcast contract is that nothing leaves SquadHub until
+      // the admin clicks "Broadcast to these N users". Released rows whose
+      // SquadHire HTTP call failed (squadhire_notified_at still null) are
+      // still picked up here so they get retried in the background.
       const { data: rows, error } = await supabaseAdmin
         .from('subscription_card_external_recipients')
         .select('id, card_id, external_user_id')
         .eq('assigned_manually', true)
+        .not('notified_at', 'is', null)
         .is('squadhire_notified_at', null)
         .lt('squadhire_notify_attempts', MAX_SYNC_ATTEMPTS)
         .order('created_at', { ascending: true })

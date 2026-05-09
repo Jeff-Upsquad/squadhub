@@ -203,6 +203,11 @@ export default function AdminPublishedCardRecipientsView({
       queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
     },
   });
+  const broadcastResult = broadcastMutation.data?.data as
+    | { notified?: number; failed?: number }
+    | undefined;
+  const partialFailure =
+    !!broadcastResult && (broadcastResult.failed ?? 0) > 0 && (broadcastResult.notified ?? 0) > 0;
 
   const counts = useMemo(() => ({
     accepted: allRecipients.filter((r) => r.status === 'accepted').length,
@@ -551,6 +556,11 @@ export default function AdminPublishedCardRecipientsView({
                       {broadcastMutation.isError && (
                         <p className="mt-2 text-right text-[11px] text-red-600">
                           {(broadcastMutation.error as any)?.response?.data?.error || 'Broadcast failed. Try again.'}
+                        </p>
+                      )}
+                      {partialFailure && (
+                        <p className="mt-2 text-right text-[11px] text-amber-700">
+                          {broadcastResult!.notified} sent · {broadcastResult!.failed} couldn't be reached. Retry to send the rest.
                         </p>
                       )}
                     </section>
