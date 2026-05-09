@@ -1188,16 +1188,14 @@ function squadhireStatusLabel(card: PublishedCard): string {
 }
 
 function formatDeliverable(d: { kind: 'hours' | 'item'; per_day: number; per_week: number; per_month: number }): string {
+  const day = Number(d.per_day) || 0;
+  const week = Number(d.per_week) || 0;
+  const month = Number(d.per_month) || 0;
+  if (day === 0 && week === 0 && month === 0) return '—';
   if (d.kind === 'hours') {
-    if (d.per_week) return `${d.per_week} hrs/week`;
-    if (d.per_day) return `${d.per_day} hrs/day`;
-    if (d.per_month) return `${d.per_month} hrs/month`;
-    return '—';
+    return `${day} hrs/day · ${week} hrs/week · ${month} hrs/month`;
   }
-  if (d.per_week) return `${d.per_week}× per week`;
-  if (d.per_day) return `${d.per_day}× per day`;
-  if (d.per_month) return `${d.per_month}× per month`;
-  return '—';
+  return `${day}/day · ${week}/week · ${month}/month`;
 }
 
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
