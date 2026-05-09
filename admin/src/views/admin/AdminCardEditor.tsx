@@ -64,6 +64,7 @@ interface CardData {
   brand_name: string | null;
   business_nature: string | null;
   notes: string | null;
+  requirement_note: string | null;
   target_tiers: string[];
   min_experience_years: number;
   target_languages: string[];
@@ -142,6 +143,7 @@ export default function AdminCardEditor({
   const [brandName, setBrandName] = useState('');
   const [businessNature, setBusinessNature] = useState('');
   const [notes, setNotes] = useState('');
+  const [requirementNote, setRequirementNote] = useState('');
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [targetCountryIds, setTargetCountryIds] = useState<string[]>([]);
   const [targetRegions, setTargetRegions] = useState<{ country_id: string; region: string }[]>([]);
@@ -170,6 +172,7 @@ export default function AdminCardEditor({
     setBrandName(card.brand_name || '');
     setBusinessNature(card.business_nature || '');
     setNotes(card.notes || '');
+    setRequirementNote(card.requirement_note || '');
     setDeliverables(card.custom_deliverables || []);
     setTargetCountryIds(card.target_country_ids || []);
     setTargetRegions(card.target_regions || []);
@@ -247,6 +250,7 @@ export default function AdminCardEditor({
         brand_name: brandName || null,
         business_nature: businessNature || null,
         notes: notes || null,
+        requirement_note: requirementNote || null,
         custom_deliverables: deliverables,
       }),
     onSuccess: () => {
@@ -788,6 +792,16 @@ export default function AdminCardEditor({
                   onChange={(e) => setNotes(e.target.value)}
                   disabled={!isDraft}
                   rows={3}
+                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm resize-none"
+                />
+              </Field>
+              <Field label="Requirement Note">
+                <textarea
+                  value={requirementNote}
+                  onChange={(e) => setRequirementNote(e.target.value)}
+                  disabled={!isDraft}
+                  rows={3}
+                  placeholder="Short note about the requirement"
                   className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm resize-none"
                 />
               </Field>

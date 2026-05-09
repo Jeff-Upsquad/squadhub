@@ -23,6 +23,7 @@ export interface SubscriptionRequest {
   nature_of_business: string;
   short_note: string;
   location_of_business: string;
+  requirement_note: string;
 }
 
 interface ListResult {
