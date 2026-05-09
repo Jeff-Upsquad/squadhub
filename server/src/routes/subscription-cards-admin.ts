@@ -434,10 +434,13 @@ router.get('/:id/squadhire-recipients', async (req: Request, res: Response) => {
 // ============================================================
 // POST /admin/subscription-cards/:id/broadcast-pending
 // Release all queued (notified_at IS NULL) talent recipients on a
-// soft-published (manual) card: lazy-deliver the card to SquadHire if
-// it's never been synced, then per-row notifySquadhireOfManualAssignment.
-// Successful rows share a single `notified_at` timestamp so the UI can
-// group them as one batch; failed rows stay queued for retry.
+// soft-published (manual) card. Always re-delivers the card payload to
+// SquadHire first (idempotent on external_id) so the per-row
+// notifySquadhireOfManualAssignment call won't 404 if Profiles' state has
+// drifted from ours. Successful rows share a single `notified_at`
+// timestamp so the UI can group them as one batch; failed rows stay
+// queued for retry, and the response status reflects partial/total
+// failure so the UI can surface it instead of pretending success.
 // ============================================================
 router.post('/:id/broadcast-pending', async (req: Request, res: Response) => {
   try {
@@ -479,33 +482,36 @@ router.post('/:id/broadcast-pending', async (req: Request, res: Response) => {
       return;
     }
 
-    if (!card.squadhire_synced_at) {
-      const categoryIds = Array.isArray(card.squadhire_category_ids)
-        ? (card.squadhire_category_ids as string[])
-        : [];
-      if (categoryIds.length === 0) {
-        res.status(409).json({
-          success: false,
-          error: 'Card has no SquadHire categories. Add categories before broadcasting.',
-        });
-        return;
-      }
-      const payload = await buildSquadhirePayloadForCard(cardId);
-      if (payload) {
-        await deliverCardToSquadhire(cardId, payload);
-      }
-      const { data: recheck } = await supabaseAdmin
-        .from('subscription_cards')
-        .select('squadhire_synced_at')
-        .eq('id', cardId)
-        .maybeSingle();
-      if (!recheck?.squadhire_synced_at) {
-        res.status(503).json({
-          success: false,
-          error: 'Card could not be synced to SquadHire. Try again in a few minutes.',
-        });
-        return;
-      }
+    const categoryIds = Array.isArray(card.squadhire_category_ids)
+      ? (card.squadhire_category_ids as string[])
+      : [];
+    if (categoryIds.length === 0) {
+      res.status(409).json({
+        success: false,
+        error: 'Card has no SquadHire categories. Add categories before broadcasting.',
+      });
+      return;
+    }
+
+    // Always re-deliver the card payload before notifying. The webhook is
+    // idempotent on external_id, so a card already on Profiles becomes a
+    // no-op upsert; a card Profiles has lost (deleted/wiped) gets re-created
+    // here, preventing the manual-assignment call from 404'ing on it.
+    const payload = await buildSquadhirePayloadForCard(cardId);
+    if (payload) {
+      await deliverCardToSquadhire(cardId, payload);
+    }
+    const { data: recheck } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('squadhire_synced_at')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!recheck?.squadhire_synced_at) {
+      res.status(503).json({
+        success: false,
+        error: 'Card could not be synced to SquadHire. Try again in a few minutes.',
+      });
+      return;
     }
 
     const successfulIds: string[] = [];
@@ -538,6 +544,22 @@ router.post('/:id/broadcast-pending', async (req: Request, res: Response) => {
         res.status(500).json({ success: false, error: 'Notified SquadHire but failed to record state. Please retry.' });
         return;
       }
+    }
+
+    // 502 when nothing got through so the client mutation enters its error
+    // state and the admin sees the actual failure instead of an apparent
+    // "success" with the queue unchanged. Partial failure stays 200 with
+    // the per-row breakdown so the admin can decide whether to retry.
+    if (successfulIds.length === 0) {
+      const firstError = failures[0]?.error || 'unknown_error';
+      res.status(502).json({
+        success: false,
+        notified: 0,
+        failed: failures.length,
+        failures,
+        error: `Broadcast to SquadHire failed for all ${failures.length} talent${failures.length !== 1 ? 's' : ''} (${firstError}). Please try again in a few minutes.`,
+      });
+      return;
     }
 
     res.json({
