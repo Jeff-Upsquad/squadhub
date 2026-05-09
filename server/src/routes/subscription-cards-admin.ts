@@ -1033,7 +1033,17 @@ router.post('/:id/archive', async (req: Request, res: Response) => {
       return;
     }
 
-    // Tell SquadHire to drop its mirror rows so talents stop seeing it.
+    // Re-deliver to SquadHire so its local copy picks up archived_at
+    // and flips status='archived'. Without this, the card stays visible
+    // on the SquadHire business dashboard and in accepted talents'
+    // Responded tab — the recall notification only drops pending
+    // mirror rows, not the card itself.
+    buildSquadhirePayloadForCard(updated.id)
+      .then((payload) => payload && deliverCardToSquadhire(updated.id, payload))
+      .catch((err) => console.error('[admin-archive] squadhire delivery error', err));
+
+    // Drop SquadHire's mirror recipient rows so a future republish
+    // doesn't re-surface stale pending offers to the same talents.
     notifySquadhireOfCardRecall(updated.id).catch((err) => {
       console.error('[admin-archive] squadhire mirror drop error', err);
     });

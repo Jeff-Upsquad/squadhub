@@ -74,6 +74,12 @@ export interface SquadhireCardPayload {
   // accepted view but otherwise keeps the card visible. Absent on
   // never-recalled cards and on clean recalls (which become drafts).
   recalled_at?: string;
+  // ISO timestamp set when an admin archived a card from SquadHub's
+  // Archive tab. Stronger hide than recall — SquadHire removes the card
+  // from BOTH talent (pending and responded) AND business dashboards.
+  // Cleared on republish; sent as null in that case so SquadHire can
+  // transition out of archived. Omitted entirely when never archived.
+  archived_at?: string | null;
   // True when this card was created by SquadHub as a secondary (child of
   // another card via parent_card_id). SquadHire's business dashboard hides
   // secondaries from the published-cards list — only the primary surfaces.
@@ -102,7 +108,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, distribution, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, recalled_at, source, proposed_price, markup, customer_company, customer_email, service_type, plan_name',
+      'id, state, distribution, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, recalled_at, archived_at, source, proposed_price, markup, customer_company, customer_email, service_type, plan_name',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -139,11 +145,16 @@ export async function buildSquadhirePayloadForCard(
     return null;
   }
 
-  // Map SquadHub state → SquadHire status.
+  // Map SquadHub state → SquadHire status. archived_at dominates: if
+  // an admin explicitly archived the card it's hidden everywhere on
+  // SquadHire regardless of underlying state (a published card archived
+  // by an admin would otherwise leak through as 'active').
+  const isArchived = !!(card as any).archived_at;
   const status: 'active' | 'assigned' | 'archived' =
-    card.state === 'published' ? 'active'
-      : card.state === 'assigned' ? 'assigned'
-        : 'archived';
+    isArchived ? 'archived'
+      : card.state === 'published' ? 'active'
+        : card.state === 'assigned' ? 'assigned'
+          : 'archived';
 
   const targetingCardId = contentSource.id as string;
   const stagedSubId = contentSource.submission_subscription_id;
@@ -489,6 +500,7 @@ export async function buildSquadhirePayloadForCard(
     leadEmail && leadEmail.includes('@') ? leadEmail.toLowerCase() : undefined;
 
   const recalledAt = card.recalled_at as string | null | undefined;
+  const archivedAt = (card as any).archived_at as string | null | undefined;
 
   const businessPhone = leadPhone && leadPhone.length >= 6 ? leadPhone : undefined;
   const businessContactName = leadContactName && leadContactName.length > 0 ? leadContactName : undefined;
@@ -507,6 +519,7 @@ export async function buildSquadhirePayloadForCard(
     ...(businessContactName ? { business_contact_name: businessContactName } : {}),
     ...(businessCompany ? { business_company: businessCompany } : {}),
     ...(recalledAt ? { recalled_at: new Date(recalledAt).toISOString() } : {}),
+    archived_at: archivedAt ? new Date(archivedAt).toISOString() : null,
   };
 }
 
