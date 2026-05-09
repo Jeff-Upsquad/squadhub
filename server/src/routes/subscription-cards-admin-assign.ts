@@ -9,6 +9,7 @@ import { sharePartnerWithCardClient } from '../utils/sharePartnerWithClient';
 import {
   notifySquadhireOfManualAssignment,
   notifySquadhireOfManualRemoval,
+  notifySquadhireOfTalentAcceptance,
   buildSquadhirePayloadForCard,
   deliverCardToSquadhire,
 } from '../utils/squadhireWebhook';
@@ -843,6 +844,15 @@ router.post(
       }
 
       await sharePartnerWithCardClient(employee.id, cardId);
+
+      // Mirror the acceptance on SquadHire so the linked business
+      // dashboard shows the talent as 'new for review' — same end-state
+      // as if the talent had hit accept on SquadHire themselves. Fire-
+      // and-forget: SquadHub side is already updated; the SquadHire
+      // mirror is best-effort and the user response shouldn't wait.
+      notifySquadhireOfTalentAcceptance(cardId, talent_id).catch((err) => {
+        console.error('[auto-accept-talent] notify squadhire failed', err);
+      });
 
       res.json({ success: true });
     } catch (err: any) {

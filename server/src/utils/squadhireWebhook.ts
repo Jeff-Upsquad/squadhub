@@ -973,6 +973,62 @@ export async function notifySquadhireOfManualRemoval(
 }
 
 // ------------------------------------------------------------
+// Public: outbound notification when an admin auto-accepts a card on
+// behalf of a talent (POST /admin/subscription-cards/:id/auto-accept-talent).
+// SquadHire mirrors the row to status='accepted' and surfaces the talent
+// in the linked business dashboard. Best-effort, single attempt — the
+// SquadHub-side accept is already persisted by the time we get here.
+// ------------------------------------------------------------
+
+export async function notifySquadhireOfTalentAcceptance(
+  cardId: string,
+  talentId: string,
+): Promise<void> {
+  const baseUrl = config.squadhireWebhookUrl;
+  if (!baseUrl) {
+    console.warn('[squadhire-webhook] talent-accepted skipped: url not configured');
+    return;
+  }
+  if (!config.squadhireWebhookSecret) {
+    console.warn('[squadhire-webhook] talent-accepted skipped: secret not configured');
+    return;
+  }
+
+  const url = baseUrl.endsWith('/')
+    ? `${baseUrl}talent-accepted`
+    : `${baseUrl}/talent-accepted`;
+  const body = {
+    type: 'talent_accepted',
+    card_id: cardId,
+    talent_id: talentId,
+    accepted_at: new Date().toISOString(),
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.warn(`[squadhire-webhook] talent-accepted http_${res.status} ${text.slice(0, 200)}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[squadhire-webhook] talent-accepted failed', msg);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ------------------------------------------------------------
 // Public: outbound notification when an admin selects a talent
 // for a card. If talentId is null, the card was closed by
 // selecting a partner (SquadHub-native) — SquadHire just needs
