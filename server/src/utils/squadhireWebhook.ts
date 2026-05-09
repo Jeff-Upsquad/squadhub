@@ -622,13 +622,16 @@ export async function deliverCardToSquadhire(
 export function startSquadhireSyncSweeper(): NodeJS.Timeout {
   const tick = async () => {
     try {
-      // Any card with SquadHire categories that hasn't been successfully
-      // synced yet is fair game — not just state=published. Recall and
-      // Close both reset squadhire_synced_at to NULL and bump sync_attempts
-      // back to 0, so their archived deliveries are retried here too.
+      // Only broadcast cards are swept. Manual/soft-published cards
+      // intentionally stay out of SquadHire until an admin manually
+      // assigns a talent (handled inline in the assign-talent endpoint).
+      // Recall and Close on broadcast cards reset squadhire_synced_at to
+      // NULL and bump sync_attempts back to 0, so their archived
+      // deliveries are retried here too.
       const { data: cards, error } = await supabaseAdmin
         .from('subscription_cards')
         .select('id')
+        .eq('distribution', 'broadcast')
         .not('squadhire_category_ids', 'eq', '{}')
         .is('squadhire_synced_at', null)
         .lt('squadhire_sync_attempts', MAX_SYNC_ATTEMPTS)

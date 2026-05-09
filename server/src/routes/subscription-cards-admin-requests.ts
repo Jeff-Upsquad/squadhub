@@ -555,8 +555,9 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       await matchPartnersForCard(cardId);
     }
 
-    // SquadHire delivery (if target includes talent)
-    if (publishTargets.includes('talent')) {
+    // SquadHire delivery (only on broadcast — manual/soft publishes sync
+    // lazily on first manual talent assignment).
+    if (publishTargets.includes('talent') && distribution === 'broadcast') {
       buildSquadhirePayloadForCard(cardId)
         .then((payload) => payload && deliverCardToSquadhire(cardId, payload))
         .catch((err) =>
