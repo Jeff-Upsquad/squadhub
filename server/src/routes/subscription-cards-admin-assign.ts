@@ -123,7 +123,7 @@ router.post('/subscription-cards/:id/assign-talent', async (req: Request, res: R
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, squadhire_synced_at, squadhire_category_ids')
+      .select('id, state, distribution, squadhire_synced_at, squadhire_category_ids')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) {
@@ -139,11 +139,18 @@ router.post('/subscription-cards/:id/assign-talent', async (req: Request, res: R
       return;
     }
 
-    // Pre-flight: ensure the card exists in SquadHire before assigning.
-    if (!card.squadhire_synced_at) {
-      const categoryIds = Array.isArray(card.squadhire_category_ids)
-        ? (card.squadhire_category_ids as string[])
-        : [];
+    const isManual = card.distribution === 'manual';
+    const categoryIds = Array.isArray(card.squadhire_category_ids)
+      ? (card.squadhire_category_ids as string[])
+      : [];
+
+    // For manual cards we just queue — no SquadHire round-trip yet. The
+    // dedicated /broadcast-pending endpoint will lazy-deliver and notify
+    // when the admin explicitly releases this batch.
+    //
+    // For broadcast cards we keep the inline lazy-deliver + per-talent
+    // notify, because admins expect the talent to see the card right away.
+    if (!isManual && !card.squadhire_synced_at) {
       if (categoryIds.length === 0) {
         res.status(409).json({
           success: false,
@@ -169,6 +176,13 @@ router.post('/subscription-cards/:id/assign-talent', async (req: Request, res: R
         });
         return;
       }
+    } else if (isManual && categoryIds.length === 0) {
+      // Manual cards still need categories; the broadcast step will lazy-deliver.
+      res.status(409).json({
+        success: false,
+        error: 'Card has no SquadHire categories. Add categories before assigning talent.',
+      });
+      return;
     }
 
     const { data: existing } = await supabaseAdmin
@@ -196,6 +210,7 @@ router.post('/subscription-cards/:id/assign-talent', async (req: Request, res: R
           status: 'pending',
           responded_at: null,
           assigned_manually: true,
+          notified_at: isManual ? null : new Date().toISOString(),
         },
         { onConflict: 'card_id,external_system,external_recipient_id', ignoreDuplicates: true },
       )
@@ -203,6 +218,12 @@ router.post('/subscription-cards/:id/assign-talent', async (req: Request, res: R
       .single();
     if (insErr) {
       res.status(500).json({ success: false, error: insErr.message });
+      return;
+    }
+
+    if (isManual) {
+      // Queued only. Admin will release via /broadcast-pending.
+      res.json({ success: true, queued: true });
       return;
     }
 

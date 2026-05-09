@@ -29,6 +29,7 @@ export type TalentRecipient = {
   selected_at?: string | null;
   selected_by?: string | null;
   passed_over_at?: string | null;
+  notified_at?: string | null;
 };
 
 export type RecipientsResponse = {
