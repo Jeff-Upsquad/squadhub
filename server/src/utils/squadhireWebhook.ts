@@ -190,6 +190,84 @@ export async function buildSquadhirePayloadForCard(
     leadPhone = (contentSource as any).customer_phone ?? null;
     leadContactName = (contentSource as any).customer_name ?? null;
     leadCompany = (contentSource as any).customer_company ?? null;
+
+    // Resolve the matching subscription_plan and read its deliverables so the
+    // talent sees the actual configured hours/items instead of the hardcoded
+    // PLAN_HOURS fallback. Falls back gracefully when no plan matches (typo'd
+    // service_type, plan_name not in the catalog, etc) — the existing
+    // PLAN_HOURS path further down still runs as a last resort.
+    if (subscriptionName && planName) {
+      // Mirror the upsquad-label → SquadHub-slug map used by the request-publish
+      // path (server/src/routes/subscription-cards-admin-requests.ts). Try slug
+      // first, then case-insensitive name match for hand-typed custom cards.
+      const SERVICE_SLUG_MAP: Record<string, string> = {
+        Designers: 'designer',
+        Editors: 'video_editor',
+        'Designer plus Editor': 'designer_video_editor',
+      };
+      const guessedSlug =
+        SERVICE_SLUG_MAP[subscriptionName] ??
+        subscriptionName.toLowerCase().trim().replace(/\s+/g, '_');
+
+      const { data: subRow } = await supabaseAdmin
+        .from('subscriptions')
+        .select('id')
+        .or(`slug.eq.${guessedSlug},name.ilike.${subscriptionName}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (subRow?.id) {
+        const { data: planRow } = await supabaseAdmin
+          .from('subscription_plans')
+          .select('id')
+          .eq('subscription_id', subRow.id)
+          .ilike('plan', planName)
+          .maybeSingle();
+
+        if (planRow?.id) {
+          const [{ data: planDelivs }, { data: delivTypes }] = await Promise.all([
+            supabaseAdmin
+              .from('subscription_plan_deliverables')
+              .select('id, kind, per_day, per_week, per_month, deliverable_type_id')
+              .eq('plan_id', planRow.id),
+            supabaseAdmin
+              .from('subscription_deliverable_types')
+              .select('id, name')
+              .eq('subscription_id', subRow.id),
+          ]);
+
+          const disabledIds = new Set<string>(
+            Array.isArray(contentSource.disabled_default_deliverable_ids)
+              ? (contentSource.disabled_default_deliverable_ids as string[])
+              : [],
+          );
+          const hoursRow = (planDelivs ?? []).find(
+            (d: any) => d.kind === 'hours' && !disabledIds.has(d.id),
+          );
+          if (hoursRow) {
+            planHoursDeliverable = {
+              per_day: Number(hoursRow.per_day) || 0,
+              per_week: Number(hoursRow.per_week) || 0,
+              per_month: Number(hoursRow.per_month) || 0,
+            };
+          }
+
+          const typeNameMap: Record<string, string> = {};
+          (delivTypes ?? []).forEach((t: any) => { typeNameMap[t.id] = t.name; });
+
+          planItemDeliverables = (planDelivs ?? [])
+            .filter((d: any) => d.kind === 'item' && !disabledIds.has(d.id))
+            .map((d: any) => ({
+              kind: 'item',
+              name: typeNameMap[d.deliverable_type_id] || 'Deliverable',
+              deliverable_type_id: d.deliverable_type_id ?? null,
+              per_day: Number(d.per_day) || 0,
+              per_week: Number(d.per_week) || 0,
+              per_month: Number(d.per_month) || 0,
+            }));
+        }
+      }
+    }
   } else if (staged) {
     const [{ data: sub }, { data: plan }, { data: submission }, { data: planDelivs }, { data: delivTypes }] = await Promise.all([
       supabaseAdmin.from('subscriptions').select('name').eq('id', staged.subscription_id).maybeSingle(),
