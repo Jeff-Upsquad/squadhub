@@ -407,20 +407,22 @@ export default function AdminPublishedCardRecipientsView({
             <div className="lg:w-[280px] lg:shrink-0">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <h4 className="sh-section-heading">Customer</h4>
-                {card.submission?.id && (
-                  <a
-                    href={`/admin/clients?submission=${card.submission.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Open this lead in the Clients CRM"
-                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-[var(--color-sh-ink-muted)] hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)] transition"
-                  >
-                    View in CRM
-                    <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                    </svg>
-                  </a>
-                )}
+                <a
+                  href={card.submission?.id
+                    ? `/admin/clients?submission=${card.submission.id}`
+                    : '/admin/clients'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={card.submission?.id
+                    ? 'Open this lead in the Clients CRM'
+                    : 'Open the Clients CRM (no linked submission for this card)'}
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-[var(--color-sh-ink-muted)] hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)] transition"
+                >
+                  View in CRM
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                  </svg>
+                </a>
               </div>
               <div className="space-y-1.5 text-xs">
                 <HeaderDetailRow label="Company" value={card.customer_company} />
