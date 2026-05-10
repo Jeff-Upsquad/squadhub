@@ -61,45 +61,44 @@ export default function AdminRequestsList() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-[#E2E8F0] bg-white px-6 pt-5 pb-4">
-        <div className="mb-4">
-          <h1 className="text-xl font-semibold text-[#0F172B]">From Requests</h1>
-          <p className="mt-0.5 text-sm text-[#62748E]">
-            Inbound subscription requests from the pricing page.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
-          >
-            <option value="">All statuses</option>
-            <option value="pending">Pending</option>
-            <option value="in_review">In Review</option>
-            <option value="published">Published</option>
-            <option value="declined">Declined</option>
-          </select>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, email, company…"
-            className="flex-1 min-w-[200px] rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder:text-[#90A1B9] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
-          />
+    <div className="flex flex-1 flex-col">
+      {/* Filters */}
+      <div className="px-6 pb-4">
+        <div className="sh-card p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="sh-input w-auto"
+            >
+              <option value="">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="in_review">In Review</option>
+              <option value="published">Published</option>
+              <option value="declined">Declined</option>
+            </select>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, email, company…"
+              className="sh-input flex-1 min-w-[220px]"
+            />
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-5">
+      <div className="flex-1 overflow-y-auto px-6 pb-8">
         {isLoading ? (
-          <p className="py-8 text-center text-sm text-[#90A1B9]">Loading…</p>
+          <div className="sh-card py-16 text-center">
+            <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading…</p>
+          </div>
         ) : requests.length === 0 ? (
-          <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-            <p className="text-sm text-[#90A1B9]">No subscription requests found.</p>
+          <div className="sh-card py-16 text-center">
+            <p className="text-sm text-[var(--color-sh-ink-subtle)]">No subscription requests found.</p>
           </div>
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {requests.map((req) => (
               <RequestRow
                 key={req.id}
@@ -140,11 +139,6 @@ function RequestRow({
     : request.status === 'in_review'
     ? 'Continue'
     : 'Review';
-  const buttonClass = hasCard
-    ? 'ml-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100'
-    : request.status === 'in_review'
-    ? 'ml-2 rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-medium text-[#0F172B] transition hover:bg-slate-50 disabled:opacity-50'
-    : 'ml-2 rounded-md bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[#1E293B] disabled:opacity-50';
   const statusColors: Record<string, string> = {
     pending: '#F59E0B',
     in_review: '#3B82F6',
@@ -155,48 +149,54 @@ function RequestRow({
   const color = statusColors[request.status] || '#6B7280';
 
   return (
-    <div className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-4 py-3">
+    <div className="sh-card flex items-center justify-between px-5 py-4">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 text-sm font-semibold">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
           {(request.company || request.name).charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-[#0F172B]">
+          <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
             {request.company || request.name}
           </p>
-          <p className="mt-0.5 truncate text-xs text-[#62748E]">
+          <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
             {request.service_type} · {request.tier} · {request.plan}
           </p>
-          <p className="mt-0.5 truncate text-[11px] text-[#90A1B9]">
+          <p className="mt-0.5 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
             {request.email} · {request.phone}
           </p>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <span className="text-sm font-medium text-[#0F172B]">
+        <span className="text-sm font-semibold text-[var(--color-sh-ink)]">
           ₹{request.proposed_price.toLocaleString()}
         </span>
         {request.working_days && (
-          <span className="text-xs text-[#62748E]">
+          <span className="text-xs text-[var(--color-sh-ink-muted)]">
             {request.working_days.split(',').length}d/wk
           </span>
         )}
         <span
-          className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-          style={{ backgroundColor: `${color}18`, color }}
+          className="sh-status-pill"
+          style={{ backgroundColor: `${color}1F`, color }}
         >
           {request.status}
         </span>
-        <span className="text-[11px] text-[#90A1B9]">
+        <span className="text-[11px] text-[var(--color-sh-ink-faint)]">
           {new Date(request.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
         </span>
-        <button
-          onClick={onAction}
-          disabled={isPending}
-          className={buttonClass}
-        >
-          {buttonLabel}
-        </button>
+        {hasCard ? (
+          <button onClick={onAction} className="sh-btn-info">
+            {buttonLabel}
+          </button>
+        ) : request.status === 'pending' ? (
+          <button onClick={onAction} disabled={isPending} className="sh-btn-primary sh-btn-primary-sm">
+            {buttonLabel}
+          </button>
+        ) : (
+          <button onClick={onAction} disabled={isPending} className="sh-btn-ghost sh-btn-ghost-sm">
+            {buttonLabel}
+          </button>
+        )}
       </div>
     </div>
   );

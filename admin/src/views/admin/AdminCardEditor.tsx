@@ -342,33 +342,36 @@ export default function AdminCardEditor({
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-[#90A1B9]">Loading card…</p>
+      <div className="flex h-full items-center justify-center sh-surface">
+        <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading card…</p>
       </div>
     );
   }
 
   if (!card) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4">
-        <p className="text-sm text-[#90A1B9]">Card not found.</p>
-        <button onClick={onClose} className="text-sm text-blue-600 hover:underline">Go back</button>
+      <div className="flex h-full flex-col items-center justify-center gap-4 sh-surface">
+        <p className="text-sm text-[var(--color-sh-ink-faint)]">Card not found.</p>
+        <button onClick={onClose} className="sh-btn-ghost sh-btn-ghost-sm">Go back</button>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col sh-surface">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[#E2E8F0] bg-white px-6 py-4">
-        <div>
-          <button onClick={onClose} className="text-sm text-[#62748E] hover:text-[#0F172B]">
-            ← Back
+      <div className="flex items-center justify-between px-6 pt-6 pb-4">
+        <div className="space-y-2">
+          <button onClick={onClose} className="sh-btn-ghost sh-btn-ghost-sm">
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
           </button>
-          <h1 className="mt-1 text-lg font-semibold text-[#0F172B]">
+          <h1 className="sh-display text-2xl sm:text-3xl">
             {card.source === 'request' ? 'Card from Request' : 'Custom Card'}
             {card.subscription_request_id && (
-              <span className="ml-2 text-sm font-normal text-[#62748E]">
+              <span className="ml-2 text-base font-normal text-[var(--color-sh-ink-muted)]">
                 (Request #{card.subscription_request_id})
               </span>
             )}
@@ -384,21 +387,21 @@ export default function AdminCardEditor({
                   }
                 }}
                 disabled={deleteMutation.isPending}
-                className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                className="sh-btn-danger"
               >
                 {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
               </button>
               <button
                 onClick={handleSave}
                 disabled={saveMutation.isPending}
-                className="rounded-md border border-[#E2E8F0] px-3 py-2 text-sm font-medium text-[#0F172B] transition hover:bg-slate-50 disabled:opacity-50"
+                className="sh-btn-ghost"
               >
                 {saveMutation.isPending ? 'Saving…' : 'Save Draft'}
               </button>
               <button
                 onClick={() => publishMutation.mutate()}
                 disabled={publishMutation.isPending}
-                className="rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E293B] disabled:opacity-50"
+                className="sh-btn-primary sh-btn-primary-sm"
               >
                 {publishMutation.isPending ? 'Publishing…' : 'Publish'}
               </button>
@@ -408,8 +411,48 @@ export default function AdminCardEditor({
       </div>
 
       {/* Form */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="mx-auto max-w-3xl space-y-8">
+      <div className="flex-1 overflow-y-auto px-6 pb-10">
+        <div className="mx-auto max-w-3xl space-y-6">
+          {/* Publish Settings */}
+          <Section title="Publish Settings">
+            <Field label="Publish To">
+              <div className="flex gap-2">
+                {['partner', 'talent'].map((target) => {
+                  const active = publishTargets.includes(target);
+                  return (
+                    <PillCheckbox
+                      key={target}
+                      active={active}
+                      disabled={!isDraft}
+                      onClick={() =>
+                        setPublishTargets(active
+                          ? publishTargets.filter((t) => t !== target)
+                          : [...publishTargets, target])
+                      }
+                      label={target.charAt(0).toUpperCase() + target.slice(1)}
+                    />
+                  );
+                })}
+              </div>
+            </Field>
+            <Field label="Distribution">
+              <div className="flex gap-2">
+                {(['broadcast', 'manual'] as const).map((mode) => {
+                  const active = distribution === mode;
+                  return (
+                    <PillCheckbox
+                      key={mode}
+                      active={active}
+                      disabled={!isDraft}
+                      onClick={() => setDistribution(mode)}
+                      label={mode === 'broadcast' ? 'Broadcast (all matching users)' : 'Publish (share manually)'}
+                    />
+                  );
+                })}
+              </div>
+            </Field>
+          </Section>
+
           {/* Plan Basics */}
           <Section title="Plan Basics">
             <div className="grid grid-cols-2 gap-4">
@@ -418,7 +461,7 @@ export default function AdminCardEditor({
                   value={serviceType}
                   onChange={(e) => setServiceType(e.target.value)}
                   disabled={!isDraft}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm"
+                  className="sh-input"
                 >
                   <option value="">Select…</option>
                   {SERVICE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -429,7 +472,7 @@ export default function AdminCardEditor({
                   value={planName}
                   onChange={(e) => setPlanName(e.target.value)}
                   disabled={!isDraft}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm"
+                  className="sh-input"
                 >
                   <option value="">Select…</option>
                   {VALID_PLANS.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
@@ -438,47 +481,42 @@ export default function AdminCardEditor({
             </div>
             <Field label="Tiers">
               <div className="flex flex-wrap gap-2">
-                {VALID_TIERS.map((tier) => (
-                  <label key={tier} className="flex items-center gap-1.5 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={tiers.includes(tier)}
-                      onChange={(e) =>
-                        setTiers(e.target.checked
-                          ? [...tiers, tier]
-                          : tiers.filter((t) => t !== tier))
-                      }
+                {VALID_TIERS.map((tier) => {
+                  const active = tiers.includes(tier);
+                  return (
+                    <PillCheckbox
+                      key={tier}
+                      active={active}
                       disabled={!isDraft}
-                      className="rounded border-[#E2E8F0]"
+                      onClick={() =>
+                        setTiers(active ? tiers.filter((t) => t !== tier) : [...tiers, tier])
+                      }
+                      label={tier}
                     />
-                    {tier}
-                  </label>
-                ))}
+                  );
+                })}
               </div>
             </Field>
             <Field label="Working Days">
               <div className="flex flex-wrap gap-2">
-                {VALID_DAYS.map((day) => (
-                  <label key={day} className="flex items-center gap-1.5 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={workingDays.includes(day)}
-                      onChange={(e) =>
-                        setWorkingDays(e.target.checked
-                          ? [...workingDays, day]
-                          : workingDays.filter((d) => d !== day))
-                      }
+                {VALID_DAYS.map((day) => {
+                  const active = workingDays.includes(day);
+                  return (
+                    <PillCheckbox
+                      key={day}
+                      active={active}
                       disabled={!isDraft}
-                      className="rounded border-[#E2E8F0]"
+                      onClick={() =>
+                        setWorkingDays(active ? workingDays.filter((d) => d !== day) : [...workingDays, day])
+                      }
+                      label={day}
                     />
-                    {day}
-                  </label>
-                ))}
+                  );
+                })}
               </div>
             </Field>
           </Section>
 
-          {/* Customer */}
           {/* Location & Language */}
           <Section title="Location & Language">
             <Field label="Country">
@@ -491,7 +529,7 @@ export default function AdminCardEditor({
                   setTargetRegions((prev) => prev.filter((r) => r.country_id === id));
                 }}
                 disabled={!isDraft}
-                className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50"
+                className="sh-input"
               >
                 <option value="">No country preference</option>
                 {countries.map((c) => (
@@ -505,10 +543,10 @@ export default function AdminCardEditor({
                 const selectedCountry = selectedCountryId ? countryById[selectedCountryId] : null;
                 const stateOptions = selectedCountry ? STATES_BY_COUNTRY_NAME[selectedCountry.name] || [] : [];
                 if (!selectedCountry) {
-                  return <p className="text-xs text-[#90A1B9]">Pick a country above to enable.</p>;
+                  return <p className="text-xs text-[var(--color-sh-ink-faint)]">Pick a country above to enable.</p>;
                 }
                 if (stateOptions.length === 0) {
-                  return <p className="text-xs text-[#90A1B9]">No state list configured for {selectedCountry.name}.</p>;
+                  return <p className="text-xs text-[var(--color-sh-ink-faint)]">No state list configured for {selectedCountry.name}.</p>;
                 }
                 const selectedRegions = new Set(targetRegions.map((r) => r.region));
                 return (
@@ -516,25 +554,18 @@ export default function AdminCardEditor({
                     {stateOptions.map((state) => {
                       const active = selectedRegions.has(state);
                       return (
-                        <button
+                        <PillCheckbox
                           key={state}
-                          type="button"
+                          active={active}
+                          disabled={!isDraft}
                           onClick={() => {
-                            if (!isDraft) return;
                             setTargetRegions((prev) => {
                               if (active) return prev.filter((r) => r.region !== state);
                               return [...prev, { country_id: selectedCountryId, region: state }];
                             });
                           }}
-                          disabled={!isDraft}
-                          className={`rounded-full px-3 py-1 text-xs transition border ${
-                            active
-                              ? 'bg-indigo-600 text-white border-indigo-600'
-                              : 'bg-white text-[#0F172B] border-[#E2E8F0] hover:bg-indigo-50'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        >
-                          {active && '✓ '}{state}
-                        </button>
+                          label={state}
+                        />
                       );
                     })}
                   </div>
@@ -546,60 +577,46 @@ export default function AdminCardEditor({
                 {LANGUAGE_OPTIONS.map((lang) => {
                   const active = targetLanguages.includes(lang);
                   return (
-                    <button
+                    <PillCheckbox
                       key={lang}
-                      type="button"
+                      active={active}
+                      disabled={!isDraft}
                       onClick={() => {
-                        if (!isDraft) return;
                         setTargetLanguages((prev) =>
                           active ? prev.filter((l) => l !== lang) : [...prev, lang],
                         );
                       }}
-                      disabled={!isDraft}
-                      className={`rounded-full px-3 py-1 text-xs transition border ${
-                        active
-                          ? 'bg-amber-500 text-white border-amber-500'
-                          : 'bg-white text-[#0F172B] border-[#E2E8F0] hover:bg-amber-50'
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    >
-                      {active && '✓ '}{lang}
-                    </button>
+                      label={lang}
+                    />
                   );
                 })}
               </div>
             </Field>
             <Field label="SquadHire Categories">
-              <p className="mb-2 text-[11px] text-[#90A1B9]">
+              <p className="mb-2 text-[11px] text-[var(--color-sh-ink-faint)]">
                 The card is only delivered to SquadHire when at least one
                 category is picked — talents subscribed to these categories
                 see the card. Pre-filled from the matching subscription's
                 SquadHire Profile when available.
               </p>
               {squadhireCategories.length === 0 ? (
-                <p className="text-xs text-[#90A1B9]">No categories loaded.</p>
+                <p className="text-xs text-[var(--color-sh-ink-faint)]">No categories loaded.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {squadhireCategories.map((cat) => {
                     const active = squadhireCategoryIds.includes(cat.id);
                     return (
-                      <button
+                      <PillCheckbox
                         key={cat.id}
-                        type="button"
+                        active={active}
+                        disabled={!isDraft}
                         onClick={() => {
-                          if (!isDraft) return;
                           setSquadhireCategoryIds((prev) =>
                             active ? prev.filter((id) => id !== cat.id) : [...prev, cat.id],
                           );
                         }}
-                        disabled={!isDraft}
-                        className={`rounded-full px-3 py-1 text-xs transition border ${
-                          active
-                            ? 'bg-emerald-600 text-white border-emerald-600'
-                            : 'bg-white text-[#0F172B] border-[#E2E8F0] hover:bg-emerald-50'
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
-                      >
-                        {active && '✓ '}{cat.name}
-                      </button>
+                        label={cat.name}
+                      />
                     );
                   })}
                 </div>
@@ -614,7 +631,7 @@ export default function AdminCardEditor({
                   value={customerCompany}
                   onChange={(e) => setCustomerCompany(e.target.value)}
                   disabled={!isDraft}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                  className="sh-input"
                 />
               </Field>
               <Field label="Contact Name">
@@ -622,7 +639,7 @@ export default function AdminCardEditor({
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   disabled={!isDraft}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                  className="sh-input"
                 />
               </Field>
               <Field label="Email" onEditClick={isDraft ? () => setEmailEditable(true) : undefined} editActive={emailEditable}>
@@ -630,7 +647,7 @@ export default function AdminCardEditor({
                   value={customerEmail}
                   onChange={(e) => setCustomerEmail(e.target.value)}
                   disabled={!isDraft || !emailEditable}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm transition-colors disabled:bg-slate-50 disabled:text-slate-500"
+                  className="sh-input"
                 />
               </Field>
               <Field label="Phone" onEditClick={isDraft ? () => setPhoneEditable(true) : undefined} editActive={phoneEditable}>
@@ -638,7 +655,7 @@ export default function AdminCardEditor({
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
                   disabled={!isDraft || !phoneEditable}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm transition-colors disabled:bg-slate-50 disabled:text-slate-500"
+                  className="sh-input"
                 />
               </Field>
               <div className="col-span-2">
@@ -648,7 +665,7 @@ export default function AdminCardEditor({
                     onChange={(e) => setCustomerLocation(e.target.value)}
                     disabled={!isDraft}
                     placeholder="e.g. Bangalore, India"
-                    className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                    className="sh-input"
                   />
                 </Field>
               </div>
@@ -658,7 +675,7 @@ export default function AdminCardEditor({
           {/* Plan Deliverables (read-only, derived from catalog) */}
           <Section title="Plan Deliverables">
             {dailyHours == null ? (
-              <p className="text-xs text-[#90A1B9]">
+              <p className="text-xs text-[var(--color-sh-ink-faint)]">
                 Pick service, plan, and at least one tier to see hours from the catalog.
               </p>
             ) : (
@@ -670,31 +687,31 @@ export default function AdminCardEditor({
                     {monthlyHours != null ? `${monthlyHours} hr/mo` : '—'}
                   </ReadOnlyField>
                 </div>
-                <p className="mt-2 text-[11px] text-[#90A1B9]">
+                <p className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">
                   Editable from the Subscriptions module ({catalog?.plan?.tier} · {catalog?.plan?.plan}).
                 </p>
               </>
             )}
           </Section>
 
-          {/* Custom Deliverables (moved here, below the auto-derived block) */}
+          {/* Custom Deliverables */}
           <Section title="Custom Deliverables">
             <div className="space-y-3">
               {deliverables.map((d) => (
-                <div key={d.id} className="flex items-start gap-2 rounded-lg border border-[#E2E8F0] bg-white p-3">
+                <div key={d.id} className="flex items-start gap-2 rounded-xl border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] p-3">
                   <div className="flex-1 grid grid-cols-4 gap-2">
                     <input
                       value={d.name}
                       onChange={(e) => updateDeliverable(d.id, 'name', e.target.value)}
                       placeholder="Name"
                       disabled={!isDraft}
-                      className="col-span-2 rounded-md border border-[#E2E8F0] px-2 py-1.5 text-sm"
+                      className="sh-input col-span-2"
                     />
                     <select
                       value={d.kind}
                       onChange={(e) => updateDeliverable(d.id, 'kind', e.target.value)}
                       disabled={!isDraft}
-                      className="rounded-md border border-[#E2E8F0] px-2 py-1.5 text-sm"
+                      className="sh-input"
                     >
                       <option value="item">Item</option>
                       <option value="hours">Hours</option>
@@ -705,13 +722,14 @@ export default function AdminCardEditor({
                       onChange={(e) => updateDeliverable(d.id, 'per_month', parseInt(e.target.value) || 0)}
                       placeholder="/mo"
                       disabled={!isDraft}
-                      className="rounded-md border border-[#E2E8F0] px-2 py-1.5 text-sm"
+                      className="sh-input"
                     />
                   </div>
                   {isDraft && (
                     <button
                       onClick={() => removeDeliverable(d.id)}
-                      className="mt-1.5 text-sm text-red-500 hover:text-red-700"
+                      className="mt-2 text-base text-red-500 hover:text-red-700"
+                      aria-label="Remove deliverable"
                     >
                       ×
                     </button>
@@ -721,7 +739,7 @@ export default function AdminCardEditor({
               {isDraft && (
                 <button
                   onClick={addDeliverable}
-                  className="rounded-md border border-dashed border-[#E2E8F0] px-3 py-2 text-sm text-[#62748E] hover:border-[#0F172B] hover:text-[#0F172B]"
+                  className="rounded-xl border border-dashed border-[var(--color-sh-warm-border)] px-4 py-2.5 text-sm font-semibold text-[var(--color-sh-ink-muted)] hover:border-[var(--color-sh-ink)] hover:text-[var(--color-sh-ink)] transition"
                 >
                   + Add Deliverable
                 </button>
@@ -738,15 +756,15 @@ export default function AdminCardEditor({
                   value={proposedPrice || ''}
                   onChange={(e) => setProposedPrice(parseInt(e.target.value) || 0)}
                   disabled={!isDraft}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50"
+                  className="sh-input"
                 />
                 {originalProposedPrice != null && originalProposedPrice !== proposedPrice && (
-                  <p className="mt-1 text-[11px] text-[#90A1B9]">
+                  <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
                     Originally <span className="line-through">₹{originalProposedPrice.toLocaleString()}</span>
                   </p>
                 )}
                 {catalogPricingRow && (
-                  <p className="mt-1 text-[11px] text-[#90A1B9]">
+                  <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
                     Catalog min: ₹{catalogPricingRow.price.toLocaleString()}
                   </p>
                 )}
@@ -758,10 +776,10 @@ export default function AdminCardEditor({
                   value={markup || ''}
                   onChange={(e) => setMarkup(parseInt(e.target.value) || 0)}
                   disabled={!isDraft}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm disabled:bg-slate-50"
+                  className="sh-input"
                 />
                 {catalogPricingRow && (
-                  <p className="mt-1 text-[11px] text-[#90A1B9]">
+                  <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
                     Catalog: {catalogPricingRow.margin_type === 'percent'
                       ? `${catalogPricingRow.margin_value}% (= ₹${(catalogMarginInRupees ?? 0).toLocaleString()})`
                       : `₹${catalogPricingRow.margin_value.toLocaleString()} (flat)`}
@@ -769,10 +787,10 @@ export default function AdminCardEditor({
                 )}
               </Field>
               <Field label="Partner Price (₹/mo)">
-                <div className="flex h-[38px] items-center rounded-md border border-[#E2E8F0] bg-slate-50 px-3 text-sm font-semibold text-[#0F172B]">
+                <div className="flex h-[40px] items-center rounded-[10px] border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-3 text-sm font-bold text-[var(--color-sh-ink)]">
                   {partnerPrice != null ? `₹${partnerPrice.toLocaleString()}` : '—'}
                 </div>
-                <p className="mt-1 text-[11px] text-[#90A1B9]">= Proposed − Margin</p>
+                <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">= Proposed − Margin</p>
               </Field>
             </div>
           </Section>
@@ -785,7 +803,7 @@ export default function AdminCardEditor({
                   value={brandName}
                   onChange={(e) => setBrandName(e.target.value)}
                   disabled={!isDraft}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm"
+                  className="sh-input"
                 />
               </Field>
               <Field label="Business Nature">
@@ -794,7 +812,7 @@ export default function AdminCardEditor({
                   onChange={(e) => setBusinessNature(e.target.value)}
                   disabled={!isDraft}
                   rows={2}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm resize-none"
+                  className="sh-input resize-none"
                 />
               </Field>
               <Field label="Notes">
@@ -803,7 +821,7 @@ export default function AdminCardEditor({
                   onChange={(e) => setNotes(e.target.value)}
                   disabled={!isDraft}
                   rows={3}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm resize-none"
+                  className="sh-input resize-none"
                 />
               </Field>
               <Field label="Requirement Note">
@@ -813,53 +831,12 @@ export default function AdminCardEditor({
                   disabled={!isDraft}
                   rows={3}
                   placeholder="Short note about the requirement"
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm resize-none"
+                  className="sh-input resize-none"
                 />
               </Field>
             </div>
           </Section>
 
-          {/* Publish Settings */}
-          <Section title="Publish Settings">
-            <Field label="Publish To">
-              <div className="flex gap-4">
-                {['partner', 'talent'].map((target) => (
-                  <label key={target} className="flex items-center gap-1.5 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={publishTargets.includes(target)}
-                      onChange={(e) =>
-                        setPublishTargets(e.target.checked
-                          ? [...publishTargets, target]
-                          : publishTargets.filter((t) => t !== target))
-                      }
-                      disabled={!isDraft}
-                      className="rounded border-[#E2E8F0]"
-                    />
-                    {target.charAt(0).toUpperCase() + target.slice(1)}
-                  </label>
-                ))}
-              </div>
-            </Field>
-            <Field label="Distribution">
-              <div className="flex gap-4">
-                {(['broadcast', 'manual'] as const).map((mode) => (
-                  <label key={mode} className="flex items-center gap-1.5 text-sm">
-                    <input
-                      type="radio"
-                      name="distribution"
-                      value={mode}
-                      checked={distribution === mode}
-                      onChange={() => setDistribution(mode)}
-                      disabled={!isDraft}
-                      className="border-[#E2E8F0]"
-                    />
-                    {mode === 'broadcast' ? 'Broadcast (all matching users)' : 'Publish (share manually)'}
-                  </label>
-                ))}
-              </div>
-            </Field>
-          </Section>
         </div>
       </div>
     </div>
@@ -869,8 +846,8 @@ export default function AdminCardEditor({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h2 className="mb-3 text-sm font-semibold text-[#0F172B] uppercase tracking-wide">{title}</h2>
-      <div className="space-y-4 rounded-lg border border-[#E2E8F0] bg-white p-4">
+      <h2 className="sh-section-heading mb-3 px-1">{title}</h2>
+      <div className="sh-card space-y-4 p-5">
         {children}
       </div>
     </div>
@@ -880,10 +857,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Field({ label, children, onEditClick, editActive }: { label: string; children: React.ReactNode; onEditClick?: () => void; editActive?: boolean }) {
   return (
     <div>
-      <div className="mb-1 flex items-center gap-1.5">
-        <label className="text-xs font-medium text-[#62748E]">{label}</label>
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <label className="text-xs font-semibold text-[var(--color-sh-ink-muted)]">{label}</label>
         {onEditClick && !editActive && (
-          <button type="button" onClick={onEditClick} className="text-[#90A1B9] transition hover:text-[#2962FF]" title={`Edit ${label}`}>
+          <button type="button" onClick={onEditClick} className="text-[var(--color-sh-ink-faint)] transition hover:text-[var(--color-sh-ink)]" title={`Edit ${label}`}>
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
@@ -899,10 +876,28 @@ function Field({ label, children, onEditClick, editActive }: { label: string; ch
 function ReadOnlyField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-[#62748E]">{label}</label>
-      <div className="flex h-[38px] items-center rounded-md border border-[#E2E8F0] bg-slate-50 px-3 text-sm font-semibold text-[#0F172B]">
+      <label className="mb-1.5 block text-xs font-semibold text-[var(--color-sh-ink-muted)]">{label}</label>
+      <div className="flex h-[40px] items-center rounded-[10px] border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-3 text-sm font-bold text-[var(--color-sh-ink)]">
         {children}
       </div>
     </div>
+  );
+}
+
+function PillCheckbox({ active, disabled, onClick, label }: { active: boolean; disabled?: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => { if (!disabled) onClick(); }}
+      disabled={disabled}
+      className="rounded-full px-3.5 py-1.5 text-xs font-semibold transition border-[1.5px] disabled:opacity-50 disabled:cursor-not-allowed"
+      style={
+        active
+          ? { background: 'var(--color-sh-lime-soft)', color: 'var(--color-sh-ink)', borderColor: 'var(--color-sh-ink)' }
+          : { background: '#fff', color: 'var(--color-sh-ink)', borderColor: 'var(--color-sh-warm-border)' }
+      }
+    >
+      {active && <span className="mr-1">✓</span>}{label}
+    </button>
   );
 }

@@ -1,10 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
-
-type Tab = 'partner' | 'talent';
 
 type PartnerHit = {
   id: string;
@@ -30,13 +28,11 @@ export default function AssignRecipientPicker({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>('partner');
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus the search input on open. Switching tabs preserves the query so a
-  // partner-not-found admin can flip to Talents and try the same name.
+  // Focus the search input on open.
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -55,22 +51,24 @@ export default function AssignRecipientPicker({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const partners = useQuery({
+  // Both searches fire in parallel against the single query so the user
+  // only types once and sees grouped results.
+  const partnersQ = useQuery({
     queryKey: ['admin-partner-search', debouncedQuery],
     queryFn: () =>
       api.get('/admin/partners/search', { params: { q: debouncedQuery } }).then(
         (r) => (r.data?.data as PartnerHit[]) ?? [],
       ),
-    enabled: tab === 'partner' && debouncedQuery.length > 0,
+    enabled: debouncedQuery.length > 0,
   });
 
-  const talents = useQuery({
+  const talentsQ = useQuery({
     queryKey: ['admin-talent-search', debouncedQuery],
     queryFn: () =>
       api.get('/admin/talents/search', { params: { q: debouncedQuery } }).then(
         (r) => (r.data?.data as TalentHit[]) ?? [],
       ),
-    enabled: tab === 'talent' && debouncedQuery.length > 0,
+    enabled: debouncedQuery.length > 0,
     retry: 0,
   });
 
@@ -102,201 +100,208 @@ export default function AssignRecipientPicker({
 
   const isAssigning = assignPartner.isPending || assignTalent.isPending;
 
+  const partners = partnersQ.data ?? [];
+  const talents = talentsQ.data ?? [];
+  const isLoading = partnersQ.isLoading || talentsQ.isLoading;
+  const isError = !!partnersQ.error && !!talentsQ.error; // both failed
+  const hasResults = partners.length > 0 || talents.length > 0;
+  const totalCount = useMemo(() => partners.length + talents.length, [partners, talents]);
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative flex h-[520px] w-[480px] max-w-[95vw] flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-4 py-3">
-          <h3 className="text-sm font-semibold text-[#0F172B]">Assign partner or talent</h3>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative flex h-[560px] w-[520px] max-w-[95vw] flex-col overflow-hidden rounded-[16px] border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] shadow-2xl">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--color-sh-warm-border)] bg-white px-5 py-4">
+          <div className="space-y-1.5 min-w-0">
+            <span className="sh-eyebrow">
+              <span className="sh-eyebrow-dot" />
+              Assign recipient
+            </span>
+            <h3 className="sh-display text-xl">Pick a partner or talent</h3>
+          </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="rounded-md p-1 text-[#62748E] hover:bg-[#F8FAFC]"
+            className="shrink-0 rounded-md p-1 text-[var(--color-sh-ink-muted)] hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)] transition"
           >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        <div className="flex border-b border-[#E2E8F0]">
-          <TabButton active={tab === 'partner'} onClick={() => setTab('partner')}>
-            Partners
-          </TabButton>
-          <TabButton active={tab === 'talent'} onClick={() => setTab('talent')}>
-            Talents
-          </TabButton>
+        {/* Search */}
+        <div className="border-b border-[var(--color-sh-warm-border)] bg-white px-5 py-3">
+          <div className="relative">
+            <svg
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-sh-ink-faint)]"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" />
+            </svg>
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search partners and talents by name or email…"
+              className="sh-input pl-9"
+            />
+          </div>
+          {debouncedQuery.length > 0 && hasResults && (
+            <p className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">
+              {totalCount} {totalCount === 1 ? 'match' : 'matches'} · {partners.length} partner{partners.length === 1 ? '' : 's'} · {talents.length} talent{talents.length === 1 ? '' : 's'}
+            </p>
+          )}
         </div>
 
-        <div className="border-b border-[#E2E8F0] px-3 py-2">
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={
-              tab === 'partner' ? 'Search partners by name or email…' : 'Search talents by name or email…'
-            }
-            className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-sm text-[#0F172B] placeholder:text-[#90A1B9] focus:border-[#0F172B] focus:outline-none"
-          />
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
+        {/* Results */}
+        <div className="flex-1 overflow-y-auto p-4">
           {debouncedQuery.length === 0 ? (
-            <div className="p-6 text-center text-xs text-[#90A1B9]">
-              Start typing to search.
+            <div className="sh-card flex h-full flex-col items-center justify-center py-12 text-center">
+              <svg className="h-8 w-8 text-[var(--color-sh-ink-faint)]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" />
+              </svg>
+              <p className="mt-3 text-sm font-semibold text-[var(--color-sh-ink)]">Start typing to search</p>
+              <p className="mt-1 text-xs text-[var(--color-sh-ink-muted)]">
+                Searches partners (SquadHub) and talents (SquadHire) at once.
+              </p>
             </div>
-          ) : tab === 'partner' ? (
-            <PartnerList
-              loading={partners.isLoading}
-              error={partners.error as any}
-              hits={partners.data ?? []}
-              disabled={isAssigning}
-              onPick={(p) => assignPartner.mutate(p.id)}
-            />
+          ) : isLoading && !hasResults ? (
+            <div className="sh-card py-12 text-center">
+              <p className="text-sm text-[var(--color-sh-ink-faint)]">Searching…</p>
+            </div>
+          ) : isError ? (
+            <div className="sh-card py-12 text-center">
+              <p className="text-sm text-red-600">Search failed. Try again.</p>
+            </div>
+          ) : !hasResults ? (
+            <div className="sh-card py-12 text-center">
+              <p className="text-sm text-[var(--color-sh-ink-subtle)]">No partners or talents found.</p>
+              <p className="mt-1 text-xs text-[var(--color-sh-ink-faint)]">
+                Try a different search term.
+              </p>
+            </div>
           ) : (
-            <TalentList
-              loading={talents.isLoading}
-              error={talents.error as any}
-              hits={talents.data ?? []}
-              disabled={isAssigning}
-              onPick={(t) => assignTalent.mutate(t)}
-            />
+            <div className="space-y-5">
+              {/* Partners section */}
+              {partners.length > 0 && (
+                <section>
+                  <h4 className="sh-section-heading mb-2 px-1">
+                    Partners <span className="opacity-70">({partners.length})</span>
+                  </h4>
+                  <div className="space-y-1.5">
+                    {partners.map((p) => (
+                      <button
+                        key={`partner-${p.id}`}
+                        disabled={isAssigning}
+                        onClick={() => assignPartner.mutate(p.id)}
+                        className="sh-card sh-card-interactive flex w-full items-center justify-between gap-3 px-4 py-3 text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]"
+                            style={{ background: '#DBEAFE', color: '#1E40AF' }}
+                          >
+                            {(p.name || 'P').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">{p.name}</p>
+                            {p.email && (
+                              <p className="truncate text-[11px] text-[var(--color-sh-ink-faint)]">{p.email}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <span className="sh-status-pill" style={{ backgroundColor: '#DBEAFE', color: '#1E40AF' }}>
+                            Partner
+                          </span>
+                          {p.tier && (
+                            <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
+                              {p.tier}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  {partnersQ.isFetching && (
+                    <p className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">Refining…</p>
+                  )}
+                </section>
+              )}
+
+              {/* Talents section */}
+              {talents.length > 0 && (
+                <section>
+                  <h4 className="sh-section-heading mb-2 px-1">
+                    Talents <span className="opacity-70">({talents.length})</span>
+                  </h4>
+                  <div className="space-y-1.5">
+                    {talents.map((t) => (
+                      <button
+                        key={`talent-${t.id}`}
+                        disabled={isAssigning}
+                        onClick={() => assignTalent.mutate(t)}
+                        className="sh-card sh-card-interactive flex w-full items-center justify-between gap-3 px-4 py-3 text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]"
+                            style={{ background: 'var(--color-sh-lime-soft)', color: 'var(--color-sh-ink)' }}
+                          >
+                            {(t.name || 'T').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">{t.name || 'Unnamed talent'}</p>
+                            {t.email && (
+                              <p className="truncate text-[11px] text-[var(--color-sh-ink-faint)]">{t.email}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <span className="sh-status-pill" style={{ backgroundColor: '#F2EBFE', color: '#6B21A8' }}>
+                            Talent
+                          </span>
+                          {t.tier && (
+                            <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
+                              {t.tier}
+                            </span>
+                          )}
+                          {t.country && (
+                            <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
+                              {t.country}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  {talentsQ.isFetching && (
+                    <p className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">Refining…</p>
+                  )}
+                  {talentsQ.error && (
+                    <p className="mt-2 text-[11px] text-red-600">
+                      Couldn&apos;t reach SquadHire — only partners shown above.
+                    </p>
+                  )}
+                </section>
+              )}
+
+              {/* Partial-success message: partners-only when SquadHire is down */}
+              {partners.length > 0 && talents.length === 0 && talentsQ.error && (
+                <p className="text-center text-[11px] text-amber-700">
+                  Couldn&apos;t reach SquadHire — talents not loaded.
+                </p>
+              )}
+            </div>
           )}
         </div>
       </div>
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex-1 px-4 py-2 text-xs font-medium ${
-        active
-          ? 'border-b-2 border-[#0F172B] text-[#0F172B]'
-          : 'text-[#62748E] hover:text-[#0F172B]'
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function PartnerList({
-  loading,
-  error,
-  hits,
-  disabled,
-  onPick,
-}: {
-  loading: boolean;
-  error: { message?: string } | null;
-  hits: PartnerHit[];
-  disabled: boolean;
-  onPick: (p: PartnerHit) => void;
-}) {
-  if (loading) {
-    return <div className="p-6 text-center text-xs text-[#90A1B9]">Searching…</div>;
-  }
-  if (error) {
-    return (
-      <div className="p-6 text-center text-xs text-red-600">
-        {error.message || 'Search failed.'}
-      </div>
-    );
-  }
-  if (hits.length === 0) {
-    return <div className="p-6 text-center text-xs text-[#90A1B9]">No partners found.</div>;
-  }
-  return (
-    <ul className="divide-y divide-[#E2E8F0]">
-      {hits.map((p) => (
-        <li key={p.id}>
-          <button
-            disabled={disabled}
-            onClick={() => onPick(p)}
-            className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-[#F8FAFC] disabled:opacity-50"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm text-[#0F172B]">{p.name}</p>
-              {p.email && <p className="truncate text-[11px] text-[#90A1B9]">{p.email}</p>}
-            </div>
-            {p.tier && (
-              <span className="shrink-0 rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
-                {p.tier}
-              </span>
-            )}
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function TalentList({
-  loading,
-  error,
-  hits,
-  disabled,
-  onPick,
-}: {
-  loading: boolean;
-  error: { message?: string } | null;
-  hits: TalentHit[];
-  disabled: boolean;
-  onPick: (t: TalentHit) => void;
-}) {
-  if (loading) {
-    return <div className="p-6 text-center text-xs text-[#90A1B9]">Searching SquadHire…</div>;
-  }
-  if (error) {
-    return (
-      <div className="p-6 text-center text-xs text-red-600">
-        Couldn&apos;t reach SquadHire.
-      </div>
-    );
-  }
-  if (hits.length === 0) {
-    return <div className="p-6 text-center text-xs text-[#90A1B9]">No talents found.</div>;
-  }
-  return (
-    <ul className="divide-y divide-[#E2E8F0]">
-      {hits.map((t) => (
-        <li key={t.id}>
-          <button
-            disabled={disabled}
-            onClick={() => onPick(t)}
-            className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-[#F8FAFC] disabled:opacity-50"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm text-[#0F172B]">{t.name || 'Unnamed talent'}</p>
-              {t.email && <p className="truncate text-[11px] text-[#90A1B9]">{t.email}</p>}
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              {t.tier && (
-                <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
-                  {t.tier}
-                </span>
-              )}
-              {t.country && (
-                <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
-                  {t.country}
-                </span>
-              )}
-            </div>
-          </button>
-        </li>
-      ))}
-    </ul>
   );
 }
