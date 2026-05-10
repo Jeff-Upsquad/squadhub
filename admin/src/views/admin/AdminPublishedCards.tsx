@@ -196,8 +196,10 @@ export default function AdminPublishedCards() {
   const salesPeople: SalesPerson[] = peopleRes?.data || [];
 
   // Pending-request count drives the badge on the "Form Requests" tab.
-  // Same query-key prefix as AdminRequestsList so its mutations invalidate
-  // this count automatically.
+  // Three sources feed the queue: upsquad subscription_requests + draft
+  // subscription_cards from the public Shared Form (/connect) and from
+  // the future embedded Landing Page form. Same query keys as
+  // AdminRequestsList so its mutations invalidate these counts too.
   const { data: pendingReqsRes } = useQuery({
     queryKey: ['admin-subscription-requests', 'pending', ''],
     queryFn: () =>
@@ -205,7 +207,24 @@ export default function AdminPublishedCards() {
         .get('/admin/subscription-requests', { params: { status: 'pending' } })
         .then((r) => r.data),
   });
-  const pendingRequestCount = (pendingReqsRes?.data || []).length;
+  const { data: pendingSharedRes } = useQuery({
+    queryKey: ['admin-shared-form-submissions', ''],
+    queryFn: () =>
+      api
+        .get('/admin/subscription-cards', { params: { source: 'shared_form', state: 'draft' } })
+        .then((r) => r.data),
+  });
+  const { data: pendingLandingRes } = useQuery({
+    queryKey: ['admin-landing-page-submissions', ''],
+    queryFn: () =>
+      api
+        .get('/admin/subscription-cards', { params: { source: 'landing_page_form', state: 'draft' } })
+        .then((r) => r.data),
+  });
+  const pendingRequestCount =
+    (pendingReqsRes?.data || []).length +
+    (pendingSharedRes?.data || []).length +
+    (pendingLandingRes?.data || []).length;
 
   const stateCounts = useMemo(() => ({
     all: cards.length,
