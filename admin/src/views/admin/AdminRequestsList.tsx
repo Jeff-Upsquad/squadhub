@@ -21,17 +21,20 @@ interface SubscriptionRequest {
   card_id: string | null;
 }
 
+type RequestSubTab = 'active' | 'published' | 'declined';
+
 export default function AdminRequestsList() {
-  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [subTab, setSubTab] = useState<RequestSubTab>('active');
   const [search, setSearch] = useState<string>('');
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
+  // Server returns all statuses; sub-tabs filter client-side so counts stay
+  // accurate without a per-tab fetch.
   const { data: res, isLoading } = useQuery({
-    queryKey: ['admin-subscription-requests', statusFilter, search],
+    queryKey: ['admin-subscription-requests', search],
     queryFn: () => {
       const params: Record<string, string> = {};
-      if (statusFilter) params.status = statusFilter;
       if (search.trim()) params.search = search.trim();
       return api.get('/admin/subscription-requests', { params }).then((r) => r.data);
     },
@@ -60,6 +63,23 @@ export default function AdminRequestsList() {
     [allRequests, archivedCardIds],
   );
 
+  const counts = useMemo(() => ({
+    active: requests.filter((r) => r.status === 'pending' || r.status === 'in_review').length,
+    published: requests.filter((r) => r.status === 'published').length,
+    declined: requests.filter((r) => r.status === 'declined' || r.status === 'cancelled').length,
+  }), [requests]);
+
+  const visibleRequests = useMemo(() => {
+    switch (subTab) {
+      case 'active':
+        return requests.filter((r) => r.status === 'pending' || r.status === 'in_review');
+      case 'published':
+        return requests.filter((r) => r.status === 'published');
+      case 'declined':
+        return requests.filter((r) => r.status === 'declined' || r.status === 'cancelled');
+    }
+  }, [requests, subTab]);
+
   const createCardMutation = useMutation({
     mutationFn: (requestId: number) =>
       api.post('/admin/subscription-cards/from-request', { subscription_request_id: requestId }).then((r) => r.data),
@@ -84,38 +104,59 @@ export default function AdminRequestsList() {
 
   return (
     <div className="flex flex-1 flex-col">
-      {/* Filters */}
-      <div className="px-6 pb-4">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="sh-input sh-input-sm w-auto"
-          >
-            <option value="">All statuses</option>
-            <option value="pending">Pending</option>
-            <option value="in_review">In Review</option>
-            <option value="published">Published</option>
-            <option value="declined">Declined</option>
-          </select>
-          <div className="relative flex-1 min-w-[160px]">
-            <svg
-              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-sh-ink-faint)]"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              viewBox="0 0 24 24"
+      {/* Sub-tabs */}
+      <div className="px-6 pb-3">
+        <div className="overflow-x-auto">
+          <div className="sh-tab-bar">
+            <button
+              type="button"
+              data-active={subTab === 'active'}
+              onClick={() => setSubTab('active')}
+              className="sh-tab"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" />
-            </svg>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, email, company…"
-              className="sh-input sh-input-sm pl-8"
-            />
+              Active <span className="opacity-70">({counts.active})</span>
+            </button>
+            <button
+              type="button"
+              data-active={subTab === 'published'}
+              onClick={() => setSubTab('published')}
+              className="sh-tab"
+            >
+              Published <span className="opacity-70">({counts.published})</span>
+            </button>
+            {(counts.declined > 0 || subTab === 'declined') && (
+              <button
+                type="button"
+                data-active={subTab === 'declined'}
+                onClick={() => setSubTab('declined')}
+                className="sh-tab"
+              >
+                Declined <span className="opacity-70">({counts.declined})</span>
+              </button>
+            )}
           </div>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="px-6 pb-4">
+        <div className="relative max-w-md">
+          <svg
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-sh-ink-faint)]"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name, email, company…"
+            className="sh-input sh-input-sm pl-8"
+          />
         </div>
       </div>
 
@@ -124,13 +165,19 @@ export default function AdminRequestsList() {
           <div className="sh-card py-16 text-center">
             <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading…</p>
           </div>
-        ) : requests.length === 0 ? (
+        ) : visibleRequests.length === 0 ? (
           <div className="sh-card py-16 text-center">
-            <p className="text-sm text-[var(--color-sh-ink-subtle)]">No subscription requests found.</p>
+            <p className="text-sm text-[var(--color-sh-ink-subtle)]">
+              {subTab === 'active'
+                ? 'No active requests in the queue.'
+                : subTab === 'published'
+                  ? 'No published requests yet.'
+                  : 'No declined requests.'}
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
-            {requests.map((req) => (
+            {visibleRequests.map((req) => (
               <RequestRow
                 key={req.id}
                 request={req}
