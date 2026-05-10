@@ -23,15 +23,27 @@ function formatRelative(iso: string | null): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+type ActionTarget = {
+  type: 'partner' | 'talent';
+  id: string;
+  name: string;
+  email?: string | null;
+  canSelect: boolean;
+  canAutoAccept: boolean;
+};
+
 export default function MobileRecipientsList({
   partners,
   talents,
   hasSelection,
   isCardActive,
+  isManual,
+  talentGroups,
   onSelectPartner,
   onSelectTalent,
   onRemovePartner,
   onRemoveTalent,
+  onAutoAcceptTalent,
   isSelecting,
   isRemoving,
 }: {
@@ -39,21 +51,49 @@ export default function MobileRecipientsList({
   talents: TalentRecipient[];
   hasSelection: boolean;
   isCardActive: boolean;
+  isManual?: boolean;
+  talentGroups?: { pending: TalentRecipient[]; sentBatches: { notifiedAt: string; items: TalentRecipient[] }[] } | null;
   onSelectPartner: (id: string) => void;
   onSelectTalent: (id: string) => void;
   onRemovePartner: (id: string) => void;
   onRemoveTalent: (id: string) => void;
+  onAutoAcceptTalent?: (id: string, name: string, email: string) => void;
   isSelecting: boolean;
   isRemoving: boolean;
 }) {
-  const [actionTarget, setActionTarget] = useState<{
-    type: 'partner' | 'talent';
-    id: string;
-    name: string;
-    canSelect: boolean;
-  } | null>(null);
+  const [actionTarget, setActionTarget] = useState<ActionTarget | null>(null);
 
   const canSelectRecipients = !hasSelection && isCardActive;
+
+  const renderTalentRow = (t: TalentRecipient) => (
+    <RecipientRow
+      key={t.external_user_id}
+      name={t.name || 'Unknown talent'}
+      subtitle={t.external_user_id.slice(0, 8)}
+      status={t.status}
+      respondedAt={t.responded_at}
+      assignedManually={!!t.assigned_manually}
+      selectedAt={t.selected_at ?? null}
+      passedOverAt={t.passed_over_at ?? null}
+      onTap={() =>
+        setActionTarget({
+          type: 'talent',
+          id: t.external_user_id,
+          name: t.name || 'Unknown talent',
+          email: t.email,
+          canSelect: canSelectRecipients && t.status === 'accepted' && !t.selected_at && !t.passed_over_at,
+          canAutoAccept:
+            !!isManual
+            && !!onAutoAcceptTalent
+            && isCardActive
+            && t.status === 'pending'
+            && !t.selected_at
+            && !t.passed_over_at
+            && !!t.email,
+        })
+      }
+    />
+  );
 
   return (
     <div className="space-y-5">
@@ -84,6 +124,7 @@ export default function MobileRecipientsList({
                     id: p.id,
                     name: p.name,
                     canSelect: canSelectRecipients && p.status === 'accepted' && !p.selected_at && !p.passed_over_at,
+                    canAutoAccept: false,
                   })
                 }
               />
@@ -93,40 +134,58 @@ export default function MobileRecipientsList({
       </div>
 
       {/* Talents */}
-      <div>
-        <h4 className="sh-section-heading mb-2 flex items-center gap-2">
-          Talents
-          <span className="rounded-full border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-2 py-0.5 text-[10px] font-bold text-[var(--color-sh-ink-subtle)]">
-            {talents.length}
-          </span>
-        </h4>
-        {talents.length === 0 ? (
-          <p className="text-xs text-[var(--color-sh-ink-faint)]">No talents yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {talents.map((t) => (
-              <RecipientRow
-                key={t.external_user_id}
-                name={t.name || 'Unknown talent'}
-                subtitle={t.external_user_id.slice(0, 8)}
-                status={t.status}
-                respondedAt={t.responded_at}
-                assignedManually={!!t.assigned_manually}
-                selectedAt={t.selected_at ?? null}
-                passedOverAt={t.passed_over_at ?? null}
-                onTap={() =>
-                  setActionTarget({
-                    type: 'talent',
-                    id: t.external_user_id,
-                    name: t.name || 'Unknown talent',
-                    canSelect: canSelectRecipients && t.status === 'accepted' && !t.selected_at && !t.passed_over_at,
-                  })
-                }
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {isManual && talentGroups ? (
+        <>
+          {talentGroups.pending.length > 0 && (
+            <div>
+              <h4 className="sh-section-heading mb-2 flex items-center gap-2" style={{ color: '#B45309' }}>
+                Pending broadcast
+                <span className="rounded-full border border-[#FCD9B6] bg-[#FFF4E5] px-2 py-0.5 text-[10px] font-bold text-[#9A3412]">
+                  {talentGroups.pending.length}
+                </span>
+              </h4>
+              <div className="space-y-2">
+                {talentGroups.pending.map(renderTalentRow)}
+              </div>
+            </div>
+          )}
+          {talentGroups.sentBatches.map((batch) => (
+            <div key={batch.notifiedAt}>
+              <h4 className="sh-section-heading mb-2 flex items-center gap-2">
+                Sent {formatRelative(batch.notifiedAt)}
+                <span className="rounded-full border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-2 py-0.5 text-[10px] font-bold text-[var(--color-sh-ink-subtle)]">
+                  {batch.items.length}
+                </span>
+              </h4>
+              <div className="space-y-2">
+                {batch.items.map(renderTalentRow)}
+              </div>
+            </div>
+          ))}
+          {talentGroups.pending.length === 0 && talentGroups.sentBatches.length === 0 && (
+            <div>
+              <h4 className="sh-section-heading mb-2">Talents</h4>
+              <p className="text-xs text-[var(--color-sh-ink-faint)]">No talents yet.</p>
+            </div>
+          )}
+        </>
+      ) : (
+        <div>
+          <h4 className="sh-section-heading mb-2 flex items-center gap-2">
+            Talents
+            <span className="rounded-full border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-2 py-0.5 text-[10px] font-bold text-[var(--color-sh-ink-subtle)]">
+              {talents.length}
+            </span>
+          </h4>
+          {talents.length === 0 ? (
+            <p className="text-xs text-[var(--color-sh-ink-faint)]">No talents yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {talents.map(renderTalentRow)}
+            </div>
+          )}
+        </div>
+      )}
 
       <MobileActionSheet
         open={!!actionTarget}
@@ -135,18 +194,26 @@ export default function MobileRecipientsList({
         description="What would you like to do with this recipient?"
         actions={[
           ...(actionTarget?.canSelect
-            ? [
-                {
-                  label: 'Select for this card',
-                  variant: 'primary' as const,
-                  disabled: isSelecting,
-                  onPress: () => {
-                    if (actionTarget.type === 'partner') onSelectPartner(actionTarget.id);
-                    else onSelectTalent(actionTarget.id);
-                    setActionTarget(null);
-                  },
+            ? [{
+                label: 'Select for this card',
+                variant: 'primary' as const,
+                disabled: isSelecting,
+                onPress: () => {
+                  if (actionTarget.type === 'partner') onSelectPartner(actionTarget.id);
+                  else onSelectTalent(actionTarget.id);
+                  setActionTarget(null);
                 },
-              ]
+              }]
+            : []),
+          ...(actionTarget?.canAutoAccept && actionTarget.email && onAutoAcceptTalent
+            ? [{
+                label: 'Auto-accept on their behalf',
+                variant: 'success' as const,
+                onPress: () => {
+                  onAutoAcceptTalent(actionTarget.id, actionTarget.name, actionTarget.email!);
+                  setActionTarget(null);
+                },
+              }]
             : []),
           {
             label: 'Remove from card',
