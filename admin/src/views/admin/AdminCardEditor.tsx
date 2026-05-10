@@ -304,15 +304,18 @@ export default function AdminCardEditor({
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: () => api.delete(`/admin/subscription-cards/${cardId}`),
+  const archiveMutation = useMutation({
+    mutationFn: () => api.post(`/admin/subscription-cards/${cardId}/archive`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-custom-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-custom-cards-drafts'] });
       onClose();
     },
     onError: (err: any) => {
       const msg = err?.response?.data?.error || err?.message || 'Unknown error';
-      alert(`Delete failed: ${msg}`);
+      alert(`Archive failed: ${msg}`);
     },
   });
 
@@ -382,14 +385,14 @@ export default function AdminCardEditor({
             <>
               <button
                 onClick={() => {
-                  if (window.confirm('Delete this draft card permanently? This cannot be undone.')) {
-                    deleteMutation.mutate();
+                  if (window.confirm('Archive this draft card? It will move to the Archive tab where you can republish or delete it later.')) {
+                    archiveMutation.mutate();
                   }
                 }}
-                disabled={deleteMutation.isPending}
-                className="sh-btn-danger"
+                disabled={archiveMutation.isPending}
+                className="sh-btn-violet"
               >
-                {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+                {archiveMutation.isPending ? 'Archiving…' : 'Archive'}
               </button>
               <button
                 onClick={handleSave}
