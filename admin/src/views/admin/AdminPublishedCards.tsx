@@ -326,34 +326,43 @@ export default function AdminPublishedCards() {
 
           {/* Filters */}
           {(activeTab === 'published' || activeTab === 'archive') && (
-            <div className="sh-card p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={publishedBy}
-                  onChange={(e) => setPublishedBy(e.target.value)}
-                  className="sh-input w-auto"
+            <div className="flex flex-wrap items-center gap-1.5">
+              <select
+                value={publishedBy}
+                onChange={(e) => setPublishedBy(e.target.value)}
+                className="sh-input sh-input-sm w-auto"
+              >
+                <option value="">All sales people</option>
+                {salesPeople.map((p) => (
+                  <option key={p.id} value={p.id}>{p.display_name || p.email || p.id.slice(0, 8)}</option>
+                ))}
+              </select>
+              <div className="relative flex-1 min-w-[160px]">
+                <svg
+                  className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-sh-ink-faint)]"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  viewBox="0 0 24 24"
                 >
-                  <option value="">All sales people</option>
-                  {salesPeople.map((p) => (
-                    <option key={p.id} value={p.id}>{p.display_name || p.email || p.id.slice(0, 8)}</option>
-                  ))}
-                </select>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" />
+                </svg>
                 <input
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search business name…"
-                  className="sh-input flex-1 min-w-[220px]"
+                  placeholder="Search business…"
+                  className="sh-input sh-input-sm pl-8"
                 />
-                <select
-                  value={groupBy}
-                  onChange={(e) => setGroupBy(e.target.value as GroupBy)}
-                  className="sh-input w-auto"
-                >
-                  <option value="status">Group by status</option>
-                  <option value="date">Group by date</option>
-                </select>
               </div>
+              <select
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+                className="sh-input sh-input-sm w-auto"
+              >
+                <option value="status">By status</option>
+                <option value="date">By date</option>
+              </select>
             </div>
           )}
         </div>

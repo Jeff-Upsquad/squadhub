@@ -213,6 +213,12 @@ body {
   color: var(--color-sh-ink-faint);
   cursor: not-allowed;
 }
+/* Compact variant — apply alongside .sh-input for filter strips */
+.sh-input-sm {
+  padding: 0.375rem 0.625rem;
+  font-size: 0.8125rem;
+  border-radius: 8px;
+}
 
 /* Primary button — lime + dark border + 3D black offset shadow */
 .sh-btn-primary {
