@@ -15,7 +15,7 @@ export default function MobileActionSheet({
   description?: string;
   actions: {
     label: string;
-    variant?: 'primary' | 'danger' | 'secondary';
+    variant?: 'primary' | 'danger' | 'secondary' | 'warning' | 'violet' | 'success' | 'info';
     disabled?: boolean;
     onPress: () => void;
   }[];
@@ -49,6 +49,14 @@ export default function MobileActionSheet({
                 ? 'sh-btn-primary'
                 : action.variant === 'danger'
                 ? 'sh-btn-danger'
+                : action.variant === 'warning'
+                ? 'sh-btn-warning'
+                : action.variant === 'violet'
+                ? 'sh-btn-violet'
+                : action.variant === 'success'
+                ? 'sh-btn-success'
+                : action.variant === 'info'
+                ? 'sh-btn-info'
                 : 'sh-btn-ghost';
             return (
               <button
