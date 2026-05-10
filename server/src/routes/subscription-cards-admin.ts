@@ -55,6 +55,7 @@ router.get('/', async (req: Request, res: Response) => {
       sourceParam === 'request' ||
       sourceParam === 'custom' ||
       sourceParam === 'submission' ||
+      sourceParam === 'shared_form' ||
       sourceParam === 'landing_page_form'
     ) {
       query = query.eq('source', sourceParam);
@@ -162,7 +163,7 @@ router.get('/', async (req: Request, res: Response) => {
     const slugsToLookup = new Set<string>();
     for (const c of list) {
       if (c.submission_subscription_id) continue;
-      if (c.source !== 'request' && c.source !== 'custom' && c.source !== 'landing_page_form') continue;
+      if (c.source !== 'request' && c.source !== 'custom' && c.source !== 'shared_form' && c.source !== 'landing_page_form') continue;
       const slug = SERVICE_TYPE_TO_SLUG[c.service_type ?? ''];
       const canonicalPlan = PLAN_NAME_TO_CANONICAL[String(c.plan_name ?? '').toLowerCase()];
       const tier = Array.isArray(c.target_tiers) ? c.target_tiers[0] : null;
