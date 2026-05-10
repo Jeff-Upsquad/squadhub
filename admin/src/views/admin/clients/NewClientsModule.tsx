@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import type {
@@ -31,6 +32,7 @@ type SubmissionWithStaged = ClientSubmission & {
 
 export default function NewClientsModule() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -40,6 +42,20 @@ export default function NewClientsModule() {
     queryFn: () => api.get('/admin/clients/submissions').then((r) => r.data),
   });
   const submissions: SubmissionWithStaged[] = submissionsRes?.data || [];
+
+  // Deep-link support: ?submission=<id> auto-opens that submission once
+  // the list has loaded. Only fires once per param value so closing the
+  // slider doesn't immediately re-open it from the URL.
+  const submissionParam = searchParams.get('submission');
+  const handledParam = useRef<string | null>(null);
+  useEffect(() => {
+    if (!submissionParam) { handledParam.current = null; return; }
+    if (handledParam.current === submissionParam) return;
+    if (submissions.some((s) => s.id === submissionParam)) {
+      setSelectedSubmissionId(submissionParam);
+      handledParam.current = submissionParam;
+    }
+  }, [submissionParam, submissions]);
 
   const { data: countriesRes } = useQuery({
     queryKey: ['admin-countries'],

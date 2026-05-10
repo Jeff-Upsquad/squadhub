@@ -232,6 +232,25 @@ export default function AdminPublishedCardRecipientsView({
   });
 
   const [autoAcceptTarget, setAutoAcceptTarget] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string; type: 'partner' | 'talent' } | null>(null);
+
+  const removeRecipientMutation = useMutation({
+    mutationFn: ({ id, type }: { id: string; type: 'partner' | 'talent' }) =>
+      type === 'partner'
+        ? api.delete(`/admin/subscription-cards/${card.id}/recipients/${id}`)
+        : api.delete(`/admin/subscription-cards/${card.id}/external-recipients/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      setRemoveTarget(null);
+      showToast('Recipient removed.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to remove recipient', 'error');
+      setRemoveTarget(null);
+    },
+  });
 
   const autoAcceptTalentMutation = useMutation({
     mutationFn: ({ talentId, talentName, email }: { talentId: string; talentName: string; email: string }) =>
@@ -386,7 +405,23 @@ export default function AdminPublishedCardRecipientsView({
               )}
             </div>
             <div className="lg:w-[280px] lg:shrink-0">
-              <h4 className="sh-section-heading mb-2">Customer</h4>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h4 className="sh-section-heading">Customer</h4>
+                {card.submission?.id && (
+                  <a
+                    href={`/admin/clients?submission=${card.submission.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open this lead in the Clients CRM"
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-[var(--color-sh-ink-muted)] hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)] transition"
+                  >
+                    View in CRM
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                    </svg>
+                  </a>
+                )}
+              </div>
               <div className="space-y-1.5 text-xs">
                 <HeaderDetailRow label="Company" value={card.customer_company} />
                 <HeaderDetailRow label="Contact" value={card.customer_name} />
@@ -569,6 +604,18 @@ export default function AdminPublishedCardRecipientsView({
                             Auto-accept
                           </button>
                         )}
+                      <button
+                        type="button"
+                        onClick={() => setRemoveTarget({ id: r.id, name: r.name, type: r.type })}
+                        disabled={removeRecipientMutation.isPending}
+                        aria-label={`Remove ${r.name}`}
+                        title="Remove from this card"
+                        className="rounded-md p-1.5 text-[var(--color-sh-ink-faint)] hover:bg-red-50 hover:text-red-600 transition disabled:opacity-30"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     </div>
                   </div>
                 );
@@ -732,6 +779,21 @@ export default function AdminPublishedCardRecipientsView({
               talentName: autoAcceptTarget.name,
               email: autoAcceptTarget.email,
             })
+          }
+        />
+      )}
+      {removeTarget && (
+        <ConfirmDialog
+          open
+          title={`Remove ${removeTarget.type === 'partner' ? 'partner' : 'talent'}?`}
+          description={`Remove ${removeTarget.name} from this card? They'll stop seeing it in their ${removeTarget.type === 'partner' ? 'opportunities' : 'subscription'} feed.`}
+          confirmLabel="Remove"
+          pendingLabel="Removing…"
+          variant="danger"
+          isPending={removeRecipientMutation.isPending}
+          onCancel={() => setRemoveTarget(null)}
+          onConfirm={() =>
+            removeRecipientMutation.mutate({ id: removeTarget.id, type: removeTarget.type })
           }
         />
       )}
