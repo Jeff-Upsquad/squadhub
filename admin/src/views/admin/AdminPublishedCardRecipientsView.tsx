@@ -407,22 +407,17 @@ export default function AdminPublishedCardRecipientsView({
             <div className="lg:w-[280px] lg:shrink-0">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <h4 className="sh-section-heading">Customer</h4>
-                <a
-                  href={card.submission?.id
-                    ? `/admin/clients?submission=${card.submission.id}`
-                    : '/admin/clients'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={card.submission?.id
-                    ? 'Open this lead in the Clients CRM'
-                    : 'Open the Clients CRM (no linked submission for this card)'}
+                <button
+                  type="button"
+                  onClick={() => openLeadInCRM(card.submission?.id)}
+                  title="Open this lead in Squad CRM"
                   className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-[var(--color-sh-ink-muted)] hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)] transition"
                 >
                   View in CRM
                   <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                   </svg>
-                </a>
+                </button>
               </div>
               <div className="space-y-1.5 text-xs">
                 <HeaderDetailRow label="Company" value={card.customer_company} />
@@ -801,6 +796,28 @@ export default function AdminPublishedCardRecipientsView({
       )}
     </div>
   );
+}
+
+// Squad CRM lives at crm.squadhub.in. Resolve the SquadHub submission to
+// its CRM lead, then open the lead detail page in a new tab. Falls back
+// to the leads list when no lead exists yet (e.g. submission was never
+// converted) or when the lookup fails.
+const SQUAD_CRM_URL = 'https://crm.squadhub.in';
+
+async function openLeadInCRM(submissionId: string | null | undefined) {
+  const fallback = `${SQUAD_CRM_URL}/app/leads`;
+  if (!submissionId) {
+    window.open(fallback, '_blank', 'noopener');
+    return;
+  }
+  try {
+    const r = await api.get(`/admin/clients/submissions/${submissionId}/crm-lead`);
+    const leadId: string | undefined = r.data?.data?.lead_id;
+    const target = leadId ? `${SQUAD_CRM_URL}/app/leads/${leadId}` : fallback;
+    window.open(target, '_blank', 'noopener');
+  } catch {
+    window.open(fallback, '_blank', 'noopener');
+  }
 }
 
 function HeaderDetailRow({ label, value }: { label: string; value: string | null | undefined }) {
