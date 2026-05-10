@@ -358,7 +358,7 @@ export default function ConnectPage() {
         )}
 
         {step === 2 && (
-          <form onSubmit={handleSubmit} className="space-y-5 pb-28 sm:pb-6">
+          <form onSubmit={handleSubmit} className="space-y-5 pb-40 sm:pb-6">
             <button
               type="button"
               onClick={() => setStep(1)}
@@ -786,19 +786,24 @@ const globalStyles = `
 }
 .connect-phone-input::placeholder { color: #9C9486; }
 
+/* Mobile: pin Submit to the bottom of the visible viewport so it never
+   gets stuck mid-form when the keyboard is open. position: fixed is more
+   reliable than sticky against Android keyboard resize quirks. */
 .connect-submit-wrap {
-  position: sticky;
+  position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 12px 0 16px;
-  background: linear-gradient(to top, rgba(248, 246, 240, 0.98) 70%, rgba(248, 246, 240, 0));
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, #F8F6F0 60%, rgba(248, 246, 240, 0));
+  z-index: 20;
 }
 @media (min-width: 640px) {
   .connect-submit-wrap {
     position: static;
     padding: 0;
     background: none;
+    z-index: auto;
   }
 }
 .connect-submit {
