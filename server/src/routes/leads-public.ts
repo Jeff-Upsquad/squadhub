@@ -39,7 +39,10 @@ const submissionSchema = z.object({
 });
 
 // POST /leads/landing — public lead-capture form submission (no auth)
-// Inserts a draft subscription_card with source='landing_page_form'.
+// Inserts a draft subscription_card with source='shared_form'.
+// (Endpoint kept at /landing for URL stability; "shared_form" describes
+// how leads reach it — a link sent to a specific prospect — vs a future
+// 'landing_page_form' source for embedded marketing-page submissions.)
 router.post('/landing', async (req: Request, res: Response) => {
   try {
     const body = submissionSchema.parse(req.body);
@@ -83,7 +86,7 @@ router.post('/landing', async (req: Request, res: Response) => {
     const { data: card, error } = await supabaseAdmin
       .from('subscription_cards')
       .insert({
-        source: 'landing_page_form',
+        source: 'shared_form',
         state: 'draft',
         markup: 0,
         service_type: serviceTypeLabel,
