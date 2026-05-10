@@ -349,39 +349,53 @@ export default function AdminPublishedCardRecipientsView({
           </button>
         </div>
         <div className="sh-card p-6">
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <span
-              className="sh-status-pill"
-              style={{ backgroundColor: `${stateColor}1F`, color: stateColor }}
-            >
-              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stateColor }} />
-              {stateLabel}
-            </span>
-            <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
-              {distLabel}
-            </span>
-            {card.recalled_at && (
-              <span className="sh-status-pill" style={{ backgroundColor: '#FFE9D9', color: '#9A3412' }}>
-                Recalled
-              </span>
-            )}
-            {card.state === 'assigned' && (
-              <button
-                onClick={() => undoMutation.mutate()}
-                disabled={undoMutation.isPending}
-                className="sh-btn-danger"
-              >
-                {undoMutation.isPending ? 'Reverting…' : 'Undo Assignment'}
-              </button>
-            )}
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span
+                  className="sh-status-pill"
+                  style={{ backgroundColor: `${stateColor}1F`, color: stateColor }}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stateColor }} />
+                  {stateLabel}
+                </span>
+                <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
+                  {distLabel}
+                </span>
+                {card.recalled_at && (
+                  <span className="sh-status-pill" style={{ backgroundColor: '#FFE9D9', color: '#9A3412' }}>
+                    Recalled
+                  </span>
+                )}
+                {card.state === 'assigned' && (
+                  <button
+                    onClick={() => undoMutation.mutate()}
+                    disabled={undoMutation.isPending}
+                    className="sh-btn-danger"
+                  >
+                    {undoMutation.isPending ? 'Reverting…' : 'Undo Assignment'}
+                  </button>
+                )}
+              </div>
+              <h1 className="sh-display text-2xl sm:text-3xl truncate">{title}</h1>
+              {card.published_at && (
+                <p className="mt-2 text-xs text-[var(--color-sh-ink-faint)]">
+                  Published {new Date(card.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  {publisher && <> by {publisher.display_name || publisher.email || publisher.id.slice(0, 8)}</>}
+                </p>
+              )}
+            </div>
+            <div className="lg:w-[280px] lg:shrink-0">
+              <h4 className="sh-section-heading mb-2">Customer</h4>
+              <div className="space-y-1.5 text-xs">
+                <HeaderDetailRow label="Company" value={card.customer_company} />
+                <HeaderDetailRow label="Contact" value={card.customer_name} />
+                <HeaderDetailRow label="Email" value={card.customer_email} />
+                <HeaderDetailRow label="Phone" value={card.customer_phone} />
+                <HeaderDetailRow label="Location" value={card.customer_location} />
+              </div>
+            </div>
           </div>
-          <h1 className="sh-display text-2xl sm:text-3xl truncate">{title}</h1>
-          {card.published_at && (
-            <p className="mt-2 text-xs text-[var(--color-sh-ink-faint)]">
-              Published {new Date(card.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              {publisher && <> by {publisher.display_name || publisher.email || publisher.id.slice(0, 8)}</>}
-            </p>
-          )}
         </div>
       </div>
 
@@ -721,6 +735,17 @@ export default function AdminPublishedCardRecipientsView({
           }
         />
       )}
+    </div>
+  );
+}
+
+function HeaderDetailRow({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <span className="text-[var(--color-sh-ink-faint)]">{label}</span>
+      <span className="truncate text-[var(--color-sh-ink)]" title={value ?? undefined}>
+        {value || '—'}
+      </span>
     </div>
   );
 }
