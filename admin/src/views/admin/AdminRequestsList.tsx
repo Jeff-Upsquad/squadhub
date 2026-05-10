@@ -226,28 +226,43 @@ function RequestRow({
   };
   const color = statusColors[request.status] || '#6B7280';
 
+  const company = request.company || request.name || 'Unknown';
+  const serviceType = request.service_type || '';
+  const planName = request.plan || '';
+  const priceLabel = request.proposed_price
+    ? `₹${request.proposed_price.toLocaleString()}/mo`
+    : '';
+  const createdAt = new Date(request.created_at);
+  const dateLabel = `${createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${createdAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+
   return (
     <div className="sh-card flex items-center justify-between px-5 py-4">
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
-          {(request.company || request.name).charAt(0).toUpperCase()}
+          {company.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
-            {request.company || request.name}
+            {company}{serviceType ? `: ${serviceType}` : ''}
           </p>
-          <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
-            {request.service_type} · {request.tier} · {request.plan}
-          </p>
+          {(planName || priceLabel) && (
+            <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
+              {planName}
+              {planName && priceLabel ? ', ' : ''}
+              {priceLabel}
+            </p>
+          )}
           <p className="mt-0.5 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
-            {request.email} · {request.phone}
+            {dateLabel}
           </p>
+          {(request.name || request.email) && (
+            <p className="truncate text-[11px] text-[var(--color-sh-ink-faint)]">
+              by {request.name || request.email}
+            </p>
+          )}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <span className="text-sm font-semibold text-[var(--color-sh-ink)]">
-          ₹{request.proposed_price.toLocaleString()}
-        </span>
         {request.working_days && (
           <span className="text-xs text-[var(--color-sh-ink-muted)]">
             {request.working_days.split(',').length}d/wk
@@ -258,9 +273,6 @@ function RequestRow({
           style={{ backgroundColor: `${color}1F`, color }}
         >
           {request.status}
-        </span>
-        <span className="text-[11px] text-[var(--color-sh-ink-faint)]">
-          {new Date(request.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
         </span>
         {hasCard ? (
           <button onClick={onAction} className="sh-btn-info">
