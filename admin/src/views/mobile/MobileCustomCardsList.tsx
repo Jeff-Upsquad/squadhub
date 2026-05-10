@@ -17,12 +17,6 @@ interface CustomCard {
   created_at: string;
 }
 
-const STATE_COLORS: Record<string, { bg: string; fg: string }> = {
-  draft: { bg: '#FEF3C7', fg: '#92400E' },
-  published: { bg: '#D1FAE5', fg: '#065F46' },
-  closed: { bg: '#F3F4F6', fg: '#525252' },
-};
-
 export default function MobileCustomCardsList() {
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -69,64 +63,100 @@ export default function MobileCustomCardsList() {
   }
 
   return (
-    <div className="flex flex-col pb-6">
-      <div className="px-4 pt-3 pb-3">
-        <button
-          onClick={() => createMutation.mutate()}
-          disabled={createMutation.isPending}
-          className="w-full rounded-xl border-2 border-black bg-[#d4ff4d] px-4 py-3 text-sm font-bold text-black shadow-[3px_3px_0_0_#000] transition-transform active:scale-[0.97] active:shadow-[1px_1px_0_0_#000] disabled:opacity-50"
-        >
-          {createMutation.isPending ? 'Creating...' : '+ New Custom Card'}
-        </button>
+    <div className="flex flex-1 flex-col">
+      {/* Action strip */}
+      <div className="px-4 pb-3">
+        <div className="sh-card flex items-center justify-between gap-3 p-3">
+          <p className="text-xs text-[var(--color-sh-ink-muted)] pl-1">
+            Cards created from scratch by admins.
+          </p>
+          <button
+            onClick={() => createMutation.mutate()}
+            disabled={createMutation.isPending}
+            className="sh-btn-primary sh-btn-primary-sm shrink-0"
+          >
+            {createMutation.isPending ? 'Creating…' : 'New Card'}
+          </button>
+        </div>
       </div>
 
-      <div className="space-y-3 px-4">
+      <div className="flex-1 px-4 pb-8">
         {isLoading ? (
-          <div className="animate-pulse rounded-2xl border-2 border-black bg-white p-4 shadow-[3px_3px_0_0_#000]">
-            <div className="h-4 w-2/3 rounded-lg bg-[#e5e5e5]" />
-            <div className="mt-2 h-3 w-1/2 rounded-lg bg-[#e5e5e5]" />
+          <div className="sh-card py-10 text-center">
+            <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading…</p>
           </div>
         ) : allCards.length === 0 ? (
-          <div className="rounded-2xl border-2 border-black bg-white px-6 py-12 text-center shadow-[3px_3px_0_0_#000]">
-            <p className="font-[family-name:var(--font-jakarta)] text-base font-bold text-[#0a0a0a]">
-              No custom cards yet
-            </p>
-            <p className="mt-1 text-sm text-[#525252]">Tap "New Custom Card" to create one.</p>
+          <div className="sh-card py-10 text-center">
+            <p className="text-sm text-[var(--color-sh-ink-subtle)]">No custom cards yet.</p>
+            <p className="mt-1 text-xs text-[var(--color-sh-ink-faint)]">Tap "New Card" to create one.</p>
           </div>
         ) : (
-          allCards.map((card, idx) => {
-            const colors = STATE_COLORS[card.state] || STATE_COLORS.closed;
-            const totalPrice = (card.proposed_price || 0) + (card.markup || 0);
-            return (
-              <button
+          <div className="space-y-2">
+            {allCards.map((card) => (
+              <CustomCardRow
                 key={card.id}
-                onClick={() => setEditingCardId(card.id)}
-                className="w-full rounded-2xl border-2 border-black bg-white p-4 text-left shadow-[3px_3px_0_0_#000] transition-transform active:scale-[0.98] active:shadow-[1px_1px_0_0_#000]"
-                style={{ animation: `fadeSlideUp 0.3s ease-out ${idx * 0.05}s both` }}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-[family-name:var(--font-jakarta)] text-[15px] font-bold text-[#0a0a0a]">
-                      {card.customer_company || 'Untitled'}
-                      {card.service_type ? ` · ${card.service_type}` : ''}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-[#525252]">
-                      {card.plan_name || 'No plan'}
-                      {totalPrice ? ` · ₹${totalPrice.toLocaleString()}/mo` : ''}
-                    </p>
-                  </div>
-                  <span
-                    className="shrink-0 rounded-full border border-black/20 px-2 py-0.5 text-[10px] font-bold"
-                    style={{ backgroundColor: colors.bg, color: colors.fg }}
-                  >
-                    {card.state}
-                  </span>
-                </div>
-              </button>
-            );
-          })
+                card={card}
+                onOpen={() => setEditingCardId(card.id)}
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>
+  );
+}
+
+function CustomCardRow({ card, onOpen }: { card: CustomCard; onOpen: () => void }) {
+  const company = card.customer_company || 'Untitled';
+  const serviceType = card.service_type || '';
+  const planName = card.plan_name || '';
+  const totalPrice = card.proposed_price
+    ? (card.proposed_price + (card.markup || 0))
+    : null;
+  const priceLabel = totalPrice ? `₹${totalPrice.toLocaleString()}/mo` : '';
+  const dateIso = card.published_at || card.created_at;
+  const dateObj = new Date(dateIso);
+  const dateLabel = `${card.published_at ? 'Published' : 'Created'} ${dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+
+  return (
+    <button
+      onClick={onOpen}
+      className="sh-card sh-card-interactive flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left"
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
+          {company.charAt(0).toUpperCase()}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
+            {company}{serviceType ? `: ${serviceType}` : ''}
+          </p>
+          {(planName || priceLabel) && (
+            <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
+              {planName || 'No plan'}
+              {priceLabel ? `, ${priceLabel}` : ''}
+            </p>
+          )}
+          <p className="mt-0.5 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
+            {dateLabel}
+          </p>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {card.state === 'draft' ? (
+          <span className="sh-status-pill" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+            draft
+          </span>
+        ) : card.state === 'published' ? (
+          <span className="sh-status-pill" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+            published
+          </span>
+        ) : (
+          <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
+            {card.state}
+          </span>
+        )}
+      </div>
+    </button>
   );
 }

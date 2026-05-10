@@ -4,10 +4,10 @@ import { useState } from 'react';
 import type { PartnerRecipient, TalentRecipient } from '@/views/admin/AdminPublishedCardRecipientsPanel';
 import MobileActionSheet from './MobileActionSheet';
 
-const STATUS_COLORS: Record<string, string> = {
-  accepted: 'border-emerald-600 bg-emerald-100 text-emerald-800',
-  rejected: 'border-red-500 bg-red-100 text-red-800',
-  pending: 'border-amber-500 bg-amber-100 text-amber-800',
+const STATUS_PILL: Record<string, { bg: string; fg: string }> = {
+  accepted: { bg: '#D1FAE5', fg: '#065F46' },
+  rejected: { bg: '#FEE2E2', fg: '#991B1B' },
+  pending: { bg: '#FEF3C7', fg: '#92400E' },
 };
 
 function formatRelative(iso: string | null): string {
@@ -59,14 +59,14 @@ export default function MobileRecipientsList({
     <div className="space-y-5">
       {/* Partners */}
       <div>
-        <h4 className="mb-2 flex items-center gap-2 font-[family-name:var(--font-jakarta)] text-xs font-bold uppercase tracking-wider text-[#a3a3a3]">
+        <h4 className="sh-section-heading mb-2 flex items-center gap-2">
           Partners
-          <span className="rounded-full border border-black/20 bg-[#F7F6F3] px-2 py-0.5 text-[10px] font-bold text-[#525252]">
+          <span className="rounded-full border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-2 py-0.5 text-[10px] font-bold text-[var(--color-sh-ink-subtle)]">
             {partners.length}
           </span>
         </h4>
         {partners.length === 0 ? (
-          <p className="text-xs text-[#a3a3a3]">No partners yet.</p>
+          <p className="text-xs text-[var(--color-sh-ink-faint)]">No partners yet.</p>
         ) : (
           <div className="space-y-2">
             {partners.map((p) => (
@@ -94,14 +94,14 @@ export default function MobileRecipientsList({
 
       {/* Talents */}
       <div>
-        <h4 className="mb-2 flex items-center gap-2 font-[family-name:var(--font-jakarta)] text-xs font-bold uppercase tracking-wider text-[#a3a3a3]">
+        <h4 className="sh-section-heading mb-2 flex items-center gap-2">
           Talents
-          <span className="rounded-full border border-black/20 bg-[#F7F6F3] px-2 py-0.5 text-[10px] font-bold text-[#525252]">
+          <span className="rounded-full border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-2 py-0.5 text-[10px] font-bold text-[var(--color-sh-ink-subtle)]">
             {talents.length}
           </span>
         </h4>
         {talents.length === 0 ? (
-          <p className="text-xs text-[#a3a3a3]">No talents yet.</p>
+          <p className="text-xs text-[var(--color-sh-ink-faint)]">No talents yet.</p>
         ) : (
           <div className="space-y-2">
             {talents.map((t) => (
@@ -128,7 +128,6 @@ export default function MobileRecipientsList({
         )}
       </div>
 
-      {/* Action sheet for recipient */}
       <MobileActionSheet
         open={!!actionTarget}
         onClose={() => setActionTarget(null)}
@@ -184,41 +183,42 @@ function RecipientRow({
   passedOverAt: string | null;
   onTap: () => void;
 }) {
+  const pill = STATUS_PILL[status];
   return (
     <button
       onClick={onTap}
-      className="flex w-full items-center justify-between gap-3 rounded-xl border-2 border-black/10 bg-white px-3.5 py-3 text-left active:bg-[#F7F6F3] transition-colors"
+      className="sh-card sh-card-interactive flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left"
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-[#0a0a0a]">{name}</p>
+        <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">{name}</p>
         {subtitle && (
-          <p className="truncate text-[11px] font-mono text-[#a3a3a3]">{subtitle}</p>
+          <p className="truncate text-[11px] font-mono text-[var(--color-sh-ink-faint)]">{subtitle}</p>
         )}
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           {selectedAt ? (
-            <span className="rounded-full border border-blue-600 bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">
+            <span className="sh-status-pill" style={{ backgroundColor: '#DBEAFE', color: '#1E40AF' }}>
               Selected
             </span>
           ) : passedOverAt ? (
-            <span className="rounded-full border border-[#a3a3a3] bg-[#F7F6F3] px-2 py-0.5 text-[10px] font-bold text-[#525252]">
+            <span className="sh-status-pill" style={{ backgroundColor: 'var(--color-sh-cream)', color: 'var(--color-sh-ink-subtle)' }}>
               Not selected
             </span>
           ) : (
-            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${STATUS_COLORS[status]}`}>
+            <span className="sh-status-pill" style={{ backgroundColor: pill.bg, color: pill.fg }}>
               {status}
             </span>
           )}
           {assignedManually && (
-            <span className="rounded-full border border-[#a3a3a3] bg-[#F7F6F3] px-2 py-0.5 text-[10px] font-semibold text-[#525252]">
+            <span className="sh-status-pill" style={{ backgroundColor: 'var(--color-sh-cream)', color: 'var(--color-sh-ink-subtle)' }}>
               Manual
             </span>
           )}
           {respondedAt && (
-            <span className="text-[10px] text-[#a3a3a3]">{formatRelative(respondedAt)}</span>
+            <span className="text-[10px] text-[var(--color-sh-ink-faint)]">{formatRelative(respondedAt)}</span>
           )}
         </div>
       </div>
-      <svg className="h-4 w-4 shrink-0 text-[#a3a3a3]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <svg className="h-4 w-4 shrink-0 text-[var(--color-sh-ink-faint)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" />
       </svg>
     </button>

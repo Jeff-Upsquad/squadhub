@@ -91,7 +91,7 @@ export type PublishedCard = {
  *  - 'pending'   — categories present, webhook not yet delivered (in retry loop).
  *  - 'delivered' — squadhire_synced_at set; nothing to surface (default, no chip).
  */
-function squadhireDeliveryState(card: PublishedCard): 'skipped' | 'pending' | 'delivered' {
+export function squadhireDeliveryState(card: PublishedCard): 'skipped' | 'pending' | 'delivered' {
   if (card.squadhire_synced_at) return 'delivered';
   const hasCategories =
     Array.isArray(card.squadhire_category_ids) && card.squadhire_category_ids.length > 0;
