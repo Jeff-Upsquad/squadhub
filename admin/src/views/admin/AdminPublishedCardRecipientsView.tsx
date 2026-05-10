@@ -409,7 +409,7 @@ export default function AdminPublishedCardRecipientsView({
                 <h4 className="sh-section-heading">Customer</h4>
                 <button
                   type="button"
-                  onClick={() => openLeadInCRM(card.submission?.id)}
+                  onClick={() => openLeadInCRM(card)}
                   title="Open this lead in Squad CRM"
                   className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-[var(--color-sh-ink-muted)] hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)] transition"
                 >
@@ -798,20 +798,25 @@ export default function AdminPublishedCardRecipientsView({
   );
 }
 
-// Squad CRM lives at crm.squadhub.in. Resolve the SquadHub submission to
-// its CRM lead, then open the lead detail page in a new tab. Falls back
-// to the leads list when no lead exists yet (e.g. submission was never
-// converted) or when the lookup fails.
+// Squad CRM lives at crm.squadhub.in. Resolve the published card's
+// customer to a CRM lead by trying submission_id → phone → email (the
+// server picks the first hit) and open the lead detail page in a new
+// tab. Falls back to the leads list when nothing matches or the lookup
+// fails.
 const SQUAD_CRM_URL = 'https://crm.squadhub.in';
 
-async function openLeadInCRM(submissionId: string | null | undefined) {
+async function openLeadInCRM(card: PublishedCard) {
   const fallback = `${SQUAD_CRM_URL}/app/leads`;
-  if (!submissionId) {
+  const params = new URLSearchParams();
+  if (card.submission?.id) params.set('submission_id', card.submission.id);
+  if (card.customer_phone) params.set('phone', card.customer_phone);
+  if (card.customer_email) params.set('email', card.customer_email);
+  if (params.toString().length === 0) {
     window.open(fallback, '_blank', 'noopener');
     return;
   }
   try {
-    const r = await api.get(`/admin/clients/submissions/${submissionId}/crm-lead`);
+    const r = await api.get(`/admin/clients/lookup-crm-lead?${params.toString()}`);
     const leadId: string | undefined = r.data?.data?.lead_id;
     const target = leadId ? `${SQUAD_CRM_URL}/app/leads/${leadId}` : fallback;
     window.open(target, '_blank', 'noopener');

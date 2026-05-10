@@ -209,32 +209,84 @@ router.get('/submissions', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /admin/clients/submissions/:id/crm-lead — resolves a SquadHub
-// submission to its corresponding Squad CRM lead. The CRM (`crm_leads`
-// table) lives in the same Supabase project, with `sh_client_submission_id`
-// pointing back at this submission. Used by the recipient detail "View in
-// CRM" button to deep-link into crm.squadhub.in/app/leads/<leadId>.
-// Returns { lead_id, workspace_id } when matched, or null when no lead has
-// been created for this submission yet.
-router.get('/submissions/:id/crm-lead', async (req: Request, res: Response) => {
+// GET /admin/clients/lookup-crm-lead?submission_id=&phone=&email= —
+// resolves a published card's customer to its corresponding Squad CRM
+// lead. The CRM (`crm_leads` table) shares this Supabase project, so we
+// can query it directly. Tries identifiers in order:
+//   1. sh_client_submission_id  — strongest link; set when CRM converted
+//      the lead into a SquadHub client_submission.
+//   2. phone_e164 (suffix-match) — covers leads that came in via WhatsApp
+//      first and were never explicitly linked to a submission. Cards
+//      typically store a local phone like "9447402340"; CRM stores E.164
+//      "+919447402340". Strip non-digits from the input and suffix-match.
+//   3. email (case-insensitive)  — last-resort fallback.
+// Returns { lead_id, matched_by } on hit, or null if nothing matches.
+router.get('/lookup-crm-lead', async (req: Request, res: Response) => {
   try {
-    const { data, error } = await supabaseAdmin
-      .from('crm_leads')
-      .select('id, workspace_id')
-      .eq('sh_client_submission_id', req.params.id)
-      .is('merged_into_lead_id', null)
-      .maybeSingle();
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
+    const submissionId = (req.query.submission_id as string | undefined)?.trim();
+    const phone = (req.query.phone as string | undefined)?.trim();
+    const email = (req.query.email as string | undefined)?.trim();
+
+    // 1. Submission link
+    if (submissionId) {
+      const { data, error } = await supabaseAdmin
+        .from('crm_leads')
+        .select('id')
+        .eq('sh_client_submission_id', submissionId)
+        .is('merged_into_lead_id', null)
+        .maybeSingle();
+      if (error) {
+        res.status(500).json({ success: false, error: error.message });
+        return;
+      }
+      if (data) {
+        res.json({ success: true, data: { lead_id: data.id, matched_by: 'submission_id' } });
+        return;
+      }
     }
-    if (!data) {
-      res.json({ success: true, data: null });
-      return;
+
+    // 2. Phone suffix-match
+    if (phone) {
+      const cleaned = phone.replace(/\D/g, '');
+      if (cleaned.length >= 7) {
+        const { data, error } = await supabaseAdmin
+          .from('crm_leads')
+          .select('id')
+          .ilike('phone_e164', `%${cleaned}`)
+          .is('merged_into_lead_id', null)
+          .limit(1);
+        if (error) {
+          res.status(500).json({ success: false, error: error.message });
+          return;
+        }
+        if (data && data.length > 0) {
+          res.json({ success: true, data: { lead_id: data[0].id, matched_by: 'phone' } });
+          return;
+        }
+      }
     }
-    res.json({ success: true, data: { lead_id: data.id, workspace_id: data.workspace_id } });
+
+    // 3. Email
+    if (email && email.includes('@')) {
+      const { data, error } = await supabaseAdmin
+        .from('crm_leads')
+        .select('id')
+        .ilike('email', email)
+        .is('merged_into_lead_id', null)
+        .limit(1);
+      if (error) {
+        res.status(500).json({ success: false, error: error.message });
+        return;
+      }
+      if (data && data.length > 0) {
+        res.json({ success: true, data: { lead_id: data[0].id, matched_by: 'email' } });
+        return;
+      }
+    }
+
+    res.json({ success: true, data: null });
   } catch (err) {
-    console.error('GET /submissions/:id/crm-lead error:', err);
+    console.error('GET /lookup-crm-lead error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
