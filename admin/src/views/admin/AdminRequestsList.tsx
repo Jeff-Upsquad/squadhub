@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import AdminCardEditor from './AdminCardEditor';
@@ -36,7 +36,29 @@ export default function AdminRequestsList() {
       return api.get('/admin/subscription-requests', { params }).then((r) => r.data);
     },
   });
-  const requests: SubscriptionRequest[] = res?.data || [];
+  const allRequests: SubscriptionRequest[] = res?.data || [];
+
+  // Archived cards stay in the Archive tab — hide their originating
+  // requests from From Requests so the active queue isn't polluted by
+  // already-handled items. Same query key the published-cards module
+  // uses, so the cache is shared and invalidations propagate.
+  const { data: archivedRes } = useQuery({
+    queryKey: ['admin-published-cards', '', '', 'archived'],
+    queryFn: () =>
+      api
+        .get('/admin/subscription-cards', { params: { archived: 'true' } })
+        .then((r) => r.data),
+    staleTime: 30 * 1000,
+  });
+  const archivedCardIds = useMemo(() => {
+    const list = (archivedRes?.data || []) as { id: string }[];
+    return new Set(list.map((c) => c.id));
+  }, [archivedRes]);
+
+  const requests = useMemo(
+    () => allRequests.filter((r) => !r.card_id || !archivedCardIds.has(r.card_id)),
+    [allRequests, archivedCardIds],
+  );
 
   const createCardMutation = useMutation({
     mutationFn: (requestId: number) =>
