@@ -86,25 +86,34 @@ export default function AdminRequestsList() {
     <div className="flex flex-1 flex-col">
       {/* Filters */}
       <div className="px-6 pb-4">
-        <div className="sh-card p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="sh-input w-auto"
+        <div className="flex flex-wrap items-center gap-1.5">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="sh-input sh-input-sm w-auto"
+          >
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="in_review">In Review</option>
+            <option value="published">Published</option>
+            <option value="declined">Declined</option>
+          </select>
+          <div className="relative flex-1 min-w-[160px]">
+            <svg
+              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-sh-ink-faint)]"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
             >
-              <option value="">All statuses</option>
-              <option value="pending">Pending</option>
-              <option value="in_review">In Review</option>
-              <option value="published">Published</option>
-              <option value="declined">Declined</option>
-            </select>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" />
+            </svg>
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, email, company…"
-              className="sh-input flex-1 min-w-[220px]"
+              className="sh-input sh-input-sm pl-8"
             />
           </div>
         </div>
