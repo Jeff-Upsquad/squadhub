@@ -77,46 +77,51 @@ export default function MobileAssignModal({
   const isAssigning = assignPartner.isPending || assignTalent.isPending;
 
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col bg-[#F7F6F3]">
+    <div className="fixed inset-0 z-[80] flex flex-col sh-surface">
       {/* Header */}
-      <div className="flex items-center justify-between border-b-2 border-black bg-white px-4 py-3">
-        <h3 className="font-[family-name:var(--font-jakarta)] text-base font-bold text-[#0a0a0a]">
+      <div className="flex items-center justify-between border-b border-[var(--color-sh-warm-border)] bg-white px-4 py-3">
+        <h3 className="text-base font-semibold text-[var(--color-sh-ink)]">
           Assign Recipient
         </h3>
         <button
           onClick={onClose}
-          className="rounded-lg border-2 border-black bg-white px-3 py-1.5 text-xs font-bold text-[#0a0a0a] active:scale-[0.97] transition-transform"
+          className="sh-btn-ghost sh-btn-ghost-sm"
         >
           Close
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b-2 border-black bg-white">
-        {(['partner', 'talent'] as const).map((t) => (
+      <div className="border-b border-[var(--color-sh-warm-border)] bg-white px-4 py-3">
+        <div className="sh-tab-bar">
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`flex-1 py-3 text-sm font-bold transition-colors ${
-              tab === t
-                ? 'border-b-3 border-[#d4ff4d] bg-[#0a0a0a] text-white'
-                : 'text-[#525252]'
-            }`}
+            type="button"
+            data-active={tab === 'partner'}
+            onClick={() => setTab('partner')}
+            className="sh-tab"
           >
-            {t === 'partner' ? 'Partners' : 'Talents'}
+            Partners
           </button>
-        ))}
+          <button
+            type="button"
+            data-active={tab === 'talent'}
+            onClick={() => setTab('talent')}
+            className="sh-tab"
+          >
+            Talents
+          </button>
+        </div>
       </div>
 
       {/* Search */}
-      <div className="border-b-2 border-black/10 bg-white px-4 py-3">
+      <div className="border-b border-[var(--color-sh-warm-border)] bg-white px-4 py-3">
         <input
           ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={tab === 'partner' ? 'Search partners...' : 'Search talents...'}
-          className="w-full rounded-xl border-2 border-black bg-white px-4 py-3 text-base text-[#0a0a0a] placeholder-[#a3a3a3] outline-none transition-shadow focus:shadow-[3px_3px_0_0_#000]"
+          placeholder={tab === 'partner' ? 'Search partners…' : 'Search talents…'}
+          className="sh-input"
         />
       </div>
 
@@ -124,7 +129,7 @@ export default function MobileAssignModal({
       <div className="flex-1 overflow-y-auto px-4 py-3">
         {debouncedQuery.length === 0 ? (
           <div className="py-12 text-center">
-            <p className="text-sm text-[#a3a3a3]">Start typing to search.</p>
+            <p className="text-sm text-[var(--color-sh-ink-faint)]">Start typing to search.</p>
           </div>
         ) : tab === 'partner' ? (
           <HitList
@@ -148,7 +153,6 @@ export default function MobileAssignModal({
               name: t.name || 'Unnamed talent',
               subtitle: t.email,
               badge: t.tier,
-              extra: t,
             }))}
             disabled={isAssigning}
             onPick={(id) => {
@@ -175,9 +179,9 @@ function HitList({
   disabled: boolean;
   onPick: (id: string) => void;
 }) {
-  if (loading) return <p className="py-8 text-center text-sm text-[#a3a3a3]">Searching...</p>;
+  if (loading) return <p className="py-8 text-center text-sm text-[var(--color-sh-ink-faint)]">Searching…</p>;
   if (error) return <p className="py-8 text-center text-sm text-red-600">Search failed.</p>;
-  if (items.length === 0) return <p className="py-8 text-center text-sm text-[#a3a3a3]">No results found.</p>;
+  if (items.length === 0) return <p className="py-8 text-center text-sm text-[var(--color-sh-ink-faint)]">No results found.</p>;
 
   return (
     <div className="space-y-2">
@@ -186,16 +190,21 @@ function HitList({
           key={item.id}
           onClick={() => onPick(item.id)}
           disabled={disabled}
-          className="flex w-full items-center justify-between gap-3 rounded-xl border-2 border-black bg-white px-4 py-3.5 text-left shadow-[2px_2px_0_0_#000] transition-transform active:scale-[0.98] active:shadow-[1px_1px_0_0_#000] disabled:opacity-50"
+          className="sh-card sh-card-interactive flex w-full items-center justify-between gap-3 px-4 py-3 text-left disabled:opacity-50"
         >
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold text-[#0a0a0a]">{item.name}</p>
-            {item.subtitle && (
-              <p className="truncate text-xs text-[#a3a3a3]">{item.subtitle}</p>
-            )}
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
+              {item.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">{item.name}</p>
+              {item.subtitle && (
+                <p className="truncate text-xs text-[var(--color-sh-ink-faint)]">{item.subtitle}</p>
+              )}
+            </div>
           </div>
           {item.badge && (
-            <span className="shrink-0 rounded-full border border-black/20 bg-[#F7F6F3] px-2.5 py-0.5 text-[10px] font-bold text-[#525252]">
+            <span className="shrink-0 rounded-full border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-2.5 py-0.5 text-[10px] font-bold text-[var(--color-sh-ink-subtle)]">
               {item.badge}
             </span>
           )}

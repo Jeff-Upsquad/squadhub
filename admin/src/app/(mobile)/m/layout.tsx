@@ -33,21 +33,21 @@ export default function MobileLayout({ children }: { children: React.ReactNode }
 
   return (
     <div
-      className={`${jakarta.variable} ${inter.variable} min-h-dvh bg-[#F7F6F3] font-[family-name:var(--font-inter)]`}
+      className={`${jakarta.variable} ${inter.variable} min-h-dvh sh-surface font-[family-name:var(--font-inter)]`}
     >
       {showTopBar && (
-        <header className="sticky top-0 z-40 flex items-center justify-between border-b-2 border-black bg-white px-4 py-3">
+        <header className="sticky top-0 z-40 flex items-center justify-between border-b border-[var(--color-sh-warm-border)] bg-white px-4 py-3">
           <div className="flex items-center gap-2.5">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border-2 border-black bg-[#d4ff4d] text-xs font-bold text-black shadow-[2px_2px_0_0_#000]">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-sh-lime)] text-xs font-bold text-[var(--color-sh-ink)] ring-1 ring-[var(--color-sh-ink)]">
               SH
             </span>
-            <h1 className="font-[family-name:var(--font-jakarta)] text-base font-bold tracking-tight text-[#0a0a0a]">
+            <h1 className="text-base font-semibold tracking-tight text-[var(--color-sh-ink)]">
               Published Cards
             </h1>
           </div>
           <button
             onClick={() => { logout(); router.push('/m/login'); }}
-            className="rounded-lg border-2 border-black bg-white px-3 py-1.5 text-xs font-semibold text-[#0a0a0a] active:scale-[0.97] transition-transform"
+            className="sh-btn-ghost sh-btn-ghost-sm"
           >
             Logout
           </button>

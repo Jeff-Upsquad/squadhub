@@ -31,9 +31,9 @@
   --font-mono: 'Geist Mono', monospace;
 
   /* SquadHire palette (additive — used inside the Published Cards module only) */
-  --color-sh-lime: #d4ff4d;
-  --color-sh-lime-hover: #BEE636;
-  --color-sh-lime-soft: #F2FCBC;
+  --color-sh-lime: #FCF487;
+  --color-sh-lime-hover: #E8DD68;
+  --color-sh-lime-soft: #FDFAC2;
   --color-sh-cream: #F7F6F3;
   --color-sh-warm-border: #E8E5DE;
   --color-sh-ink: #0a0a0a;

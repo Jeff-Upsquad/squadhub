@@ -60,7 +60,7 @@ export default function MobileFilterSheet({
                 onClick={() => onGroupByChange(g)}
                 className={`flex-1 rounded-xl border-2 px-3 py-2.5 text-sm font-bold transition-all active:scale-[0.97] ${
                   groupBy === g
-                    ? 'border-black bg-[#0a0a0a] text-white shadow-[2px_2px_0_0_#d4ff4d]'
+                    ? 'border-black bg-[#0a0a0a] text-white shadow-[2px_2px_0_0_#FCF487]'
                     : 'border-black bg-white text-[#0a0a0a]'
                 }`}
               >
@@ -80,7 +80,7 @@ export default function MobileFilterSheet({
               onClick={() => onPublishedByChange('')}
               className={`w-full rounded-xl border-2 px-4 py-2.5 text-left text-sm font-bold transition-all active:scale-[0.98] ${
                 publishedBy === ''
-                  ? 'border-black bg-[#d4ff4d] text-black shadow-[2px_2px_0_0_#000]'
+                  ? 'border-black bg-[#FCF487] text-black shadow-[2px_2px_0_0_#000]'
                   : 'border-black/20 bg-white text-[#0a0a0a]'
               }`}
             >
@@ -92,7 +92,7 @@ export default function MobileFilterSheet({
                 onClick={() => onPublishedByChange(p.id)}
                 className={`w-full rounded-xl border-2 px-4 py-2.5 text-left text-sm font-bold transition-all active:scale-[0.98] ${
                   publishedBy === p.id
-                    ? 'border-black bg-[#d4ff4d] text-black shadow-[2px_2px_0_0_#000]'
+                    ? 'border-black bg-[#FCF487] text-black shadow-[2px_2px_0_0_#000]'
                     : 'border-black/20 bg-white text-[#0a0a0a]'
                 }`}
               >
