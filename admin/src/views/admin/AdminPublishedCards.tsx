@@ -330,7 +330,8 @@ export default function AdminPublishedCards() {
               <select
                 value={publishedBy}
                 onChange={(e) => setPublishedBy(e.target.value)}
-                className="sh-input sh-input-sm w-auto"
+                className="sh-input sh-input-sm"
+                style={{ width: 'auto' }}
               >
                 <option value="">All sales people</option>
                 {salesPeople.map((p) => (
@@ -358,7 +359,8 @@ export default function AdminPublishedCards() {
               <select
                 value={groupBy}
                 onChange={(e) => setGroupBy(e.target.value as GroupBy)}
-                className="sh-input sh-input-sm w-auto"
+                className="sh-input sh-input-sm"
+                style={{ width: 'auto' }}
               >
                 <option value="status">By status</option>
                 <option value="date">By date</option>
