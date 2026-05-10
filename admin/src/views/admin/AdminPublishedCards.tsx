@@ -195,7 +195,7 @@ export default function AdminPublishedCards() {
   });
   const salesPeople: SalesPerson[] = peopleRes?.data || [];
 
-  // Pending-request count drives the badge on the "From Requests" tab.
+  // Pending-request count drives the badge on the "Form Requests" tab.
   // Same query-key prefix as AdminRequestsList so its mutations invalidate
   // this count automatically.
   const { data: pendingReqsRes } = useQuery({
@@ -261,7 +261,7 @@ export default function AdminPublishedCards() {
                       : `${cards.length} published card${cards.length === 1 ? '' : 's'}`}
               </span>
               <h1 className="sh-display text-3xl sm:text-4xl">
-                {activeTab === 'archive' ? 'Archived Cards' : activeTab === 'requests' ? 'From Requests' : activeTab === 'custom' ? 'Custom Cards' : 'Published Cards'}
+                {activeTab === 'archive' ? 'Archived Cards' : activeTab === 'requests' ? 'Form Requests' : activeTab === 'custom' ? 'Custom Cards' : 'Published Cards'}
               </h1>
               <p className="text-sm text-[var(--color-sh-ink-muted)] max-w-xl">
                 {activeTab === 'archive'
@@ -278,7 +278,7 @@ export default function AdminPublishedCards() {
           {/* Primary tabs */}
           <div className="overflow-x-auto">
             <div className="sh-tab-bar">
-              {([['published', 'Published'], ['requests', 'From Requests'], ['custom', 'Custom'], ['archive', 'Archive']] as const).map(([key, label]) => (
+              {([['published', 'Published'], ['requests', 'Form Requests'], ['custom', 'Custom'], ['archive', 'Archive']] as const).map(([key, label]) => (
                 <button
                   key={key}
                   type="button"

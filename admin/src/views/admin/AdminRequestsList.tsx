@@ -42,7 +42,7 @@ export default function AdminRequestsList() {
   const allRequests: SubscriptionRequest[] = res?.data || [];
 
   // Archived cards stay in the Archive tab — hide their originating
-  // requests from From Requests so the active queue isn't polluted by
+  // requests from Form Requests so the active queue isn't polluted by
   // already-handled items. Same query key the published-cards module
   // uses, so the cache is shared and invalidations propagate.
   const { data: archivedRes } = useQuery({
