@@ -62,68 +62,70 @@ export default function AdminCustomCardsList() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-[#E2E8F0] bg-white px-6 pt-5 pb-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-[#0F172B]">Custom Cards</h1>
-            <p className="mt-0.5 text-sm text-[#62748E]">
-              Cards created from scratch by admins (not from a request or submission).
-            </p>
-          </div>
+    <div className="flex flex-1 flex-col">
+      {/* Action strip */}
+      <div className="px-6 pb-4">
+        <div className="sh-card flex items-center justify-between p-3">
+          <p className="text-xs text-[var(--color-sh-ink-muted)] pl-1">
+            Cards created from scratch by admins (no request, no submission).
+          </p>
           <button
             onClick={() => createMutation.mutate()}
             disabled={createMutation.isPending}
-            className="rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E293B] disabled:opacity-50"
+            className="sh-btn-primary sh-btn-primary-sm"
           >
             {createMutation.isPending ? 'Creating…' : 'New Custom Card'}
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-5">
+      <div className="flex-1 overflow-y-auto px-6 pb-8">
         {isLoading ? (
-          <p className="py-8 text-center text-sm text-[#90A1B9]">Loading…</p>
+          <div className="sh-card py-16 text-center">
+            <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading…</p>
+          </div>
         ) : allCards.length === 0 ? (
-          <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-            <p className="text-sm text-[#90A1B9]">No custom cards yet.</p>
-            <p className="mt-1 text-xs text-[#90A1B9]">Click "New Custom Card" to create one.</p>
+          <div className="sh-card py-16 text-center">
+            <p className="text-sm text-[var(--color-sh-ink-subtle)]">No custom cards yet.</p>
+            <p className="mt-1 text-xs text-[var(--color-sh-ink-faint)]">Click "New Custom Card" to create one.</p>
           </div>
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {allCards.map((card) => (
               <button
                 key={card.id}
                 onClick={() => setEditingCardId(card.id)}
-                className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-4 py-3 text-left transition hover:shadow-sm"
+                className="sh-card sh-card-interactive flex w-full items-center justify-between px-5 py-4 text-left"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 text-sm font-semibold">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
                     {(card.customer_company || 'C').charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[#0F172B]">
+                    <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
                       {card.customer_company || 'Untitled'}
                       {card.service_type ? ` · ${card.service_type}` : ''}
                     </p>
-                    <p className="mt-0.5 truncate text-xs text-[#62748E]">
+                    <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
                       {card.plan_name || 'No plan'}
                       {card.proposed_price ? ` · ₹${((card.proposed_price || 0) + (card.markup || 0)).toLocaleString()}/mo` : ''}
                     </p>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                      card.state === 'draft'
-                        ? 'bg-amber-100 text-amber-800'
-                        : card.state === 'published'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-slate-200 text-slate-600'
-                    }`}
-                  >
-                    {card.state}
-                  </span>
+                  {card.state === 'draft' ? (
+                    <span className="sh-status-pill" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+                      draft
+                    </span>
+                  ) : card.state === 'published' ? (
+                    <span className="sh-status-pill" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                      published
+                    </span>
+                  ) : (
+                    <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
+                      {card.state}
+                    </span>
+                  )}
                 </div>
               </button>
             ))}

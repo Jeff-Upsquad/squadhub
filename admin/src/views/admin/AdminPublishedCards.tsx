@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
 import AdminPublishedCardRecipientsPanel from './AdminPublishedCardRecipientsPanel';
@@ -112,6 +113,7 @@ function formatPublishedAt(iso: string | null): string {
 }
 
 type GroupBy = 'status' | 'date';
+type StateFilter = 'all' | 'published' | 'assigned' | 'closed';
 
 function bucketByDate<T extends { state: 'published' | 'assigned' | 'closed'; published_at: string | null }>(
   cards: T[],
@@ -144,21 +146,39 @@ function publishedCardTitle(card: PublishedCard): string {
 type Tab = 'published' | 'requests' | 'custom' | 'archive';
 
 export default function AdminPublishedCards() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
   const [activeTab, setActiveTab] = useState<Tab>('published');
-  const [stateFilter, setStateFilter] = useState<'all' | 'published' | 'assigned' | 'closed'>('all');
+  const [stateFilter, setStateFilter] = useState<StateFilter>('all');
   const [publishedBy, setPublishedBy] = useState<string>('');
   const [search, setSearch] = useState<string>('');
   const [groupBy, setGroupBy] = useState<GroupBy>('status');
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [showPanel, setShowPanel] = useState(false);
+
+  // Card detail view is driven by a URL query param (?card=<id>) so the
+  // browser back button collapses the detail back to the list rather than
+  // skipping out of the module entirely.
+  const selectedCardId = searchParams.get('card');
+  const setSelectedCardId = useCallback((id: string | null) => {
+    if (id) {
+      router.push(`${pathname}?card=${id}`);
+    } else if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push(pathname);
+    }
+  }, [router, pathname]);
 
   const isArchiveTab = activeTab === 'archive';
 
+  // Server returns all states for the current tab; state filtering happens
+  // client-side so the secondary tabs can show accurate counts.
   const { data: cardsRes, isLoading } = useQuery({
-    queryKey: ['admin-published-cards', stateFilter, publishedBy, search, isArchiveTab ? 'archived' : 'active'],
+    queryKey: ['admin-published-cards', publishedBy, search, isArchiveTab ? 'archived' : 'active'],
     queryFn: () => {
       const params: Record<string, string> = {};
-      if (stateFilter !== 'all') params.state = stateFilter;
       if (publishedBy) params.published_by = publishedBy;
       if (search.trim()) params.search = search.trim();
       if (isArchiveTab) params.archived = 'true';
@@ -175,13 +195,37 @@ export default function AdminPublishedCards() {
   });
   const salesPeople: SalesPerson[] = peopleRes?.data || [];
 
-  const groups = useMemo(() => ({
-    active: cards.filter((c) => c.state === 'published'),
-    assigned: cards.filter((c) => c.state === 'assigned'),
-    cancelled: cards.filter((c) => c.state === 'closed'),
+  // Pending-request count drives the badge on the "From Requests" tab.
+  // Same query-key prefix as AdminRequestsList so its mutations invalidate
+  // this count automatically.
+  const { data: pendingReqsRes } = useQuery({
+    queryKey: ['admin-subscription-requests', 'pending', ''],
+    queryFn: () =>
+      api
+        .get('/admin/subscription-requests', { params: { status: 'pending' } })
+        .then((r) => r.data),
+  });
+  const pendingRequestCount = (pendingReqsRes?.data || []).length;
+
+  const stateCounts = useMemo(() => ({
+    all: cards.length,
+    published: cards.filter((c) => c.state === 'published').length,
+    assigned: cards.filter((c) => c.state === 'assigned').length,
+    closed: cards.filter((c) => c.state === 'closed').length,
   }), [cards]);
 
-  const dateGroups = useMemo(() => bucketByDate(cards), [cards]);
+  const filteredCards = useMemo(
+    () => stateFilter === 'all' ? cards : cards.filter((c) => c.state === stateFilter),
+    [cards, stateFilter],
+  );
+
+  const groups = useMemo(() => ({
+    active: filteredCards.filter((c) => c.state === 'published'),
+    assigned: filteredCards.filter((c) => c.state === 'assigned'),
+    cancelled: filteredCards.filter((c) => c.state === 'closed'),
+  }), [filteredCards]);
+
+  const dateGroups = useMemo(() => bucketByDate(filteredCards), [filteredCards]);
 
   const selectedCard = useMemo(
     () => cards.find((c) => c.id === selectedCardId) || null,
@@ -190,66 +234,126 @@ export default function AdminPublishedCards() {
 
   const showDetailView = (activeTab === 'published' || activeTab === 'archive') && !!selectedCard;
 
+  // When switching primary tabs, drop any stale ?card= so the detail view
+  // doesn't unexpectedly re-open when the user comes back to this tab.
+  const switchTab = useCallback((next: Tab) => {
+    setActiveTab(next);
+    if (searchParams.get('card')) {
+      router.replace(pathname);
+    }
+  }, [pathname, router, searchParams]);
+
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col sh-surface">
       {!showDetailView && (
-        <div className="border-b border-[#E2E8F0] bg-white px-6 pt-5 pb-4">
-          <div className="mb-4">
-            <h1 className="text-xl font-semibold text-[#0F172B]">Published Cards</h1>
-            <p className="mt-0.5 text-sm text-[#62748E]">All subscription cards published across the org.</p>
+        <div className="px-6 pt-6 pb-4 space-y-5">
+          {/* Hero card */}
+          <div className="sh-card p-6 sm:p-7">
+            <div className="space-y-3">
+              <span className="sh-eyebrow">
+                <span className="sh-eyebrow-dot" />
+                {activeTab === 'archive'
+                  ? `${cards.length} archived card${cards.length === 1 ? '' : 's'}`
+                  : activeTab === 'requests'
+                    ? 'Inbound queue'
+                    : activeTab === 'custom'
+                      ? 'Admin-created'
+                      : `${cards.length} published card${cards.length === 1 ? '' : 's'}`}
+              </span>
+              <h1 className="sh-display text-3xl sm:text-4xl">
+                {activeTab === 'archive' ? 'Archived Cards' : activeTab === 'requests' ? 'From Requests' : activeTab === 'custom' ? 'Custom Cards' : 'Published Cards'}
+              </h1>
+              <p className="text-sm text-[var(--color-sh-ink-muted)] max-w-xl">
+                {activeTab === 'archive'
+                  ? 'Hidden from talent feeds and the default Published list. Republish or delete from here.'
+                  : activeTab === 'requests'
+                    ? 'Inbound subscription requests from the pricing page.'
+                    : activeTab === 'custom'
+                      ? 'Cards created from scratch by admins (not from a request or submission).'
+                      : 'All subscription cards published across the org.'}
+              </p>
+            </div>
           </div>
-          <div className="mb-4 flex gap-1 rounded-lg bg-slate-100 p-1">
-            {([['published', 'Published'], ['requests', 'From Requests'], ['custom', 'Custom'], ['archive', 'Archive']] as const).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => { setActiveTab(key); setSelectedCardId(null); }}
-                className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
-                  activeTab === key
-                    ? 'bg-white text-[#0F172B] shadow-sm'
-                    : 'text-[#62748E] hover:text-[#0F172B]'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+
+          {/* Primary tabs */}
+          <div className="overflow-x-auto">
+            <div className="sh-tab-bar">
+              {([['published', 'Published'], ['requests', 'From Requests'], ['custom', 'Custom'], ['archive', 'Archive']] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  data-active={activeTab === key}
+                  onClick={() => switchTab(key)}
+                  className="sh-tab"
+                >
+                  {label}
+                  {key === 'requests' && pendingRequestCount > 0 && (
+                    <span
+                      className="ml-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none"
+                      style={{
+                        background: 'var(--color-sh-lime)',
+                        color: 'var(--color-sh-ink)',
+                        boxShadow: 'inset 0 0 0 1px var(--color-sh-ink)',
+                      }}
+                      title={`${pendingRequestCount} pending review`}
+                    >
+                      {pendingRequestCount}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* Secondary tabs (state filter) — only on Published / Archive */}
           {(activeTab === 'published' || activeTab === 'archive') && (
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={stateFilter}
-                onChange={(e) => setStateFilter(e.target.value as 'all' | 'published' | 'assigned' | 'closed')}
-                className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
-              >
-                <option value="all">All states</option>
-                <option value="published">Active</option>
-                <option value="assigned">Assigned</option>
-                <option value="closed">Cancelled</option>
-              </select>
-              <select
-                value={publishedBy}
-                onChange={(e) => setPublishedBy(e.target.value)}
-                className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
-              >
-                <option value="">All sales people</option>
-                {salesPeople.map((p) => (
-                  <option key={p.id} value={p.id}>{p.display_name || p.email || p.id.slice(0, 8)}</option>
+            <div className="overflow-x-auto">
+              <div className="sh-tab-bar">
+                {([['all', 'All'], ['published', 'Active'], ['assigned', 'Assigned'], ['closed', 'Cancelled']] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    data-active={stateFilter === key}
+                    onClick={() => setStateFilter(key)}
+                    className="sh-tab"
+                  >
+                    {label} <span className="opacity-70">({stateCounts[key]})</span>
+                  </button>
                 ))}
-              </select>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search business name…"
-                className="flex-1 min-w-[200px] rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder:text-[#90A1B9] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
-              />
-              <select
-                value={groupBy}
-                onChange={(e) => setGroupBy(e.target.value as GroupBy)}
-                className="rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:outline-none focus:ring-2 focus:ring-[#0F172B]/10"
-              >
-                <option value="status">Group by status</option>
-                <option value="date">Group by date</option>
-              </select>
+              </div>
+            </div>
+          )}
+
+          {/* Filters */}
+          {(activeTab === 'published' || activeTab === 'archive') && (
+            <div className="sh-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={publishedBy}
+                  onChange={(e) => setPublishedBy(e.target.value)}
+                  className="sh-input w-auto"
+                >
+                  <option value="">All sales people</option>
+                  {salesPeople.map((p) => (
+                    <option key={p.id} value={p.id}>{p.display_name || p.email || p.id.slice(0, 8)}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search business name…"
+                  className="sh-input flex-1 min-w-[220px]"
+                />
+                <select
+                  value={groupBy}
+                  onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+                  className="sh-input w-auto"
+                >
+                  <option value="status">Group by status</option>
+                  <option value="date">Group by date</option>
+                </select>
+              </div>
             </div>
           )}
         </div>
@@ -263,15 +367,29 @@ export default function AdminPublishedCards() {
           onOpenPanel={() => setShowPanel(true)}
         />
       ) : activeTab === 'published' ? (
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-6 pb-8">
           {isLoading ? (
-            <p className="py-8 text-center text-sm text-[#90A1B9]">Loading…</p>
-          ) : cards.length === 0 ? (
-            <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-              <p className="text-sm text-[#90A1B9]">No published cards match your filters.</p>
+            <div className="sh-card py-16 text-center">
+              <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading…</p>
+            </div>
+          ) : filteredCards.length === 0 ? (
+            <div className="sh-card py-16 text-center">
+              <p className="text-sm text-[var(--color-sh-ink-subtle)]">No cards match your filters.</p>
+            </div>
+          ) : stateFilter !== 'all' ? (
+            // Single-state view: flat list, no group headers.
+            <div className="space-y-2">
+              {filteredCards.map((card) => (
+                <PublishedCardRow
+                  key={card.id}
+                  card={card}
+                  onOpen={() => setSelectedCardId(card.id)}
+                  showCancelledTag={card.state === 'closed'}
+                />
+              ))}
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-7">
               {groupBy === 'status' ? (
                 <>
                   {groups.active.length > 0 && (
@@ -304,15 +422,17 @@ export default function AdminPublishedCards() {
           )}
         </div>
       ) : activeTab === 'archive' ? (
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-6 pb-8">
           {isLoading ? (
-            <p className="py-8 text-center text-sm text-[#90A1B9]">Loading…</p>
-          ) : cards.length === 0 ? (
-            <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-              <p className="text-sm text-[#90A1B9]">No archived cards yet.</p>
+            <div className="sh-card py-16 text-center">
+              <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading…</p>
+            </div>
+          ) : filteredCards.length === 0 ? (
+            <div className="sh-card py-16 text-center">
+              <p className="text-sm text-[var(--color-sh-ink-subtle)]">No archived cards yet.</p>
             </div>
           ) : (
-            <CardGroup label="Archived" color="#7C3AED" items={cards} onOpen={setSelectedCardId} showCancelledTag={false} showArchivedTag />
+            <CardGroup label="Archived" color="#7C3AED" items={filteredCards} onOpen={setSelectedCardId} showCancelledTag={false} showArchivedTag />
           )}
         </div>
       ) : null}
@@ -343,17 +463,16 @@ function CardGroup({
 }) {
   return (
     <div>
-      <div className="mb-2 flex items-center gap-2">
+      <div className="mb-3 flex items-center gap-2">
         <span
-          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-          style={{ backgroundColor: `${color}18`, color }}
+          className="sh-status-pill"
+          style={{ backgroundColor: `${color}1F`, color }}
         >
           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
-          {label}
+          {label} · {items.length}
         </span>
-        <span className="text-xs text-[#90A1B9]">({items.length})</span>
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         {items.map((card) => (
           <PublishedCardRow
             key={card.id}
@@ -381,23 +500,23 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
   return (
     <button
       onClick={onOpen}
-      className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-4 py-3 text-left transition hover:shadow-sm"
+      className="sh-card sh-card-interactive flex w-full items-center justify-between px-5 py-4 text-left"
     >
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-600 text-sm font-semibold">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
           {business.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-[#0F172B]">
+          <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
             {business} · {subName}
           </p>
-          <p className="mt-0.5 truncate text-xs text-[#62748E]">
+          <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
             {planLabel}
             {planLabel && card.published_at ? ' · ' : ''}
             {card.published_at ? `Published ${formatPublishedAt(card.published_at)}` : ''}
           </p>
           {publisher && (
-            <p className="mt-0.5 truncate text-[11px] text-[#90A1B9]">
+            <p className="mt-0.5 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
               by {publisher.display_name || publisher.email || publisher.id.slice(0, 8)}
             </p>
           )}
@@ -406,20 +525,22 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
       <div className="flex shrink-0 items-center gap-1.5">
         {showArchivedTag && (
           <span
-            className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700"
+            className="sh-status-pill"
+            style={{ backgroundColor: '#F2EBFE', color: '#6B21A8' }}
             title={`Archived${card.archived_at ? ' on ' + new Date(card.archived_at).toLocaleString() : ''}. Hidden from talent feeds and the default Published list.`}
           >
             Archived
           </span>
         )}
         {showCancelledTag && !card.recalled_at && (
-          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+          <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
             Cancelled
           </span>
         )}
         {card.recalled_at && (
           <span
-            className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-800"
+            className="sh-status-pill"
+            style={{ backgroundColor: '#FFE9D9', color: '#9A3412' }}
             title="Card was recalled after acceptances. Acceptees keep seeing it with a Recalled tag."
           >
             Recalled
@@ -427,7 +548,8 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
         )}
         {deliveryState === 'skipped' && (
           <span
-            className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800"
+            className="sh-status-pill"
+            style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}
             title="No SquadHire categories were selected, so this card was never delivered to SquadHire. Talents will not see it. Recall, edit categories, then re-publish to deliver."
           >
             Not on SquadHire
@@ -435,7 +557,8 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
         )}
         {deliveryState === 'pending' && (
           <span
-            className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-800"
+            className="sh-status-pill"
+            style={{ backgroundColor: '#FFE9D9', color: '#9A3412' }}
             title={
               card.squadhire_sync_last_error
                 ? `SquadHire delivery failed: ${card.squadhire_sync_last_error} (${card.squadhire_sync_attempts ?? 0} attempts). Retry sweeper runs every 5 min.`
@@ -446,17 +569,17 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
           </span>
         )}
         {card.state === 'assigned' && (
-          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+          <span className="sh-status-pill" style={{ backgroundColor: '#E0F2FE', color: '#075985' }}>
             Assigned
           </span>
         )}
         {card.selected_recipient_type && card.state !== 'assigned' && (
-          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
+          <span className="sh-status-pill" style={{ backgroundColor: '#DBEAFE', color: '#1E40AF' }}>
             Selected ({card.selected_recipient_type})
           </span>
         )}
         {(card.secondary_card_count ?? 0) > 0 && (
-          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-800">
+          <span className="sh-status-pill" style={{ backgroundColor: '#E0E7FF', color: '#3730A3' }}>
             {card.secondary_card_count} secondary
           </span>
         )}
@@ -477,17 +600,17 @@ function CountChip({
 }) {
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700"
+      className="inline-flex items-center gap-1 rounded-full bg-[var(--color-sh-cream)] border border-[var(--color-sh-warm-border)] px-2.5 py-0.5 text-[11px] font-medium"
       title={
         pending != null
           ? `${label}: ${accepted} accepted, ${rejected} rejected, ${pending} pending`
           : `${label}: ${accepted} accepted, ${rejected} rejected`
       }
     >
-      <span className="text-[#90A1B9]">{label}</span>
-      <span className="text-emerald-700">{accepted}✓</span>
-      <span className="text-red-600">{rejected}✗</span>
-      {pending != null && <span className="text-amber-700">{pending}⌛</span>}
+      <span className="text-[var(--color-sh-ink-subtle)]">{label}</span>
+      <span className="text-emerald-700 font-semibold">{accepted}✓</span>
+      <span className="text-red-600 font-semibold">{rejected}✗</span>
+      {pending != null && <span className="text-amber-700 font-semibold">{pending}⌛</span>}
     </span>
   );
 }
