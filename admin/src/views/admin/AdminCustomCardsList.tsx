@@ -92,46 +92,71 @@ export default function AdminCustomCardsList() {
         ) : (
           <div className="space-y-2">
             {allCards.map((card) => (
-              <button
+              <CustomCardRow
                 key={card.id}
-                onClick={() => setEditingCardId(card.id)}
-                className="sh-card sh-card-interactive flex w-full items-center justify-between px-5 py-4 text-left"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
-                    {(card.customer_company || 'C').charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
-                      {card.customer_company || 'Untitled'}
-                      {card.service_type ? ` · ${card.service_type}` : ''}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
-                      {card.plan_name || 'No plan'}
-                      {card.proposed_price ? ` · ₹${((card.proposed_price || 0) + (card.markup || 0)).toLocaleString()}/mo` : ''}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {card.state === 'draft' ? (
-                    <span className="sh-status-pill" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
-                      draft
-                    </span>
-                  ) : card.state === 'published' ? (
-                    <span className="sh-status-pill" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
-                      published
-                    </span>
-                  ) : (
-                    <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
-                      {card.state}
-                    </span>
-                  )}
-                </div>
-              </button>
+                card={card}
+                onOpen={() => setEditingCardId(card.id)}
+              />
             ))}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function CustomCardRow({ card, onOpen }: { card: CustomCard; onOpen: () => void }) {
+  const company = card.customer_company || 'Untitled';
+  const serviceType = card.service_type || '';
+  const planName = card.plan_name || '';
+  const totalPrice = card.proposed_price
+    ? (card.proposed_price + (card.markup || 0))
+    : null;
+  const priceLabel = totalPrice ? `₹${totalPrice.toLocaleString()}/mo` : '';
+  const dateIso = card.published_at || card.created_at;
+  const dateObj = new Date(dateIso);
+  const dateLabel = `${card.published_at ? 'Published' : 'Created'} ${dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+
+  return (
+    <button
+      onClick={onOpen}
+      className="sh-card sh-card-interactive flex w-full items-center justify-between px-5 py-4 text-left"
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
+          {company.charAt(0).toUpperCase()}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
+            {company}{serviceType ? `: ${serviceType}` : ''}
+          </p>
+          {(planName || priceLabel) && (
+            <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
+              {planName || 'No plan'}
+              {(planName || true) && priceLabel ? ', ' : ''}
+              {priceLabel}
+            </p>
+          )}
+          <p className="mt-0.5 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
+            {dateLabel}
+          </p>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {card.state === 'draft' ? (
+          <span className="sh-status-pill" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+            draft
+          </span>
+        ) : card.state === 'published' ? (
+          <span className="sh-status-pill" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+            published
+          </span>
+        ) : (
+          <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
+            {card.state}
+          </span>
+        )}
+      </div>
+    </button>
   );
 }

@@ -91,7 +91,14 @@ body {
 /* ============================================================
  * SquadHire-flavored design system (scoped to Published Cards module)
  * Opt-in classes — applied only inside the Published Cards files.
+ *
+ * Wrapped in @layer components so Tailwind utilities (in @layer
+ * utilities) always win over these defaults. That way `pl-8`,
+ * `w-auto`, `text-xl`, etc. behave as expected when applied
+ * alongside `.sh-input`, `.sh-card`, etc.
  * ============================================================ */
+
+@layer components {
 
 /* Display heading — Plus Jakarta Sans, tight tracking */
 .sh-display {
@@ -340,3 +347,5 @@ body {
   text-transform: uppercase;
   color: var(--color-sh-ink-subtle);
 }
+
+} /* end @layer components */

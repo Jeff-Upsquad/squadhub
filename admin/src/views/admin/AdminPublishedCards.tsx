@@ -500,12 +500,25 @@ function CardGroup({
 
 function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: { card: PublishedCard; onOpen: () => void; showCancelledTag: boolean; showArchivedTag?: boolean }) {
   const business = card.submission?.business_name || card.customer_company || 'Unknown';
-  const subName = card.submission_subscription?.subscription?.name || card.plan_name || '—';
-  const plan = card.submission_subscription?.plan;
-  const planLabel = plan ? `${plan.plan} · ${plan.tier}` : '';
+  const serviceType = card.service_type || '';
+  const planName =
+    card.submission_subscription?.subscription?.name
+    || card.plan_name
+    || (card.submission_subscription?.plan
+        ? `${card.submission_subscription.plan.plan} · ${card.submission_subscription.plan.tier}`
+        : '');
+  const planPrice = card.submission_subscription?.plan?.pricing?.[0];
+  const priceCurrency = planPrice?.country?.currency || '₹';
+  const priceValue = planPrice?.price ?? card.proposed_price ?? null;
+  const priceLabel = priceValue
+    ? `${priceCurrency}${Number(priceValue).toLocaleString()}/mo`
+    : '';
   const partners = card.recipient_counts?.partners ?? { pending: 0, accepted: 0, rejected: 0 };
   const talents = card.recipient_counts?.talents ?? { accepted: 0, rejected: 0 };
   const publisher = card.published_by_user;
+  const publisherLabel = publisher
+    ? publisher.display_name || publisher.email || publisher.id.slice(0, 8)
+    : null;
   const deliveryState = squadhireDeliveryState(card);
 
   return (
@@ -519,16 +532,23 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
         </div>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
-            {business} · {subName}
+            {business}{serviceType ? `: ${serviceType}` : ''}
           </p>
-          <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
-            {planLabel}
-            {planLabel && card.published_at ? ' · ' : ''}
-            {card.published_at ? `Published ${formatPublishedAt(card.published_at)}` : ''}
-          </p>
-          {publisher && (
+          {(planName || priceLabel) && (
+            <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
+              {planName}
+              {planName && priceLabel ? ', ' : ''}
+              {priceLabel}
+            </p>
+          )}
+          {card.published_at && (
             <p className="mt-0.5 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
-              by {publisher.display_name || publisher.email || publisher.id.slice(0, 8)}
+              {formatPublishedAt(card.published_at)}
+            </p>
+          )}
+          {publisherLabel && (
+            <p className="truncate text-[11px] text-[var(--color-sh-ink-faint)]">
+              by {publisherLabel}
             </p>
           )}
         </div>
