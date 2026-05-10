@@ -358,7 +358,7 @@ export default function ConnectPage() {
         )}
 
         {step === 2 && (
-          <form onSubmit={handleSubmit} className="space-y-5 pb-40 sm:pb-6">
+          <form onSubmit={handleSubmit} className="space-y-5 pb-8">
             <button
               type="button"
               onClick={() => setStep(1)}
@@ -786,25 +786,13 @@ const globalStyles = `
 }
 .connect-phone-input::placeholder { color: #9C9486; }
 
-/* Mobile: pin Submit to the bottom of the visible viewport so it never
-   gets stuck mid-form when the keyboard is open. position: fixed is more
-   reliable than sticky against Android keyboard resize quirks. */
+/* Submit lives at the natural end of the form on every viewport.
+   Tried sticky and fixed earlier — both fight the Android soft keyboard
+   and end up either covering the active input or floating mid-form.
+   Letting it scroll with content is the only reliable behaviour. */
 .connect-submit-wrap {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(to top, #F8F6F0 60%, rgba(248, 246, 240, 0));
-  z-index: 20;
-}
-@media (min-width: 640px) {
-  .connect-submit-wrap {
-    position: static;
-    padding: 0;
-    background: none;
-    z-index: auto;
-  }
+  margin-top: 8px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .connect-submit {
   display: block;
