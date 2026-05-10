@@ -209,6 +209,36 @@ router.get('/submissions', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /admin/clients/submissions/:id/crm-lead — resolves a SquadHub
+// submission to its corresponding Squad CRM lead. The CRM (`crm_leads`
+// table) lives in the same Supabase project, with `sh_client_submission_id`
+// pointing back at this submission. Used by the recipient detail "View in
+// CRM" button to deep-link into crm.squadhub.in/app/leads/<leadId>.
+// Returns { lead_id, workspace_id } when matched, or null when no lead has
+// been created for this submission yet.
+router.get('/submissions/:id/crm-lead', async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('crm_leads')
+      .select('id, workspace_id')
+      .eq('sh_client_submission_id', req.params.id)
+      .is('merged_into_lead_id', null)
+      .maybeSingle();
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    if (!data) {
+      res.json({ success: true, data: null });
+      return;
+    }
+    res.json({ success: true, data: { lead_id: data.id, workspace_id: data.workspace_id } });
+  } catch (err) {
+    console.error('GET /submissions/:id/crm-lead error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // PATCH /admin/clients/submissions/:id/sales-people — admin can add/change SPs
 const updateSubmissionSpSchema = z.object({
   primary_sales_person_id: z.string().uuid().nullable().optional(),
