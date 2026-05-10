@@ -272,18 +272,23 @@ export default function AdminPublishedCardRecipientsView({
 
   const isManual = card.distribution === 'manual';
 
-  // For manual cards: split talents into the pending-broadcast queue and one
-  // group per distinct notified_at timestamp (one per batch). Partners stay
-  // in their own flat section above the talent groups.
+  // For manual cards: split talents into
+  //   - pending: not yet broadcast AND still awaiting response (queue)
+  //   - autoAccepted: not broadcast but already responded (e.g. an admin hit
+  //     Auto-accept on a SquadHire match — they bypass the broadcast queue)
+  //   - sentBatches: one group per distinct notified_at timestamp
+  // Partners stay in their own flat section above the talent groups.
   const grouped = useMemo(() => {
     if (!isManual) return null;
     const partners = filtered.filter((r) => r.type === 'partner');
     const talents = filtered.filter((r) => r.type === 'talent');
     const pending: UnifiedRecipient[] = [];
+    const autoAccepted: UnifiedRecipient[] = [];
     const sentMap = new Map<string, UnifiedRecipient[]>();
     for (const t of talents) {
       if (!t.notified_at) {
-        pending.push(t);
+        if (t.status === 'pending') pending.push(t);
+        else autoAccepted.push(t);
       } else {
         const arr = sentMap.get(t.notified_at) ?? [];
         arr.push(t);
@@ -293,16 +298,16 @@ export default function AdminPublishedCardRecipientsView({
     const sentBatches = Array.from(sentMap.entries())
       .map(([notifiedAt, items]) => ({ notifiedAt, items }))
       .sort((a, b) => b.notifiedAt.localeCompare(a.notifiedAt));
-    return { partners, pending, sentBatches };
+    return { partners, pending, autoAccepted, sentBatches };
   }, [filtered, isManual]);
 
-  // Pending count is independent of the active status tab — the "Broadcast
-  // to these N users" button needs the total queue size, not the filtered
-  // view. (In practice all queued rows are status='pending' anyway.)
+  // Pending count drives the "Broadcast to these N users" button — only
+  // count rows that are actually awaiting broadcast (not auto-accepted
+  // ones whose notified_at is null but already have a non-pending status).
   const totalPendingTalents = useMemo(
     () =>
       isManual
-        ? allRecipients.filter((r) => r.type === 'talent' && !r.notified_at).length
+        ? allRecipients.filter((r) => r.type === 'talent' && !r.notified_at && r.status === 'pending').length
         : 0,
     [allRecipients, isManual],
   );
@@ -572,8 +577,8 @@ export default function AdminPublishedCardRecipientsView({
                 );
               }
 
-              const { partners: gPartners, pending: gPending, sentBatches } = grouped;
-              const totalGroups = (gPartners.length > 0 ? 1 : 0) + (gPending.length > 0 ? 1 : 0) + sentBatches.length;
+              const { partners: gPartners, pending: gPending, autoAccepted: gAutoAccepted, sentBatches } = grouped;
+              const totalGroups = (gPartners.length > 0 ? 1 : 0) + (gPending.length > 0 ? 1 : 0) + (gAutoAccepted.length > 0 ? 1 : 0) + sentBatches.length;
               if (totalGroups === 0) {
                 return (
                   <div className="sh-card py-12 text-center">
@@ -593,6 +598,17 @@ export default function AdminPublishedCardRecipientsView({
                       </h3>
                       <div className="space-y-2">
                         {gPartners.map(renderRow)}
+                      </div>
+                    </section>
+                  )}
+
+                  {gAutoAccepted.length > 0 && (
+                    <section>
+                      <h3 className="sh-section-heading mb-3" style={{ color: '#065F46' }}>
+                        Accepted on their behalf ({gAutoAccepted.length})
+                      </h3>
+                      <div className="space-y-2">
+                        {gAutoAccepted.map(renderRow)}
                       </div>
                     </section>
                   )}

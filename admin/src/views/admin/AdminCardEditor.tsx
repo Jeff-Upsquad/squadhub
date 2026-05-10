@@ -816,31 +816,33 @@ export default function AdminCardEditor({
                   className="sh-input"
                 />
               </Field>
-              <Field label="Business Nature">
+              <Field label="Nature of Business">
                 <textarea
                   value={businessNature}
                   onChange={(e) => setBusinessNature(e.target.value)}
                   disabled={!isDraft}
                   rows={2}
+                  placeholder="e.g. D2C apparel, B2B SaaS, education…"
                   className="sh-input resize-none"
                 />
               </Field>
-              <Field label="Notes">
+              <Field label="Short Note About the Business">
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   disabled={!isDraft}
                   rows={3}
+                  placeholder="A few lines so the talent has context before they start."
                   className="sh-input resize-none"
                 />
               </Field>
-              <Field label="Requirement Note">
+              <Field label="Short Note About the Requirement" optional>
                 <textarea
                   value={requirementNote}
                   onChange={(e) => setRequirementNote(e.target.value)}
                   disabled={!isDraft}
                   rows={3}
-                  placeholder="Short note about the requirement"
+                  placeholder="What you'd like the talent to work on first — deliverables, references, brand guidelines."
                   className="sh-input resize-none"
                 />
               </Field>
@@ -864,11 +866,16 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({ label, children, onEditClick, editActive }: { label: string; children: React.ReactNode; onEditClick?: () => void; editActive?: boolean }) {
+function Field({ label, children, onEditClick, editActive, optional }: { label: string; children: React.ReactNode; onEditClick?: () => void; editActive?: boolean; optional?: boolean }) {
   return (
     <div>
       <div className="mb-1.5 flex items-center gap-1.5">
-        <label className="text-xs font-semibold text-[var(--color-sh-ink-muted)]">{label}</label>
+        <label className="text-xs font-semibold text-[var(--color-sh-ink-muted)]">
+          {label}
+          {optional && (
+            <span className="ml-1 font-normal text-[var(--color-sh-ink-faint)]">(optional)</span>
+          )}
+        </label>
         {onEditClick && !editActive && (
           <button type="button" onClick={onEditClick} className="text-[var(--color-sh-ink-faint)] transition hover:text-[var(--color-sh-ink)]" title={`Edit ${label}`}>
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
