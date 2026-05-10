@@ -6,7 +6,7 @@ import api from '@/services/api';
 import AdminCardEditor from './AdminCardEditor';
 
 interface SubscriptionRequest {
-  id: number;
+  id: number | string;
   service_type: string;
   tier: string;
   plan: string;
@@ -19,6 +19,9 @@ interface SubscriptionRequest {
   status: string;
   created_at: string;
   card_id: string | null;
+  // Source tag — 'landing_page_form' rows are draft cards from the public
+  // /connect form, surfaced in this list with a "Landing Page" badge.
+  source?: 'request' | 'landing_page_form';
 }
 
 type RequestSubTab = 'active' | 'published' | 'declined';
@@ -39,7 +42,49 @@ export default function AdminRequestsList() {
       return api.get('/admin/subscription-requests', { params }).then((r) => r.data);
     },
   });
-  const allRequests: SubscriptionRequest[] = res?.data || [];
+  const upsquadRequests: SubscriptionRequest[] = (res?.data || []).map(
+    (r: any) => ({ ...r, source: 'request' as const }),
+  );
+
+  // Landing-page submissions live in subscription_cards as drafts with
+  // source='landing_page_form'. Fetch them and adapt to the same row shape
+  // so the existing list/sort/sub-tab plumbing keeps working unchanged.
+  const { data: lpRes, isLoading: lpLoading } = useQuery({
+    queryKey: ['admin-landing-page-submissions', search],
+    queryFn: () => {
+      const params: Record<string, string> = {
+        source: 'landing_page_form',
+        state: 'draft',
+      };
+      if (search.trim()) params.search = search.trim();
+      return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
+    },
+  });
+  const landingPageRequests: SubscriptionRequest[] = (lpRes?.data || []).map(
+    (c: any): SubscriptionRequest => ({
+      id: c.id,
+      service_type: c.service_type || '',
+      tier: Array.isArray(c.target_tiers) && c.target_tiers.length > 0 ? c.target_tiers[0] : '',
+      plan: c.plan_name || '',
+      proposed_price: c.proposed_price || 0,
+      working_days: Array.isArray(c.working_days) ? c.working_days.join(',') : '',
+      name: c.customer_name || '',
+      email: c.customer_email || '',
+      company: c.customer_company || c.brand_name || '',
+      phone: c.customer_phone || '',
+      // Map card.state to a request-style status. Drafts are pending until
+      // admin reviews; published/closed cards drop out of this query so they
+      // never show in the active queue.
+      status: 'pending',
+      created_at: c.created_at || new Date().toISOString(),
+      // The card already exists — clicking Review opens it directly without
+      // re-creating one (unlike upsquad rows which trigger from-request).
+      card_id: c.id,
+      source: 'landing_page_form',
+    }),
+  );
+
+  const allRequests: SubscriptionRequest[] = [...upsquadRequests, ...landingPageRequests];
 
   // Archived cards stay in the Archive tab — hide their originating
   // requests from Form Requests so the active queue isn't polluted by
@@ -59,7 +104,13 @@ export default function AdminRequestsList() {
   }, [archivedRes]);
 
   const requests = useMemo(
-    () => allRequests.filter((r) => !r.card_id || !archivedCardIds.has(r.card_id)),
+    () =>
+      allRequests
+        .filter((r) => !r.card_id || !archivedCardIds.has(r.card_id))
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        ),
     [allRequests, archivedCardIds],
   );
 
@@ -85,6 +136,7 @@ export default function AdminRequestsList() {
       api.post('/admin/subscription-cards/from-request', { subscription_request_id: requestId }).then((r) => r.data),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['admin-subscription-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-landing-page-submissions'] });
       if (data?.data?.id) setEditingCardId(data.data.id);
     },
   });
@@ -96,6 +148,7 @@ export default function AdminRequestsList() {
         onClose={() => {
           setEditingCardId(null);
           queryClient.invalidateQueries({ queryKey: ['admin-subscription-requests'] });
+          queryClient.invalidateQueries({ queryKey: ['admin-landing-page-submissions'] });
           queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
         }}
       />
@@ -161,7 +214,7 @@ export default function AdminRequestsList() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 pb-8">
-        {isLoading ? (
+        {isLoading || lpLoading ? (
           <div className="sh-card py-16 text-center">
             <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading…</p>
           </div>
@@ -179,12 +232,12 @@ export default function AdminRequestsList() {
           <div className="space-y-2">
             {visibleRequests.map((req) => (
               <RequestRow
-                key={req.id}
+                key={`${req.source || 'request'}-${req.id}`}
                 request={req}
                 onAction={() => {
                   if (req.card_id) {
                     setEditingCardId(req.card_id);
-                  } else {
+                  } else if (typeof req.id === 'number') {
                     createCardMutation.mutate(req.id);
                   }
                 }}
@@ -242,8 +295,16 @@ function RequestRow({
           {company.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
-            {company}{serviceType ? `: ${serviceType}` : ''}
+          <p className="flex items-center gap-2 truncate text-sm font-semibold text-[var(--color-sh-ink)]">
+            <span className="truncate">{company}{serviceType ? `: ${serviceType}` : ''}</span>
+            {request.source === 'landing_page_form' && (
+              <span
+                className="shrink-0 rounded bg-[var(--color-sh-lime-soft)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-sh-ink)] ring-1 ring-[var(--color-sh-warm-border)]"
+                title="Submitted via the public /connect form"
+              >
+                Landing Page
+              </span>
+            )}
           </p>
           {(planName || priceLabel) && (
             <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">

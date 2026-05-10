@@ -30,6 +30,7 @@ const nextConfig = {
       { source: '/subscription-cards/:path*', destination: `${API_URL}/subscription-cards/:path*` },
       { source: '/memberships/:path*', destination: `${API_URL}/memberships/:path*` },
       { source: '/clients/:path*', destination: `${API_URL}/clients/:path*` },
+      { source: '/leads/:path*', destination: `${API_URL}/leads/:path*` },
       { source: '/client-spaces/:path*', destination: `${API_URL}/client-spaces/:path*` },
       { source: '/timer/:path*', destination: `${API_URL}/timer/:path*` },
       { source: '/admin/:path*', destination: `${API_URL}/admin/:path*` },
