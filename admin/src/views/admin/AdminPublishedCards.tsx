@@ -156,7 +156,7 @@ function bucketByDate<T extends { state: 'published' | 'assigned' | 'closed'; pu
 }
 
 function publishedCardTitle(card: PublishedCard): string {
-  const business = card.submission?.business_name || card.customer_company || 'Unknown business';
+  const business = card.submission?.business_name || card.brand_name || 'Unknown business';
   const subName = card.submission_subscription?.subscription?.name || card.plan_name;
   return subName ? `${business} · ${subName}` : business;
 }
@@ -564,7 +564,7 @@ function CardGroup({
 }
 
 function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: { card: PublishedCard; onOpen: () => void; showCancelledTag: boolean; showArchivedTag?: boolean }) {
-  const business = card.submission?.business_name || card.customer_company || 'Unknown';
+  const business = card.submission?.business_name || card.brand_name || 'Unknown';
   const serviceType = card.service_type || '';
   const planName =
     card.submission_subscription?.subscription?.name

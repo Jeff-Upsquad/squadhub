@@ -62,7 +62,7 @@ export default function AdminRequestsList() {
       working_days: Array.isArray(c.working_days) ? c.working_days.join(',') : '',
       name: c.customer_name || '',
       email: c.customer_email || '',
-      company: c.customer_company || c.brand_name || '',
+      company: c.brand_name || c.customer_company || '',
       phone: c.customer_phone || '',
       // Drafts are pending until admin publishes; once published the card
       // moves out of state='draft' and stops appearing in this query.

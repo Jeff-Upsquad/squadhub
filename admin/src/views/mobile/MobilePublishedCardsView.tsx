@@ -342,7 +342,7 @@ function PublishedCardRow({
   showCancelledTag: boolean;
   showArchivedTag?: boolean;
 }) {
-  const business = card.submission?.business_name || card.customer_company || 'Unknown';
+  const business = card.submission?.business_name || card.brand_name || 'Unknown';
   const serviceType = card.service_type || '';
   const planName =
     card.submission_subscription?.subscription?.name

@@ -474,8 +474,7 @@ export default function AdminPublishedCardRecipientsView({
                 </button>
               </div>
               <div className="space-y-1.5 text-xs">
-                <HeaderDetailRow label="Company" value={card.customer_company} />
-                <HeaderDetailRow label="Contact" value={card.customer_name} />
+                <HeaderDetailRow label="Contact Person" value={card.customer_name} />
                 <HeaderDetailRow label="Email" value={card.customer_email} />
                 <HeaderDetailRow label="Phone" value={card.customer_phone} />
                 <HeaderDetailRow label="Location" value={card.customer_location} />

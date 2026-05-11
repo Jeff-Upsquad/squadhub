@@ -1067,8 +1067,7 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
       </DetailSection>
 
       <DetailSection title="Customer">
-        <DetailRow label="Company" value={card.customer_company || EMPTY} />
-        <DetailRow label="Contact" value={card.customer_name || EMPTY} />
+        <DetailRow label="Contact Person" value={card.customer_name || EMPTY} />
         <DetailRow label="Email" value={card.customer_email || EMPTY} />
         <DetailRow label="Phone" value={card.customer_phone || EMPTY} />
         <DetailRow label="Location" value={card.customer_location || EMPTY} />
