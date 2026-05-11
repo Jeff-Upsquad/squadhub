@@ -232,6 +232,13 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/sharp-ishizaka-f9ead2/admin && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3005"],
       "port": 3005
+    },
+    {
+      "name": "Loving Rosalind Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/loving-rosalind-6113b9/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3070"],
+      "port": 3070,
+      "autoPort": true
     }
   ]
 }

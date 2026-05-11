@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tansta
 import api from '../services/api';
 import type { Task, SpaceStatus, TaskComment, TaskMetadata } from '@squadhub/shared';
 import { getTaskStatusCategory } from '@squadhub/shared';
+import { showToastCard } from '../components/Toast';
+import { usePMStore } from '../stores/pmStore';
 
 // Invalidate every query key that contributes to a task-list UI so all views
 // (List, Folder, Space, My Tasks, Emergency) refresh after a mutation without
@@ -94,13 +96,20 @@ export function useCreateTask(listId: string | null) {
       const res = await api.post('/pm/tasks', { ...body, list_id: targetListId });
       return res.data.data;
     },
-    onSuccess: (_data, vars) => {
+    onSuccess: (data, vars) => {
       const targetListId = vars.list_id || listId;
       invalidateTaskLists(qc, targetListId);
       qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
       qc.invalidateQueries({ queryKey: ['notifications', 'list'] });
       if (vars.parent_task_id) {
         qc.invalidateQueries({ queryKey: ['task', vars.parent_task_id] });
+      }
+      if (data?.id) {
+        showToastCard({
+          subtitle: vars.parent_task_id ? 'New subtask' : 'New task',
+          title: data.title || vars.title || 'Untitled task',
+          onClick: () => usePMStore.getState().setActiveTask(data.id),
+        });
       }
     },
   });
