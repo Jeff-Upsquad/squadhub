@@ -220,6 +220,18 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/determined-haibt-695fe3/admin && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3002"],
       "port": 3002
+    },
+    {
+      "name": "Sharp Ishizaka Server",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/sharp-ishizaka-f9ead2 && PORT=4001 exec npm run dev -w server"],
+      "port": 4001
+    },
+    {
+      "name": "Sharp Ishizaka Admin",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/sharp-ishizaka-f9ead2/admin && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3005"],
+      "port": 3005
     }
   ]
 }

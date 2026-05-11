@@ -45,6 +45,7 @@ export type PublishedCard = {
   archived_at?: string | null;
   closed_at?: string | null;
   assigned_at?: string | null;
+  admin_reviewed_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   subscription_request_id?: number | null;
@@ -113,7 +114,24 @@ function formatPublishedAt(iso: string | null): string {
 }
 
 type GroupBy = 'status' | 'date';
-type StateFilter = 'all' | 'published' | 'assigned' | 'closed';
+// UI bucket — independent of `state` because the new "Assigned" bucket is
+// driven by selected_recipient_id, which can coexist with state='closed'
+// (webhook from Profiles closes the card and pins a selection together).
+type Bucket = 'active' | 'selected' | 'assigned' | 'cancelled';
+type StateFilter = 'all' | Bucket;
+
+/**
+ * Precedence-based bucketing. A card with `selected_recipient_id` set always
+ * lands in "assigned" — even if state='closed' (webhook flow) or state='assigned'
+ * (admin manually picked one final recipient). Only when no final recipient
+ * exists do we fall through to state-based buckets.
+ */
+function categorize(card: PublishedCard): Bucket {
+  if (card.selected_recipient_id) return 'assigned';
+  if (card.state === 'assigned') return 'selected';
+  if (card.state === 'closed') return 'cancelled';
+  return 'active';
+}
 
 function bucketByDate<T extends { state: 'published' | 'assigned' | 'closed'; published_at: string | null }>(
   cards: T[],
@@ -226,23 +244,36 @@ export default function AdminPublishedCards() {
     (pendingSharedRes?.data || []).length +
     (pendingLandingRes?.data || []).length;
 
+  const bucketed = useMemo(() => {
+    const out: Record<Bucket, PublishedCard[]> = { active: [], selected: [], assigned: [], cancelled: [] };
+    for (const c of cards) out[categorize(c)].push(c);
+    return out;
+  }, [cards]);
+
   const stateCounts = useMemo(() => ({
     all: cards.length,
-    published: cards.filter((c) => c.state === 'published').length,
-    assigned: cards.filter((c) => c.state === 'assigned').length,
-    closed: cards.filter((c) => c.state === 'closed').length,
-  }), [cards]);
+    active: bucketed.active.length,
+    selected: bucketed.selected.length,
+    assigned: bucketed.assigned.length,
+    cancelled: bucketed.cancelled.length,
+  }), [cards, bucketed]);
+
+  const unreviewedAssignedCount = useMemo(
+    () => bucketed.assigned.filter((c) => !c.admin_reviewed_at).length,
+    [bucketed.assigned],
+  );
 
   const filteredCards = useMemo(
-    () => stateFilter === 'all' ? cards : cards.filter((c) => c.state === stateFilter),
-    [cards, stateFilter],
+    () => stateFilter === 'all' ? cards : bucketed[stateFilter],
+    [cards, bucketed, stateFilter],
   );
 
   const groups = useMemo(() => ({
-    active: filteredCards.filter((c) => c.state === 'published'),
-    assigned: filteredCards.filter((c) => c.state === 'assigned'),
-    cancelled: filteredCards.filter((c) => c.state === 'closed'),
-  }), [filteredCards]);
+    active: bucketed.active,
+    selected: bucketed.selected,
+    assigned: bucketed.assigned,
+    cancelled: bucketed.cancelled,
+  }), [bucketed]);
 
   const dateGroups = useMemo(() => bucketByDate(filteredCards), [filteredCards]);
 
@@ -328,7 +359,7 @@ export default function AdminPublishedCards() {
           {(activeTab === 'published' || activeTab === 'archive') && (
             <div className="overflow-x-auto">
               <div className="sh-tab-bar">
-                {([['all', 'All'], ['published', 'Active'], ['assigned', 'Assigned'], ['closed', 'Cancelled']] as const).map(([key, label]) => (
+                {([['all', 'All'], ['active', 'Active'], ['selected', 'Selected'], ['assigned', 'Assigned'], ['cancelled', 'Cancelled']] as const).map(([key, label]) => (
                   <button
                     key={key}
                     type="button"
@@ -337,6 +368,18 @@ export default function AdminPublishedCards() {
                     className="sh-tab"
                   >
                     {label} <span className="opacity-70">({stateCounts[key]})</span>
+                    {key === 'assigned' && unreviewedAssignedCount > 0 && (
+                      <span
+                        className="ml-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none"
+                        style={{
+                          background: '#DC2626',
+                          color: 'white',
+                        }}
+                        title={`${unreviewedAssignedCount} new — admin review pending`}
+                      >
+                        {unreviewedAssignedCount} new
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -425,8 +468,11 @@ export default function AdminPublishedCards() {
                   {groups.active.length > 0 && (
                     <CardGroup label="Active" color="#10B981" items={groups.active} onOpen={setSelectedCardId} showCancelledTag={false} />
                   )}
+                  {groups.selected.length > 0 && (
+                    <CardGroup label="Selected" color="#0EA5E9" items={groups.selected} onOpen={setSelectedCardId} showCancelledTag={false} />
+                  )}
                   {groups.assigned.length > 0 && (
-                    <CardGroup label="Assigned" color="#0EA5E9" items={groups.assigned} onOpen={setSelectedCardId} showCancelledTag={false} />
+                    <CardGroup label="Assigned" color="#059669" items={groups.assigned} onOpen={setSelectedCardId} showCancelledTag={false} />
                   )}
                   {groups.cancelled.length > 0 && (
                     <CardGroup label="Cancelled" color="#6B7280" items={groups.cancelled} onOpen={setSelectedCardId} showCancelledTag={false} />
@@ -618,16 +664,36 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
             SquadHire pending
           </span>
         )}
-        {card.state === 'assigned' && (
-          <span className="sh-status-pill" style={{ backgroundColor: '#E0F2FE', color: '#075985' }}>
-            Assigned
-          </span>
-        )}
-        {card.selected_recipient_type && card.state !== 'assigned' && (
-          <span className="sh-status-pill" style={{ backgroundColor: '#DBEAFE', color: '#1E40AF' }}>
-            Selected ({card.selected_recipient_type})
-          </span>
-        )}
+        {(() => {
+          const bucket = categorize(card);
+          if (bucket === 'assigned') {
+            const isUnreviewed = !card.admin_reviewed_at;
+            return (
+              <>
+                <span className="sh-status-pill" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                  Assigned{card.selected_recipient_type ? ` (${card.selected_recipient_type})` : ''}
+                </span>
+                {isUnreviewed && (
+                  <span
+                    className="sh-status-pill"
+                    style={{ backgroundColor: '#DC2626', color: 'white' }}
+                    title="A talent has been assigned to this card. Click Review to open it."
+                  >
+                    NEW
+                  </span>
+                )}
+              </>
+            );
+          }
+          if (bucket === 'selected') {
+            return (
+              <span className="sh-status-pill" style={{ backgroundColor: '#E0F2FE', color: '#075985' }}>
+                Selected
+              </span>
+            );
+          }
+          return null;
+        })()}
         {(card.secondary_card_count ?? 0) > 0 && (
           <span className="sh-status-pill" style={{ backgroundColor: '#E0E7FF', color: '#3730A3' }}>
             {card.secondary_card_count} secondary
