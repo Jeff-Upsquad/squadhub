@@ -25,8 +25,9 @@ import { nextQuickDate } from './taskHelpers';
 import EmergencyConfirm from './EmergencyConfirm';
 import TaskStatusPicker from './TaskStatusPicker';
 import ListPickerCombobox from './ListPickerCombobox';
-import TaskAttachments from './TaskAttachments';
+import TaskAttachments, { type TaskAttachmentsHandle } from './TaskAttachments';
 import { useTaskAttachments, useDeleteTaskAttachment } from '../../../hooks/useTaskAttachments';
+import { usePanelFileDrop } from './usePanelFileDrop';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -172,6 +173,11 @@ export default function TaskDetailPanel({
   const { data: taskTypes } = useTaskTypes();
   const { data: checklists } = useChecklists(activeTaskId);
   const updateTask = useUpdateTask(listId);
+
+  const attachmentsRef = useRef<TaskAttachmentsHandle>(null);
+  const { dragActive: panelDragActive, panelHandlers } = usePanelFileDrop((files) => {
+    attachmentsRef.current?.addFiles(files);
+  });
 
   // Track in-flight quick-date values so rapid clicks read the most recent
   // sent value rather than the stale React Query cache.
@@ -439,6 +445,7 @@ export default function TaskDetailPanel({
       {/* Floating drawer */}
       <aside
         onClick={(e) => e.stopPropagation()}
+        {...(canEdit && task ? panelHandlers : {})}
         className="td-panel td-panel-luma apple td-shell absolute flex flex-col"
         style={{
           background: 'var(--surface)',
@@ -447,6 +454,21 @@ export default function TaskDetailPanel({
           opacity: mounted ? 1 : 0,
         }}
       >
+        {panelDragActive && canEdit && task && (
+          <div
+            aria-hidden
+            className="absolute inset-0 z-[100] pointer-events-none flex items-center justify-center"
+            style={{
+              background: 'rgba(255,255,255,0.88)',
+              border: '2px dashed var(--sh-ink-3)',
+              borderRadius: 'inherit',
+            }}
+          >
+            <div className="text-[14px] font-medium text-[color:var(--sh-ink)]">
+              Drop files to attach
+            </div>
+          </div>
+        )}
         {/* Top bar — task code chip + breadcrumb + actions */}
         <div className="td-head td-head-luma flex items-center gap-2 shrink-0">
           <button
@@ -1372,7 +1394,7 @@ export default function TaskDetailPanel({
               </div>
               {task && (
                 <div className="td-files-wrap">
-                  <TaskAttachments taskId={task.id} canEdit={canEdit} excludeAudio />
+                  <TaskAttachments ref={attachmentsRef} taskId={task.id} canEdit={canEdit} excludeAudio />
                 </div>
               )}
 

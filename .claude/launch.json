@@ -232,6 +232,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/sharp-ishizaka-f9ead2/admin && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3005"],
       "port": 3005
+    },
+    {
+      "name": "Loving Mendel Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/loving-mendel-40036e/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3002"],
+      "port": 3002
     }
   ]
 }

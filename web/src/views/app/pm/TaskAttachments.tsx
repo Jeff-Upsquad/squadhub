@@ -1,8 +1,12 @@
 'use client';
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState, useCallback, useEffect } from 'react';
 import api from '../../../services/api';
 import type { TaskAttachment } from '@squadhub/shared';
 import { useTaskAttachments, useDeleteTaskAttachment } from '../../../hooks/useTaskAttachments';
+
+export type TaskAttachmentsHandle = {
+  addFiles: (files: FileList | File[]) => void;
+};
 
 function isAudioMime(mime: string | null | undefined): boolean {
   return !!mime && mime.startsWith('audio/');
@@ -34,7 +38,10 @@ interface Props {
   excludeAudio?: boolean;
 }
 
-export default function TaskAttachments({ taskId, canEdit, excludeAudio }: Props) {
+const TaskAttachments = forwardRef<TaskAttachmentsHandle, Props>(function TaskAttachments(
+  { taskId, canEdit, excludeAudio },
+  ref,
+) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [inFlight, setInFlight] = useState<InFlight[]>([]);
   const [dragOver, setDragOver] = useState(false);
@@ -118,6 +125,8 @@ export default function TaskAttachments({ taskId, canEdit, excludeAudio }: Props
     Array.from(files).forEach((f) => uploadOne(f));
   }, [uploadOne]);
 
+  useImperativeHandle(ref, () => ({ addFiles: handleFiles }), [handleFiles]);
+
   const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.length) handleFiles(e.target.files);
     e.target.value = '';
@@ -125,6 +134,7 @@ export default function TaskAttachments({ taskId, canEdit, excludeAudio }: Props
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setDragOver(false);
     if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files);
   };
@@ -151,8 +161,9 @@ export default function TaskAttachments({ taskId, canEdit, excludeAudio }: Props
     <div className="flex flex-col gap-2">
       {canEdit && (
         <div
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
+          onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
+          onDragLeave={(e) => { e.stopPropagation(); setDragOver(false); }}
           onDrop={onDrop}
           onClick={() => inputRef.current?.click()}
           className="cursor-pointer flex items-center justify-center gap-2 rounded-xl border border-dashed py-5 text-[13px] transition-colors"
@@ -248,7 +259,9 @@ export default function TaskAttachments({ taskId, canEdit, excludeAudio }: Props
       ) : null}
     </div>
   );
-}
+});
+
+export default TaskAttachments;
 
 const SPEEDS = [0.5, 1, 1.5, 2] as const;
 
