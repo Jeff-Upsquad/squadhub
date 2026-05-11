@@ -221,6 +221,19 @@ export default function AdminPublishedCardRecipientsView({
     },
   });
 
+  const markReviewedMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${card.id}/mark-reviewed`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      showToast('Marked as reviewed.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to mark reviewed', 'error');
+    },
+  });
+
   const broadcastMutation = useMutation({
     mutationFn: () =>
       api.post(`/admin/subscription-cards/${card.id}/broadcast-pending`),
@@ -284,6 +297,11 @@ export default function AdminPublishedCardRecipientsView({
     total: allRecipients.length,
   }), [allRecipients]);
 
+  const selectedRecipients = useMemo(
+    () => allRecipients.filter((r) => r.selected_at),
+    [allRecipients],
+  );
+
   const filtered = useMemo(
     () => activeTab === 'all' ? allRecipients : allRecipients.filter((r) => r.status === activeTab),
     [allRecipients, activeTab],
@@ -331,10 +349,28 @@ export default function AdminPublishedCardRecipientsView({
     [allRecipients, isManual],
   );
 
-  const stateColor = card.state === 'published' ? '#10B981' : card.state === 'assigned' ? '#0EA5E9' : '#6B7280';
-  const stateLabel = card.state === 'published' ? 'Active' : card.state === 'assigned' ? 'Assigned' : 'Cancelled';
+  // Bucket-aware state pill (mirrors AdminPublishedCards.categorize). A card
+  // with selected_recipient_id always shows "Assigned" regardless of state.
+  const bucket: 'active' | 'selected' | 'assigned' | 'cancelled' = card.selected_recipient_id
+    ? 'assigned'
+    : card.state === 'assigned'
+      ? 'selected'
+      : card.state === 'closed'
+        ? 'cancelled'
+        : 'active';
+  const stateColor =
+    bucket === 'active' ? '#10B981'
+      : bucket === 'selected' ? '#0EA5E9'
+      : bucket === 'assigned' ? '#059669'
+      : '#6B7280';
+  const stateLabel =
+    bucket === 'active' ? 'Active'
+      : bucket === 'selected' ? 'Selected'
+      : bucket === 'assigned' ? 'Assigned'
+      : 'Cancelled';
   const distLabel = card.distribution === 'manual' ? 'Published' : 'Broadcast';
   const publisher = card.published_by_user;
+  const isUnreviewed = bucket === 'assigned' && !card.admin_reviewed_at;
 
   // Broadcast summary info
   const partnerCount = (card.recipient_counts?.partners?.pending ?? 0) +
@@ -386,13 +422,31 @@ export default function AdminPublishedCardRecipientsView({
                     Recalled
                   </span>
                 )}
-                {card.state === 'assigned' && (
+                {isUnreviewed && (
+                  <span
+                    className="sh-status-pill"
+                    style={{ backgroundColor: '#DC2626', color: 'white' }}
+                    title="A talent has been assigned to this card. Mark as reviewed to clear the badge."
+                  >
+                    NEW
+                  </span>
+                )}
+                {bucket === 'selected' && (
                   <button
                     onClick={() => undoMutation.mutate()}
                     disabled={undoMutation.isPending}
                     className="sh-btn-danger"
                   >
-                    {undoMutation.isPending ? 'Reverting…' : 'Undo Assignment'}
+                    {undoMutation.isPending ? 'Reverting…' : 'Undo Selection'}
+                  </button>
+                )}
+                {isUnreviewed && (
+                  <button
+                    onClick={() => markReviewedMutation.mutate()}
+                    disabled={markReviewedMutation.isPending}
+                    className="sh-btn-success"
+                  >
+                    {markReviewedMutation.isPending ? 'Marking…' : 'Mark as Reviewed'}
                   </button>
                 )}
               </div>
@@ -439,6 +493,65 @@ export default function AdminPublishedCardRecipientsView({
           </div>
         ) : (
           <>
+            {/* Selected talent(s) — emerald card mirroring the SquadHire business view */}
+            {selectedRecipients.length > 0 && (
+              <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/50 p-5 sm:p-6">
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-emerald-800">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {selectedRecipients.length === 1 ? 'Selected Talent' : `Selected Talents (${selectedRecipients.length})`}
+                </h2>
+                <div className="space-y-3">
+                  {selectedRecipients.map((r) => (
+                    <div key={`selected-${r.type}-${r.id}`} className="flex items-center gap-4">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-[var(--color-sh-ink)] text-base font-bold ring-1 ring-emerald-200">
+                        {r.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-[15px] font-semibold text-[#0a0a0a]">
+                            {r.name}
+                          </p>
+                          <span
+                            className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                            style={r.type === 'partner'
+                              ? { backgroundColor: '#DBEAFE', color: '#1E40AF' }
+                              : { backgroundColor: '#F2EBFE', color: '#6B21A8' }}
+                          >
+                            {r.type === 'partner' ? 'Partner' : 'Talent'}
+                          </span>
+                        </div>
+                        {r.responded_at && (
+                          <p className="mt-0.5 truncate text-xs text-[#737373]">
+                            Responded {formatRelative(r.responded_at)}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {r.type === 'talent' && adminUrl && (
+                          <a
+                            href={`${adminUrl}/admin/users/${r.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="View profile in SquadHire"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-emerald-700 hover:bg-emerald-100 transition"
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                            </svg>
+                          </a>
+                        )}
+                        <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                          Selected
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Broadcast summary */}
             <div
               className="sh-card flex flex-wrap items-center gap-2 px-4 py-3"

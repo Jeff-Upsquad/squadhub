@@ -1194,4 +1194,35 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================================
+// POST /admin/subscription-cards/:id/mark-reviewed
+// Stamps admin_reviewed_at so the "NEW" badge clears for this card.
+// Idempotent — calling twice just refreshes the timestamp.
+// The DB trigger resets admin_reviewed_at whenever selected_recipient_id
+// changes, so a fresh selection re-opens the NEW badge automatically.
+// ============================================================
+router.post('/:id/mark-reviewed', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const { data: updated, error } = await supabaseAdmin
+      .from('subscription_cards')
+      .update({ admin_reviewed_at: new Date().toISOString() })
+      .eq('id', cardId)
+      .select('id, admin_reviewed_at')
+      .maybeSingle();
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    if (!updated) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    res.json({ success: true, data: updated });
+  } catch (err: any) {
+    console.error('Mark reviewed error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
 export default router;

@@ -93,7 +93,17 @@ router.get('/users', async (req: Request, res: Response) => {
 // GET /admin/stats — basic platform stats
 router.get('/stats', async (_req: Request, res: Response) => {
   try {
-    const [usersRes, workspacesRes, channelsRes, messagesRes, pendingRes, internalRes, clientRes, clientStaffRes, partnerRes, partnerEmployeeRes] = await Promise.all([
+    // The unreviewed-assigned count depends on migration 078 (admin_reviewed_at).
+    // If the migration hasn't been applied yet, treat the count as 0 rather
+    // than failing the whole /stats response.
+    const unreviewedAssignedPromise = supabaseAdmin
+      .from('subscription_cards')
+      .select('*', { count: 'exact', head: true })
+      .not('selected_recipient_id', 'is', null)
+      .is('admin_reviewed_at', null)
+      .then((r) => r, () => ({ count: 0 } as { count: number }));
+
+    const [usersRes, workspacesRes, channelsRes, messagesRes, pendingRes, internalRes, clientRes, clientStaffRes, partnerRes, partnerEmployeeRes, unreviewedAssignedRes] = await Promise.all([
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('workspaces').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('channels').select('*', { count: 'exact', head: true }),
@@ -104,6 +114,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('user_type', 'client_staff'),
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('user_type', 'partner'),
       supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).eq('user_type', 'partner_employee'),
+      unreviewedAssignedPromise,
     ]);
 
     res.json({
@@ -114,6 +125,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
         total_channels: channelsRes.count || 0,
         total_messages: messagesRes.count || 0,
         pending_approvals: pendingRes.count || 0,
+        unreviewed_assigned_cards: unreviewedAssignedRes.count || 0,
         users_by_type: {
           internal: internalRes.count || 0,
           client: clientRes.count || 0,
