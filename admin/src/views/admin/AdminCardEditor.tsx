@@ -78,7 +78,6 @@ interface CardData {
   publish_targets: string[];
   customer_name: string | null;
   customer_email: string | null;
-  customer_company: string | null;
   customer_phone: string | null;
   customer_location: string | null;
   service_type: string | null;
@@ -140,7 +139,6 @@ export default function AdminCardEditor({
   const [originalProposedPrice, setOriginalProposedPrice] = useState<number | null>(null);
   const [tiers, setTiers] = useState<string[]>([]);
   const [workingDays, setWorkingDays] = useState<string[]>([]);
-  const [customerCompany, setCustomerCompany] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -172,7 +170,6 @@ export default function AdminCardEditor({
     setPlanName(card.plan_name || '');
     setTiers(card.target_tiers || []);
     setWorkingDays(card.working_days || []);
-    setCustomerCompany(card.customer_company || '');
     setCustomerName(card.customer_name || '');
     setCustomerEmail(card.customer_email || '');
     setCustomerPhone(card.customer_phone || '');
@@ -384,7 +381,6 @@ export default function AdminCardEditor({
         service_type: serviceType || null,
         plan_name: planName || null,
         working_days: workingDays,
-        customer_company: customerCompany || null,
         customer_location: customerLocation || null,
         customer_name: customerName || null,
         customer_email: customerEmail || null,
@@ -1022,15 +1018,7 @@ export default function AdminCardEditor({
 
           <Section title="Customer">
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Company">
-                <input
-                  value={customerCompany}
-                  onChange={(e) => setCustomerCompany(e.target.value)}
-                  disabled={!isDraft}
-                  className="sh-input"
-                />
-              </Field>
-              <Field label="Contact Name">
+              <Field label="Contact Person Name">
                 <input
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}

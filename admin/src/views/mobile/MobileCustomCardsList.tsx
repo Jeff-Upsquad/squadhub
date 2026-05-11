@@ -8,7 +8,7 @@ import AdminCardEditor from '@/views/admin/AdminCardEditor';
 interface CustomCard {
   id: string;
   state: string;
-  customer_company: string | null;
+  brand_name: string | null;
   service_type: string | null;
   plan_name: string | null;
   proposed_price: number | null;
@@ -107,7 +107,7 @@ export default function MobileCustomCardsList() {
 }
 
 function CustomCardRow({ card, onOpen }: { card: CustomCard; onOpen: () => void }) {
-  const company = card.customer_company || 'Untitled';
+  const company = card.brand_name || 'Untitled';
   const serviceType = card.service_type || '';
   const planName = card.plan_name || '';
   const totalPrice = card.proposed_price

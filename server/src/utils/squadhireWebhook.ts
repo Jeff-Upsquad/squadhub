@@ -1060,22 +1060,17 @@ export async function notifySquadhireOfTalentAcceptance(
 }
 
 // ------------------------------------------------------------
-// Public: outbound notification when an admin selects a talent
-// for a card. If talentId is null, the card was closed by
-// selecting a partner (SquadHub-native) — SquadHire just needs
-// to know the card is archived. Best-effort, single attempt.
+// Card selection: single POST attempt
 // ------------------------------------------------------------
 
-export async function notifySquadhireOfSelection(
+function postSelectionOnce(
   cardId: string,
   talentIds: string[],
   selectedAt: string,
-): Promise<void> {
+): Promise<AttemptOutcome> {
   const baseUrl = config.squadhireWebhookUrl;
-  if (!baseUrl || !config.squadhireWebhookSecret) {
-    console.warn('[squadhire-webhook] selection skipped: not configured');
-    return;
-  }
+  if (!baseUrl) return Promise.resolve({ delivered: false, error: 'squadhire_webhook_url_not_configured' });
+  if (!config.squadhireWebhookSecret) return Promise.resolve({ delivered: false, error: 'squadhire_webhook_secret_not_configured' });
 
   const url = baseUrl.endsWith('/')
     ? `${baseUrl}cards/selection`
@@ -1090,25 +1085,134 @@ export async function notifySquadhireOfSelection(
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-SquadHub-Signature': config.squadhireWebhookSecret,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      console.warn(`[squadhire-webhook] selection http_${res.status}`);
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn('[squadhire-webhook] selection failed', msg);
-  } finally {
-    clearTimeout(timer);
+  return fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-SquadHub-Signature': config.squadhireWebhookSecret,
+    },
+    body: JSON.stringify(body),
+    signal: controller.signal,
+  })
+    .then((res) => {
+      if (!res.ok) return { delivered: false, error: `http_${res.status}` } as AttemptOutcome;
+      return { delivered: true } as AttemptOutcome;
+    })
+    .catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { delivered: false, error: msg.slice(0, 500) } as AttemptOutcome;
+    })
+    .finally(() => clearTimeout(timer));
+}
+
+// ------------------------------------------------------------
+// Card selection: persist attempt state onto the card row
+// ------------------------------------------------------------
+
+async function persistSelectionResult(
+  cardId: string,
+  outcome: AttemptOutcome,
+  attemptsDelta: number,
+): Promise<void> {
+  const { data: current, error: readErr } = await supabaseAdmin
+    .from('subscription_cards')
+    .select('squadhire_select_notify_attempts')
+    .eq('id', cardId)
+    .maybeSingle();
+  if (readErr) {
+    console.error('[squadhire-webhook] failed to read select-notify attempts', readErr);
+    return;
   }
+
+  const patch: Record<string, unknown> = {
+    squadhire_select_notify_attempts:
+      ((current as any)?.squadhire_select_notify_attempts ?? 0) + attemptsDelta,
+    squadhire_select_notify_error: outcome.delivered ? null : (outcome.error ?? 'unknown_error'),
+  };
+  if (outcome.delivered) {
+    patch.squadhire_select_notified_at = new Date().toISOString();
+  }
+
+  const { error } = await supabaseAdmin
+    .from('subscription_cards')
+    .update(patch)
+    .eq('id', cardId);
+  if (error) {
+    console.error('[squadhire-webhook] failed to persist select-notify state', error);
+  }
+}
+
+// ------------------------------------------------------------
+// Public: inline delivery with retries (called from /assign).
+// Returns the outcome so the caller can warn the admin on failure.
+// If still undelivered after INLINE_ATTEMPTS, the row is left with
+// squadhire_select_notified_at = NULL and the sweeper picks it up.
+// ------------------------------------------------------------
+
+export async function notifySquadhireOfSelection(
+  cardId: string,
+  talentIds: string[],
+  selectedAt: string,
+): Promise<AttemptOutcome> {
+  let lastOutcome: AttemptOutcome = { delivered: false, error: 'not_attempted' };
+  for (let i = 0; i < INLINE_ATTEMPTS; i++) {
+    if (INLINE_BACKOFF_MS[i] > 0) await sleep(INLINE_BACKOFF_MS[i]);
+    lastOutcome = await postSelectionOnce(cardId, talentIds, selectedAt);
+    if (lastOutcome.delivered) break;
+  }
+  await persistSelectionResult(cardId, lastOutcome, INLINE_ATTEMPTS);
+  return lastOutcome;
+}
+
+// ------------------------------------------------------------
+// Public: background sweeper — retries cards whose selection
+// webhook never reached SquadHire. Mirrors startManualAssignmentSweeper.
+// ------------------------------------------------------------
+
+export function startSelectionNotifySweeper(): NodeJS.Timeout {
+  const tick = async () => {
+    try {
+      const { data: cards, error } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id, assigned_at')
+        .eq('state', 'assigned')
+        .is('squadhire_select_notified_at', null)
+        .lt('squadhire_select_notify_attempts', MAX_SYNC_ATTEMPTS)
+        .order('assigned_at', { ascending: true })
+        .limit(SWEEPER_BATCH_SIZE);
+
+      if (error) {
+        console.error('[squadhire-webhook] selection sweeper query failed', error);
+        return;
+      }
+      if (!cards || cards.length === 0) return;
+
+      for (const card of cards as { id: string; assigned_at: string | null }[]) {
+        const { data: selectedRows, error: rowsErr } = await supabaseAdmin
+          .from('subscription_card_external_recipients')
+          .select('external_user_id')
+          .eq('card_id', card.id)
+          .not('selected_at', 'is', null);
+        if (rowsErr) {
+          console.error('[squadhire-webhook] selection sweeper recipients query failed', rowsErr);
+          continue;
+        }
+        const talentIds = (selectedRows ?? [])
+          .map((r: any) => r.external_user_id as string | null)
+          .filter((id: string | null): id is string => !!id);
+
+        const selectedAt = card.assigned_at ?? new Date().toISOString();
+        const outcome = await postSelectionOnce(card.id, talentIds, selectedAt);
+        await persistSelectionResult(card.id, outcome, 1);
+      }
+    } catch (err) {
+      console.error('[squadhire-webhook] selection sweeper tick errored', err);
+    }
+  };
+
+  const handle = setInterval(tick, SWEEPER_INTERVAL_MS);
+  setTimeout(tick, 15_000);
+  return handle;
 }
 
 // ------------------------------------------------------------
