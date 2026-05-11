@@ -196,6 +196,203 @@ export async function matchPartnersForCard(cardId: string, targetingCardId?: str
 }
 
 /**
+ * Fan a multi-tier draft card out to N independent published cards, one per
+ * selected tier. Children are NOT linked via parent_card_id — they're fully
+ * independent so SquadHire surfaces all of them on the business dashboard
+ * (the webhook hides cards with `is_secondary=true`) and so closing one
+ * tier doesn't cascade to its siblings.
+ *
+ * Returns ALL resulting card ids, original first. Caller fans out
+ * matchPartnersForCard + SquadHire delivery per id.
+ *
+ * If the draft has 0–1 tiers, no fan-out happens — the original is just
+ * flipped to published with its existing proposed_price/markup (single-tier
+ * drafts can also have a tier_pricing entry, in which case we copy that
+ * tier's values onto the row before flipping state).
+ *
+ * Caller is responsible for: validating state='draft' and that publish_targets
+ * is non-empty. This helper just does the row work.
+ */
+export async function fanOutTierCards(
+  originalCardId: string,
+  publishedBy: string,
+  distribution: 'broadcast' | 'manual',
+): Promise<string[]> {
+  const { data: original, error: loadErr } = await supabaseAdmin
+    .from('subscription_cards')
+    .select('*')
+    .eq('id', originalCardId)
+    .single();
+  if (loadErr || !original) throw loadErr ?? new Error('Card not found');
+
+  const targetTiers: string[] = Array.isArray(original.target_tiers)
+    ? (original.target_tiers as string[]).filter(Boolean)
+    : [];
+  const tierPricing: Record<string, { proposed_price?: number; markup?: number }> =
+    original.tier_pricing && typeof original.tier_pricing === 'object'
+      ? original.tier_pricing
+      : {};
+
+  const now = new Date().toISOString();
+
+  if (targetTiers.length <= 1) {
+    // Single-tier (or untargeted) path. If tier_pricing has the tier's
+    // entry, prefer it over the legacy proposed_price/markup on the row
+    // (form may have written both during transition).
+    const updates: Record<string, unknown> = {
+      state: 'published',
+      distribution,
+      published_at: now,
+      published_by: publishedBy,
+      tier_pricing: {},
+    };
+    if (targetTiers.length === 1) {
+      const entry = tierPricing[targetTiers[0]];
+      if (entry && entry.proposed_price && entry.proposed_price > 0) {
+        updates.proposed_price = entry.proposed_price;
+        updates.markup = entry.markup ?? 0;
+      }
+    }
+    const { error: updErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .update(updates)
+      .eq('id', originalCardId)
+      .eq('state', 'draft');
+    if (updErr) throw updErr;
+    return [originalCardId];
+  }
+
+  // Multi-tier: validate every selected tier has a non-zero price.
+  for (const tier of targetTiers) {
+    const entry = tierPricing[tier];
+    if (!entry || !entry.proposed_price || entry.proposed_price <= 0) {
+      throw new Error(`Missing pricing for tier "${tier}"`);
+    }
+  }
+
+  // Repurpose the original row as the first tier's card.
+  const firstTier = targetTiers[0];
+  const firstEntry = tierPricing[firstTier];
+  const { error: updErr } = await supabaseAdmin
+    .from('subscription_cards')
+    .update({
+      state: 'published',
+      distribution,
+      published_at: now,
+      published_by: publishedBy,
+      target_tiers: [firstTier],
+      proposed_price: firstEntry.proposed_price ?? null,
+      markup: firstEntry.markup ?? 0,
+      tier_pricing: {},
+    })
+    .eq('id', originalCardId)
+    .eq('state', 'draft');
+  if (updErr) throw updErr;
+
+  // Fields copied verbatim onto each sibling. Deliberate omissions:
+  //   - id (auto)
+  //   - state, distribution, published_at, published_by (set fresh)
+  //   - target_tiers, proposed_price, markup (overridden per sibling)
+  //   - tier_pricing (cleared)
+  //   - parent_card_id (NULL — siblings stay independent so SquadHire
+  //     surfaces them all on the business dashboard)
+  //   - subscription_request_id (kept on original only — upsquad notify
+  //     fires once)
+  //   - submission_subscription_id (kept on original only — staged path
+  //     uses .maybeSingle() on this column to find drafts; siblings would
+  //     break that lookup)
+  //   - state-machine columns that should reset per sibling (closed_at,
+  //     recalled_at, archived_at, squadhire_synced_at, etc.)
+  const COPY_FIELDS = [
+    'source',
+    'service_type',
+    'plan_name',
+    'working_days',
+    'brand_name',
+    'business_nature',
+    'notes',
+    'requirement_note',
+    'min_experience_years',
+    'target_languages',
+    'custom_deliverables',
+    'publish_targets',
+    'customer_company',
+    'customer_name',
+    'customer_email',
+    'customer_phone',
+    'customer_location',
+    'squadhire_category_ids',
+    'partner_price_override',
+    'disabled_default_deliverable_ids',
+  ] as const;
+
+  const siblingIds: string[] = [];
+  for (let i = 1; i < targetTiers.length; i++) {
+    const tier = targetTiers[i];
+    const entry = tierPricing[tier];
+    const insertRow: Record<string, unknown> = {
+      state: 'published',
+      distribution,
+      published_at: now,
+      published_by: publishedBy,
+      target_tiers: [tier],
+      proposed_price: entry.proposed_price ?? null,
+      markup: entry.markup ?? 0,
+      tier_pricing: {},
+    };
+    for (const field of COPY_FIELDS) {
+      const val = (original as any)[field];
+      if (val !== undefined) insertRow[field] = val;
+    }
+    const { data: inserted, error: insErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .insert(insertRow)
+      .select('id')
+      .single();
+    if (insErr || !inserted) throw insErr ?? new Error('Insert failed');
+    siblingIds.push(inserted.id as string);
+  }
+
+  // Copy targeting join rows (countries / regions) from the original to
+  // each sibling so each tier card gets the same geo targeting. Categories
+  // live on the row itself and are already covered by COPY_FIELDS.
+  if (siblingIds.length > 0) {
+    const [{ data: countryRows }, { data: regionRows }] = await Promise.all([
+      supabaseAdmin
+        .from('subscription_card_target_countries')
+        .select('country_id')
+        .eq('card_id', originalCardId),
+      supabaseAdmin
+        .from('subscription_card_target_regions')
+        .select('country_id, region')
+        .eq('card_id', originalCardId),
+    ]);
+    const countryInserts: Array<{ card_id: string; country_id: string }> = [];
+    const regionInserts: Array<{ card_id: string; country_id: string; region: string }> = [];
+    for (const sid of siblingIds) {
+      (countryRows ?? []).forEach((r: any) => {
+        countryInserts.push({ card_id: sid, country_id: r.country_id });
+      });
+      (regionRows ?? []).forEach((r: any) => {
+        regionInserts.push({ card_id: sid, country_id: r.country_id, region: r.region });
+      });
+    }
+    if (countryInserts.length > 0) {
+      await supabaseAdmin
+        .from('subscription_card_target_countries')
+        .insert(countryInserts);
+    }
+    if (regionInserts.length > 0) {
+      await supabaseAdmin
+        .from('subscription_card_target_regions')
+        .insert(regionInserts);
+    }
+  }
+
+  return [originalCardId, ...siblingIds];
+}
+
+/**
  * Inverse of matchPartnersForCard: given a partner, find all active published
  * cards they qualify for and upsert them as recipients. Idempotent.
  */
