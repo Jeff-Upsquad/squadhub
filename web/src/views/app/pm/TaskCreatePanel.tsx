@@ -14,7 +14,9 @@ import ListPickerCombobox from './ListPickerCombobox';
 import TaskStatusPicker from './TaskStatusPicker';
 import { nextQuickDate } from './taskHelpers';
 import { useDraftTaskStore, type SerializableDraft } from '../../../stores/draftTaskStore';
+import { usePMStore } from '../../../stores/pmStore';
 import { showToast } from '../../../components/Toast';
+import { usePanelFileDrop } from './usePanelFileDrop';
 
 /* -------------------------------------------------------------------------- */
 /* Helpers (duplicated from TaskDetailPanel — keep in sync if they change)    */
@@ -381,6 +383,8 @@ export default function TaskCreatePanel({
   const [newItemDrafts, setNewItemDrafts] = useState<Record<string, string>>({});
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [focusOnCreate, setFocusOnCreate] = useState(false);
+  const toggleFocusToday = usePMStore((s) => s.toggleFocusToday);
   const filePickerRef = useRef<HTMLInputElement>(null);
 
   // Default task type, once the list of types is available.
@@ -483,6 +487,8 @@ export default function TaskCreatePanel({
         list_id: effectiveListId,
         ...(metadata ? { metadata } : {}),
       });
+
+      if (focusOnCreate) toggleFocusToday(newTask.id);
 
       // Subtasks
       for (const st of draft.subtasks) {
@@ -634,6 +640,8 @@ export default function TaskCreatePanel({
     setDraft((d) => ({ ...d, pendingFiles: d.pendingFiles.filter((f) => f.id !== id) }));
   };
 
+  const { dragActive: panelDragActive, panelHandlers } = usePanelFileDrop(addDraftFiles);
+
   // Estimate input commit
   const commitEstimate = () => {
     const mins = parseTimeInput(estimateInput);
@@ -656,6 +664,7 @@ export default function TaskCreatePanel({
       {/* Floating drawer */}
       <aside
         onClick={(e) => e.stopPropagation()}
+        {...panelHandlers}
         className="td-panel td-panel-luma apple td-shell absolute flex flex-col"
         style={{
           background: 'var(--surface)',
@@ -664,6 +673,21 @@ export default function TaskCreatePanel({
           opacity: mounted ? 1 : 0,
         }}
       >
+        {panelDragActive && (
+          <div
+            aria-hidden
+            className="absolute inset-0 z-[100] pointer-events-none flex items-center justify-center"
+            style={{
+              background: 'rgba(255,255,255,0.88)',
+              border: '2px dashed var(--sh-ink-3)',
+              borderRadius: 'inherit',
+            }}
+          >
+            <div className="text-[14px] font-medium text-[color:var(--sh-ink)]">
+              Drop files to attach
+            </div>
+          </div>
+        )}
         {/* Top bar */}
         <div className="td-head td-head-luma flex items-center gap-2 shrink-0">
           <button
@@ -691,6 +715,16 @@ export default function TaskCreatePanel({
             {isDesignTask ? (isVideoTask ? 'NEW VIDEO TASK' : 'NEW DESIGN TASK') : 'NEW TASK'}
           </span>
           <div className="flex-1" />
+          <button
+            type="button"
+            onClick={() => setFocusOnCreate((v) => !v)}
+            className="td-nav-btn td-focus-star"
+            data-active={focusOnCreate}
+            title={focusOnCreate ? 'Will be focused for today — click to remove' : 'Focus today'}
+            aria-label={focusOnCreate ? 'Focused for today' : 'Focus today'}
+          >
+            <span style={{ fontSize: 14, lineHeight: 1 }}>{focusOnCreate ? '★' : '☆'}</span>
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -1436,10 +1470,12 @@ export default function TaskCreatePanel({
           <div className="td-files-wrap">
             <div className="flex flex-col gap-2">
               <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
+                onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
+                onDragLeave={(e) => { e.stopPropagation(); setDragOver(false); }}
                 onDrop={(e) => {
                   e.preventDefault();
+                  e.stopPropagation();
                   setDragOver(false);
                   if (e.dataTransfer.files?.length) addDraftFiles(e.dataTransfer.files);
                 }}
