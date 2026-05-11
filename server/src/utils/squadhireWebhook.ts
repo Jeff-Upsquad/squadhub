@@ -39,6 +39,17 @@ const PLAN_HOURS: Record<string, number> = {
   personal: 8,
 };
 
+// Card sources that DON'T link to a staged subscription
+// (client_submission_subscriptions). For these, customer/plan/email metadata
+// lives directly on the subscription_cards row instead of the staged record.
+// Keep in sync with the chk_source constraint in supabase migrations.
+const NON_STAGED_SOURCES = new Set([
+  'request',
+  'custom',
+  'shared_form',
+  'landing_page_form',
+]);
+
 export interface SquadhireCardPayload {
   external_id: string;
   content: Record<string, unknown>;
@@ -210,9 +221,10 @@ export async function buildSquadhirePayloadForCard(
   let planHoursDeliverable: { per_day: number; per_week: number; per_month: number } | null = null;
   let planItemDeliverables: Array<{ kind: string; name: string; deliverable_type_id: string | null; per_day: number; per_week: number; per_month: number }> = [];
 
-  // For request/custom-sourced cards, read metadata from the card itself
+  // For non-staged cards (request/custom/shared_form/landing_page_form), read
+  // metadata from the card itself instead of from a staged subscription row.
   const cardSource = (contentSource as any).source as string | undefined;
-  if (!staged && (cardSource === 'request' || cardSource === 'custom')) {
+  if (!staged && cardSource && NON_STAGED_SOURCES.has(cardSource)) {
     subscriptionName = (contentSource as any).service_type ?? null;
     planName = (contentSource as any).plan_name ?? null;
     leadEmail = (contentSource as any).customer_email ?? null;
@@ -406,7 +418,7 @@ export async function buildSquadhirePayloadForCard(
     hoursLabel = formatDeliverableCadence(perDay, perWeek, perMonth, 'hrs');
   }
 
-  // Fallback for request/custom cards: derive hours from the standard plan
+  // Fallback for non-staged cards: derive hours from the standard plan
   // name (Starter/Basic/Plus/Pro/Personal) since these cards aren't linked
   // to a subscription_plan and the admin typically doesn't add a manual
   // hours deliverable. Without this, the talent's "Work commitment" panel
@@ -414,7 +426,8 @@ export async function buildSquadhirePayloadForCard(
   if (
     !hoursLabel &&
     !staged &&
-    (cardSource === 'request' || cardSource === 'custom') &&
+    cardSource &&
+    NON_STAGED_SOURCES.has(cardSource) &&
     typeof planName === 'string'
   ) {
     const hpd = PLAN_HOURS[planName.toLowerCase().trim()];
@@ -483,10 +496,10 @@ export async function buildSquadhirePayloadForCard(
     }
   }
 
-  // For request/custom cards: proposed_price is what the customer pays/sees,
+  // For non-staged cards: proposed_price is what the customer pays/sees,
   // markup (displayed as "Margin") is the platform commission, and the talent
   // earns the remainder (proposed - margin).
-  if (!staged && (cardSource === 'request' || cardSource === 'custom')) {
+  if (!staged && cardSource && NON_STAGED_SOURCES.has(cardSource)) {
     const proposedPrice = (contentSource as any).proposed_price as number | null;
     const markup = (contentSource as any).markup as number | null;
     if (proposedPrice) {
@@ -595,10 +608,10 @@ export async function buildSquadhirePayloadForCard(
     content.hours_label = hoursLabel;
   }
 
-  // For request/custom cards, default to "No specific deliverables" so the
+  // For non-staged cards, default to "No specific deliverables" so the
   // talent's Work Commitment panel renders even when the admin didn't add
   // any custom deliverables. Skip if custom_deliverables already has items.
-  if (!staged && (cardSource === 'request' || cardSource === 'custom')) {
+  if (!staged && cardSource && NON_STAGED_SOURCES.has(cardSource)) {
     const customDelivs = Array.isArray(contentSource.custom_deliverables)
       ? (contentSource.custom_deliverables as any[])
       : [];
