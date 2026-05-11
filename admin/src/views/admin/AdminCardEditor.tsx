@@ -684,161 +684,6 @@ export default function AdminCardEditor({
             </Field>
           </Section>
 
-          {/* Location & Language */}
-          <Section title="Location & Language">
-            <Field label="Country">
-              <select
-                value={targetCountryIds[0] || ''}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  setTargetCountryIds(id ? [id] : []);
-                  // Drop any region rows tied to a different country
-                  setTargetRegions((prev) => prev.filter((r) => r.country_id === id));
-                }}
-                disabled={!isDraft}
-                className="sh-input"
-              >
-                <option value="">No country preference</option>
-                {countries.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="States / regions">
-              {(() => {
-                const selectedCountryId = targetCountryIds[0];
-                const selectedCountry = selectedCountryId ? countryById[selectedCountryId] : null;
-                const stateOptions = selectedCountry ? STATES_BY_COUNTRY_NAME[selectedCountry.name] || [] : [];
-                if (!selectedCountry) {
-                  return <p className="text-xs text-[var(--color-sh-ink-faint)]">Pick a country above to enable.</p>;
-                }
-                if (stateOptions.length === 0) {
-                  return <p className="text-xs text-[var(--color-sh-ink-faint)]">No state list configured for {selectedCountry.name}.</p>;
-                }
-                const selectedRegions = new Set(targetRegions.map((r) => r.region));
-                return (
-                  <div className="flex flex-wrap gap-2">
-                    {stateOptions.map((state) => {
-                      const active = selectedRegions.has(state);
-                      return (
-                        <PillCheckbox
-                          key={state}
-                          active={active}
-                          disabled={!isDraft}
-                          onClick={() => {
-                            setTargetRegions((prev) => {
-                              if (active) return prev.filter((r) => r.region !== state);
-                              return [...prev, { country_id: selectedCountryId, region: state }];
-                            });
-                          }}
-                          label={state}
-                        />
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-            </Field>
-            <Field label="Languages">
-              <div className="flex flex-wrap gap-2">
-                {LANGUAGE_OPTIONS.map((lang) => {
-                  const active = targetLanguages.includes(lang);
-                  return (
-                    <PillCheckbox
-                      key={lang}
-                      active={active}
-                      disabled={!isDraft}
-                      onClick={() => {
-                        setTargetLanguages((prev) =>
-                          active ? prev.filter((l) => l !== lang) : [...prev, lang],
-                        );
-                      }}
-                      label={lang}
-                    />
-                  );
-                })}
-              </div>
-            </Field>
-            <Field label="SquadHire Categories">
-              <p className="mb-2 text-[11px] text-[var(--color-sh-ink-faint)]">
-                The card is only delivered to SquadHire when at least one
-                category is picked — talents subscribed to these categories
-                see the card. Pre-filled from the matching subscription's
-                SquadHire Profile when available.
-              </p>
-              {squadhireCategories.length === 0 ? (
-                <p className="text-xs text-[var(--color-sh-ink-faint)]">No categories loaded.</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {squadhireCategories.map((cat) => {
-                    const active = squadhireCategoryIds.includes(cat.id);
-                    return (
-                      <PillCheckbox
-                        key={cat.id}
-                        active={active}
-                        disabled={!isDraft}
-                        onClick={() => {
-                          setSquadhireCategoryIds((prev) =>
-                            active ? prev.filter((id) => id !== cat.id) : [...prev, cat.id],
-                          );
-                        }}
-                        label={cat.name}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </Field>
-          </Section>
-
-          <Section title="Customer">
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Company">
-                <input
-                  value={customerCompany}
-                  onChange={(e) => setCustomerCompany(e.target.value)}
-                  disabled={!isDraft}
-                  className="sh-input"
-                />
-              </Field>
-              <Field label="Contact Name">
-                <input
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  disabled={!isDraft}
-                  className="sh-input"
-                />
-              </Field>
-              <Field label="Email" onEditClick={isDraft ? () => setEmailEditable(true) : undefined} editActive={emailEditable}>
-                <input
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  disabled={!isDraft || !emailEditable}
-                  className="sh-input"
-                />
-              </Field>
-              <Field label="Phone" onEditClick={isDraft ? () => setPhoneEditable(true) : undefined} editActive={phoneEditable}>
-                <input
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  disabled={!isDraft || !phoneEditable}
-                  className="sh-input"
-                />
-              </Field>
-              <div className="col-span-2">
-                <Field label="Location of Business">
-                  <input
-                    value={customerLocation}
-                    onChange={(e) => setCustomerLocation(e.target.value)}
-                    disabled={!isDraft}
-                    placeholder="e.g. Bangalore, India"
-                    className="sh-input"
-                  />
-                </Field>
-              </div>
-            </div>
-          </Section>
-
           {/* Deliverables — combined: catalog hours per selected tier (top)
               + shared custom deliverables list (bottom). Custom items are
               applied to every tier card on publish. */}
@@ -1066,6 +911,161 @@ export default function AdminCardEditor({
                 })}
               </div>
             )}
+          </Section>
+
+          {/* Location & Language */}
+          <Section title="Location & Language">
+            <Field label="Country">
+              <select
+                value={targetCountryIds[0] || ''}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setTargetCountryIds(id ? [id] : []);
+                  // Drop any region rows tied to a different country
+                  setTargetRegions((prev) => prev.filter((r) => r.country_id === id));
+                }}
+                disabled={!isDraft}
+                className="sh-input"
+              >
+                <option value="">No country preference</option>
+                {countries.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="States / regions">
+              {(() => {
+                const selectedCountryId = targetCountryIds[0];
+                const selectedCountry = selectedCountryId ? countryById[selectedCountryId] : null;
+                const stateOptions = selectedCountry ? STATES_BY_COUNTRY_NAME[selectedCountry.name] || [] : [];
+                if (!selectedCountry) {
+                  return <p className="text-xs text-[var(--color-sh-ink-faint)]">Pick a country above to enable.</p>;
+                }
+                if (stateOptions.length === 0) {
+                  return <p className="text-xs text-[var(--color-sh-ink-faint)]">No state list configured for {selectedCountry.name}.</p>;
+                }
+                const selectedRegions = new Set(targetRegions.map((r) => r.region));
+                return (
+                  <div className="flex flex-wrap gap-2">
+                    {stateOptions.map((state) => {
+                      const active = selectedRegions.has(state);
+                      return (
+                        <PillCheckbox
+                          key={state}
+                          active={active}
+                          disabled={!isDraft}
+                          onClick={() => {
+                            setTargetRegions((prev) => {
+                              if (active) return prev.filter((r) => r.region !== state);
+                              return [...prev, { country_id: selectedCountryId, region: state }];
+                            });
+                          }}
+                          label={state}
+                        />
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </Field>
+            <Field label="Languages">
+              <div className="flex flex-wrap gap-2">
+                {LANGUAGE_OPTIONS.map((lang) => {
+                  const active = targetLanguages.includes(lang);
+                  return (
+                    <PillCheckbox
+                      key={lang}
+                      active={active}
+                      disabled={!isDraft}
+                      onClick={() => {
+                        setTargetLanguages((prev) =>
+                          active ? prev.filter((l) => l !== lang) : [...prev, lang],
+                        );
+                      }}
+                      label={lang}
+                    />
+                  );
+                })}
+              </div>
+            </Field>
+            <Field label="SquadHire Categories">
+              <p className="mb-2 text-[11px] text-[var(--color-sh-ink-faint)]">
+                The card is only delivered to SquadHire when at least one
+                category is picked — talents subscribed to these categories
+                see the card. Pre-filled from the matching subscription's
+                SquadHire Profile when available.
+              </p>
+              {squadhireCategories.length === 0 ? (
+                <p className="text-xs text-[var(--color-sh-ink-faint)]">No categories loaded.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {squadhireCategories.map((cat) => {
+                    const active = squadhireCategoryIds.includes(cat.id);
+                    return (
+                      <PillCheckbox
+                        key={cat.id}
+                        active={active}
+                        disabled={!isDraft}
+                        onClick={() => {
+                          setSquadhireCategoryIds((prev) =>
+                            active ? prev.filter((id) => id !== cat.id) : [...prev, cat.id],
+                          );
+                        }}
+                        label={cat.name}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </Field>
+          </Section>
+
+          <Section title="Customer">
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Company">
+                <input
+                  value={customerCompany}
+                  onChange={(e) => setCustomerCompany(e.target.value)}
+                  disabled={!isDraft}
+                  className="sh-input"
+                />
+              </Field>
+              <Field label="Contact Name">
+                <input
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  disabled={!isDraft}
+                  className="sh-input"
+                />
+              </Field>
+              <Field label="Email" onEditClick={isDraft ? () => setEmailEditable(true) : undefined} editActive={emailEditable}>
+                <input
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  disabled={!isDraft || !emailEditable}
+                  className="sh-input"
+                />
+              </Field>
+              <Field label="Phone" onEditClick={isDraft ? () => setPhoneEditable(true) : undefined} editActive={phoneEditable}>
+                <input
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  disabled={!isDraft || !phoneEditable}
+                  className="sh-input"
+                />
+              </Field>
+              <div className="col-span-2">
+                <Field label="Location of Business">
+                  <input
+                    value={customerLocation}
+                    onChange={(e) => setCustomerLocation(e.target.value)}
+                    disabled={!isDraft}
+                    placeholder="e.g. Bangalore, India"
+                    className="sh-input"
+                  />
+                </Field>
+              </div>
+            </div>
           </Section>
 
           {/* Client Brief */}
