@@ -98,10 +98,16 @@ export function isTaskCompleted(t: Task): boolean {
   return false;
 }
 
-export function partitionByCompletion(tasks: Task[]): { open: Task[]; completed: Task[] } {
+export function partitionByCompletion(
+  tasks: Task[],
+  fadingIds?: ReadonlySet<string>,
+): { open: Task[]; completed: Task[] } {
   const open: Task[] = [];
   const completed: Task[] = [];
-  for (const t of tasks) (isTaskCompleted(t) ? completed : open).push(t);
+  for (const t of tasks) {
+    if (isTaskCompleted(t) && !fadingIds?.has(t.id)) completed.push(t);
+    else open.push(t);
+  }
   return { open, completed };
 }
 

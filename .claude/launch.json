@@ -238,6 +238,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/elastic-borg-6e91d2/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3011"],
       "port": 3011
+    },
+    {
+      "name": "Musing Agnesi Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/musing-agnesi-f8ebbd/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3071"],
+      "port": 3071
     }
   ]
 }

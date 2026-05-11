@@ -29,7 +29,7 @@ export default function TaskRow({
   canEdit?: boolean;
   listId: string;
 }) {
-  const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, toggleFocusToday, focusedTodayIds, focusedTodayDate } = usePMStore();
+  const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, toggleFocusToday, focusedTodayIds, focusedTodayDate, markFading, unmarkFading } = usePMStore();
   const isFocused = (() => {
     const today = new Date().toISOString().slice(0, 10);
     return focusedTodayDate === today && focusedTodayIds.includes(task.id);
@@ -68,16 +68,22 @@ export default function TaskRow({
     e.stopPropagation();
     if (!canEdit) return;
     const next = isDone ? 'todo' : 'done';
-    if (!isDone) setIsFadingOut(true);
+    if (!isDone) {
+      setIsFadingOut(true);
+      markFading(task.id);
+    }
     updateTask.mutate(
       { id: task.id, status: next } as any,
-      { onError: () => { setIsFadingOut(false); setIsHidden(false); } },
+      { onError: () => { setIsFadingOut(false); setIsHidden(false); unmarkFading(task.id); } },
     );
   };
 
   const handleRowTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
-    if (e.propertyName === 'transform' && isFadingOut) setIsHidden(true);
+    if (e.propertyName === 'transform' && isFadingOut) {
+      setIsHidden(true);
+      unmarkFading(task.id);
+    }
   };
 
   if (isHidden) return null;
