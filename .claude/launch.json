@@ -244,6 +244,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/loving-mendel-40036e/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3002"],
       "port": 3002
+    },
+    {
+      "name": "Description Links Worktree Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/condescending-babbage-306cbc/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3081"],
+      "port": 3081
     }
   ]
 }

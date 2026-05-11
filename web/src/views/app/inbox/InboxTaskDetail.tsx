@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTask, useTaskComments, useAddComment, useUpdateTask } from '../../../hooks/useTasks';
 import MentionPicker from '../../../components/MentionPicker';
+import { linkifyText } from '../../../lib/linkify';
 
 function initials(name?: string | null) {
   if (!name) return '?';
@@ -143,7 +144,7 @@ export default function InboxTaskDetail({
 
       {t.description && (
         <div style={{ padding: '0 24px 12px', fontSize: 13.5, lineHeight: 1.55, color: 'var(--sh-ink-2)', whiteSpace: 'pre-wrap' }}>
-          {t.description}
+          {linkifyText(t.description)}
         </div>
       )}
 
