@@ -1072,9 +1072,13 @@ function postSelectionOnce(
   if (!baseUrl) return Promise.resolve({ delivered: false, error: 'squadhire_webhook_url_not_configured' });
   if (!config.squadhireWebhookSecret) return Promise.resolve({ delivered: false, error: 'squadhire_webhook_secret_not_configured' });
 
+  // baseUrl already ends in /squadhub/cards (matching the other webhooks like
+  // /talent-accepted and /manual-assignments). The Profiles route is mounted
+  // at /squadhub/cards/selection, so we append just /selection here — not
+  // /cards/selection, which would 404 due to the doubled prefix.
   const url = baseUrl.endsWith('/')
-    ? `${baseUrl}cards/selection`
-    : `${baseUrl}/cards/selection`;
+    ? `${baseUrl}selection`
+    : `${baseUrl}/selection`;
   const body = {
     type: 'card_selection',
     card_id: cardId,
@@ -1231,8 +1235,8 @@ export async function notifySquadhireOfSelectionUndo(
   }
 
   const url = baseUrl.endsWith('/')
-    ? `${baseUrl}cards/undo-selection`
-    : `${baseUrl}/cards/undo-selection`;
+    ? `${baseUrl}undo-selection`
+    : `${baseUrl}/undo-selection`;
   const body = {
     type: 'card_selection_undo',
     card_id: cardId,
