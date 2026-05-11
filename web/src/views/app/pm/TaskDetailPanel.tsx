@@ -27,6 +27,7 @@ import TaskStatusPicker from './TaskStatusPicker';
 import ListPickerCombobox from './ListPickerCombobox';
 import TaskAttachments from './TaskAttachments';
 import { useTaskAttachments, useDeleteTaskAttachment } from '../../../hooks/useTaskAttachments';
+import { linkifyText } from '../../../lib/linkify';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -655,7 +656,7 @@ export default function TaskDetailPanel({
                   />
                 ) : (
                   <div className={`td-about ${!task.description ? 'empty' : ''} ${canEdit ? 'cursor-text' : ''}`}>
-                    {task.description || 'Click to add a description…'}
+                    {task.description ? linkifyText(task.description) : 'Click to add a description…'}
                   </div>
                 )}
               </div>
