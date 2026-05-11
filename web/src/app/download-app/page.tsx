@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
+import { useHasHydrated } from '@/hooks/useHasHydrated';
 
 type Platform = 'macos' | 'windows' | null;
 
@@ -12,17 +13,6 @@ function detectPlatform(): Platform {
   if (ua.includes('mac')) return 'macos';
   if (ua.includes('win')) return 'windows';
   return null;
-}
-
-function useHasHydrated() {
-  return useSyncExternalStore(
-    (cb) => {
-      const unsub = useAuthStore.persist.onFinishHydration(cb);
-      return () => unsub();
-    },
-    () => useAuthStore.persist.hasHydrated(),
-    () => false,
-  );
 }
 
 export default function DownloadAppPage() {

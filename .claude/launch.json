@@ -263,6 +263,13 @@
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/loving-rosalind-6113b9/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3070"],
       "port": 3070,
       "autoPort": true
+    },
+    {
+      "name": "Dreamy Carson Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/dreamy-carson-4dcb73/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3013"],
+      "port": 3013,
+      "autoPort": true
     }
   ]
 }
