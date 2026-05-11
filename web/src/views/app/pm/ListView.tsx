@@ -32,7 +32,7 @@ export default function ListView({
 }) {
   const { data: tasks, isLoading } = useTasks(listId, undefined);
   const updateTask = useUpdateTask(listId);
-  const { selectedTasks, clearSelection, focusedTodayIds, focusedTodayDate } = usePMStore();
+  const { selectedTasks, clearSelection, focusedTodayIds, focusedTodayDate, fadingTaskIds } = usePMStore();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
@@ -61,8 +61,8 @@ export default function ListView({
   const activeFilterCount = countActiveFilters(filters);
 
   const { open: openTasks, completed: completedTasks } = useMemo(
-    () => partitionByCompletion(filteredTasks),
-    [filteredTasks],
+    () => partitionByCompletion(filteredTasks, fadingTaskIds),
+    [filteredTasks, fadingTaskIds],
   );
 
   const statusGroups = useMemo(() => {

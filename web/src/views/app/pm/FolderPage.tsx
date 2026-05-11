@@ -26,6 +26,7 @@ export default function FolderPage() {
   const clearScopeFilters = usePMStore((s) => s.clearScopeFilters);
   const groupByScope = usePMStore((s) => s.groupByScope);
   const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
+  const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
   const [listFilter, setListFilter] = useState<string>('all');
   const groupScopeKey = activeFolderId ? `folder:${activeFolderId}` : '';
   const groupBy = (groupScopeKey && groupByScope[groupScopeKey]) || 'none';
@@ -100,8 +101,8 @@ export default function FolderPage() {
   const activeFilterCount = countActiveFilters(filters);
 
   const { open: openTasks, completed: completedTasks } = useMemo(
-    () => partitionByCompletion(filteredTasks),
-    [filteredTasks],
+    () => partitionByCompletion(filteredTasks, fadingTaskIds),
+    [filteredTasks, fadingTaskIds],
   );
 
   const groups = useMemo(() => {

@@ -30,6 +30,7 @@ export default function SpacePage() {
   const clearScopeFilters = usePMStore((s) => s.clearScopeFilters);
   const groupByScope = usePMStore((s) => s.groupByScope);
   const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
+  const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
   const [folderFilter, setFolderFilter] = useState<string>('all');
   const [listFilter, setListFilter] = useState<string>('all');
   const groupScopeKey = activeSpacePageId ? `space:${activeSpacePageId}` : '';
@@ -133,8 +134,8 @@ export default function SpacePage() {
   const activeFilterCount = countActiveFilters(filters);
 
   const { open: openTasks, completed: completedTasks } = useMemo(
-    () => partitionByCompletion(filteredTasks),
-    [filteredTasks],
+    () => partitionByCompletion(filteredTasks, fadingTaskIds),
+    [filteredTasks, fadingTaskIds],
   );
 
   const groups = useMemo(() => {

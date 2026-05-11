@@ -31,6 +31,7 @@ interface PMState {
   myTasksOnly: boolean;
   collapsedGroups: Record<string, boolean>;
   selectedTasks: string[];
+  fadingTaskIds: Set<string>;
   timer: TimerState | null;
   filtersByScope: Record<string, TaskFilterState>;
   focusedTodayIds: string[];
@@ -55,6 +56,8 @@ interface PMState {
   toggleTaskSelection: (taskId: string) => void;
   selectAllTasks: (taskIds: string[]) => void;
   clearSelection: () => void;
+  markFading: (taskId: string) => void;
+  unmarkFading: (taskId: string) => void;
   startTimer: (taskId: string, taskTitle: string, listId: string, baseTracked: number) => TimerState | null;
   stopTimer: () => TimerState | null;
   setScopeFilters: (scopeKey: string, next: TaskFilterState) => void;
@@ -101,6 +104,7 @@ export const usePMStore = create<PMState>()(
       myTasksOnly: false,
       collapsedGroups: {},
       selectedTasks: [],
+      fadingTaskIds: new Set<string>(),
       timer: null,
       filtersByScope: {},
       focusedTodayIds: [],
@@ -137,6 +141,20 @@ export const usePMStore = create<PMState>()(
         })),
       selectAllTasks: (taskIds) => set({ selectedTasks: taskIds }),
       clearSelection: () => set({ selectedTasks: [] }),
+      markFading: (taskId) =>
+        set((state) => {
+          if (state.fadingTaskIds.has(taskId)) return state;
+          const next = new Set(state.fadingTaskIds);
+          next.add(taskId);
+          return { fadingTaskIds: next };
+        }),
+      unmarkFading: (taskId) =>
+        set((state) => {
+          if (!state.fadingTaskIds.has(taskId)) return state;
+          const next = new Set(state.fadingTaskIds);
+          next.delete(taskId);
+          return { fadingTaskIds: next };
+        }),
       startTimer: (taskId, taskTitle, listId, baseTracked) => {
         const prev = get().timer;
         set({
@@ -236,7 +254,7 @@ export const usePMStore = create<PMState>()(
           todayListGroupBy: s.todayListGroupBy,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Set<string>(), timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none' }),
     }),
     {
       name: 'squadhub-pm',

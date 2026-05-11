@@ -2150,6 +2150,12 @@ body {
 .lv-card[data-dragover="true"] {
   box-shadow: 0 0 0 2px var(--sh-ink-4);
 }
+/* Un-clip the card while a row is sliding off so the
+   tick-pop-and-slide animation isn't hidden by overflow:hidden.
+   Reverts as soon as the row is removed from the DOM. */
+.lv-card:has(.lv-row[data-fading="true"]) {
+  overflow: visible;
+}
 
 .lv-card-head {
   display: grid;
