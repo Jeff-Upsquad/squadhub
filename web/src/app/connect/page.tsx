@@ -111,7 +111,6 @@ type FormData = {
   business_nature: string;
   business_note: string;
   requirement_note: string;
-  company: string;
   contact_name: string;
   email: string;
   country_code: string;
@@ -128,7 +127,6 @@ const initialForm: FormData = {
   business_nature: '',
   business_note: '',
   requirement_note: '',
-  company: '',
   contact_name: '',
   email: '',
   country_code: '+91',
@@ -233,7 +231,6 @@ export default function ConnectPage() {
           business_nature: form.business_nature.trim(),
           business_note: form.business_note.trim(),
           requirement_note: form.requirement_note.trim() || undefined,
-          company: form.company.trim(),
           contact_name: form.contact_name.trim(),
           email: form.email.trim(),
           phone: `${form.country_code} ${form.phone.trim()}`.trim(),
@@ -430,17 +427,7 @@ export default function ConnectPage() {
               hint="How we'll reach you to confirm and schedule the kickoff call."
             >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Company" required>
-                  <input
-                    type="text"
-                    required
-                    value={form.company}
-                    onChange={(e) => update('company', e.target.value)}
-                    placeholder="Company name"
-                    className="connect-input"
-                  />
-                </Field>
-                <Field label="Contact Name" required>
+                <Field label="Contact Person Name" required>
                   <input
                     type="text"
                     required

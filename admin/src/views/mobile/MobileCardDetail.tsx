@@ -196,7 +196,7 @@ export default function MobileCardDetail({
   const planPrice = plan?.pricing?.[0];
   const priceCurrency = planPrice?.country?.currency || card.submission?.country?.currency || '';
   const publisher = card.published_by_user;
-  const business = card.submission?.business_name || card.customer_company || 'Unknown business';
+  const business = card.submission?.business_name || card.brand_name || 'Unknown business';
   const deliveryState = squadhireDeliveryState(activeCard);
 
   const countryNameById = useMemo(() => {
@@ -404,8 +404,7 @@ export default function MobileCardDetail({
 
             {/* Customer */}
             <DetailCard title="Customer">
-              <DetailRow label="Company" value={card.customer_company || EMPTY} />
-              <DetailRow label="Contact" value={card.customer_name || EMPTY} />
+              <DetailRow label="Contact Person" value={card.customer_name || EMPTY} />
               <DetailRow label="Email" value={card.customer_email || EMPTY} />
               <DetailRow label="Phone" value={card.customer_phone || EMPTY} />
               <DetailRow label="Location" value={card.customer_location || EMPTY} />
