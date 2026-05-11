@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
+import { useHasHydrated } from '@/hooks/useHasHydrated';
 import ThemeToggleAuth from '@/components/ThemeToggleAuth';
 
 export default function AuthLayout({
@@ -11,13 +12,15 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const hydrated = useHasHydrated();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   useEffect(() => {
+    if (!hydrated) return;
     if (isAuthenticated) {
       router.push('/app');
     }
-  }, [isAuthenticated, router]);
+  }, [hydrated, isAuthenticated, router]);
 
   return (
     <div className="relative flex min-h-screen w-full items-center justify-center bg-[#F8FAFC] px-4 py-12 dark:bg-canvas">
