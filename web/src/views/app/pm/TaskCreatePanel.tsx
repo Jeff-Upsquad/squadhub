@@ -14,6 +14,7 @@ import ListPickerCombobox from './ListPickerCombobox';
 import TaskStatusPicker from './TaskStatusPicker';
 import { nextQuickDate } from './taskHelpers';
 import { useDraftTaskStore, type SerializableDraft } from '../../../stores/draftTaskStore';
+import { usePMStore } from '../../../stores/pmStore';
 import { showToast } from '../../../components/Toast';
 
 /* -------------------------------------------------------------------------- */
@@ -381,6 +382,8 @@ export default function TaskCreatePanel({
   const [newItemDrafts, setNewItemDrafts] = useState<Record<string, string>>({});
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [focusOnCreate, setFocusOnCreate] = useState(false);
+  const toggleFocusToday = usePMStore((s) => s.toggleFocusToday);
   const filePickerRef = useRef<HTMLInputElement>(null);
 
   // Default task type, once the list of types is available.
@@ -483,6 +486,8 @@ export default function TaskCreatePanel({
         list_id: effectiveListId,
         ...(metadata ? { metadata } : {}),
       });
+
+      if (focusOnCreate) toggleFocusToday(newTask.id);
 
       // Subtasks
       for (const st of draft.subtasks) {
@@ -691,6 +696,16 @@ export default function TaskCreatePanel({
             {isDesignTask ? (isVideoTask ? 'NEW VIDEO TASK' : 'NEW DESIGN TASK') : 'NEW TASK'}
           </span>
           <div className="flex-1" />
+          <button
+            type="button"
+            onClick={() => setFocusOnCreate((v) => !v)}
+            className="td-nav-btn td-focus-star"
+            data-active={focusOnCreate}
+            title={focusOnCreate ? 'Will be focused for today — click to remove' : 'Focus today'}
+            aria-label={focusOnCreate ? 'Focused for today' : 'Focus today'}
+          >
+            <span style={{ fontSize: 14, lineHeight: 1 }}>{focusOnCreate ? '★' : '☆'}</span>
+          </button>
           <button
             type="button"
             onClick={() => {
