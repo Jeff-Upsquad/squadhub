@@ -550,6 +550,22 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       return;
     }
 
+    // Tier-required gate: a card delivered to talents MUST have at least one
+    // target tier. Otherwise the SquadHire matcher's tier filter is skipped
+    // (it only fires when match_rules.target_tiers is non-empty), and every
+    // category-matching talent becomes a recipient regardless of skill level
+    // — which is exactly the bug the per-tier fan-out is meant to fix.
+    const cardTargetTiers: string[] = Array.isArray(card.target_tiers)
+      ? (card.target_tiers as string[]).filter(Boolean)
+      : [];
+    if (publishTargets.includes('talent') && cardTargetTiers.length === 0) {
+      res.status(400).json({
+        success: false,
+        error: 'Pick at least one tier — empty target_tiers would broadcast to every category-matching talent.',
+      });
+      return;
+    }
+
     // Multi-tier validation: when 2+ tiers selected, every tier must have
     // a non-zero price in tier_pricing. Single-tier (or untargeted) drafts
     // fall through to the legacy proposed_price/markup display-price check.

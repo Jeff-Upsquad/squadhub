@@ -145,6 +145,24 @@ export async function buildSquadhirePayloadForCard(
     return null;
   }
 
+  // Tier-required gate (belt-and-suspenders to the publish-time check). If
+  // a card slips through publish without target_tiers (legacy rows, direct
+  // DB edits), refuse to broadcast it. SquadHire's matcher would otherwise
+  // skip its tier filter and deliver to every category-matching talent.
+  const cardPublishTargets = Array.isArray((card as any).publish_targets)
+    ? ((card as any).publish_targets as string[])
+    : ['partner', 'talent'];
+  const cardTargetTiers = Array.isArray(contentSource.target_tiers)
+    ? ((contentSource.target_tiers as string[]).filter(Boolean))
+    : [];
+  if (cardPublishTargets.includes('talent') && cardTargetTiers.length === 0) {
+    console.warn(
+      '[squadhire] skipping delivery — card targets talent but has no tiers',
+      { cardId, state: card.state },
+    );
+    return null;
+  }
+
   // Map SquadHub state → SquadHire status. archived_at dominates: if
   // an admin explicitly archived the card it's hidden everywhere on
   // SquadHire regardless of underlying state (a published card archived

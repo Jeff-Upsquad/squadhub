@@ -310,6 +310,22 @@ router.post(
         return;
       }
 
+      // Tier-required gate (mirrors the request/custom path). A card delivered
+      // to talents MUST carry at least one target tier — otherwise SquadHire's
+      // matcher skips tier filtering and broadcasts to every category-matching
+      // talent. Fail closed at publish time so the bug can't reach SquadHire.
+      const stagedPublishTargets: string[] = loaded.card.publish_targets || ['partner', 'talent'];
+      const stagedTargetTiers: string[] = Array.isArray(loaded.card.target_tiers)
+        ? (loaded.card.target_tiers as string[]).filter(Boolean)
+        : [];
+      if (stagedPublishTargets.includes('talent') && stagedTargetTiers.length === 0) {
+        res.status(400).json({
+          success: false,
+          error: 'Pick at least one tier — empty target_tiers would broadcast to every category-matching talent.',
+        });
+        return;
+      }
+
       // Manual distribution skips the auto-fan-out. The card still flips to
       // 'published' so it's visible in the admin Published Cards list and in
       // the client portal; admins then hand-pick recipients via the
