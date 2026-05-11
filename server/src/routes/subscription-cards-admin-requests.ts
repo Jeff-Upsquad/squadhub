@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
-import { hydrateCard, matchPartnersForCard } from '../utils/subscriptionCards';
+import { fanOutTierCards, hydrateCard, matchPartnersForCard } from '../utils/subscriptionCards';
 import {
   buildSquadhirePayloadForCard,
   deliverCardToSquadhire,
@@ -328,6 +328,19 @@ const editCardSchema = z.object({
   })).optional(),
   proposed_price: z.number().int().positive().nullable().optional(),
   markup: z.number().int().min(0).optional(),
+  // Per-tier draft pricing. Used when the admin picks 2+ tiers — the
+  // publish handler validates every selected tier has an entry here, then
+  // fans the draft out to one published card per tier (each card carries
+  // that tier's proposed_price/markup). Empty {} on single-tier drafts.
+  tier_pricing: z
+    .record(
+      z.string(),
+      z.object({
+        proposed_price: z.number().int().min(0),
+        markup: z.number().int().min(0),
+      }),
+    )
+    .optional(),
   partner_price_override: z.number().int().min(0).nullable().optional(),
   publish_targets: z.array(z.enum(['partner', 'talent'])).min(1).optional(),
   distribution: z.enum(['broadcast', 'manual']).optional(),
@@ -377,6 +390,7 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
     if (body.custom_deliverables !== undefined) updates.custom_deliverables = body.custom_deliverables;
     if (body.proposed_price !== undefined) updates.proposed_price = body.proposed_price;
     if (body.markup !== undefined) updates.markup = body.markup;
+    if (body.tier_pricing !== undefined) updates.tier_pricing = body.tier_pricing;
     if (body.partner_price_override !== undefined) updates.partner_price_override = body.partner_price_override;
     if (body.publish_targets !== undefined) updates.publish_targets = body.publish_targets;
     if (body.distribution !== undefined) updates.distribution = body.distribution;
@@ -526,55 +540,85 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
     const publishTargets: string[] = card.publish_targets || ['partner', 'talent'];
     const distribution = parsed.data.distribution;
 
-    // Validate: at least one target, display_price > 0 if proposed_price set
     if (publishTargets.length === 0) {
       res.status(400).json({ success: false, error: 'At least one publish target required' });
       return;
     }
-    if (card.proposed_price && (card.proposed_price + (card.markup || 0)) <= 0) {
+
+    // Multi-tier validation: when 2+ tiers selected, every tier must have
+    // a non-zero price in tier_pricing. Single-tier (or untargeted) drafts
+    // fall through to the legacy proposed_price/markup display-price check.
+    const targetTiers: string[] = Array.isArray(card.target_tiers)
+      ? (card.target_tiers as string[]).filter(Boolean)
+      : [];
+    const tierPricing: Record<string, { proposed_price?: number; markup?: number }> =
+      card.tier_pricing && typeof card.tier_pricing === 'object'
+        ? card.tier_pricing
+        : {};
+
+    if (targetTiers.length > 1) {
+      for (const tier of targetTiers) {
+        const entry = tierPricing[tier];
+        if (!entry || !entry.proposed_price || entry.proposed_price <= 0) {
+          res.status(400).json({
+            success: false,
+            error: `Missing pricing for tier "${tier}"`,
+          });
+          return;
+        }
+      }
+    } else if (card.proposed_price && (card.proposed_price + (card.markup || 0)) <= 0) {
       res.status(400).json({ success: false, error: 'Display price must be > 0' });
       return;
     }
 
-    const now = new Date().toISOString();
-    const { data: updated, error: updErr } = await supabaseAdmin
-      .from('subscription_cards')
-      .update({
-        state: 'published',
-        distribution,
-        published_at: now,
-        published_by: (req as any).userId,
-      })
-      .eq('id', cardId)
-      .select('*')
-      .single();
-    if (updErr) {
-      res.status(500).json({ success: false, error: updErr.message });
+    // Fan out (or single-publish) — returns the original id first, then
+    // any sibling ids created for additional tiers.
+    let cardIds: string[];
+    try {
+      cardIds = await fanOutTierCards(cardId, (req as any).userId, distribution);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message ?? 'Fan-out failed' });
       return;
     }
 
-    // Partner matching (if target includes partner and distribution is broadcast)
+    // Partner matching per card (each card has target_tiers=[oneTier], so
+    // matchPartnersForCard naturally routes only that tier's partners).
     if (publishTargets.includes('partner') && distribution === 'broadcast') {
-      await matchPartnersForCard(cardId);
+      for (const cid of cardIds) {
+        await matchPartnersForCard(cid);
+      }
     }
 
-    // SquadHire delivery (only on broadcast — manual/soft publishes sync
-    // lazily on first manual talent assignment).
+    // SquadHire delivery per card (only on broadcast — manual publishes
+    // sync lazily on first manual talent assignment). Fire-and-forget so
+    // a slow webhook doesn't block the publish response.
     if (publishTargets.includes('talent') && distribution === 'broadcast') {
-      buildSquadhirePayloadForCard(cardId)
-        .then((payload) => payload && deliverCardToSquadhire(cardId, payload))
-        .catch((err) =>
-          console.error('[publish-request-card] squadhire delivery error', err),
-        );
+      for (const cid of cardIds) {
+        buildSquadhirePayloadForCard(cid)
+          .then((payload) => payload && deliverCardToSquadhire(cid, payload))
+          .catch((err) =>
+            console.error('[publish-request-card] squadhire delivery error', err),
+          );
+      }
     }
 
-    // Notify upsquad of status change (fire-and-forget)
+    // Notify upsquad once — only the original carries subscription_request_id.
     if (card.subscription_request_id) {
       updateSubscriptionRequestStatus(card.subscription_request_id, 'published').catch(() => {});
     }
 
+    const { data: updated } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('*')
+      .eq('id', cardId)
+      .single();
     const hydrated = await hydrateCard(updated);
-    res.json({ success: true, data: hydrated });
+    res.json({
+      success: true,
+      data: hydrated,
+      child_card_ids: cardIds.slice(1),
+    });
   } catch (err: any) {
     console.error('Publish request/custom card error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });

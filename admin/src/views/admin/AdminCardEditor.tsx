@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { STATES_BY_COUNTRY_NAME, LANGUAGE_OPTIONS } from './locationLanguageOptions';
 
@@ -71,6 +71,10 @@ interface CardData {
   custom_deliverables: Deliverable[];
   proposed_price: number | null;
   markup: number;
+  // Per-tier draft pricing: { Junior: { proposed_price, markup }, Pro: ... }.
+  // Cleared at publish — fan-out copies each tier's values onto its own
+  // sibling card. Empty {} on single-tier drafts.
+  tier_pricing: Record<string, { proposed_price: number; markup: number }> | null;
   publish_targets: string[];
   customer_name: string | null;
   customer_email: string | null;
@@ -143,8 +147,12 @@ export default function AdminCardEditor({
   const [customerLocation, setCustomerLocation] = useState('');
   const [emailEditable, setEmailEditable] = useState(false);
   const [phoneEditable, setPhoneEditable] = useState(false);
-  const [proposedPrice, setProposedPrice] = useState<number>(0);
-  const [markup, setMarkup] = useState<number>(0);
+  // Per-tier pricing — source of truth for the form. One entry per
+  // selected tier. With 1 tier the Pricing section renders one group;
+  // with N tiers it renders N stacked groups. On publish, the backend
+  // either flips the single card to published (1 tier) or fans out N
+  // sibling cards (2+ tiers), reading prices from this map either way.
+  const [tierPricing, setTierPricing] = useState<Record<string, { proposedPrice: number; markup: number }>>({});
   const [publishTargets, setPublishTargets] = useState<string[]>(['partner', 'talent']);
   const [distribution, setDistribution] = useState<string>('broadcast');
   const [brandName, setBrandName] = useState('');
@@ -171,9 +179,31 @@ export default function AdminCardEditor({
     setCustomerLocation(card.customer_location || '');
     setEmailEditable(false);
     setPhoneEditable(false);
-    setProposedPrice(card.proposed_price || 0);
+    // Hydrate tier_pricing from DB if present; otherwise seed every selected
+    // tier from the legacy proposed_price/markup so the form round-trips
+    // for cards that pre-date this column.
+    const dbTierPricing = card.tier_pricing && typeof card.tier_pricing === 'object'
+      ? card.tier_pricing
+      : null;
+    const initialPricing: Record<string, { proposedPrice: number; markup: number }> = {};
+    if (dbTierPricing) {
+      Object.entries(dbTierPricing).forEach(([tier, p]) => {
+        initialPricing[tier] = {
+          proposedPrice: (p as any)?.proposed_price ?? 0,
+          markup: (p as any)?.markup ?? 0,
+        };
+      });
+    }
+    (card.target_tiers || []).forEach((tier) => {
+      if (!initialPricing[tier]) {
+        initialPricing[tier] = {
+          proposedPrice: card.proposed_price || 0,
+          markup: card.markup || 0,
+        };
+      }
+    });
+    setTierPricing(initialPricing);
     setOriginalProposedPrice(card.proposed_price);
-    setMarkup(card.markup || 0);
     setPublishTargets(card.publish_targets || ['partner', 'talent']);
     setDistribution(card.distribution || 'broadcast');
     setBrandName(card.brand_name || '');
@@ -187,57 +217,166 @@ export default function AdminCardEditor({
     setSquadhireCategoryIds(card.squadhire_category_ids || []);
   }, [card]);
 
-  // Catalog lookup: when service + plan + first selected tier are known,
-  // pull daily/weekly hours and the per-country margin from subscriptions.
+  // Toggle a tier on/off, syncing tierPricing in lockstep so every
+  // selected tier always has a row in the Pricing section.
+  const toggleTier = useCallback((tier: string) => {
+    setTiers((prev) => {
+      const isOn = prev.includes(tier);
+      const next = isOn ? prev.filter((t) => t !== tier) : [...prev, tier];
+      setTierPricing((p) => {
+        const np = { ...p };
+        if (isOn) {
+          delete np[tier];
+        } else if (!np[tier]) {
+          np[tier] = { proposedPrice: 0, markup: 0 };
+        }
+        return np;
+      });
+      return next;
+    });
+  }, []);
+
+  const updateTierPricing = useCallback(
+    (tier: string, field: 'proposedPrice' | 'markup', value: number) => {
+      setTierPricing((prev) => ({
+        ...prev,
+        [tier]: {
+          proposedPrice: prev[tier]?.proposedPrice ?? 0,
+          markup: prev[tier]?.markup ?? 0,
+          [field]: value,
+        },
+      }));
+    },
+    [],
+  );
+
+  // Catalog lookup: one query per selected tier. Each returns its own
+  // daily/weekly hours plus the per-country pricing row (used to suggest
+  // the default margin for that tier). Hidden tiers don't fire queries.
   const catalogServiceSlug = SERVICE_TYPE_TO_SLUG[serviceType] || '';
   const catalogPlan = planName ? PLAN_TO_CANONICAL[planName.toLowerCase()] || '' : '';
-  const catalogTier = tiers[0] || '';
-  const catalogQuery = useQuery<PlanLookupRow | null>({
-    queryKey: ['admin-card-plan-lookup', catalogServiceSlug, catalogTier, catalogPlan],
-    enabled: !!catalogServiceSlug && !!catalogPlan && !!catalogTier,
-    queryFn: () =>
-      api
-        .get('/admin/subscriptions/lookup', {
-          params: { service: catalogServiceSlug, tier: catalogTier, plan: catalogPlan },
-        })
-        .then((r) => r.data?.data || null)
-        .catch(() => null),
+  const catalogQueries = useQueries({
+    queries: tiers.map((tier) => ({
+      queryKey: ['admin-card-plan-lookup', catalogServiceSlug, tier, catalogPlan],
+      enabled: !!catalogServiceSlug && !!catalogPlan && !!tier,
+      queryFn: () =>
+        api
+          .get('/admin/subscriptions/lookup', {
+            params: { service: catalogServiceSlug, tier, plan: catalogPlan },
+          })
+          .then((r) => (r.data?.data as PlanLookupRow | null) || null)
+          .catch(() => null),
+    })),
   });
 
-  const catalog = catalogQuery.data || null;
-  const dailyHours = catalog?.plan?.daily_hours ?? null;
-  const weeklyHours = catalog?.plan?.weekly_hours ?? null;
-  const monthlyHours = useMemo(() => {
-    if (dailyHours == null) return null;
-    const days = workingDaysThisMonth(workingDays);
-    return Number((dailyHours * days).toFixed(2));
-  }, [dailyHours, workingDays]);
+  // Index catalog rows by tier for O(1) access in the deliverables / pricing
+  // tables. Keeps render code readable when iterating selected tiers.
+  const catalogByTier = useMemo(() => {
+    const map: Record<string, PlanLookupRow | null> = {};
+    tiers.forEach((tier, i) => {
+      map[tier] = (catalogQueries[i]?.data as PlanLookupRow | null) ?? null;
+    });
+    return map;
+  }, [tiers, catalogQueries]);
 
-  // Catalog gives the default margin per (plan, country); typically the first
-  // pricing row (India). Card-level edit lives in the existing markup column.
-  const catalogPricingRow = catalog?.pricing?.[0] || null;
-  const catalogMarginInRupees = useMemo(() => {
-    if (!catalogPricingRow || proposedPrice <= 0) return null;
-    return catalogPricingRow.margin_type === 'percent'
-      ? Math.round((proposedPrice * catalogPricingRow.margin_value) / 100)
-      : catalogPricingRow.margin_value;
-  }, [catalogPricingRow, proposedPrice]);
+  const workingDaysCount = useMemo(
+    () => workingDaysThisMonth(workingDays),
+    [workingDays],
+  );
 
-  // Seed margin from catalog when admin hasn't set one yet (markup === 0 on
-  // load and proposed price is known). Only fires once per card load via the
-  // [card?.id, catalogPricingRow] dep — won't clobber a manual edit.
+  // Compute monthly hours per tier on demand. dailyHours × working days
+  // this month, mirroring the previous single-tier behavior.
+  const monthlyHoursForTier = useCallback(
+    (tier: string): number | null => {
+      const daily = catalogByTier[tier]?.plan?.daily_hours ?? null;
+      if (daily == null) return null;
+      return Number((daily * workingDaysCount).toFixed(2));
+    },
+    [catalogByTier, workingDaysCount],
+  );
+
+  // Catalog-suggested margin in rupees for a given tier given that tier's
+  // current proposed price. Mirrors the old single-tier helper.
+  const catalogMarginForTier = useCallback(
+    (tier: string): number | null => {
+      const row = catalogByTier[tier]?.pricing?.[0] || null;
+      const proposed = tierPricing[tier]?.proposedPrice ?? 0;
+      if (!row || proposed <= 0) return null;
+      return row.margin_type === 'percent'
+        ? Math.round((proposed * row.margin_value) / 100)
+        : row.margin_value;
+    },
+    [catalogByTier, tierPricing],
+  );
+
+  // Seed margin from catalog when admin hasn't set one yet for a tier.
+  // Mirrors the legacy single-tier seed: only fires once per (card load,
+  // tier, proposed price change) via the dep on tierPricingProposedKey.
+  const tierPricingProposedKey = useMemo(
+    () => tiers.map((t) => `${t}:${tierPricing[t]?.proposedPrice ?? 0}`).join('|'),
+    [tiers, tierPricing],
+  );
   useEffect(() => {
     if (!card) return;
-    if ((card.markup ?? 0) > 0) return;
-    if (catalogMarginInRupees == null) return;
-    setMarkup(catalogMarginInRupees);
+    setTierPricing((prev) => {
+      let changed = false;
+      const next: typeof prev = { ...prev };
+      for (const tier of tiers) {
+        const entry = next[tier];
+        if (!entry) continue;
+        if (entry.markup > 0) continue;
+        const row = catalogByTier[tier]?.pricing?.[0];
+        if (!row || entry.proposedPrice <= 0) continue;
+        const suggested = row.margin_type === 'percent'
+          ? Math.round((entry.proposedPrice * row.margin_value) / 100)
+          : row.margin_value;
+        if (suggested > 0) {
+          next[tier] = { ...entry, markup: suggested };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [card?.id, catalogPricingRow?.plan_id, proposedPrice]);
+  }, [card?.id, tierPricingProposedKey, JSON.stringify(Object.keys(catalogByTier))]);
 
-  const partnerPrice = useMemo(() => {
-    if (proposedPrice <= 0) return null;
-    return Math.max(0, proposedPrice - (markup || 0));
-  }, [proposedPrice, markup]);
+  const partnerPriceForTier = useCallback(
+    (tier: string): number | null => {
+      const entry = tierPricing[tier];
+      if (!entry || entry.proposedPrice <= 0) return null;
+      return Math.max(0, entry.proposedPrice - (entry.markup || 0));
+    },
+    [tierPricing],
+  );
+
+  // Whether at least one selected tier has catalog data loaded — used to
+  // decide whether to render the per-tier hours table or the empty-state
+  // copy in the combined Deliverables section.
+  const anyCatalogLoaded = tiers.some((t) => catalogByTier[t] != null);
+
+  // Build the API tier_pricing map (snake_case shape) from the form state.
+  const tierPricingPayload = useMemo(() => {
+    const out: Record<string, { proposed_price: number; markup: number }> = {};
+    for (const [tier, entry] of Object.entries(tierPricing)) {
+      out[tier] = {
+        proposed_price: entry.proposedPrice ?? 0,
+        markup: entry.markup ?? 0,
+      };
+    }
+    return out;
+  }, [tierPricing]);
+
+  // Legacy proposed_price / markup columns: only meaningful when there's
+  // exactly one tier (single-card publish path reads from the row). With
+  // 2+ tiers, fan-out reads tier_pricing instead, so we send 0/null here.
+  const legacyProposedPrice = useMemo(() => {
+    if (tiers.length !== 1) return null;
+    return tierPricing[tiers[0]]?.proposedPrice || null;
+  }, [tiers, tierPricing]);
+  const legacyMarkup = useMemo(() => {
+    if (tiers.length !== 1) return 0;
+    return tierPricing[tiers[0]]?.markup || 0;
+  }, [tiers, tierPricing]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -250,8 +389,9 @@ export default function AdminCardEditor({
         customer_name: customerName || null,
         customer_email: customerEmail || null,
         customer_phone: customerPhone || null,
-        proposed_price: proposedPrice || null,
-        markup,
+        proposed_price: legacyProposedPrice,
+        markup: legacyMarkup,
+        tier_pricing: tierPricingPayload,
         publish_targets: publishTargets,
         distribution,
         brand_name: brandName || null,
@@ -350,6 +490,13 @@ export default function AdminCardEditor({
 
   const isDraft = card?.state === 'draft';
 
+  // Publish gate: every selected tier must have a non-zero proposed price
+  // (single-tier and multi-tier both — fan-out throws on missing entries).
+  // Fall back to "no tiers" disabled until at least one is selected.
+  const canPublish =
+    tiers.length > 0 &&
+    tiers.every((t) => (tierPricing[t]?.proposedPrice ?? 0) > 0);
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center sh-surface">
@@ -410,7 +557,14 @@ export default function AdminCardEditor({
               </button>
               <button
                 onClick={() => publishMutation.mutate()}
-                disabled={publishMutation.isPending}
+                disabled={publishMutation.isPending || !canPublish}
+                title={
+                  !canPublish
+                    ? tiers.length === 0
+                      ? 'Select at least one tier with a price'
+                      : 'Every selected tier needs a proposed price'
+                    : undefined
+                }
                 className="sh-btn-primary sh-btn-primary-sm"
               >
                 {publishMutation.isPending ? 'Publishing…' : 'Publish'}
@@ -498,14 +652,17 @@ export default function AdminCardEditor({
                       key={tier}
                       active={active}
                       disabled={!isDraft}
-                      onClick={() =>
-                        setTiers(active ? tiers.filter((t) => t !== tier) : [...tiers, tier])
-                      }
+                      onClick={() => toggleTier(tier)}
                       label={tier}
                     />
                   );
                 })}
               </div>
+              {tiers.length > 1 && (
+                <p className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">
+                  Publishing will create one card per tier — each broadcast only to that tier's partners and shown as a separate card to the business.
+                </p>
+              )}
             </Field>
             <Field label="Working Days">
               <div className="flex flex-wrap gap-2">
@@ -682,127 +839,233 @@ export default function AdminCardEditor({
             </div>
           </Section>
 
-          {/* Plan Deliverables (read-only, derived from catalog) */}
-          <Section title="Plan Deliverables">
-            {dailyHours == null ? (
-              <p className="text-xs text-[var(--color-sh-ink-faint)]">
-                Pick service, plan, and at least one tier to see hours from the catalog.
-              </p>
-            ) : (
-              <>
-                <div className="grid grid-cols-3 gap-4">
-                  <ReadOnlyField label="Daily Hours">{dailyHours} hr/day</ReadOnlyField>
-                  <ReadOnlyField label="Weekly Hours">{weeklyHours ?? '—'} hr/wk</ReadOnlyField>
-                  <ReadOnlyField label={`Monthly (${workingDaysThisMonth(workingDays)} days)`}>
-                    {monthlyHours != null ? `${monthlyHours} hr/mo` : '—'}
-                  </ReadOnlyField>
-                </div>
-                <p className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">
-                  Editable from the Subscriptions module ({catalog?.plan?.tier} · {catalog?.plan?.plan}).
-                </p>
-              </>
-            )}
-          </Section>
-
-          {/* Custom Deliverables */}
-          <Section title="Custom Deliverables">
-            <div className="space-y-3">
-              {deliverables.map((d) => (
-                <div key={d.id} className="flex items-start gap-2 rounded-xl border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] p-3">
-                  <div className="flex-1 grid grid-cols-4 gap-2">
-                    <input
-                      value={d.name}
-                      onChange={(e) => updateDeliverable(d.id, 'name', e.target.value)}
-                      placeholder="Name"
-                      disabled={!isDraft}
-                      className="sh-input col-span-2"
-                    />
-                    <select
-                      value={d.kind}
-                      onChange={(e) => updateDeliverable(d.id, 'kind', e.target.value)}
-                      disabled={!isDraft}
-                      className="sh-input"
-                    >
-                      <option value="item">Item</option>
-                      <option value="hours">Hours</option>
-                    </select>
-                    <input
-                      type="number"
-                      value={d.per_month || ''}
-                      onChange={(e) => updateDeliverable(d.id, 'per_month', parseInt(e.target.value) || 0)}
-                      placeholder="/mo"
-                      disabled={!isDraft}
-                      className="sh-input"
-                    />
+          {/* Deliverables — combined: catalog hours per selected tier (top)
+              + shared custom deliverables list (bottom). Custom items are
+              applied to every tier card on publish. */}
+          <Section title="Deliverables">
+            <div className="space-y-5">
+              {/* Plan deliverables — one column per selected tier */}
+              <div>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                  Plan hours (from catalog)
+                </h3>
+                {tiers.length === 0 || !anyCatalogLoaded ? (
+                  <p className="text-xs text-[var(--color-sh-ink-faint)]">
+                    Pick service, plan, and at least one tier to see hours from the catalog.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto rounded-[10px] border border-[var(--color-sh-warm-border)]">
+                    <table className="w-full text-sm">
+                      <thead className="bg-[var(--color-sh-cream)]">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                            Cadence
+                          </th>
+                          {tiers.map((tier) => (
+                            <th
+                              key={tier}
+                              className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]"
+                            >
+                              {tier}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-t border-[var(--color-sh-warm-border)]">
+                          <td className="px-3 py-2 font-medium text-[var(--color-sh-ink-muted)]">Daily</td>
+                          {tiers.map((tier) => {
+                            const daily = catalogByTier[tier]?.plan?.daily_hours ?? null;
+                            return (
+                              <td key={tier} className="px-3 py-2 font-bold text-[var(--color-sh-ink)]">
+                                {daily != null ? `${daily} hr/day` : '—'}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                        <tr className="border-t border-[var(--color-sh-warm-border)]">
+                          <td className="px-3 py-2 font-medium text-[var(--color-sh-ink-muted)]">Weekly</td>
+                          {tiers.map((tier) => {
+                            const weekly = catalogByTier[tier]?.plan?.weekly_hours ?? null;
+                            return (
+                              <td key={tier} className="px-3 py-2 font-bold text-[var(--color-sh-ink)]">
+                                {weekly != null ? `${weekly} hr/wk` : '—'}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                        <tr className="border-t border-[var(--color-sh-warm-border)]">
+                          <td className="px-3 py-2 font-medium text-[var(--color-sh-ink-muted)]">
+                            Monthly ({workingDaysCount} days)
+                          </td>
+                          {tiers.map((tier) => {
+                            const monthly = monthlyHoursForTier(tier);
+                            return (
+                              <td key={tier} className="px-3 py-2 font-bold text-[var(--color-sh-ink)]">
+                                {monthly != null ? `${monthly} hr/mo` : '—'}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tbody>
+                    </table>
+                    <p className="border-t border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-3 py-2 text-[11px] text-[var(--color-sh-ink-faint)]">
+                      Hours come from the Subscriptions catalog ({planName || '—'} · {tiers.join(', ') || '—'}).
+                    </p>
                   </div>
+                )}
+              </div>
+
+              {/* Custom deliverables — shared across all tier cards */}
+              <div>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                  Custom deliverables
+                  {tiers.length > 1 && (
+                    <span className="ml-2 font-normal normal-case text-[var(--color-sh-ink-faint)]">
+                      (shared across all selected tiers)
+                    </span>
+                  )}
+                </h3>
+                <div className="space-y-3">
+                  {deliverables.map((d) => (
+                    <div key={d.id} className="flex items-start gap-2 rounded-xl border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] p-3">
+                      <div className="flex-1 grid grid-cols-4 gap-2">
+                        <input
+                          value={d.name}
+                          onChange={(e) => updateDeliverable(d.id, 'name', e.target.value)}
+                          placeholder="Name"
+                          disabled={!isDraft}
+                          className="sh-input col-span-2"
+                        />
+                        <select
+                          value={d.kind}
+                          onChange={(e) => updateDeliverable(d.id, 'kind', e.target.value)}
+                          disabled={!isDraft}
+                          className="sh-input"
+                        >
+                          <option value="item">Item</option>
+                          <option value="hours">Hours</option>
+                        </select>
+                        <input
+                          type="number"
+                          value={d.per_month || ''}
+                          onChange={(e) => updateDeliverable(d.id, 'per_month', parseInt(e.target.value) || 0)}
+                          placeholder="/mo"
+                          disabled={!isDraft}
+                          className="sh-input"
+                        />
+                      </div>
+                      {isDraft && (
+                        <button
+                          onClick={() => removeDeliverable(d.id)}
+                          className="mt-2 text-base text-red-500 hover:text-red-700"
+                          aria-label="Remove deliverable"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
                   {isDraft && (
                     <button
-                      onClick={() => removeDeliverable(d.id)}
-                      className="mt-2 text-base text-red-500 hover:text-red-700"
-                      aria-label="Remove deliverable"
+                      onClick={addDeliverable}
+                      className="rounded-xl border border-dashed border-[var(--color-sh-warm-border)] px-4 py-2.5 text-sm font-semibold text-[var(--color-sh-ink-muted)] hover:border-[var(--color-sh-ink)] hover:text-[var(--color-sh-ink)] transition"
                     >
-                      ×
+                      + Add Deliverable
                     </button>
                   )}
                 </div>
-              ))}
-              {isDraft && (
-                <button
-                  onClick={addDeliverable}
-                  className="rounded-xl border border-dashed border-[var(--color-sh-warm-border)] px-4 py-2.5 text-sm font-semibold text-[var(--color-sh-ink-muted)] hover:border-[var(--color-sh-ink)] hover:text-[var(--color-sh-ink)] transition"
-                >
-                  + Add Deliverable
-                </button>
-              )}
+              </div>
             </div>
           </Section>
 
-          {/* Pricing */}
+          {/* Pricing — one labeled group per selected tier. With one tier
+              selected this renders a single block, visually similar to the
+              old single-trio layout. With N tiers each gets its own
+              proposed/margin/partner-price row that publishes as a
+              separate card. */}
           <Section title="Pricing">
-            <div className="grid grid-cols-3 gap-4">
-              <Field label="Proposed Price (₹/mo)">
-                <input
-                  type="number"
-                  value={proposedPrice || ''}
-                  onChange={(e) => setProposedPrice(parseInt(e.target.value) || 0)}
-                  disabled={!isDraft}
-                  className="sh-input"
-                />
-                {originalProposedPrice != null && originalProposedPrice !== proposedPrice && (
-                  <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
-                    Originally <span className="line-through">₹{originalProposedPrice.toLocaleString()}</span>
-                  </p>
-                )}
-                {catalogPricingRow && (
-                  <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
-                    Catalog min: ₹{catalogPricingRow.price.toLocaleString()}
-                  </p>
-                )}
-              </Field>
-              <Field label="Margin (₹/mo)">
-                <input
-                  type="number"
-                  min={0}
-                  value={markup || ''}
-                  onChange={(e) => setMarkup(parseInt(e.target.value) || 0)}
-                  disabled={!isDraft}
-                  className="sh-input"
-                />
-                {catalogPricingRow && (
-                  <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
-                    Catalog: {catalogPricingRow.margin_type === 'percent'
-                      ? `${catalogPricingRow.margin_value}% (= ₹${(catalogMarginInRupees ?? 0).toLocaleString()})`
-                      : `₹${catalogPricingRow.margin_value.toLocaleString()} (flat)`}
-                  </p>
-                )}
-              </Field>
-              <Field label="Partner Price (₹/mo)">
-                <div className="flex h-[40px] items-center rounded-[10px] border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-3 text-sm font-bold text-[var(--color-sh-ink)]">
-                  {partnerPrice != null ? `₹${partnerPrice.toLocaleString()}` : '—'}
-                </div>
-                <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">= Proposed − Margin</p>
-              </Field>
-            </div>
+            {tiers.length === 0 ? (
+              <p className="text-xs text-[var(--color-sh-ink-faint)]">
+                Select at least one tier above to set pricing.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {tiers.map((tier) => {
+                  const entry = tierPricing[tier] || { proposedPrice: 0, markup: 0 };
+                  const partnerPrice = partnerPriceForTier(tier);
+                  const catalogPricingRow = catalogByTier[tier]?.pricing?.[0] || null;
+                  const catalogMarginInRupees = catalogMarginForTier(tier);
+                  const showOriginal =
+                    tiers.length === 1 &&
+                    originalProposedPrice != null &&
+                    originalProposedPrice !== entry.proposedPrice;
+                  return (
+                    <div
+                      key={tier}
+                      className="rounded-xl border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] p-4"
+                    >
+                      <div className="mb-3 flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-[var(--color-sh-ink)]">
+                          {tier} pricing
+                        </h3>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-[var(--color-sh-ink-muted)]">
+                          1 card on publish
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        <Field label="Proposed Price (₹/mo)">
+                          <input
+                            type="number"
+                            value={entry.proposedPrice || ''}
+                            onChange={(e) =>
+                              updateTierPricing(tier, 'proposedPrice', parseInt(e.target.value) || 0)
+                            }
+                            disabled={!isDraft}
+                            className="sh-input"
+                          />
+                          {showOriginal && (
+                            <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
+                              Originally <span className="line-through">₹{originalProposedPrice!.toLocaleString()}</span>
+                            </p>
+                          )}
+                          {catalogPricingRow && (
+                            <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
+                              Catalog min: ₹{catalogPricingRow.price.toLocaleString()}
+                            </p>
+                          )}
+                        </Field>
+                        <Field label="Margin (₹/mo)">
+                          <input
+                            type="number"
+                            min={0}
+                            value={entry.markup || ''}
+                            onChange={(e) =>
+                              updateTierPricing(tier, 'markup', parseInt(e.target.value) || 0)
+                            }
+                            disabled={!isDraft}
+                            className="sh-input"
+                          />
+                          {catalogPricingRow && (
+                            <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
+                              Catalog: {catalogPricingRow.margin_type === 'percent'
+                                ? `${catalogPricingRow.margin_value}% (= ₹${(catalogMarginInRupees ?? 0).toLocaleString()})`
+                                : `₹${catalogPricingRow.margin_value.toLocaleString()} (flat)`}
+                            </p>
+                          )}
+                        </Field>
+                        <Field label="Partner Price (₹/mo)">
+                          <div className="flex h-[40px] items-center rounded-[10px] border border-[var(--color-sh-warm-border)] bg-white px-3 text-sm font-bold text-[var(--color-sh-ink)]">
+                            {partnerPrice != null ? `₹${partnerPrice.toLocaleString()}` : '—'}
+                          </div>
+                          <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">= Proposed − Margin</p>
+                        </Field>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </Section>
 
           {/* Client Brief */}
