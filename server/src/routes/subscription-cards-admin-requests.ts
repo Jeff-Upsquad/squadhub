@@ -362,8 +362,13 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
       res.status(409).json({ success: false, error: 'Only draft cards can be edited' });
       return;
     }
-    if (card.source !== 'request' && card.source !== 'custom') {
-      res.status(409).json({ success: false, error: 'Only request/custom cards can be edited here' });
+    if (
+      card.source !== 'request' &&
+      card.source !== 'custom' &&
+      card.source !== 'shared_form' &&
+      card.source !== 'landing_page_form'
+    ) {
+      res.status(409).json({ success: false, error: 'This card source cannot be edited here' });
       return;
     }
 
