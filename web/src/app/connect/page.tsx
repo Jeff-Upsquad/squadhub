@@ -507,16 +507,6 @@ export default function ConnectPage() {
               hint="How we'll reach you to confirm and schedule the kickoff call."
             >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Contact Person Name" required>
-                  <input
-                    type="text"
-                    required
-                    value={form.contact_name}
-                    onChange={(e) => update('contact_name', e.target.value)}
-                    placeholder="Full name"
-                    className="connect-input"
-                  />
-                </Field>
                 <Field label="Email" required>
                   <input
                     type="email"
@@ -550,6 +540,16 @@ export default function ConnectPage() {
                       className="connect-phone-input"
                     />
                   </div>
+                </Field>
+                <Field label="Contact Person Name" required>
+                  <input
+                    type="text"
+                    required
+                    value={form.contact_name}
+                    onChange={(e) => update('contact_name', e.target.value)}
+                    placeholder="Full name"
+                    className="connect-input"
+                  />
                 </Field>
               </div>
               <Field label="Location of Business" optional>

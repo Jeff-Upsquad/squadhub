@@ -276,6 +276,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/gifted-johnson-35108d/web && INTERNAL_API_URL=http://localhost:4010 exec npx next dev -p 3010"],
       "port": 3010
+    },
+    {
+      "name": "Gifted Johnson Admin",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/gifted-johnson-35108d/admin && INTERNAL_API_URL=http://localhost:4010 exec npx next dev -p 3011"],
+      "port": 3011
     }
   ]
 }
