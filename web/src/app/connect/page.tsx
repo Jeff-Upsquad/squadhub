@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // Kept in sync with admin/locationLanguageOptions.ts.
 // Inlined here because /web has no /admin dependency by design.
@@ -106,6 +106,30 @@ function rolesToServiceType(roles: RoleSlug[]): ServiceType | null {
   return null;
 }
 
+// Reverse map for autofill: brand records store the slug, so a returning
+// visitor's Step 1 selection can be rehydrated without a label↔slug round-trip.
+function serviceTypeToRoles(slug: string | null | undefined): RoleSlug[] {
+  if (slug === 'designer') return ['designer'];
+  if (slug === 'video_editor') return ['editor'];
+  if (slug === 'designer_video_editor') return ['designer_plus_editor'];
+  return [];
+}
+
+// Phone is stored as "+91 9447402340". Split on autofill by longest-matching
+// prefix in COUNTRY_CODES; fallback to +91.
+function splitPhone(stored: string | null | undefined): { code: string; number: string } {
+  const fallback = { code: '+91', number: '' };
+  if (!stored) return fallback;
+  const trimmed = stored.trim();
+  const sorted = [...COUNTRY_CODES].sort((a, b) => b.code.length - a.code.length);
+  for (const c of sorted) {
+    if (trimmed.startsWith(c.code)) {
+      return { code: c.code, number: trimmed.slice(c.code.length).trim() };
+    }
+  }
+  return { code: fallback.code, number: trimmed };
+}
+
 type FormData = {
   brand_name: string;
   business_nature: string;
@@ -146,6 +170,13 @@ export default function ConnectPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [countries, setCountries] = useState<Country[]>([]);
+  // Autofill state — silent single-field lookup (email OR phone). On match,
+  // pre-fill contact + latest brand + talent prefs. The user can edit
+  // brand_name to start a fresh brand; that path clears brand-specific
+  // fields and dismisses the banner.
+  const [prefilledFromLead, setPrefilledFromLead] = useState(false);
+  const prefilledBrandRef = useRef<string | null>(null);
+  const lastLookupKeyRef = useRef<string | null>(null);
 
   // Fetch country list once. Default to India (matching the upsquad onboard
   // form's behavior) but let the user pick any country we serve.
@@ -165,11 +196,100 @@ export default function ConnectPage() {
       .catch(() => {/* non-fatal — admin can fix country on review */});
   }, []);
 
+  // Debounced lookup: fire when email looks valid OR phone has ≥7 digits.
+  // Don't re-fire once we've already prefilled — would clobber edits the
+  // user makes after the autofill.
+  useEffect(() => {
+    if (prefilledFromLead) return;
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+    const phoneDigits = form.phone.replace(/\D/g, '');
+    const phoneOk = phoneDigits.length >= 7;
+    if (!emailOk && !phoneOk) return;
+    const phoneForLookup = phoneOk ? `${form.country_code} ${form.phone.trim()}`.trim() : '';
+    const key = `${emailOk ? form.email.trim().toLowerCase() : ''}|${phoneForLookup}`;
+    if (key === lastLookupKeyRef.current) return;
+    lastLookupKeyRef.current = key;
+
+    const t = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams();
+        if (emailOk) params.set('email', form.email.trim());
+        if (phoneOk) params.set('phone', phoneForLookup);
+        const r = await fetch(`/leads/lookup?${params.toString()}`);
+        const data = await r.json();
+        if (!data?.success || !data.data?.found) return;
+        const lead = data.data.lead;
+        const brand = (data.data.brands || [])[0];
+        if (!lead) return;
+
+        // Re-check the guard inside the timer — the user may have
+        // dismissed the banner during the debounce.
+        setPrefilledFromLead((already) => {
+          if (already) return true;
+
+          const phoneParts = splitPhone(lead.phone);
+          setForm((prev) => ({
+            ...prev,
+            contact_name: prev.contact_name || lead.contact_name || '',
+            email: prev.email || lead.email || '',
+            country_code: prev.phone ? prev.country_code : phoneParts.code,
+            phone: prev.phone || phoneParts.number,
+            // Brand + talent prefs from the most recent brand (if any).
+            brand_name: brand?.brand_name || prev.brand_name,
+            business_nature: brand?.business_nature || prev.business_nature,
+            business_note: brand?.business_note || prev.business_note,
+            requirement_note: brand?.requirement_note || prev.requirement_note,
+            business_location: brand?.business_location || prev.business_location,
+            country_id: brand?.country_id || prev.country_id,
+            state_regions: brand?.target_regions?.length ? brand.target_regions : prev.state_regions,
+            languages: brand?.target_languages?.length ? brand.target_languages : prev.languages,
+            working_days: brand?.working_days?.length ? brand.working_days : prev.working_days,
+          }));
+
+          if (brand?.service_type) {
+            const nextRoles = serviceTypeToRoles(brand.service_type);
+            if (nextRoles.length > 0) setRoles(nextRoles);
+          }
+
+          prefilledBrandRef.current = brand?.brand_name || null;
+          return true;
+        });
+      } catch {
+        // Silent — autofill is a UX nicety, not load-bearing.
+      }
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [form.email, form.phone, form.country_code, prefilledFromLead]);
+
   const selectedCountryName = countries.find((c) => c.id === form.country_id)?.name || '';
   const stateOptions = STATES_BY_COUNTRY_NAME[selectedCountryName] || [];
 
   function update<K extends keyof FormData>(field: K, value: FormData[K]) {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => {
+      // "Different brand?" path: once prefilled, if the user changes the
+      // brand_name away from the autofilled one, clear the brand-specific
+      // fields and dismiss the banner. Contact + talent prefs stay — same
+      // lead is most likely still the same lead.
+      if (
+        field === 'brand_name' &&
+        prefilledFromLead &&
+        prefilledBrandRef.current &&
+        typeof value === 'string' &&
+        value.trim().toLowerCase() !== prefilledBrandRef.current.toLowerCase()
+      ) {
+        setPrefilledFromLead(false);
+        prefilledBrandRef.current = null;
+        return {
+          ...prev,
+          brand_name: value as FormData['brand_name'],
+          business_nature: '',
+          business_note: '',
+          requirement_note: '',
+          business_location: '',
+        };
+      }
+      return { ...prev, [field]: value };
+    });
   }
 
   function changeCountry(newCountryId: string) {
@@ -367,60 +487,20 @@ export default function ConnectPage() {
               Back
             </button>
 
+            {prefilledFromLead && (
+              <div className="rounded-lg border border-[#0a0a0a] bg-[#F2FCBC] px-4 py-3 text-sm text-[#0a0a0a]">
+                <span className="font-semibold">Welcome back —</span>{' '}
+                pre-filled from your last brief. Change brand name to start a new brand.
+              </div>
+            )}
+
             {error && (
               <div className="rounded-lg bg-[#FBEFE9] border border-[#E0B7A2] px-4 py-3 text-sm text-[#8B3A1A]">
                 {error}
               </div>
             )}
 
-            {/* Section: Brand */}
-            <Section
-              eyebrow="Client brief"
-              title="About your brand"
-              hint="Helps creators understand your space and pitch ideas that fit."
-            >
-              <Field label="Brand Name" required>
-                <input
-                  type="text"
-                  required
-                  value={form.brand_name}
-                  onChange={(e) => update('brand_name', e.target.value)}
-                  placeholder="Your brand name"
-                  className="connect-input"
-                />
-              </Field>
-              <Field label="Nature of Business" required>
-                <input
-                  type="text"
-                  required
-                  value={form.business_nature}
-                  onChange={(e) => update('business_nature', e.target.value)}
-                  placeholder="e.g. Retail, SaaS, Education"
-                  className="connect-input"
-                />
-              </Field>
-              <Field label="Short Note About the Business" required>
-                <textarea
-                  required
-                  rows={3}
-                  value={form.business_note}
-                  onChange={(e) => update('business_note', e.target.value)}
-                  placeholder="What you do, who you serve, what makes you different."
-                  className="connect-input resize-none"
-                />
-              </Field>
-              <Field label="Short Note About the Requirement" optional>
-                <textarea
-                  rows={3}
-                  value={form.requirement_note}
-                  onChange={(e) => update('requirement_note', e.target.value)}
-                  placeholder="What you'd like the talent to work on first."
-                  className="connect-input resize-none"
-                />
-              </Field>
-            </Section>
-
-            {/* Section: Contact */}
+            {/* Section: Contact (first so we can autofill on email/phone) */}
             <Section
               eyebrow="Customer"
               title="Your contact"
@@ -479,6 +559,53 @@ export default function ConnectPage() {
                   onChange={(e) => update('business_location', e.target.value)}
                   placeholder="City, area"
                   className="connect-input"
+                />
+              </Field>
+            </Section>
+
+            {/* Section: Brand */}
+            <Section
+              eyebrow="Client brief"
+              title="About your brand"
+              hint="Helps creators understand your space and pitch ideas that fit."
+            >
+              <Field label="Brand Name" required>
+                <input
+                  type="text"
+                  required
+                  value={form.brand_name}
+                  onChange={(e) => update('brand_name', e.target.value)}
+                  placeholder="Your brand name"
+                  className="connect-input"
+                />
+              </Field>
+              <Field label="Nature of Business" required>
+                <input
+                  type="text"
+                  required
+                  value={form.business_nature}
+                  onChange={(e) => update('business_nature', e.target.value)}
+                  placeholder="e.g. Retail, SaaS, Education"
+                  className="connect-input"
+                />
+              </Field>
+              <Field label="Short Note About the Business" required>
+                <textarea
+                  required
+                  rows={3}
+                  value={form.business_note}
+                  onChange={(e) => update('business_note', e.target.value)}
+                  placeholder="What you do, who you serve, what makes you different."
+                  className="connect-input resize-none"
+                />
+              </Field>
+              <Field label="Short Note About the Requirement" optional>
+                <textarea
+                  rows={3}
+                  value={form.requirement_note}
+                  onChange={(e) => update('requirement_note', e.target.value)}
+                  placeholder="What you'd like the talent to work on first."
+                  className="connect-input resize-none"
                 />
               </Field>
             </Section>

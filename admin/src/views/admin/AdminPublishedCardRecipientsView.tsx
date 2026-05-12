@@ -6,6 +6,7 @@ import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
+import { openLeadInCRM } from '@/utils/squadCrm';
 import type { PublishedCard } from './AdminPublishedCards';
 import type { RecipientsResponse } from './AdminPublishedCardRecipientsPanel';
 
@@ -487,7 +488,11 @@ export default function AdminPublishedCardRecipientsView({
                 <h4 className="sh-section-heading">Customer</h4>
                 <button
                   type="button"
-                  onClick={() => openLeadInCRM(card)}
+                  onClick={() => openLeadInCRM({
+                    submission_id: card.submission?.id,
+                    phone: card.customer_phone,
+                    email: card.customer_email,
+                  })}
                   title="Open this lead in Squad CRM"
                   className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-[var(--color-sh-ink-muted)] hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)] transition"
                 >
@@ -932,33 +937,6 @@ export default function AdminPublishedCardRecipientsView({
       )}
     </div>
   );
-}
-
-// Squad CRM lives at crm.squadhub.in. Resolve the published card's
-// customer to a CRM lead by trying submission_id → phone → email (the
-// server picks the first hit) and open the lead detail page in a new
-// tab. Falls back to the leads list when nothing matches or the lookup
-// fails.
-const SQUAD_CRM_URL = 'https://crm.squadhub.in';
-
-async function openLeadInCRM(card: PublishedCard) {
-  const fallback = `${SQUAD_CRM_URL}/app/leads`;
-  const params = new URLSearchParams();
-  if (card.submission?.id) params.set('submission_id', card.submission.id);
-  if (card.customer_phone) params.set('phone', card.customer_phone);
-  if (card.customer_email) params.set('email', card.customer_email);
-  if (params.toString().length === 0) {
-    window.open(fallback, '_blank', 'noopener');
-    return;
-  }
-  try {
-    const r = await api.get(`/admin/clients/lookup-crm-lead?${params.toString()}`);
-    const leadId: string | undefined = r.data?.data?.lead_id;
-    const target = leadId ? `${SQUAD_CRM_URL}/app/leads/${leadId}` : fallback;
-    window.open(target, '_blank', 'noopener');
-  } catch {
-    window.open(fallback, '_blank', 'noopener');
-  }
 }
 
 function HeaderDetailRow({ label, value }: { label: string; value: string | null | undefined }) {

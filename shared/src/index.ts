@@ -1107,7 +1107,7 @@ export interface ClientSubmission {
   designation: string | null;
   contact_number: string;
   email: string;
-  business_address: string;
+  business_address: string | null;
   gst_registered: boolean;
   gst_number: string | null;
   accounts_email: string | null;
@@ -1122,6 +1122,36 @@ export interface ClientSubmission {
   primary_sales_person?: SalesPerson | null;
   secondary_sales_person?: SalesPerson | null;
   selected_subscriptions?: ClientSubmissionSubscription[];
+  brands?: ClientSubmissionBrand[];
+}
+
+// Source of a brief-form submission. 'shared_form' = squadhub.in/connect
+// (a link sent to a specific lead). 'landing_page_form' = a future
+// embedded form on upsquadconnect.com.
+export type BrandSource = 'shared_form' | 'landing_page_form';
+
+// Service-type slug stored on the brand. Lets the brief form rehydrate
+// Step 1 roles on autofill without a label<->slug reverse map.
+export type BrandServiceType = 'designer' | 'video_editor' | 'designer_video_editor';
+
+export interface ClientSubmissionBrand {
+  id: string;
+  submission_id: string;
+  brand_name: string;
+  business_nature: string | null;
+  business_note: string | null;
+  requirement_note: string | null;
+  service_type: BrandServiceType | null;
+  target_languages: string[];
+  working_days: string[];
+  country_id: string | null;
+  target_tiers: string[];
+  business_location: string | null;
+  source: BrandSource;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  target_regions?: string[];
 }
 
 export interface ClientSubmissionSubscription {
