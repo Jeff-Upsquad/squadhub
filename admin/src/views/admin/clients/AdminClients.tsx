@@ -28,7 +28,7 @@ export default function AdminClients() {
   const clientCount = clientCountRes?.data?.count || 0;
 
   const tabs: { id: Tab; label: string; count: number }[] = [
-    { id: 'new-clients', label: 'New Clients', count: pendingCount },
+    { id: 'new-clients', label: 'New Leads', count: pendingCount },
     { id: 'clients', label: 'Clients', count: clientCount },
     { id: 'invite-links', label: 'Invite Links', count: 0 },
     { id: 'client-subscriptions', label: 'Client Subscriptions', count: 0 },

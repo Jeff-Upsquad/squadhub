@@ -148,7 +148,7 @@ export default function NewClientsModule() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">New Clients</h1>
+        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">New Leads</h1>
         <p className="mt-1 text-sm text-[#62748E]">Track lead pipeline and assign subscriptions</p>
       </div>
 
