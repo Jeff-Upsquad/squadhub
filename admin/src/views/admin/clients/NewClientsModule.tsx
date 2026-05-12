@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import type {
   ClientSubmission,
+  ClientSubmissionBrand,
   ClientSubmissionSubscription,
   Country,
   Subscription,
@@ -17,6 +18,13 @@ import { PIPELINE_STATUSES } from '@squadhub/shared';
 import SliderPanel from './SliderPanel';
 import LeadStatusChips, { STATUS_META } from '../../../components/LeadStatusChips';
 import AdminLeadSubscriptionsSection from './AdminLeadSubscriptionsSection';
+import { openLeadInCRM } from '../../../utils/squadCrm';
+
+const SERVICE_TYPE_LABEL: Record<string, string> = {
+  designer: 'Designers',
+  video_editor: 'Editors',
+  designer_video_editor: 'Designer + Editor',
+};
 
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
 const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Elite'];
@@ -224,6 +232,24 @@ export default function NewClientsModule() {
       <SliderPanel open={!!selectedSubmission} onClose={closeSlider} title="Lead" width="w-[520px]">
         {selectedSubmission && (
           <div className="space-y-6">
+            <div>
+              <button
+                type="button"
+                onClick={() => openLeadInCRM({
+                  submission_id: selectedSubmission.id,
+                  phone: selectedSubmission.contact_number,
+                  email: selectedSubmission.email,
+                })}
+                title="Open this lead in Squad CRM"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[#E2E8F0] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#0F172B] hover:bg-[#F8FAFC] transition"
+              >
+                Open in Squad CRM
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+              </button>
+            </div>
+
             <div className="space-y-2">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Pipeline</h4>
               <LeadStatusChips
@@ -294,15 +320,72 @@ export default function NewClientsModule() {
               {selectedSubmission.designation && <InfoRow label="Designation" value={selectedSubmission.designation} />}
               <InfoRow label="Contact Number" value={selectedSubmission.contact_number} />
               <InfoRow label="Email" value={selectedSubmission.email} />
-              <InfoRow label="Business Address" value={selectedSubmission.business_address} />
+              {selectedSubmission.business_address && <InfoRow label="Business Address" value={selectedSubmission.business_address} />}
               <InfoRow label="GST Registered" value={selectedSubmission.gst_registered ? 'Yes' : 'No'} />
               {selectedSubmission.gst_number && <InfoRow label="GST Number" value={selectedSubmission.gst_number} />}
               {selectedSubmission.accounts_email && <InfoRow label="Accounts Email" value={selectedSubmission.accounts_email} />}
               <InfoRow label="Submitted" value={new Date(selectedSubmission.created_at).toLocaleString('en-IN')} />
             </div>
+
+            {selectedSubmission.brands && selectedSubmission.brands.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Brands</h4>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                    {selectedSubmission.brands.length}
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {selectedSubmission.brands.map((b) => (
+                    <BrandCard key={b.id} brand={b} countries={countries} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </SliderPanel>
+    </div>
+  );
+}
+
+function BrandCard({ brand, countries }: { brand: ClientSubmissionBrand; countries: Country[] }) {
+  const talentCountry = brand.country_id ? countries.find((c) => c.id === brand.country_id)?.name : null;
+  const serviceLabel = brand.service_type ? SERVICE_TYPE_LABEL[brand.service_type] || brand.service_type : null;
+  return (
+    <div className="rounded-lg border border-[#E2E8F0] bg-white p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-[#0F172B]">{brand.brand_name}</p>
+          {serviceLabel && (
+            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-700">
+              {serviceLabel}
+            </span>
+          )}
+        </div>
+        <span className="text-[10px] text-[#90A1B9]">
+          Updated {new Date(brand.updated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        {brand.business_nature && <InfoRow label="Business Nature" value={brand.business_nature} />}
+        {brand.business_note && <InfoRow label="About the Business" value={brand.business_note} />}
+        {brand.requirement_note && <InfoRow label="Requirement" value={brand.requirement_note} />}
+        {brand.business_location && <InfoRow label="Business Location" value={brand.business_location} />}
+        {talentCountry && <InfoRow label="Talent Country" value={talentCountry} />}
+        {brand.target_regions && brand.target_regions.length > 0 && (
+          <InfoRow label="Regions" value={brand.target_regions.join(', ')} />
+        )}
+        {brand.target_languages && brand.target_languages.length > 0 && (
+          <InfoRow label="Languages" value={brand.target_languages.join(', ')} />
+        )}
+        {brand.working_days && brand.working_days.length > 0 && (
+          <InfoRow label="Working Days" value={brand.working_days.join(', ')} />
+        )}
+        {brand.target_tiers && brand.target_tiers.length > 0 && (
+          <InfoRow label="Target Tiers" value={brand.target_tiers.join(', ')} />
+        )}
+      </div>
     </div>
   );
 }

@@ -183,6 +183,40 @@ async function hydrateSalesPeopleOn<T extends { primary_sales_person_id?: string
   }));
 }
 
+// Fetch all client_submission_brands rows for the given submission ids,
+// with their target_regions hydrated. Returns a Record keyed by
+// submission_id, brands ordered updated_at DESC inside each value.
+async function hydrateBrandsBySubmission(submissionIds: string[]): Promise<Record<string, any[]>> {
+  if (submissionIds.length === 0) return {};
+
+  const { data: brands } = await supabaseAdmin
+    .from('client_submission_brands')
+    .select('*')
+    .in('submission_id', submissionIds)
+    .order('updated_at', { ascending: false });
+
+  const rows = (brands || []) as any[];
+  if (rows.length === 0) return {};
+
+  const brandIds = rows.map((b) => b.id);
+  const { data: regions } = await supabaseAdmin
+    .from('client_submission_brand_regions')
+    .select('brand_id, region')
+    .in('brand_id', brandIds);
+
+  const regionsByBrand: Record<string, string[]> = {};
+  for (const r of (regions || []) as any[]) {
+    (regionsByBrand[r.brand_id] = regionsByBrand[r.brand_id] || []).push(r.region);
+  }
+
+  const bySubmission: Record<string, any[]> = {};
+  for (const b of rows) {
+    const enriched = { ...b, target_regions: regionsByBrand[b.id] || [] };
+    (bySubmission[b.submission_id] = bySubmission[b.submission_id] || []).push(enriched);
+  }
+  return bySubmission;
+}
+
 router.get('/submissions', async (_req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin
@@ -195,11 +229,17 @@ router.get('/submissions', async (_req: Request, res: Response) => {
       return;
     }
     const enriched = await hydrateSalesPeopleOn(data || []);
+    const submissionIds = enriched.map((s: any) => s.id);
 
-    const stagedMap = await hydrateStagedSubscriptions(enriched.map((s: any) => s.id));
+    const [stagedMap, brandsMap] = await Promise.all([
+      hydrateStagedSubscriptions(submissionIds),
+      hydrateBrandsBySubmission(submissionIds),
+    ]);
+
     const withStaged = enriched.map((s: any) => ({
       ...s,
       selected_subscriptions: stagedMap[s.id] || [],
+      brands: brandsMap[s.id] || [],
     }));
 
     res.json({ success: true, data: withStaged });

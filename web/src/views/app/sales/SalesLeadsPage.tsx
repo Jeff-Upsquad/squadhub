@@ -439,7 +439,7 @@ function LeadDetailPanel({ lead, countryName, onClose }: { lead: LeadWithRole; c
               {lead.designation && <InfoRow label="Designation" value={lead.designation} />}
               <InfoRow label="Contact Number" value={lead.contact_number} />
               <InfoRow label="Email" value={lead.email} />
-              <InfoRow label="Business Address" value={lead.business_address} />
+              <InfoRow label="Business Address" value={lead.business_address || '—'} />
               <InfoRow label="GST Registered" value={lead.gst_registered ? 'Yes' : 'No'} />
               {lead.gst_number && <InfoRow label="GST Number" value={lead.gst_number} />}
               {lead.accounts_email && <InfoRow label="Accounts Email" value={lead.accounts_email} />}
