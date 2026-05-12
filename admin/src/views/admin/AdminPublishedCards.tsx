@@ -359,7 +359,7 @@ export default function AdminPublishedCards() {
           {(activeTab === 'published' || activeTab === 'archive') && (
             <div className="overflow-x-auto">
               <div className="sh-tab-bar">
-                {([['all', 'All'], ['active', 'Active'], ['selected', 'Selected'], ['assigned', 'Assigned'], ['cancelled', 'Cancelled']] as const).map(([key, label]) => (
+                {([['all', 'All'], ['active', 'Active'], ['assigned', 'Assigned'], ['selected', 'Selected'], ['cancelled', 'Cancelled']] as const).map(([key, label]) => (
                   <button
                     key={key}
                     type="button"
