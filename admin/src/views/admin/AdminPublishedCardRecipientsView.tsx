@@ -234,6 +234,20 @@ export default function AdminPublishedCardRecipientsView({
     },
   });
 
+  const finalizeMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${card.id}/finalize-selection`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      showToast('Card finalized — talent moved to Assigned.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to finalize', 'error');
+    },
+  });
+
   const broadcastMutation = useMutation({
     mutationFn: () =>
       api.post(`/admin/subscription-cards/${card.id}/broadcast-pending`),
@@ -432,13 +446,23 @@ export default function AdminPublishedCardRecipientsView({
                   </span>
                 )}
                 {bucket === 'selected' && (
-                  <button
-                    onClick={() => undoMutation.mutate()}
-                    disabled={undoMutation.isPending}
-                    className="sh-btn-danger"
-                  >
-                    {undoMutation.isPending ? 'Reverting…' : 'Undo Selection'}
-                  </button>
+                  <>
+                    <button
+                      onClick={() => finalizeMutation.mutate()}
+                      disabled={finalizeMutation.isPending}
+                      className="sh-btn-success"
+                      title="Mark the subscription active and move the card to Assigned."
+                    >
+                      {finalizeMutation.isPending ? 'Finalizing…' : 'Finalize'}
+                    </button>
+                    <button
+                      onClick={() => undoMutation.mutate()}
+                      disabled={undoMutation.isPending}
+                      className="sh-btn-danger"
+                    >
+                      {undoMutation.isPending ? 'Reverting…' : 'Undo Selection'}
+                    </button>
+                  </>
                 )}
                 {isUnreviewed && (
                   <button

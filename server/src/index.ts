@@ -82,7 +82,7 @@ import profileAccessAdminRoutes from './routes/profile-access-admin';
 import viewPreferencesRoutes from './routes/view-preferences';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimerCron } from './cron/timer-cron';
-import { startSquadhireSyncSweeper, startManualAssignmentSweeper, startSelectionNotifySweeper } from './utils/squadhireWebhook';
+import { startSquadhireSyncSweeper, startManualAssignmentSweeper, startSelectionNotifySweeper, startActivationNotifySweeper } from './utils/squadhireWebhook';
 import { startProfileAccessGrantsSyncSweeper } from './utils/squadhireGrantsWebhook';
 
 // Validate env vars before starting
@@ -218,5 +218,6 @@ server.listen(config.port, () => {
   startSquadhireSyncSweeper();
   startManualAssignmentSweeper();
   startSelectionNotifySweeper();
+  startActivationNotifySweeper();
   startProfileAccessGrantsSyncSweeper();
 });
