@@ -50,14 +50,30 @@ export type MyTasksBuckets = {
   tomorrow: Task[];
   upcoming: Task[];
   later: Task[];
+  focused: Task[];
 };
+
+function todayKeyLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function useActiveFocusedIds(): string[] {
+  const focusedTodayIds = usePMStore((s) => s.focusedTodayIds);
+  const focusedTodayDate = usePMStore((s) => s.focusedTodayDate);
+  return focusedTodayDate === todayKeyLocal() ? focusedTodayIds : [];
+}
 
 export function useMyTasks() {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const focusedIds = useActiveFocusedIds();
+  const focusedKey = focusedIds.join(',');
   return useQuery<MyTasksBuckets>({
-    queryKey: ['my-tasks', tz],
+    queryKey: ['my-tasks', tz, focusedKey],
     queryFn: async () => {
-      const res = await api.get(`/pm/tasks/my?tz=${encodeURIComponent(tz)}`);
+      const params = new URLSearchParams({ tz });
+      if (focusedKey) params.set('focused_ids', focusedKey);
+      const res = await api.get(`/pm/tasks/my?${params.toString()}`);
       return res.data.data;
     },
     staleTime: 30_000,
