@@ -21,6 +21,7 @@ function emit() {
   listeners.forEach((l) => l());
 }
 
+const ENTRY_MS = 260;
 const EXIT_MS = 2000;
 const EXIT_EASE = 'cubic-bezier(0.55, 0.06, 0.68, 0.19)';
 
@@ -59,7 +60,8 @@ export function showToastCard(opts: {
     },
   ];
   emit();
-  setTimeout(() => dismiss(id), opts.durationMs ?? 5000);
+  // Wait for entry animation to fully settle, then count the 5s display window.
+  setTimeout(() => dismiss(id), ENTRY_MS + (opts.durationMs ?? 5000));
 }
 
 function subscribe(cb: () => void) {
