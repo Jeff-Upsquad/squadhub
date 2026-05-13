@@ -118,15 +118,6 @@ function rolesToServiceTypes(roles: RoleSlug[]): ServiceType[] {
   return out;
 }
 
-// Reverse map for autofill: brand records store the slug, so a returning
-// visitor's Step 1 selection can be rehydrated without a label↔slug round-trip.
-function serviceTypeToRoles(slug: string | null | undefined): RoleSlug[] {
-  if (slug === 'designer') return ['designer'];
-  if (slug === 'video_editor') return ['editor'];
-  if (slug === 'designer_video_editor') return ['designer_plus_editor'];
-  return [];
-}
-
 // Phone is stored as "+91 9447402340". Split on autofill by longest-matching
 // prefix in COUNTRY_CODES; fallback to +91.
 function splitPhone(stored: string | null | undefined): { code: string; number: string } {
@@ -258,10 +249,11 @@ export default function ConnectPage() {
             working_days: brand?.working_days?.length ? brand.working_days : prev.working_days,
           }));
 
-          if (brand?.service_type) {
-            const nextRoles = serviceTypeToRoles(brand.service_type);
-            if (nextRoles.length > 0) setRoles(nextRoles);
-          }
+          // Step 1 (role pills) is intentionally NOT autofilled. The brand row
+          // stores a single collapsed service_type slug, so rehydrating from
+          // it would silently overwrite multi-pick selections (Designer +
+          // Editor) with the combo. Make the user pick roles fresh every
+          // submission instead.
 
           prefilledBrandRef.current = brand?.brand_name || null;
           return true;
