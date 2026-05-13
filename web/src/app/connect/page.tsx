@@ -106,6 +106,18 @@ function rolesToServiceType(roles: RoleSlug[]): ServiceType | null {
   return null;
 }
 
+// One service_type per role checkbox ticked — no collapsing. Picking Designer
+// + Editor (two boxes) yields ['designer', 'video_editor'] so the backend
+// emits two separate cards (two specialists). The explicit "Designer + Editor"
+// combo box still maps to a single hybrid card.
+function rolesToServiceTypes(roles: RoleSlug[]): ServiceType[] {
+  const out: ServiceType[] = [];
+  if (roles.includes('designer')) out.push('designer');
+  if (roles.includes('editor')) out.push('video_editor');
+  if (roles.includes('designer_plus_editor')) out.push('designer_video_editor');
+  return out;
+}
+
 // Reverse map for autofill: brand records store the slug, so a returning
 // visitor's Step 1 selection can be rehydrated without a label↔slug round-trip.
 function serviceTypeToRoles(slug: string | null | undefined): RoleSlug[] {
@@ -324,8 +336,8 @@ export default function ConnectPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const serviceType = rolesToServiceType(roles);
-    if (!serviceType) {
+    const serviceTypes = rolesToServiceTypes(roles);
+    if (serviceTypes.length === 0) {
       setStep(1);
       return;
     }
@@ -346,7 +358,7 @@ export default function ConnectPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          service_type: serviceType,
+          service_types: serviceTypes,
           brand_name: form.brand_name.trim(),
           business_nature: form.business_nature.trim(),
           business_note: form.business_note.trim(),

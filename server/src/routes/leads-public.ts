@@ -210,7 +210,16 @@ router.get('/lookup', ipRateLimit, async (req: Request, res: Response) => {
 //   3. Insert subscription_cards as before, with the new brand_id FK.
 // ---------------------------------------------------------------------------
 const submissionSchema = z.object({
-  service_type: z.enum(['designer', 'video_editor', 'designer_video_editor']),
+  // One slug per role checkbox ticked on /connect Step 1. Two boxes ticked →
+  // two cards. The "Designer + Editor" combo box is its own distinct slug
+  // (`designer_video_editor`) meaning one hybrid person, not two specialists.
+  service_types: z
+    .array(z.enum(['designer', 'video_editor', 'designer_video_editor']))
+    .min(1)
+    .max(3)
+    .refine((arr) => new Set(arr).size === arr.length, {
+      message: 'service_types must be unique',
+    }),
   brand_name: z.string().trim().min(1).max(200),
   business_nature: z.string().trim().min(1).max(200),
   business_note: z.string().trim().min(1).max(2000),
@@ -280,13 +289,23 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
       .ilike('brand_name', body.brand_name)
       .maybeSingle();
 
+    // The brand row holds a single slug; when 2+ slugs were submitted we
+    // store the combo value so the autofill probe in /leads/lookup still
+    // returns something meaningful for returning visitors. The individual
+    // cards (below) carry the per-role service_type for the real source of
+    // truth.
+    const brandServiceType =
+      body.service_types.length === 1
+        ? body.service_types[0]
+        : 'designer_video_editor';
+
     const brandFields = {
       submission_id: submission.id,
       brand_name: body.brand_name,
       business_nature: body.business_nature,
       business_note: body.business_note,
       requirement_note: body.requirement_note || null,
-      service_type: body.service_type,
+      service_type: brandServiceType,
       target_languages: body.languages,
       working_days: body.working_days,
       country_id: countryId,
@@ -340,82 +359,88 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
         );
     }
 
-    // 3. Pre-resolve SquadHire categories tied to the chosen subscription so
-    // the admin doesn't have to re-pick them. Mirrors from-request flow.
-    let squadhireCategoryIds: string[] = [];
-    {
-      const { data: subRow } = await supabaseAdmin
-        .from('subscriptions')
-        .select('id')
-        .eq('slug', body.service_type)
-        .maybeSingle();
-      if (subRow?.id) {
-        const { data: profileRows } = await supabaseAdmin
-          .from('subscription_squadhire_profiles')
-          .select('squadhire_category_id')
-          .eq('subscription_id', subRow.id);
-        squadhireCategoryIds = (profileRows || []).map(
-          (r: any) => r.squadhire_category_id,
-        );
-      }
-    }
-
-    const serviceTypeLabel = SLUG_TO_SERVICE_TYPE[body.service_type];
+    // 3. Emit one draft subscription_cards row per slug ticked on Step 1.
+    // Cards share brand_id + contact details but each carries its own
+    // service_type + squadhire_category_ids. Multi-tier publish already
+    // fans out into independent siblings the same way, so the admin UI
+    // and downstream matching don't need any changes.
     const targetRegions =
       countryId && body.state_regions.length > 0
         ? body.state_regions.map((region) => ({ country_id: countryId, region }))
         : [];
 
-    const { data: card, error } = await supabaseAdmin
-      .from('subscription_cards')
-      .insert({
-        source: 'shared_form',
-        state: 'draft',
-        markup: 0,
-        service_type: serviceTypeLabel,
-        target_tiers: [],
-        working_days: body.working_days,
-        customer_name: body.contact_name,
-        customer_email: body.email,
-        customer_phone: body.phone,
-        customer_location: body.business_location || null,
-        target_languages: body.languages,
-        squadhire_category_ids: squadhireCategoryIds,
-        brand_name: body.brand_name,
-        business_nature: body.business_nature,
-        notes: body.business_note,
-        requirement_note: body.requirement_note || null,
-        publish_targets: ['partner', 'talent'],
-        brand_id: brandId,
-      })
-      .select('id')
-      .single();
+    for (const slug of body.service_types) {
+      // Pre-resolve SquadHire categories for THIS service_type so the admin
+      // doesn't have to re-pick them. Mirrors from-request flow.
+      let squadhireCategoryIds: string[] = [];
+      {
+        const { data: subRow } = await supabaseAdmin
+          .from('subscriptions')
+          .select('id')
+          .eq('slug', slug)
+          .maybeSingle();
+        if (subRow?.id) {
+          const { data: profileRows } = await supabaseAdmin
+            .from('subscription_squadhire_profiles')
+            .select('squadhire_category_id')
+            .eq('subscription_id', subRow.id);
+          squadhireCategoryIds = (profileRows || []).map(
+            (r: any) => r.squadhire_category_id,
+          );
+        }
+      }
 
-    if (error || !card) {
-      console.error('Landing page submission insert error:', error);
-      res.status(500).json({ success: false, error: 'Failed to submit. Please try again.' });
-      return;
+      const { data: card, error } = await supabaseAdmin
+        .from('subscription_cards')
+        .insert({
+          source: 'shared_form',
+          state: 'draft',
+          markup: 0,
+          service_type: SLUG_TO_SERVICE_TYPE[slug],
+          target_tiers: [],
+          working_days: body.working_days,
+          customer_name: body.contact_name,
+          customer_email: body.email,
+          customer_phone: body.phone,
+          customer_location: body.business_location || null,
+          target_languages: body.languages,
+          squadhire_category_ids: squadhireCategoryIds,
+          brand_name: body.brand_name,
+          business_nature: body.business_nature,
+          notes: body.business_note,
+          requirement_note: body.requirement_note || null,
+          publish_targets: ['partner', 'talent'],
+          brand_id: brandId,
+        })
+        .select('id')
+        .single();
+
+      if (error || !card) {
+        console.error('Landing page submission insert error:', error);
+        res.status(500).json({ success: false, error: 'Failed to submit. Please try again.' });
+        return;
+      }
+
+      // Country/region targeting lives in join tables, mirroring from-request.
+      if (countryId) {
+        await supabaseAdmin
+          .from('subscription_card_target_countries')
+          .insert({ card_id: (card as any).id, country_id: countryId });
+      }
+      if (targetRegions.length > 0) {
+        await supabaseAdmin
+          .from('subscription_card_target_regions')
+          .insert(
+            targetRegions.map((r) => ({
+              card_id: (card as any).id,
+              country_id: r.country_id,
+              region: r.region,
+            })),
+          );
+      }
     }
 
-    // Country/region targeting lives in join tables, mirroring from-request.
-    if (countryId) {
-      await supabaseAdmin
-        .from('subscription_card_target_countries')
-        .insert({ card_id: (card as any).id, country_id: countryId });
-    }
-    if (targetRegions.length > 0) {
-      await supabaseAdmin
-        .from('subscription_card_target_regions')
-        .insert(
-          targetRegions.map((r) => ({
-            card_id: (card as any).id,
-            country_id: r.country_id,
-            region: r.region,
-          })),
-        );
-    }
-
-    // Don't return the card id from a public endpoint.
+    // Don't return card ids from a public endpoint.
     res.json({ success: true });
   } catch (err) {
     if (err instanceof z.ZodError) {
