@@ -374,10 +374,15 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       const missingIds = focusedIds.filter((id) => !alreadyFetched.has(id));
       let extras: any[] = [];
       if (missingIds.length > 0) {
+        // Tasks not in the assignee-filtered set are only allowed in the
+        // focused bucket if the caller created them — prevents random
+        // unassigned tasks created by someone else from leaking onto the
+        // user's focus list when a stale star ID is sent up.
         const { data: extra } = await supabaseAdmin
           .from('tasks')
           .select('*')
-          .in('id', missingIds);
+          .in('id', missingIds)
+          .eq('created_by', req.userId!);
         const filteredExtras = includeDone
           ? (extra ?? [])
           : (extra ?? []).filter((t: any) => t.status !== 'done' && t.status !== 'closed');
