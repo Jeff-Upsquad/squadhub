@@ -29,13 +29,17 @@ export default function TodayList() {
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
 
   // Show ONLY tasks the user has marked Focus today (★) or whose work_date is
-  // today. The pmStore focus list auto-resets when the date rolls over.
+  // today. The pmStore focus list auto-resets when the date rolls over. The
+  // server-side `focused` bucket carries starred tasks that aren't otherwise
+  // assigned to or dated for the user, so they can still surface here.
   const tasks: Task[] = useMemo(() => {
     if (!data) return [];
-    const all = [...data.overdue, ...data.today];
+    const merged = [...data.overdue, ...data.today, ...(data.focused ?? [])];
+    const seen = new Set<string>();
+    const unique = merged.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
     const todayKey = new Date().toISOString().slice(0, 10);
     const focusedSet = focusedTodayDate === todayKey ? new Set(focusedTodayIds) : new Set<string>();
-    return all.filter((t) => focusedSet.has(t.id) || isToday(t.work_date, tz));
+    return unique.filter((t) => focusedSet.has(t.id) || isToday(t.work_date, tz));
   }, [data, focusedTodayIds, focusedTodayDate, tz]);
 
   const groupBy = usePMStore((s) => s.todayListGroupBy);

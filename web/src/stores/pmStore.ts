@@ -225,6 +225,7 @@ export const usePMStore = create<PMState>()(
             : [...current, taskId];
           return { focusedTodayIds: next, focusedTodayDate: today };
         });
+        triggerSave();
       },
       isFocusedToday: (taskId) => {
         const state = get();
@@ -240,6 +241,14 @@ export const usePMStore = create<PMState>()(
         if (prefs.sortByScope !== undefined) patch.sortByScope = prefs.sortByScope as Record<string, SortBy>;
         if (prefs.focusTodayScope !== undefined) patch.focusTodayScope = prefs.focusTodayScope as Record<string, boolean>;
         if (prefs.todayListGroupBy !== undefined) patch.todayListGroupBy = prefs.todayListGroupBy as GroupBy;
+        // Stars only carry over if the server's date matches today locally —
+        // otherwise they're stale and we let the existing reset behavior win.
+        if (Array.isArray(prefs.focusedTodayIds) && typeof prefs.focusedTodayDate === 'string') {
+          if (prefs.focusedTodayDate === todayKey()) {
+            patch.focusedTodayIds = prefs.focusedTodayIds as string[];
+            patch.focusedTodayDate = prefs.focusedTodayDate as string;
+          }
+        }
         if (Object.keys(patch).length > 0) set(patch);
       },
       _getServerPayload: () => {
@@ -252,6 +261,8 @@ export const usePMStore = create<PMState>()(
           sortByScope: s.sortByScope,
           focusTodayScope: s.focusTodayScope,
           todayListGroupBy: s.todayListGroupBy,
+          focusedTodayIds: s.focusedTodayIds,
+          focusedTodayDate: s.focusedTodayDate,
         };
       },
       reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Set<string>(), timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none' }),

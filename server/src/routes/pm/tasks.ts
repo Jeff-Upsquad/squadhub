@@ -326,8 +326,8 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     const tomorrowStr = fmt.format(new Date(now.getTime() + dayMs));
     const upcomingCutoffStr = fmt.format(new Date(now.getTime() + 7 * dayMs));
 
-    const buckets: Record<'overdue' | 'today' | 'tomorrow' | 'upcoming' | 'later', any[]> = {
-      overdue: [], today: [], tomorrow: [], upcoming: [], later: [],
+    const buckets: Record<'overdue' | 'today' | 'tomorrow' | 'upcoming' | 'later' | 'focused', any[]> = {
+      overdue: [], today: [], tomorrow: [], upcoming: [], later: [], focused: [],
     };
 
     // All three date fields are TIMESTAMPTZ (migration 034 promoted
@@ -358,6 +358,35 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       if (dueStr < todayStr) buckets.overdue.push(t);
       else if (dueStr <= upcomingCutoffStr) buckets.upcoming.push(t);
       else buckets.later.push(t);
+    }
+
+    // Starred ("Focus today") tasks are tracked client-side in pmStore and
+    // surfaced on the Home focus list. They may not be in the assignee-filtered
+    // result above (e.g. unassigned, or no date set), so we fetch any missing
+    // ones here and return the full set in a separate `focused` bucket.
+    const focusedIds = Array.from(new Set(
+      ((req.query.focused_ids as string | undefined) ?? '')
+        .split(',').map((s) => s.trim()).filter(Boolean)
+    )).slice(0, 200);
+
+    if (focusedIds.length > 0) {
+      const alreadyFetched = new Map(tasks.map((t: any) => [t.id, t]));
+      const missingIds = focusedIds.filter((id) => !alreadyFetched.has(id));
+      let extras: any[] = [];
+      if (missingIds.length > 0) {
+        const { data: extra } = await supabaseAdmin
+          .from('tasks')
+          .select('*')
+          .in('id', missingIds);
+        const filteredExtras = includeDone
+          ? (extra ?? [])
+          : (extra ?? []).filter((t: any) => t.status !== 'done' && t.status !== 'closed');
+        extras = await hydrateParents(await hydrateLists(await hydrateAssignees(filteredExtras)));
+      }
+      const fromExisting = focusedIds
+        .map((id) => alreadyFetched.get(id))
+        .filter(Boolean);
+      buckets.focused = [...fromExisting, ...extras];
     }
 
     res.json({ success: true, data: buckets });
