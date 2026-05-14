@@ -223,7 +223,6 @@ const submissionSchema = z.object({
   brand_name: z.string().trim().min(1).max(200),
   business_nature: z.string().trim().min(1).max(200),
   business_note: z.string().trim().min(1).max(2000),
-  requirement_note: z.string().trim().max(2000).optional().or(z.literal('')),
   contact_name: z.string().trim().min(1).max(200),
   email: z.string().trim().email().max(200),
   phone: z.string().trim().min(4).max(30),
@@ -238,6 +237,20 @@ const submissionSchema = z.object({
     .refine((arr) => arr.every((d) => VALID_DAYS.has(d)), {
       message: 'working_days must be Mon..Sun',
     }),
+  // Per-role requirement details, keyed by service_type slug. Each card
+  // emitted below picks up its own entry. Brand-level requirement_note is
+  // no longer the source of truth — kept on the brand row as null going
+  // forward; legacy rows retain their existing value.
+  role_requirements: z
+    .record(
+      z.enum(['designer', 'video_editor', 'designer_video_editor']),
+      z.object({
+        note: z.string().trim().max(2000).optional(),
+        hours: z.string().trim().max(200).optional(),
+      }),
+    )
+    .optional()
+    .default({}),
 });
 
 router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
@@ -304,7 +317,10 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
       brand_name: body.brand_name,
       business_nature: body.business_nature,
       business_note: body.business_note,
-      requirement_note: body.requirement_note || null,
+      // requirement_note lives on subscription_cards now (one per role). Keep
+      // the brand column at null for new submissions; legacy rows still
+      // populated from before this change render as a fallback in admin.
+      requirement_note: null,
       service_type: brandServiceType,
       target_languages: body.languages,
       working_days: body.working_days,
@@ -390,6 +406,8 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
         }
       }
 
+      const roleReq = body.role_requirements?.[slug];
+
       const { data: card, error } = await supabaseAdmin
         .from('subscription_cards')
         .insert({
@@ -408,7 +426,8 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
           brand_name: body.brand_name,
           business_nature: body.business_nature,
           notes: body.business_note,
-          requirement_note: body.requirement_note || null,
+          requirement_note: roleReq?.note || null,
+          hours_note: roleReq?.hours || null,
           publish_targets: ['partner', 'talent'],
           brand_id: brandId,
         })

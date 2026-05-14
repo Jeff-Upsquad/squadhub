@@ -137,7 +137,6 @@ type FormData = {
   brand_name: string;
   business_nature: string;
   business_note: string;
-  requirement_note: string;
   contact_name: string;
   email: string;
   country_code: string;
@@ -153,7 +152,6 @@ const initialForm: FormData = {
   brand_name: '',
   business_nature: '',
   business_note: '',
-  requirement_note: '',
   contact_name: '',
   email: '',
   country_code: '+91',
@@ -165,10 +163,31 @@ const initialForm: FormData = {
   working_days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
 };
 
+// Per-role requirement details, captured in the "Requirement" section on
+// Step 2. One sub-row per role ticked in Step 1. Both fields optional —
+// kept here as strings (not narrowed to selected roles) so toggling a
+// role off and back on preserves what the user already typed.
+type RoleRequirement = { note: string; hours: string };
+const emptyRoleRequirements: Record<RoleSlug, RoleRequirement> = {
+  designer: { note: '', hours: '' },
+  editor: { note: '', hours: '' },
+  designer_plus_editor: { note: '', hours: '' },
+};
+
+// One slug per role — used on submit to key the role_requirements payload
+// by the backend's service_type vocab (editor → video_editor).
+function roleToServiceTypeSlug(role: RoleSlug): ServiceType {
+  if (role === 'designer') return 'designer';
+  if (role === 'editor') return 'video_editor';
+  return 'designer_video_editor';
+}
+
 export default function ConnectPage() {
   const [step, setStep] = useState<1 | 2>(1);
   const [roles, setRoles] = useState<RoleSlug[]>([]);
   const [form, setForm] = useState<FormData>(initialForm);
+  const [roleRequirements, setRoleRequirements] =
+    useState<Record<RoleSlug, RoleRequirement>>(emptyRoleRequirements);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
@@ -241,7 +260,10 @@ export default function ConnectPage() {
             brand_name: brand?.brand_name || prev.brand_name,
             business_nature: brand?.business_nature || prev.business_nature,
             business_note: brand?.business_note || prev.business_note,
-            requirement_note: brand?.requirement_note || prev.requirement_note,
+            // Per-role requirement details live on subscription_cards now,
+            // not on the brand. They're tied to Step 1 (which we don't
+            // autofill either), so we leave the Requirement section empty
+            // on rehydration — same rationale as the role pills below.
             business_location: brand?.business_location || prev.business_location,
             country_id: brand?.country_id || prev.country_id,
             state_regions: brand?.target_regions?.length ? brand.target_regions : prev.state_regions,
@@ -288,7 +310,6 @@ export default function ConnectPage() {
           brand_name: value as FormData['brand_name'],
           business_nature: '',
           business_note: '',
-          requirement_note: '',
           business_location: '',
         };
       }
@@ -318,6 +339,17 @@ export default function ConnectPage() {
     );
   }
 
+  function updateRoleReq(
+    slug: RoleSlug,
+    field: keyof RoleRequirement,
+    value: string,
+  ) {
+    setRoleRequirements((prev) => ({
+      ...prev,
+      [slug]: { ...prev[slug], [field]: value },
+    }));
+  }
+
   function goToStep2() {
     if (roles.length === 0) return;
     setStep(2);
@@ -344,6 +376,25 @@ export default function ConnectPage() {
       return;
     }
 
+    // Build the per-role payload from current selections only. Skips roles
+    // the user ticked then un-ticked (their note/hours stay in state but
+    // shouldn't be sent), and drops entries where both fields are empty.
+    const roleReqsPayload: Record<
+      string,
+      { note?: string; hours?: string }
+    > = {};
+    for (const r of roles) {
+      const entry = roleRequirements[r];
+      const note = entry.note.trim();
+      const hours = entry.hours.trim();
+      if (note || hours) {
+        roleReqsPayload[roleToServiceTypeSlug(r)] = {
+          ...(note ? { note } : {}),
+          ...(hours ? { hours } : {}),
+        };
+      }
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch('/leads/landing', {
@@ -354,7 +405,6 @@ export default function ConnectPage() {
           brand_name: form.brand_name.trim(),
           business_nature: form.business_nature.trim(),
           business_note: form.business_note.trim(),
-          requirement_note: form.requirement_note.trim() || undefined,
           contact_name: form.contact_name.trim(),
           email: form.email.trim(),
           phone: `${form.country_code} ${form.phone.trim()}`.trim(),
@@ -363,6 +413,9 @@ export default function ConnectPage() {
           state_regions: form.state_regions,
           languages: form.languages,
           working_days: form.working_days,
+          ...(Object.keys(roleReqsPayload).length > 0
+            ? { role_requirements: roleReqsPayload }
+            : {}),
         }),
       });
       const data = await res.json();
@@ -556,15 +609,6 @@ export default function ConnectPage() {
                   />
                 </Field>
               </div>
-              <Field label="Location of Business" optional>
-                <input
-                  type="text"
-                  value={form.business_location}
-                  onChange={(e) => update('business_location', e.target.value)}
-                  placeholder="City, area"
-                  className="connect-input"
-                />
-              </Field>
             </Section>
 
             {/* Section: Brand */}
@@ -603,15 +647,55 @@ export default function ConnectPage() {
                   className="connect-input resize-none"
                 />
               </Field>
-              <Field label="Short Note About the Requirement" optional>
-                <textarea
-                  rows={3}
-                  value={form.requirement_note}
-                  onChange={(e) => update('requirement_note', e.target.value)}
-                  placeholder="What you'd like the talent to work on first."
-                  className="connect-input resize-none"
+              <Field label="Location of Business" optional>
+                <input
+                  type="text"
+                  value={form.business_location}
+                  onChange={(e) => update('business_location', e.target.value)}
+                  placeholder="City, area"
+                  className="connect-input"
                 />
               </Field>
+            </Section>
+
+            {/* Section: Requirement — one mini-card per role ticked on Step 1.
+                Both fields optional. Empties are filtered out on submit, so
+                a role with no detail simply doesn't get a role_requirements
+                entry (and the resulting subscription_card stays with NULL
+                requirement_note + hours_note). */}
+            <Section
+              eyebrow="Requirement"
+              title="What each role will work on"
+              hint="A quick note per role helps us match the right talent. All fields optional."
+            >
+              {ROLE_OPTIONS.filter((o) => roles.includes(o.slug)).map((opt) => (
+                <div key={opt.slug} className="connect-role-req">
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#FCF487] ring-1 ring-[#0a0a0a]" />
+                    <span className="text-sm font-semibold text-[#0a0a0a]">{opt.title}</span>
+                  </div>
+                  <div className="space-y-3">
+                    <Field label="Short note" optional>
+                      <textarea
+                        rows={2}
+                        value={roleRequirements[opt.slug].note}
+                        onChange={(e) => updateRoleReq(opt.slug, 'note', e.target.value)}
+                        placeholder="What you'd like this role to work on first."
+                        className="connect-input resize-none"
+                      />
+                    </Field>
+                    <Field label="Hours" optional hint="Daily or weekly — however you usually think about it.">
+                      <input
+                        type="text"
+                        value={roleRequirements[opt.slug].hours}
+                        onChange={(e) => updateRoleReq(opt.slug, 'hours', e.target.value)}
+                        placeholder="e.g. 4 hrs daily or 20 hrs/week"
+                        className="connect-input"
+                      />
+                    </Field>
+                  </div>
+                </div>
+              ))}
             </Section>
 
             {/* Section: Talent preferences */}
@@ -974,6 +1058,17 @@ const globalStyles = `
   border-radius: 12px;
   padding: 14px 16px;
   box-shadow: 3px 3px 0 0 #0a0a0a;
+}
+
+/* Per-role row inside the Requirement section. Lighter than the Step 1
+   role card — it's a sub-block inside an existing Section, not its own
+   highlighted card. Vertical gap between rows is handled by the parent
+   Section's space-y-4. */
+.connect-role-req {
+  background: #FBFAF6;
+  border: 1px solid #E8E5DD;
+  border-radius: 12px;
+  padding: 14px 16px;
 }
 
 /* Selected chips (states, languages) — brand lime soft fill, ink ring */
