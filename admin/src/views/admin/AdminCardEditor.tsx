@@ -65,6 +65,7 @@ interface CardData {
   business_nature: string | null;
   notes: string | null;
   requirement_note: string | null;
+  hours_note: string | null;
   target_tiers: string[];
   min_experience_years: number;
   target_languages: string[];
@@ -157,6 +158,7 @@ export default function AdminCardEditor({
   const [businessNature, setBusinessNature] = useState('');
   const [notes, setNotes] = useState('');
   const [requirementNote, setRequirementNote] = useState('');
+  const [hoursNote, setHoursNote] = useState('');
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [targetCountryIds, setTargetCountryIds] = useState<string[]>([]);
   const [targetRegions, setTargetRegions] = useState<{ country_id: string; region: string }[]>([]);
@@ -207,6 +209,7 @@ export default function AdminCardEditor({
     setBusinessNature(card.business_nature || '');
     setNotes(card.notes || '');
     setRequirementNote(card.requirement_note || '');
+    setHoursNote(card.hours_note || '');
     setDeliverables(card.custom_deliverables || []);
     setTargetCountryIds(card.target_country_ids || []);
     setTargetRegions(card.target_regions || []);
@@ -394,6 +397,7 @@ export default function AdminCardEditor({
         business_nature: businessNature || null,
         notes: notes || null,
         requirement_note: requirementNote || null,
+        hours_note: hoursNote || null,
         custom_deliverables: deliverables,
       }),
     onSuccess: () => {
@@ -1095,6 +1099,16 @@ export default function AdminCardEditor({
                   rows={3}
                   placeholder="What you'd like the talent to work on first — deliverables, references, brand guidelines."
                   className="sh-input resize-none"
+                />
+              </Field>
+              <Field label="Hours" optional>
+                <input
+                  type="text"
+                  value={hoursNote}
+                  onChange={(e) => setHoursNote(e.target.value)}
+                  disabled={!isDraft}
+                  placeholder="e.g. 4 hrs daily or 20 hrs/week"
+                  className="sh-input"
                 />
               </Field>
             </div>

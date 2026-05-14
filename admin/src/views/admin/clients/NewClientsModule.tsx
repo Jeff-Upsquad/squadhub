@@ -349,9 +349,30 @@ export default function NewClientsModule() {
   );
 }
 
+// Map the upsquad-style service_type label stored on subscription_cards
+// back to a display string. Mirrors the BrandServiceType slug map above,
+// since cards use the label-form ("Designers"/"Editors"/"Designer plus
+// Editor") while brand.service_type uses the slug form.
+const CARD_SERVICE_TYPE_LABEL: Record<string, string> = {
+  Designers: 'Designers',
+  Editors: 'Editors',
+  'Designer plus Editor': 'Designer + Editor',
+};
+
 function BrandCard({ brand, countries }: { brand: ClientSubmissionBrand; countries: Country[] }) {
   const talentCountry = brand.country_id ? countries.find((c) => c.id === brand.country_id)?.name : null;
   const serviceLabel = brand.service_type ? SERVICE_TYPE_LABEL[brand.service_type] || brand.service_type : null;
+
+  // Per-role requirement details live on subscription_cards now. Only show
+  // cards that actually have something to display, so the section stays
+  // tight when leads skip the optional fields.
+  const cards = (brand.cards || []).filter(
+    (c) => c.requirement_note || c.hours_note,
+  );
+  // Fallback to the legacy brand-level requirement_note for older rows
+  // that pre-date the per-role split (migration 083 onwards).
+  const showLegacyRequirement = cards.length === 0 && !!brand.requirement_note;
+
   return (
     <div className="rounded-lg border border-[#E2E8F0] bg-white p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -370,8 +391,23 @@ function BrandCard({ brand, countries }: { brand: ClientSubmissionBrand; countri
       <div className="space-y-1.5">
         {brand.business_nature && <InfoRow label="Business Nature" value={brand.business_nature} />}
         {brand.business_note && <InfoRow label="About the Business" value={brand.business_note} />}
-        {brand.requirement_note && <InfoRow label="Requirement" value={brand.requirement_note} />}
         {brand.business_location && <InfoRow label="Business Location" value={brand.business_location} />}
+        {showLegacyRequirement && (
+          <InfoRow label="Requirement" value={brand.requirement_note!} />
+        )}
+        {cards.length > 0 && (
+          <div className="space-y-2 pt-1">
+            {cards.map((c) => (
+              <div key={c.id} className="rounded border border-[#E2E8F0] bg-[#F8FAFC] p-2">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#475569]">
+                  {(c.service_type && CARD_SERVICE_TYPE_LABEL[c.service_type]) || c.service_type || 'Role'}
+                </p>
+                {c.requirement_note && <InfoRow label="Requirement" value={c.requirement_note} />}
+                {c.hours_note && <InfoRow label="Hours" value={c.hours_note} />}
+              </div>
+            ))}
+          </div>
+        )}
         {talentCountry && <InfoRow label="Talent Country" value={talentCountry} />}
         {brand.target_regions && brand.target_regions.length > 0 && (
           <InfoRow label="Regions" value={brand.target_regions.join(', ')} />

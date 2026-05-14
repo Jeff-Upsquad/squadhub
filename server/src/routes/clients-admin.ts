@@ -204,14 +204,33 @@ async function hydrateBrandsBySubmission(submissionIds: string[]): Promise<Recor
     .select('brand_id, region')
     .in('brand_id', brandIds);
 
+  // Per-role requirement details live on subscription_cards now (one card
+  // per role ticked on /connect). Pull the slim view needed for the New
+  // Clients slider so each BrandCard can render per-role notes + hours.
+  const { data: cards } = await supabaseAdmin
+    .from('subscription_cards')
+    .select('id, brand_id, service_type, requirement_note, hours_note, state, created_at')
+    .in('brand_id', brandIds)
+    .order('created_at', { ascending: true });
+
   const regionsByBrand: Record<string, string[]> = {};
   for (const r of (regions || []) as any[]) {
     (regionsByBrand[r.brand_id] = regionsByBrand[r.brand_id] || []).push(r.region);
   }
 
+  const cardsByBrand: Record<string, any[]> = {};
+  for (const c of (cards || []) as any[]) {
+    if (!c.brand_id) continue;
+    (cardsByBrand[c.brand_id] = cardsByBrand[c.brand_id] || []).push(c);
+  }
+
   const bySubmission: Record<string, any[]> = {};
   for (const b of rows) {
-    const enriched = { ...b, target_regions: regionsByBrand[b.id] || [] };
+    const enriched = {
+      ...b,
+      target_regions: regionsByBrand[b.id] || [],
+      cards: cardsByBrand[b.id] || [],
+    };
     (bySubmission[b.submission_id] = bySubmission[b.submission_id] || []).push(enriched);
   }
   return bySubmission;

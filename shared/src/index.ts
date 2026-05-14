@@ -1140,6 +1140,12 @@ export interface ClientSubmissionBrand {
   brand_name: string;
   business_nature: string | null;
   business_note: string | null;
+  /**
+   * Legacy brand-level requirement note. As of migration 083 the source of
+   * truth moves to subscription_cards (one note + hours per role). New
+   * /connect submissions write null here; rows from before still hold their
+   * old value and the admin UI falls back to displaying it.
+   */
   requirement_note: string | null;
   service_type: BrandServiceType | null;
   target_languages: string[];
@@ -1152,6 +1158,21 @@ export interface ClientSubmissionBrand {
   updated_at: string;
   // Joined
   target_regions?: string[];
+  /** Slim view of the brand's subscription_cards, used by the admin New
+   *  Clients slider to render per-role requirement notes + hours. */
+  cards?: ClientSubmissionBrandCard[];
+}
+
+/** Slim card shape returned alongside the brand in the New Clients
+ *  endpoint. Not the full SubscriptionCard — just the fields the slider
+ *  needs to surface per-role requirement details. */
+export interface ClientSubmissionBrandCard {
+  id: string;
+  service_type: string | null;
+  requirement_note: string | null;
+  hours_note: string | null;
+  state: string;
+  created_at: string;
 }
 
 export interface ClientSubmissionSubscription {
