@@ -683,7 +683,7 @@ router.post(
           .maybeSingle(),
         supabaseAdmin
           .from('subscription_card_external_recipients')
-          .select('id, status, email')
+          .select('id, status, email, squadhire_acceptance_notified_at')
           .eq('card_id', cardId)
           .eq('external_system', 'squadhire')
           .eq('external_user_id', talent_id)
@@ -785,10 +785,20 @@ router.post(
       if (existing?.status === 'accepted') {
         // Idempotent — re-share with client in case the prior run failed that step.
         await sharePartnerWithCardClient(employee.id, cardId);
+        // If the SquadHire mirror never landed (webhook lost on the original
+        // accept), refire here so admins can recover a stuck card by clicking
+        // Auto Accept again. Persists state so the sweeper can take over if
+        // this attempt also fails.
+        if (!existing.squadhire_acceptance_notified_at) {
+          notifySquadhireOfTalentAcceptance(cardId, talent_id, existing.id as string).catch((err) => {
+            console.error('[auto-accept-talent] notify squadhire failed (idempotent retry)', err);
+          });
+        }
         res.json({ success: true, alreadyAccepted: true });
         return;
       }
 
+      let recipientRowId: string | undefined;
       if (existing) {
         // Existing 'pending' row — flip with status guard to avoid clobbering
         // a concurrent reject that landed between our read and write.
@@ -816,11 +826,12 @@ router.post(
           });
           return;
         }
+        recipientRowId = existing.id as string;
       } else {
         // No local row yet (talent came from live SquadHire match). Create
         // one directly in accepted state. ON CONFLICT DO NOTHING handles a
         // concurrent insert from elsewhere; we re-read to recover the id.
-        const { error: insErr } = await supabaseAdmin
+        const { data: inserted, error: insErr } = await supabaseAdmin
           .from('subscription_card_external_recipients')
           .upsert(
             {
@@ -836,10 +847,25 @@ router.post(
               assigned_manually: true,
             },
             { onConflict: 'card_id,external_system,external_recipient_id', ignoreDuplicates: true },
-          );
+          )
+          .select('id')
+          .maybeSingle();
         if (insErr) {
           res.status(500).json({ success: false, error: insErr.message });
           return;
+        }
+        recipientRowId = inserted?.id as string | undefined;
+        if (!recipientRowId) {
+          // ignoreDuplicates returned no row — re-read to recover the id so
+          // the webhook retries persist their state somewhere.
+          const { data: refetched } = await supabaseAdmin
+            .from('subscription_card_external_recipients')
+            .select('id')
+            .eq('card_id', cardId)
+            .eq('external_system', 'squadhire')
+            .eq('external_recipient_id', talent_id)
+            .maybeSingle();
+          recipientRowId = (refetched?.id as string | undefined) ?? undefined;
         }
       }
 
@@ -848,9 +874,11 @@ router.post(
       // Mirror the acceptance on SquadHire so the linked business
       // dashboard shows the talent as 'new for review' — same end-state
       // as if the talent had hit accept on SquadHire themselves. Fire-
-      // and-forget: SquadHub side is already updated; the SquadHire
-      // mirror is best-effort and the user response shouldn't wait.
-      notifySquadhireOfTalentAcceptance(cardId, talent_id).catch((err) => {
+      // and-forget so the admin response isn't blocked on the cross-app
+      // hop, but the call now retries 3x inline and persists state to
+      // squadhire_acceptance_notified_at — the sweeper picks up rows
+      // whose every attempt failed and keeps retrying every 5 min.
+      notifySquadhireOfTalentAcceptance(cardId, talent_id, recipientRowId).catch((err) => {
         console.error('[auto-accept-talent] notify squadhire failed', err);
       });
 
