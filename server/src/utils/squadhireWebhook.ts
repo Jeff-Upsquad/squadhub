@@ -1004,26 +1004,16 @@ export async function notifySquadhireOfManualRemoval(
 }
 
 // ------------------------------------------------------------
-// Public: outbound notification when an admin auto-accepts a card on
-// behalf of a talent (POST /admin/subscription-cards/:id/auto-accept-talent).
-// SquadHire mirrors the row to status='accepted' and surfaces the talent
-// in the linked business dashboard. Best-effort, single attempt — the
-// SquadHub-side accept is already persisted by the time we get here.
+// Talent acceptance: single POST attempt
 // ------------------------------------------------------------
 
-export async function notifySquadhireOfTalentAcceptance(
+function postTalentAcceptedOnce(
   cardId: string,
   talentId: string,
-): Promise<void> {
+): Promise<AttemptOutcome> {
   const baseUrl = config.squadhireWebhookUrl;
-  if (!baseUrl) {
-    console.warn('[squadhire-webhook] talent-accepted skipped: url not configured');
-    return;
-  }
-  if (!config.squadhireWebhookSecret) {
-    console.warn('[squadhire-webhook] talent-accepted skipped: secret not configured');
-    return;
-  }
+  if (!baseUrl) return Promise.resolve({ delivered: false, error: 'squadhire_webhook_url_not_configured' });
+  if (!config.squadhireWebhookSecret) return Promise.resolve({ delivered: false, error: 'squadhire_webhook_secret_not_configured' });
 
   const url = baseUrl.endsWith('/')
     ? `${baseUrl}talent-accepted`
@@ -1037,26 +1027,136 @@ export async function notifySquadhireOfTalentAcceptance(
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-SquadHub-Signature': config.squadhireWebhookSecret,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      console.warn(`[squadhire-webhook] talent-accepted http_${res.status} ${text.slice(0, 200)}`);
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn('[squadhire-webhook] talent-accepted failed', msg);
-  } finally {
-    clearTimeout(timer);
+  return fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-SquadHub-Signature': config.squadhireWebhookSecret,
+    },
+    body: JSON.stringify(body),
+    signal: controller.signal,
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        return {
+          delivered: false,
+          error: `http_${res.status}${text ? ` ${text.slice(0, 200)}` : ''}`,
+        } as AttemptOutcome;
+      }
+      return { delivered: true } as AttemptOutcome;
+    })
+    .catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { delivered: false, error: msg.slice(0, 500) } as AttemptOutcome;
+    })
+    .finally(() => clearTimeout(timer));
+}
+
+// ------------------------------------------------------------
+// Talent acceptance: persist attempt state onto the recipient row
+// ------------------------------------------------------------
+
+async function persistTalentAcceptedResult(
+  recipientRowId: string,
+  outcome: AttemptOutcome,
+  attemptsDelta: number,
+): Promise<void> {
+  const { data: current, error: readErr } = await supabaseAdmin
+    .from('subscription_card_external_recipients')
+    .select('squadhire_acceptance_notify_attempts')
+    .eq('id', recipientRowId)
+    .maybeSingle();
+  if (readErr) {
+    console.error('[squadhire-webhook] failed to read acceptance-notify attempts', readErr);
+    return;
   }
+
+  const patch: Record<string, unknown> = {
+    squadhire_acceptance_notify_attempts:
+      ((current as any)?.squadhire_acceptance_notify_attempts ?? 0) + attemptsDelta,
+    squadhire_acceptance_notify_error: outcome.delivered ? null : (outcome.error ?? 'unknown_error'),
+  };
+  if (outcome.delivered) {
+    patch.squadhire_acceptance_notified_at = new Date().toISOString();
+  }
+
+  const { error } = await supabaseAdmin
+    .from('subscription_card_external_recipients')
+    .update(patch)
+    .eq('id', recipientRowId);
+  if (error) {
+    console.error('[squadhire-webhook] failed to persist acceptance-notify state', error);
+  }
+}
+
+// ------------------------------------------------------------
+// Public: outbound notification when an admin auto-accepts a card on
+// behalf of a talent (POST /admin/subscription-cards/:id/auto-accept-talent).
+// SquadHire mirrors the row to status='accepted' and surfaces the talent
+// in the linked business dashboard's "New talents for review" section.
+//
+// 3 inline retries with 0/2/10s backoff. When recipientRowId is provided,
+// the outcome is persisted on the row so the sweeper can re-attempt later
+// if every inline try failed. Returns the final outcome so the caller can
+// surface a warning to the admin on persistent failure.
+// ------------------------------------------------------------
+
+export async function notifySquadhireOfTalentAcceptance(
+  cardId: string,
+  talentId: string,
+  recipientRowId?: string,
+): Promise<AttemptOutcome> {
+  let lastOutcome: AttemptOutcome = { delivered: false, error: 'not_attempted' };
+  for (let i = 0; i < INLINE_ATTEMPTS; i++) {
+    if (INLINE_BACKOFF_MS[i] > 0) await sleep(INLINE_BACKOFF_MS[i]);
+    lastOutcome = await postTalentAcceptedOnce(cardId, talentId);
+    if (lastOutcome.delivered) break;
+  }
+  if (!lastOutcome.delivered) {
+    console.warn('[squadhire-webhook] talent-accepted failed after retries', lastOutcome.error);
+  }
+  if (recipientRowId) {
+    await persistTalentAcceptedResult(recipientRowId, lastOutcome, INLINE_ATTEMPTS);
+  }
+  return lastOutcome;
+}
+
+// ------------------------------------------------------------
+// Public: background sweeper for talent acceptances that never
+// reached SquadHire. Mirrors startManualAssignmentSweeper.
+// ------------------------------------------------------------
+
+export function startTalentAcceptedNotifySweeper(): NodeJS.Timeout {
+  const tick = async () => {
+    try {
+      const { data: rows, error } = await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .select('id, card_id, external_user_id')
+        .eq('status', 'accepted')
+        .is('squadhire_acceptance_notified_at', null)
+        .lt('squadhire_acceptance_notify_attempts', MAX_SYNC_ATTEMPTS)
+        .order('created_at', { ascending: true })
+        .limit(SWEEPER_BATCH_SIZE);
+
+      if (error) {
+        console.error('[squadhire-webhook] talent-accepted sweeper query failed', error);
+        return;
+      }
+      if (!rows || rows.length === 0) return;
+
+      for (const row of rows as { id: string; card_id: string; external_user_id: string }[]) {
+        const outcome = await postTalentAcceptedOnce(row.card_id, row.external_user_id);
+        await persistTalentAcceptedResult(row.id, outcome, 1);
+      }
+    } catch (err) {
+      console.error('[squadhire-webhook] talent-accepted sweeper tick errored', err);
+    }
+  };
+
+  const handle = setInterval(tick, SWEEPER_INTERVAL_MS);
+  setTimeout(tick, 15_000);
+  return handle;
 }
 
 // ------------------------------------------------------------
