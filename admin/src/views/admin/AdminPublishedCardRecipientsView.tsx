@@ -385,7 +385,7 @@ export default function AdminPublishedCardRecipientsView({
       : 'Cancelled';
   const distLabel = card.distribution === 'manual' ? 'Published' : 'Broadcast';
   const publisher = card.published_by_user;
-  const isUnreviewed = bucket === 'assigned' && !card.admin_reviewed_at;
+  const isUnreviewed = (bucket === 'assigned' || bucket === 'selected') && !card.admin_reviewed_at;
 
   // Broadcast summary info
   const partnerCount = (card.recipient_counts?.partners?.pending ?? 0) +
@@ -441,7 +441,11 @@ export default function AdminPublishedCardRecipientsView({
                   <span
                     className="sh-status-pill"
                     style={{ backgroundColor: '#DC2626', color: 'white' }}
-                    title="A talent has been assigned to this card. Mark as reviewed to clear the badge."
+                    title={
+                      bucket === 'selected'
+                        ? 'A talent has been selected for this card. Mark as reviewed to clear the badge.'
+                        : 'A talent has been assigned to this card. Mark as reviewed to clear the badge.'
+                    }
                   >
                     NEW
                   </span>
@@ -893,10 +897,10 @@ export default function AdminPublishedCardRecipientsView({
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Assigning…
+                Selecting…
               </>
             ) : (
-              `Assign (${checkedIds.size})`
+              `Select (${checkedIds.size})`
             )}
           </button>
         </div>
