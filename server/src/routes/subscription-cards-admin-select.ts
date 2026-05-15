@@ -115,8 +115,10 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
         .is('passed_over_at', null);
     }
 
-    // Transition card to assigned
-    const cardUpdate: Record<string, unknown> = { state: 'assigned' };
+    // Transition card to assigned (Selected bucket — selected_recipient_id stays null).
+    // Reset admin_reviewed_at so the "NEW" badge re-opens on the Selected tab for
+    // every fresh selection event (handles first-time move + re-assign after undo).
+    const cardUpdate: Record<string, unknown> = { state: 'assigned', admin_reviewed_at: null };
     if (card.state === 'published') cardUpdate.assigned_at = now;
     await supabaseAdmin
       .from('subscription_cards')

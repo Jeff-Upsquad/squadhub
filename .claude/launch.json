@@ -306,6 +306,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/eager-hamilton-5ed9e9/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3001"],
       "port": 3001
+    },
+    {
+      "name": "Youthful Rubin Admin",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/youthful-rubin-fd968b/admin && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3001"],
+      "port": 3001
     }
   ]
 }

@@ -263,6 +263,11 @@ export default function AdminPublishedCards() {
     [bucketed.assigned],
   );
 
+  const unreviewedSelectedCount = useMemo(
+    () => bucketed.selected.filter((c) => !c.admin_reviewed_at).length,
+    [bucketed.selected],
+  );
+
   const filteredCards = useMemo(
     () => stateFilter === 'all' ? cards : bucketed[stateFilter],
     [cards, bucketed, stateFilter],
@@ -359,7 +364,7 @@ export default function AdminPublishedCards() {
           {(activeTab === 'published' || activeTab === 'archive') && (
             <div className="overflow-x-auto">
               <div className="sh-tab-bar">
-                {([['all', 'All'], ['active', 'Active'], ['assigned', 'Assigned'], ['selected', 'Selected'], ['cancelled', 'Cancelled']] as const).map(([key, label]) => (
+                {([['all', 'All'], ['active', 'Active'], ['selected', 'Selected'], ['assigned', 'Assigned'], ['cancelled', 'Cancelled']] as const).map(([key, label]) => (
                   <button
                     key={key}
                     type="button"
@@ -368,16 +373,19 @@ export default function AdminPublishedCards() {
                     className="sh-tab"
                   >
                     {label} <span className="opacity-70">({stateCounts[key]})</span>
-                    {key === 'assigned' && unreviewedAssignedCount > 0 && (
+                    {((key === 'assigned' && unreviewedAssignedCount > 0) ||
+                      (key === 'selected' && unreviewedSelectedCount > 0)) && (
                       <span
                         className="ml-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none"
                         style={{
                           background: '#DC2626',
                           color: 'white',
                         }}
-                        title={`${unreviewedAssignedCount} new — admin review pending`}
+                        title={`${
+                          key === 'assigned' ? unreviewedAssignedCount : unreviewedSelectedCount
+                        } new — admin review pending`}
                       >
-                        {unreviewedAssignedCount} new
+                        {key === 'assigned' ? unreviewedAssignedCount : unreviewedSelectedCount} new
                       </span>
                     )}
                   </button>
@@ -686,10 +694,22 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
             );
           }
           if (bucket === 'selected') {
+            const isUnreviewed = !card.admin_reviewed_at;
             return (
-              <span className="sh-status-pill" style={{ backgroundColor: '#E0F2FE', color: '#075985' }}>
-                Selected
-              </span>
+              <>
+                <span className="sh-status-pill" style={{ backgroundColor: '#E0F2FE', color: '#075985' }}>
+                  Selected
+                </span>
+                {isUnreviewed && (
+                  <span
+                    className="sh-status-pill"
+                    style={{ backgroundColor: '#DC2626', color: 'white' }}
+                    title="A talent has been selected for this card. Click Review to open it."
+                  >
+                    NEW
+                  </span>
+                )}
+              </>
             );
           }
           return null;
