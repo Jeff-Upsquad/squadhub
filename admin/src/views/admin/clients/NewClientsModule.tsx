@@ -18,6 +18,7 @@ import { PIPELINE_STATUSES } from '@squadhub/shared';
 import SliderPanel from './SliderPanel';
 import LeadStatusChips, { STATUS_META } from '../../../components/LeadStatusChips';
 import AdminLeadSubscriptionsSection from './AdminLeadSubscriptionsSection';
+import AdminLeadCardsSection from './AdminLeadCardsSection';
 import { openLeadInCRM } from '../../../utils/squadCrm';
 
 const SERVICE_TYPE_LABEL: Record<string, string> = {
@@ -260,6 +261,38 @@ export default function NewClientsModule() {
               {statusError && <p className="text-xs text-red-600">{statusError}</p>}
             </div>
 
+            {(() => {
+              const status = selectedSubmission.status as SubmissionStatus;
+              if (status === 'converted' || status === 'onboarding' || status === 'closed') return null;
+              const disabledReason = !selectedCountry
+                ? 'Set a billing country first'
+                : selectedSubs.length === 0
+                  ? 'Add at least one subscription first'
+                  : null;
+              const canConvert = !disabledReason;
+              return (
+                <div className="space-y-1.5">
+                  <button
+                    type="button"
+                    disabled={!canConvert || statusMutation.isPending}
+                    onClick={() => {
+                      statusMutation.mutate(
+                        { id: selectedSubmission.id, status: 'converted' },
+                        { onSuccess: () => closeSlider() },
+                      );
+                    }}
+                    title={disabledReason || 'Materialise this lead into a client and copy its subscriptions over.'}
+                    className="w-full rounded-md bg-[#15803D] px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#166534] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {statusMutation.isPending ? 'Converting…' : 'Convert to Client'}
+                  </button>
+                  {disabledReason && (
+                    <p className="text-center text-[11px] text-[#90A1B9]">{disabledReason}</p>
+                  )}
+                </div>
+              );
+            })()}
+
             <AdminLeadSubscriptionsSection
               submissionId={selectedSubmission.id}
               country={selectedCountry}
@@ -267,6 +300,8 @@ export default function NewClientsModule() {
               selected={selectedSubs}
               disabled={subsLocked}
             />
+
+            <AdminLeadCardsSection submissionId={selectedSubmission.id} />
 
             <div className="space-y-3">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Sales Attribution</h4>
