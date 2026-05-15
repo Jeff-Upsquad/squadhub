@@ -30,6 +30,7 @@ router.get('/', async (req: Request, res: Response) => {
     const sourceParam = String(req.query.source || '').trim();
     const archivedParam = String(req.query.archived || '').trim();
     const showArchived = archivedParam === 'true';
+    const submissionIdParam = String(req.query.submission_id || '').trim();
 
     let query = supabaseAdmin
       .from('subscription_cards')
@@ -61,6 +62,65 @@ router.get('/', async (req: Request, res: Response) => {
       query = query.eq('source', sourceParam);
     }
     if (publishedBy) query = query.eq('published_by', publishedBy);
+
+    // Scope to a single lead's cards. The Lead detail panel calls this to
+    // list every card associated with a submission via any of the known
+    // linking paths:
+    //   1. submission_subscription_id — the canonical link for cards
+    //      published from a staged subscription on the lead.
+    //   2. customer_email — request/shared_form/landing_page_form cards
+    //      from /connect carry the customer's email but do not point at
+    //      a submission row, so we have to match on that field.
+    //   3. customer_phone (digit suffix) — same as (2) for phone-led leads.
+    if (submissionIdParam) {
+      const { data: leadRow } = await supabaseAdmin
+        .from('client_submissions')
+        .select('email, contact_number')
+        .eq('id', submissionIdParam)
+        .maybeSingle();
+
+      const { data: stagedForSubmission } = await supabaseAdmin
+        .from('client_submission_subscriptions')
+        .select('id')
+        .eq('submission_id', submissionIdParam);
+      const allowedStagedIds = (stagedForSubmission || []).map((r: any) => r.id);
+
+      const matchingCardIds = new Set<string>();
+      const phoneDigits = leadRow?.contact_number
+        ? String(leadRow.contact_number).replace(/\D/g, '')
+        : '';
+      const phoneSuffix = phoneDigits.length >= 7 ? phoneDigits : '';
+
+      const [byStaged, byEmail, byPhone] = await Promise.all([
+        allowedStagedIds.length > 0
+          ? supabaseAdmin
+              .from('subscription_cards')
+              .select('id')
+              .in('submission_subscription_id', allowedStagedIds)
+          : Promise.resolve({ data: [] as { id: string }[] }),
+        leadRow?.email
+          ? supabaseAdmin
+              .from('subscription_cards')
+              .select('id')
+              .ilike('customer_email', leadRow.email.trim())
+          : Promise.resolve({ data: [] as { id: string }[] }),
+        phoneSuffix
+          ? supabaseAdmin
+              .from('subscription_cards')
+              .select('id')
+              .ilike('customer_phone', `%${phoneSuffix}`)
+          : Promise.resolve({ data: [] as { id: string }[] }),
+      ]);
+      (byStaged.data || []).forEach((r: any) => matchingCardIds.add(r.id));
+      (byEmail.data || []).forEach((r: any) => matchingCardIds.add(r.id));
+      (byPhone.data || []).forEach((r: any) => matchingCardIds.add(r.id));
+
+      if (matchingCardIds.size === 0) {
+        res.json({ success: true, data: [] });
+        return;
+      }
+      query = query.in('id', Array.from(matchingCardIds));
+    }
 
     const { data: cards, error } = await query;
     if (error) {
