@@ -927,7 +927,7 @@ function SecondaryCardsSection({
             const isRecalled = !!sc.recalled_at;
             const stateColor = sc.state === 'published' ? '#10B981' : isRecalled ? '#EA580C' : '#6B7280';
             const stateLabel = sc.state === 'published' ? 'Active' : isRecalled ? 'Recalled' : 'Closed';
-            const distLabel = sc.distribution === 'manual' ? 'Published' : 'Broadcast';
+            const distLabel = sc.distribution === 'manual' ? 'Soft Published' : 'Broadcast';
             const partners = sc.recipient_counts?.partners ?? { pending: 0, accepted: 0, rejected: 0 };
             const talents = sc.recipient_counts?.talents ?? { accepted: 0, rejected: 0 };
             return (
@@ -990,7 +990,7 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
     : '';
   const stateColor = activeCard.state === 'published' ? '#10B981' : '#6B7280';
   const stateLabel = activeCard.state === 'published' ? 'Active' : 'Cancelled';
-  const distLabel = activeCard.distribution === 'manual' ? 'Published' : 'Broadcast';
+  const distLabel = activeCard.distribution === 'manual' ? 'Soft Published' : 'Broadcast';
   const publisher = card.published_by_user;
   const sourceBadge =
     card.source === 'request' ? 'From request' : card.source === 'custom' ? 'Custom' : null;

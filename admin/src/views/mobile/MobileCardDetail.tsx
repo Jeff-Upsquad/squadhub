@@ -321,7 +321,7 @@ export default function MobileCardDetail({
                 {isActive ? 'Active' : isAssigned ? 'Assigned' : 'Cancelled'}
               </span>
               <span className="sh-status-pill" style={{ backgroundColor: 'var(--color-sh-cream)', color: 'var(--color-sh-ink-subtle)' }}>
-                {isManual ? 'Published' : 'Broadcast'}
+                {isManual ? 'Soft Published' : 'Broadcast'}
               </span>
               {isArchived && (
                 <span className="sh-status-pill" style={{ backgroundColor: '#F2EBFE', color: '#6B21A8' }}>
@@ -563,7 +563,7 @@ export default function MobileCardDetail({
                                 {scActive ? 'Active' : scRecalled ? 'Recalled' : 'Closed'}
                               </span>
                               <span className="text-[9px] font-semibold text-[var(--color-sh-ink-faint)]">
-                                {sc.distribution === 'manual' ? 'Published' : 'Broadcast'}
+                                {sc.distribution === 'manual' ? 'Soft Published' : 'Broadcast'}
                               </span>
                             </div>
                             <p className="text-xs text-[var(--color-sh-ink)]">
