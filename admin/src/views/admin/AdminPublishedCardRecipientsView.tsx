@@ -383,7 +383,7 @@ export default function AdminPublishedCardRecipientsView({
       : bucket === 'selected' ? 'Selected'
       : bucket === 'assigned' ? 'Assigned'
       : 'Cancelled';
-  const distLabel = card.distribution === 'manual' ? 'Published' : 'Broadcast';
+  const distLabel = card.distribution === 'manual' ? 'Soft Published' : 'Broadcast';
   const publisher = card.published_by_user;
   const isUnreviewed = (bucket === 'assigned' || bucket === 'selected') && !card.admin_reviewed_at;
 
