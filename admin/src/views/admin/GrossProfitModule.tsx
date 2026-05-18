@@ -66,7 +66,7 @@ function formatPct(pct: number): string {
 function tierBadge(tier: string | undefined): string {
   if (tier === 'Junior') return 'bg-[#F1F5F9] text-[#475569]';
   if (tier === 'Pro') return 'bg-[#EEF2FF] text-[#4338CA]';
-  if (tier === 'Elite') return 'bg-[#FEF3C7] text-[#A16207]';
+  if (tier === 'Elite' || tier === 'Top Talents') return 'bg-[#FEF3C7] text-[#A16207]';
   return 'bg-[#F1F5F9] text-[#64748B]';
 }
 

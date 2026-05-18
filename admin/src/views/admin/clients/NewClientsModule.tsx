@@ -28,11 +28,12 @@ const SERVICE_TYPE_LABEL: Record<string, string> = {
 };
 
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
-const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Elite'];
+const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Elite', 'Top Talents'];
 const TIER_COLOR: Record<SubscriptionTier, string> = {
   Junior: 'bg-slate-100 text-slate-600',
   Pro: 'bg-indigo-100 text-indigo-700',
   Elite: 'bg-yellow-100 text-yellow-700',
+  'Top Talents': 'bg-yellow-100 text-yellow-700',
 };
 
 type SubmissionWithStaged = ClientSubmission & {

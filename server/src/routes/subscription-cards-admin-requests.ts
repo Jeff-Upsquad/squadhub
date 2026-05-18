@@ -20,8 +20,12 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
-// Map upsquad's tier vocabulary (Juniors/Pros/Elites) to SquadHub's enum
-// (Junior/Pro/Elite/Custom). Unknown values are dropped.
+// Map upsquad's tier vocabulary to SquadHub's enum
+// (Junior/Pro/Elite/Top Talents/Custom). Unknown values are dropped.
+// 'Elite' is being renamed to 'Top Talents' — Phase 1 accepts both old and
+// new tokens from upsquad (since both sides deploy independently). Once
+// upsquad has fully cut over, the legacy `elite`/`elites` keys can be
+// removed in Phase 3.
 const TIER_MAP: Record<string, string> = {
   juniors: 'Junior',
   junior: 'Junior',
@@ -29,6 +33,10 @@ const TIER_MAP: Record<string, string> = {
   pro: 'Pro',
   elites: 'Elite',
   elite: 'Elite',
+  'top talents': 'Top Talents',
+  'top_talents': 'Top Talents',
+  toptalents: 'Top Talents',
+  'top talent': 'Top Talents',
   custom: 'Custom',
 };
 function normalizeTiers(raw: string): string[] {

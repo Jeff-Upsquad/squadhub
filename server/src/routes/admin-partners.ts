@@ -252,7 +252,7 @@ router.get('/by-client/:clientId', async (req: Request, res: Response) => {
 // PATCH /admin/partners/:userId/targeting — set partner's subscription-card
 // targeting profile (tier / experience / location / languages).
 const targetingSchema = z.object({
-  tier: z.enum(['Junior', 'Pro', 'Elite', 'Custom']).nullable(),
+  tier: z.enum(['Junior', 'Pro', 'Elite', 'Top Talents', 'Custom']).nullable(),
   min_experience_years: z.number().int().min(0).nullable(),
   country_id: z.string().uuid().nullable(),
   state_region: z.string().max(100).nullable(),
