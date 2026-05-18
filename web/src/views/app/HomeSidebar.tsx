@@ -28,6 +28,7 @@ interface HomeSidebarProps {
   onSelectChannel: (channelId: string) => void;
   onCreateChannel: () => void;
   onOpenSpaces: () => void;
+  onOpenSearch: () => void;
 }
 
 // ---- Favorite icon helper ----
@@ -165,6 +166,7 @@ export default function HomeSidebar({
   onSelectChannel,
   onCreateChannel,
   onOpenSpaces,
+  onOpenSearch,
 }: HomeSidebarProps) {
   const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
   const { data: favorites, isLoading: favoritesLoading } = useFavorites(workspaceId);
@@ -234,16 +236,20 @@ export default function HomeSidebar({
 
       {/* Search */}
       <div className="px-3 pt-2 pb-2 border-b border-[var(--sh-hair)] relative">
-        <svg className="absolute left-[20px] top-1/2 -translate-y-1/2 h-[13px] w-[13px] text-[var(--sh-ink-4)]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+        <svg className="absolute left-[20px] top-1/2 -translate-y-1/2 h-[13px] w-[13px] text-[var(--sh-ink-4)] pointer-events-none z-[1]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
           <circle cx="11" cy="11" r="7" />
           <path d="m21 21-4.3-4.3" />
         </svg>
-        <input
-          className="w-full pl-[30px] pr-10 py-[7px] bg-[var(--surface)] border border-[var(--sh-hair)] rounded-lg text-[12.5px] text-[var(--sh-ink)] outline-none placeholder:text-[var(--sh-ink-4)] focus:border-[var(--sh-ink-4)]"
-          placeholder="Search or jump to…"
-        />
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          className="w-full pl-[30px] pr-10 py-[7px] bg-[var(--surface)] border border-[var(--sh-hair)] rounded-lg text-[12.5px] text-left text-[var(--sh-ink-4)] outline-none hover:border-[var(--sh-ink-4)] focus:border-[var(--sh-ink-4)] transition"
+          aria-label="Open workspace search"
+        >
+          Search or jump to…
+        </button>
         <span
-          className="absolute right-[18px] top-1/2 -translate-y-1/2 text-[10px] text-[var(--sh-ink-4)] bg-[var(--sh-hair-3)] border border-[var(--sh-hair)] rounded px-[4px] py-[1px]"
+          className="absolute right-[18px] top-1/2 -translate-y-1/2 text-[10px] text-[var(--sh-ink-4)] bg-[var(--sh-hair-3)] border border-[var(--sh-hair)] rounded px-[4px] py-[1px] pointer-events-none"
           style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)' }}
         >⌘K</span>
       </div>

@@ -319,6 +319,18 @@
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/stupefied-edison-5be1be/web && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3082"],
       "port": 3082,
       "autoPort": true
+    },
+    {
+      "name": "Clever Poincare Server",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/clever-poincare-b90980/server && PORT=4005 exec npm run dev"],
+      "port": 4005
+    },
+    {
+      "name": "Clever Poincare Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/clever-poincare-b90980/web && INTERNAL_API_URL=http://localhost:4005 exec npx next dev -p 3003"],
+      "port": 3003
     }
   ]
 }

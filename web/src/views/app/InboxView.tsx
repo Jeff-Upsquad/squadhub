@@ -6,6 +6,7 @@ import { useWorkspaceStore } from '../../stores/workspaceStore';
 import type { HomeView } from '../../layouts/MainLayout';
 import InboxTaskDetail from './inbox/InboxTaskDetail';
 import InboxMessageDetail from './inbox/InboxMessageDetail';
+import ViewSearchInput from '../../components/pm/ViewSearchInput';
 
 type Notification = {
   id: string;
@@ -95,6 +96,7 @@ export default function InboxView({
 
   const [filter, setFilter] = useState<Filter>('all');
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const { data: items = [], isLoading } = useQuery<Notification[]>({
     queryKey: ['notifications', 'list'],
@@ -166,12 +168,17 @@ export default function InboxView({
   });
 
   const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return items.filter((it) => {
-      if (filter === 'unread') return !it.is_read;
-      if (filter === 'mentions') return isMention(it.type);
+      if (filter === 'unread' && it.is_read) return false;
+      if (filter === 'mentions' && !isMention(it.type)) return false;
+      if (q) {
+        const haystack = `${it.title || ''} ${it.body || ''} ${it.actor?.display_name || ''}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
       return true;
     });
-  }, [items, filter]);
+  }, [items, filter, searchQuery]);
 
   const groups = useMemo(() => {
     const out: { needs: Notification[]; fyi: Notification[] } = { needs: [], fyi: [] };
@@ -211,6 +218,7 @@ export default function InboxView({
           </div>
           <div className="pill" data-active={filter === 'mentions'} onClick={() => setFilter('mentions')}>Mentions</div>
           <div style={{ flex: 1 }} />
+          <ViewSearchInput value={searchQuery} onChange={setSearchQuery} placeholder="Search notifications..." />
           <button
             type="button"
             className="pill"

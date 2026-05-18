@@ -8,6 +8,7 @@ import TaskGroupCard from './TaskGroupCard';
 import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, type GroupBy } from '../../../lib/taskGrouping';
 import FilterBar from '../../../components/pm/FilterBar';
 import GroupByDropdown from '../../../components/pm/GroupByDropdown';
+import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import {
   EMPTY_FILTER,
   countActiveFilters,
@@ -30,6 +31,7 @@ export default function FolderPage() {
   const focusedTodayIds = usePMStore((s) => s.focusedTodayIds);
   const focusedTodayDate = usePMStore((s) => s.focusedTodayDate);
   const [listFilter, setListFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const groupScopeKey = activeFolderId ? `folder:${activeFolderId}` : '';
   const groupBy = (groupScopeKey && groupByScope[groupScopeKey]) || 'none';
 
@@ -91,8 +93,10 @@ export default function FolderPage() {
     let arr = allTasks;
     if (listFilter !== 'all') arr = arr.filter((t) => t.list?.id === listFilter);
     arr = filterTasks(arr, filters, tz);
+    const q = searchQuery.trim().toLowerCase();
+    if (q) arr = arr.filter((t) => t.title.toLowerCase().includes(q));
     return arr;
-  }, [allTasks, listFilter, filters, tz]);
+  }, [allTasks, listFilter, filters, tz, searchQuery]);
 
   const optionSourceTasks = useMemo(
     () => (listFilter === 'all' ? allTasks : allTasks.filter((t) => t.list?.id === listFilter)),
@@ -145,6 +149,7 @@ export default function FolderPage() {
           <span className="text-sm font-medium text-[var(--sh-ink)]">{folder?.name || 'Folder'}</span>
           <span className="text-xs text-[var(--sh-ink-3)]">· {totalCount} task{totalCount === 1 ? '' : 's'}</span>
         </div>
+        <ViewSearchInput value={searchQuery} onChange={setSearchQuery} />
       </div>
 
       {/* List filter pills + Filter */}

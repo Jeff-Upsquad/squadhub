@@ -13,6 +13,7 @@ import ManageMembersModal from './ManageMembersModal';
 import TaskCreatePanel from './TaskCreatePanel';
 import FilterBar from '../../../components/pm/FilterBar';
 import GroupByDropdown from '../../../components/pm/GroupByDropdown';
+import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import { LIST_GROUP_BY_OPTIONS, SORT_BY_OPTIONS, type SortBy } from '../../../lib/taskGrouping';
 import { EMPTY_FILTER, deriveAssigneeOptions, deriveTagOptions } from '../../../lib/filters';
 
@@ -150,18 +151,7 @@ export default function ListPage() {
         {/* Right: actions */}
         <div className="flex items-center gap-2">
           {/* Search input */}
-          <div className="lv-search">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search tasks..."
-            />
-            <kbd>/</kbd>
-          </div>
+          <ViewSearchInput value={searchQuery} onChange={setSearchQuery} />
 
           {/* Settings button */}
           {canAccessSettings && (
