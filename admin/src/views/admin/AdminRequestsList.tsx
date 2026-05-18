@@ -48,11 +48,15 @@ export default function AdminRequestsList() {
     (r: any) => ({ ...r, source: 'request' as const }),
   );
 
-  // Form submissions (Shared Form via /connect, plus future Landing Page
-  // entries from the marketing site) live in subscription_cards as drafts.
-  // One query fetches both sources together; the per-row source field drives
-  // the badge.
+  // Form submissions (Shared Form via /connect, plus Landing Page entries
+  // from the marketing site) live in subscription_cards. Draft cards drive
+  // the Active sub-tab; published/assigned/closed cards drive Published and
+  // Declined. Two queries per source — drafts and non-drafts — because the
+  // server endpoint excludes drafts unless explicitly asked.
   function adaptCardToRequest(c: any, source: 'shared_form' | 'landing_page_form'): SubscriptionRequest {
+    let status: SubscriptionRequest['status'] = 'pending';
+    if (c.state === 'published' || c.state === 'assigned') status = 'published';
+    else if (c.state === 'closed') status = 'cancelled';
     return {
       id: c.id,
       service_type: c.service_type || '',
@@ -64,9 +68,7 @@ export default function AdminRequestsList() {
       email: c.customer_email || '',
       company: c.brand_name || c.customer_company || '',
       phone: c.customer_phone || '',
-      // Drafts are pending until admin publishes; once published the card
-      // moves out of state='draft' and stops appearing in this query.
-      status: 'pending',
+      status,
       created_at: c.created_at || new Date().toISOString(),
       card_id: c.id,
       source,
@@ -89,12 +91,32 @@ export default function AdminRequestsList() {
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
   });
-  const sharedFormRequests: SubscriptionRequest[] = (sharedRes?.data || []).map(
-    (c: any) => adaptCardToRequest(c, 'shared_form'),
-  );
-  const landingPageRequests: SubscriptionRequest[] = (lpRes?.data || []).map(
-    (c: any) => adaptCardToRequest(c, 'landing_page_form'),
-  );
+  // Non-draft cards from the same two form sources — surface published,
+  // assigned, and closed cards in the Published / Declined sub-tabs.
+  const { data: sharedPublishedRes, isLoading: sharedPublishedLoading } = useQuery({
+    queryKey: ['admin-shared-form-submissions', 'published', search],
+    queryFn: () => {
+      const params: Record<string, string> = { source: 'shared_form' };
+      if (search.trim()) params.search = search.trim();
+      return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
+    },
+  });
+  const { data: lpPublishedRes, isLoading: lpPublishedLoading } = useQuery({
+    queryKey: ['admin-landing-page-submissions', 'published', search],
+    queryFn: () => {
+      const params: Record<string, string> = { source: 'landing_page_form' };
+      if (search.trim()) params.search = search.trim();
+      return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
+    },
+  });
+  const sharedFormRequests: SubscriptionRequest[] = [
+    ...(sharedRes?.data || []).map((c: any) => adaptCardToRequest(c, 'shared_form')),
+    ...(sharedPublishedRes?.data || []).map((c: any) => adaptCardToRequest(c, 'shared_form')),
+  ];
+  const landingPageRequests: SubscriptionRequest[] = [
+    ...(lpRes?.data || []).map((c: any) => adaptCardToRequest(c, 'landing_page_form')),
+    ...(lpPublishedRes?.data || []).map((c: any) => adaptCardToRequest(c, 'landing_page_form')),
+  ];
 
   const allRequests: SubscriptionRequest[] = [
     ...upsquadRequests,
@@ -232,7 +254,7 @@ export default function AdminRequestsList() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 pb-8">
-        {isLoading || sharedLoading || lpLoading ? (
+        {isLoading || sharedLoading || lpLoading || sharedPublishedLoading || lpPublishedLoading ? (
           <div className="sh-card py-16 text-center">
             <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading…</p>
           </div>
@@ -286,7 +308,9 @@ function RequestRow({
   const isFormSubmission =
     request.source === 'shared_form' || request.source === 'landing_page_form';
   const buttonLabel = isFormSubmission
-    ? 'Review'
+    ? request.status === 'pending'
+      ? 'Review'
+      : 'View Card'
     : hasCard
     ? 'View Card'
     : request.status === 'pending'
@@ -370,7 +394,10 @@ function RequestRow({
           {request.status}
         </span>
         {isFormSubmission ? (
-          <button onClick={onAction} className="sh-btn-primary sh-btn-primary-sm">
+          <button
+            onClick={onAction}
+            className={request.status === 'pending' ? 'sh-btn-primary sh-btn-primary-sm' : 'sh-btn-info'}
+          >
             {buttonLabel}
           </button>
         ) : hasCard ? (
