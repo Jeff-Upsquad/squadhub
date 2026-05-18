@@ -2,12 +2,28 @@ import { Router, Request, Response } from 'express';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
-import { isWorkspaceAdmin } from '../../middleware/permissions';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
 router.use(requireAuth);
 router.use(requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_staff'));
+
+function logStep(step: string, error: unknown) {
+  if (error) console.error(`[pm/search] ${step}:`, error);
+}
+
+// Resolve workspace-scoped admin status (workspace_members can have multiple rows
+// per user across workspaces, so we filter by workspace_id rather than using .single()).
+async function isAdminInWorkspace(userId: string, workspaceId: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from('workspace_members')
+    .select('role')
+    .eq('user_id', userId)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+  logStep('isAdminInWorkspace', error);
+  return data?.role === 'admin' || data?.role === 'super_admin';
+}
 
 // GET /pm/search?workspace_id=xxx&q=...&limit=25
 // Workspace-wide task title search, scoped to lists the user can access.
@@ -31,11 +47,12 @@ router.get('/search', async (req: Request, res: Response) => {
     const userId = req.userId!;
 
     // 1. All non-deleted spaces in this workspace
-    const { data: workspaceSpaces } = await supabaseAdmin
+    const { data: workspaceSpaces, error: spacesErr } = await supabaseAdmin
       .from('spaces')
       .select('id, name, created_by')
       .eq('workspace_id', workspaceId)
       .is('deleted_at', null);
+    logStep('spaces', spacesErr);
 
     const workspaceSpaceIds = (workspaceSpaces || []).map((s: any) => s.id);
     if (workspaceSpaceIds.length === 0) {
@@ -44,25 +61,22 @@ router.get('/search', async (req: Request, res: Response) => {
     }
 
     // 2. Resolve accessible list IDs in this workspace
-    const admin = await isWorkspaceAdmin(userId);
+    const admin = await isAdminInWorkspace(userId, workspaceId);
 
     let accessibleListIds: string[] = [];
 
     if (admin) {
       // Admins see everything in the workspace
-      const { data: allLists } = await supabaseAdmin
+      const { data: allLists, error: allListsErr } = await supabaseAdmin
         .from('lists')
         .select('id')
         .in('space_id', workspaceSpaceIds)
         .is('deleted_at', null);
+      logStep('admin allLists', allListsErr);
       accessibleListIds = (allLists || []).map((l: any) => l.id);
     } else {
       // Resolve via creator-of + resource_memberships at each level
-      const [
-        { data: spaceMems },
-        { data: folderMems },
-        { data: listMems },
-      ] = await Promise.all([
+      const [memSpaceRes, memFolderRes, memListRes] = await Promise.all([
         supabaseAdmin
           .from('resource_memberships')
           .select('resource_id')
@@ -79,48 +93,53 @@ router.get('/search', async (req: Request, res: Response) => {
           .eq('resource_type', 'list')
           .eq('user_id', userId),
       ]);
+      logStep('memSpace', memSpaceRes.error);
+      logStep('memFolder', memFolderRes.error);
+      logStep('memList', memListRes.error);
 
       const accessibleSpaceIds = new Set<string>([
-        ...(spaceMems || []).map((m: any) => m.resource_id),
+        ...(memSpaceRes.data || []).map((m: any) => m.resource_id),
         ...(workspaceSpaces || [])
           .filter((s: any) => s.created_by === userId)
           .map((s: any) => s.id),
       ]);
 
       // Lists in accessible spaces (space-level inheritance) — scoped to this workspace
-      let listsViaSpace: { id: string; folder_id: string | null }[] = [];
+      let listsViaSpace: any[] = [];
       if (accessibleSpaceIds.size > 0) {
-        const { data } = await supabaseAdmin
+        const r = await supabaseAdmin
           .from('lists')
           .select('id, folder_id, space_id')
           .in('space_id', Array.from(accessibleSpaceIds))
           .is('deleted_at', null);
-        listsViaSpace = (data || []) as any[];
+        logStep('listsViaSpace', r.error);
+        listsViaSpace = r.data || [];
       }
 
       // Folders the user has direct access to (creator or member), scoped to workspace
-      const folderMemIds = (folderMems || []).map((m: any) => m.resource_id);
-      let accessibleFolderIds = new Set<string>();
+      const folderMemIds = (memFolderRes.data || []).map((m: any) => m.resource_id);
+      const accessibleFolderIds = new Set<string>();
       if (folderMemIds.length > 0) {
-        const { data: folderRows } = await supabaseAdmin
+        const r = await supabaseAdmin
           .from('folders')
           .select('id, space_id')
           .in('id', folderMemIds)
           .is('deleted_at', null);
-        for (const f of folderRows || []) {
+        logStep('folderRows', r.error);
+        for (const f of r.data || []) {
           if (workspaceSpaceIds.includes((f as any).space_id)) {
             accessibleFolderIds.add((f as any).id);
           }
         }
       }
-      // Plus folders the user created
       {
-        const { data: createdFolders } = await supabaseAdmin
+        const r = await supabaseAdmin
           .from('folders')
           .select('id, space_id')
           .eq('created_by', userId)
           .is('deleted_at', null);
-        for (const f of createdFolders || []) {
+        logStep('createdFolders', r.error);
+        for (const f of r.data || []) {
           if (workspaceSpaceIds.includes((f as any).space_id)) {
             accessibleFolderIds.add((f as any).id);
           }
@@ -128,37 +147,40 @@ router.get('/search', async (req: Request, res: Response) => {
       }
 
       // Lists in accessible folders
-      let listsViaFolder: { id: string }[] = [];
+      let listsViaFolder: any[] = [];
       if (accessibleFolderIds.size > 0) {
-        const { data } = await supabaseAdmin
+        const r = await supabaseAdmin
           .from('lists')
           .select('id')
           .in('folder_id', Array.from(accessibleFolderIds))
           .is('deleted_at', null);
-        listsViaFolder = (data || []) as any[];
+        logStep('listsViaFolder', r.error);
+        listsViaFolder = r.data || [];
       }
 
       // Lists with direct membership — scope to workspace
-      const listMemIds = (listMems || []).map((m: any) => m.resource_id);
-      let listsViaDirect: { id: string }[] = [];
+      const listMemIds = (memListRes.data || []).map((m: any) => m.resource_id);
+      let listsViaDirect: any[] = [];
       if (listMemIds.length > 0) {
-        const { data } = await supabaseAdmin
+        const r = await supabaseAdmin
           .from('lists')
           .select('id, space_id')
           .in('id', listMemIds)
           .is('deleted_at', null);
-        listsViaDirect = ((data || []) as any[]).filter((l) =>
+        logStep('listsViaDirect', r.error);
+        listsViaDirect = (r.data || []).filter((l: any) =>
           workspaceSpaceIds.includes(l.space_id),
         );
       }
 
       // Lists the user created — scope to workspace
-      const { data: createdLists } = await supabaseAdmin
+      const createdListsRes = await supabaseAdmin
         .from('lists')
         .select('id, space_id')
         .eq('created_by', userId)
         .is('deleted_at', null);
-      const listsViaCreator = ((createdLists || []) as any[]).filter((l) =>
+      logStep('createdLists', createdListsRes.error);
+      const listsViaCreator = (createdListsRes.data || []).filter((l: any) =>
         workspaceSpaceIds.includes(l.space_id),
       );
 
@@ -189,6 +211,8 @@ router.get('/search', async (req: Request, res: Response) => {
       .limit(limit);
 
     if (error) {
+      console.error('[pm/search] tasks query error:', error);
+      console.error('[pm/search] accessibleListIds count:', accessibleListIds.length);
       res.status(500).json({ success: false, error: error.message });
       return;
     }
