@@ -230,10 +230,29 @@ export default function AdminPublishedCardRecipientsView({
   const markReviewedMutation = useMutation({
     mutationFn: () =>
       api.post(`/admin/subscription-cards/${card.id}/mark-reviewed`),
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
-      showToast('Marked as reviewed.', 'success');
+      queryClient.invalidateQueries({ queryKey: ['admin-submissions'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-submissions-count'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-clients'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-clients-count'] });
+      const promotion = res?.data?.data?.promotion as
+        | { action: 'promoted' | 'attached' | 'noop'; clientBusinessName?: string }
+        | undefined;
+      if (promotion?.action === 'promoted') {
+        showToast('Marked as reviewed. Lead promoted to client.', 'success');
+      } else if (promotion?.action === 'attached') {
+        const name = promotion.clientBusinessName?.trim();
+        showToast(
+          name
+            ? `Marked as reviewed. Added to existing client: ${name}.`
+            : 'Marked as reviewed. Added to existing client.',
+          'success',
+        );
+      } else {
+        showToast('Marked as reviewed.', 'success');
+      }
     },
     onError: (err: any) => {
       showToast(err?.response?.data?.error || err.message || 'Failed to mark reviewed', 'error');
