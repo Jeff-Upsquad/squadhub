@@ -99,7 +99,7 @@ interface Deliverable {
 }
 
 const VALID_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const VALID_TIERS = ['Junior', 'Pro', 'Elite', 'Custom'];
+const VALID_TIERS = ['Junior', 'Pro', 'Elite', 'Top Talents', 'Custom'];
 const VALID_PLANS = ['starter', 'basic', 'plus', 'pro', 'personal'];
 const SERVICE_TYPES = ['Designers', 'Editors', 'Designer plus Editor'];
 

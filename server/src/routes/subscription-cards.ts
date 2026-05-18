@@ -52,7 +52,7 @@ async function cascadeCloseSecondaryCards(parentCardId: string): Promise<void> {
 // Schemas
 // ------------------------------------------------------------
 const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
-const PARTNER_TIERS = ['Junior', 'Pro', 'Elite', 'Custom'] as const;
+const PARTNER_TIERS = ['Junior', 'Pro', 'Elite', 'Top Talents', 'Custom'] as const;
 
 const customDeliverableSchema = z.object({
   id: z.string(),
