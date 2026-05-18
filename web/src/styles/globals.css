@@ -305,6 +305,11 @@ body {
 .sh-view .dp-snooze-menu .row.unsnooze { color: var(--sh-ink-3); border-top: 1px solid var(--sh-hair-3); margin-top: 4px; padding-top: 8px; }
 
 .sh-view .dp-calendar { overflow-y: auto; background: var(--surface); position: relative; }
+/* Embedded variant (Home → calendar toggle): wrapper has a fixed/viewport-relative
+   height; make the calendar fill it so its inner scroll engages and auto-scroll-to-now
+   lands the current-time line near the top. */
+.sh-view .td-cal-embed { display: flex; flex-direction: column; }
+.sh-view .td-cal-embed > .dp-calendar { flex: 1; min-height: 0; }
 .sh-view .dp-cal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; border-bottom: 1px solid var(--sh-hair); position: sticky; top: 0; background: var(--surface); z-index: 4; gap: 16px; }
 .sh-view .dp-cal-head h2 { font-family: 'Instrument Serif', serif; font-size: 22px; font-weight: 400; letter-spacing: -0.01em; margin: 0 0 0 10px; color: var(--sh-ink); white-space: nowrap; }
 .sh-view .dp-cal-nav { display: flex; align-items: center; gap: 4px; min-width: 0; }

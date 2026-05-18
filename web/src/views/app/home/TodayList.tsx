@@ -4,6 +4,8 @@ import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
 import { usePMStore, todayKey } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
 import { groupTasks, isToday, type GroupBy } from '../../../lib/taskGrouping';
+import DayCalendar from '../day-planner/DayCalendar';
+import { planDateKey } from '../../../hooks/useDayPlanner';
 
 const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'none', label: 'None' },
@@ -45,8 +47,13 @@ export default function TodayList() {
   const groupBy = usePMStore((s) => s.todayListGroupBy);
   const setTodayListGroupBy = usePMStore((s) => s.setTodayListGroupBy);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
+  const view = usePMStore((s) => s.todayListView);
+  const setTodayListView = usePMStore((s) => s.setTodayListView);
   const [menuOpen, setMenuOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
+
+  const today = useMemo(() => planDateKey(), []);
+  const [viewDate, setViewDate] = useState<string>(today);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -72,123 +79,161 @@ export default function TodayList() {
     <div className="card" style={{ marginBottom: 28 }}>
       <div className="card-head">
         <h3>Today — focus list</h3>
-        <div ref={anchorRef} style={{ position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {view === 'list' && (
+            <div ref={anchorRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="td-pill-btn"
+                onClick={() => setMenuOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+              >
+                <span style={{ color: 'var(--sh-ink-3)', marginRight: 2 }}>Group:</span>
+                {currentLabel}
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+              {menuOpen && (
+                <div
+                  role="menu"
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    right: 0,
+                    minWidth: 160,
+                    background: 'var(--surface, #fff)',
+                    border: '1px solid var(--sh-hair-2, #eee)',
+                    borderRadius: 10,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+                    padding: 4,
+                    zIndex: 40,
+                    fontSize: 12.5,
+                  }}
+                >
+                  {GROUP_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setTodayListGroupBy(opt.value); setMenuOpen(false); }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        width: '100%',
+                        padding: '6px 10px',
+                        borderRadius: 6,
+                        background: groupBy === opt.value ? 'var(--sh-hair-3)' : 'transparent',
+                        color: 'var(--sh-ink)',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        border: 'none',
+                        font: 'inherit',
+                      }}
+                    >
+                      <span>{opt.label}</span>
+                      {groupBy === opt.value && (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <button
             type="button"
             className="td-pill-btn"
-            onClick={() => setMenuOpen((v) => !v)}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
+            onClick={() => setTodayListView(view === 'list' ? 'calendar' : 'list')}
+            aria-label={view === 'list' ? 'Switch to calendar view' : 'Switch to list view'}
+            title={view === 'list' ? 'Switch to calendar view' : 'Switch to list view'}
+            style={{ padding: '4px 8px' }}
           >
-            <span style={{ color: 'var(--sh-ink-3)', marginRight: 2 }}>Group:</span>
-            {currentLabel}
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 9l6 6 6-6" />
-            </svg>
+            {view === 'list' ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6" />
+                <line x1="8" y1="12" x2="21" y2="12" />
+                <line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" />
+                <line x1="3" y1="12" x2="3.01" y2="12" />
+                <line x1="3" y1="18" x2="3.01" y2="18" />
+              </svg>
+            )}
           </button>
-          {menuOpen && (
-            <div
-              role="menu"
-              style={{
-                position: 'absolute',
-                top: 'calc(100% + 6px)',
-                right: 0,
-                minWidth: 160,
-                background: 'var(--surface, #fff)',
-                border: '1px solid var(--sh-hair-2, #eee)',
-                borderRadius: 10,
-                boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-                padding: 4,
-                zIndex: 40,
-                fontSize: 12.5,
-              }}
-            >
-              {GROUP_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  role="menuitem"
-                  onClick={() => { setTodayListGroupBy(opt.value); setMenuOpen(false); }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    width: '100%',
-                    padding: '6px 10px',
-                    borderRadius: 6,
-                    background: groupBy === opt.value ? 'var(--sh-hair-3)' : 'transparent',
-                    color: 'var(--sh-ink)',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    border: 'none',
-                    font: 'inherit',
-                  }}
-                >
-                  <span>{opt.label}</span>
-                  {groupBy === opt.value && (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
-      {isLoading && (
-        <div className="today-list">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="today-item" style={{ opacity: 0.5 }}>
-              <div className="checkbox" />
-              <div>
-                <div className="ti-title" style={{ background: 'var(--sh-ink-6, #eee)', height: 12, borderRadius: 4, width: '60%' }} />
-                <div className="ti-meta" style={{ marginTop: 6 }}>
-                  <span style={{ background: 'var(--sh-ink-6, #eee)', height: 10, borderRadius: 4, width: 80, display: 'inline-block' }} />
+      {view === 'calendar' ? (
+        <div className="td-cal-embed" style={{ height: 'calc(100vh - 180px)', minHeight: 600 }}>
+          <DayCalendar date={viewDate} today={today} onDateChange={setViewDate} />
+        </div>
+      ) : (
+        <>
+          {isLoading && (
+            <div className="today-list">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="today-item" style={{ opacity: 0.5 }}>
+                  <div className="checkbox" />
+                  <div>
+                    <div className="ti-title" style={{ background: 'var(--sh-ink-6, #eee)', height: 12, borderRadius: 4, width: '60%' }} />
+                    <div className="ti-meta" style={{ marginTop: 6 }}>
+                      <span style={{ background: 'var(--sh-ink-6, #eee)', height: 10, borderRadius: 4, width: 80, display: 'inline-block' }} />
+                    </div>
+                  </div>
+                  <div className="ava" style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--sh-ink-6, #eee)' }} />
                 </div>
-              </div>
-              <div className="ava" style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--sh-ink-6, #eee)' }} />
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
-      {isError && !isLoading && (
-        <div style={{ padding: '18px 4px', textAlign: 'center', color: 'var(--sh-ink-4)' }}>
-          Couldn't load today's list.{' '}
-          <span className="link" style={{ cursor: 'pointer' }} onClick={() => refetch()}>Retry</span>
-        </div>
-      )}
+          {isError && !isLoading && (
+            <div style={{ padding: '18px 4px', textAlign: 'center', color: 'var(--sh-ink-4)' }}>
+              Couldn't load today's list.{' '}
+              <span className="link" style={{ cursor: 'pointer' }} onClick={() => refetch()}>Retry</span>
+            </div>
+          )}
 
-      {!isLoading && !isError && tasks.length === 0 && (
-        <div style={{ padding: '18px 4px', textAlign: 'center', color: 'var(--sh-ink-4)' }}>
-          Nothing on the list for today.
-        </div>
-      )}
+          {!isLoading && !isError && tasks.length === 0 && (
+            <div style={{ padding: '18px 4px', textAlign: 'center', color: 'var(--sh-ink-4)' }}>
+              Nothing on the list for today.
+            </div>
+          )}
 
-      {!isLoading && !isError && tasks.length > 0 && (
-        groupBy === 'none' ? (
-          <div className="today-list">
-            {tasks.map((t) => (
-              <TodayRow key={t.id} task={t} onOpen={openTask} />
-            ))}
-          </div>
-        ) : (
-          groups.map((g) => (
-            <div key={g.key} className="today-group">
-              <div className="today-group-head">
-                <span>{g.label}</span>
-                <span className="count">· {g.tasks.length}</span>
-              </div>
+          {!isLoading && !isError && tasks.length > 0 && (
+            groupBy === 'none' ? (
               <div className="today-list">
-                {g.tasks.map((t) => (
+                {tasks.map((t) => (
                   <TodayRow key={t.id} task={t} onOpen={openTask} />
                 ))}
               </div>
-            </div>
-          ))
-        )
+            ) : (
+              groups.map((g) => (
+                <div key={g.key} className="today-group">
+                  <div className="today-group-head">
+                    <span>{g.label}</span>
+                    <span className="count">· {g.tasks.length}</span>
+                  </div>
+                  <div className="today-list">
+                    {g.tasks.map((t) => (
+                      <TodayRow key={t.id} task={t} onOpen={openTask} />
+                    ))}
+                  </div>
+                </div>
+              ))
+            )
+          )}
+        </>
       )}
     </div>
   );
