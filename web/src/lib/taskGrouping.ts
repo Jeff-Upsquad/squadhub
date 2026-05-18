@@ -241,3 +241,23 @@ export function groupTasks(tasks: Task[], by: GroupBy, tz: string): Group[] {
       return [];
   }
 }
+
+export function buildFocusTodayGroup(
+  tasks: Task[],
+  focusedTodayIds: string[],
+  focusedTodayDate: string,
+  todayKey: string,
+  sortBy: SortBy = 'manual',
+): Group | null {
+  if (focusedTodayDate !== todayKey || focusedTodayIds.length === 0) return null;
+  const ids = new Set(focusedTodayIds);
+  const matched = tasks.filter((t) => ids.has(t.id));
+  if (matched.length === 0) return null;
+  const ordered =
+    sortBy === 'manual'
+      ? (focusedTodayIds
+          .map((id) => matched.find((t) => t.id === id))
+          .filter(Boolean) as Task[])
+      : sortTasks(matched, sortBy);
+  return { key: 'focus_today', label: '★ Focus Today', sort: -1, tasks: ordered };
+}

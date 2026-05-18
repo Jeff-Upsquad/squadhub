@@ -5,7 +5,7 @@ import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useSpace } from '../../../hooks/useSpaces';
 import TaskGroupCard from './TaskGroupCard';
-import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, type GroupBy } from '../../../lib/taskGrouping';
+import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, type GroupBy } from '../../../lib/taskGrouping';
 import FilterBar from '../../../components/pm/FilterBar';
 import GroupByDropdown from '../../../components/pm/GroupByDropdown';
 import {
@@ -31,6 +31,8 @@ export default function SpacePage() {
   const groupByScope = usePMStore((s) => s.groupByScope);
   const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
+  const focusedTodayIds = usePMStore((s) => s.focusedTodayIds);
+  const focusedTodayDate = usePMStore((s) => s.focusedTodayDate);
   const [folderFilter, setFolderFilter] = useState<string>('all');
   const [listFilter, setListFilter] = useState<string>('all');
   const groupScopeKey = activeSpacePageId ? `space:${activeSpacePageId}` : '';
@@ -142,6 +144,11 @@ export default function SpacePage() {
     if (groupBy === 'none') return [];
     return groupTasks(openTasks, groupBy, tz);
   }, [openTasks, groupBy, tz]);
+
+  const focusGroup = useMemo(() => {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    return buildFocusTodayGroup(openTasks, focusedTodayIds, focusedTodayDate, todayKey);
+  }, [openTasks, focusedTodayIds, focusedTodayDate]);
 
   if (!activeSpacePageId) {
     return (
@@ -314,6 +321,19 @@ export default function SpacePage() {
           </div>
         ) : (
           <>
+            {focusGroup && (
+              <TaskGroupCard
+                groupKey="focus_today"
+                label={focusGroup.label}
+                dotColor="#f59e0b"
+                tasks={focusGroup.tasks}
+                allStatuses={spaceStatuses}
+                listId={null}
+                onStatusChange={noopStatusChange}
+                canEdit
+                showAddRow={false}
+              />
+            )}
             {groupBy === 'none' ? (
               <TaskGroupCard
                 groupKey="sp-all"

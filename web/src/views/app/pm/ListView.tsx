@@ -3,7 +3,7 @@ import type { SpaceStatus } from '@squadhub/shared';
 import { useTasks, useUpdateTask, groupTasksByStatus } from '../../../hooks/useTasks';
 import { usePMStore, type ListGroupBy } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
-import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, type SortBy } from '../../../lib/taskGrouping';
+import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, type SortBy } from '../../../lib/taskGrouping';
 import { filterTasks, countActiveFilters, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
 import TaskGroupCard from './TaskGroupCard';
 
@@ -65,6 +65,12 @@ export default function ListView({
     [filteredTasks, fadingTaskIds],
   );
 
+  const focusGroup = useMemo(() => {
+    if (focusToday) return null;
+    const todayKey = new Date().toISOString().slice(0, 10);
+    return buildFocusTodayGroup(openTasks, focusedTodayIds, focusedTodayDate, todayKey, sortBy);
+  }, [openTasks, focusedTodayIds, focusedTodayDate, focusToday, sortBy]);
+
   const statusGroups = useMemo(() => {
     if (groupBy !== 'status') return null;
     return groupTasksByStatus(filteredTasks, statuses);
@@ -99,6 +105,19 @@ export default function ListView({
   return (
     <div className="lv-canvas relative flex flex-1 flex-col overflow-auto">
       <div className="lv-card-canvas" style={{ flex: 1 }}>
+        {focusGroup && (
+          <TaskGroupCard
+            groupKey="focus_today"
+            label={focusGroup.label}
+            dotColor="#f59e0b"
+            tasks={focusGroup.tasks}
+            allStatuses={statuses}
+            listId={listId}
+            onStatusChange={handleStatusChange}
+            canEdit={canEdit}
+            showAddRow={false}
+          />
+        )}
         {totalVisible === 0 ? (
           <div className="lv-empty">
             {emptyMessage}
