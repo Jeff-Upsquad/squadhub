@@ -6,8 +6,8 @@ import { showToastCard } from '../components/Toast';
 import { usePMStore } from '../stores/pmStore';
 
 // Invalidate every query key that contributes to a task-list UI so all views
-// (List, Folder, Space, My Tasks, Emergency) refresh after a mutation without
-// requiring the user to reload.
+// (List, Folder, Space, My Tasks, Emergency, Day Planner) refresh after a
+// mutation without requiring the user to reload.
 function invalidateTaskLists(qc: QueryClient, listId: string | null) {
   qc.invalidateQueries({ queryKey: ['tasks', listId] });
   qc.invalidateQueries({ queryKey: ['folder-tasks'] });
@@ -15,6 +15,13 @@ function invalidateTaskLists(qc: QueryClient, listId: string | null) {
   qc.invalidateQueries({ queryKey: ['my-tasks'] });
   qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
   qc.invalidateQueries({ queryKey: ['emergency-tasks'] });
+  // Day Planner candidate list depends on due_date / work_date / start_date /
+  // focused_at — any task edit can flip membership, so re-evaluate on server.
+  // Clearing a date or unfocusing here will drop the task from the list.
+  qc.invalidateQueries({ queryKey: ['day-planner'] });
+  // Day Planner calendar blocks pull a hydrated task summary (title/status) —
+  // refresh those too so a "done" task greys out as soon as it's completed.
+  qc.invalidateQueries({ queryKey: ['day-plans'] });
 }
 
 export function useTasks(listId: string | null, filters?: { status?: string; priority?: string; sort?: string }) {

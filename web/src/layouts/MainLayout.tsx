@@ -43,6 +43,7 @@ import GlobalTaskDetailPanel from '../views/app/home/GlobalTaskDetailPanel';
 import EmergencyBanner from '../views/app/pm/EmergencyBanner';
 import InboxView from '../views/app/InboxView';
 import MyTasksView from '../views/app/MyTasksView';
+import DayPlannerView from '../views/app/DayPlannerView';
 import LearningShell from '../views/app/learning/LearningShell';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
 import { useUnreadCount } from '../hooks/useUnreadCount';
@@ -50,7 +51,7 @@ import { useNotificationSocket } from '../hooks/useNotificationSocket';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner';
 
 // ---- Role Home lookup ----
 // Picks which Home component to render based on the role's home_view.
@@ -529,6 +530,8 @@ export default function MainLayout() {
           <InboxView setHomeView={setHomeView} />
         ) : homeView === 'my-tasks' ? (
           <MyTasksView />
+        ) : homeView === 'day-planner' ? (
+          <DayPlannerView />
         ) : homeView === 'mentions' ? (
           <div className="sh-view flex flex-1 flex-col items-center justify-center">
             <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', letterSpacing: '-0.01em' }}>Mentions</h3>

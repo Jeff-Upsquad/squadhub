@@ -323,11 +323,12 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     const now = new Date();
     const todayStr = fmt.format(now);
     const dayMs = 24 * 60 * 60 * 1000;
+    const yesterdayStr = fmt.format(new Date(now.getTime() - dayMs));
     const tomorrowStr = fmt.format(new Date(now.getTime() + dayMs));
     const upcomingCutoffStr = fmt.format(new Date(now.getTime() + 7 * dayMs));
 
-    const buckets: Record<'overdue' | 'today' | 'tomorrow' | 'upcoming' | 'later' | 'focused', any[]> = {
-      overdue: [], today: [], tomorrow: [], upcoming: [], later: [], focused: [],
+    const buckets: Record<'overdue' | 'today' | 'tomorrow' | 'upcoming' | 'later' | 'focused' | 'day_planner', any[]> = {
+      overdue: [], today: [], tomorrow: [], upcoming: [], later: [], focused: [], day_planner: [],
     };
 
     // All three date fields are TIMESTAMPTZ (migration 034 promoted
@@ -343,10 +344,22 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       const dueStr = toTzDay(t.due_date);
       const workStr = toTzDay(t.work_date);
       const startStr = toTzDay(t.start_date);
+      const focusedAtDay = toTzDay((t as any).focused_at);
+      const isSnoozed = (t as any).snoozed_until && new Date((t as any).snoozed_until as string) > now;
       const dateStrs = [dueStr, workStr, startStr].filter(Boolean) as string[];
 
       const hasToday = dateStrs.includes(todayStr);
       const hasTomorrow = dateStrs.includes(tomorrowStr);
+
+      // Day Planner list: union of all four membership rules, minus snoozed.
+      // A task can appear here *and* in today/tomorrow/overdue below.
+      const isDueOverdue   = dueStr   && dueStr   <  todayStr;
+      const isWorkTodayOr  = workStr  && workStr  <= todayStr;
+      const isFocusedRecent = focusedAtDay && (focusedAtDay === todayStr || focusedAtDay === yesterdayStr);
+      const isStartSoon    = startStr && (startStr === todayStr || startStr === tomorrowStr);
+      if (!isSnoozed && (isDueOverdue || isWorkTodayOr || isFocusedRecent || isStartSoon)) {
+        buckets.day_planner.push(t);
+      }
 
       // Today and tomorrow take priority — so a task with work_date today but
       // due_date yesterday shows up on the user's Today list, not Overdue.
@@ -1108,6 +1121,60 @@ router.delete('/task-comments/:id', requirePermission('can_delete_messages'), as
     res.json({ success: true, message: 'Comment deleted' });
   } catch (err) {
     console.error('Delete comment error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PATCH /pm/tasks/:id/focus — set or clear the "Focus today" star on a task.
+// Body: { focused: boolean }. When true, focused_at is set to now(); when false, cleared.
+router.patch('/tasks/:id/focus', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const focused = !!req.body?.focused;
+    const { data, error } = await supabaseAdmin
+      .from('tasks')
+      .update({ focused_at: focused ? new Date().toISOString() : null })
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Patch focus error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PATCH /pm/tasks/:id/snooze — set or clear the snooze timestamp on a task.
+// Body: { until: ISO string | null }. Day Planner hides snoozed tasks until that moment.
+router.patch('/tasks/:id/snooze', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const until = req.body?.until;
+    if (until !== null && typeof until !== 'string') {
+      res.status(400).json({ success: false, error: 'until must be an ISO string or null' });
+      return;
+    }
+    if (until && Number.isNaN(Date.parse(until))) {
+      res.status(400).json({ success: false, error: 'until is not a valid ISO timestamp' });
+      return;
+    }
+    const { data, error } = await supabaseAdmin
+      .from('tasks')
+      .update({ snoozed_until: until })
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Patch snooze error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

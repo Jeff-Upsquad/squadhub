@@ -414,6 +414,8 @@ export interface Task {
   due_date: string | null;
   work_date: string | null;
   start_date: string | null;
+  focused_at: string | null;
+  snoozed_until: string | null;
   task_type_id: string | null;
   time_estimate: number | null;
   time_tracked: number;
@@ -434,6 +436,26 @@ export interface Task {
   folder?: { id: string; name: string } | null;
   space?: { id: string; name: string } | null;
   parent_task?: { id: string; title: string } | null;
+}
+
+// Per-user, per-day calendar block placed on the Day Planner's hourly grid.
+// A task can appear on different users' day plans independently.
+export interface TaskDayPlan {
+  id: string;
+  task_id: string;
+  user_id: string;
+  plan_date: string;          // YYYY-MM-DD
+  start_minute: number;       // 0..1439, minute-of-day in the user's local tz
+  duration_minutes: number;
+  created_at: string;
+  updated_at: string;
+  // Joined task summary so the calendar block can render without a second fetch.
+  task?: Pick<Task, 'id' | 'title' | 'priority' | 'status_id' | 'time_estimate' | 'list_id'> & {
+    // TEXT status (catalog key like 'closed' or legacy 'done'/'todo'). Used to
+    // grey out blocks for completed tasks. Not on the base Task type today.
+    status?: string | null;
+    list?: { id: string; name: string } | null;
+  };
 }
 
 export interface TaskTimeEntry {
