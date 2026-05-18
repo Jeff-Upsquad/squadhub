@@ -312,6 +312,13 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/youthful-rubin-fd968b/admin && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3001"],
       "port": 3001
+    },
+    {
+      "name": "Stupefied Edison Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/stupefied-edison-5be1be/web && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3082"],
+      "port": 3082,
+      "autoPort": true
     }
   ]
 }
