@@ -73,13 +73,13 @@ export default function ListView({
 
   const statusGroups = useMemo(() => {
     if (groupBy !== 'status') return null;
-    return groupTasksByStatus(filteredTasks, statuses);
-  }, [filteredTasks, statuses, groupBy]);
+    return groupTasksByStatus(filteredTasks, statuses, fadingTaskIds);
+  }, [filteredTasks, statuses, groupBy, fadingTaskIds]);
 
   const genericGroups = useMemo(() => {
     if (groupBy === 'status' || groupBy === 'none') return null;
-    return groupTasksGeneric(openTasks, groupBy, tz);
-  }, [openTasks, groupBy, tz]);
+    return groupTasksGeneric(openTasks, groupBy, tz, fadingTaskIds);
+  }, [openTasks, groupBy, tz, fadingTaskIds]);
 
   const handleStatusChange = (taskId: string, statusId: string) => {
     updateTask.mutate({ id: taskId, status: statusId });

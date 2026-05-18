@@ -1,5 +1,11 @@
 import type { Task } from '@squadhub/shared';
 
+// Sentinel for callers that genuinely have no fading state to thread through
+// (e.g., exports, server-side rendering, tests). Real UI callers must pass the
+// actual `fadingTaskIds` map from pmStore so status-grouping pipelines can
+// keep a task in its pre-fade bucket while the slide-out animation plays.
+export const EMPTY_FADING_MAP: ReadonlyMap<string, string> = new Map();
+
 export type GroupBy = 'none' | 'status' | 'work_date' | 'due_date' | 'priority' | 'space' | 'folder' | 'list';
 
 export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
@@ -98,9 +104,12 @@ export function isTaskCompleted(t: Task): boolean {
   return false;
 }
 
+// Accepts either a ReadonlySet<string> or a ReadonlyMap<string, string> — both
+// expose `.has(id)` with identical semantics, which is all this filter needs.
+// (The store moved from Set to Map to also carry pre-fade status snapshots.)
 export function partitionByCompletion(
   tasks: Task[],
-  fadingIds?: ReadonlySet<string>,
+  fadingIds?: ReadonlySet<string> | ReadonlyMap<string, string>,
 ): { open: Task[]; completed: Task[] } {
   const open: Task[] = [];
   const completed: Task[] = [];
@@ -164,10 +173,23 @@ export function groupByPriority(tasks: Task[]): Group[] {
   return [...map.values()].sort((a, b) => (a.sort as number) - (b.sort as number));
 }
 
-export function groupByStatus(tasks: Task[]): Group[] {
+// `fadingMap` is REQUIRED (not optional) so that any new caller is forced by
+// the type checker to thread the store's fading snapshot through \u2014 otherwise
+// the optimistic status patch will re-bucket the row before its slide-out
+// animation can play. Pass EMPTY_FADING_MAP only in genuine non-UI contexts.
+export function groupByStatus(
+  tasks: Task[],
+  fadingMap: ReadonlyMap<string, string>,
+): Group[] {
   const map = new Map<string, Group>();
   for (const t of tasks) {
-    const s = (t as unknown as { status?: { id?: string; name?: string; position?: number } | string | null }).status;
+    // If a task is fading, ignore its (already optimistically-mutated) status
+    // and re-derive the bucket from the pre-fade snapshot. Treat the snapshot
+    // as a raw string status (the string-status branch below).
+    const snapshot = fadingMap.get(t.id);
+    const s = snapshot !== undefined
+      ? snapshot
+      : (t as unknown as { status?: { id?: string; name?: string; position?: number } | string | null }).status;
     let key: string;
     let label: string;
     let sort: number | string;
@@ -217,7 +239,15 @@ export function groupByNamedRef(
   return [...map.values()].sort((a, b) => (a.sort as string).localeCompare(b.sort as string));
 }
 
-export function groupTasks(tasks: Task[], by: GroupBy, tz: string): Group[] {
+// `fadingMap` is REQUIRED so callers can't accidentally drop the snapshot when
+// `by === 'status'`. The other group-by paths don't read `task.status`, so the
+// value is unused for them — but the type guard keeps the call site honest.
+export function groupTasks(
+  tasks: Task[],
+  by: GroupBy,
+  tz: string,
+  fadingMap: ReadonlyMap<string, string>,
+): Group[] {
   switch (by) {
     case 'work_date':
       return groupByDate(tasks, 'work_date', tz, 'No work date');
@@ -226,7 +256,7 @@ export function groupTasks(tasks: Task[], by: GroupBy, tz: string): Group[] {
     case 'priority':
       return groupByPriority(tasks);
     case 'status':
-      return groupByStatus(tasks);
+      return groupByStatus(tasks, fadingMap);
     case 'space':
       return groupByNamedRef(tasks, (t) => t.space ?? null, 'No space');
     case 'folder':

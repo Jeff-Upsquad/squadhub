@@ -44,6 +44,7 @@ export default function TodayList() {
 
   const groupBy = usePMStore((s) => s.todayListGroupBy);
   const setTodayListGroupBy = usePMStore((s) => s.setTodayListGroupBy);
+  const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
   const [menuOpen, setMenuOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
 
@@ -62,8 +63,8 @@ export default function TodayList() {
   }, [menuOpen]);
 
   const groups = useMemo(
-    () => (groupBy === 'none' ? [] : groupTasks(tasks, groupBy, tz)),
-    [tasks, groupBy, tz],
+    () => (groupBy === 'none' ? [] : groupTasks(tasks, groupBy, tz, fadingTaskIds)),
+    [tasks, groupBy, tz, fadingTaskIds],
   );
   const currentLabel = GROUP_OPTIONS.find((o) => o.value === groupBy)?.label ?? 'None';
 

@@ -257,6 +257,7 @@ export default function BoardView({
 }) {
   const { data: tasks, isLoading } = useTasks(listId, undefined);
   const updateTask = useUpdateTask(listId);
+  const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
   const groups = useMemo(() => {
@@ -265,8 +266,8 @@ export default function BoardView({
       const q = searchQuery.toLowerCase();
       arr = arr.filter((t) => t.title.toLowerCase().includes(q));
     }
-    return groupTasksByStatus(arr, statuses);
-  }, [tasks, statuses, searchQuery, filters, tz]);
+    return groupTasksByStatus(arr, statuses, fadingTaskIds);
+  }, [tasks, statuses, searchQuery, filters, tz, fadingTaskIds]);
 
   const handleDrop = (taskId: string, statusId: string) => {
     if (!canEdit) return;

@@ -113,8 +113,8 @@ export default function FolderPage() {
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return [];
-    return groupTasks(openTasks, groupBy, tz);
-  }, [openTasks, groupBy, tz]);
+    return groupTasks(openTasks, groupBy, tz, fadingTaskIds);
+  }, [openTasks, groupBy, tz, fadingTaskIds]);
 
   const focusGroup = useMemo(() => {
     const todayKey = new Date().toISOString().slice(0, 10);
