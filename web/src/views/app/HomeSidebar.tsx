@@ -275,6 +275,18 @@ export default function HomeSidebar({
             unread
             onClick={() => onChangeView('inbox')}
           />
+          <NavItem
+            icon={
+              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <circle cx="12" cy="13" r="8" />
+                <path d="M12 9v4l2.5 1.5" />
+                <path d="M5 3 3 5M19 3l2 2" />
+              </svg>
+            }
+            label="Day Planner"
+            active={homeView === 'day-planner'}
+            onClick={() => onChangeView('day-planner')}
+          />
           {canSeeDogfoodNav && (
             <>
               <NavItem
