@@ -727,6 +727,10 @@ export default function MainLayout() {
         <GlobalCreateTaskModal
           onClose={() => { setShowCreateTaskModal(false); setResumingDraft(null); }}
           resumeDraft={resumingDraft}
+          // Only pre-fill list/space when the user is actually viewing a
+          // list-context page; otherwise (Home/Inbox/My Tasks/Docs/etc.) the
+          // persisted activeListId/contextListId would leak in as a stale default.
+          inListContext={activeSection === 'home' && homeView === 'tasks'}
         />
       )}
 
