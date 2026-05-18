@@ -298,13 +298,27 @@ export function useAddComment(taskId: string | null) {
 // Helper: group tasks by status. For task_type='task' tasks, task.status holds
 // a TASK_STATUS_CATALOG key — resolve it to the legacy 4-bucket category so the
 // same board layout keeps working.
-export function groupTasksByStatus(tasks: Task[], statuses: SpaceStatus[]) {
+//
+// `fadingMap` is REQUIRED (not optional) so callers can't silently re-open the
+// task-completion-animation regression. For fading tasks we read the pre-fade
+// status snapshot instead of `task.status` (which has already been flipped by
+// the optimistic update in useUpdateTask.onMutate) so the row stays in its
+// original status bucket while the CSS slide-out plays. Pass EMPTY_FADING_MAP
+// only from genuine non-UI contexts.
+export function groupTasksByStatus(
+  tasks: Task[],
+  statuses: SpaceStatus[],
+  fadingMap: ReadonlyMap<string, string>,
+) {
   const groups: { status: SpaceStatus; tasks: Task[] }[] = [];
   for (const status of statuses) {
     groups.push({
       status,
       tasks: tasks.filter((t) => {
-        const raw = (t as any).status as string | undefined;
+        const snapshot = fadingMap.get(t.id);
+        const raw = snapshot !== undefined
+          ? snapshot
+          : ((t as any).status as string | undefined);
         if (!raw) return false;
         if (raw === status.category) return true;
         const mapped = getTaskStatusCategory(raw);

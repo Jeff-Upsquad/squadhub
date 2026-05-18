@@ -31,7 +31,11 @@ interface PMState {
   myTasksOnly: boolean;
   collapsedGroups: Record<string, boolean>;
   selectedTasks: string[];
-  fadingTaskIds: Set<string>;
+  // Map of task IDs currently animating out → their pre-fade raw status string.
+  // The snapshot lets grouping functions (groupTasksByStatus, groupByStatus) keep
+  // the row in its original status bucket while the CSS slide plays, instead of
+  // re-bucketing it the same render tick the optimistic status patch lands.
+  fadingTaskIds: Map<string, string>;
   timer: TimerState | null;
   filtersByScope: Record<string, TaskFilterState>;
   focusedTodayIds: string[];
@@ -56,7 +60,7 @@ interface PMState {
   toggleTaskSelection: (taskId: string) => void;
   selectAllTasks: (taskIds: string[]) => void;
   clearSelection: () => void;
-  markFading: (taskId: string) => void;
+  markFading: (taskId: string, prevStatus: string) => void;
   unmarkFading: (taskId: string) => void;
   startTimer: (taskId: string, taskTitle: string, listId: string, baseTracked: number) => TimerState | null;
   stopTimer: () => TimerState | null;
@@ -104,7 +108,7 @@ export const usePMStore = create<PMState>()(
       myTasksOnly: false,
       collapsedGroups: {},
       selectedTasks: [],
-      fadingTaskIds: new Set<string>(),
+      fadingTaskIds: new Map<string, string>(),
       timer: null,
       filtersByScope: {},
       focusedTodayIds: [],
@@ -141,17 +145,21 @@ export const usePMStore = create<PMState>()(
         })),
       selectAllTasks: (taskIds) => set({ selectedTasks: taskIds }),
       clearSelection: () => set({ selectedTasks: [] }),
-      markFading: (taskId) =>
+      markFading: (taskId, prevStatus) =>
         set((state) => {
+          // Existing-key short-circuit: re-clicks (e.g. user toggles done off
+          // and on again before the first animation finishes) must NOT overwrite
+          // the pre-fade snapshot — keep the first remembered status so the row
+          // stays in its original bucket through the whole animation.
           if (state.fadingTaskIds.has(taskId)) return state;
-          const next = new Set(state.fadingTaskIds);
-          next.add(taskId);
+          const next = new Map(state.fadingTaskIds);
+          next.set(taskId, prevStatus);
           return { fadingTaskIds: next };
         }),
       unmarkFading: (taskId) =>
         set((state) => {
           if (!state.fadingTaskIds.has(taskId)) return state;
-          const next = new Set(state.fadingTaskIds);
+          const next = new Map(state.fadingTaskIds);
           next.delete(taskId);
           return { fadingTaskIds: next };
         }),
@@ -265,7 +273,7 @@ export const usePMStore = create<PMState>()(
           focusedTodayDate: s.focusedTodayDate,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Set<string>(), timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none' }),
     }),
     {
       name: 'squadhub-pm',

@@ -68,7 +68,10 @@ export default function TaskRow({
     if (!canEdit) return;
     const next = isDone ? 'todo' : 'done';
     if (!isDone) {
-      markFading(task.id);
+      // Snapshot the pre-fade status so status-grouping pipelines keep the row
+      // in this bucket while the slide animation plays — see pmStore.ts and
+      // groupTasksByStatus / groupByStatus for the read side.
+      markFading(task.id, statusCategory ?? '');
     }
     updateTask.mutate(
       { id: task.id, status: next } as any,

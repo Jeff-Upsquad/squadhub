@@ -25,6 +25,7 @@ export default function DashboardListPanel() {
   const [mounted, setMounted] = useState(false);
   const groupByScope = usePMStore((s) => s.groupByScope);
   const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
+  const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
   const dashScopeKey = activeDashboardTab ? `dashboard:${activeDashboardTab}` : '';
   const groupBy = (dashScopeKey && groupByScope[dashScopeKey]) || 'none';
 
@@ -62,8 +63,8 @@ export default function DashboardListPanel() {
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return [];
-    return groupTasks(tasks, groupBy, tz);
-  }, [tasks, groupBy, tz]);
+    return groupTasks(tasks, groupBy, tz, fadingTaskIds);
+  }, [tasks, groupBy, tz, fadingTaskIds]);
 
   if (!activeDashboardTab) return null;
 
