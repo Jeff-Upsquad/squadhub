@@ -57,11 +57,17 @@ export default function TodayList() {
   const openSnooze = (e: React.MouseEvent, t: Task) => {
     e.stopPropagation();
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    // Menu is ~180px tall (3 rows + optional unsnooze). Flip above the button
+    // if there isn't enough room below — otherwise it gets clipped by the
+    // bottom of the viewport.
+    const MENU_HEIGHT = 180;
+    const MARGIN = 4;
+    const flipUp = rect.bottom + MARGIN + MENU_HEIGHT > window.innerHeight;
     setSnoozeAnchor({
       taskId: t.id,
       isSnoozed: !!t.snoozed_until && new Date(t.snoozed_until) > new Date(),
       left: rect.right - 220,
-      top: rect.bottom + 4,
+      top: flipUp ? rect.top - MENU_HEIGHT - MARGIN : rect.bottom + MARGIN,
     });
   };
 
