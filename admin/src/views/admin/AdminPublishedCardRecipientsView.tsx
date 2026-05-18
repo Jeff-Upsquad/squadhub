@@ -168,7 +168,12 @@ export default function AdminPublishedCardRecipientsView({
     return [...partners, ...localTalents, ...remoteTalents];
   }, [data, squadhireTalents]);
 
-  const canAssign = card.state === 'published' || card.state === 'assigned';
+  // Once a card has a final recipient (Assigned bucket), recipient selection
+  // is frozen — no checkboxes, no bottom action bar. Selecting Talent panel
+  // above still conveys who was assigned.
+  const canAssign =
+    !card.selected_recipient_id &&
+    (card.state === 'published' || card.state === 'assigned');
 
   // Pre-check already-selected recipients
   useEffect(() => {
