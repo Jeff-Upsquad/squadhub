@@ -203,11 +203,11 @@ router.get('/search', async (req: Request, res: Response) => {
 
     const { data: matches, error } = await supabaseAdmin
       .from('tasks')
-      .select('id, title, status, priority, due_date, list_id, parent_task_id, updated_at')
+      .select('id, title, status, priority, due_date, list_id, parent_task_id, created_at')
       .in('list_id', accessibleListIds)
       .is('parent_task_id', null)
       .ilike('title', `%${safeQ}%`)
-      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(limit);
 
     if (error) {
