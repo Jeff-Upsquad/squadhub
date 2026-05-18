@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
-import { usePMStore } from '../../../stores/pmStore';
+import { usePMStore, todayKey } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
 import { groupTasks, isToday, type GroupBy } from '../../../lib/taskGrouping';
 
@@ -37,8 +37,8 @@ export default function TodayList() {
     const merged = [...data.overdue, ...data.today, ...(data.focused ?? [])];
     const seen = new Set<string>();
     const unique = merged.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const focusedSet = focusedTodayDate === todayKey ? new Set(focusedTodayIds) : new Set<string>();
+    const today = todayKey();
+    const focusedSet = focusedTodayDate === today ? new Set(focusedTodayIds) : new Set<string>();
     return unique.filter((t) => focusedSet.has(t.id) || isToday(t.work_date, tz));
   }, [data, focusedTodayIds, focusedTodayDate, tz]);
 

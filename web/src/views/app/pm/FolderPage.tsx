@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import type { Folder, List, SpaceStatus, Task } from '@squadhub/shared';
 import api from '../../../services/api';
-import { usePMStore } from '../../../stores/pmStore';
+import { usePMStore, todayKey } from '../../../stores/pmStore';
 import { useSpace } from '../../../hooks/useSpaces';
 import TaskGroupCard from './TaskGroupCard';
 import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, type GroupBy } from '../../../lib/taskGrouping';
@@ -117,8 +117,7 @@ export default function FolderPage() {
   }, [openTasks, groupBy, tz]);
 
   const focusGroup = useMemo(() => {
-    const todayKey = new Date().toISOString().slice(0, 10);
-    return buildFocusTodayGroup(openTasks, focusedTodayIds, focusedTodayDate, todayKey);
+    return buildFocusTodayGroup(openTasks, focusedTodayIds, focusedTodayDate, todayKey());
   }, [openTasks, focusedTodayIds, focusedTodayDate]);
 
   if (!activeFolderId) {

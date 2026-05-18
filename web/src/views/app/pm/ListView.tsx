@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { SpaceStatus } from '@squadhub/shared';
 import { useTasks, useUpdateTask, groupTasksByStatus } from '../../../hooks/useTasks';
-import { usePMStore, type ListGroupBy } from '../../../stores/pmStore';
+import { usePMStore, todayKey, type ListGroupBy } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, type SortBy } from '../../../lib/taskGrouping';
 import { filterTasks, countActiveFilters, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
@@ -48,7 +48,7 @@ export default function ListView({
       });
     }
     if (focusToday) {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayKey();
       const focusedSet = focusedTodayDate === today ? new Set(focusedTodayIds) : new Set<string>();
       arr = arr.filter((t) => focusedSet.has(t.id));
     }
@@ -67,8 +67,7 @@ export default function ListView({
 
   const focusGroup = useMemo(() => {
     if (focusToday) return null;
-    const todayKey = new Date().toISOString().slice(0, 10);
-    return buildFocusTodayGroup(openTasks, focusedTodayIds, focusedTodayDate, todayKey, sortBy);
+    return buildFocusTodayGroup(openTasks, focusedTodayIds, focusedTodayDate, todayKey(), sortBy);
   }, [openTasks, focusedTodayIds, focusedTodayDate, focusToday, sortBy]);
 
   const statusGroups = useMemo(() => {

@@ -163,12 +163,8 @@ export default function TaskDetailPanel({
   spaceId?: string | null;
   listName?: string | null;
 }) {
-  const { activeTaskId, setActiveTask, timer, startTimer: globalStartTimer, stopTimer: globalStopTimer, toggleFocusToday, focusedTodayIds, focusedTodayDate } = usePMStore();
-  const isFocusedToday = (() => {
-    if (!activeTaskId) return false;
-    const today = new Date().toISOString().slice(0, 10);
-    return focusedTodayDate === today && focusedTodayIds.includes(activeTaskId);
-  })();
+  const { activeTaskId, setActiveTask, timer, startTimer: globalStartTimer, stopTimer: globalStopTimer, toggleFocusToday, isFocusedToday: checkIsFocusedToday } = usePMStore();
+  const isFocusedToday = activeTaskId ? checkIsFocusedToday(activeTaskId) : false;
   const { data: task, isLoading } = useTask(activeTaskId);
   const { data: comments } = useTaskComments(activeTaskId);
   const { data: taskTypes } = useTaskTypes();

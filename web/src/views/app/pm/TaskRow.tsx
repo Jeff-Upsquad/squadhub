@@ -29,11 +29,8 @@ export default function TaskRow({
   canEdit?: boolean;
   listId: string;
 }) {
-  const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, toggleFocusToday, focusedTodayIds, focusedTodayDate, fadingTaskIds, markFading, unmarkFading } = usePMStore();
-  const isFocused = (() => {
-    const today = new Date().toISOString().slice(0, 10);
-    return focusedTodayDate === today && focusedTodayIds.includes(task.id);
-  })();
+  const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, toggleFocusToday, isFocusedToday, fadingTaskIds, markFading, unmarkFading } = usePMStore();
+  const isFocused = isFocusedToday(task.id);
   const effectiveListId = listId || (task as any).list_id || task.list?.id || null;
   const updateTask = useUpdateTask(effectiveListId);
   const [expanded, setExpanded] = useState(false);
