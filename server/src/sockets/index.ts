@@ -201,7 +201,10 @@ export function setupSocketIO(httpServer: HttpServer) {
 
   // Bridge: Poll notifications table → Socket.IO.
   // Notifications are created by PostgreSQL triggers (not app code), so we
-  // poll for new rows every 2 seconds and fan out via Socket.IO.
+  // poll for new rows and fan out via Socket.IO. Interval is 10s to keep
+  // DB request volume manageable on the nano Supabase instance; trade-off is
+  // up to ~10s of notification latency.
+  const POLL_INTERVAL_MS = 10_000;
   let lastPollTime = new Date().toISOString();
   let pollCount = 0;
 
@@ -231,8 +234,8 @@ export function setupSocketIO(httpServer: HttpServer) {
         return;
       }
 
-      // Log every 30th poll (once per minute) to confirm it's running
-      if (pollCount % 30 === 0) {
+      // Log every 6th poll (once per minute at 10s interval) to confirm it's running
+      if (pollCount % 6 === 0) {
         console.log(`[socket] poll #${pollCount} — watching from ${lastPollTime}, found ${newNotifications?.length || 0}`);
       }
 
@@ -249,9 +252,9 @@ export function setupSocketIO(httpServer: HttpServer) {
     } catch (e) {
       console.error('[socket] notification poll error:', e);
     }
-  }, 2000);
+  }, POLL_INTERVAL_MS);
 
-  console.log('[socket] Notification polling bridge active (2s interval)');
+  console.log(`[socket] Notification polling bridge active (${POLL_INTERVAL_MS / 1000}s interval)`);
 
   return io;
 }
