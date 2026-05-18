@@ -343,6 +343,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/funny-curran-d6d2bf/admin && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3014"],
       "port": 3014
+    },
+    {
+      "name": "Thirsty Raman Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/thirsty-raman-33b539/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3088"],
+      "port": 3088
     }
   ]
 }

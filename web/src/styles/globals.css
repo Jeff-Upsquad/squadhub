@@ -3733,6 +3733,38 @@ input.td-title-hero {
   color: var(--sh-ink);
 }
 
+/* Dark counterpart — mirror the scoped tokens so the drawer follows app theme */
+.dark .td-panel,
+.dark .td-panel-luma {
+  /* Surfaces */
+  --surface:       #161b22;
+  --surface-alt:   #1c2030;
+  /* Ink scale — inverted */
+  --sh-ink:        #e2e8f0;
+  --sh-ink-2:      #cbd5e1;
+  --sh-ink-3:      #94a3b8;
+  --sh-ink-4:      #64748b;
+  --sh-ink-5:      #334155;
+  /* Hairlines */
+  --sh-hair:       #21262d;
+  --sh-hair-2:     #2d333c;
+  --sh-hair-3:     #1c2030;
+  /* Status palette */
+  --td-paper:      #161b22;
+  --td-paper-2:    #1c2030;
+  --td-paper-3:    #21262d;
+  --td-rule:       #21262d;
+  --td-rule-soft:  #1e2533;
+  /* Status colors keep their hues; soften their tinted backgrounds */
+  --td-green-soft: rgba(16, 185, 129, 0.12);
+  --td-amber-soft: rgba(245, 158, 11, 0.12);
+  --td-red-soft:   rgba(239, 68, 68, 0.14);
+  /* Accent — keep blue, recolor soft for dark */
+  --td-accent-soft: rgba(41, 98, 255, 0.18);
+  --td-accent-ring: rgba(41, 98, 255, 0.30);
+  color: var(--sh-ink);
+}
+
 /* Re-skin the shell — flush right-edge panel with small left-corner radius */
 .td-panel-luma,
 .td-panel-luma.apple,
