@@ -67,13 +67,28 @@ export interface Message {
   content: string | null;
   type: MessageType;
   file_url: string | null;
+  file_name?: string | null;
+  file_size?: number | null;
+  file_mime?: string | null;
+  duration_ms?: number | null;
+  parent_message_id?: string | null;
+  mentions?: string[];
+  unfurl?: MessageUnfurl | null;
+  reply_count?: number;
   created_at: string;
   updated_at: string;
   is_deleted: boolean;
   // Joined fields (populated by API)
   sender?: User;
   reactions?: Reaction[];
-  reply_count?: number;
+}
+
+export interface MessageUnfurl {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  site_name?: string;
 }
 
 // ---- DMs ----
@@ -594,6 +609,7 @@ export interface SharedWithMeItem {
 // ---- Socket.io Events ----
 export interface ServerToClientEvents {
   new_message: (message: Message) => void;
+  thread_reply: (message: Message) => void;
   message_updated: (message: Message) => void;
   message_deleted: (data: { message_id: string; channel_id?: string; dm_conversation_id?: string }) => void;
   new_reaction: (reaction: Reaction & { message_id: string }) => void;
