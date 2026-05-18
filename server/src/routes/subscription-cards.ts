@@ -13,6 +13,7 @@ import {
   deliverCardToSquadhire,
   notifySquadhireOfCardRecall,
 } from '../utils/squadhireWebhook';
+import { buildPlanSnapshotForCard } from '../utils/cardPlanSnapshot';
 
 const router = Router();
 
@@ -335,6 +336,11 @@ router.post(
           ? await matchPartnersForCard(req.params.id as string)
           : [];
 
+      // Freeze plan-side data (hours, deliverables, pricing) onto the card so
+      // later plan edits don't silently rewrite a card partners already saw.
+      // Recall clears this; the only way to refresh is recall → republish.
+      const planSnapshot = await buildPlanSnapshotForCard(loaded.card);
+
       // Flip state; reject if something else raced us.
       const { data: updated, error: updErr } = await supabaseAdmin
         .from('subscription_cards')
@@ -343,6 +349,7 @@ router.post(
           distribution,
           published_at: new Date().toISOString(),
           published_by: req.userId!,
+          plan_snapshot: planSnapshot,
         })
         .eq('id', (req.params.id as string))
         .eq('state', 'draft')
@@ -445,13 +452,15 @@ router.post(
             squadhire_sync_last_error: null,
           }
         : {
-            // Clean recall — back to draft for re-publish.
+            // Clean recall — back to draft for re-publish. Clear the frozen
+            // plan snapshot so the next publish re-reads live plan data.
             state: 'draft' as const,
             published_at: null,
             published_by: null,
             squadhire_synced_at: null,
             squadhire_sync_attempts: 0,
             squadhire_sync_last_error: null,
+            plan_snapshot: null,
           };
 
       const { data: updated, error: updErr } = await supabaseAdmin
@@ -637,9 +646,28 @@ router.get(
         const country = submission ? countryById[submission.country_id] || null : null;
         const plan = staged ? planById[staged.plan_id] || null : null;
         const subscription = staged ? subById[staged.subscription_id] || null : null;
-        const planPricing = staged ? pricingByPlan[staged.plan_id] || [] : [];
-        const priceForCountry = country
-          ? planPricing.find((pr: any) => pr.country_id === country.id) || null
+
+        // Frozen plan snapshot wins over live plan reads for non-draft cards.
+        const snap =
+          card.plan_snapshot && typeof card.plan_snapshot === 'object'
+            ? (card.plan_snapshot as any)
+            : null;
+
+        let priceForCountry: any = null;
+        if (snap?.pricing && country) {
+          const row = (snap.pricing as any[]).find((pr) => pr.country_id === country.id);
+          if (row) priceForCountry = { ...row, plan_id: snap.plan?.id ?? staged?.plan_id ?? null };
+        } else {
+          const planPricing = staged ? pricingByPlan[staged.plan_id] || [] : [];
+          priceForCountry = country
+            ? planPricing.find((pr: any) => pr.country_id === country.id) || null
+            : null;
+        }
+
+        const planWithFrozenHours = plan
+          ? snap?.plan
+            ? { ...plan, daily_hours: snap.plan.daily_hours, weekly_hours: snap.plan.weekly_hours }
+            : plan
           : null;
 
         const base = await hydrateCard(card);
@@ -652,9 +680,9 @@ router.get(
             ? {
                 ...staged,
                 subscription,
-                plan: plan
+                plan: planWithFrozenHours
                   ? {
-                      ...plan,
+                      ...planWithFrozenHours,
                       pricing: priceForCountry
                         ? [{ ...priceForCountry, country }]
                         : [],

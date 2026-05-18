@@ -152,8 +152,56 @@ router.get('/', async (req: Request, res: Response) => {
     cardList.forEach((c: any) => {
       const effectiveSubId = c.submission_subscription_id || parentById[c.parent_card_id]?.submission_subscription_id;
       const targetingId = c.parent_card_id ?? c.id;
-      const staged = effectiveSubId ? stagedById[effectiveSubId] || null : null;
+      let staged = effectiveSubId ? stagedById[effectiveSubId] || null : null;
       const submission = staged ? submissionById[staged.submission_id] : null;
+
+      // Frozen plan-side data wins over the live values stagedHydrated returns.
+      // Without this override, plan edits made after publish would leak into
+      // partner-visible card data.
+      const snap = c.plan_snapshot && typeof c.plan_snapshot === 'object' ? c.plan_snapshot : null;
+      if (staged && snap) {
+        const snapDelivs = Array.isArray(snap.deliverables) ? snap.deliverables : [];
+        const snapPricing = Array.isArray(snap.pricing) ? snap.pricing : [];
+        const snapPartnerPricing = Array.isArray(snap.partner_pricing) ? snap.partner_pricing : [];
+        staged = {
+          ...staged,
+          plan: staged.plan
+            ? {
+                ...staged.plan,
+                daily_hours: snap.plan?.daily_hours ?? staged.plan.daily_hours,
+                weekly_hours: snap.plan?.weekly_hours ?? staged.plan.weekly_hours,
+                deliverables: snapDelivs.map((d: any) => ({
+                  id: d.id,
+                  kind: d.kind,
+                  plan_id: snap.plan?.id ?? staged.plan.id,
+                  deliverable_type_id: d.deliverable_type_id ?? null,
+                  per_day: Number(d.per_day) || 0,
+                  per_week: Number(d.per_week) || 0,
+                  per_month: Number(d.per_month) || 0,
+                  sort_order: Number(d.sort_order) || 0,
+                  deliverable_type: d.deliverable_type_id
+                    ? { id: d.deliverable_type_id, name: d.deliverable_type_name ?? null }
+                    : null,
+                })),
+                pricing: snapPricing.map((p: any) => ({
+                  plan_id: snap.plan?.id ?? staged.plan.id,
+                  country_id: p.country_id,
+                  price: Number(p.price) || 0,
+                  margin_value: Number(p.margin_value) || 0,
+                  margin_type: p.margin_type ?? 'fixed',
+                  country: countryById[p.country_id] ?? null,
+                })),
+                partner_pricing: snapPartnerPricing.map((p: any) => ({
+                  plan_id: snap.plan?.id ?? staged.plan.id,
+                  country_id: p.country_id,
+                  price: Number(p.price) || 0,
+                  country: countryById[p.country_id] ?? null,
+                })),
+              }
+            : null,
+        };
+      }
+
       cardById[c.id] = {
         ...c,
         target_country_ids: countriesByCard[targetingId] || [],

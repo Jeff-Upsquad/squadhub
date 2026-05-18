@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../supabase';
+import { buildPlanSnapshotForCard } from './cardPlanSnapshot';
 
 /**
  * Hydrate a subscription_cards row into the shape the UI expects:
@@ -253,6 +254,9 @@ export async function fanOutTierCards(
         updates.markup = entry.markup ?? 0;
       }
     }
+    // Freeze the plan-side data this card displays so subsequent plan
+    // edits don't silently rewrite a card partners already saw.
+    updates.plan_snapshot = await buildPlanSnapshotForCard(original);
     const { error: updErr } = await supabaseAdmin
       .from('subscription_cards')
       .update(updates)
@@ -273,6 +277,13 @@ export async function fanOutTierCards(
   // Repurpose the original row as the first tier's card.
   const firstTier = targetTiers[0];
   const firstEntry = tierPricing[firstTier];
+  // Each tier card resolves to its own plan_id (plans are keyed by
+  // subscription+plan+tier), so snapshot per card. Build the originals
+  // snapshot with target_tiers narrowed to [firstTier] for the resolver.
+  const originalSnapshot = await buildPlanSnapshotForCard({
+    ...original,
+    target_tiers: [firstTier],
+  });
   const { error: updErr } = await supabaseAdmin
     .from('subscription_cards')
     .update({
@@ -284,6 +295,7 @@ export async function fanOutTierCards(
       proposed_price: firstEntry.proposed_price ?? null,
       markup: firstEntry.markup ?? 0,
       tier_pricing: {},
+      plan_snapshot: originalSnapshot,
     })
     .eq('id', originalCardId)
     .eq('state', 'draft');
@@ -345,6 +357,12 @@ export async function fanOutTierCards(
       const val = (original as any)[field];
       if (val !== undefined) insertRow[field] = val;
     }
+    // Per-tier snapshot — plans are keyed by (subscription, plan, tier) so
+    // the resolver picks up this sibling's distinct plan_id.
+    insertRow.plan_snapshot = await buildPlanSnapshotForCard({
+      ...original,
+      ...insertRow,
+    });
     const { data: inserted, error: insErr } = await supabaseAdmin
       .from('subscription_cards')
       .insert(insertRow)
