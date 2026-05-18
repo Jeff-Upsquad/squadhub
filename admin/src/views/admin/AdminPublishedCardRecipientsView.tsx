@@ -451,23 +451,13 @@ export default function AdminPublishedCardRecipientsView({
                   </span>
                 )}
                 {bucket === 'selected' && (
-                  <>
-                    <button
-                      onClick={() => finalizeMutation.mutate()}
-                      disabled={finalizeMutation.isPending}
-                      className="sh-btn-success"
-                      title="Mark the subscription active and move the card to Assigned."
-                    >
-                      {finalizeMutation.isPending ? 'Finalizing…' : 'Finalize'}
-                    </button>
-                    <button
-                      onClick={() => undoMutation.mutate()}
-                      disabled={undoMutation.isPending}
-                      className="sh-btn-danger"
-                    >
-                      {undoMutation.isPending ? 'Reverting…' : 'Undo Selection'}
-                    </button>
-                  </>
+                  <button
+                    onClick={() => undoMutation.mutate()}
+                    disabled={undoMutation.isPending}
+                    className="sh-btn-danger"
+                  >
+                    {undoMutation.isPending ? 'Reverting…' : 'Undo Selection'}
+                  </button>
                 )}
                 {isUnreviewed && (
                   <button
@@ -881,30 +871,38 @@ export default function AdminPublishedCardRecipientsView({
       </div>
 
       {/* Floating Assign bar */}
-      {canAssign && checkedIds.size > 0 && (
-        <div className="sticky bottom-0 px-6 py-4 sh-surface border-t border-[var(--color-sh-warm-border)] flex items-center justify-between shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
-          <span className="text-sm text-[var(--color-sh-ink-muted)]">
-            {checkedIds.size} recipient{checkedIds.size !== 1 ? 's' : ''} selected
-          </span>
-          <button
-            onClick={() => assignMutation.mutate()}
-            disabled={assignMutation.isPending}
-            className="sh-btn-primary"
-          >
-            {assignMutation.isPending ? (
-              <>
-                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Selecting…
-              </>
-            ) : (
-              `Select (${checkedIds.size})`
-            )}
-          </button>
-        </div>
-      )}
+      {canAssign && checkedIds.size > 0 && (() => {
+        const isSelectedBucket = bucket === 'selected';
+        const mutation = isSelectedBucket ? finalizeMutation : assignMutation;
+        const idleLabel = isSelectedBucket
+          ? `Assign (${checkedIds.size})`
+          : `Select (${checkedIds.size})`;
+        const pendingLabel = isSelectedBucket ? 'Assigning…' : 'Selecting…';
+        return (
+          <div className="sticky bottom-0 px-6 py-4 sh-surface border-t border-[var(--color-sh-warm-border)] flex items-center justify-between shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
+            <span className="text-sm text-[var(--color-sh-ink-muted)]">
+              {checkedIds.size} recipient{checkedIds.size !== 1 ? 's' : ''} selected
+            </span>
+            <button
+              onClick={() => mutation.mutate()}
+              disabled={mutation.isPending}
+              className="sh-btn-primary"
+            >
+              {mutation.isPending ? (
+                <>
+                  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  {pendingLabel}
+                </>
+              ) : (
+                idleLabel
+              )}
+            </button>
+          </div>
+        );
+      })()}
       {autoAcceptTarget && (
         <ConfirmDialog
           open

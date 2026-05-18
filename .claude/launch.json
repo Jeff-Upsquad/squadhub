@@ -337,6 +337,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/clever-poincare-b90980/web && INTERNAL_API_URL=http://localhost:4005 exec npx next dev -p 3003"],
       "port": 3003
+    },
+    {
+      "name": "Funny Curran Admin",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/funny-curran-d6d2bf/admin && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3014"],
+      "port": 3014
     }
   ]
 }
