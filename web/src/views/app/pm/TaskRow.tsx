@@ -29,7 +29,7 @@ export default function TaskRow({
   canEdit?: boolean;
   listId: string;
 }) {
-  const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, toggleFocusToday, focusedTodayIds, focusedTodayDate, markFading, unmarkFading } = usePMStore();
+  const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, toggleFocusToday, focusedTodayIds, focusedTodayDate, fadingTaskIds, markFading, unmarkFading } = usePMStore();
   const isFocused = (() => {
     const today = new Date().toISOString().slice(0, 10);
     return focusedTodayDate === today && focusedTodayIds.includes(task.id);
@@ -37,8 +37,6 @@ export default function TaskRow({
   const effectiveListId = listId || (task as any).list_id || task.list?.id || null;
   const updateTask = useUpdateTask(effectiveListId);
   const [expanded, setExpanded] = useState(false);
-  const [isFadingOut, setIsFadingOut] = useState(false);
-  const [isHidden, setIsHidden] = useState(false);
 
   // Track in-flight quick-date values so rapid clicks read the most recent sent
   // value rather than the stale React Query cache. Cleared when the cache
@@ -58,7 +56,8 @@ export default function TaskRow({
 
   const statusCategory = (task as any).status as string | undefined;
   const isDone = statusCategory === 'done' || statusCategory === 'closed';
-  const displayDone = isDone || isFadingOut;
+  const isFading = fadingTaskIds.has(task.id);
+  const displayDone = isDone || isFading;
   const priorityLevel = PRIORITY_LEVEL[task.priority || 'none'];
   const workWhen = formatWhen(task.work_date);
   const dueWhen = formatWhen(task.due_date);
@@ -69,24 +68,20 @@ export default function TaskRow({
     if (!canEdit) return;
     const next = isDone ? 'todo' : 'done';
     if (!isDone) {
-      setIsFadingOut(true);
       markFading(task.id);
     }
     updateTask.mutate(
       { id: task.id, status: next } as any,
-      { onError: () => { setIsFadingOut(false); setIsHidden(false); unmarkFading(task.id); } },
+      { onError: () => { unmarkFading(task.id); } },
     );
   };
 
   const handleRowTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
-    if (e.propertyName === 'transform' && isFadingOut) {
-      setIsHidden(true);
+    if (e.propertyName === 'transform' && isFading) {
       unmarkFading(task.id);
     }
   };
-
-  if (isHidden) return null;
 
   const openPicker = (
     e: React.MouseEvent,
@@ -131,7 +126,7 @@ export default function TaskRow({
         data-active={isActive}
         data-selected={isSelected}
         data-done={displayDone}
-        data-fading={isFadingOut}
+        data-fading={isFading}
         style={depth > 0 ? { paddingLeft: 20 + depth * 22 } : undefined}
       >
         {/* Checkbox — toggles done */}
@@ -140,7 +135,7 @@ export default function TaskRow({
           onClick={handleGlyphClick}
           className="lv-glyph"
           data-done={displayDone}
-          data-celebrating={isFadingOut}
+          data-celebrating={isFading}
           data-progress={!isDone && statusCategory === 'active'}
           disabled={!canEdit}
           aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}

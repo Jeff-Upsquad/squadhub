@@ -1410,7 +1410,11 @@ body {
   transition:
     background 120ms ease,
     opacity .6s ease-in .35s,
-    transform .6s cubic-bezier(0.4, 0, 0.7, 0.1) .35s;
+    transform .6s cubic-bezier(0.4, 0, 0.7, 0.1) .35s,
+    max-height .6s ease-in .5s,
+    min-height .6s ease-in .5s,
+    padding-block .6s ease-in .5s,
+    border-top-width .6s ease-in .5s;
   position: relative;
 }
 .lv-row:first-child { border-top: none; }
@@ -1485,13 +1489,25 @@ body {
   opacity: 0;
   transform: translateX(200px);
   pointer-events: none;
+  max-height: 0;
+  min-height: 0;
+  padding-block: 0;
+  border-top-width: 0;
+  overflow: hidden;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .lv-row,
-  .today-item { transition: background 120ms ease; }
+  .today-item { transition: background 120ms ease, opacity 1ms; }
   .lv-row[data-fading="true"],
-  .today-item[data-fading="true"] { opacity: 0; transform: none; }
+  .today-item[data-fading="true"] {
+    opacity: 0;
+    transform: none;
+    max-height: 0;
+    min-height: 0;
+    padding-block: 0;
+    border-top-width: 0;
+  }
   .lv-glyph[data-celebrating="true"],
   .lv-glyph[data-celebrating="true"]::after,
   .sh-view .checkbox[data-celebrating="true"],
@@ -2351,6 +2367,16 @@ body {
   border-top: 1px solid var(--sh-hair-3) !important;
 }
 .lv-card .lv-row:first-child { border-top: none; }
+/* Collapse the row's vertical space while it fades off so siblings reflow
+   immediately — no empty-row gap left behind during the slide. Matches
+   specificity of the card-row !important rule above. */
+.lv-canvas .lv-card .lv-row[data-fading="true"],
+.lv-card .lv-card-body .lv-row[data-fading="true"],
+.lv-card .lv-row[data-fading="true"] {
+  min-height: 0 !important;
+  padding-block: 0 !important;
+  border-top-width: 0 !important;
+}
 .lv-card .lv-row[data-active="true"]::before {
   content: '';
   position: absolute;
