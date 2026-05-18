@@ -124,8 +124,9 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
     return () => clearInterval(t);
   }, []);
 
-  // On mount (and when navigating back to today), center the current-time line
-  // in the visible calendar viewport instead of starting the user at midnight.
+  // On mount (and when navigating back to today), position the current-time
+  // line near the top of the visible calendar viewport so the user starts
+  // looking at "now + upcoming hours" rather than the middle of the day.
   const calRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const isToday = date === today;
@@ -137,7 +138,8 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
       const grid = gridRef.current;
       if (!cal || !grid) return;
       const nowOffset = grid.offsetTop + nowMinute * PX_PER_MIN;
-      cal.scrollTop = Math.max(0, nowOffset - cal.clientHeight / 2);
+      // Small headroom (40px) so the now-line isn't flush with the sticky header.
+      cal.scrollTop = Math.max(0, nowOffset - 40);
     }, 0);
     return () => window.clearTimeout(id);
   // We want this to fire only when isToday flips on (initial mount, or after
