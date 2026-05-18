@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import ViewSearchInput from '../../components/pm/ViewSearchInput';
 
 type Status = 'prog' | 'todo' | 'review' | 'done';
 type Priority = 'p0' | 'p1' | 'p2';
@@ -70,6 +71,15 @@ type Filter = 'mine' | 'created' | 'sub' | 'all';
 
 export default function MyTasksView() {
   const [filter, setFilter] = useState<Filter>('mine');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredGroups = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return GROUPS;
+    return GROUPS
+      .map((g) => ({ ...g, rows: g.rows.filter((r) => r.title.toLowerCase().includes(q)) }))
+      .filter((g) => g.rows.length > 0);
+  }, [searchQuery]);
 
   return (
     <div className="sh-view h-full overflow-y-auto">
@@ -80,7 +90,8 @@ export default function MyTasksView() {
             <h1>Your work, across six spaces.</h1>
             <div className="sub">Sorted by priority, then due date. Grouped by status.</div>
           </div>
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ViewSearchInput value={searchQuery} onChange={setSearchQuery} />
             <div className="top-btn ghost-border">
               <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M3 5h18l-7 9v5l-4 2v-7z" /></svg>
               Filter
@@ -113,7 +124,7 @@ export default function MyTasksView() {
             <span>Due</span>
             <span>Space</span>
           </div>
-          {GROUPS.map((g) => (
+          {filteredGroups.map((g) => (
             <div key={g.id} className="task-group">
               <div className="task-group-head">
                 <span className={`group-dot ${g.dot}`} />

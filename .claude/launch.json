@@ -325,6 +325,18 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/musing-leavitt-1df196/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3001"],
       "port": 3001
+    },
+    {
+      "name": "Clever Poincare Server",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/clever-poincare-b90980/server && PORT=4005 exec npm run dev"],
+      "port": 4005
+    },
+    {
+      "name": "Clever Poincare Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/clever-poincare-b90980/web && INTERNAL_API_URL=http://localhost:4005 exec npx next dev -p 3003"],
+      "port": 3003
     }
   ]
 }

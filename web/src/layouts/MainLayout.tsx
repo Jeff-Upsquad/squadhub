@@ -19,6 +19,7 @@ import ListPage from '../views/app/pm/ListPage';
 import FolderPage from '../views/app/pm/FolderPage';
 import SpacePage from '../views/app/pm/SpacePage';
 import HomeSidebar from '../views/app/HomeSidebar';
+import SearchPalette from '../views/app/SearchPalette';
 import SettingsSlider from '../components/SettingsSlider';
 import CheckInWidget from '../views/app/checkin/CheckInWidget';
 import TimeManagementPage from '../views/app/time-management/TimeManagementPage';
@@ -210,6 +211,7 @@ export default function MainLayout() {
   const [timesheetOpen, setTimesheetOpen] = useState(false);
   const [timesheetAnchor, setTimesheetAnchor] = useState<DOMRect | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -224,6 +226,36 @@ export default function MainLayout() {
   }, [profileOpen]);
 
   useEffect(() => { loadViewPreferences(); }, []);
+
+  // Global keyboard shortcuts:
+  //   ⌘K / Ctrl+K -> open workspace search palette
+  //   /           -> focus the view's top-right search input (when not already typing)
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if ((target as HTMLElement).isContentEditable) return true;
+      return false;
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setSearchOpen(true);
+        return;
+      }
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !isEditableTarget(e.target)) {
+        const input = document.querySelector<HTMLInputElement>('[data-view-search="true"]');
+        if (input) {
+          e.preventDefault();
+          input.focus();
+          input.select();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // Auto-switch to tasks view when a list is selected
   useEffect(() => {
@@ -498,6 +530,7 @@ export default function MainLayout() {
             onSelectChannel={handleSelectChannel}
             onCreateChannel={() => setShowCreateChannel(true)}
             onOpenSpaces={handleOpenSpaces}
+            onOpenSearch={() => setSearchOpen(true)}
           />
         </div>
       )}
@@ -707,6 +740,15 @@ export default function MainLayout() {
 
       {/* Toast notifications */}
       <ToastContainer />
+
+      {/* Workspace search palette */}
+      {searchOpen && currentWorkspace && (
+        <SearchPalette
+          workspaceId={currentWorkspace.id}
+          onClose={() => setSearchOpen(false)}
+          setHomeView={(v) => { setActiveSection('home'); setHomeView(v); }}
+        />
+      )}
     </div>
   );
 }
