@@ -187,7 +187,7 @@ function RailBtn({
 }
 
 export default function MainLayout() {
-  const { currentWorkspace, activeChannelId, setWorkspace, setChannels, setActiveChannel } = useWorkspaceStore();
+  const { currentWorkspace, activeChannelId, activeChannelKind, dmConversations, setWorkspace, setChannels, setActiveChannel } = useWorkspaceStore();
   const myHomeView: RoleHomeView = currentWorkspace?.my_home_view ?? 'user';
   const useRoleHome = ROLE_SPECIFIC_HOMES.includes(myHomeView);
   const user = useAuthStore((s) => s.user);
@@ -357,7 +357,11 @@ export default function MainLayout() {
 
   // Handlers for HomeSidebar
   const handleSelectChannel = (channelId: string) => {
-    setActiveChannel(channelId);
+    setActiveChannel(channelId, 'channel');
+    setHomeView('chat');
+  };
+  const handleSelectDm = (dmId: string) => {
+    setActiveChannel(dmId, 'dm');
     setHomeView('chat');
   };
 
@@ -528,6 +532,7 @@ export default function MainLayout() {
             homeView={homeView}
             onChangeView={(v) => { setActiveSection('home'); setHomeView(v); }}
             onSelectChannel={handleSelectChannel}
+            onSelectDm={handleSelectDm}
             onCreateChannel={() => setShowCreateChannel(true)}
             onOpenSpaces={handleOpenSpaces}
             onOpenSearch={() => setSearchOpen(true)}
@@ -578,48 +583,47 @@ export default function MainLayout() {
         ) : (
           homeView === 'chat' ? (
             <>
-              {activeChannelId && (
+              {activeChannelId && (() => {
+                const isDm = activeChannelKind === 'dm';
+                const activeDm = isDm ? dmConversations.find((d) => d.id === activeChannelId) : null;
+                const meId = user?.id;
+                const otherParticipants = (activeDm?.participants || []).filter((p) => p.id !== meId);
+                const dmTitle = isDm
+                  ? (otherParticipants.length === 0
+                      ? 'Note to self'
+                      : otherParticipants.length === 1
+                        ? otherParticipants[0].display_name
+                        : `${otherParticipants[0].display_name} +${otherParticipants.length - 1}`)
+                  : null;
+                return (
                 <div className="flex flex-col border-b border-divider">
                   <div className="flex items-center justify-between px-2 py-[7px]">
                     <div className="flex items-center gap-1 w-[360px]">
-                      {/* Channel name with hashtag */}
+                      {/* Title with hash (channel) or avatar (DM) */}
                       <div className="flex items-center gap-1.5 rounded px-2 py-1 overflow-hidden">
-                        <svg className="h-4 w-4 shrink-0 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-                        </svg>
+                        {isDm ? (
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] bg-[#E2E8F0] text-[10px] font-bold text-[#0F172B]">
+                            {(otherParticipants[0]?.display_name?.[0] || '?').toUpperCase()}
+                          </span>
+                        ) : (
+                          <svg className="h-4 w-4 shrink-0 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                          </svg>
+                        )}
                         <span className="text-[18px] font-black leading-[26px] text-foreground">
-                          {activeChannel?.name}
+                          {isDm ? dmTitle : activeChannel?.name}
                         </span>
                         <svg className="h-4 w-4 shrink-0 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                       </div>
-                      {activeChannel?.description && (
+                      {!isDm && activeChannel?.description && (
                         <span className="text-[12px] leading-[16px] text-foreground-muted truncate flex-1">
                           {activeChannel.description}
                         </span>
                       )}
                     </div>
                     <div className="flex items-center gap-2.5">
-                      {/* Members pill */}
-                      <div className="flex items-center gap-2 rounded-[7px] border border-divider px-2 py-1.5">
-                        <span className="text-[12px] font-semibold leading-[16px] text-foreground-muted">
-                          {channels.length}
-                        </span>
-                      </div>
-                      {/* Huddle */}
-                      <div className="flex items-center gap-2 rounded-[7px] border border-divider px-2 py-1.5">
-                        <svg className="h-[22px] w-[22px] text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
-                        </svg>
-                      </div>
-                      {/* Canvas */}
-                      <div className="flex items-center gap-2 rounded-[7px] border border-divider px-2 py-1.5">
-                        <svg className="h-5 w-5 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                        </svg>
-                        <span className="text-[12px] font-semibold leading-[16px] text-foreground-muted">Canvas</span>
-                      </div>
                       {/* Settings */}
                       <button
                         onClick={() => setShowChannelSettings(!showChannelSettings)}
@@ -635,11 +639,12 @@ export default function MainLayout() {
                     </div>
                   </div>
                 </div>
-              )}
+                );
+              })()}
               <div className="flex flex-1 overflow-hidden">
                 {activeChannelId ? (
                   <div className="flex-1 flex flex-col overflow-hidden">
-                    <ChatPanel channelId={activeChannelId} />
+                    <ChatPanel channelId={activeChannelId} kind={activeChannelKind} />
                   </div>
                 ) : (
                   <div className="flex flex-1 items-center justify-center text-sm text-foreground-dim">

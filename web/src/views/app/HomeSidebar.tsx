@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { Channel, SubscriptionCardRecipient } from '@squadhub/shared';
 import type { HomeView } from '../../layouts/MainLayout';
@@ -17,6 +17,9 @@ import { useIsClient, useIsPartner } from '../../hooks/useUserType';
 import { useMyClients, useClientFolders, type MyClientEntry } from '../../hooks/useMyClients';
 import { useIsWorkspaceAdmin } from '../../hooks/useIsWorkspaceAdmin';
 import AddClientSpaceModal from './clients/AddClientSpaceModal';
+import { useDms } from '../../hooks/useDms';
+import NewDmModal from './chat/NewDmModal';
+import DmListItem from './chat/DmListItem';
 
 // ---- Props ----
 interface HomeSidebarProps {
@@ -26,6 +29,7 @@ interface HomeSidebarProps {
   homeView: HomeView;
   onChangeView: (view: HomeView) => void;
   onSelectChannel: (channelId: string) => void;
+  onSelectDm: (dmId: string) => void;
   onCreateChannel: () => void;
   onOpenSpaces: () => void;
   onOpenSearch: () => void;
@@ -164,11 +168,23 @@ export default function HomeSidebar({
   homeView,
   onChangeView,
   onSelectChannel,
+  onSelectDm,
   onCreateChannel,
   onOpenSpaces,
   onOpenSearch,
 }: HomeSidebarProps) {
   const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
+  const activeChannelKind = useWorkspaceStore((s) => s.activeChannelKind);
+  const setDmConversations = useWorkspaceStore((s) => s.setDmConversations);
+  const canSendDms = useHasPermission('can_send_dms');
+  const [showNewDm, setShowNewDm] = useState(false);
+  const { data: dmsData } = useDms(workspaceId);
+  const dms = dmsData ?? [];
+  // Keep store in sync only when the query data ref actually changes.
+  // Avoids feedback loop from defaulting `[]` on every render.
+  useEffect(() => {
+    if (dmsData) setDmConversations(dmsData);
+  }, [dmsData, setDmConversations]);
   const { data: favorites, isLoading: favoritesLoading } = useFavorites(workspaceId);
   const { data: sharedItems, isLoading: sharedLoading } = useSharedWithMe(workspaceId);
   const { data: myClients, isLoading: myClientsLoading, isError: myClientsError } = useMyClients();
@@ -682,13 +698,52 @@ export default function HomeSidebar({
             title="Direct Messages"
             expanded={expandedSections.dms}
             onToggle={() => toggleSection('dms')}
+            action={
+              canSendDms ? (
+                <button
+                  onClick={() => setShowNewDm(true)}
+                  className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
+                  title="New direct message"
+                >
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+              ) : undefined
+            }
           />
           {expandedSections.dms && (
             <div className="px-2 pb-1">
-              <p className="px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">No direct messages yet</p>
+              {dms.length === 0 ? (
+                <p className="px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">No direct messages yet</p>
+              ) : (
+                dms.map((dm) => (
+                  <DmListItem
+                    key={dm.id}
+                    dm={dm}
+                    active={activeChannelId === dm.id && activeChannelKind === 'dm' && homeView === 'chat'}
+                    onClick={() => onSelectDm(dm.id)}
+                  />
+                ))
+              )}
+              {canSendDms && (
+                <button
+                  onClick={() => setShowNewDm(true)}
+                  className="flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-4)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+                >
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  New direct message
+                </button>
+              )}
             </div>
           )}
         </div>
+
+        {showNewDm && (
+          <NewDmModal workspaceId={workspaceId} onClose={() => setShowNewDm(false)} />
+        )}
       </div>
 
       {addSpaceForClient && (

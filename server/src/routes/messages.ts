@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { checkResourceAccess, meetsAccessLevel, requirePermission } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
+import { findFirstUrl, unfurl } from '../services/unfurl';
 
 const router = Router();
 
@@ -12,6 +13,10 @@ const sendMessageSchema = z.object({
   content: z.string().max(4000).optional(),
   type: z.enum(['text', 'image', 'audio', 'video', 'file']).default('text'),
   file_url: z.string().url().optional(),
+  file_name: z.string().max(255).optional(),
+  file_size: z.number().int().positive().optional(),
+  file_mime: z.string().max(255).optional(),
+  duration_ms: z.number().int().nonnegative().optional(),
   parent_message_id: z.string().uuid().optional(), // for threads
   mentions: z.array(z.string().uuid()).max(100).optional(),
 }).refine(
@@ -100,17 +105,42 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       }
     }
 
+    // Resolve unfurl inline (with 4s cap) — best-effort, never blocks message send.
+    let unfurlData: unknown = null;
+    if (body.type === 'text' && body.content) {
+      const firstUrl = findFirstUrl(body.content);
+      if (firstUrl) {
+        try {
+          unfurlData = await unfurl(firstUrl);
+        } catch {
+          unfurlData = null;
+        }
+      }
+    }
+
+    // Build the insert payload, omitting optional columns whose value is null/undefined.
+    // This is defensive against environments where new columns (file_*, duration_ms,
+    // parent_message_id, unfurl) haven't been added yet — only columns the caller
+    // actually populated get included. Required fields are always set.
+    const insertRow: Record<string, unknown> = {
+      channel_id: body.channel_id || null,
+      dm_conversation_id: body.dm_conversation_id || null,
+      sender_id: req.userId,
+      content: body.content || null,
+      type: body.type,
+      file_url: body.file_url || null,
+      mentions: body.mentions || [],
+    };
+    if (body.file_name) insertRow.file_name = body.file_name;
+    if (body.file_size) insertRow.file_size = body.file_size;
+    if (body.file_mime) insertRow.file_mime = body.file_mime;
+    if (body.duration_ms) insertRow.duration_ms = body.duration_ms;
+    if (body.parent_message_id) insertRow.parent_message_id = body.parent_message_id;
+    if (unfurlData) insertRow.unfurl = unfurlData;
+
     const { data: message, error } = await supabaseAdmin
       .from('messages')
-      .insert({
-        channel_id: body.channel_id || null,
-        dm_conversation_id: body.dm_conversation_id || null,
-        sender_id: req.userId,
-        content: body.content || null,
-        type: body.type,
-        file_url: body.file_url || null,
-        mentions: body.mentions || [],
-      })
+      .insert(insertRow)
       .select('*, sender:users!sender_id(id, display_name, avatar_url)')
       .single();
 
@@ -119,7 +149,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    // If this is a thread reply, insert into message_threads
+    // If this is a thread reply, also insert into message_threads (legacy table).
     if (body.parent_message_id) {
       await supabaseAdmin.from('message_threads').insert({
         parent_message_id: body.parent_message_id,
@@ -127,11 +157,16 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       });
     }
 
-    // Emit via Socket.io (the socket handler will be attached to the app)
+    // Emit via Socket.io (the socket handler will be attached to the app).
+    // For thread replies, emit a thread_reply event AND also broadcast new_message
+    // so the channel can update its reply_count denormalization on the parent.
     const io = req.app.get('io');
     if (io) {
       const room = body.channel_id || body.dm_conversation_id;
       io.to(room).emit('new_message', message);
+      if (body.parent_message_id) {
+        io.to(room).emit('thread_reply', message);
+      }
     }
 
     res.status(201).json({ success: true, data: message });

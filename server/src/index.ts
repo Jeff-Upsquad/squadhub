@@ -12,6 +12,7 @@ import workspaceRoutes from './routes/workspaces';
 import channelRoutes from './routes/channels';
 import messageRoutes from './routes/messages';
 import dmRoutes from './routes/dms';
+import uploadChatWsRoutes from './routes/upload-chat-ws';
 import uploadRoutes from './routes/upload';
 import userRoutes from './routes/users';
 import adminRoutes from './routes/admin';
@@ -116,6 +117,7 @@ app.use('/auth', authRoutes);
 app.use('/workspaces', workspaceRoutes);
 app.use('/channels', channelRoutes);
 app.use('/messages', messageRoutes);
+app.use('/messages', uploadChatWsRoutes); // adds POST /messages/upload-presign
 app.use('/dms', dmRoutes);
 app.use('/upload', uploadRoutes);
 app.use('/users', userRoutes);
