@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import NewClientsModule from './NewClientsModule';
@@ -10,7 +11,11 @@ import OnboardingLinksModule from './OnboardingLinksModule';
 type Tab = 'new-clients' | 'clients' | 'invite-links' | 'client-subscriptions' | 'client-access';
 
 export default function AdminClients() {
-  const [activeTab, setActiveTab] = useState<Tab>('new-clients');
+  // Deep-link query params: ?client=<id> lands on the Clients tab, ?submission=<id>
+  // lands on the New Leads tab. The downstream modules handle the actual row open.
+  const searchParams = useSearchParams();
+  const initialTab: Tab = searchParams.get('client') ? 'clients' : 'new-clients';
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
   // Counts for badges
   const { data: subCountRes } = useQuery({
