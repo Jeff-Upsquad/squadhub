@@ -340,8 +340,10 @@ body {
 .sh-view .dp-block[data-done="true"] .b-title { color: var(--sh-ink-3); text-decoration: line-through; text-decoration-color: var(--sh-ink-4); }
 .sh-view .dp-block[data-done="true"] .b-meta { color: var(--sh-ink-4); }
 .sh-view .dp-block[data-done="true"] .remove { color: var(--sh-ink-3); }
-.sh-view .dp-block .dp-block-handle { height: 6px; cursor: ns-resize; flex: none; background: transparent; }
-.sh-view .dp-block .dp-block-handle:hover { background: rgba(202, 138, 4, 0.35); }
+.sh-view .dp-block .dp-block-handle { height: 8px; cursor: ns-resize; flex: none; background: transparent; position: relative; transition: background 0.12s; }
+.sh-view .dp-block .dp-block-handle::after { content: ''; position: absolute; left: 12px; right: 12px; top: 50%; transform: translateY(-50%); height: 2px; border-radius: 1px; background: rgba(120, 53, 15, 0.35); opacity: 0; transition: opacity 0.12s; }
+.sh-view .dp-block .dp-block-handle:hover { background: rgba(202, 138, 4, 0.18); }
+.sh-view .dp-block .dp-block-handle:hover::after { opacity: 1; }
 .sh-view .dp-block .dp-block-body { flex: 1 1 auto; min-height: 0; padding: 4px 10px 4px 8px; position: relative; cursor: grab; user-select: none; }
 .sh-view .dp-block .dp-block-body:active { cursor: grabbing; }
 .sh-view .dp-block .b-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #422006; padding-right: 18px; }
