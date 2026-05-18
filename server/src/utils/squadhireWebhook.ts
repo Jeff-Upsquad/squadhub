@@ -119,11 +119,24 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, distribution, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, recalled_at, archived_at, source, proposed_price, markup, customer_company, customer_email, service_type, plan_name',
+      'id, state, distribution, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, recalled_at, archived_at, source, proposed_price, markup, customer_company, customer_email, service_type, plan_name, plan_snapshot',
     )
     .eq('id', cardId)
     .maybeSingle();
   if (!card) return null;
+
+  // Frozen plan-side data (hours, deliverables, pricing) captured at publish
+  // time. When set, all plan reads below short-circuit to this object so the
+  // partner sees what existed at publish, not whatever the plan looks like now.
+  const planSnapshot =
+    (card as any).plan_snapshot && typeof (card as any).plan_snapshot === 'object'
+      ? ((card as any).plan_snapshot as {
+          plan?: { id: string; plan: string | null; tier: string | null; daily_hours: number | null; weekly_hours: number | null };
+          deliverables?: Array<{ id: string; kind: 'hours' | 'item'; deliverable_type_id: string | null; deliverable_type_name: string | null; per_day: number; per_week: number; per_month: number; sort_order: number }>;
+          pricing?: Array<{ country_id: string; price: number; margin_value: number; margin_type: 'fixed' | 'percent' }>;
+          partner_pricing?: Array<{ country_id: string; price: number }>;
+        })
+      : null;
 
   // For secondary cards, resolve content fields from the parent.
   let contentSource = card;
@@ -388,6 +401,42 @@ export async function buildSquadhirePayloadForCard(
       }));
   }
 
+  // Frozen plan-snapshot wins over the live reads above. Cards in any
+  // non-draft state were published from a specific plan revision, and
+  // later edits to that plan must not silently rewrite the values
+  // partners already saw.
+  if (planSnapshot) {
+    if (planSnapshot.plan) {
+      planName = planSnapshot.plan.plan ?? planName;
+      planTier = planSnapshot.plan.tier ?? planTier;
+    }
+    const disabledIdsForSnapshot = new Set<string>(
+      Array.isArray(contentSource.disabled_default_deliverable_ids)
+        ? (contentSource.disabled_default_deliverable_ids as string[])
+        : [],
+    );
+    const snapHours = (planSnapshot.deliverables ?? []).find(
+      (d) => d.kind === 'hours' && !disabledIdsForSnapshot.has(d.id),
+    );
+    planHoursDeliverable = snapHours
+      ? {
+          per_day: Number(snapHours.per_day) || 0,
+          per_week: Number(snapHours.per_week) || 0,
+          per_month: Number(snapHours.per_month) || 0,
+        }
+      : null;
+    planItemDeliverables = (planSnapshot.deliverables ?? [])
+      .filter((d) => d.kind === 'item' && !disabledIdsForSnapshot.has(d.id))
+      .map((d) => ({
+        kind: 'item',
+        name: d.deliverable_type_name ?? 'Deliverable',
+        deliverable_type_id: d.deliverable_type_id ?? null,
+        per_day: Number(d.per_day) || 0,
+        per_week: Number(d.per_week) || 0,
+        per_month: Number(d.per_month) || 0,
+      }));
+  }
+
   // Hours resolution: a card's custom_deliverables can carry an hours entry
   // that overrides the plan default (same pattern as partner price). Prefer
   // the card-level override, fall back to the plan deliverable.
@@ -457,7 +506,31 @@ export async function buildSquadhirePayloadForCard(
   let resolvedMonthlyPrice: number | null = null;
   let resolvedCustomerMonthlyPrice: number | null = null;
   let resolvedCurrency: string | null = null;
-  if (pricingCountryId && staged?.plan_id) {
+  if (planSnapshot && pricingCountryId) {
+    // Frozen pricing path: use the snapshot captured at publish time.
+    const customerRow = (planSnapshot.pricing ?? []).find(
+      (p) => p.country_id === pricingCountryId,
+    );
+    const partnerRow = (planSnapshot.partner_pricing ?? []).find(
+      (p) => p.country_id === pricingCountryId,
+    );
+    const { data: country } = await supabaseAdmin
+      .from('countries')
+      .select('currency')
+      .eq('id', pricingCountryId)
+      .maybeSingle();
+    const defaultPartnerPrice = partnerRow ? Number(partnerRow.price) : null;
+    const override = card.partner_price_override as number | null | undefined;
+    const resolved = override ?? defaultPartnerPrice;
+    if (resolved != null && country?.currency) {
+      resolvedMonthlyPrice = resolved;
+      resolvedCurrency = country.currency as string;
+    }
+    if (customerRow) {
+      resolvedCustomerMonthlyPrice = Number(customerRow.price);
+      if (!resolvedCurrency && country?.currency) resolvedCurrency = country.currency as string;
+    }
+  } else if (pricingCountryId && staged?.plan_id) {
     const [{ data: planPartner }, { data: planCustomer }, { data: country }] = await Promise.all([
       supabaseAdmin
         .from('subscription_plan_partner_pricing')

@@ -314,14 +314,49 @@ router.get('/', async (req: Request, res: Response) => {
       const country = submission ? countryById[submission.country_id] || null : null;
       const plan = staged ? planById[staged.plan_id] || null : null;
       const subscription = staged ? subById[staged.subscription_id] || null : null;
-      const planPricing = staged ? pricingByPlan[staged.plan_id] || [] : [];
-      const priceForCountry = country
-        ? planPricing.find((pr: any) => pr.country_id === country.id) || null
-        : null;
       const publisher = card.published_by ? publisherById[card.published_by] || null : null;
 
-      const planIdForDelivs = staged?.plan_id ?? cardIdToResolvedPlanId[card.id] ?? null;
-      const planDefaults = buildPlanDefaultDeliverables(planIdForDelivs);
+      // Frozen plan-side data wins over live reads. Populated at publish
+      // time and cleared on recall — see utils/cardPlanSnapshot.ts.
+      const snap =
+        card.plan_snapshot && typeof card.plan_snapshot === 'object'
+          ? (card.plan_snapshot as any)
+          : null;
+
+      let planDefaults: any[];
+      if (snap?.deliverables) {
+        planDefaults = (snap.deliverables as any[]).map((d) => ({
+          id: d.id,
+          kind: d.kind,
+          deliverable_type_id: d.deliverable_type_id ?? null,
+          deliverable_type_name: d.deliverable_type_name ?? null,
+          per_day: Number(d.per_day) || 0,
+          per_week: Number(d.per_week) || 0,
+          per_month: Number(d.per_month) || 0,
+        }));
+      } else {
+        const planIdForDelivs = staged?.plan_id ?? cardIdToResolvedPlanId[card.id] ?? null;
+        planDefaults = buildPlanDefaultDeliverables(planIdForDelivs);
+      }
+
+      let priceForCountry: any = null;
+      if (snap?.pricing && country) {
+        const row = (snap.pricing as any[]).find((pr) => pr.country_id === country.id);
+        if (row) priceForCountry = { ...row, plan_id: snap.plan?.id ?? staged?.plan_id ?? null };
+      } else {
+        const planPricing = staged ? pricingByPlan[staged.plan_id] || [] : [];
+        priceForCountry = country
+          ? planPricing.find((pr: any) => pr.country_id === country.id) || null
+          : null;
+      }
+
+      // Hours come from the snapshot too. We keep plan name/tier live since
+      // they rarely change and the admin column wants the current label.
+      const planWithFrozenHours = plan
+        ? snap?.plan
+          ? { ...plan, daily_hours: snap.plan.daily_hours, weekly_hours: snap.plan.weekly_hours }
+          : plan
+        : null;
 
       const base = await hydrateCard(card);
       return {
@@ -331,9 +366,9 @@ router.get('/', async (req: Request, res: Response) => {
           ? {
               ...staged,
               subscription,
-              plan: plan
+              plan: planWithFrozenHours
                 ? {
-                    ...plan,
+                    ...planWithFrozenHours,
                     pricing: priceForCountry ? [{ ...priceForCountry, country }] : [],
                   }
                 : null,
@@ -707,7 +742,7 @@ router.post('/:id/secondary-cards', async (req: Request, res: Response) => {
 
     const { data: parent } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, squadhire_category_ids')
+      .select('id, state, squadhire_category_ids, plan_snapshot')
       .eq('id', parentId)
       .is('parent_card_id', null)
       .maybeSingle();
@@ -732,6 +767,9 @@ router.post('/:id/secondary-cards', async (req: Request, res: Response) => {
         published_at: now,
         published_by: (req as any).userId,
         squadhire_category_ids: parent.squadhire_category_ids || [],
+        // Secondaries display the parent's plan terms; mirror the parent's
+        // frozen snapshot so the same freeze rules apply (no live drift).
+        plan_snapshot: parent.plan_snapshot ?? null,
       })
       .select('*')
       .single();
@@ -866,6 +904,8 @@ router.post('/:id/recall', async (req: Request, res: Response) => {
         squadhire_synced_at: null,
         squadhire_sync_attempts: 0,
         squadhire_sync_last_error: null,
+        // Clear the frozen plan snapshot — back to live reads until republish.
+        plan_snapshot: null,
       };
     } else {
       updatePayload = {
