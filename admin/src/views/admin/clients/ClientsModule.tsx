@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import type { Client, Country, Subscription, ClientStatus, SalesPerson } from '@squadhub/shared';
@@ -26,6 +27,7 @@ const EMPTY_CREATE_FORM = {
 
 export default function ClientsModule() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(false);
@@ -42,6 +44,25 @@ export default function ClientsModule() {
     queryFn: () => api.get('/admin/clients').then((r) => r.data),
   });
   const clients: Client[] = clientsRes?.data || [];
+
+  // Deep-link support: ?client=<id> auto-opens that client once the list
+  // has loaded, and switches the status tab to match so the row is visible.
+  // Only fires once per param value so closing the slider doesn't immediately
+  // re-open it from the URL.
+  const clientParam = searchParams.get('client');
+  const handledClientParam = useRef<string | null>(null);
+  useEffect(() => {
+    if (!clientParam) { handledClientParam.current = null; return; }
+    if (handledClientParam.current === clientParam) return;
+    const match = clients.find((c) => c.id === clientParam);
+    if (match) {
+      setStatusTab(match.status);
+      setSelectedClient(match);
+      setEditing(false);
+      setShowArchivedSubs(false);
+      handledClientParam.current = clientParam;
+    }
+  }, [clientParam, clients]);
 
   const { data: catalogRes } = useQuery({
     queryKey: ['admin-subs-catalog'],
