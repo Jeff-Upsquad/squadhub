@@ -14,6 +14,7 @@ import CreateChannelModal from '../views/app/chat/CreateChannelModal';
 import GlobalCreateTaskModal from '../views/app/pm/GlobalCreateTaskModal';
 import type { SavedDraft } from '../stores/draftTaskStore';
 import ToastContainer from '../components/Toast';
+import { useWorkBlockNotifier } from '../hooks/useWorkBlockNotifier';
 import DraftTasksWidget from '../components/DraftTasksWidget';
 import ListPage from '../views/app/pm/ListPage';
 import FolderPage from '../views/app/pm/FolderPage';
@@ -41,6 +42,7 @@ import DesignerHome from '../views/app/home/DesignerHome';
 import VideoEditorHome from '../views/app/home/VideoEditorHome';
 import AccountantHome from '../views/app/home/AccountantHome';
 import GlobalTaskDetailPanel from '../views/app/home/GlobalTaskDetailPanel';
+import GlobalTaskPeekPanel from '../views/app/home/GlobalTaskPeekPanel';
 import EmergencyBanner from '../views/app/pm/EmergencyBanner';
 import InboxView from '../views/app/InboxView';
 import MyTasksView from '../views/app/MyTasksView';
@@ -203,6 +205,8 @@ export default function MainLayout() {
   const [homeView, setHomeView] = useState<HomeView>('hub');
   const { data: unreadCount = 0 } = useUnreadCount();
   useNotificationSocket();
+  // Schedule in-app toasts for upcoming work-block windows today.
+  useWorkBlockNotifier();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
@@ -710,6 +714,12 @@ export default function MainLayout() {
 
       {/* Global task detail panel — opens from any view when activeTaskId is set */}
       <GlobalTaskDetailPanel />
+
+      {/* Side-by-side peek — opens when a task is clicked inside another
+          task's panel (e.g. work-block activity rows). Renders the full
+          TaskDetailPanel on the left so the host panel on the right stays
+          visible at the same time. */}
+      <GlobalTaskPeekPanel />
 
       {/* Time sheet panel — anchored to the rail button */}
       {timesheetOpen && (

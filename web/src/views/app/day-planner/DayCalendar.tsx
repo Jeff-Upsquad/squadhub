@@ -384,20 +384,34 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
           const isDone = isTaskDone(p.task?.status);
           const top = renderStart * PX_PER_MIN;
           const height = Math.max(20, renderDur * PX_PER_MIN);
+          // Work-block occurrences carry a `task_type_key` from the server's
+          // hydrate and a `virtual` flag from the day-plans GET extension.
+          const isWorkBlock = (p.task as any)?.task_type_key === 'work_block';
+          const wbColor = (p.task as any)?.task_type_color || '#8b5cf6';
+          const isVirtual = (p as any).virtual === true;
+          const wbStyle = isWorkBlock
+            ? {
+                background: `color-mix(in oklch, ${wbColor} 18%, transparent)`,
+                borderLeft: `3px solid ${wbColor}`,
+              }
+            : null;
           return (
             <div
               key={p.id}
               className="dp-block"
               data-moving={isMoving ? 'true' : undefined}
               data-done={isDone ? 'true' : undefined}
+              data-type={isWorkBlock ? 'work_block' : undefined}
+              data-virtual={isVirtual ? 'true' : undefined}
               style={{
                 top,
                 height,
                 left: `calc(70px + ${p.col} * (100% - 92px) / ${p.cols})`,
                 width: `calc((100% - 92px) / ${p.cols} - 4px)`,
                 right: 'auto',
+                ...(wbStyle || {}),
               }}
-              title={`${p.task?.title ?? 'Task'} · ${fmtMinAsClock(renderStart)}`}
+              title={`${p.task?.title ?? 'Task'} · ${fmtMinAsClock(renderStart)}${isWorkBlock ? ' · Work block' : ''}`}
             >
               {/* Top resize handle — drag to extend earlier */}
               <div
@@ -411,17 +425,19 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
                 className="dp-block-body"
                 onMouseDown={startMove({ id: p.id, task_id: p.task_id, start_minute: p.start_minute, duration_minutes: p.duration_minutes })}
               >
-                <button
-                  type="button"
-                  className="remove"
-                  onClick={(e) => { e.stopPropagation(); unschedule.mutate({ task_id: p.task_id, plan_date: date }); }}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  aria-label="Remove from calendar"
-                >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6 6l12 12M18 6L6 18" />
-                  </svg>
-                </button>
+                {!isVirtual && (
+                  <button
+                    type="button"
+                    className="remove"
+                    onClick={(e) => { e.stopPropagation(); unschedule.mutate({ task_id: p.task_id, plan_date: date }); }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    aria-label="Remove from calendar"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                )}
                 <div className="b-title">{p.task?.title ?? 'Task'}</div>
                 <div className="b-meta">
                   <svg className="b-clock" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -457,9 +473,10 @@ interface Positioned {
   task_id: string;
   start_minute: number;
   duration_minutes: number;
-  task?: { id: string; title: string; status?: string | null } | undefined;
+  task?: { id: string; title: string; status?: string | null; task_type_key?: string | null; task_type_color?: string | null } | undefined;
   col: number;
   cols: number;
+  virtual?: boolean;
 }
 
 // "Completed" covers both the catalog 'closed' key and the legacy 'done'/'closed'
@@ -501,7 +518,16 @@ function positionBlocks(plans: any[]): Positioned[] {
       task_id: p.task_id,
       start_minute: p.start_minute,
       duration_minutes: p.duration_minutes,
-      task: p.task ? { id: p.task.id, title: p.task.title, status: p.task.status } : undefined,
+      task: p.task
+        ? {
+            id: p.task.id,
+            title: p.task.title,
+            status: p.task.status,
+            task_type_key: p.task.task_type_key ?? null,
+            task_type_color: p.task.task_type_color ?? null,
+          }
+        : undefined,
+      virtual: p.virtual === true,
       col,
       cols: 1,
     });

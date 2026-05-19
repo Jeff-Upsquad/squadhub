@@ -2,9 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import type { Task, SpaceStatus } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
+import { useTaskTypes } from '../../../hooks/useTaskTypes';
+import { useActiveWorkBlockRun, useRecordWorkBlockCompletion } from '../../../hooks/useWorkBlocks';
 import { avatarColor, initialOf, formatWhen, nextQuickDate } from './taskHelpers';
 import AssigneePicker from './AssigneePicker';
 import DatePicker from './DatePicker';
+
+function fmtClock(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
 
 const PRIORITY_LEVEL: Record<string, string | null> = {
   urgent: 'p0',
@@ -29,10 +39,35 @@ export default function TaskRow({
   canEdit?: boolean;
   listId: string;
 }) {
-  const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, toggleFocusToday, isFocusedToday, fadingTaskIds, markFading, unmarkFading } = usePMStore();
+  const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, toggleFocusToday, isFocusedToday, fadingTaskIds, markFading, unmarkFading, timer: globalTimer } = usePMStore();
+  const { data: activeWB } = useActiveWorkBlockRun();
+  // Per-row timer indicator: live ticking elapsed for whichever timer this row
+  // owns (per-task timer OR a work-block run on this task). Updates once per
+  // second only when a relevant timer is active — quiet for everyone else.
+  const isPerTaskTimer = globalTimer?.taskId === task.id;
+  const isWorkBlockRun = activeWB?.task.id === task.id && !activeWB?.run.ended_at;
+  const isTiming = isPerTaskTimer || isWorkBlockRun;
+  const [tickElapsed, setTickElapsed] = useState(0);
+  useEffect(() => {
+    if (!isTiming) { setTickElapsed(0); return; }
+    const startMs = isPerTaskTimer
+      ? (globalTimer?.startedAt ?? Date.now())
+      : new Date(activeWB!.run.started_at).getTime();
+    const tick = () => setTickElapsed(Math.max(0, Math.floor((Date.now() - startMs) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [isTiming, isPerTaskTimer, globalTimer?.startedAt, activeWB?.run.started_at]);
   const isFocused = isFocusedToday(task.id);
   const effectiveListId = listId || (task as any).list_id || task.list?.id || null;
   const updateTask = useUpdateTask(effectiveListId);
+  // Task list endpoints don't hydrate the `task_type` join — only the id —
+  // so resolve from the cached useTaskTypes() list to drive type-based styling.
+  const { data: taskTypesList } = useTaskTypes();
+  const resolvedTaskType = (task as any).task_type
+    || taskTypesList?.find((t) => t.id === task.task_type_id)
+    || null;
+  const isWorkBlock = resolvedTaskType?.key === 'work_block';
   const [expanded, setExpanded] = useState(false);
 
   // Track in-flight quick-date values so rapid clicks read the most recent sent
@@ -60,6 +95,7 @@ export default function TaskRow({
   const dueWhen = formatWhen(task.due_date);
   const assignees = task.assignees || [];
 
+  const recordCompletion = useRecordWorkBlockCompletion();
   const handleGlyphClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!canEdit) return;
@@ -69,6 +105,12 @@ export default function TaskRow({
       // in this bucket while the slide animation plays — see pmStore.ts and
       // groupTasksByStatus / groupByStatus for the read side.
       markFading(task.id, statusCategory ?? '');
+      // If a work-block run is active for the caller (and this task isn't
+      // itself the work block), log this completion against the run. Same
+      // hook the detail panel uses — idempotent on the server.
+      if (activeWB && activeWB.task.id !== task.id) {
+        recordCompletion.mutate({ run_id: activeWB.run.id, completed_task_id: task.id });
+      }
     }
     updateTask.mutate(
       { id: task.id, status: next } as any,
@@ -127,6 +169,7 @@ export default function TaskRow({
         data-selected={isSelected}
         data-done={displayDone}
         data-fading={isFading}
+        data-type={isWorkBlock ? 'work_block' : undefined}
         style={depth > 0 ? { paddingLeft: 20 + depth * 22 } : undefined}
       >
         {/* Checkbox — toggles done */}
@@ -168,7 +211,49 @@ export default function TaskRow({
                 </svg>
               </button>
             )}
+            {isWorkBlock && (
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={resolvedTaskType?.color || '#8b5cf6'}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-label="Work block"
+                style={{ flexShrink: 0 }}
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+            )}
             <span className="lv-title">{task.title}</span>
+            {isTiming && (
+              <span
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums"
+                style={{
+                  background: isWorkBlockRun
+                    ? 'color-mix(in oklch, #8b5cf6 18%, transparent)'
+                    : 'rgba(16, 185, 129, 0.15)',
+                  color: isWorkBlockRun ? '#7c3aed' : '#047857',
+                  flexShrink: 0,
+                }}
+                title={isWorkBlockRun ? 'Work-block run in progress' : 'Timer running'}
+              >
+                <span className="relative inline-flex h-1.5 w-1.5">
+                  <span
+                    className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75"
+                    style={{ background: isWorkBlockRun ? '#a78bfa' : '#34d399' }}
+                  />
+                  <span
+                    className="relative inline-flex h-1.5 w-1.5 rounded-full"
+                    style={{ background: isWorkBlockRun ? '#8b5cf6' : '#10b981' }}
+                  />
+                </span>
+                {fmtClock(tickElapsed)}
+              </span>
+            )}
             <button
               type="button"
               className="lv-focus-star"

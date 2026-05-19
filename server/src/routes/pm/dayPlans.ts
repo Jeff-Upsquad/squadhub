@@ -11,6 +11,36 @@ router.use(requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_
 
 const dateRe = /^\d{4}-\d{2}-\d{2}$/;
 
+// Recurrence matching for work-block virtual occurrences. Kept here (not
+// in a shared package) so the day-planner endpoint has zero new deps. The
+// web client has a mirror in web/src/utils/workBlockRecurrence.ts.
+type Recurrence = {
+  kind: 'none' | 'daily' | 'weekdays' | 'weekly' | 'monthly';
+  weekdays?: number[];
+  day_of_month?: number;
+  starts_on?: string;
+  ends_on?: string | null;
+};
+
+function occursOn(rule: Recurrence | null | undefined, dateStr: string): boolean {
+  if (!rule) return false;
+  if (rule.starts_on && dateStr < rule.starts_on) return false;
+  if (rule.ends_on && dateStr > rule.ends_on) return false;
+  if (rule.kind === 'none') {
+    // One-off blocks: an occurrence only on starts_on (if set).
+    return !!rule.starts_on && rule.starts_on === dateStr;
+  }
+  // Build a UTC-noon Date to dodge DST edges when reading getUTCDay/getUTCDate.
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  const dow = d.getUTCDay(); // 0=Sun..6=Sat
+  const dom = d.getUTCDate();
+  if (rule.kind === 'daily') return true;
+  if (rule.kind === 'weekdays') return dow >= 1 && dow <= 5;
+  if (rule.kind === 'weekly') return Array.isArray(rule.weekdays) && rule.weekdays.includes(dow);
+  if (rule.kind === 'monthly') return typeof rule.day_of_month === 'number' && rule.day_of_month === dom;
+  return false;
+}
+
 const createSchema = z.object({
   task_id: z.string().uuid(),
   plan_date: z.string().regex(dateRe),
@@ -33,12 +63,19 @@ async function hydrate(plans: any[]): Promise<any[]> {
   // makes Supabase reject the whole select with 42703.
   const { data: tasks, error: tasksErr } = await supabaseAdmin
     .from('tasks')
-    .select('id, title, priority, status, time_estimate, list_id')
+    .select('id, title, priority, status, time_estimate, list_id, task_type_id, task_types(key, color)')
     .in('id', taskIds);
   if (tasksErr) {
     console.error('[dayPlans] tasks lookup failed:', tasksErr);
   }
-  const taskMap = new Map<string, any>((tasks || []).map((t: any) => [t.id, t]));
+  // Flatten task_types join → `task_type_key` / `task_type_color` so day-planner
+  // blocks can identify work blocks without an extra round-trip.
+  const taskMap = new Map<string, any>(
+    (tasks || []).map((t: any) => [
+      t.id,
+      { ...t, task_type_key: t.task_types?.key ?? null, task_type_color: t.task_types?.color ?? null },
+    ]),
+  );
 
   const listIds = Array.from(
     new Set((tasks || []).map((t: any) => t.list_id).filter(Boolean)),
@@ -58,7 +95,11 @@ async function hydrate(plans: any[]): Promise<any[]> {
   });
 }
 
-// GET /pm/day-plans?date=YYYY-MM-DD — caller's plan blocks for the date.
+// GET /pm/day-plans?date=YYYY-MM-DD — caller's plan blocks for the date,
+// merged with virtual work-block occurrences whose recurrence rule fires on
+// that date. Virtual rows carry `virtual: true` and `kind: 'work_block_occurrence'`
+// so the client knows to PATCH them as new task_day_plans rows instead of
+// updating a non-existent id.
 router.get('/day-plans', async (req: Request, res: Response) => {
   try {
     const date = req.query.date as string;
@@ -77,7 +118,44 @@ router.get('/day-plans', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
-    const hydrated = await hydrate(data || []);
+    const realPlans = data || [];
+    const realPlanTaskIds = new Set<string>(realPlans.map((p: any) => p.task_id));
+
+    // Pull work-block configs whose task is assigned to the caller. Joining
+    // assignee_ids in Supabase: `.contains('assignee_ids', [userId])`.
+    const { data: wbConfigs } = await supabaseAdmin
+      .from('work_blocks')
+      .select(
+        'task_id, start_minute, end_minute, recurrence, notify_before_min, notify_on_start, notify_on_end, tasks!inner(id, assignee_ids)',
+      )
+      .contains('tasks.assignee_ids', [req.userId!]);
+
+    const virtualPlans: any[] = [];
+    for (const wb of (wbConfigs || []) as any[]) {
+      if (realPlanTaskIds.has(wb.task_id)) continue; // user already has an override
+      if (!occursOn(wb.recurrence as Recurrence, date)) continue;
+      const duration = (wb.end_minute as number) - (wb.start_minute as number);
+      virtualPlans.push({
+        id: `wb:${wb.task_id}:${date}`,
+        task_id: wb.task_id,
+        user_id: req.userId!,
+        plan_date: date,
+        start_minute: wb.start_minute,
+        duration_minutes: duration,
+        created_at: null,
+        updated_at: null,
+        virtual: true,
+        kind: 'work_block_occurrence',
+        wb_notify_before_min: wb.notify_before_min,
+        wb_notify_on_start: wb.notify_on_start,
+        wb_notify_on_end: wb.notify_on_end,
+      });
+    }
+
+    const merged = [...realPlans, ...virtualPlans].sort(
+      (a, b) => (a.start_minute || 0) - (b.start_minute || 0),
+    );
+    const hydrated = await hydrate(merged);
     res.json({ success: true, data: hydrated });
   } catch (err) {
     console.error('Get day plans error:', err);

@@ -1429,6 +1429,17 @@ body {
 .lv-row:first-child { border-top: none; }
 .lv-row:hover { background: var(--sh-hair-3); }
 .lv-row[data-active="true"] { background: var(--surface-alt); }
+/* Work-block rows — distinct violet tint + left accent so they're spottable in any list */
+.lv-row[data-type="work_block"] {
+  background: color-mix(in oklch, #8b5cf6 6%, transparent);
+  box-shadow: inset 3px 0 0 #8b5cf6;
+}
+.lv-row[data-type="work_block"]:hover {
+  background: color-mix(in oklch, #8b5cf6 12%, transparent);
+}
+.lv-row[data-type="work_block"][data-active="true"] {
+  background: color-mix(in oklch, #8b5cf6 14%, transparent);
+}
 .lv-row[data-selected="true"]::before {
   content: '';
   position: absolute;
@@ -3338,6 +3349,24 @@ body {
   width: min(760px, 95vw) !important;
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Side-by-side peek mode of the full TaskDetailPanel — when an activity row
+ * or linked-task chip is clicked, the panel mounts a second copy with
+ * data-peek="true" set on the .td-shell aside. CSS below overrides the
+ * right-pinned positioning so the peek anchors to the LEFT (after the app
+ * sidebar) and the host panel on the right stays exactly where it is. */
+.td-panel-luma.apple.td-shell[data-peek="true"] {
+  /* Same width as the main task panel so the two read as equal siblings.
+   * Anchored on the left edge of the content area (past the icon rail
+   * and workspace nav, ~344px). */
+  left: 360px !important;
+  right: auto !important;
+  top: 16px !important;
+  bottom: 16px !important;
+  width: min(640px, 70vw) !important;
+  border-radius: 16px !important;
+  z-index: 50 !important;
 }
 .dark .td-panel-luma.apple.td-shell {
   background: rgba(22, 27, 34, 0.85);
