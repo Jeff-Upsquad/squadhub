@@ -17,6 +17,7 @@ import { useDraftTaskStore, type SerializableDraft } from '../../../stores/draft
 import { usePMStore } from '../../../stores/pmStore';
 import { showToast } from '../../../components/Toast';
 import { usePanelFileDrop } from './usePanelFileDrop';
+import { inputTimeToMinute, type Recurrence } from '../../../utils/workBlockRecurrence';
 
 /* -------------------------------------------------------------------------- */
 /* Helpers (duplicated from TaskDetailPanel — keep in sync if they change)    */
@@ -374,6 +375,11 @@ export default function TaskCreatePanel({
   const [priorityAnchor, setPriorityAnchor] = useState<DOMRect | null>(null);
   const [pendingEmergency, setPendingEmergency] = useState(false);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
+  const [typeAnchor, setTypeAnchor] = useState<DOMRect | null>(null);
+  // Work-block fields — only used when currentType.key === 'work_block'.
+  const [wbStartTime, setWbStartTime] = useState('09:00');
+  const [wbEndTime, setWbEndTime] = useState('10:00');
+  const [wbRecurrence, setWbRecurrence] = useState<Recurrence>({ kind: 'none' });
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   const [assigneeAnchorRect, setAssigneeAnchorRect] = useState<DOMRect | null>(null);
   const [workDateOpen, setWorkDateOpen] = useState(false);
@@ -495,6 +501,26 @@ export default function TaskCreatePanel({
       });
 
       if (focusOnCreate) toggleFocusToday(newTask.id);
+
+      // Work-block config — write iff the user picked the work_block type.
+      // Failure here doesn't roll back the task: the user can edit the
+      // schedule later from the detail panel.
+      if (currentType?.key === 'work_block') {
+        const startMin = inputTimeToMinute(wbStartTime);
+        const endMin = inputTimeToMinute(wbEndTime);
+        if (endMin > startMin) {
+          try {
+            await api.post(`/pm/work-blocks/${newTask.id}`, {
+              start_minute: startMin,
+              end_minute: endMin,
+              recurrence: wbRecurrence,
+            });
+          } catch (err) {
+            console.error('Failed to save work-block config:', err);
+            showToast('Task created, but couldn’t save the schedule');
+          }
+        }
+      }
 
       // Subtasks
       for (const st of draft.subtasks) {
@@ -1247,46 +1273,114 @@ export default function TaskCreatePanel({
                 >
                   <span className="k">{META_ICONS.Space}Type</span>
                   <span className="v">
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setTypeMenuOpen((v) => !v)}
-                        className="td-prop-chip"
-                        style={{
-                          background: currentType?.color ? `color-mix(in oklch, ${currentType.color} 14%, transparent)` : 'var(--surface-alt)',
-                          color: currentType?.color || 'var(--sh-ink-3)',
-                        }}
-                      >
-                        <span className="dot" style={{ background: currentType?.color || 'var(--sh-ink-4)' }} />
-                        {currentType?.name || 'Select type'}
-                      </button>
-                      {typeMenuOpen && (
-                        <>
-                          <div className="fixed inset-0 z-10" onClick={() => setTypeMenuOpen(false)} />
-                          <div
-                            className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-lg border shadow-lg"
-                            style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
-                          >
-                            {taskTypes.map((t) => (
-                              <button
-                                key={t.id}
-                                onClick={() => {
-                                  setDraft((d) => ({ ...d, task_type_id: t.id }));
-                                  setTypeMenuOpen(false);
-                                }}
-                                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)] ${
-                                  currentType?.id === t.id ? 'bg-[color:var(--sh-hair-3)]' : ''
-                                }`}
-                              >
-                                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: t.color }} />
-                                <span className="flex-1 text-[color:var(--sh-ink)]">{t.name}</span>
-                                {t.is_default && <span className="text-[10px] text-[color:var(--sh-ink-4)]">Default</span>}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        setTypeAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                        setTypeMenuOpen((v) => !v);
+                      }}
+                      className="td-prop-chip"
+                      style={{
+                        background: currentType?.color ? `color-mix(in oklch, ${currentType.color} 14%, transparent)` : 'var(--surface-alt)',
+                        color: currentType?.color || 'var(--sh-ink-3)',
+                      }}
+                    >
+                      <span className="dot" style={{ background: currentType?.color || 'var(--sh-ink-4)' }} />
+                      {currentType?.name || 'Select type'}
+                    </button>
+                  </span>
+                </div>
+              )}
+
+              {/* Work block schedule — only when type is work_block */}
+              {currentType?.key === 'work_block' && (
+                <div
+                  className="td-settings-row"
+                  style={{ gridColumn: '1 / -1', borderRight: 'none' }}
+                >
+                  <span className="k">{META_ICONS.Space}Block</span>
+                  <span className="v" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="time"
+                      value={wbStartTime}
+                      onChange={(e) => setWbStartTime(e.target.value)}
+                      className="rounded border px-2 py-1 text-[12.5px]"
+                      style={{ borderColor: 'var(--sh-hair-3)', background: 'var(--surface)' }}
+                    />
+                    <span className="opacity-60 text-[12.5px]">→</span>
+                    <input
+                      type="time"
+                      value={wbEndTime}
+                      onChange={(e) => setWbEndTime(e.target.value)}
+                      className="rounded border px-2 py-1 text-[12.5px]"
+                      style={{ borderColor: 'var(--sh-hair-3)', background: 'var(--surface)' }}
+                    />
+                    <select
+                      value={wbRecurrence.kind}
+                      onChange={(e) => {
+                        const kind = e.target.value as Recurrence['kind'];
+                        setWbRecurrence((r) => ({
+                          ...r,
+                          kind,
+                          weekdays: kind === 'weekly' ? r.weekdays ?? [1] : undefined,
+                          day_of_month: kind === 'monthly' ? r.day_of_month ?? 1 : undefined,
+                        }));
+                      }}
+                      className="rounded border px-2 py-1 text-[12.5px]"
+                      style={{ borderColor: 'var(--sh-hair-3)', background: 'var(--surface)' }}
+                    >
+                      <option value="none">Does not repeat</option>
+                      <option value="daily">Every day</option>
+                      <option value="weekdays">Every weekday</option>
+                      <option value="weekly">Weekly on…</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                    {wbRecurrence.kind === 'weekly' && (
+                      <span style={{ display: 'flex', gap: 4 }}>
+                        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, idx) => {
+                          const active = wbRecurrence.weekdays?.includes(idx) ?? false;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() =>
+                                setWbRecurrence((r) => {
+                                  const set = new Set(r.weekdays || []);
+                                  set.has(idx) ? set.delete(idx) : set.add(idx);
+                                  return { ...r, weekdays: Array.from(set).sort() };
+                                })
+                              }
+                              className="rounded text-[11px]"
+                              style={{
+                                width: 22,
+                                height: 22,
+                                border: `1px solid ${active ? 'var(--sh-accent, #8b5cf6)' : 'var(--sh-hair-3)'}`,
+                                background: active ? 'color-mix(in oklch, var(--sh-accent, #8b5cf6) 18%, transparent)' : 'var(--surface)',
+                              }}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </span>
+                    )}
+                    {wbRecurrence.kind === 'monthly' && (
+                      <input
+                        type="number"
+                        min={1}
+                        max={28}
+                        value={wbRecurrence.day_of_month ?? 1}
+                        onChange={(e) =>
+                          setWbRecurrence((r) => ({
+                            ...r,
+                            day_of_month: Math.max(1, Math.min(28, parseInt(e.target.value, 10) || 1)),
+                          }))
+                        }
+                        className="w-14 rounded border px-2 py-1 text-[12.5px]"
+                        style={{ borderColor: 'var(--sh-hair-3)', background: 'var(--surface)' }}
+                        title="Day of the month"
+                      />
+                    )}
                   </span>
                 </div>
               )}
@@ -1607,6 +1701,39 @@ export default function TaskCreatePanel({
           onChange={(next) => setDraft((d) => ({ ...d, due_date: next }))}
           onClose={() => setDueDateOpen(false)}
         />
+      )}
+
+      {typeMenuOpen && typeAnchor && (
+        <>
+          <div className="fixed inset-0 z-[55]" onClick={() => setTypeMenuOpen(false)} />
+          <div
+            className="fixed z-[56] w-56 overflow-hidden rounded-xl border shadow-lg"
+            style={{
+              borderColor: 'var(--sh-hair)',
+              background: 'var(--surface)',
+              top: Math.min(typeAnchor.bottom + 4, window.innerHeight - 240),
+              left: Math.min(typeAnchor.left, window.innerWidth - 232),
+            }}
+          >
+            {(taskTypes || []).map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  setDraft((d) => ({ ...d, task_type_id: t.id }));
+                  setTypeMenuOpen(false);
+                }}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)] ${
+                  currentType?.id === t.id ? 'bg-[color:var(--sh-hair-3)]' : ''
+                }`}
+              >
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: t.color }} />
+                <span className="flex-1 text-[color:var(--sh-ink)]">{t.name}</span>
+                {t.is_default && <span className="text-[10px] text-[color:var(--sh-ink-4)]">Default</span>}
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
       {priorityMenuOpen && priorityAnchor && (

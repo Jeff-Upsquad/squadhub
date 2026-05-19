@@ -29,6 +29,15 @@ import TaskAttachments, { type TaskAttachmentsHandle } from './TaskAttachments';
 import { useTaskAttachments, useDeleteTaskAttachment } from '../../../hooks/useTaskAttachments';
 import { usePanelFileDrop } from './usePanelFileDrop';
 import { linkifyText } from '../../../lib/linkify';
+import WorkBlockSections from './WorkBlockSections';
+import {
+  useStartWorkBlockRun,
+  useStopWorkBlockRun,
+  useActiveWorkBlockRun,
+  useRecordWorkBlockCompletion,
+  useOpenWorkBlockTaskTime,
+  useCloseWorkBlockTaskTime,
+} from '../../../hooks/useWorkBlocks';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -154,6 +163,8 @@ export default function TaskDetailPanel({
   spaceColor,
   spaceId,
   listName,
+  taskIdOverride,
+  isPeek = false,
 }: {
   statuses: SpaceStatus[];
   listId: string;
@@ -162,13 +173,28 @@ export default function TaskDetailPanel({
   spaceColor?: string | null;
   spaceId?: string | null;
   listName?: string | null;
+  /** When set, this panel renders the given task instead of the global active task.
+   *  Used by the side-by-side peek so a second panel can coexist with the main one. */
+  taskIdOverride?: string | null;
+  /** When true, the panel positions itself on the left, marks itself with
+   *  data-peek="true" for CSS, and routes close + subtask-open through the
+   *  peek slot rather than the global active slot. */
+  isPeek?: boolean;
 }) {
-  const { activeTaskId, setActiveTask, timer, startTimer: globalStartTimer, stopTimer: globalStopTimer, toggleFocusToday, isFocusedToday: checkIsFocusedToday } = usePMStore();
-  const isFocusedToday = activeTaskId ? checkIsFocusedToday(activeTaskId) : false;
-  const { data: task, isLoading } = useTask(activeTaskId);
-  const { data: comments } = useTaskComments(activeTaskId);
+  const pmStore = usePMStore();
+  const { activeTaskId, timer, startTimer: globalStartTimer, stopTimer: globalStopTimer, toggleFocusToday, isFocusedToday: checkIsFocusedToday } = pmStore;
+  // effectiveTaskId — primary uses the global activeTaskId; peek uses the override.
+  const effectiveTaskId = taskIdOverride ?? activeTaskId;
+  // Close routes: peek closes peekTaskId, primary closes activeTaskId. Opening
+  // a subtask from inside a peek opens it into the peek slot (replacing the
+  // current peek task) — that matches the user's mental model of "this side
+  // is for drilling in without losing the host on the other side."
+  const setActiveTask = isPeek ? pmStore.setPeekTask : pmStore.setActiveTask;
+  const isFocusedToday = effectiveTaskId ? checkIsFocusedToday(effectiveTaskId) : false;
+  const { data: task, isLoading } = useTask(effectiveTaskId);
+  const { data: comments } = useTaskComments(effectiveTaskId);
   const { data: taskTypes } = useTaskTypes();
-  const { data: checklists } = useChecklists(activeTaskId);
+  const { data: checklists } = useChecklists(effectiveTaskId);
   const updateTask = useUpdateTask(listId);
 
   const attachmentsRef = useRef<TaskAttachmentsHandle>(null);
@@ -189,12 +215,12 @@ export default function TaskDetailPanel({
   const { data: timeStats } = useTimeStats({ workspaceId, context: 'default' });
   const canEditTimeLogs = timeStats?.data?.time_log_edit?.can_edit === true;
   const createTask = useCreateTask(listId);
-  const addComment = useAddComment(activeTaskId);
-  const createChecklist = useCreateChecklist(activeTaskId);
-  const deleteChecklist = useDeleteChecklist(activeTaskId);
-  const createChecklistItem = useCreateChecklistItem(activeTaskId);
-  const updateChecklistItem = useUpdateChecklistItem(activeTaskId);
-  const deleteChecklistItem = useDeleteChecklistItem(activeTaskId);
+  const addComment = useAddComment(effectiveTaskId);
+  const createChecklist = useCreateChecklist(effectiveTaskId);
+  const deleteChecklist = useDeleteChecklist(effectiveTaskId);
+  const createChecklistItem = useCreateChecklistItem(effectiveTaskId);
+  const updateChecklistItem = useUpdateChecklistItem(effectiveTaskId);
+  const deleteChecklistItem = useDeleteChecklistItem(effectiveTaskId);
   const qc = useQueryClient();
 
   const [editing, setEditing] = useState<'title' | 'description' | null>(null);
@@ -230,16 +256,15 @@ export default function TaskDetailPanel({
   const [celebratingSubtaskId, setCelebratingSubtaskId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (activeTaskId) {
-      const id = requestAnimationFrame(() => setMounted(true));
-      return () => cancelAnimationFrame(id);
-    }
-    setMounted(false);
-    return undefined;
-  }, [activeTaskId]);
+    if (!effectiveTaskId) { setMounted(false); return undefined; }
+    // Defer one tick so the initial off-screen transform paints before the
+    // mounted state flips — keeps the slide-in animation visible.
+    const id = window.setTimeout(() => setMounted(true), 0);
+    return () => window.clearTimeout(id);
+  }, [effectiveTaskId]);
 
   useEffect(() => {
-    if (!activeTaskId) return undefined;
+    if (!effectiveTaskId) return undefined;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const el = document.activeElement as HTMLElement | null;
@@ -249,7 +274,7 @@ export default function TaskDetailPanel({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [activeTaskId, setActiveTask]);
+  }, [effectiveTaskId, setActiveTask]);
 
   const currentType = useMemo<TaskType | null>(() => {
     if (!task || !taskTypes) return null;
@@ -266,21 +291,76 @@ export default function TaskDetailPanel({
     updateTask.mutate({ id: task.id, metadata: nextMetadata });
   }
 
-  const isTimerForThisTask = timer?.taskId === activeTaskId;
+  // /pm/tasks/:id doesn't hydrate the task_type join — resolve via the cached
+  // useTaskTypes() list (already loaded for the type picker) so the work-block
+  // branch fires when expected.
+  const isWorkBlock =
+    task?.task_type?.key === 'work_block' ||
+    (!!task?.task_type_id && taskTypes?.some((t) => t.id === task.task_type_id && t.key === 'work_block')) ||
+    false;
+  const startWorkBlockRun = useStartWorkBlockRun();
+  const stopWorkBlockRun = useStopWorkBlockRun();
+  const activeWorkBlock = useActiveWorkBlockRun();
+  const recordCompletion = useRecordWorkBlockCompletion();
+  const openTaskTime = useOpenWorkBlockTaskTime();
+  const closeTaskTime = useCloseWorkBlockTaskTime();
+
+  // Two independent "is running for this task?" predicates: the per-task
+  // timer (regular tasks) and the work-block run (work-block tasks). They
+  // never overlap on the *same* task, but a regular task's timer can run
+  // alongside a work-block run on a different task — that's the whole point.
+  const isTimerForThisTask = !isWorkBlock && timer?.taskId === effectiveTaskId;
+  const isWorkBlockRunForThisTask =
+    isWorkBlock && activeWorkBlock.data?.task.id === effectiveTaskId && !activeWorkBlock.data?.run.ended_at;
+  const isAnyRunningForThisTask = isTimerForThisTask || isWorkBlockRunForThisTask;
 
   useEffect(() => {
-    if (!isTimerForThisTask || !timer) { setTimerElapsed(0); return; }
-    const tick = () => setTimerElapsed(Math.floor((Date.now() - timer.startedAt) / 1000));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [isTimerForThisTask, timer]);
+    if (isTimerForThisTask && timer) {
+      const tick = () => setTimerElapsed(Math.floor((Date.now() - timer.startedAt) / 1000));
+      tick();
+      const id = setInterval(tick, 1000);
+      return () => clearInterval(id);
+    }
+    if (isWorkBlockRunForThisTask && activeWorkBlock.data) {
+      const startMs = new Date(activeWorkBlock.data.run.started_at).getTime();
+      const tick = () => setTimerElapsed(Math.floor((Date.now() - startMs) / 1000));
+      tick();
+      const id = setInterval(tick, 1000);
+      return () => clearInterval(id);
+    }
+    setTimerElapsed(0);
+    return undefined;
+  }, [isTimerForThisTask, timer, isWorkBlockRunForThisTask, activeWorkBlock.data]);
 
   const handleStartTimer = async () => {
     if (!task) return;
+
+    // ---- Work-block path: only manage the work-block run, leave the
+    // per-task timer alone so the user can still run one on a regular task
+    // at the same time.
+    if (isWorkBlock) {
+      try {
+        const run = await startWorkBlockRun.mutateAsync({ task_id: task.id });
+        // If a per-task timer is already running on a regular task, log the
+        // overlap immediately so the work block shows it from second 0.
+        if (timer && timer.taskId !== task.id) {
+          openTaskTime.mutate({ run_id: run.id, task_id: timer.taskId });
+        }
+      } catch (err) { console.error('Failed to start work-block run:', err); }
+      return;
+    }
+
+    // ---- Regular-task path: existing per-task timer flow + (if a work-
+    // block run is active) bracket the overlap with task-time rows.
     const prev = globalStartTimer(task.id, task.title, listId, task.time_tracked || 0);
+    const active = activeWorkBlock.data;
     if (prev) {
       const elapsedSecs = Math.floor((Date.now() - prev.startedAt) / 1000);
+      // Close the prev task's overlap row first — any new row for the same
+      // (run, task) would otherwise hit the partial unique index.
+      if (active && prev.taskId !== task.id) {
+        closeTaskTime.mutate({ run_id: active.run.id, task_id: prev.taskId });
+      }
       if (elapsedSecs >= 1) {
         try {
           await api.post(`/pm/tasks/${prev.taskId}/time-entries`, {
@@ -295,11 +375,33 @@ export default function TaskDetailPanel({
         }
       }
     }
+    if (active) {
+      openTaskTime.mutate({ run_id: active.run.id, task_id: task.id });
+    }
   };
 
   const handleStopTimer = async () => {
+    if (!task) return;
+
+    // ---- Work-block path: close the run; the server auto-closes any
+    // open task-time rows so we don't have to enumerate them client-side.
+    if (isWorkBlock) {
+      const active = activeWorkBlock.data;
+      if (active && active.task.id === task.id) {
+        try { await stopWorkBlockRun.mutateAsync({ run_id: active.run.id, task_id: task.id }); }
+        catch (err) { console.error('Failed to stop work-block run:', err); }
+      }
+      return;
+    }
+
+    // ---- Regular-task path: existing per-task time entry + close the
+    // corresponding overlap row if a work-block run is active.
     const stopped = globalStopTimer();
     if (!stopped) return;
+    const active = activeWorkBlock.data;
+    if (active) {
+      closeTaskTime.mutate({ run_id: active.run.id, task_id: stopped.taskId });
+    }
     const elapsedSecs = Math.floor((Date.now() - stopped.startedAt) / 1000);
     if (elapsedSecs < 1) return;
     try {
@@ -315,7 +417,7 @@ export default function TaskDetailPanel({
     }
   };
 
-  if (!activeTaskId) return null;
+  if (!effectiveTaskId) return null;
 
   const taskStatusCategory = task ? (task as any).status as string | undefined : undefined;
   const catalogDef = getTaskStatusDef(taskStatusCategory);
@@ -359,6 +461,12 @@ export default function TaskDetailPanel({
     if (!isDone) {
       setMainCelebrating(true);
       setTimeout(() => setMainCelebrating(false), 650);
+      // If a work-block run is active and this isn't the work block itself,
+      // log this completion against the active run. Idempotent server-side.
+      const active = activeWorkBlock.data;
+      if (active && active.task.id !== task.id) {
+        recordCompletion.mutate({ run_id: active.run.id, completed_task_id: task.id });
+      }
     }
     updateTask.mutate({ id: task.id, status: next } as any);
   };
@@ -444,9 +552,13 @@ export default function TaskDetailPanel({
         onClick={(e) => e.stopPropagation()}
         {...(canEdit && task ? panelHandlers : {})}
         className="td-panel td-panel-luma apple td-shell absolute flex flex-col"
+        data-peek={isPeek ? 'true' : undefined}
         style={{
           background: 'var(--surface)',
-          transform: mounted ? 'translateX(0)' : 'translateX(calc(100% + 24px))',
+          // Peek slides in from the LEFT; primary slides in from the right.
+          transform: mounted
+            ? 'translateX(0)'
+            : isPeek ? 'translateX(calc(-100% - 24px))' : 'translateX(calc(100% + 24px))',
           transition: 'transform .42s cubic-bezier(0.23, 1, 0.32, 1), opacity .3s ease',
           opacity: mounted ? 1 : 0,
         }}
@@ -582,12 +694,14 @@ export default function TaskDetailPanel({
             )}
           </div>
           {task && canEdit && (
-            isTimerForThisTask ? (
+            isAnyRunningForThisTask ? (
               <button type="button" onClick={handleStopTimer} className="td-pill-btn" title="Stop timer">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
                   <rect x="6" y="6" width="12" height="12" rx="1" />
                 </svg>
-                {formatSeconds((task.time_tracked || 0) + timerElapsed)}
+                {/* Work-block pill shows current run elapsed; regular task pill
+                    shows total tracked + this session's elapsed (legacy display). */}
+                {formatSeconds(isWorkBlockRunForThisTask ? timerElapsed : (task.time_tracked || 0) + timerElapsed)}
               </button>
             ) : (
               <button type="button" onClick={handleStartTimer} className="td-pill-btn" title="Start timer">
@@ -1381,6 +1495,13 @@ export default function TaskDetailPanel({
               ) : !newChecklistTitle ? (
                 <div className="text-[12.5px] text-[color:var(--sh-ink-4)]">No checklists.</div>
               ) : null}
+
+              {isWorkBlock && task && (
+                <>
+                  <div className="td-section-rule" />
+                  <WorkBlockSections task={task} canEdit={!!canEdit} />
+                </>
+              )}
 
               <div className="td-section-rule" />
 

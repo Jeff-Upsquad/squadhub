@@ -37,6 +37,11 @@ interface PMState {
   // the row in its original status bucket while the CSS slide plays, instead of
   // re-bucketing it the same render tick the optimistic status patch lands.
   fadingTaskIds: Map<string, string>;
+  // Secondary task displayed in a side-peek next to the main detail panel.
+  // Used when the user clicks a task reference inside another task's panel
+  // (e.g. from the work-block "Activity during this run" section) and wants
+  // to view it without losing the host panel's context.
+  peekTaskId: string | null;
   timer: TimerState | null;
   filtersByScope: Record<string, TaskFilterState>;
   focusedTodayIds: string[];
@@ -51,6 +56,7 @@ interface PMState {
   setActiveFolder: (id: string | null) => void;
   setActiveSpacePage: (id: string | null) => void;
   setActiveTask: (id: string | null) => void;
+  setPeekTask: (id: string | null) => void;
   setActiveDesignFolder: (id: string | null) => void;
   setContextListId: (id: string | null) => void;
   setActiveClient: (id: string | null) => void;
@@ -112,6 +118,7 @@ export const usePMStore = create<PMState>()(
       collapsedGroups: {},
       selectedTasks: [],
       fadingTaskIds: new Map<string, string>(),
+      peekTaskId: null,
       timer: null,
       filtersByScope: {},
       focusedTodayIds: [],
@@ -126,7 +133,10 @@ export const usePMStore = create<PMState>()(
       setActiveList: (id) => set({ activeListId: id, contextListId: id, selectedTasks: [], activeDesignFolderId: null, activeFolderId: null, activeSpacePageId: null }),
       setActiveFolder: (id) => set({ activeFolderId: id, activeListId: null, activeDesignFolderId: null, activeSpacePageId: null, contextListId: null, selectedTasks: [] }),
       setActiveSpacePage: (id) => set({ activeSpacePageId: id, activeListId: null, activeFolderId: null, activeDesignFolderId: null, contextListId: null, selectedTasks: [] }),
-      setActiveTask: (id) => set({ activeTaskId: id }),
+      // Opening the main task clears any open peek so the user doesn't lose
+      // track of which is which.
+      setActiveTask: (id) => set({ activeTaskId: id, peekTaskId: null }),
+      setPeekTask: (id) => set({ peekTaskId: id }),
       setActiveDesignFolder: (id) => set({ activeDesignFolderId: id, activeListId: null, activeFolderId: null, activeSpacePageId: null, contextListId: null, selectedTasks: [] }),
       setContextListId: (id) => set({ contextListId: id }),
       setActiveClient: (id) => set({ activeClientId: id }),
@@ -285,7 +295,7 @@ export const usePMStore = create<PMState>()(
           focusedTodayDate: s.focusedTodayDate,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list' }),
     }),
     {
       name: 'squadhub-pm',
