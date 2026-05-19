@@ -244,6 +244,8 @@ export default function TaskCreatePanel({
   defaultStatus,
   spaceName,
   spaceColor,
+  folderName,
+  listName,
   onClose,
   onCreated,
   pickable = false,
@@ -261,6 +263,8 @@ export default function TaskCreatePanel({
   defaultStatus?: string;
   spaceName?: string;
   spaceColor?: string | null;
+  folderName?: string | null;
+  listName?: string | null;
   onClose: () => void;
   onCreated?: (newTask: Task) => void;
   /** When true, render space/folder/list pickers at the top and derive listId + statuses from selection. */
@@ -284,14 +288,14 @@ export default function TaskCreatePanel({
   // Load the selected space for statuses + selected list metadata (name/color)
   const { data: spaceData } = useSpace(pickable ? selectedSpaceId : null);
 
-  // Selected list info (for the combobox button label)
+  // Selected list info (name + parent folder name, picker mode)
   const selectedListInfo = useMemo(() => {
     if (!pickable || !selectedListId || !spaceData) return null;
     const direct = (spaceData.lists || []).find((l) => l.id === selectedListId);
-    if (direct) return { name: direct.name };
+    if (direct) return { name: direct.name, folderName: null as string | null };
     for (const f of spaceData.folders || []) {
       const inFolder = (f.lists || []).find((l) => l.id === selectedListId);
-      if (inFolder) return { name: inFolder.name };
+      if (inFolder) return { name: inFolder.name, folderName: f.name };
     }
     return null;
   }, [pickable, selectedListId, spaceData]);
@@ -305,6 +309,8 @@ export default function TaskCreatePanel({
   );
   const effectiveSpaceName = pickable ? spaceData?.name : spaceName;
   const effectiveSpaceColor = pickable ? (spaceData?.color ?? null) : (spaceColor ?? null);
+  const effectiveFolderName = pickable ? (selectedListInfo?.folderName ?? null) : (folderName ?? null);
+  const effectiveListName = pickable ? (selectedListInfo?.name ?? null) : (listName ?? null);
 
   const createTask = useCreateTask(effectiveListId);
   const { data: assignableUsers = [] } = useAssignableUsersByList(effectiveListId);
@@ -701,15 +707,66 @@ export default function TaskCreatePanel({
             </svg>
           </button>
           {effectiveSpaceName && (
-            <span className="td-host-chip td-focus" tabIndex={0}>
-              <span className="logo" style={{ background: effectiveSpaceColor || 'var(--sh-ink)' }}>
-                {initialOf(effectiveSpaceName)[0]}
+            pickable && workspaceId ? (
+              <ListPickerCombobox
+                workspaceId={workspaceId}
+                selectedListId={selectedListId}
+                selectedListName={effectiveListName}
+                selectedSpaceColor={effectiveSpaceColor}
+                initialSpaceId={selectedSpaceId}
+                onChange={(newListId, newSpaceId) => {
+                  setSelectedListId(newListId);
+                  setSelectedSpaceId(newSpaceId);
+                }}
+                renderTrigger={({ toggle }) => (
+                  <button
+                    type="button"
+                    onClick={toggle}
+                    className="td-bcrumb td-focus"
+                    title="Choose space, folder, and list"
+                  >
+                    <span className="emblem" style={{ background: effectiveSpaceColor || 'var(--sh-ink)' }}>
+                      {initialOf(effectiveSpaceName)[0]}
+                    </span>
+                    <span className="name">{effectiveSpaceName}</span>
+                    {effectiveFolderName && (
+                      <>
+                        <span className="sep">›</span>
+                        <span className="name">{effectiveFolderName}</span>
+                      </>
+                    )}
+                    {effectiveListName && (
+                      <>
+                        <span className="sep">›</span>
+                        <span className="name">{effectiveListName}</span>
+                      </>
+                    )}
+                    <svg className="chev" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                      <path d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                )}
+              />
+            ) : (
+              <span className="td-bcrumb">
+                <span className="emblem" style={{ background: effectiveSpaceColor || 'var(--sh-ink)' }}>
+                  {initialOf(effectiveSpaceName)[0]}
+                </span>
+                <span className="name">{effectiveSpaceName}</span>
+                {effectiveFolderName && (
+                  <>
+                    <span className="sep">›</span>
+                    <span className="name">{effectiveFolderName}</span>
+                  </>
+                )}
+                {effectiveListName && (
+                  <>
+                    <span className="sep">›</span>
+                    <span className="name">{effectiveListName}</span>
+                  </>
+                )}
               </span>
-              <span>{effectiveSpaceName}</span>
-              <svg className="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M9 5l7 7-7 7" />
-              </svg>
-            </span>
+            )
           )}
           <span className="text-[11.5px] text-[color:var(--sh-ink-4)] font-medium tracking-[0.01em]">
             {isDesignTask ? (isVideoTask ? 'NEW VIDEO TASK' : 'NEW DESIGN TASK') : 'NEW TASK'}
@@ -762,23 +819,6 @@ export default function TaskCreatePanel({
 
         {/* Scrollable body */}
         <div className="td-scroll flex-1 overflow-y-auto px-6 pt-3 pb-8">
-          {/* List picker combobox (picker mode only) */}
-          {pickable && workspaceId && (
-            <div className="mb-4">
-              <ListPickerCombobox
-                workspaceId={workspaceId}
-                selectedListId={selectedListId}
-                selectedListName={selectedListInfo?.name ?? null}
-                selectedSpaceColor={effectiveSpaceColor}
-                initialSpaceId={selectedSpaceId}
-                onChange={(listId, spaceId) => {
-                  setSelectedListId(listId);
-                  setSelectedSpaceId(spaceId);
-                }}
-              />
-            </div>
-          )}
-
           {/* Title row */}
           <div className="flex items-start gap-3" style={{ marginBottom: 14 }}>
             <span

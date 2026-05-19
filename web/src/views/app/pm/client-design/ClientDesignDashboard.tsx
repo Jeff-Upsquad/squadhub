@@ -241,8 +241,10 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
       {showCreatePanel && briefsListId && (
         <TaskCreatePanel
           listId={briefsListId}
-          spaceName={folder?.name}
-          spaceColor={null}
+          spaceName={space?.name}
+          spaceColor={space?.color || null}
+          folderName={folder?.name || null}
+          listName={listByStatus.queued?.name || null}
           onClose={() => setShowCreatePanel(false)}
           isDesignTask
           customTaskTypeKey={taskTypeKey}

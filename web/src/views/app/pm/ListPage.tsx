@@ -346,8 +346,10 @@ export default function ListPage() {
           listId={activeListId}
           statuses={statuses}
           defaultStatus={statuses[0]?.category}
-          spaceName={spaceData?.name || listData?.name}
+          spaceName={spaceData?.name}
           spaceColor={spaceData?.color || null}
+          folderName={folderData?.name || null}
+          listName={listData?.name || null}
           onClose={() => setShowCreatePanel(false)}
         />
       )}
