@@ -355,6 +355,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/objective-goodall-ab758f/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3015"],
       "port": 3015
+    },
+    {
+      "name": "Festive Bell Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/festive-bell-ac1473/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3001"],
+      "port": 3001
     }
   ]
 }
