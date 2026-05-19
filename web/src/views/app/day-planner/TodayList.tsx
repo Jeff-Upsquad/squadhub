@@ -20,9 +20,16 @@ function badgesFor(t: Task, todayStr: string, yesterdayStr: string, tomorrowStr:
   return out;
 }
 
-function dueText(iso: string | null): string | null {
+function fmtDate(iso: string | null): string | null {
   if (!iso) return null;
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(iso));
+}
+
+function priorityChip(p: Task['priority']): { level: 'emg' | 'p0' | 'p1'; label: string } | null {
+  if (p === 'emergency') return { level: 'emg', label: 'EMERGENCY' };
+  if (p === 'urgent') return { level: 'p0', label: 'Urgent' };
+  if (p === 'high') return { level: 'p1', label: 'High' };
+  return null;
 }
 
 export default function TodayList() {
@@ -90,8 +97,8 @@ export default function TodayList() {
         </div>
       ) : (
         visibleTasks.map((t) => {
-          const badges = badgesFor(t, todayStr, yesterdayStr, tomorrowStr);
-          const due = dueText(t.due_date);
+          const badges = badgesFor(t, todayStr, yesterdayStr, tomorrowStr).filter((b) => b !== 'today');
+          const pri = priorityChip(t.priority);
           const isFocused = !!t.focused_at;
           return (
             <div
@@ -120,21 +127,34 @@ export default function TodayList() {
               <div className="body">
                 <div className="title">{t.title}</div>
                 <div className="meta">
+                  {pri && (
+                    <span className="td-pri-chip" data-level={pri.level}>
+                      <span className="dot" />
+                      {pri.label}
+                    </span>
+                  )}
                   {badges.map((b) => (
                     <span key={b} className={`badge ${b}`}>{badgeLabel(b)}</span>
                   ))}
-                  {due && <span>Due {due}</span>}
+                  {t.due_date && <span>Due {fmtDate(t.due_date)}</span>}
+                  {t.work_date && <span>Work {fmtDate(t.work_date)}</span>}
+                  {t.start_date && <span>Start {fmtDate(t.start_date)}</span>}
                   {t.time_estimate ? <span>· {t.time_estimate}m</span> : null}
-                  {t.list?.name && <span>· {t.list.name}</span>}
+                  {(t.space?.name || t.folder?.name || t.list?.name) && (
+                    <span className="crumb">
+                      {t.space?.name && <span className="name">{t.space.name}</span>}
+                      {t.folder?.name && (<><span className="sep">›</span><span className="name">{t.folder.name}</span></>)}
+                      {t.list?.name && (<><span className="sep">›</span><span className="name">{t.list.name}</span></>)}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="actions">
-                <button type="button" onClick={(e) => openSnooze(e, t)} title="Snooze">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                <button type="button" className="icon" onClick={(e) => openSnooze(e, t)} title="Snooze">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="9" />
                     <path d="M12 7v5l3 2" />
                   </svg>
-                  Snooze
                 </button>
               </div>
             </div>
