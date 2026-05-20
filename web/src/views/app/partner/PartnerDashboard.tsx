@@ -53,7 +53,7 @@ export default function PartnerDashboard() {
         {/* Quick actions */}
         <div className="mt-8">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground-muted">Quick Actions</h2>
-          <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
             <div className="rounded-lg border border-divider bg-surface-alt p-4 text-center">
               <svg className="mx-auto h-8 w-8 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />

@@ -115,7 +115,7 @@ export default function TimeSheetPanel({ anchorRect, onClose }: Props) {
   return (
     <div
       ref={panelRef}
-      className="fixed z-[20] w-[380px] overflow-hidden rounded-[14px] border border-[var(--sh-hair)] bg-[var(--sidebar)] text-[var(--sh-ink)]"
+      className="fixed z-[20] w-[min(380px,calc(100vw-32px))] overflow-hidden rounded-[14px] border border-[var(--sh-hair)] bg-[var(--sidebar)] text-[var(--sh-ink)]"
       style={{
         top,
         left,
