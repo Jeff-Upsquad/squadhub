@@ -19,6 +19,149 @@ export type TransitionResult =
   | { ok: true; status: PipelineStatus; clientId: string | null }
   | { ok: false; code: number; error: string };
 
+// Mirrors the resolution rules in migration 084_card_plan_snapshot.sql — keep in sync.
+// service_type → subscription slug, lowercase(plan_name) → canonical plan, target_tiers[0] → tier.
+const CARD_SERVICE_TYPE_TO_SUB_SLUG: Record<string, string> = {
+  'Designers': 'designer',
+  'Editors': 'video_editor',
+  'Designer plus Editor': 'designer_video_editor',
+};
+const CARD_PLAN_NAME_TO_CANONICAL: Record<string, string> = {
+  starter: 'Starter',
+  basic: 'Basic',
+  plus: 'Plus',
+  pro: 'Pro',
+  personal: 'Personal',
+};
+
+async function resolveCardToSubscriptionPlan(card: {
+  service_type: string | null;
+  plan_name: string | null;
+  target_tiers: string[] | null;
+}): Promise<{ subscriptionId: string; planId: string } | null> {
+  const slug = card.service_type ? CARD_SERVICE_TYPE_TO_SUB_SLUG[card.service_type] : null;
+  const planName = card.plan_name ? CARD_PLAN_NAME_TO_CANONICAL[card.plan_name.toLowerCase()] : null;
+  const tier = card.target_tiers?.[0] ?? null;
+  if (!slug || !planName || !tier) return null;
+
+  const { data: sub } = await supabaseAdmin
+    .from('subscriptions').select('id').eq('slug', slug).maybeSingle();
+  if (!sub) return null;
+
+  const { data: planRow } = await supabaseAdmin
+    .from('subscription_plans').select('id')
+    .eq('subscription_id', sub.id)
+    .eq('plan', planName)
+    .eq('tier', tier)
+    .maybeSingle();
+  if (!planRow) return null;
+
+  return { subscriptionId: sub.id, planId: planRow.id };
+}
+
+// When a lead has Assigned cards but no explicit staged subscriptions, the
+// admin's intent to convert is already clear — the cards represent committed
+// work. Auto-stage one client_submission_subscriptions row per resolvable
+// card and back-fill the card's submission_subscription_id so the data model
+// stays consistent. Idempotent: cards already pointing at a staged sub or
+// that can't be resolved (custom service_type / unknown plan name) are
+// skipped. Returns the count of newly staged rows.
+export async function stageSubscriptionsFromAssignedCards(submissionId: string): Promise<number> {
+  const { data: submission } = await supabaseAdmin
+    .from('client_submissions')
+    .select('id, email, contact_number')
+    .eq('id', submissionId)
+    .maybeSingle();
+  if (!submission) return 0;
+
+  const email = (submission.email ?? '').toString().trim();
+  const phoneDigits = String(submission.contact_number ?? '').replace(/\D/g, '');
+  const phoneSuffix = phoneDigits.length >= 7 ? phoneDigits.slice(-10) : '';
+
+  const { data: stagedRowsForSubmission } = await supabaseAdmin
+    .from('client_submission_subscriptions')
+    .select('id')
+    .eq('submission_id', submissionId);
+  const allowedStagedIds = (stagedRowsForSubmission ?? []).map((r: any) => r.id);
+
+  // Collect every Assigned card linked to this lead via any of the known
+  // paths. Mirrors the list query in subscription-cards-admin.ts.
+  const cardMatches = new Map<string, any>();
+
+  if (allowedStagedIds.length > 0) {
+    const { data: rows } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('*')
+      .eq('state', 'assigned')
+      .is('archived_at', null)
+      .is('parent_card_id', null)
+      .in('submission_subscription_id', allowedStagedIds);
+    (rows ?? []).forEach((r: any) => cardMatches.set(r.id, r));
+  }
+
+  if (email) {
+    const { data: rows } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('*')
+      .eq('state', 'assigned')
+      .is('archived_at', null)
+      .is('parent_card_id', null)
+      .ilike('customer_email', email);
+    (rows ?? []).forEach((r: any) => cardMatches.set(r.id, r));
+  }
+
+  if (phoneSuffix) {
+    const { data: rows } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('*')
+      .eq('state', 'assigned')
+      .is('archived_at', null)
+      .is('parent_card_id', null)
+      .ilike('customer_phone', `%${phoneSuffix}`);
+    (rows ?? []).forEach((r: any) => cardMatches.set(r.id, r));
+  }
+
+  let stagedCount = 0;
+
+  for (const card of cardMatches.values()) {
+    if (card.submission_subscription_id) continue;
+
+    const resolution = await resolveCardToSubscriptionPlan({
+      service_type: card.service_type,
+      plan_name: card.plan_name,
+      target_tiers: card.target_tiers,
+    });
+    if (!resolution) continue;
+
+    const { data: inserted, error: insErr } = await supabaseAdmin
+      .from('client_submission_subscriptions')
+      .insert({
+        submission_id: submissionId,
+        subscription_id: resolution.subscriptionId,
+        plan_id: resolution.planId,
+      })
+      .select('id')
+      .single();
+
+    if (insErr || !inserted) {
+      console.warn(
+        '[stageSubscriptionsFromAssignedCards] Failed to stage from card',
+        card.id, insErr?.message,
+      );
+      continue;
+    }
+
+    await supabaseAdmin
+      .from('subscription_cards')
+      .update({ submission_subscription_id: inserted.id })
+      .eq('id', card.id);
+
+    stagedCount += 1;
+  }
+
+  return stagedCount;
+}
+
 async function copyPlanDeliverables(clientSubscriptionId: string, planId: string) {
   const { data: planDelivs } = await supabaseAdmin
     .from('subscription_plan_deliverables')
@@ -332,12 +475,26 @@ export async function transitionSubmissionStatus(
   let clientId: string | null = null;
 
   if (newStatus === 'converted') {
-    const { data: stagedSubs, error: stagedErr } = await supabaseAdmin
+    let { data: stagedSubs, error: stagedErr } = await supabaseAdmin
       .from('client_submission_subscriptions')
       .select('*')
       .eq('submission_id', submissionId);
 
     if (stagedErr) return { ok: false, code: 500, error: stagedErr.message };
+
+    // Fallback: if no explicit staged subs but the lead has Assigned cards,
+    // promote those cards into staged subs so the conversion can proceed.
+    if (!stagedSubs || stagedSubs.length === 0) {
+      const created = await stageSubscriptionsFromAssignedCards(submissionId);
+      if (created > 0) {
+        const refetch = await supabaseAdmin
+          .from('client_submission_subscriptions')
+          .select('*')
+          .eq('submission_id', submissionId);
+        stagedSubs = refetch.data ?? null;
+      }
+    }
+
     if (!stagedSubs || stagedSubs.length === 0) {
       return {
         ok: false,

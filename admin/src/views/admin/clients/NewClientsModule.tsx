@@ -87,6 +87,20 @@ export default function NewClientsModule() {
     [submissions, selectedSubmissionId],
   );
 
+  // Reuses the same query key as AdminLeadCardsSection so the cache is shared
+  // and we don't double-fetch. Needed here so the Convert button can enable
+  // when the lead has Assigned cards but no staged subs.
+  const { data: selectedCardsRes } = useQuery({
+    queryKey: ['admin-submission-cards', selectedSubmissionId],
+    queryFn: () =>
+      api
+        .get('/admin/subscription-cards', { params: { submission_id: selectedSubmissionId } })
+        .then((r) => r.data),
+    enabled: !!selectedSubmissionId,
+  });
+  const selectedCards: { state: string }[] = selectedCardsRes?.data || [];
+  const assignedCardCount = selectedCards.filter((c) => c.state === 'assigned').length;
+
   useEffect(() => {
     setEditPrimary(selectedSubmission?.primary_sales_person_id || '');
     setEditSecondary(selectedSubmission?.secondary_sales_person_id || '');
@@ -110,6 +124,9 @@ export default function NewClientsModule() {
       queryClient.invalidateQueries({ queryKey: ['admin-submissions-count'] });
       queryClient.invalidateQueries({ queryKey: ['admin-clients'] });
       queryClient.invalidateQueries({ queryKey: ['admin-clients-count'] });
+      // Auto-staging from Assigned cards back-fills submission_subscription_id
+      // on those cards, so refresh the per-lead card list too.
+      queryClient.invalidateQueries({ queryKey: ['admin-submission-cards'] });
       setStatusError(null);
     },
     onError: (err: any) => {
@@ -267,8 +284,8 @@ export default function NewClientsModule() {
               if (status === 'converted' || status === 'onboarding' || status === 'closed') return null;
               const disabledReason = !selectedCountry
                 ? 'Set a billing country first'
-                : selectedSubs.length === 0
-                  ? 'Add at least one subscription first'
+                : selectedSubs.length === 0 && assignedCardCount === 0
+                  ? 'Add a subscription or assign a card first'
                   : null;
               const canConvert = !disabledReason;
               return (

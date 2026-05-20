@@ -361,6 +361,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/festive-bell-ac1473/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3001"],
       "port": 3001
+    },
+    {
+      "name": "Convert From Cards Admin",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-convert-from-cards/admin && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3003"],
+      "port": 3003
     }
   ]
 }
