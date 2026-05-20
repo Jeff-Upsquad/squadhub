@@ -5451,3 +5451,25 @@ ol.sqc-list {
   background: var(--surface);
   color: var(--foreground);
 }
+
+/* ── Mobile overrides ─────────────────────────────────────────────────────
+ * Below the md breakpoint (Tailwind 768px) the TaskDetailPanel takes the
+ * full viewport rather than its desktop 16px-inset card. The peek-panel
+ * data-peek mode is force-hidden because its desktop position anchors at
+ * left:360px (off-screen on phones) and the side-by-side mental model
+ * breaks below 768px — JSX in MainLayout also guards the render, this
+ * is belt-and-braces.
+ */
+@media (max-width: 767px) {
+  .td-panel-luma.apple.td-shell {
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: auto !important;
+    border-radius: 0 !important;
+  }
+  .td-panel-luma.apple.td-shell[data-peek="true"] {
+    display: none !important;
+  }
+}

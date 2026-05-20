@@ -271,7 +271,7 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center px-4 pt-[14vh]"
+      className="fixed inset-0 z-[100] flex items-start justify-center px-4 pt-4 md:pt-[14vh]"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
