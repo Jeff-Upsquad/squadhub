@@ -51,7 +51,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 
     let query = supabaseAdmin
       .from('messages')
-      .select('*, sender:users!sender_id(id, display_name, avatar_url), reactions(*)')
+      .select('*, sender:users!sender_id(id, display_name, avatar_url), reactions(*, user:users!user_id(id, display_name, avatar_url))')
       .eq('is_deleted', false)
       .order('created_at', { ascending: false })
       .limit(limit);
@@ -78,6 +78,42 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
     const messages = (data || []).reverse();
     const has_more = data?.length === limit;
     const nextCursor = data?.length ? data[data.length - 1].created_at : null;
+
+    // Enrich parent messages with thread participants + last_reply_at so the
+    // client can show the Slack-style "ML JT MO · 4 replies · Last reply ..." footer.
+    const parentIds = messages.filter((m: any) => (m.reply_count || 0) > 0).map((m: any) => m.id);
+    if (parentIds.length > 0) {
+      const { data: replies } = await supabaseAdmin
+        .from('messages')
+        .select('parent_message_id, sender_id, created_at, sender:users!sender_id(id, display_name, avatar_url)')
+        .in('parent_message_id', parentIds)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: true });
+
+      if (replies) {
+        const meta = new Map<string, { participants: any[]; last_reply_at: string; seen: Set<string> }>();
+        for (const r of replies as any[]) {
+          const pid = r.parent_message_id;
+          let bucket = meta.get(pid);
+          if (!bucket) {
+            bucket = { participants: [], last_reply_at: r.created_at, seen: new Set() };
+            meta.set(pid, bucket);
+          }
+          bucket.last_reply_at = r.created_at;
+          if (r.sender && !bucket.seen.has(r.sender.id) && bucket.participants.length < 5) {
+            bucket.seen.add(r.sender.id);
+            bucket.participants.push(r.sender);
+          }
+        }
+        for (const m of messages as any[]) {
+          const bucket = meta.get(m.id);
+          if (bucket) {
+            m.thread_participants = bucket.participants;
+            m.last_reply_at = bucket.last_reply_at;
+          }
+        }
+      }
+    }
 
     res.json({
       success: true,

@@ -47,7 +47,7 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
   const replies: Message[] = threadRes?.data?.replies || [];
 
   return (
-    <div className="flex w-[420px] shrink-0 flex-col border-l border-divider bg-white dark:bg-surface">
+    <div className="sqc-thread-panel relative flex w-[420px] shrink-0 flex-col border-l border-divider bg-white dark:bg-surface">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-divider px-4 py-[10px]">
         <div className="flex flex-col">

@@ -586,7 +586,7 @@ export default function MainLayout() {
           </div>
         ) : (
           homeView === 'chat' ? (
-            <>
+            <div className="squadhub-chat flex flex-1 flex-col min-w-0">
               {activeChannelId && (() => {
                 const isDm = activeChannelKind === 'dm';
                 const activeDm = isDm ? dmConversations.find((d) => d.id === activeChannelId) : null;
@@ -599,50 +599,47 @@ export default function MainLayout() {
                         ? otherParticipants[0].display_name
                         : `${otherParticipants[0].display_name} +${otherParticipants.length - 1}`)
                   : null;
+                const headerName = isDm ? dmTitle : activeChannel?.name;
+                const memberCount = isDm
+                  ? (activeDm?.participants?.length || 0)
+                  : null;
                 return (
-                <div className="flex flex-col border-b border-divider">
-                  <div className="flex items-center justify-between px-2 py-[7px]">
-                    <div className="flex items-center gap-1 w-[360px]">
-                      {/* Title with hash (channel) or avatar (DM) */}
-                      <div className="flex items-center gap-1.5 rounded px-2 py-1 overflow-hidden">
-                        {isDm ? (
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] bg-[#E2E8F0] text-[10px] font-bold text-[#0F172B]">
-                            {(otherParticipants[0]?.display_name?.[0] || '?').toUpperCase()}
-                          </span>
-                        ) : (
-                          <svg className="h-4 w-4 shrink-0 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-                          </svg>
-                        )}
-                        <span className="text-[18px] font-black leading-[26px] text-foreground">
-                          {isDm ? dmTitle : activeChannel?.name}
+                  <div className="sqc-header">
+                    <div className="sqc-header__title" title={isDm ? 'Conversation' : 'Channel details'}>
+                      {isDm ? (
+                        <span
+                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] text-[10px] font-bold text-white"
+                          style={{ background: 'linear-gradient(135deg, #9b6cff, #ff5a1f)' }}
+                        >
+                          {(otherParticipants[0]?.display_name?.[0] || '?').toUpperCase()}
                         </span>
-                        <svg className="h-4 w-4 shrink-0 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                      {!isDm && activeChannel?.description && (
-                        <span className="text-[12px] leading-[16px] text-foreground-muted truncate flex-1">
-                          {activeChannel.description}
-                        </span>
+                      ) : (
+                        <span className="text-[18px] font-black leading-none text-[var(--sh-text-2)]">#</span>
                       )}
+                      <span>{headerName}</span>
+                      {memberCount != null && <small>· {memberCount}</small>}
+                      <svg className="h-3.5 w-3.5 text-[var(--sh-text-2)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
                     </div>
-                    <div className="flex items-center gap-2.5">
-                      {/* Settings */}
+                    {!isDm && activeChannel?.description && (
+                      <button type="button" className="sqc-header__topic" title="Set channel topic">
+                        {activeChannel.description}
+                      </button>
+                    )}
+                    <div className="sqc-header__actions">
                       <button
+                        type="button"
                         onClick={() => setShowChannelSettings(!showChannelSettings)}
-                        className={`rounded-[7px] border border-divider p-1.5 transition ${
-                          showChannelSettings ? 'bg-surface-alt text-foreground' : 'text-foreground-muted hover:bg-surface-alt hover:text-foreground'
-                        }`}
-                        title="Channel settings"
+                        className={`sqc-pill ${showChannelSettings ? 'bg-[var(--sh-bg-hover)]' : ''}`}
+                        title="Settings"
                       >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                        <svg className="h-4 w-4 text-[var(--sh-text-2)]" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zm0 6a.75.75 0 110-1.5.75.75 0 010 1.5zm0 6a.75.75 0 110-1.5.75.75 0 010 1.5z" />
                         </svg>
                       </button>
                     </div>
                   </div>
-                </div>
                 );
               })()}
               <div className="flex flex-1 overflow-hidden">
@@ -672,7 +669,7 @@ export default function MainLayout() {
                   ) : null;
                 })()}
               </div>
-            </>
+            </div>
           ) : homeView === 'tasks' ? (
             activeDesignFolderId ? (
               <ClientDesignDashboard folderId={activeDesignFolderId} />
