@@ -51,6 +51,7 @@ import LearningShell from '../views/app/learning/LearningShell';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
 import { useUnreadCount } from '../hooks/useUnreadCount';
 import { useNotificationSocket } from '../hooks/useNotificationSocket';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'learning' | 'more';
@@ -208,6 +209,8 @@ export default function MainLayout() {
   // Schedule in-app toasts for upcoming work-block windows today.
   useWorkBlockNotifier();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const isMobile = useIsMobile();
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
@@ -230,6 +233,15 @@ export default function MainLayout() {
   }, [profileOpen]);
 
   useEffect(() => { loadViewPreferences(); }, []);
+
+  // Lock body scroll while the mobile drawer is open so the underlying
+  // page doesn't move behind the overlay.
+  useEffect(() => {
+    if (!mobileDrawerOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [mobileDrawerOpen]);
 
   // Global keyboard shortcuts:
   //   ⌘K / Ctrl+K -> open workspace search palette
@@ -263,22 +275,22 @@ export default function MainLayout() {
 
   // Auto-switch to tasks view when a list is selected
   useEffect(() => {
-    if (activeListId) setHomeView('tasks');
+    if (activeListId) { setHomeView('tasks'); setMobileDrawerOpen(false); }
   }, [activeListId]);
 
   // Auto-switch to tasks view when a folder is selected
   useEffect(() => {
-    if (activeFolderId) setHomeView('tasks');
+    if (activeFolderId) { setHomeView('tasks'); setMobileDrawerOpen(false); }
   }, [activeFolderId]);
 
   // Auto-switch to tasks view when a space is opened (space page)
   useEffect(() => {
-    if (activeSpacePageId) setHomeView('tasks');
+    if (activeSpacePageId) { setHomeView('tasks'); setMobileDrawerOpen(false); }
   }, [activeSpacePageId]);
 
   // Auto-switch to tasks view when a client opens a design folder
   useEffect(() => {
-    if (activeDesignFolderId) setHomeView('tasks');
+    if (activeDesignFolderId) { setHomeView('tasks'); setMobileDrawerOpen(false); }
   }, [activeDesignFolderId]);
 
   // Fetch workspaces
@@ -363,10 +375,12 @@ export default function MainLayout() {
   const handleSelectChannel = (channelId: string) => {
     setActiveChannel(channelId, 'channel');
     setHomeView('chat');
+    setMobileDrawerOpen(false);
   };
   const handleSelectDm = (dmId: string) => {
     setActiveChannel(dmId, 'dm');
     setHomeView('chat');
+    setMobileDrawerOpen(false);
   };
 
   const handleOpenSpaces = () => {
@@ -376,7 +390,7 @@ export default function MainLayout() {
   // Loading state
   if (workspacesLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-surface">
+      <div className="flex h-[100dvh] items-center justify-center bg-surface">
         <p className="text-sm text-foreground-dim">Loading...</p>
       </div>
     );
@@ -385,7 +399,7 @@ export default function MainLayout() {
   // No workspaces
   if (!workspacesRes || workspaces.length === 0) {
     return (
-      <div className="flex h-screen items-center justify-center bg-surface">
+      <div className="flex h-[100dvh] items-center justify-center bg-surface">
         <div className="text-center">
           <h2 className="font-[family-name:var(--font-display)] text-lg font-semibold text-foreground">Welcome to SquadHub</h2>
           <p className="mt-2 text-sm text-foreground-muted">Your workspace is being set up. Please refresh in a moment.</p>
@@ -403,7 +417,53 @@ export default function MainLayout() {
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
   return (
-    <div className="flex h-screen bg-[var(--sidebar)] text-foreground">
+    <div className="flex h-[100dvh] bg-[var(--sidebar)] text-foreground">
+      {/* Mobile top bar — only renders below md breakpoint. */}
+      <div className="fixed inset-x-0 top-0 z-[60] flex h-12 items-center justify-between border-b border-[var(--sh-hair)] bg-[var(--icon-bar)] px-3 md:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileDrawerOpen(true)}
+          aria-label="Open menu"
+          className="grid h-9 w-9 place-items-center rounded-[8px] text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)]"
+        >
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="grid h-7 w-7 place-items-center rounded-[8px] bg-[var(--sh-ink)] text-[var(--sidebar)]" style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', fontSize: 18, letterSpacing: '-0.02em' }}>S</div>
+          <span className="text-[13px] font-medium text-[var(--sh-ink)] truncate max-w-[140px]">
+            {activeSection === 'home' ? SECTION_TITLES.home : SECTION_TITLES[activeSection]}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowCreateTaskModal(true)}
+          aria-label="Create new task"
+          className="grid h-9 w-9 place-items-center rounded-[8px] text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)]"
+        >
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Mobile drawer backdrop */}
+      {mobileDrawerOpen && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/40 md:hidden"
+          onClick={() => setMobileDrawerOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Drawer container — wraps icon rail + module sidebar. On desktop this
+          is a static flex row; on mobile it slides in/out as an overlay. */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-[81] flex transition-transform duration-200 ease-in-out md:static md:z-auto md:transition-none ${
+          mobileDrawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}
+      >
       {/* Far-left monochrome rail — 64px wide, inset right shadow, light gray */}
       <div
         className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-[var(--sh-hair)] bg-[var(--icon-bar)] px-2 pt-[14px] pb-3 relative z-[3]"
@@ -534,7 +594,7 @@ export default function MainLayout() {
             channels={channels}
             activeChannelId={activeChannelId}
             homeView={homeView}
-            onChangeView={(v) => { setActiveSection('home'); setHomeView(v); }}
+            onChangeView={(v) => { setActiveSection('home'); setHomeView(v); setMobileDrawerOpen(false); }}
             onSelectChannel={handleSelectChannel}
             onSelectDm={handleSelectDm}
             onCreateChannel={() => setShowCreateChannel(true)}
@@ -543,16 +603,18 @@ export default function MainLayout() {
           />
         </div>
       )}
+      </aside>
 
       {/* Main content area */}
-      <div className="relative flex flex-1 flex-col overflow-hidden bg-surface">
-        {/* Universal "New task" button — visible in all views */}
+      <div className="relative flex flex-1 flex-col overflow-hidden bg-surface pt-12 md:pt-0">
+        {/* Universal "New task" button — visible in all views. Hidden on
+            mobile because the mobile top bar has its own "+" button. */}
         <button
           type="button"
           onClick={() => setShowCreateTaskModal(true)}
           title="New task"
           aria-label="Create new task"
-          className="absolute right-3 top-2 z-40 grid h-8 w-8 place-items-center rounded-[9px] border border-transparent text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition"
+          className="absolute right-3 top-2 z-40 hidden h-8 w-8 place-items-center rounded-[9px] border border-transparent text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition md:grid"
         >
           <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
             <path d="M12 5v14M5 12h14" />
@@ -602,7 +664,7 @@ export default function MainLayout() {
                 return (
                 <div className="flex flex-col border-b border-divider">
                   <div className="flex items-center justify-between px-2 py-[7px]">
-                    <div className="flex items-center gap-1 w-[360px]">
+                    <div className="flex items-center gap-1 w-full md:w-[360px] min-w-0">
                       {/* Title with hash (channel) or avatar (DM) */}
                       <div className="flex items-center gap-1.5 rounded px-2 py-1 overflow-hidden">
                         {isDm ? (
@@ -718,8 +780,10 @@ export default function MainLayout() {
       {/* Side-by-side peek — opens when a task is clicked inside another
           task's panel (e.g. work-block activity rows). Renders the full
           TaskDetailPanel on the left so the host panel on the right stays
-          visible at the same time. */}
-      <GlobalTaskPeekPanel />
+          visible at the same time. Disabled on mobile — its CSS anchors at
+          left:360px which goes off-screen, and the side-by-side mental model
+          breaks below 768px. */}
+      {!isMobile && <GlobalTaskPeekPanel />}
 
       {/* Time sheet panel — anchored to the rail button */}
       {timesheetOpen && (

@@ -16,6 +16,7 @@ import GroupByDropdown from '../../../components/pm/GroupByDropdown';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import { LIST_GROUP_BY_OPTIONS, SORT_BY_OPTIONS, type SortBy } from '../../../lib/taskGrouping';
 import { EMPTY_FILTER, deriveAssigneeOptions, deriveTagOptions } from '../../../lib/filters';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const SORT_ICON = (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -54,6 +55,12 @@ export default function ListPage() {
 
   const scopeKey = activeListId ? `list:${activeListId}` : '';
   const filters = (scopeKey && filtersByScope[scopeKey]) || EMPTY_FILTER;
+
+  // On mobile, force the list view — kanban is unusable on touch and the
+  // BoardView's drag-and-drop has no touch fallback. The stored desktop
+  // preference is preserved (we read but don't write back).
+  const isMobile = useIsMobile();
+  const effectiveViewMode = isMobile ? 'list' : viewMode;
 
   const { data: listData } = useQuery({
     queryKey: ['list', activeListId],
@@ -192,7 +199,7 @@ export default function ListPage() {
         <button
           onClick={() => setViewMode('list')}
           className="lv-tab"
-          data-active={viewMode === 'list'}
+          data-active={effectiveViewMode === 'list'}
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
@@ -201,8 +208,8 @@ export default function ListPage() {
         </button>
         <button
           onClick={() => setViewMode('board')}
-          className="lv-tab"
-          data-active={viewMode === 'board'}
+          className="lv-tab hidden md:inline-flex"
+          data-active={effectiveViewMode === 'board'}
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
@@ -224,7 +231,7 @@ export default function ListPage() {
       </div>
 
       {/* Group by dropdown + Filter + Sort + Focus today + My tasks toggle (List view only) */}
-      {viewMode === 'list' && (
+      {effectiveViewMode === 'list' && (
         <div className="lv-subtoolbar shrink-0">
           <span className="st-label">Group by</span>
           <GroupByDropdown
@@ -279,7 +286,7 @@ export default function ListPage() {
       )}
 
       {/* For board view: filter row above content */}
-      {viewMode === 'board' && (
+      {effectiveViewMode === 'board' && (
         <div className="sh-view dl-groupby shrink-0">
           <FilterBar
             filters={filters}
@@ -293,7 +300,7 @@ export default function ListPage() {
 
       {/* Content area + task detail panel */}
       <div className="flex flex-1 overflow-hidden">
-        {viewMode === 'list' ? (
+        {effectiveViewMode === 'list' ? (
           <ListView
             listId={activeListId}
             statuses={statuses}

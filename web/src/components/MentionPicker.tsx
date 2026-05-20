@@ -193,7 +193,7 @@ export default function MentionPicker({
 
       {pickerOpen && (results.length > 0 || loading) && (
         <div
-          className="absolute bottom-full left-0 z-50 mb-2 w-[260px] overflow-hidden rounded-[6px] border border-divider bg-surface shadow-lg"
+          className="absolute bottom-full left-0 z-50 mb-2 w-[min(260px,calc(100vw-32px))] overflow-hidden rounded-[6px] border border-divider bg-surface shadow-lg"
           role="listbox"
         >
           {loading && results.length === 0 ? (
