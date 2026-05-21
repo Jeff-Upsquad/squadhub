@@ -732,48 +732,48 @@ export default function TaskCreatePanel({
               <path d="M13 17l5-5-5-5M6 17l5-5-5-5" />
             </svg>
           </button>
-          {effectiveSpaceName && (
-            pickable && workspaceId ? (
-              <ListPickerCombobox
-                workspaceId={workspaceId}
-                selectedListId={selectedListId}
-                selectedListName={effectiveListName}
-                selectedSpaceColor={effectiveSpaceColor}
-                initialSpaceId={selectedSpaceId}
-                onChange={(newListId, newSpaceId) => {
-                  setSelectedListId(newListId);
-                  setSelectedSpaceId(newSpaceId);
-                }}
-                renderTrigger={({ toggle }) => (
-                  <button
-                    type="button"
-                    onClick={toggle}
-                    className="td-bcrumb td-focus"
-                    title="Choose space, folder, and list"
-                  >
-                    <span className="emblem" style={{ background: effectiveSpaceColor || 'var(--sh-ink)' }}>
-                      {initialOf(effectiveSpaceName)[0]}
-                    </span>
-                    <span className="name">{effectiveSpaceName}</span>
-                    {effectiveFolderName && (
-                      <>
-                        <span className="sep">›</span>
-                        <span className="name">{effectiveFolderName}</span>
-                      </>
-                    )}
-                    {effectiveListName && (
-                      <>
-                        <span className="sep">›</span>
-                        <span className="name">{effectiveListName}</span>
-                      </>
-                    )}
-                    <svg className="chev" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                      <path d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                )}
-              />
-            ) : (
+          {pickable && workspaceId ? (
+            <ListPickerCombobox
+              workspaceId={workspaceId}
+              selectedListId={selectedListId}
+              selectedListName={effectiveListName}
+              selectedSpaceColor={effectiveSpaceColor}
+              initialSpaceId={selectedSpaceId}
+              onChange={(newListId, newSpaceId) => {
+                setSelectedListId(newListId);
+                setSelectedSpaceId(newSpaceId);
+              }}
+              renderTrigger={({ toggle }) => (
+                <button
+                  type="button"
+                  onClick={toggle}
+                  className="td-bcrumb td-focus"
+                  title="Choose space, folder, and list"
+                >
+                  <span className="emblem" style={{ background: effectiveSpaceColor || 'var(--sh-ink)' }}>
+                    {effectiveSpaceName ? initialOf(effectiveSpaceName)[0] : '+'}
+                  </span>
+                  <span className="name">{effectiveSpaceName || 'Choose list'}</span>
+                  {effectiveFolderName && (
+                    <>
+                      <span className="sep">›</span>
+                      <span className="name">{effectiveFolderName}</span>
+                    </>
+                  )}
+                  {effectiveListName && (
+                    <>
+                      <span className="sep">›</span>
+                      <span className="name">{effectiveListName}</span>
+                    </>
+                  )}
+                  <svg className="chev" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              )}
+            />
+          ) : (
+            effectiveSpaceName && (
               <span className="td-bcrumb">
                 <span className="emblem" style={{ background: effectiveSpaceColor || 'var(--sh-ink)' }}>
                   {initialOf(effectiveSpaceName)[0]}
