@@ -307,6 +307,7 @@ export const usePMStore = create<PMState>()(
         activeSpacePageId: state.activeSpacePageId,
         activeDesignFolderId: state.activeDesignFolderId,
         activeClientId: state.activeClientId,
+        activeDashboardTab: state.activeDashboardTab,
         contextListId: state.contextListId,
         timer: state.timer,
         listGroupBy: state.listGroupBy,
