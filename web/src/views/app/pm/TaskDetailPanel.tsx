@@ -162,6 +162,7 @@ export default function TaskDetailPanel({
   spaceName,
   spaceColor,
   spaceId,
+  folderName,
   listName,
   taskIdOverride,
   isPeek = false,
@@ -172,6 +173,7 @@ export default function TaskDetailPanel({
   spaceName?: string;
   spaceColor?: string | null;
   spaceId?: string | null;
+  folderName?: string | null;
   listName?: string | null;
   /** When set, this panel renders the given task instead of the global active task.
    *  Used by the side-by-side peek so a second panel can coexist with the main one. */
@@ -613,6 +615,12 @@ export default function TaskDetailPanel({
                       {initialOf(spaceName)[0]}
                     </span>
                     <span className="name">{spaceName}</span>
+                    {folderName && (
+                      <>
+                        <span className="sep">›</span>
+                        <span className="name">{folderName}</span>
+                      </>
+                    )}
                     {listName && (
                       <>
                         <span className="sep">›</span>
@@ -631,6 +639,12 @@ export default function TaskDetailPanel({
                   {initialOf(spaceName)[0]}
                 </span>
                 <span className="name">{spaceName}</span>
+                {folderName && (
+                  <>
+                    <span className="sep">›</span>
+                    <span className="name">{folderName}</span>
+                  </>
+                )}
                 {listName && (
                   <>
                     <span className="sep">›</span>
