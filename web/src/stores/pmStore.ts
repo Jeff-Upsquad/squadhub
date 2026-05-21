@@ -8,6 +8,7 @@ export type ViewMode = 'list' | 'board';
 export type DashboardTab = 'today' | 'overdue' | 'tomorrow' | 'all';
 export type ListGroupBy = Extract<GroupBy, 'status' | 'none' | 'work_date' | 'due_date' | 'priority'>;
 export type TodayListView = 'list' | 'calendar';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner';
 
 interface TimerState {
   taskId: string;
@@ -26,6 +27,7 @@ interface PMState {
   activeDesignFolderId: string | null;
   activeClientId: string | null;
   activeDashboardTab: DashboardTab | null;
+  homeView: HomeView;
   contextListId: string | null;
   viewMode: ViewMode;
   listGroupBy: ListGroupBy;
@@ -111,6 +113,7 @@ export const usePMStore = create<PMState>()(
       activeDesignFolderId: null,
       activeClientId: null,
       activeDashboardTab: null,
+      homeView: 'hub',
       contextListId: null,
       viewMode: 'list',
       listGroupBy: 'status',
@@ -141,6 +144,7 @@ export const usePMStore = create<PMState>()(
       setContextListId: (id) => set({ contextListId: id }),
       setActiveClient: (id) => set({ activeClientId: id }),
       setActiveDashboardTab: (tab) => set({ activeDashboardTab: tab }),
+      setHomeView: (v) => set({ homeView: v }),
       setViewMode: (mode) => set({ viewMode: mode }),
       setListGroupBy: (g) => { set({ listGroupBy: g }); triggerSave(); },
       setMyTasksOnly: (v) => { set({ myTasksOnly: v }); triggerSave(); },
@@ -295,7 +299,7 @@ export const usePMStore = create<PMState>()(
           focusedTodayDate: s.focusedTodayDate,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeClientId: null, activeDashboardTab: null, homeView: 'hub', contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list' }),
     }),
     {
       name: 'squadhub-pm',
@@ -308,6 +312,7 @@ export const usePMStore = create<PMState>()(
         activeDesignFolderId: state.activeDesignFolderId,
         activeClientId: state.activeClientId,
         activeDashboardTab: state.activeDashboardTab,
+        homeView: state.homeView,
         contextListId: state.contextListId,
         timer: state.timer,
         listGroupBy: state.listGroupBy,
