@@ -22,6 +22,8 @@ export default function GlobalTaskDetailPanel() {
   });
 
   const spaceId = listData?.space_id as string | undefined;
+  const folderId = listData?.folder_id as string | undefined;
+
   const { data: spaceData } = useQuery({
     queryKey: ['space', spaceId],
     queryFn: async () => {
@@ -29,6 +31,15 @@ export default function GlobalTaskDetailPanel() {
       return res.data.data;
     },
     enabled: !!spaceId,
+  });
+
+  const { data: folderData } = useQuery({
+    queryKey: ['folder', folderId],
+    queryFn: async () => {
+      const res = await api.get(`/pm/folders/${folderId}`);
+      return res.data.data;
+    },
+    enabled: !!folderId,
   });
 
   const isAdmin = useIsAdmin();
@@ -48,6 +59,7 @@ export default function GlobalTaskDetailPanel() {
       spaceName={spaceData?.name || listData?.name}
       spaceColor={spaceData?.color || null}
       spaceId={spaceId ?? null}
+      folderName={folderData?.name || null}
       listName={listData?.name || null}
     />
   );

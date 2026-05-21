@@ -25,6 +25,8 @@ export default function GlobalTaskPeekPanel() {
   });
 
   const spaceId = listData?.space_id as string | undefined;
+  const folderId = listData?.folder_id as string | undefined;
+
   const { data: spaceData } = useQuery({
     queryKey: ['space', spaceId],
     queryFn: async () => {
@@ -32,6 +34,15 @@ export default function GlobalTaskPeekPanel() {
       return res.data.data;
     },
     enabled: !!spaceId,
+  });
+
+  const { data: folderData } = useQuery({
+    queryKey: ['folder', folderId],
+    queryFn: async () => {
+      const res = await api.get(`/pm/folders/${folderId}`);
+      return res.data.data;
+    },
+    enabled: !!folderId,
   });
 
   const isAdmin = useIsAdmin();
@@ -51,6 +62,7 @@ export default function GlobalTaskPeekPanel() {
       spaceName={spaceData?.name || listData?.name}
       spaceColor={spaceData?.color || null}
       spaceId={spaceId ?? null}
+      folderName={folderData?.name || null}
       listName={listData?.name || null}
       taskIdOverride={peekTaskId}
       isPeek
