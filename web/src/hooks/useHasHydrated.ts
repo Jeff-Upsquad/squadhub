@@ -2,14 +2,19 @@
 
 import { useSyncExternalStore } from 'react';
 import { useAuthStore } from '@/stores/authStore';
+import { usePMStore } from '@/stores/pmStore';
 
 export function useHasHydrated() {
   return useSyncExternalStore(
     (cb) => {
-      const unsub = useAuthStore.persist.onFinishHydration(cb);
-      return () => unsub();
+      const unsub1 = useAuthStore.persist.onFinishHydration(cb);
+      const unsub2 = usePMStore.persist.onFinishHydration(cb);
+      return () => {
+        unsub1();
+        unsub2();
+      };
     },
-    () => useAuthStore.persist.hasHydrated(),
+    () => useAuthStore.persist.hasHydrated() && usePMStore.persist.hasHydrated(),
     () => false,
   );
 }
