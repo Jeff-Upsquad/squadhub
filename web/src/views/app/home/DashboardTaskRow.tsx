@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 function hashHue(input: string): number {
   let h = 0;
@@ -49,8 +50,10 @@ const PRIORITY_LABEL: Record<string, string | null> = {
 
 export default function DashboardTaskRow({ task }: { task: Task }) {
   const setActiveTask = usePMStore((s) => s.setActiveTask);
+  const setPeekTask = usePMStore((s) => s.setPeekTask);
   const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
   const updateTask = useUpdateTask(null);
+  const isMobile = useIsMobile();
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
 
@@ -65,8 +68,12 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
   const parentTitle = task.parent_task?.title || null;
 
   const onOpen = () => {
-    setActiveDashboardTab(null);
-    setActiveTask(task.id);
+    if (isMobile) {
+      setActiveDashboardTab(null);
+      setActiveTask(task.id);
+      return;
+    }
+    setPeekTask(task.id);
   };
 
   const onToggleDone = (e: React.MouseEvent) => {
