@@ -590,12 +590,6 @@ export default function TaskDetailPanel({
               <path d="M13 17l5-5-5-5M6 17l5-5-5-5" />
             </svg>
           </button>
-          {task && (
-            <span className="td-task-code">
-              <span className="dot" style={currentType?.color ? { background: currentType.color } : undefined} />
-              SQ-{String(task.display_number ?? 0).padStart(3, '0')}
-            </span>
-          )}
           {spaceName && (
             workspaceId && canEdit ? (
               <ListPickerCombobox
