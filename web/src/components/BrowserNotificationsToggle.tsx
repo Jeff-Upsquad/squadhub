@@ -7,6 +7,7 @@ import {
   isBrowserNotificationsSupported,
   requestBrowserNotificationPermission,
   setBrowserNotificationsEnabled,
+  showTestBrowserNotification,
 } from '../services/browserNotifications';
 
 export default function BrowserNotificationsToggle({
@@ -36,6 +37,7 @@ export default function BrowserNotificationsToggle({
       if (enabled) {
         setBrowserNotificationsEnabled(false);
         setEnabled(false);
+        window.dispatchEvent(new Event('squadhub:desktop-notifications-changed'));
         onCloseMenu?.();
         return;
       }
@@ -53,6 +55,8 @@ export default function BrowserNotificationsToggle({
 
       setBrowserNotificationsEnabled(true);
       setEnabled(true);
+      showTestBrowserNotification();
+      window.dispatchEvent(new Event('squadhub:desktop-notifications-changed'));
       onCloseMenu?.();
     } finally {
       setBusy(false);
