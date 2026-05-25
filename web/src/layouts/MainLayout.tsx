@@ -50,7 +50,8 @@ import DayPlannerView from '../views/app/DayPlannerView';
 import LearningShell from '../views/app/learning/LearningShell';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
 import { useUnreadCount } from '../hooks/useUnreadCount';
-import { useNotificationSocket } from '../hooks/useNotificationSocket';
+import { useBrowserNotifications } from '../hooks/useBrowserNotifications';
+import BrowserNotificationsToggle from '../components/BrowserNotificationsToggle';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 // ---- Types ----
@@ -205,7 +206,7 @@ export default function MainLayout() {
   const [activeSection, setActiveSection] = useState<ActiveSection>('home');
   const [homeView, setHomeView] = useState<HomeView>('hub');
   const { data: unreadCount = 0 } = useUnreadCount();
-  useNotificationSocket();
+  useBrowserNotifications(currentWorkspace?.id);
   // Schedule in-app toasts for upcoming work-block windows today.
   useWorkBlockNotifier();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -349,17 +350,20 @@ export default function MainLayout() {
     }
   }, [currentWorkspace]);
 
-  // Deep link handler — desktop companion app opens URLs with query params
+  const openInboxNotification = (notificationId: string) => {
+    setActiveSection('home');
+    setHomeView('inbox');
+    window.__pendingInboxNotificationId = notificationId;
+  };
+
+  // Deep link handler — desktop companion / browser notification clicks
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const openTask = params.get('open_task');
     const openChannel = params.get('open_channel');
     const openInbox = params.get('open_inbox');
     if (openInbox) {
-      setActiveSection('home');
-      setHomeView('inbox');
-      // Store the notification ID so InboxView can auto-select it
-      window.__pendingInboxNotificationId = openInbox;
+      openInboxNotification(openInbox);
       window.history.replaceState({}, '', window.location.pathname);
     } else if (openTask) {
       usePMStore.getState().setActiveTask(openTask);
@@ -370,6 +374,15 @@ export default function MainLayout() {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, [setActiveChannel]);
+
+  useEffect(() => {
+    const onOpenInbox = (e: Event) => {
+      const id = (e as CustomEvent<{ notificationId: string }>).detail.notificationId;
+      if (id) openInboxNotification(id);
+    };
+    window.addEventListener('squadhub:open-inbox', onOpenInbox);
+    return () => window.removeEventListener('squadhub:open-inbox', onOpenInbox);
+  }, []);
 
   // Handlers for HomeSidebar
   const handleSelectChannel = (channelId: string) => {
@@ -555,6 +568,7 @@ export default function MainLayout() {
                   <p className="text-[11px] text-[var(--foreground-dim)] truncate">{user?.email}</p>
                 </div>
                 <div className="py-1">
+                  <BrowserNotificationsToggle onCloseMenu={() => setProfileOpen(false)} />
                   <a
                     href="/download-app"
                     className="flex items-center gap-2 px-3 py-2 text-[13px] text-[var(--foreground)] hover:bg-[var(--sh-hair-3)] transition"
