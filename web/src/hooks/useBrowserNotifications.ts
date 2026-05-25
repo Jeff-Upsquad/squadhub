@@ -4,17 +4,18 @@ import type { Notification } from '@squadhub/shared';
 import api from '../services/api';
 import { connectSocket } from '../services/socket';
 import {
-  isBrowserNotificationsEnabled,
+  isDesktopNotificationsReady,
   showBrowserNotification,
   syncBrowserNotificationPreference,
 } from '../services/browserNotifications';
-import { useUnreadCount } from './useUnreadCount';
 
-/** Socket-driven inbox refresh + native OS notifications. */
+const POLL_MS = 12_000;
+
+/** Socket + polling inbox refresh + native OS notifications. */
 export function useBrowserNotifications(workspaceId: string | undefined) {
   const queryClient = useQueryClient();
-  const { data: unreadCount = 0 } = useUnreadCount();
-  const prevUnreadRef = useRef(unreadCount);
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const pollInitializedRef = useRef(false);
 
   useEffect(() => {
     syncBrowserNotificationPreference();
@@ -27,6 +28,7 @@ export function useBrowserNotifications(workspaceId: string | undefined) {
     const handle = (notification: Notification) => {
       queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] });
       queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+      seenIdsRef.current.add(notification.id);
       showBrowserNotification(notification);
     };
 
@@ -36,31 +38,40 @@ export function useBrowserNotifications(workspaceId: string | undefined) {
     };
   }, [queryClient, workspaceId]);
 
-  // Fallback when inbox badge updates via polling but socket event was missed.
+  // Reliable delivery: diff the inbox list on a timer (socket + 60s unread poll often miss OS banners).
   useEffect(() => {
-    if (!workspaceId || !isBrowserNotificationsEnabled()) return;
-    if (unreadCount <= prevUnreadRef.current) {
-      prevUnreadRef.current = unreadCount;
-      return;
-    }
-
-    prevUnreadRef.current = unreadCount;
+    if (!workspaceId) return;
 
     let cancelled = false;
-    (async () => {
+
+    const poll = async () => {
+      if (!isDesktopNotificationsReady() || cancelled) return;
       try {
-        const res = await api.get('/notifications', { params: { limit: 10 } });
+        const res = await api.get('/notifications', { params: { limit: 30 } });
         if (cancelled) return;
         const items: Notification[] = res.data.data || [];
-        const latest = items.find((n) => !n.is_read) ?? items[0];
-        if (latest) showBrowserNotification(latest);
+
+        if (!pollInitializedRef.current) {
+          for (const n of items) seenIdsRef.current.add(n.id);
+          pollInitializedRef.current = true;
+          return;
+        }
+
+        for (const n of items) {
+          if (seenIdsRef.current.has(n.id)) continue;
+          seenIdsRef.current.add(n.id);
+          if (!n.is_read) showBrowserNotification(n);
+        }
       } catch {
         // non-fatal
       }
-    })();
+    };
 
+    poll();
+    const timer = window.setInterval(poll, POLL_MS);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
-  }, [unreadCount, workspaceId]);
+  }, [workspaceId]);
 }

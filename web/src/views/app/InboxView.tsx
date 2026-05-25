@@ -7,6 +7,7 @@ import type { HomeView } from '../../layouts/MainLayout';
 import InboxTaskDetail from './inbox/InboxTaskDetail';
 import InboxMessageDetail from './inbox/InboxMessageDetail';
 import ViewSearchInput from '../../components/pm/ViewSearchInput';
+import DesktopNotificationsBanner from '../../components/DesktopNotificationsBanner';
 
 type Notification = {
   id: string;
@@ -211,6 +212,7 @@ export default function InboxView({
   return (
     <div className="sh-view inbox-view">
       <div className="inbox-list">
+        <DesktopNotificationsBanner />
         <div className="inbox-filter">
           <div className="pill" data-active={filter === 'all'} onClick={() => setFilter('all')}>All</div>
           <div className="pill" data-active={filter === 'unread'} onClick={() => setFilter('unread')}>
