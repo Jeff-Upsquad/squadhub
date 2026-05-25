@@ -63,8 +63,8 @@ export default function BrowserNotificationsToggle({
     permission === 'denied'
       ? 'Blocked in browser settings'
       : enabled
-        ? 'On when tab is in background'
-        : 'Off';
+        ? 'On — macOS notification center'
+        : 'Off — turn on for desktop alerts';
 
   return (
     <button
@@ -76,7 +76,7 @@ export default function BrowserNotificationsToggle({
       className="flex w-full items-center justify-between gap-3 px-3 py-2 text-[13px] text-[var(--foreground)] hover:bg-[var(--sh-hair-3)] transition disabled:opacity-50"
     >
       <span className="flex flex-col items-start min-w-0">
-        <span className="font-medium">Browser notifications</span>
+        <span className="font-medium">Desktop notifications</span>
         <span className="text-[11px] text-[var(--foreground-dim)] truncate w-full">{statusLine}</span>
       </span>
       <span

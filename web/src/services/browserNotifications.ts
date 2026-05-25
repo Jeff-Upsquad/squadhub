@@ -13,6 +13,8 @@ const TYPE_LABELS: Record<string, string> = {
   reaction_added: 'Reaction',
 };
 
+const recentlyShownIds = new Set<string>();
+
 export function isBrowserNotificationsSupported(): boolean {
   return typeof window !== 'undefined' && 'Notification' in window;
 }
@@ -27,6 +29,14 @@ export function isBrowserNotificationsEnabled(): boolean {
 
 export function setBrowserNotificationsEnabled(enabled: boolean): void {
   localStorage.setItem(BROWSER_NOTIF_STORAGE_KEY, enabled ? 'true' : 'false');
+}
+
+/** If the user already allowed notifications in the browser, turn the in-app toggle on. */
+export function syncBrowserNotificationPreference(): void {
+  if (!isBrowserNotificationsSupported()) return;
+  if (Notification.permission === 'granted' && !isBrowserNotificationsEnabled()) {
+    setBrowserNotificationsEnabled(true);
+  }
 }
 
 export function getBrowserNotificationPermission(): NotificationPermission | 'unsupported' {
@@ -66,27 +76,39 @@ export function navigateToInboxNotification(
 function shouldShowOsNotification(): boolean {
   if (!isBrowserNotificationsSupported()) return false;
   if (!isBrowserNotificationsEnabled()) return false;
-  if (Notification.permission !== 'granted') return false;
-  // Avoid duplicating in-app UI when the user is actively focused on SquadHub.
-  return document.hidden || !document.hasFocus();
+  return Notification.permission === 'granted';
 }
 
-export function maybeShowBrowserNotification(n: Notification): void {
+/** Show a native OS notification (deduped by notification id). */
+export function showBrowserNotification(n: Notification): void {
   if (!shouldShowOsNotification()) return;
+  if (recentlyShownIds.has(n.id)) return;
+  recentlyShownIds.add(n.id);
+  if (recentlyShownIds.size > 100) {
+    const oldest = recentlyShownIds.values().next().value;
+    if (oldest) recentlyShownIds.delete(oldest);
+  }
 
   const body = n.body || notificationSubtitle(n.type);
   const workspaceId =
     typeof n.metadata?.workspace_id === 'string' ? n.metadata.workspace_id : undefined;
 
-  const osNotif = new window.Notification(n.title, {
-    body,
-    tag: n.id,
-    icon: `${window.location.origin}/squadhub.svg`,
-  });
+  try {
+    const osNotif = new window.Notification(n.title, {
+      body,
+      tag: n.id,
+      icon: `${window.location.origin}/squadhub.svg`,
+    });
 
-  osNotif.onclick = () => {
-    osNotif.close();
-    window.focus();
-    navigateToInboxNotification(n.id, workspaceId);
-  };
+    osNotif.onclick = () => {
+      osNotif.close();
+      window.focus();
+      navigateToInboxNotification(n.id, workspaceId);
+    };
+  } catch {
+    // Browser blocked or unsupported options — ignore.
+  }
 }
+
+/** @deprecated use showBrowserNotification */
+export const maybeShowBrowserNotification = showBrowserNotification;
