@@ -424,9 +424,19 @@ export default function AdminCardEditor({
     queryKey: ['admin-countries'],
     queryFn: () => api.get('/admin/countries').then((r) => r.data?.data || []),
   });
-  const countries: Array<{ id: string; name: string }> = countriesQuery.data || [];
-  const countryById: Record<string, { id: string; name: string }> = {};
-  countries.forEach((c) => { countryById[c.id] = c; });
+  const countries: Array<{ id: string; name: string }> = useMemo(
+    () => countriesQuery.data && Array.isArray(countriesQuery.data) ? countriesQuery.data : [],
+    [countriesQuery.data],
+  );
+  const countryById: Record<string, { id: string; name: string }> = useMemo(() => {
+    const map: Record<string, { id: string; name: string }> = {};
+    countries.forEach((c) => {
+      if (c && typeof c.id === 'string') {
+        map[c.id] = c;
+      }
+    });
+    return map;
+  }, [countries]);
 
   // SquadHire categories — drives the publish gate. Empty = card is not
   // delivered to SquadHire (the "Not on SquadHire" badge in the list view).
@@ -935,14 +945,14 @@ export default function AdminCardEditor({
             </Field>
             <Field label="States / regions">
               {(() => {
-                const selectedCountryId = targetCountryIds[0];
-                const selectedCountry = selectedCountryId ? countryById[selectedCountryId] : null;
-                const stateOptions = selectedCountry ? STATES_BY_COUNTRY_NAME[selectedCountry.name] || [] : [];
+                const selectedCountryId = Array.isArray(targetCountryIds) ? targetCountryIds[0] : '';
+                const selectedCountry = selectedCountryId && countryById[selectedCountryId] ? countryById[selectedCountryId] : null;
+                const stateOptions = selectedCountry?.name ? (STATES_BY_COUNTRY_NAME[selectedCountry.name] || []) : [];
                 if (!selectedCountry) {
                   return <p className="text-xs text-[var(--color-sh-ink-faint)]">Pick a country above to enable.</p>;
                 }
                 if (stateOptions.length === 0) {
-                  return <p className="text-xs text-[var(--color-sh-ink-faint)]">No state list configured for {selectedCountry.name}.</p>;
+                  return <p className="text-xs text-[var(--color-sh-ink-faint)]">No state list configured for {selectedCountry.name || 'this country'}.</p>;
                 }
                 const selectedRegions = new Set(targetRegions.map((r) => r.region));
                 return (
