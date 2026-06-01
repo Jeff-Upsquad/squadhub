@@ -149,6 +149,8 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
   //   2. customer_email — request/shared_form cards
   //   3. customer_phone (suffix) — same for phone-led leads
   let cardBySubPlan: Record<string, any> = {};
+  const matchedTextCardIds = new Set<string>();
+  let unmatchedCards: Record<string, any> = {};
   if (client.submission_id) {
     const { data: leadRow } = await supabaseAdmin
       .from('client_submissions')
@@ -233,10 +235,19 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
             if (!existing || newPrio > oldPrio) {
               cardBySubPlan[key] = { id: crd.id, state: crd.state, published_at: crd.published_at };
             }
+            matchedTextCardIds.add(crd.id);
           }
         });
       });
     }
+
+    // Collect email/phone-matched cards that didn't match any subscription
+    unmatchedCards = textCards
+      .filter((crd: any) => !matchedTextCardIds.has(crd.id))
+      .reduce((acc: Record<string, any>, crd: any) => {
+        if (!acc[crd.id]) acc[crd.id] = { id: crd.id, state: crd.state, published_at: crd.published_at };
+        return acc;
+      }, {});
   }
 
   return {
@@ -253,6 +264,7 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
       deliverables: delivsByCs[c.id] || [],
       card: cardBySubPlan[`${c.subscription_id}:${c.plan_id}`] || null,
     })),
+    linkedCards: Object.values(unmatchedCards),
   };
 }
 

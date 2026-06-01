@@ -632,6 +632,32 @@ export default function ClientsModule() {
               )}
             </div>
 
+            {/* Linked cards not matched to any subscription */}
+            {selectedClient && (selectedClient as any).linkedCards?.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Other Cards</h4>
+                <div className="divide-y divide-[#F1F5F9] rounded-lg border border-[#E2E8F0] bg-white">
+                  {(selectedClient as any).linkedCards.map((lc: any) => (
+                    <div key={lc.id} className="flex items-center justify-between px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-[#0F172B]">Card</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${lc.state === 'assigned' ? 'bg-[#D1FAE5] text-[#065F46]' : lc.state === 'published' ? 'bg-[#DCFCE7] text-[#15803D]' : 'bg-[#F1F5F9] text-[#475569]'}`}>
+                          {lc.state}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setViewingCard(lc)}
+                        className="rounded bg-[#2962FF] px-2 py-1 text-[10px] font-medium text-white hover:bg-[#1E4FCC]"
+                      >
+                        View Card
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Card detail inline view */}
             {viewingCard && selectedClient && (
               <div className="space-y-3">

@@ -1401,6 +1401,7 @@ export interface Client {
   subscriptions?: ClientSubscription[];
   primary_sales_person?: SalesPerson | null;
   secondary_sales_person?: SalesPerson | null;
+  linkedCards?: { id: string; state: string; published_at: string | null }[];
 }
 
 export type OnboardingLinkStatus = 'active' | 'used' | 'expired';
