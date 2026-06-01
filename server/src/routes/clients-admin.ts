@@ -214,8 +214,9 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
     const textCards = [...(byEmail.data || []), ...(byPhone.data || [])]
       .filter((crd: any) => !matchingCardIds.has(crd.id) && crd.service_type && crd.plan_name);
 
+    const normService = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '').replace(/s$/, '');
+
     if (textCards.length > 0 && cs.length > 0) {
-      const normService = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '').replace(/s$/, '');
       textCards.forEach((crd: any) => {
         const cardServiceNorm = normService(crd.service_type);
         const cardPlanNorm = normService(crd.plan_name);
@@ -248,6 +249,63 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
         if (!acc[crd.id]) acc[crd.id] = { id: crd.id, state: crd.state, published_at: crd.published_at };
         return acc;
       }, {});
+
+    // For unmatched cards, auto-create the corresponding subscription
+    if (Object.keys(unmatchedCards).length > 0) {
+      const { data: allSubs } = await supabaseAdmin.from('subscriptions').select('id, name');
+      const { data: allPlans } = await supabaseAdmin.from('subscription_plans').select('*');
+      const existingKeys = new Set(cs.map((c: any) => `${c.subscription_id}:${c.plan_id}`));
+      const createdCs: any[] = [];
+
+      for (const crd of Object.values(unmatchedCards) as any[]) {
+        const fullCrd = (byEmail.data || []).concat(byPhone.data || []).find((c: any) => c.id === crd.id);
+        if (!fullCrd?.service_type || !fullCrd?.plan_name) continue;
+        const cardSvcNorm = normService(fullCrd.service_type);
+        const cardPlanNorm = normService(fullCrd.plan_name);
+
+        const matchedSub = (allSubs || []).find((s: any) => {
+          const subNorm = normService(s.name);
+          return subNorm.includes(cardSvcNorm) || cardSvcNorm.includes(subNorm);
+        });
+        if (!matchedSub) continue;
+
+        const matchedPlan = (allPlans || []).find(
+          (p: any) => p.subscription_id === matchedSub.id && normService(p.plan) === cardPlanNorm,
+        );
+        if (!matchedPlan) continue;
+
+        const key = `${matchedSub.id}:${matchedPlan.id}`;
+        if (existingKeys.has(key)) continue;
+
+        const { data: newCs } = await supabaseAdmin
+          .from('client_subscriptions')
+          .insert({ client_id: client.id, subscription_id: matchedSub.id, plan_id: matchedPlan.id, status: 'active' })
+          .select('*')
+          .single();
+
+        if (newCs) {
+          createdCs.push(newCs);
+          subsMap[matchedSub.id] = matchedSub;
+          plansMap[matchedPlan.id] = matchedPlan;
+          cardBySubPlan[key] = { id: crd.id, state: crd.state, published_at: crd.published_at };
+          matchedTextCardIds.add(crd.id);
+          existingKeys.add(key);
+        }
+      }
+
+      // Extend cs with newly created subscriptions
+      if (createdCs.length > 0) {
+        (cs as any[]).push(...createdCs);
+      }
+
+      // Rebuild unmatchedCards without the ones we just matched
+      unmatchedCards = textCards
+        .filter((crd: any) => !matchedTextCardIds.has(crd.id))
+        .reduce((acc: Record<string, any>, crd: any) => {
+          if (!acc[crd.id]) acc[crd.id] = { id: crd.id, state: crd.state, published_at: crd.published_at };
+          return acc;
+        }, {});
+    }
   }
 
   return {
