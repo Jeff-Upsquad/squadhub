@@ -138,14 +138,7 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
   for (const m of members || []) membersByLevel[m.access_level]?.push(m);
 
   return (
-    <>
-      {/* Mobile backdrop — visible only below md so tapping outside closes. */}
-      <div
-        className="fixed inset-0 z-[49] bg-black/40 md:hidden"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-    <div className="fixed inset-y-0 right-0 z-[50] flex h-full w-full max-w-[360px] shrink-0 flex-col border-l border-[#E2E8F0] bg-[#F8FAFC] md:static md:inset-auto md:z-auto md:w-80 md:max-w-none">
+    <div className="flex h-full w-80 shrink-0 flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-[#E2E8F0] px-4 py-3">
         <h3 className="text-sm font-semibold text-[#0F172B] font-[family-name:var(--font-display)]">
@@ -364,7 +357,6 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
         </div>
       )}
     </div>
-    </>
   );
 }
 
