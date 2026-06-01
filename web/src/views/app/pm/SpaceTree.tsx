@@ -5,6 +5,7 @@ import { useHasPermission } from '../../../hooks/usePermissions';
 import { usePMStore } from '../../../stores/pmStore';
 import CreateSpaceModal from './CreateSpaceModal';
 import CreateFolderListModal from './CreateFolderListModal';
+import CreateAreaSpaceModal from './CreateAreaSpaceModal';
 import ManageMembersModal from './ManageMembersModal';
 import SettingsSlider from '../../../components/SettingsSlider';
 import { canAtLeast } from '../../../lib/access';
@@ -175,6 +176,16 @@ const DropdownFolderIcon = (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
   </svg>
 );
+const DropdownSpaceIcon = (
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+  </svg>
+);
+const DropdownClientIcon = (
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21v-2a4 4 0 00-4-4H9a4 4 0 00-4 4v2M12 3a4 4 0 100 8 4 4 0 000-8z" />
+  </svg>
+);
 
 // ---- List item ----
 function ListItem({ list, isManager = false, myAccess }: { list: List; isManager?: boolean; myAccess?: AccessLevel | null }) {
@@ -256,14 +267,24 @@ function InlineInput({
   );
 }
 
+// ---- Space icon for template-based spaces ----
+function SpaceIconSmall() {
+  return (
+    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+    </svg>
+  );
+}
+
 // ---- Folder item ----
 function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }: { folder: Folder; spaceId: string; canAdd: boolean; canDelete: boolean; isManager: boolean; myAccess?: AccessLevel | null }) {
-  const { activeFolderId, setActiveFolder, setActiveSpace } = usePMStore();
+  const { activeFolderId, setActiveFolder, setActiveSpace, setActiveDesignFolder } = usePMStore();
   const [open, setOpen] = useState(true);
   const [adding, setAdding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const createList = useCreateList(spaceId);
   const isActive = activeFolderId === folder.id;
+  const isTemplateSpace = !!folder.client_space_template_id;
 
   return (
     <div>
@@ -276,7 +297,7 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
           <TriangleChevron open={open} />
         </button>
         <button
-          onClick={() => { setActiveSpace(spaceId); setActiveFolder(folder.id); }}
+          onClick={() => { setActiveSpace(spaceId); isTemplateSpace ? setActiveDesignFolder(folder.id) : setActiveFolder(folder.id); }}
           className={`flex min-w-0 flex-1 items-center gap-2 rounded-[6px] px-[5px] py-[5px] text-left text-[13px] transition ${
             isActive
               ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
@@ -285,14 +306,14 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
           style={isActive ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
         >
           <span className={`shrink-0 ${isActive ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`}>
-            <FolderIconSmall />
+            {isTemplateSpace ? <SpaceIconSmall /> : <FolderIconSmall />}
           </span>
           <span className="truncate">{folder.name}</span>
         </button>
         <div className="mr-1 hidden items-center gap-0.5 group-hover:flex">
           {folder.is_locked && <AdminLockIcon />}
           {folder.is_private && !folder.is_locked && <LockIcon />}
-          {canDelete && !folder.is_locked && <EllipsisButton onClick={() => setShowSettings(true)} title="Folder settings" />}
+          {canDelete && !folder.is_locked && <EllipsisButton onClick={() => setShowSettings(true)} title={isTemplateSpace ? 'Space settings' : 'Folder settings'} />}
           {canAdd && !folder.is_locked && <AddButton onClick={() => setAdding(true)} title="Add list" />}
         </div>
       </div>
@@ -329,17 +350,103 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
   );
 }
 
+// ---- Person icon for client folders ----
+function PersonIconSmall() {
+  return (
+    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+    </svg>
+  );
+}
+
+// ---- Client folder item ----
+function ClientItem({ folder, childSpaces, spaceId, canAddLists, canAddSpaces, canDelete, isManager, myAccess }: {
+  folder: Folder;
+  childSpaces: Folder[];
+  spaceId: string;
+  canAddLists: boolean;
+  canAddSpaces: boolean;
+  canDelete: boolean;
+  isManager: boolean;
+  myAccess?: AccessLevel | null;
+}) {
+  const { activeFolderId, setActiveFolder, setActiveSpace } = usePMStore();
+  const [open, setOpen] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const isActive = activeFolderId === folder.id;
+
+  return (
+    <div>
+      <div className="group flex items-center">
+        <button
+          onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)]"
+          aria-label={open ? 'Collapse' : 'Expand'}
+        >
+          <TriangleChevron open={open} />
+        </button>
+        <button
+          onClick={() => { setActiveSpace(spaceId); setActiveFolder(folder.id); }}
+          className={`flex min-w-0 flex-1 items-center gap-2 rounded-[6px] px-[5px] py-[5px] text-left text-[13px] transition ${
+            isActive
+              ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+              : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+          }`}
+          style={isActive ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+        >
+          <span className={`shrink-0 ${isActive ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`}>
+            <PersonIconSmall />
+          </span>
+          <span className="truncate">{folder.name}</span>
+        </button>
+        <div className="mr-1 hidden items-center gap-0.5 group-hover:flex">
+          {folder.is_locked && <AdminLockIcon />}
+          {folder.is_private && !folder.is_locked && <LockIcon />}
+          {canDelete && !folder.is_locked && <EllipsisButton onClick={() => setShowSettings(true)} title="Client settings" />}
+          {canAddSpaces && !folder.is_locked && <AddButton onClick={() => setAdding(true)} title="Add space" />}
+        </div>
+      </div>
+
+      {open && (
+        <div className="pb-1 pl-8 pr-2">
+          {childSpaces.map(spaceFolder => (
+            <FolderItem key={spaceFolder.id} folder={spaceFolder} spaceId={spaceId} canAdd={canAddLists} canDelete={canDelete} isManager={isManager} myAccess={myAccess} />
+          ))}
+          {adding && (
+            <CreateAreaSpaceModal
+              spaceId={spaceId}
+              parentFolderId={folder.id}
+              onClose={() => setAdding(false)}
+            />
+          )}
+        </div>
+      )}
+
+      {showSettings && typeof document !== 'undefined' && createPortal((
+        <>
+        <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setShowSettings(false)} />
+        <div className="fixed inset-y-0 right-0 left-auto z-50 flex h-full w-[360px] shrink-0 flex-col border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-lg" onClick={(e) => e.stopPropagation()}>
+          <SettingsSlider type="folder" id={folder.id} name={folder.name} spaceId={spaceId} myAccess={myAccess} onClose={() => setShowSettings(false)} />
+        </div>
+        </>
+      ), document.body)}
+    </div>
+  );
+}
+
 // ---- Space item ----
 function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
   const { activeSpaceId, activeSpacePageId, setActiveSpace, setActiveSpacePage } = usePMStore();
   const isActive = activeSpaceId === spaceId;
   const isSpacePageActive = activeSpacePageId === spaceId;
   const [open, setOpen] = useState(false);
-  const [createModal, setCreateModal] = useState<'folder' | 'list' | null>(null);
+  const [createModal, setCreateModal] = useState<'folder' | 'list' | 'space' | 'client' | null>(null);
   const [showMembers, setShowMembers] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const canCreateFolders = useHasPermission('can_create_folders');
   const canCreateLists = useHasPermission('can_create_lists');
+  const canCreateSpaces = useHasPermission('can_create_spaces');
 
   const { data: fullSpace } = useSpace(isActive || open ? spaceId : null);
   const space = fullSpace || initial;
@@ -388,8 +495,8 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
         <div className="mr-1 hidden items-center gap-0.5 group-hover:flex">
           {space?.is_locked && <AdminLockIcon />}
           {space?.is_private && !space?.is_locked && <LockIcon />}
-          {isManager && !space?.is_locked && <EllipsisButton onClick={() => setShowSettings(true)} title="Space settings" />}
-          {canAddItems && !space?.is_locked && (canCreateFolders || canCreateLists) && (
+          {isManager && !space?.is_locked && <EllipsisButton onClick={() => setShowSettings(true)} title="Area settings" />}
+          {canAddItems && !space?.is_locked && (canCreateFolders || canCreateLists || canCreateSpaces) && (
             <AddDropdown
               items={[
                 ...(canCreateLists ? [{
@@ -397,6 +504,18 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
                   label: 'List',
                   description: 'Track tasks, projects, people & more',
                   onClick: () => setCreateModal('list'),
+                }] : []),
+                ...(canCreateSpaces ? [{
+                  icon: DropdownSpaceIcon,
+                  label: 'Space',
+                  description: 'Designer Space, Video Editor Space & more',
+                  onClick: () => setCreateModal('space'),
+                }] : []),
+                ...(canCreateFolders ? [{
+                  icon: DropdownClientIcon,
+                  label: 'Client',
+                  description: 'Group template-based spaces for a client',
+                  onClick: () => setCreateModal('client'),
                 }] : []),
                 ...(canCreateFolders ? [{
                   icon: DropdownFolderIcon,
@@ -412,15 +531,70 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
 
       {open && space && (
         <div className="pb-1 pl-8 pr-2">
-          {space.folders?.map((folder) => (
-            <FolderItem key={folder.id} folder={folder} spaceId={spaceId} canAdd={canAddItems && canCreateLists} canDelete={isManager} isManager={isManager} myAccess={myAccess} />
-          ))}
-          {space.lists?.map((list) => (
-            <ListItem key={list.id} list={list} isManager={isManager} myAccess={myAccess} />
-          ))}
-          {createModal && (
+          {(() => {
+            // Build folder hierarchy
+            const allFolders = space.folders || [];
+
+            // Group child folders (spaces) by parent_folder_id
+            const childFolders: Record<string, Folder[]> = {};
+            const rootFolders: Folder[] = [];
+            for (const f of allFolders) {
+              if (f.parent_folder_id) {
+                if (!childFolders[f.parent_folder_id]) childFolders[f.parent_folder_id] = [];
+                childFolders[f.parent_folder_id].push(f);
+              } else {
+                rootFolders.push(f);
+              }
+            }
+
+            // Render: clients first, then other folders, then standalone spaces
+            const clientFolders = rootFolders.filter(f => f.folder_type === 'client');
+            const otherRootFolders = rootFolders.filter(f => f.folder_type !== 'client' && !f.client_space_template_id);
+            const standaloneSpaces = rootFolders.filter(f => f.client_space_template_id);
+
+            return (
+              <>
+                {clientFolders.map(folder => (
+                  <ClientItem
+                    key={folder.id}
+                    folder={folder}
+                    childSpaces={childFolders[folder.id] || []}
+                    spaceId={spaceId}
+                    canAddLists={canAddItems && canCreateLists}
+                    canAddSpaces={canAddItems && canCreateSpaces}
+                    canDelete={isManager}
+                    isManager={isManager}
+                    myAccess={myAccess}
+                  />
+                ))}
+                {otherRootFolders.map(folder => (
+                  <FolderItem key={folder.id} folder={folder} spaceId={spaceId} canAdd={canAddItems && canCreateLists} canDelete={isManager} isManager={isManager} myAccess={myAccess} />
+                ))}
+                {standaloneSpaces.map(folder => (
+                  <FolderItem key={folder.id} folder={folder} spaceId={spaceId} canAdd={canAddItems && canCreateLists} canDelete={isManager} isManager={isManager} myAccess={myAccess} />
+                ))}
+                {space.lists?.map((list) => (
+                  <ListItem key={list.id} list={list} isManager={isManager} myAccess={myAccess} />
+                ))}
+              </>
+            );
+          })()}
+          {createModal && createModal !== 'space' && createModal !== 'client' && (
             <CreateFolderListModal
               type={createModal}
+              spaceId={spaceId}
+              onClose={() => setCreateModal(null)}
+            />
+          )}
+          {createModal === 'client' && (
+            <CreateFolderListModal
+              type="client"
+              spaceId={spaceId}
+              onClose={() => setCreateModal(null)}
+            />
+          )}
+          {createModal === 'space' && (
+            <CreateAreaSpaceModal
               spaceId={spaceId}
               onClose={() => setCreateModal(null)}
             />
@@ -468,13 +642,13 @@ export default function SpaceTree({ workspaceId, onRequestCreate }: { workspaceI
         )}
         {spaces?.length === 0 && !isLoading && (
           <div className="px-3 py-2 text-center">
-            <p className="text-[11.5px] text-[var(--sh-ink-4)]">No spaces yet</p>
+            <p className="text-[11.5px] text-[var(--sh-ink-4)]">No areas yet</p>
             {canCreateSpaces && (
               <button
                 onClick={handleCreate}
                 className="mt-2 text-[11.5px] font-medium text-[var(--sh-ink-2)] hover:text-[var(--sh-ink)]"
               >
-                Create your first space
+                Create your first area
               </button>
             )}
           </div>

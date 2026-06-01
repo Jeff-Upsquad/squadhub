@@ -41,7 +41,7 @@ export function useCreateSpace(workspaceId: string | undefined) {
 export function useCreateFolder(spaceId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { name: string; profile_id?: string }) => {
+    mutationFn: async (body: { name: string; profile_id?: string; client_space_template_id?: string; skip_template_lists?: boolean; parent_folder_id?: string; folder_type?: string }) => {
       const res = await api.post('/pm/folders', { ...body, space_id: spaceId });
       return res.data.data;
     },

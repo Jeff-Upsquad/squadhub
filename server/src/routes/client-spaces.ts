@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth';
-import { isWorkspaceAdmin } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 
 const router = Router();
@@ -8,18 +7,9 @@ const router = Router();
 router.use(requireAuth);
 
 // GET /client-spaces/available
-// Returns all enabled templates. Only workspace admins can instantiate them
-// (sharing is admin-driven — managers then share the resulting folders with team users).
+// Returns all enabled templates. Authenticated users can view them.
 router.get('/available', async (req: Request, res: Response) => {
   try {
-    const userId = req.userId!;
-
-    const isAdmin = await isWorkspaceAdmin(userId);
-    if (!isAdmin) {
-      res.status(403).json({ success: false, error: 'Workspace admin access required' });
-      return;
-    }
-
     const { data: all, error } = await supabaseAdmin
       .from('client_space_templates')
       .select('id, slug, name, description, icon, category, template, version, is_enabled')

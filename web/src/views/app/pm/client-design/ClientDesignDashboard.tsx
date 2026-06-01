@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import './design.css';
+import api from '../../../../services/api';
 import { useFolderTasks } from '../../../../hooks/useFolderTasks';
 import { useClientDesignPlan } from '../../../../hooks/useClientDesignPlan';
 import { useTaskTypes } from '../../../../hooks/useTaskTypes';
@@ -54,7 +56,10 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [pendingListId, setPendingListId] = useState<string | null>(null);
+  const creatingRef = useRef(false);
 
+  const qc = useQueryClient();
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const { folder, requests, byStatus, listByStatus, isLoading } = useFolderTasks(folderId);
   const plan = useClientDesignPlan();
@@ -75,6 +80,31 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
 
   const isManager = canAtLeast(folder?.my_access_level, 'manager');
 
+  const handleNewTask = useCallback(async () => {
+    const listId = listByStatus.queued?.id || pendingListId;
+    if (listId) {
+      setShowCreatePanel(true);
+      return;
+    }
+    if (!folder || creatingRef.current) return;
+    try {
+      const res = await api.post('/pm/lists', {
+        space_id: folder.space_id,
+        folder_id: folder.id,
+        name: 'Briefs',
+      });
+      const newListId = res.data?.data?.id;
+      if (newListId) {
+        setPendingListId(newListId);
+        qc.invalidateQueries({ queryKey: ['folder', folderId] });
+        qc.invalidateQueries({ queryKey: ['folder-tasks', folderId] });
+        setShowCreatePanel(true);
+      }
+    } catch (err) {
+      console.error('Failed to create default list:', err);
+    }
+  }, [listByStatus.queued?.id, pendingListId, folder, qc, folderId]);
+
   useEffect(() => {
     if (typeof window !== 'undefined') window.localStorage.setItem(TAB_STORAGE, tab);
   }, [tab]);
@@ -85,7 +115,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
-        setShowCreatePanel(true);
+        handleNewTask();
       }
       if (e.key === 'Escape') {
         setShowCreatePanel(false);
@@ -93,7 +123,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [handleNewTask]);
 
   const filteredRequests = useMemo(() => {
     if (!searchQuery.trim()) return requests;
@@ -112,7 +142,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
     { key: 'completed', label: 'Completed', count: doneCount },
   ];
 
-  const briefsListId = listByStatus.queued?.id || null;
+  const briefsListId = listByStatus.queued?.id || pendingListId;
   const effectiveStatuses = space?.statuses || [];
 
   return (
@@ -156,7 +186,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
           )}
 
           <button
-            onClick={() => setShowCreatePanel(true)}
+            onClick={handleNewTask}
             className="lv-newtask-btn"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -219,11 +249,11 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
                 />
               )}
               {tab === 'board' && (
-                <BoardTab
-                  byStatus={byStatus}
-                  onOpenRequest={(r) => openRequest(r.id)}
-                  onNewRequest={() => setShowCreatePanel(true)}
-                />
+                  <BoardTab
+                    byStatus={byStatus}
+                    onOpenRequest={(r) => openRequest(r.id)}
+                    onNewRequest={handleNewTask}
+                  />
               )}
               {tab === 'reports' && <ReportsTab requests={filteredRequests} plan={plan} />}
               {tab === 'completed' && (

@@ -281,6 +281,8 @@ export interface Folder {
   client_id?: string | null;
   client_space_template_id?: string | null;
   client_space_template_version?: number | null;
+  parent_folder_id?: string | null;
+  folder_type?: string | null;
   // Joined
   lists?: List[];
   profile?: CustomProfile;

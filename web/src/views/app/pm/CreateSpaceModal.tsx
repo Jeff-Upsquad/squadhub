@@ -42,7 +42,7 @@ export default function CreateSpaceModal({
         onClick={(e) => e.stopPropagation()}
         className="my-8 w-full max-w-md rounded-xl border border-[#E2E8F0] bg-[#F1F5F9] p-6 shadow-2xl"
       >
-        <h2 className="mb-5 text-lg font-semibold text-[#0F172B] font-[family-name:var(--font-display)]">Create Space</h2>
+        <h2 className="mb-5 text-lg font-semibold text-[#0F172B] font-[family-name:var(--font-display)]">Create Area</h2>
 
         {/* Name */}
         <label className="mb-1 block text-sm font-medium text-[#666666] font-[family-name:var(--font-mono)] uppercase tracking-[0.12em]">Name</label>
@@ -99,7 +99,7 @@ export default function CreateSpaceModal({
             disabled={!name.trim() || createSpace.isPending}
             className="rounded-lg bg-[#0F172B] text-white px-4 py-2 text-sm font-medium hover:bg-[#1D293D] disabled:opacity-50"
           >
-            {createSpace.isPending ? 'Creating...' : 'Create Space'}
+            {createSpace.isPending ? 'Creating...' : 'Create Area'}
           </button>
         </div>
       </form>

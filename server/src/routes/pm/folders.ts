@@ -16,6 +16,9 @@ const createSchema = z.object({
   profile_id: z.string().uuid().optional(),
   client_space_template_id: z.string().uuid().optional(),
   client_id: z.string().uuid().optional(),
+  skip_template_lists: z.boolean().optional(),
+  parent_folder_id: z.string().uuid().optional(),
+  folder_type: z.enum(['folder', 'client']).optional(),
 });
 
 // GET /pm/folders?space_id=xxx
@@ -338,6 +341,14 @@ router.post('/folders', requirePermission('can_create_folders'), async (req: Req
       insertPayload.client_id = body.client_id;
     }
 
+    if (body.parent_folder_id) {
+      insertPayload.parent_folder_id = body.parent_folder_id;
+    }
+
+    if (body.folder_type) {
+      insertPayload.folder_type = body.folder_type;
+    }
+
     const { data, error } = await supabaseAdmin
       .from('folders')
       .insert(insertPayload)
@@ -357,7 +368,7 @@ router.post('/folders', requirePermission('can_create_folders'), async (req: Req
     });
 
     // Auto-create child lists from profile template
-    if (profile && profile.template?.lists) {
+    if (!body.skip_template_lists && profile && profile.template?.lists) {
       const templateLists = profile.template.lists as Array<{ name: string; position: number; default_view?: string }>;
       for (const tl of templateLists) {
         await supabaseAdmin.from('lists').insert({
@@ -374,8 +385,8 @@ router.post('/folders', requirePermission('can_create_folders'), async (req: Req
       }
     }
 
-    // Or auto-create child lists from client-space template
-    if (clientSpaceTemplate && clientSpaceTemplate.template?.lists) {
+    // Auto-create child lists from client-space template
+    if (!body.skip_template_lists && clientSpaceTemplate && clientSpaceTemplate.template?.lists) {
       const templateLists = clientSpaceTemplate.template.lists as Array<{ name: string; position: number; default_view?: string }>;
       for (const tl of templateLists) {
         const { error: listErr } = await supabaseAdmin.from('lists').insert({

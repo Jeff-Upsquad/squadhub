@@ -599,7 +599,7 @@ export default function HomeSidebar({
           <>
             <div className="pb-1">
               <SectionHeader
-                title="Spaces"
+                title="Areas"
                 expanded={expandedSections.spaces}
                 onToggle={() => toggleSection('spaces')}
                 action={
@@ -607,7 +607,7 @@ export default function HomeSidebar({
                     <button
                       onClick={() => setShowCreateSpace(true)}
                       className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
-                      title="Create space"
+                      title="Create area"
                     >
                       <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v16m8-8H4" />
