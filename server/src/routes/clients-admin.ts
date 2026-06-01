@@ -250,9 +250,11 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
         return acc;
       }, {});
 
-    // For unmatched cards, auto-create the corresponding subscription
+    // For unmatched cards, auto-create the corresponding subscription.
+    // Uses word-level matching (not substring) to avoid false matches.
     if (Object.keys(unmatchedCards).length > 0) {
-      const { data: allSubs } = await supabaseAdmin.from('subscriptions').select('id, name');
+      const { data: allSubs } = await supabaseAdmin
+        .from('subscriptions').select('id, name').order('name');
       const { data: allPlans } = await supabaseAdmin.from('subscription_plans').select('*');
       const existingKeys = new Set(cs.map((c: any) => `${c.subscription_id}:${c.plan_id}`));
       const createdCs: any[] = [];
@@ -263,11 +265,13 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
         const cardSvcNorm = normService(fullCrd.service_type);
         const cardPlanNorm = normService(fullCrd.plan_name);
 
-        const matchedSub = (allSubs || []).find((s: any) => {
-          const subNorm = normService(s.name);
-          return subNorm.includes(cardSvcNorm) || cardSvcNorm.includes(subNorm);
+        // Find subscriptions whose name contains service_type as a whole word
+        const wordMatches = (allSubs || []).filter((s: any) => {
+          const words = s.name.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+          return words.some((w: string) => w.replace(/s$/, '') === cardSvcNorm);
         });
-        if (!matchedSub) continue;
+        if (wordMatches.length !== 1) continue;
+        const matchedSub = wordMatches[0];
 
         const matchedPlan = (allPlans || []).find(
           (p: any) => p.subscription_id === matchedSub.id && normService(p.plan) === cardPlanNorm,
