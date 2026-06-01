@@ -265,13 +265,31 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
         const cardSvcNorm = normService(fullCrd.service_type);
         const cardPlanNorm = normService(fullCrd.plan_name);
 
-        // Find subscriptions whose name contains service_type as a whole word
-        const wordMatches = (allSubs || []).filter((s: any) => {
-          const words = s.name.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-          return words.some((w: string) => w.replace(/s$/, '') === cardSvcNorm);
-        });
-        if (wordMatches.length !== 1) continue;
-        const matchedSub = wordMatches[0];
+        // Find subscriptions whose name contains service_type as a whole word.
+        // Prefer exact normalized match first, then word match — when multiple
+        // match, pick the subscription where the matched word accounts for a
+        // larger fraction of the name (e.g. "Video Editor" over "Designer + Editor"
+        // for service type "Editors", since "Editor" is 50% vs 33%).
+        let matchedSub = (allSubs || []).find(
+          (s: any) => normService(s.name) === cardSvcNorm,
+        );
+        if (!matchedSub) {
+          const wordMatches = (allSubs || []).filter((s: any) => {
+            const words = s.name.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+            return words.some((w: string) => w.replace(/s$/, '') === cardSvcNorm);
+          });
+          if (wordMatches.length === 1) {
+            matchedSub = wordMatches[0];
+          } else if (wordMatches.length > 1) {
+            matchedSub = wordMatches.sort((a: any, b: any) => {
+              const aFrac = cardSvcNorm.length / a.name.length;
+              const bFrac = cardSvcNorm.length / b.name.length;
+              return bFrac - aFrac;
+            })[0];
+          }
+        }
+
+        if (!matchedSub) continue;
 
         const matchedPlan = (allPlans || []).find(
           (p: any) => p.subscription_id === matchedSub.id && normService(p.plan) === cardPlanNorm,
