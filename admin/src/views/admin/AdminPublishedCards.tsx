@@ -194,12 +194,13 @@ export default function AdminPublishedCards() {
   // Server returns all states for the current tab; state filtering happens
   // client-side so the secondary tabs can show accurate counts.
   const { data: cardsRes, isLoading } = useQuery({
-    queryKey: ['admin-published-cards', publishedBy, search, isArchiveTab ? 'archived' : 'active'],
+    queryKey: ['admin-published-cards', publishedBy, search, isArchiveTab ? 'archived' : 'active', selectedCardId],
     queryFn: () => {
       const params: Record<string, string> = {};
       if (publishedBy) params.published_by = publishedBy;
       if (search.trim()) params.search = search.trim();
       if (isArchiveTab) params.archived = 'true';
+      if (selectedCardId) params.card_id = selectedCardId;
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
     enabled: activeTab === 'published' || activeTab === 'archive',

@@ -1048,6 +1048,7 @@ export interface SubscriptionPlanRow {
   sort_order: number;
   daily_hours: number | null;
   weekly_hours: number | null;
+  monthly_hours: number | null;
   created_at: string;
   updated_at: string;
   // Joined
@@ -1435,6 +1436,7 @@ export interface ClientSubscription {
   subscription?: Subscription;
   plan?: SubscriptionPlanRow;
   deliverables?: ClientSubscriptionDeliverable[];
+  card?: { id: string; state: string; published_at: string | null } | null;
 }
 
 // ---- Cash Book ----

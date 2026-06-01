@@ -36,6 +36,7 @@ router.get('/', async (req: Request, res: Response) => {
     const archivedParam = String(req.query.archived || '').trim();
     const showArchived = archivedParam === 'true';
     const submissionIdParam = String(req.query.submission_id || '').trim();
+    const cardIdParam = String(req.query.card_id || '').trim();
 
     let query = supabaseAdmin
       .from('subscription_cards')
@@ -127,6 +128,19 @@ router.get('/', async (req: Request, res: Response) => {
       query = query.in('id', Array.from(matchingCardIds));
     }
 
+    // When a specific card_id is requested (e.g., from ?card= in URL),
+    // force-include it regardless of state/archive/parent filters so the
+    // frontend can open the detail panel for any card state.
+    let forceCard: any = null;
+    if (cardIdParam) {
+      const { data: fc } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('*')
+        .eq('id', cardIdParam)
+        .maybeSingle();
+      if (fc) forceCard = fc;
+    }
+
     const { data: cards, error } = await query;
     if (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -134,6 +148,9 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     const list = cards || [];
+    if (forceCard && !list.some((c: any) => c.id === forceCard.id)) {
+      list.push(forceCard);
+    }
     if (list.length === 0) {
       res.json({ success: true, data: [] });
       return;

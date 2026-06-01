@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
-import type { Client, Country, Subscription, ClientStatus, SalesPerson } from '@squadhub/shared';
+import type { Client, ClientSubscription, Country, Subscription, ClientStatus, SalesPerson } from '@squadhub/shared';
 import SliderPanel from './SliderPanel';
 import { PlanPicker } from './NewClientsModule';
 
@@ -33,6 +33,27 @@ export default function ClientsModule() {
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
   const [showArchivedSubs, setShowArchivedSubs] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [viewingCard, setViewingCard] = useState<{ id: string; state: string; published_at: string | null } | null>(null);
+
+  const groupedSubs = useMemo(() => {
+    const groups: Record<string, ClientSubscription[]> = {};
+    (selectedClient?.subscriptions || []).forEach((cs) => {
+      const key = cs.subscription?.name || cs.subscription_id || 'Unknown';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(cs);
+    });
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [selectedClient?.subscriptions]);
+
+  const toggleGroup = (name: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
   const [statusTab, setStatusTab] = useState<ClientStatus>('active');
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<typeof EMPTY_CREATE_FORM>(EMPTY_CREATE_FORM);
@@ -501,65 +522,132 @@ export default function ClientsModule() {
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {selectedClient.subscriptions.map((cs) => {
-                    const priceRow = cs.plan?.pricing?.find((p) => p.country_id === selectedClient.country_id);
-                    const sym = selectedClientCountry?.currency === 'USD' ? '$' : '\u20B9';
-                    const locale = selectedClientCountry?.currency === 'USD' ? 'en-US' : 'en-IN';
-                    const priceLabel = priceRow
-                      ? `${sym}${priceRow.price.toLocaleString(locale)}/mo`
-                      : 'No price set';
-                    const isArchived = !!cs.archived_at;
+                  {groupedSubs.map(([subName, subs]) => {
+                    const isOpen = expandedGroups.has(subName);
                     return (
-                      <div
-                        key={cs.id}
-                        className={`rounded-lg border border-[#E2E8F0] bg-white px-4 py-3 ${cs.status === 'cancelled' || isArchived ? 'opacity-50' : ''}`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-[#0F172B]">{cs.subscription?.name || 'Unknown'}</p>
-                            <p className="mt-0.5 text-xs text-[#90A1B9]">
-                              {cs.plan?.plan || '—'} · {cs.plan?.tier || '—'} · {priceLabel}
-                            </p>
+                      <div key={subName} className="rounded-lg border border-[#E2E8F0] bg-white overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(subName)}
+                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#F8FAFC] transition"
+                        >
+                          <span className="text-sm font-medium text-[#0F172B]">{subName}</span>
+                          <span className="flex items-center gap-2">
+                            <span className="text-xs text-[#90A1B9]">{subs.length} plan{subs.length !== 1 ? 's' : ''}</span>
+                            <svg
+                              className={`h-3.5 w-3.5 text-[#90A1B9] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                              fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </span>
+                        </button>
+                        {isOpen && (
+                          <div className="border-t border-[#F1F5F9] divide-y divide-[#F1F5F9]">
+                            {subs.map((cs) => {
+                              const priceRow = cs.plan?.pricing?.find((p) => p.country_id === selectedClient.country_id);
+                              const sym = selectedClientCountry?.currency === 'USD' ? '$' : '\u20B9';
+                              const locale = selectedClientCountry?.currency === 'USD' ? 'en-US' : 'en-IN';
+                              const priceLabel = priceRow
+                                ? `${sym}${priceRow.price.toLocaleString(locale)}/mo`
+                                : 'No price set';
+                              const dh = cs.plan?.daily_hours;
+                              const wh = cs.plan?.weekly_hours;
+                              const mh = cs.plan?.monthly_hours;
+                              const hoursParts: string[] = [];
+                              if (dh) hoursParts.push(`${dh}h/day`);
+                              if (wh) hoursParts.push(`${wh}h/week`);
+                              if (mh) hoursParts.push(`${mh}h/month`);
+                              const hoursLabel = hoursParts.length > 0 ? hoursParts.join(' · ') : '';
+                              const isArchived = !!cs.archived_at;
+                              return (
+                                <div key={cs.id} className={`px-4 py-3 ${cs.status === 'cancelled' || isArchived ? 'opacity-50' : ''}`}>
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-sm text-[#0F172B]">
+                                        {cs.plan?.plan || '—'} · {cs.plan?.tier || '—'}
+                                      </p>
+                                      <p className="mt-0.5 text-xs text-[#90A1B9]">
+                                        {hoursLabel}{hoursLabel && priceLabel ? ' · ' : ''}{priceLabel}
+                                      </p>
+                                    </div>
+                                    <div className="flex shrink-0 items-center gap-1.5">
+                                      {cs.card ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => setViewingCard(cs.card!)}
+                                          className="rounded bg-[#2962FF] px-2 py-1 text-[10px] font-medium text-white hover:bg-[#1E4FCC]"
+                                        >
+                                          View Card
+                                        </button>
+                                      ) : (
+                                        <a
+                                          href="/admin/published-cards"
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="rounded bg-[#E8EFFF] px-2 py-1 text-[10px] font-medium text-[#2962FF] hover:bg-[#D6E4FF]"
+                                        >
+                                          Published Cards
+                                        </a>
+                                      )}
+                                      {isArchived && (
+                                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">Archived</span>
+                                      )}
+                                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[cs.status]}`}>
+                                        {cs.status}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {!isArchived && cs.status === 'active' && (
+                                      <>
+                                        <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'paused' })} className="rounded bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100">Pause</button>
+                                        <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'cancelled' })} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
+                                      </>
+                                    )}
+                                    {!isArchived && cs.status === 'paused' && (
+                                      <>
+                                        <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'active' })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Resume</button>
+                                        <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'cancelled' })} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
+                                      </>
+                                    )}
+                                    {!isArchived && cs.status === 'cancelled' && (
+                                      <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'active' })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Reactivate</button>
+                                    )}
+                                    {isArchived ? (
+                                      <button onClick={() => unarchiveSubMutation.mutate({ clientId: selectedClient.id, csId: cs.id })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Unarchive</button>
+                                    ) : (
+                                      <button onClick={() => archiveSubMutation.mutate({ clientId: selectedClient.id, csId: cs.id })} className="rounded bg-[#F1F5F9] px-2 py-1 text-[10px] font-medium text-[#62748E] hover:bg-[#E2E8F0]">Archive</button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            {isArchived && (
-                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                                Archived
-                              </span>
-                            )}
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[cs.status]}`}>
-                              {cs.status}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="mt-2 flex gap-1.5">
-                          {!isArchived && cs.status === 'active' && (
-                            <>
-                              <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'paused' })} className="rounded bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100">Pause</button>
-                              <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'cancelled' })} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
-                            </>
-                          )}
-                          {!isArchived && cs.status === 'paused' && (
-                            <>
-                              <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'active' })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Resume</button>
-                              <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'cancelled' })} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
-                            </>
-                          )}
-                          {!isArchived && cs.status === 'cancelled' && (
-                            <button onClick={() => subStatusMutation.mutate({ clientId: selectedClient.id, csId: cs.id, status: 'active' })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Reactivate</button>
-                          )}
-                          {isArchived ? (
-                            <button onClick={() => unarchiveSubMutation.mutate({ clientId: selectedClient.id, csId: cs.id })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Unarchive</button>
-                          ) : (
-                            <button onClick={() => archiveSubMutation.mutate({ clientId: selectedClient.id, csId: cs.id })} className="rounded bg-[#F1F5F9] px-2 py-1 text-[10px] font-medium text-[#62748E] hover:bg-[#E2E8F0]">Archive</button>
-                          )}
-                        </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
               )}
             </div>
+
+            {/* Card detail inline view */}
+            {viewingCard && selectedClient && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Card Detail</h4>
+                  <button
+                    type="button"
+                    onClick={() => setViewingCard(null)}
+                    className="text-xs text-[#2962FF] hover:underline"
+                  >
+                    Back to subscriptions
+                  </button>
+                </div>
+                <CardDetailView cardId={viewingCard.id} />
+              </div>
+            )}
           </div>
         )}
       </SliderPanel>
@@ -678,6 +766,76 @@ function FormField({ label, value, onChange, type = 'text', required = false }: 
         required={required}
         className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
       />
+    </div>
+  );
+}
+
+const STATE_STYLE: Record<string, { bg: string; color: string; label: string }> = {
+  draft: { bg: '#F1F5F9', color: '#475569', label: 'Draft' },
+  published: { bg: '#DCFCE7', color: '#15803D', label: 'Published' },
+  assigned: { bg: '#D1FAE5', color: '#065F46', label: 'Assigned' },
+  closed: { bg: '#EEF2F6', color: '#475569', label: 'Cancelled' },
+};
+
+function CardDetailView({ cardId }: { cardId: string }) {
+  const { data: res, isLoading } = useQuery({
+    queryKey: ['admin-single-card', cardId],
+    queryFn: () =>
+      api.get('/admin/subscription-cards', { params: { card_id: cardId } }).then((r) => r.data),
+  });
+  const card: any = (res?.data || []).find((c: any) => c.id === cardId) || null;
+
+  if (isLoading) return <p className="py-4 text-center text-xs text-[#90A1B9]">Loading card…</p>;
+  if (!card) return <p className="py-4 text-center text-xs text-[#90A1B9]">Card not found.</p>;
+
+  const meta = STATE_STYLE[card.state] || { bg: '#F1F5F9', color: '#475569', label: card.state };
+  const business = card.submission?.business_name || card.brand_name || card.customer_company || '—';
+  const subName = card.submission_subscription?.subscription?.name || card.plan_name || '—';
+  const planTier = card.submission_subscription?.plan
+    ? `${card.submission_subscription.plan.plan} · ${card.submission_subscription.plan.tier}`
+    : '—';
+
+  return (
+    <div className="rounded-lg border border-[#E2E8F0] bg-white p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-[#0F172B]">{business}</p>
+          <p className="mt-0.5 text-xs text-[#62748E]">{subName}{subName !== '—' && planTier !== '—' ? ' · ' : ''}{planTier}</p>
+        </div>
+        <span
+          className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+          style={{ backgroundColor: meta.bg, color: meta.color }}
+        >
+          {meta.label}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-2 text-xs text-[#62748E]">
+        {card.working_days?.length > 0 && (
+          <span>Working days: {card.working_days.join(', ')}</span>
+        )}
+        {card.target_tiers?.length > 0 && (
+          <span>Tiers: {card.target_tiers.join(', ')}</span>
+        )}
+        {card.target_languages?.length > 0 && (
+          <span>Languages: {card.target_languages.join(', ')}</span>
+        )}
+        {card.min_experience_years > 0 && (
+          <span>Min exp: {card.min_experience_years}yrs</span>
+        )}
+      </div>
+      {card.notes && (
+        <p className="text-xs text-[#62748E]">{card.notes}</p>
+      )}
+      <div className="flex gap-2 pt-1">
+        <a
+          href={`/admin/published-cards?card=${card.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded bg-[#2962FF] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1E4FCC]"
+        >
+          Open full view
+        </a>
+      </div>
     </div>
   );
 }

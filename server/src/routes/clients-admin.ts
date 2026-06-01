@@ -143,6 +143,102 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
     (delivsByCs[d.client_subscription_id] = delivsByCs[d.client_subscription_id] || []).push(d);
   });
 
+  // Fetch cards linked through the original submission.
+  // Uses the same three matching strategies as GET /admin/subscription-cards:
+  //   1. submission_subscription_id — cards published from staged subs
+  //   2. customer_email — request/shared_form cards
+  //   3. customer_phone (suffix) — same for phone-led leads
+  let cardBySubPlan: Record<string, any> = {};
+  if (client.submission_id) {
+    const { data: leadRow } = await supabaseAdmin
+      .from('client_submissions')
+      .select('email, contact_number')
+      .eq('id', client.submission_id)
+      .maybeSingle();
+
+    const { data: stagedSubs } = await supabaseAdmin
+      .from('client_submission_subscriptions')
+      .select('id, subscription_id, plan_id')
+      .eq('submission_id', client.submission_id);
+
+    const matchingCardIds = new Set<string>();
+    const cardByStagedId: Record<string, any> = {};
+
+    if (stagedSubs && stagedSubs.length > 0) {
+      const stagedIds = stagedSubs.map((s: any) => s.id);
+      const { data: stgCards } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id, submission_subscription_id, state, published_at')
+        .in('submission_subscription_id', stagedIds);
+
+      (stgCards || []).forEach((crd: any) => {
+        matchingCardIds.add(crd.id);
+        cardByStagedId[crd.submission_subscription_id] = crd;
+      });
+    }
+
+    const phoneDigits = leadRow?.contact_number
+      ? String(leadRow.contact_number).replace(/\D/g, '')
+      : '';
+    const phoneSuffix = phoneDigits.length >= 7 ? phoneDigits : '';
+
+    const [byEmail, byPhone] = await Promise.all([
+      leadRow?.email
+        ? supabaseAdmin
+            .from('subscription_cards')
+            .select('id, service_type, plan_name, state, published_at')
+            .ilike('customer_email', leadRow.email.trim())
+        : Promise.resolve({ data: [] as any[] }),
+      phoneSuffix
+        ? supabaseAdmin
+            .from('subscription_cards')
+            .select('id, service_type, plan_name, state, published_at')
+            .ilike('customer_phone', `%${phoneSuffix}`)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+
+    // Index cards matched by staged sub ID → keyed by (subscription_id, plan_id)
+    if (stagedSubs) {
+      stagedSubs.forEach((ss: any) => {
+        const card = cardByStagedId[ss.id];
+        if (card) {
+          cardBySubPlan[`${ss.subscription_id}:${ss.plan_id}`] = card;
+        }
+      });
+    }
+
+    // For email/phone-matched cards, try to match by service_type + plan_name
+    // against each client_subscription's subscription name and plan name.
+    const textCards = [...(byEmail.data || []), ...(byPhone.data || [])]
+      .filter((crd: any) => !matchingCardIds.has(crd.id) && crd.service_type && crd.plan_name);
+
+    if (textCards.length > 0 && cs.length > 0) {
+      const normService = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '').replace(/s$/, '');
+      textCards.forEach((crd: any) => {
+        const cardServiceNorm = normService(crd.service_type);
+        const cardPlanNorm = normService(crd.plan_name);
+        cs.forEach((c: any) => {
+          const subName = subsMap[c.subscription_id]?.name || '';
+          const planName = plansMap[c.plan_id]?.plan || '';
+          if (
+            subName && planName &&
+            cardServiceNorm === normService(subName) &&
+            cardPlanNorm === normService(planName)
+          ) {
+            const key = `${c.subscription_id}:${c.plan_id}`;
+            const existing = cardBySubPlan[key];
+            const statePriority: Record<string, number> = { draft: 0, published: 1, assigned: 2, closed: 3 };
+            const newPrio = statePriority[crd.state] ?? 0;
+            const oldPrio = existing ? (statePriority[existing.state] ?? 0) : -1;
+            if (!existing || newPrio > oldPrio) {
+              cardBySubPlan[key] = { id: crd.id, state: crd.state, published_at: crd.published_at };
+            }
+          }
+        });
+      });
+    }
+  }
+
   return {
     ...client,
     country,
@@ -155,6 +251,7 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
         ? { ...plansMap[c.plan_id], pricing: pricingByPlan[c.plan_id] || [] }
         : null,
       deliverables: delivsByCs[c.id] || [],
+      card: cardBySubPlan[`${c.subscription_id}:${c.plan_id}`] || null,
     })),
   };
 }
