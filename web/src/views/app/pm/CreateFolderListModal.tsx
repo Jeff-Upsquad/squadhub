@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useCreateFolder, useCreateList } from '../../../hooks/useSpaces';
 import { useAvailableProfiles } from '../../../hooks/useCustomProfiles';
 import type { CustomProfile } from '@squadhub/shared';
@@ -52,11 +53,15 @@ export default function CreateFolderListModal({
     ? error?.response?.data?.error || error.message
     : null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+  const modal = (
+    <div
+      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-lg rounded-xl border border-[#E2E8F0] bg-[#F1F5F9] p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+        className="my-8 w-full max-w-lg rounded-xl border border-[#E2E8F0] bg-[#F1F5F9] p-6 shadow-2xl"
       >
         <h2 className="mb-5 text-lg font-semibold text-[#0F172B] font-[family-name:var(--font-display)]">
           Create {type === 'folder' ? 'Folder' : 'List'}
@@ -184,4 +189,7 @@ export default function CreateFolderListModal({
       </form>
     </div>
   );
+
+  if (typeof document === 'undefined') return null;
+  return createPortal(modal, document.body);
 }
