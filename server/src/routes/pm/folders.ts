@@ -751,4 +751,84 @@ router.post('/folders/:id/link-to-card', async (req: Request, res: Response) => 
   }
 });
 
+// GET /pm/folders/:id/time-summary?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Aggregates task_time_entries across all users for tasks inside this folder.
+// Returns one row per date that has logged time. Used by the space dashboard.
+router.get('/folders/:id/time-summary', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const from = String(req.query.from || '').trim();
+    const to = String(req.query.to || '').trim();
+
+    if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      res.status(400).json({ success: false, error: 'from and to query params (YYYY-MM-DD) are required' });
+      return;
+    }
+
+    const userLevel = await checkResourceAccess(req.userId!, 'folder', id);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this folder' });
+      return;
+    }
+
+    const { data: lists } = await supabaseAdmin
+      .from('lists')
+      .select('id')
+      .eq('folder_id', id)
+      .is('deleted_at', null);
+    const listIds = (lists || []).map((l: any) => l.id);
+    if (listIds.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const { data: tasks } = await supabaseAdmin
+      .from('tasks')
+      .select('id')
+      .in('list_id', listIds)
+      .is('deleted_at', null);
+    const taskIds = (tasks || []).map((t: any) => t.id);
+    if (taskIds.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const fromStartUtc = new Date(`${from}T00:00:00+05:30`).toISOString();
+    const toEndUtc = new Date(`${to}T23:59:59.999+05:30`).toISOString();
+
+    const { data: entries, error } = await supabaseAdmin
+      .from('task_time_entries')
+      .select('started_at, duration_seconds')
+      .in('task_id', taskIds)
+      .gte('started_at', fromStartUtc)
+      .lte('started_at', toEndUtc)
+      .not('duration_seconds', 'is', null);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const buckets: Record<string, number> = {};
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+    for (const e of entries || []) {
+      const ist = new Date(new Date((e as any).started_at).getTime() + IST_OFFSET);
+      const y = ist.getUTCFullYear();
+      const m = String(ist.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(ist.getUTCDate()).padStart(2, '0');
+      const key = `${y}-${m}-${d}`;
+      buckets[key] = (buckets[key] || 0) + Number((e as any).duration_seconds || 0);
+    }
+
+    const data = Object.entries(buckets)
+      .map(([date, total_work_seconds]) => ({ date, total_work_seconds }))
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Get folder time summary error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 export default router;

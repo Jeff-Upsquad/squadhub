@@ -249,7 +249,7 @@ export function useUpdateTaskTimeTracked(listId: string | null) {
       invalidateTaskLists(qc, listId);
       qc.invalidateQueries({ queryKey: ['task', vars.id] });
       qc.invalidateQueries({ queryKey: ['task-time-entries'] });
-      qc.invalidateQueries({ queryKey: ['daily-summaries'] });
+      qc.invalidateQueries({ queryKey: ['folder-time-summary'] });
     },
   });
 }
