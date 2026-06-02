@@ -565,6 +565,21 @@ router.get('/folders/:id/link-status', async (req: Request, res: Response) => {
       return;
     }
 
+    const { data: folder } = await supabaseAdmin
+      .from('folders')
+      .select('space_id')
+      .eq('id', folderId)
+      .single();
+    let workspaceId: string | null = null;
+    if (folder?.space_id) {
+      const { data: space } = await supabaseAdmin
+        .from('spaces')
+        .select('workspace_id')
+        .eq('id', folder.space_id)
+        .single();
+      workspaceId = space?.workspace_id || null;
+    }
+
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
       .select('card_code, linked_at, plan_snapshot')
@@ -585,6 +600,7 @@ router.get('/folders/:id/link-status', async (req: Request, res: Response) => {
         daily_hours: dailyHours,
         weekly_hours: weeklyHours,
         monthly_hours: monthlyHours,
+        workspace_id: workspaceId,
       },
     });
   } catch (err) {

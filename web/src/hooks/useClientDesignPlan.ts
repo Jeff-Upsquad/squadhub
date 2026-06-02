@@ -49,6 +49,7 @@ export function useClientDesignPlan(folderId?: string): DesignPlan {
   const dailyHours = linkData?.daily_hours ?? 4;
   const weeklyHours = linkData?.weekly_hours ?? 20;
   const monthlyHours = linkData?.monthly_hours ?? 80;
+  const workspaceId = linkData?.workspace_id;
 
   const weekStart = startOfWeek(new Date());
   const weekEnd = new Date(weekStart);
@@ -57,34 +58,36 @@ export function useClientDesignPlan(folderId?: string): DesignPlan {
   const monthStart = toISODate(new Date(now.getFullYear(), now.getMonth(), 1));
   const monthEnd = toISODate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
 
+  const wsParam = workspaceId ? `&workspace_id=${workspaceId}` : '';
+
   const { data: summariesRes } = useQuery({
-    queryKey: ['daily-summaries', user?.id, toISODate(weekStart)],
+    queryKey: ['daily-summaries', user?.id, toISODate(weekStart), workspaceId],
     queryFn: async () => {
       try {
         const res = await api.get(
-          `/timer/daily-summaries?from=${toISODate(weekStart)}&to=${toISODate(weekEnd)}`,
+          `/timer/daily-summaries?from=${toISODate(weekStart)}&to=${toISODate(weekEnd)}${wsParam}`,
         );
         return res.data.data as DailySummary[];
       } catch {
         return [] as DailySummary[];
       }
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !!workspaceId,
   });
 
   const { data: monthSummariesRes } = useQuery({
-    queryKey: ['daily-summaries', user?.id, monthStart],
+    queryKey: ['daily-summaries', user?.id, monthStart, workspaceId],
     queryFn: async () => {
       try {
         const res = await api.get(
-          `/timer/daily-summaries?from=${monthStart}&to=${monthEnd}`,
+          `/timer/daily-summaries?from=${monthStart}&to=${monthEnd}${wsParam}`,
         );
         return res.data.data as DailySummary[];
       } catch {
         return [] as DailySummary[];
       }
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !!workspaceId,
   });
 
   const summaries = summariesRes || [];
