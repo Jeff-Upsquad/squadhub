@@ -48,7 +48,7 @@ export function useClientDesignPlan(folderId?: string): DesignPlan {
 
   const dailyHours = linkData?.daily_hours ?? 4;
   const weeklyHours = linkData?.weekly_hours ?? 20;
-  const monthlyHours = linkData?.monthly_hours ?? 80;
+  const monthlyHours = linkData?.prorated_monthly_hours ?? linkData?.monthly_hours ?? dailyHours * 20;
 
   const weekStart = startOfWeek(new Date());
   const weekEnd = new Date(weekStart);

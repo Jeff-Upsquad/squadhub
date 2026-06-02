@@ -582,7 +582,7 @@ router.get('/folders/:id/link-status', async (req: Request, res: Response) => {
 
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
-      .select('card_code, linked_at, plan_snapshot')
+      .select('card_code, linked_at, plan_snapshot, billing_start_date')
       .eq('linked_folder_id', folderId)
       .maybeSingle();
 
@@ -591,15 +591,29 @@ router.get('/folders/:id/link-status', async (req: Request, res: Response) => {
     const weeklyHours = snapshot?.plan?.weekly_hours != null ? Number(snapshot.plan.weekly_hours) : null;
     const monthlyHours = dailyHours != null ? dailyHours * 20 : null;
 
+    let proratedMonthlyHours: number | null = null;
+    const billingStartDate = card?.billing_start_date ?? null;
+    if (dailyHours != null && billingStartDate) {
+      const start = new Date(billingStartDate + 'T00:00:00');
+      const now = new Date();
+      if (start.getFullYear() === now.getFullYear() && start.getMonth() === now.getMonth()) {
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const remainingDays = lastDay - start.getDate() + 1;
+        proratedMonthlyHours = dailyHours * remainingDays;
+      }
+    }
+
     res.json({
       success: true,
       data: {
         linked: !!card,
         card_code: card?.card_code ?? null,
         linked_at: card?.linked_at ?? null,
+        billing_start_date: billingStartDate,
         daily_hours: dailyHours,
         weekly_hours: weeklyHours,
         monthly_hours: monthlyHours,
+        prorated_monthly_hours: proratedMonthlyHours,
         workspace_id: workspaceId,
       },
     });
@@ -747,6 +761,68 @@ router.post('/folders/:id/link-to-card', async (req: Request, res: Response) => 
     });
   } catch (err) {
     console.error('Link to card error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /pm/folders/:id/billing-start-date
+//
+// Set or clear the billing start date for the linked card.
+// When set, the first month's hours are prorated based on
+// remaining calendar days from that date.
+// ============================================================
+const billingStartDateSchema = z.object({
+  billing_start_date: z.string().nullable(),
+});
+
+router.post('/folders/:id/billing-start-date', async (req: Request, res: Response) => {
+  try {
+    const folderId = req.params.id as string;
+
+    const userLevel = await checkResourceAccess(req.userId!, 'folder', folderId);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this folder' });
+      return;
+    }
+
+    const parsed = billingStartDateSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
+      return;
+    }
+
+    const { billing_start_date } = parsed.data;
+
+    if (billing_start_date != null && !/^\d{4}-\d{2}-\d{2}$/.test(billing_start_date)) {
+      res.status(400).json({ success: false, error: 'billing_start_date must be YYYY-MM-DD or null' });
+      return;
+    }
+
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id')
+      .eq('linked_folder_id', folderId)
+      .maybeSingle();
+
+    if (!card) {
+      res.status(404).json({ success: false, error: 'No linked card found for this folder' });
+      return;
+    }
+
+    const { error: updErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .update({ billing_start_date })
+      .eq('id', card.id);
+
+    if (updErr) {
+      res.status(500).json({ success: false, error: updErr.message });
+      return;
+    }
+
+    res.json({ success: true, data: { billing_start_date } });
+  } catch (err) {
+    console.error('Set billing start date error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
