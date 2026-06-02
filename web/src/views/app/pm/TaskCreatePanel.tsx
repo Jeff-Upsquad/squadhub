@@ -338,7 +338,7 @@ export default function TaskCreatePanel({
       return next;
     });
 
-  const initialStatus = defaultStatus || effectiveStatuses[0]?.category || 'todo';
+  const initialStatus = defaultStatus || effectiveStatuses[0]?.name || 'todo';
   const [draft, setDraft] = useState<Draft>(() => {
     if (initialDraft) {
       return { ...initialDraft, pendingFiles: [] };
@@ -365,8 +365,8 @@ export default function TaskCreatePanel({
       return;
     }
     if (!effectiveStatuses.length) return;
-    if (effectiveStatuses.some((s) => s.category === draft.status)) return;
-    setDraft((d) => ({ ...d, status: effectiveStatuses[0].category }));
+    if (effectiveStatuses.some((s) => s.name === draft.status)) return;
+    setDraft((d) => ({ ...d, status: effectiveStatuses[0].name }));
   }, [effectiveStatuses, draft.status, draft.task_type_id, taskTypes]);
 
   // Popover / menu anchors
@@ -418,7 +418,7 @@ export default function TaskCreatePanel({
   }, []);
 
   const currentStatus = useMemo(
-    () => effectiveStatuses.find((s) => s.category === draft.status),
+    () => effectiveStatuses.find((s) => s.name === draft.status),
     [effectiveStatuses, draft.status],
   );
   const currentType = useMemo(
@@ -1062,7 +1062,7 @@ export default function TaskCreatePanel({
                               <button
                                 key={s.id}
                                 onClick={() => {
-                                  setDraft((d) => ({ ...d, status: s.category }));
+                                  setDraft((d) => ({ ...d, status: s.name }));
                                   setStatusMenuOpen(false);
                                 }}
                                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)]"

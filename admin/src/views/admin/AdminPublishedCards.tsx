@@ -46,6 +46,9 @@ export type PublishedCard = {
   closed_at?: string | null;
   assigned_at?: string | null;
   admin_reviewed_at?: string | null;
+  card_code?: string | null;
+  linked_folder_id?: string | null;
+  linked_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   subscription_request_id?: number | null;
@@ -718,6 +721,16 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
         {(card.secondary_card_count ?? 0) > 0 && (
           <span className="sh-status-pill" style={{ backgroundColor: '#E0E7FF', color: '#3730A3' }}>
             {card.secondary_card_count} secondary
+          </span>
+        )}
+        {card.card_code && card.linked_folder_id && (
+          <span className="sh-status-pill" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+            Linked
+          </span>
+        )}
+        {card.card_code && !card.linked_folder_id && card.state === 'assigned' && (
+          <span className="sh-status-pill" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+            Not linked
           </span>
         )}
         <CountChip label="Partners" accepted={partners.accepted} rejected={partners.rejected} pending={partners.pending} />

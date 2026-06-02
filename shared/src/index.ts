@@ -1247,7 +1247,7 @@ export function isTopTalentsTier(t: string | null | undefined): boolean {
   return t === 'Top Talents' || t === 'Elite' || t === 'elite';
 }
 
-export type SubscriptionCardState = 'draft' | 'published' | 'closed';
+export type SubscriptionCardState = 'draft' | 'published' | 'assigned' | 'closed';
 /**
  * `broadcast` (default) — at publish time the server fans out to all matching
  * partners and SquadHire broadcasts to its talents. `manual` — no fan-out;
@@ -1314,6 +1314,12 @@ export interface SubscriptionCard {
   /** Secondary cards link to a primary card via parent_card_id. Primary
    *  cards have parent_card_id = null. */
   parent_card_id?: string | null;
+  /** Human-readable unique code (e.g. CARD-A3X9K2) generated on assign. Used to link this card to a space. */
+  card_code: string | null;
+  /** FK to folders(id) — the client-space folder this card is linked to. Null means not linked. */
+  linked_folder_id: string | null;
+  /** When the card was linked to a space. Null if not yet linked. */
+  linked_at: string | null;
   created_at: string;
   updated_at: string;
   // Derived
@@ -1401,7 +1407,7 @@ export interface Client {
   subscriptions?: ClientSubscription[];
   primary_sales_person?: SalesPerson | null;
   secondary_sales_person?: SalesPerson | null;
-  linkedCards?: { id: string; state: string; published_at: string | null }[];
+  linkedCards?: { id: string; state: string; published_at: string | null; card_code: string | null; linked_folder_id: string | null; linked_at: string | null }[];
 }
 
 export type OnboardingLinkStatus = 'active' | 'used' | 'expired';
@@ -1437,7 +1443,7 @@ export interface ClientSubscription {
   subscription?: Subscription;
   plan?: SubscriptionPlanRow;
   deliverables?: ClientSubscriptionDeliverable[];
-  card?: { id: string; state: string; published_at: string | null } | null;
+  card?: { id: string; state: string; published_at: string | null; card_code: string | null; linked_folder_id: string | null; linked_at: string | null } | null;
 }
 
 // ---- Cash Book ----

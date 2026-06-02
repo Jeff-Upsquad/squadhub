@@ -549,4 +549,190 @@ router.delete('/folders/:id', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================================
+// GET /pm/folders/:id/link-status
+//
+// Returns whether this folder (client space) is linked to a
+// subscription card via linked_folder_id.
+// ============================================================
+router.get('/folders/:id/link-status', async (req: Request, res: Response) => {
+  try {
+    const folderId = req.params.id as string;
+
+    const userLevel = await checkResourceAccess(req.userId!, 'folder', folderId);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this folder' });
+      return;
+    }
+
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('card_code, linked_at, plan_snapshot')
+      .eq('linked_folder_id', folderId)
+      .maybeSingle();
+
+    const snapshot = card?.plan_snapshot as { plan?: { daily_hours?: number | null; weekly_hours?: number | null } } | null;
+    const dailyHours = snapshot?.plan?.daily_hours != null ? Number(snapshot.plan.daily_hours) : null;
+    const weeklyHours = snapshot?.plan?.weekly_hours != null ? Number(snapshot.plan.weekly_hours) : null;
+    const monthlyHours = dailyHours != null ? dailyHours * 20 : null;
+
+    res.json({
+      success: true,
+      data: {
+        linked: !!card,
+        card_code: card?.card_code ?? null,
+        linked_at: card?.linked_at ?? null,
+        daily_hours: dailyHours,
+        weekly_hours: weeklyHours,
+        monthly_hours: monthlyHours,
+      },
+    });
+  } catch (err) {
+    console.error('Folder link status error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+const SUBSCRIPTION_TO_TEMPLATE_SLUGS: Record<string, string[]> = {
+  designer: ['design-space'],
+  video_editor: ['video-editing-space'],
+  designer_video_editor: ['design-space', 'video-editing-space'],
+};
+
+// ============================================================
+// POST /pm/folders/:id/link-to-card
+//
+// Link a subscription card to this client-space folder using
+// the card's unique 6-character code.
+// ============================================================
+const linkToCardSchema = z.object({
+  card_code: z.string().min(1),
+});
+
+router.post('/folders/:id/link-to-card', async (req: Request, res: Response) => {
+  try {
+    const folderId = req.params.id as string;
+    const parsed = linkToCardSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
+      return;
+    }
+
+    const userLevel = await checkResourceAccess(req.userId!, 'folder', folderId);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this folder' });
+      return;
+    }
+
+    const { card_code } = parsed.data;
+
+    // 1. Find card by code
+    const { data: card, error: cardErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, card_code, linked_folder_id, submission_subscription_id, service_type, state')
+      .eq('card_code', card_code)
+      .maybeSingle();
+
+    if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
+    if (!card) { res.status(404).json({ success: false, error: 'Card not found for this code' }); return; }
+    if (card.linked_folder_id) {
+      res.status(409).json({ success: false, error: 'This card is already linked to a space' });
+      return;
+    }
+
+    // 2. Verify folder is a client space
+    const { data: folder, error: folderErr } = await supabaseAdmin
+      .from('folders')
+      .select('id, client_space_template_id')
+      .eq('id', folderId)
+      .maybeSingle();
+
+    if (folderErr) { res.status(500).json({ success: false, error: folderErr.message }); return; }
+    if (!folder) { res.status(404).json({ success: false, error: 'Folder not found' }); return; }
+    if (!folder.client_space_template_id) {
+      res.status(400).json({ success: false, error: 'This folder is not a client space' });
+      return;
+    }
+
+    // 3. Look up template slug
+    const { data: template, error: tplErr } = await supabaseAdmin
+      .from('client_space_templates')
+      .select('slug, name')
+      .eq('id', folder.client_space_template_id)
+      .maybeSingle();
+
+    if (tplErr) { res.status(500).json({ success: false, error: tplErr.message }); return; }
+    if (!template) { res.status(404).json({ success: false, error: 'Client space template not found' }); return; }
+
+    // 4. Validate compatibility
+    //    Try primary path (via submission_subscription_id + subscription slug)
+    //    then fall back to matching card.service_type against template slug.
+    let compatible = false;
+
+    // 4a. subscription-slug path
+    if (card.submission_subscription_id) {
+      const { data: stagedSub } = await supabaseAdmin
+        .from('client_submission_subscriptions')
+        .select('subscription_id')
+        .eq('id', card.submission_subscription_id)
+        .maybeSingle();
+
+      if (stagedSub) {
+        const { data: subscription } = await supabaseAdmin
+          .from('subscriptions')
+          .select('slug')
+          .eq('id', stagedSub.subscription_id)
+          .maybeSingle();
+
+        if (subscription) {
+          const allowed = SUBSCRIPTION_TO_TEMPLATE_SLUGS[subscription.slug];
+          if (allowed?.includes(template.slug)) compatible = true;
+        }
+      }
+    }
+
+    // 4b. service_type fallback
+    if (!compatible && card.service_type) {
+      const svc = card.service_type.toLowerCase();
+      const combinedSvc = svc.replace(/[^a-z0-9]/g, '');
+      if (template.slug === 'design-space' && (combinedSvc.includes('design') || combinedSvc.includes('brand'))) {
+        compatible = true;
+      } else if (template.slug === 'video-editing-space' && (combinedSvc.includes('editor') || combinedSvc.includes('video') || combinedSvc.includes('edit'))) {
+        compatible = true;
+      }
+    }
+
+    if (!compatible) {
+      res.status(400).json({
+        success: false,
+        error: `This card type is not compatible with "${template.name}" spaces.`,
+      });
+      return;
+    }
+
+    // 5. Stamp the link
+    const now = new Date().toISOString();
+    const { error: updErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .update({ linked_folder_id: folderId, linked_at: now })
+      .eq('id', card.id);
+
+    if (updErr) { res.status(500).json({ success: false, error: updErr.message }); return; }
+
+    res.json({
+      success: true,
+      data: {
+        card_id: card.id,
+        card_code,
+        linked_folder_id: folderId,
+        linked_at: now,
+        space_name: template.name,
+      },
+    });
+  } catch (err) {
+    console.error('Link to card error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 export default router;

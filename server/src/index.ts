@@ -45,6 +45,7 @@ import subscriptionCardsAdminRequestsRoutes from './routes/subscription-cards-ad
 import subscriptionCardsAdminAssignRoutes from './routes/subscription-cards-admin-assign';
 import subscriptionCardsAdminSelectRoutes from './routes/subscription-cards-admin-select';
 import subscriptionCardsPartnerRoutes from './routes/subscription-cards-partner';
+import subscriptionCardsLinkingRoutes from './routes/subscription-cards-linking';
 import subscriptionsAdminRoutes from './routes/subscriptions-admin';
 import countriesAdminRoutes from './routes/countries-admin';
 import grossProfitAdminRoutes from './routes/gross-profit-admin';
@@ -151,6 +152,7 @@ app.use('/admin/subscription-cards', subscriptionCardsAdminRoutes);
 app.use('/admin', subscriptionCardsAdminRequestsRoutes);
 app.use('/admin', subscriptionCardsAdminAssignRoutes);
 app.use('/admin', subscriptionCardsAdminSelectRoutes);
+app.use('/admin', subscriptionCardsLinkingRoutes);
 app.use('/partner/opportunities', subscriptionCardsPartnerRoutes);
 app.use('/admin/subscriptions', subscriptionsAdminRoutes);
 app.use('/admin/subscriptions', subscriptionSquadhireProfilesAdminRoutes);

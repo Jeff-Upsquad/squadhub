@@ -7,8 +7,10 @@ export interface DesignPlan {
   name: string;
   dailyHours: number;
   weeklyHours: number;
+  monthlyHours: number;
   usedToday: number;
   usedWeek: number;
+  usedMonth: number;
   days: HoursDay[];
 }
 
@@ -35,13 +37,25 @@ interface DailySummary {
   total_work_seconds: number;
 }
 
-export function useClientDesignPlan(): DesignPlan {
+export function useClientDesignPlan(folderId?: string): DesignPlan {
   const user = useAuthStore((s) => s.user);
-  const dailyHours = 4;
-  const weeklyHours = 20;
+
+  const { data: linkData } = useQuery({
+    queryKey: ['folder-link-status', folderId],
+    queryFn: () => api.get(`/pm/folders/${folderId}/link-status`).then((r) => r.data?.data),
+    enabled: !!folderId,
+  });
+
+  const dailyHours = linkData?.daily_hours ?? 4;
+  const weeklyHours = linkData?.weekly_hours ?? 20;
+  const monthlyHours = linkData?.monthly_hours ?? 80;
+
   const weekStart = startOfWeek(new Date());
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
+  const now = new Date();
+  const monthStart = toISODate(new Date(now.getFullYear(), now.getMonth(), 1));
+  const monthEnd = toISODate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
 
   const { data: summariesRes } = useQuery({
     queryKey: ['daily-summaries', user?.id, toISODate(weekStart)],
@@ -58,7 +72,23 @@ export function useClientDesignPlan(): DesignPlan {
     enabled: !!user?.id,
   });
 
+  const { data: monthSummariesRes } = useQuery({
+    queryKey: ['daily-summaries', user?.id, monthStart],
+    queryFn: async () => {
+      try {
+        const res = await api.get(
+          `/timer/daily-summaries?from=${monthStart}&to=${monthEnd}`,
+        );
+        return res.data.data as DailySummary[];
+      } catch {
+        return [] as DailySummary[];
+      }
+    },
+    enabled: !!user?.id,
+  });
+
   const summaries = summariesRes || [];
+  const monthSummaries = monthSummariesRes || [];
   const todayKey = toISODate(new Date());
 
   const days: HoursDay[] = WEEKDAY_LABELS.map((label, i) => {
@@ -83,13 +113,16 @@ export function useClientDesignPlan(): DesignPlan {
 
   const usedToday = (summaries.find((s) => s.date === todayKey)?.total_work_seconds || 0) / 3600;
   const usedWeek = days.reduce((sum, d) => sum + d.used + d.over, 0);
+  const usedMonth = monthSummaries.reduce((sum, s) => sum + s.total_work_seconds, 0) / 3600;
 
   return {
     name: 'Pro',
     dailyHours,
     weeklyHours,
+    monthlyHours,
     usedToday: Math.round(usedToday * 10) / 10,
     usedWeek: Math.round(usedWeek * 10) / 10,
+    usedMonth: Math.round(usedMonth * 10) / 10,
     days,
   };
 }

@@ -352,7 +352,7 @@ export default function ListPage() {
         <TaskCreatePanel
           listId={activeListId}
           statuses={statuses}
-          defaultStatus={statuses[0]?.category}
+          defaultStatus={statuses[0]?.name}
           spaceName={spaceData?.name}
           spaceColor={spaceData?.color || null}
           folderName={folderData?.name || null}

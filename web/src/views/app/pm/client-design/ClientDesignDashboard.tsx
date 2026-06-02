@@ -62,7 +62,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
   const qc = useQueryClient();
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const { folder, requests, byStatus, listByStatus, isLoading } = useFolderTasks(folderId);
-  const plan = useClientDesignPlan();
+  const plan = useClientDesignPlan(folderId);
   const { data: taskTypes } = useTaskTypes();
   const { data: space } = useSpace(folder?.space_id ?? null);
   const openRequest = (id: string) => setActiveTask(id);
@@ -235,6 +235,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
             <>
               {tab === 'dashboard' && (
                 <DashboardTab
+                  folderId={folderId}
                   requests={filteredRequests}
                   plan={plan}
                   statuses={effectiveStatuses}

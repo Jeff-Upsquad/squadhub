@@ -347,6 +347,29 @@ function ClientSubscriptionCard({
     onSuccess: () => onRefetch(),
   });
 
+  const card = cs.card;
+
+  async function copyCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {
+      // fallback
+    }
+  }
+
+  const { data: linkStatusRes, refetch: refetchLinkStatus } = useQuery({
+    queryKey: ['card-link-status', card?.id],
+    queryFn: () => api.get(`/admin/subscription-cards/${card?.id}/link-status`).then((r) => r.data),
+    enabled: !!card?.id,
+  });
+
+  const unlinkMutation = useMutation({
+    mutationFn: () => api.post(`/admin/subscription-cards/${card!.id}/unlink`),
+    onSuccess: () => { refetchLinkStatus(); onRefetch(); },
+  });
+
+  const linkedFolderName = linkStatusRes?.data?.linked_folder_name ?? null;
+
   return (
     <div className={`rounded-lg border border-[#E2E8F0] bg-white p-4 ${cs.status === 'cancelled' ? 'opacity-60' : ''}`}>
       <div className="flex items-start justify-between">
@@ -361,14 +384,36 @@ function ClientSubscriptionCard({
             )}
             <span className="text-xs text-[#90A1B9]">· {priceLabel}</span>
           </div>
+          {linkedFolderName && (
+            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
+              <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              {linkedFolderName}
+            </span>
+          )}
         </div>
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${
-          cs.status === 'active' ? 'bg-emerald-100 text-emerald-700'
-            : cs.status === 'paused' ? 'bg-amber-100 text-amber-700'
-            : 'bg-red-100 text-red-700'
-        }`}>
-          {cs.status}
-        </span>
+        <div className="flex items-center gap-2">
+          {card?.card_code && (
+            <button
+              onClick={() => copyCode(card.card_code!)}
+              className="group relative flex items-center gap-1 rounded-md border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-mono text-[#62748E] hover:bg-[#F8FAFC]"
+              title="Copy card code"
+            >
+              {card.card_code}
+              <svg className="h-3 w-3 text-[#90A1B9] group-hover:text-[#0F172B]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+              </svg>
+            </button>
+          )}
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${
+            cs.status === 'active' ? 'bg-emerald-100 text-emerald-700'
+              : cs.status === 'paused' ? 'bg-amber-100 text-amber-700'
+              : 'bg-red-100 text-red-700'
+          }`}>
+            {cs.status}
+          </span>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -391,7 +436,12 @@ function ClientSubscriptionCard({
           {resetMutation.isPending ? 'Resetting…' : 'Reset to plan'}
         </button>
         <button onClick={() => removeMutation.mutate()} className="rounded bg-[#F1F5F9] px-2 py-1 text-[10px] font-medium text-[#62748E] hover:bg-[#E2E8F0]">Remove</button>
-      </div>
+          {linkedFolderName && (
+            <button onClick={() => unlinkMutation.mutate()} className="rounded bg-rose-50 px-2 py-1 text-[10px] font-medium text-rose-700 hover:bg-rose-100" disabled={unlinkMutation.isPending}>
+              {unlinkMutation.isPending ? 'Unlinking…' : 'Unlink'}
+            </button>
+          )}
+        </div>
 
       <div className="mt-3 border-t border-[#F1F5F9] pt-3">
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">Deliverables</p>

@@ -8,10 +8,27 @@ import {
   notifySquadhireOfSelectionUndo,
   notifySquadhireOfActivation,
 } from '../utils/squadhireWebhook';
+import { stageSubscriptionsFromAssignedCards } from '../utils/submissionPipeline';
+import crypto from 'crypto';
 
 const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
+
+// Generate a unique CARD-XXXXXX code. Retries on collision.
+async function generateCardCode(): Promise<string> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const suffix = crypto.randomBytes(4).toString('base64url').slice(0, 6).toUpperCase();
+    const code = `CARD-${suffix}`;
+    const { data: existing } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id')
+      .eq('card_code', code)
+      .maybeSingle();
+    if (!existing) return code;
+  }
+  throw new Error('Failed to generate unique card code after 10 attempts');
+}
 
 // ============================================================
 // POST /admin/subscription-cards/:id/assign
@@ -19,6 +36,10 @@ router.use(requireAdmin);
 // Batch-assign multiple accepted recipients. Card transitions
 // from published → assigned on first call. Subsequent calls add
 // more selections (re-stamps passed_over on non-selected).
+//
+// Side effects on first assign (published → assigned):
+//   1. Generates a unique card_code (CARD-XXXXXX)
+//   2. Auto-stages subscriptions for the linked submission if any
 // ============================================================
 const assignSchema = z.object({
   partner_ids: z.array(z.string().uuid()).default([]),
@@ -43,7 +64,7 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state')
+      .select('id, state, submission_subscription_id, card_code')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
@@ -115,11 +136,40 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
         .is('passed_over_at', null);
     }
 
+    // ── First-time assign side effects ──
+    const isFirstAssign = card.state === 'published';
+    if (isFirstAssign) {
+      // 1. Generate unique card_code if not already set
+      if (!card.card_code) {
+        const code = await generateCardCode();
+        card.card_code = code;
+      }
+
+      // 2. Auto-stage subscriptions for the linked submission
+      const submissionSubId: string | null = card.submission_subscription_id;
+      if (submissionSubId) {
+        const { data: stagedSub } = await supabaseAdmin
+          .from('client_submission_subscriptions')
+          .select('submission_id')
+          .eq('id', submissionSubId)
+          .maybeSingle();
+
+        if (stagedSub?.submission_id) {
+          stageSubscriptionsFromAssignedCards(stagedSub.submission_id).catch((err) => {
+            console.error('[assign] auto-stage failed', err);
+          });
+        }
+      }
+    }
+
     // Transition card to assigned (Selected bucket — selected_recipient_id stays null).
     // Reset admin_reviewed_at so the "NEW" badge re-opens on the Selected tab for
     // every fresh selection event (handles first-time move + re-assign after undo).
     const cardUpdate: Record<string, unknown> = { state: 'assigned', admin_reviewed_at: null };
-    if (card.state === 'published') cardUpdate.assigned_at = now;
+    if (isFirstAssign) {
+      cardUpdate.assigned_at = now;
+      if (card.card_code) cardUpdate.card_code = card.card_code;
+    }
     await supabaseAdmin
       .from('subscription_cards')
       .update(cardUpdate)
@@ -130,7 +180,7 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
       console.error('[assign] notify squadhire failed', err);
     });
 
-    res.json({ success: true });
+    res.json({ success: true, data: { card_code: isFirstAssign ? card.card_code : undefined } });
   } catch (err: any) {
     console.error('Assign error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
