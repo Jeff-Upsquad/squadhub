@@ -32,6 +32,8 @@ export function useCreateTaskTimeEntry() {
       qc.invalidateQueries({ queryKey: ['folder-tasks'] });
       qc.invalidateQueries({ queryKey: ['space-tasks'] });
       qc.invalidateQueries({ queryKey: ['my-tasks'] });
+      qc.invalidateQueries({ queryKey: ['folder-time-summary'] });
+      qc.invalidateQueries({ queryKey: ['folder-subscription-card'] });
     },
   });
 }
