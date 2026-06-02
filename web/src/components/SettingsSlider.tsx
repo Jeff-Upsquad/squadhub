@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useAuthStore } from '../stores/authStore';
@@ -288,77 +288,131 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
                       />
                     ))}
                   </div>
-                </div>
-              );
-            })}
-            {(members || []).length === 0 && (
-              <p className="text-xs text-[#999999]">No members yet</p>
+    </div>
+  );
+}
+
+function SubscriptionCardSection({ folderId }: { folderId: string }) {
+  const qc = useQueryClient();
+  const [codeInput, setCodeInput] = useState('');
+  const [showLinkInput, setShowLinkInput] = useState(false);
+
+  const { data: linkStatus } = useQuery({
+    queryKey: ['folder-link-status', folderId],
+    queryFn: () => import('../services/api').then((m) => m.default.get(`/pm/folders/${folderId}/link-status`).then((r) => r.data?.data)),
+  });
+
+  const hoursLinked = linkStatus?.linked ?? false;
+  const cardCode = linkStatus?.card_code ?? null;
+
+  const linkMutation = useMutation({
+    mutationFn: (code: string) =>
+      import('../services/api').then((m) =>
+        m.default.post(`/pm/folders/${folderId}/link-to-card`, { card_code: code }).then((r) => r.data)
+      ),
+    onSuccess: () => {
+      setShowLinkInput(false);
+      setCodeInput('');
+      qc.invalidateQueries({ queryKey: ['folder-link-status', folderId] });
+    },
+  });
+
+  const isPending = linkMutation.isPending;
+
+  return (
+    <div className="border-t border-[#E2E8F0] pt-4">
+      <p className="mb-2 text-xs font-medium text-[#666666] uppercase tracking-wide">
+        Subscription Card
+      </p>
+
+      {hoursLinked ? (
+        <div className="space-y-3">
+          <p className="text-xs text-[#999999]">
+            Linked card: <span className="font-mono text-[#0F172B]">{cardCode}</span>
+          </p>
+
+          <div>
+            <label className="mb-1 block text-[10px] font-medium text-[#666666] uppercase tracking-wide">
+              Billing Start Date
+            </label>
+            <p className="mb-1 text-[10px] text-[#999999]">
+              First month's hours are prorated based on remaining calendar days.
+            </p>
+            <input
+              type="date"
+              defaultValue={linkStatus?.billing_start_date ?? ''}
+              onChange={(e) => {
+                const val = e.target.value || null;
+                import('../services/api').then((m) =>
+                  m.default.post(`/pm/folders/${folderId}/billing-start-date`, { billing_start_date: val })
+                ).then(() => {
+                  qc.invalidateQueries({ queryKey: ['folder-link-status', folderId] });
+                });
+              }}
+              className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
+            />
+            {linkStatus?.prorated_monthly_hours != null && (
+              <p className="mt-1 text-[10px] text-[#999999]">
+                Prorated monthly limit: {linkStatus.prorated_monthly_hours}h
+              </p>
             )}
           </div>
-        </div>
 
-        {/* Info */}
-        <div className="border-t border-[#E2E8F0] pt-4">
-          <p className="text-xs text-[#999999]">
-            <span className="font-medium text-[#666666]">Type:</span> {typeLabel}
-          </p>
-          <p className="mt-1 text-xs text-[#999999]">
-            <span className="font-medium text-[#666666]">ID:</span> {id}
-          </p>
-        </div>
-      </div>
-
-      {showInvite && (
-        <ManageMembersModal
-          resourceType={type}
-          resourceId={id}
-          resourceName={name}
-          onClose={() => setShowInvite(false)}
-        />
-      )}
-
-      {showMove && spaceId && (type === 'list' || type === 'folder') && (
-        type === 'list' ? (
-          <MoveModal
-            type="list"
-            id={id}
-            name={name}
-            currentSpaceId={spaceId}
-            currentFolderId={folderId ?? null}
-            onClose={() => setShowMove(false)}
-            onMoved={onClose}
-          />
-        ) : (
-          <MoveModal
-            type="folder"
-            id={id}
-            name={name}
-            currentSpaceId={spaceId}
-            onClose={() => setShowMove(false)}
-            onMoved={onClose}
-          />
-        )
-      )}
-
-      {/* Danger zone at bottom */}
-      {canManage && (
-        <div className="border-t border-[#E2E8F0] p-4">
-          <p className="mb-2 text-xs font-medium text-[#666666] uppercase tracking-wide">Danger Zone</p>
           <button
-            onClick={handleDelete}
-            disabled={deleteMutation.isPending}
-            className="w-full rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+            onClick={() => setShowLinkInput(!showLinkInput)}
+            className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-xs font-medium text-[#0F172B] transition hover:bg-[#F1F5F9]"
           >
-            {deleteMutation.isPending ? 'Deleting...' : `Delete ${typeLabel}`}
+            Change Card
           </button>
-          <p className="mt-1.5 text-[10px] text-[#999999]">
-            This {type} will be moved to trash. An admin can restore it later.
-          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-[#999999]">No card linked to this space.</p>
+          {showLinkInput ? (
+            <div className="space-y-2">
+              <input
+                value={codeInput}
+                onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
+                placeholder="Paste CARD-XXXXXX code"
+                disabled={isPending}
+                className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm font-mono text-[#0F172B] outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF] disabled:opacity-50"
+                onKeyDown={(e) => e.key === 'Enter' && codeInput && linkMutation.mutate(codeInput)}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => codeInput && linkMutation.mutate(codeInput)}
+                  disabled={!codeInput || isPending}
+                  className="flex-1 rounded-md bg-[#0F172B] px-3 py-2 text-xs font-medium text-white hover:bg-[#1D293D] disabled:opacity-50"
+                >
+                  {isPending ? 'Linking\u2026' : 'Link'}
+                </button>
+                <button
+                  onClick={() => { setShowLinkInput(false); setCodeInput(''); }}
+                  className="rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-xs font-medium text-[#0F172B] hover:bg-[#F1F5F9]"
+                >
+                  Cancel
+                </button>
+              </div>
+              {linkMutation.isError && (
+                <p className="text-xs text-red-600">
+                  {(linkMutation.error as any)?.response?.data?.error || 'Link failed'}
+                </p>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowLinkInput(true)}
+              className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-xs font-medium text-[#0F172B] transition hover:bg-[#F1F5F9]"
+            >
+              Link to Card
+            </button>
+          )}
         </div>
       )}
     </div>
   );
 }
+
 
 function MemberRow({
   member,
