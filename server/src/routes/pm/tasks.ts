@@ -559,6 +559,45 @@ router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
       .update({ time_tracked: newTotal })
       .eq('id', taskId);
 
+    // Also update daily_time_summaries so the space dashboard reflects this time
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+    const startedIst = new Date(new Date(started_at).getTime() + IST_OFFSET);
+    const entryDate = `${startedIst.getUTCFullYear()}-${String(startedIst.getUTCMonth() + 1).padStart(2, '0')}-${String(startedIst.getUTCDate()).padStart(2, '0')}`;
+
+    const { data: existingSummary } = await supabaseAdmin
+      .from('daily_time_summaries')
+      .select('id, total_work_seconds')
+      .eq('user_id', req.userId!)
+      .eq('workspace_id', workspaceId)
+      .eq('date', entryDate)
+      .eq('context', 'default')
+      .maybeSingle();
+
+    if (existingSummary) {
+      await supabaseAdmin
+        .from('daily_time_summaries')
+        .update({
+          total_work_seconds: existingSummary.total_work_seconds + duration_seconds,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingSummary.id);
+    } else {
+      await supabaseAdmin
+        .from('daily_time_summaries')
+        .insert({
+          user_id: req.userId!,
+          workspace_id: workspaceId,
+          context: 'default',
+          date: entryDate,
+          total_work_seconds: duration_seconds,
+          total_break_seconds: 0,
+          total_no_work_seconds: 0,
+          session_count: 1,
+          first_start: stoppedAt,
+          last_stop: stoppedAt,
+        });
+    }
+
     res.json({ success: true, data: entry });
   } catch (err) {
     if (err instanceof z.ZodError) {

@@ -439,6 +439,52 @@ router.get('/stats', async (req: Request, res: Response) => {
   }
 });
 
+// GET /timer/daily-summaries?from=YYYY-MM-DD&to=YYYY-MM-DD[&workspace_id=...][&context=...]
+// Returns daily summaries for the current user in the given date range.
+// Used by the space dashboard's hours-used cards.
+router.get('/daily-summaries', async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const from = String(req.query.from || '').trim();
+    const to = String(req.query.to || '').trim();
+
+    if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      res.status(400).json({ success: false, error: 'from and to query params (YYYY-MM-DD) are required' });
+      return;
+    }
+
+    let query = supabaseAdmin
+      .from('daily_time_summaries')
+      .select('date, total_work_seconds')
+      .eq('user_id', userId)
+      .gte('date', from)
+      .lte('date', to)
+      .order('date', { ascending: true });
+
+    const workspace_id = req.query.workspace_id as string | undefined;
+    if (workspace_id) {
+      query = query.eq('workspace_id', workspace_id);
+    }
+
+    const context = req.query.context as string | undefined;
+    if (context) {
+      query = query.eq('context', context);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data: data || [] });
+  } catch (err) {
+    console.error('Daily summaries error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // PATCH /timer/sessions/:id — edit an owned session (start/end/type).
 // Enforces: ownership, primary-role can_edit_time_logs, edit window.
 const patchSchema = z.object({
