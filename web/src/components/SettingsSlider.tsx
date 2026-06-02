@@ -288,6 +288,76 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
                       />
                     ))}
                   </div>
+                </div>
+              );
+            })}
+            {(members || []).length === 0 && (
+              <p className="text-xs text-[#999999]">No members yet</p>
+            )}
+          </div>
+        </div>
+
+        {type === 'folder' && <SubscriptionCardSection folderId={id} />}
+
+        {/* Info */}
+        <div className="border-t border-[#E2E8F0] pt-4">
+          <p className="text-xs text-[#999999]">
+            <span className="font-medium text-[#666666]">Type:</span> {typeLabel}
+          </p>
+          <p className="mt-1 text-xs text-[#999999]">
+            <span className="font-medium text-[#666666]">ID:</span> {id}
+          </p>
+        </div>
+      </div>
+
+      {showInvite && (
+        <ManageMembersModal
+          resourceType={type}
+          resourceId={id}
+          resourceName={name}
+          onClose={() => setShowInvite(false)}
+        />
+      )}
+
+      {showMove && spaceId && (type === 'list' || type === 'folder') && (
+        type === 'list' ? (
+          <MoveModal
+            type="list"
+            id={id}
+            name={name}
+            currentSpaceId={spaceId}
+            currentFolderId={folderId ?? null}
+            onClose={() => setShowMove(false)}
+            onMoved={onClose}
+          />
+        ) : (
+          <MoveModal
+            type="folder"
+            id={id}
+            name={name}
+            currentSpaceId={spaceId}
+            onClose={() => setShowMove(false)}
+            onMoved={onClose}
+          />
+        )
+      )}
+
+      {/* Danger zone at bottom */}
+      {canManage && (
+        <div className="border-t border-[#E2E8F0] p-4">
+          <p className="mb-2 text-xs font-medium text-[#666666] uppercase tracking-wide">Danger Zone</p>
+          <button
+            onClick={handleDelete}
+            disabled={deleteMutation.isPending}
+            className="w-full rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+          >
+            {deleteMutation.isPending ? 'Deleting...' : `Delete ${typeLabel}`}
+          </button>
+          <p className="mt-1.5 text-[10px] text-[#999999]">
+            This {type} will be moved to trash. An admin can restore it later.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
