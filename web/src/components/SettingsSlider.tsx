@@ -299,7 +299,7 @@ function SubscriptionCardSection({ folderId }: { folderId: string }) {
 
   const { data: linkStatus } = useQuery({
     queryKey: ['folder-link-status', folderId],
-    queryFn: () => import('../services/api').then((m) => m.default.get(`/pm/folders/${folderId}/link-status`).then((r) => r.data?.data)),
+    queryFn: () => api.get(`/pm/folders/${folderId}/link-status`).then((r) => r.data?.data),
   });
 
   const hoursLinked = linkStatus?.linked ?? false;
@@ -307,9 +307,7 @@ function SubscriptionCardSection({ folderId }: { folderId: string }) {
 
   const linkMutation = useMutation({
     mutationFn: (code: string) =>
-      import('../services/api').then((m) =>
-        m.default.post(`/pm/folders/${folderId}/link-to-card`, { card_code: code }).then((r) => r.data)
-      ),
+      api.post(`/pm/folders/${folderId}/link-to-card`, { card_code: code }).then((r) => r.data),
     onSuccess: () => {
       setShowLinkInput(false);
       setCodeInput('');
@@ -343,9 +341,7 @@ function SubscriptionCardSection({ folderId }: { folderId: string }) {
               defaultValue={linkStatus?.billing_start_date ?? ''}
               onChange={(e) => {
                 const val = e.target.value || null;
-                import('../services/api').then((m) =>
-                  m.default.post(`/pm/folders/${folderId}/billing-start-date`, { billing_start_date: val })
-                ).then(() => {
+                api.post(`/pm/folders/${folderId}/billing-start-date`, { billing_start_date: val }).then(() => {
                   qc.invalidateQueries({ queryKey: ['folder-link-status', folderId] });
                 });
               }}
@@ -412,7 +408,6 @@ function SubscriptionCardSection({ folderId }: { folderId: string }) {
     </div>
   );
 }
-
 
 function MemberRow({
   member,
