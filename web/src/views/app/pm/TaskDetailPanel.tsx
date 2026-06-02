@@ -372,6 +372,7 @@ export default function TaskDetailPanel({
           qc.invalidateQueries({ queryKey: ['task-time-entries'] });
           qc.invalidateQueries({ queryKey: ['tasks', prev.listId] });
           qc.invalidateQueries({ queryKey: ['task', prev.taskId] });
+          qc.invalidateQueries({ queryKey: ['daily-summaries'] });
         } catch (err) {
           console.error('Failed to save previous timer:', err);
         }
@@ -414,6 +415,7 @@ export default function TaskDetailPanel({
       qc.invalidateQueries({ queryKey: ['task-time-entries'] });
       qc.invalidateQueries({ queryKey: ['tasks', stopped.listId] });
       qc.invalidateQueries({ queryKey: ['task', stopped.taskId] });
+      qc.invalidateQueries({ queryKey: ['daily-summaries'] });
     } catch (err) {
       console.error('Failed to save tracked time:', err);
     }
