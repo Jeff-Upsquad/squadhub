@@ -155,13 +155,13 @@ function BoardColumn({
     e.preventDefault();
     setIsDragOver(false);
     const taskId = e.dataTransfer.getData('text/plain');
-    if (taskId) onDrop(taskId, status.category);
+    if (taskId) onDrop(taskId, status.name);
   };
 
   const handleAdd = () => {
     if (!title.trim()) { setAddingTask(false); return; }
     createTask.mutate(
-      { title: title.trim(), status: status.category },
+      { title: title.trim(), status: status.name },
       { onSuccess: () => { setTitle(''); } },
     );
   };

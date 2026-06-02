@@ -143,7 +143,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
   ];
 
   const briefsListId = listByStatus.queued?.id || pendingListId;
-  const effectiveStatuses = space?.statuses || [];
+  const effectiveStatuses = (space as any)?.space_statuses || space?.statuses || [];
 
   return (
     <div className="flex flex-1 flex-col">
@@ -280,7 +280,8 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
           isDesignTask
           customTaskTypeKey={taskTypeKey}
           designTaskTypeId={designType?.id || null}
-          statuses={space?.statuses}
+          statuses={effectiveStatuses}
+          defaultStatus={effectiveStatuses[0]?.name}
         />
       )}
 

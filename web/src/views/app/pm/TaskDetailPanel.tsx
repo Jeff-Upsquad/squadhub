@@ -434,6 +434,19 @@ export default function TaskDetailPanel({
   const matchedStatus = !isTaskType ? (statuses.find((s) => s.name === taskStatusCategory) || statuses.find((s) => s.category === taskStatusCategory)) : null;
   const isDone = catalogDef?.category === 'closed' || taskStatusCategory === 'done' || taskStatusCategory === 'closed' || matchedStatus?.category === 'done' || matchedStatus?.category === 'closed';
 
+  // Normalize legacy status for design/video tasks when the drawer opens
+  useEffect(() => {
+    if (!task || isTaskType || !statuses.length || !taskStatusCategory) return;
+    if (statuses.some((s) => s.name === taskStatusCategory)) return;
+    const legacyCategory: Record<string, string> = { todo: 'todo', active: 'active', done: 'done', closed: 'closed' };
+    const cat = legacyCategory[taskStatusCategory];
+    if (!cat) return;
+    const target = statuses.find((s) => s.category === cat);
+    if (target && target.name !== taskStatusCategory) {
+      updateTask.mutate({ id: task.id, status: target.name } as any);
+    }
+  }, [task?.id, isTaskType, statuses, taskStatusCategory]);
+
   const handleSave = (field: 'title' | 'description') => {
     if (!task) return;
     if (field === 'title' && editValue.trim()) {
@@ -459,12 +472,19 @@ export default function TaskDetailPanel({
 
   const handleToggleDone = () => {
     if (!task || !canEdit) return;
-    const next = isDone ? 'todo' : 'done';
+    let next: string;
+    if (!isTaskType && statuses.length > 0) {
+      if (isDone) {
+        next = statuses.find((s) => s.category === 'todo')?.name || statuses[0].name;
+      } else {
+        next = statuses.find((s) => s.category === 'closed')?.name || statuses.find((s) => s.category === 'done')?.name || statuses[statuses.length - 1].name;
+      }
+    } else {
+      next = isDone ? 'open' : 'closed';
+    }
     if (!isDone) {
       setMainCelebrating(true);
       setTimeout(() => setMainCelebrating(false), 650);
-      // If a work-block run is active and this isn't the work block itself,
-      // log this completion against the active run. Idempotent server-side.
       const active = activeWorkBlock.data;
       if (active && active.task.id !== task.id) {
         recordCompletion.mutate({ run_id: active.run.id, completed_task_id: task.id });
@@ -2089,7 +2109,7 @@ function SpaceStatusPicker({
         }}
       >
         <span className="dot" style={{ background: current?.color || 'var(--sh-ink-4)' }} />
-        {current?.name || taskStatusCategory || 'No status'}
+        {current?.name || (taskStatusCategory ? ({ todo: 'To Do', active: 'Active', done: 'Done', closed: 'Closed' }[taskStatusCategory] ?? taskStatusCategory) : 'No status')}
       </button>
       {open && createPortal(
         <>
