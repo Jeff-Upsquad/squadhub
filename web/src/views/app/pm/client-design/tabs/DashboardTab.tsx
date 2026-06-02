@@ -8,13 +8,6 @@ import TaskGroupCard from '../../TaskGroupCard';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../../../services/api';
 
-function toISODate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
 const STATUS_ORDER: RequestStatus[] = ['progress', 'review', 'queued', 'done'];
 const STATUS_COLOR: Record<RequestStatus, string> = {
   queued: 'var(--cd-queued)',
@@ -242,51 +235,6 @@ export default function DashboardTab({
                 Link to Card
               </button>
             </div>
-          )}
-        </div>
-      )}
-
-      {hoursLinked && linkStatus && (
-        <div
-          style={{
-            padding: '10px 16px',
-            fontSize: 11,
-            color: 'var(--cd-fg-2)',
-            background: 'var(--cd-bg-2)',
-            border: '1px dashed var(--cd-br-1)',
-            borderRadius: 6,
-            marginTop: 4,
-            marginBottom: 16,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-          }}
-        >
-          <span style={{ whiteSpace: 'nowrap' }}>Starting date</span>
-          <input
-            type="date"
-            value={linkStatus.billing_start_date ?? ''}
-            onChange={(e) => {
-              const val = e.target.value || null;
-              api.post(`/pm/folders/${folderId}/billing-start-date`, { billing_start_date: val }).then(() => {
-                qc.invalidateQueries({ queryKey: ['folder-link-status', folderId] });
-              });
-            }}
-            style={{
-              padding: '4px 8px',
-              fontSize: 11,
-              fontFamily: 'var(--cd-font-mono)',
-              border: '1px solid var(--cd-br-1)',
-              borderRadius: 4,
-              background: 'var(--cd-bg-1)',
-              color: 'var(--cd-fg-1)',
-              outline: 'none',
-            }}
-          />
-          {linkStatus.billing_start_date && (
-            <span style={{ fontSize: 10, color: 'var(--cd-fg-3)' }}>
-              First month prorated to {Math.round(plan.monthlyHours * 10) / 10}h
-            </span>
           )}
         </div>
       )}
