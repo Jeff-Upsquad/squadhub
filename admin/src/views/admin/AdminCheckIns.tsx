@@ -14,7 +14,7 @@ const TABS = [
   { id: 'history', label: 'History' },
   { id: 'checklists', label: 'Checklists' },
   { id: 'deadlines', label: 'Deadlines' },
-  { id: 'office-timing', label: 'Office Timing' },
+  { id: 'office-timing', label: 'Virtual Office Timing' },
   { id: 'holidays', label: 'Holidays' },
 ] as const;
 
@@ -46,7 +46,7 @@ function AdminCheckInsInner() {
     <div>
       <div className="mb-6">
         <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Daily Check-Ins</h1>
-        <p className="mt-1 text-sm text-[#62748E]">Attendance overview, history, checklists, deadlines, office timing, and holidays — all in one place.</p>
+        <p className="mt-1 text-sm text-[#62748E]">Attendance overview, history, checklists, deadlines, virtual office timing, and holidays — all in one place.</p>
       </div>
 
       <div className="mb-5 flex gap-1 overflow-x-auto rounded-lg bg-[#F1F5F9] p-1">

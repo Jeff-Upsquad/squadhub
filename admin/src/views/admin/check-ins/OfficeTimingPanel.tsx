@@ -153,7 +153,7 @@ export default function OfficeTimingPanel() {
 
   function handleDelete() {
     if (!editingUserId) return;
-    if (!confirm('Remove this user\'s office timing? They\'ll fall back to the default check-in deadline.')) return;
+    if (!confirm('Remove this user\'s timing configuration? They\'ll fall back to the default check-in deadline.')) return;
     deleteMutation.mutate(editingUserId);
   }
 

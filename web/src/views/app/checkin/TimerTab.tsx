@@ -16,7 +16,7 @@ function formatOfficeHours(totalSeconds: number): string {
 const TIMER_CONFIG: { type: TimerType; label: string; icon: string; color: string; activeColor: string; activeBg: string }[] = [
   {
     type: 'work',
-    label: 'Work Lock',
+    label: 'Work Time',
     icon: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z',
     color: 'border-blue-200 text-blue-700 hover:bg-blue-50',
     activeColor: 'text-white',
