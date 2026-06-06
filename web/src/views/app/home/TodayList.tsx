@@ -181,17 +181,15 @@ export default function TodayList() {
       ) : (
         <>
           {isLoading && (
-            <div className="today-list">
+            <div className="home-task-list">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="today-item" style={{ opacity: 0.5 }}>
+                <div key={i} className="home-task-item" style={{ opacity: 0.5 }}>
                   <div className="checkbox" />
-                  <div>
-                    <div className="ti-title" style={{ background: 'var(--sh-ink-6, #eee)', height: 12, borderRadius: 4, width: '60%' }} />
-                    <div className="ti-meta" style={{ marginTop: 6 }}>
-                      <span style={{ background: 'var(--sh-ink-6, #eee)', height: 10, borderRadius: 4, width: 80, display: 'inline-block' }} />
-                    </div>
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
+                    <span className="ht-title" style={{ background: 'var(--sh-ink-6, #eee)', height: 12, borderRadius: 4, width: '60%' }} />
+                    <span className="ht-meta" style={{ background: 'var(--sh-ink-6, #eee)', height: 10, borderRadius: 4, width: 80 }} />
                   </div>
-                  <div className="ava" style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--sh-ink-6, #eee)' }} />
+                  <div className="ht-ava ava" style={{ background: 'var(--sh-ink-6, #eee)' }} />
                 </div>
               ))}
             </div>
@@ -212,7 +210,7 @@ export default function TodayList() {
 
           {!isLoading && !isError && tasks.length > 0 && (
             groupBy === 'none' ? (
-              <div className="today-list">
+              <div className="home-task-list">
                 {tasks.map((t) => (
                   <TodayRow key={t.id} task={t} onOpen={openTask} />
                 ))}
@@ -224,8 +222,8 @@ export default function TodayList() {
                     <span>{g.label}</span>
                     <span className="count">· {g.tasks.length}</span>
                   </div>
-                  <div className="today-list">
-                    {g.tasks.map((t) => (
+                  <div className="home-task-list">
+                    {tasks.map((t) => (
                       <TodayRow key={t.id} task={t} onOpen={openTask} />
                     ))}
                   </div>
@@ -272,7 +270,7 @@ function TodayRow({ task: t, onOpen }: { task: Task; onOpen: (id: string) => voi
 
   return (
     <div
-      className="today-item"
+      className="home-task-item"
       data-done={displayDone}
       data-fading={isFadingOut}
       data-subtask={isSubtask || undefined}
@@ -281,7 +279,7 @@ function TodayRow({ task: t, onOpen }: { task: Task; onOpen: (id: string) => voi
       role="button"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(t.id); } }}
-      style={isSubtask ? { paddingLeft: 24 } : undefined}
+      style={isSubtask ? { paddingLeft: 20 } : undefined}
     >
       <div
         className="checkbox"
@@ -291,36 +289,30 @@ function TodayRow({ task: t, onOpen }: { task: Task; onOpen: (id: string) => voi
         aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
         onClick={onToggleDone}
       />
-      <div>
-        <div className="ti-title">
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
+        <span className="ht-title">
           {isSubtask && <span style={{ color: 'var(--sh-ink-4)', marginRight: 4 }}>↳</span>}
           {t.title}
-        </div>
-        <div className="ti-meta">
-          {isSubtask && parentTitle && (
-            <>
-              <span style={{ color: 'var(--sh-ink-4)' }}>From: {parentTitle}</span>
-              {(label || when.text) && <span>·</span>}
-            </>
-          )}
-          {label && <span className="tag">{label}</span>}
-          {label && when.text && <span>·</span>}
-          {when.text && (
-            <span style={when.state === 'overdue' ? { color: 'var(--sh-danger, #c43)' } : undefined}>
-              {when.text}
-            </span>
-          )}
-        </div>
+        </span>
+        {(label || when.text || (isSubtask && parentTitle)) && (
+          <span className="ht-meta" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {isSubtask && parentTitle && (
+              <span style={{ color: 'var(--sh-ink-4)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>↳ {parentTitle}</span>
+            )}
+            {label && <span className="tag" style={{ fontSize: 10, padding: '0 5px' }}>{label}</span>}
+            {when.text && (
+              <span style={when.state === 'overdue' ? { color: 'var(--sh-danger, #c43)' } : undefined}>
+                {when.text}
+              </span>
+            )}
+          </span>
+        )}
       </div>
       {assignee ? (
         <div
-          className="ava"
+          className="ht-ava ava"
           style={{
-            width: 22,
-            height: 22,
-            borderRadius: '50%',
             background: avatarColor(assignee.id || assignee.email),
-            fontSize: 9.5,
           }}
           title={assignee.display_name || assignee.email}
         >
@@ -328,14 +320,10 @@ function TodayRow({ task: t, onOpen }: { task: Task; onOpen: (id: string) => voi
         </div>
       ) : (
         <div
-          className="ava"
+          className="ht-ava ava"
           style={{
-            width: 22,
-            height: 22,
-            borderRadius: '50%',
             background: 'var(--sh-ink-6, #eee)',
             color: 'var(--sh-ink-4)',
-            fontSize: 9.5,
           }}
           title="Unassigned"
         >

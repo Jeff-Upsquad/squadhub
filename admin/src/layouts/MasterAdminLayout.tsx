@@ -208,16 +208,6 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
               Workspace Settings
             </NavLink>
           </div>
-
-          <div className="!mt-4 border-t border-[#E2E8F0] pt-3">
-            <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">System</p>
-            <NavLink href="/admin/design-system">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.098 19.902a3.75 3.75 0 005.304 0l6.401-6.402M6.75 21A3.75 3.75 0 013 17.25V4.125C3 3.504 3.504 3 4.125 3h5.25c.621 0 1.125.504 1.125 1.125v4.072M6.75 21a3.75 3.75 0 003.75-3.75V8.197M6.75 21h13.125c.621 0 1.125-.504 1.125-1.125v-5.25c0-.621-.504-1.125-1.125-1.125h-4.072" />
-              </svg>
-              Design System
-            </NavLink>
-          </div>
         </nav>
         <div className="border-t border-[#E2E8F0] p-3 space-y-0.5">
           <a
