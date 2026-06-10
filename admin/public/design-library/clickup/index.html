@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClickUp Design System — Extracted Reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Shantell+Sans:wght@300..800&family=Sometype+Mono:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; scroll-padding-top: 96px; }
+  body {
+    background: var(--core-background-main);
+    color: var(--core-text-main);
+    font-family: var(--font-body);
+    font-size: var(--text-md); line-height: var(--text-md-leading); letter-spacing: var(--text-md-tracking);
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    overflow-x: clip;
+  }
+  ::selection { background: var(--core-accent-purple-badge); color: var(--core-accent-purple); }
+
+  /* ── guide chrome ─────────────────────────────────────────── */
+  .topbar {
+    position: sticky; top: 0; z-index: 50; height: var(--nav-height);
+    display: flex; align-items: center;
+    background: rgba(255,255,255,.82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--core-border-default);
+  }
+  .topbar-inner { width: 100%; max-width: var(--container-nav); margin: 0 auto; padding: 0 var(--space-gutter-desktop); display: flex; align-items: center; gap: 24px; }
+  .topbar img.logo { height: 26px; display: block; }
+  .topbar .doc-tag { font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--core-accent-purple); background: var(--core-accent-purple-badge); padding: 4px 10px; border-radius: var(--radius-pill); white-space: nowrap; }
+  .topbar nav { margin-left: auto; display: flex; gap: 2px; }
+  .topbar nav a {
+    display: flex; align-items: center; height: 32px; padding: 8px 10px; border-radius: var(--radius-button);
+    color: var(--core-text-secondary); font-size: 14px; font-weight: 500; line-height: 20px; letter-spacing: -.15px;
+    text-decoration: none; white-space: nowrap; transition: background-color var(--transition-fast), color var(--transition-fast);
+  }
+  .topbar nav a:hover { background: var(--core-button-secondary); color: var(--core-text-main); }
+
+  .shell { max-width: 1320px; margin: 0 auto; padding: 0 var(--space-gutter-desktop); display: grid; grid-template-columns: 212px minmax(0,1fr); gap: 56px; }
+  aside.toc { position: sticky; top: calc(var(--nav-height) + 28px); align-self: start; height: max-content; padding: 28px 0 60px; }
+  aside.toc .toc-label { font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--core-text-tertiary); margin-bottom: 14px; }
+  aside.toc a { display: block; padding: 6px 10px; margin-left: -10px; border-radius: 6px; color: var(--core-text-secondary); font-size: 13px; font-weight: 500; letter-spacing: -.1px; text-decoration: none; transition: background-color var(--transition-fast), color var(--transition-fast); }
+  aside.toc a:hover { background: var(--core-background-box); color: var(--core-text-main); }
+  aside.toc a.num::before { content: attr(data-n) " "; font-family: var(--font-mono); font-size: 10px; color: var(--core-text-tertiary); margin-right: 4px; }
+  main { padding-bottom: 120px; min-width: 0; }
+
+  section.block { padding-top: 84px; }
+  .eyebrow { font-family: var(--font-mono); font-size: 13px; font-weight: 500; line-height: 1.23; letter-spacing: .06em; text-transform: uppercase; color: var(--core-accent-purple); margin-bottom: 14px; }
+  h1.display, h2.display, h3.display { font-family: var(--font-display); color: var(--core-text-main); }
+  h2.display {
+    font-size: clamp(32px, 2.6vw + 18px, 44px); font-weight: 650; line-height: 1.18; letter-spacing: -.03em;
+    background: var(--gradient-text-light); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    padding-bottom: .12em; margin-bottom: 10px; max-width: 720px;
+  }
+  .lede { color: var(--core-text-secondary); font-size: var(--text-lg); line-height: 1.55; letter-spacing: var(--text-lg-tracking); max-width: 680px; margin-bottom: 40px; }
+  .lede code, p code { font-family: var(--font-mono); font-size: .85em; background: var(--core-background-box); border: 1px solid var(--core-border-default); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+  h3.sub { font-family: var(--font-display); font-size: 21px; font-weight: 650; letter-spacing: -.4px; margin: 44px 0 6px; }
+  h3.sub + p.note { margin-top: 0; }
+  p.note { color: var(--core-text-secondary); font-size: var(--text-sm); letter-spacing: var(--text-sm-tracking); line-height: 1.55; max-width: 640px; margin: 4px 0 20px; }
+
+  /* hero */
+  .hero { padding: 92px 0 76px; position: relative; }
+  .hero .bars { display: flex; gap: 10px; margin: 34px 0 0; }
+  .hero .bars span { height: 10px; border-radius: var(--radius-pill); flex: 1; }
+  .hero h1 {
+    font-family: var(--font-display); font-weight: 700;
+    font-size: clamp(44px, 20px + 4.667vw, 76px); line-height: 1.08; letter-spacing: -.035em;
+    background: var(--gradient-text-light); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    padding-bottom: .12em; max-width: 860px;
+  }
+  .hero .lede { margin: 18px 0 0; }
+  .hero .meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 30px; }
+  .chip { font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: .03em; color: var(--core-text-secondary); background: var(--core-background-box); border: 1px solid var(--core-border-default); padding: 6px 12px; border-radius: var(--radius-pill); }
+
+  /* swatches */
+  .swatch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 14px; }
+  .swatch { border: 1px solid var(--core-border-default); border-radius: 12px; overflow: hidden; background: #fff; cursor: copy; transition: box-shadow var(--transition-fast), transform var(--transition-fast); }
+  .swatch:hover { box-shadow: var(--shadow-card); transform: translateY(-2px); }
+  .swatch .well { height: 84px; position: relative; }
+  .swatch .well.hairline { box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
+  .swatch .info { padding: 10px 12px 12px; }
+  .swatch .name { font-size: 13px; font-weight: 600; letter-spacing: -.1px; margin-bottom: 2px; }
+  .swatch .hex { font-family: var(--font-mono); font-size: 11.5px; color: var(--core-text-secondary); }
+  .swatch .varname { font-family: var(--font-mono); font-size: 10px; color: var(--core-text-tertiary); display: block; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ramp { display: flex; border-radius: 12px; overflow: hidden; border: 1px solid var(--core-border-default); margin-bottom: 10px; }
+  .ramp div { flex: 1; height: 64px; position: relative; cursor: copy; }
+  .ramp div span { position: absolute; left: 50%; bottom: 7px; transform: translateX(-50%); font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .02em; }
+  .ramp-caption { font-family: var(--font-mono); font-size: 11px; color: var(--core-text-tertiary); margin-bottom: 26px; }
+
+  /* gradients */
+  .grad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+  .grad-card { border: 1px solid var(--core-border-default); border-radius: var(--radius-card); overflow: hidden; cursor: copy; transition: box-shadow var(--transition-fast), transform var(--transition-fast); background: #fff; }
+  .grad-card:hover { box-shadow: var(--shadow-sm); transform: translateY(-2px); }
+  .grad-card .well { height: 120px; }
+  .grad-card .info { padding: 12px 14px 14px; }
+  .grad-card .name { font-size: 14px; font-weight: 600; letter-spacing: -.15px; }
+  .grad-card .css { font-family: var(--font-mono); font-size: 10.5px; line-height: 1.5; color: var(--core-text-secondary); display: block; margin-top: 5px; word-break: break-all; }
+
+  /* typography section */
+  .font-card { border: 1px solid var(--core-border-default); border-radius: var(--radius-card); padding: 26px 28px; margin-bottom: 14px; display: grid; grid-template-columns: 200px 1fr; gap: 28px; align-items: center; transition: box-shadow var(--transition-fast); }
+  .font-card:hover { box-shadow: var(--shadow-card); }
+  .font-card .meta .fname { font-size: 15px; font-weight: 650; font-family: var(--font-display); letter-spacing: -.2px; }
+  .font-card .meta .frole { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--core-accent-purple); margin-top: 4px; }
+  .font-card .meta .fweights { font-size: 12.5px; color: var(--core-text-secondary); margin-top: 8px; line-height: 1.5; }
+  .font-card .specimen { font-size: 40px; line-height: 1.15; letter-spacing: -.02em; overflow-wrap: anywhere; }
+  .type-row { display: grid; grid-template-columns: 230px 1fr; gap: 28px; align-items: baseline; padding: 22px 0; border-bottom: 1px solid var(--core-border-default); }
+  .type-row:first-of-type { border-top: 1px solid var(--core-border-default); }
+  .type-row .spec { font-family: var(--font-mono); font-size: 11px; line-height: 1.7; color: var(--core-text-secondary); }
+  .type-row .spec b { display: block; font-family: var(--font-body); font-size: 13px; font-weight: 600; letter-spacing: -.1px; color: var(--core-text-main); margin-bottom: 4px; }
+  .type-row .sample { min-width: 0; overflow-wrap: anywhere; }
+
+  /* icons */
+  .icon-tools { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
+  .icon-tools input { flex: 1; min-width: 220px; height: 40px; padding: 0 14px; border: 1px solid var(--core-border-hairline); border-radius: 10px; font: inherit; font-size: 14px; color: var(--core-text-main); outline: none; transition: border-color var(--transition-fast), box-shadow var(--transition-fast); background: #fff; }
+  .icon-tools input:focus { border-color: var(--core-accent-purple); box-shadow: 0 0 0 3px var(--core-accent-purple-badge); }
+  .icon-tools .count { font-family: var(--font-mono); font-size: 12px; color: var(--core-text-tertiary); }
+  .icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+  .icon-cell { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 6px 10px; border: 1px solid transparent; border-radius: 10px; cursor: copy; transition: border-color var(--transition-fast), background-color var(--transition-fast); }
+  .icon-cell:hover { background: var(--core-background-box); border-color: var(--core-border-default); }
+  .icon-cell svg { width: 22px; height: 22px; color: var(--core-text-main); }
+  .icon-cell .iname { font-family: var(--font-mono); font-size: 9px; color: var(--core-text-tertiary); text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .icon-anatomy { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 28px; }
+  .icon-anatomy .cell { flex: 1; min-width: 200px; border: 1px solid var(--core-border-default); border-radius: var(--radius-card); padding: 20px; }
+  .icon-anatomy svg { width: 28px; height: 28px; color: var(--core-text-main); margin-bottom: 12px; }
+  .icon-anatomy b { display: block; font-size: 14px; font-weight: 600; letter-spacing: -.15px; margin-bottom: 4px; }
+  .icon-anatomy span { font-size: 12.5px; line-height: 1.55; color: var(--core-text-secondary); display: block; }
+
+  /* buttons — faithful reproductions */
+  .demo-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; padding: 28px; border: 1px solid var(--core-border-default); border-radius: var(--radius-card); margin-bottom: 12px; background: #fff; }
+  .demo-row.dark { background: var(--dark-bg-elevated); border-color: var(--dark-border-default); }
+  .demo-caption { font-family: var(--font-mono); font-size: 11px; color: var(--core-text-tertiary); margin: 0 0 26px; line-height: 1.7; }
+  .cu-btn {
+    display: inline-flex; flex-shrink: 0; gap: 4px; justify-content: center; align-items: center;
+    height: 32px; padding: 8px 12px; border: none; border-radius: var(--radius-button);
+    background: var(--core-button-primary); color: #fff;
+    font-family: var(--font-body); font-size: 14px; font-weight: 600; line-height: 16px; letter-spacing: -.15px;
+    font-feature-settings: "liga" off, "clig" off, "calt" off;
+    text-decoration: none; white-space: nowrap; cursor: pointer;
+    transition: background-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+  }
+  .cu-btn:hover { background: var(--core-button-primary-hover); }
+  .cu-btn--secondary { background: var(--core-button-secondary); color: var(--core-text-main); }
+  .cu-btn--secondary:hover { background: var(--core-button-secondary-hover); }
+  .cu-btn--ghost { background: transparent; color: var(--core-text-secondary); font-weight: 500; }
+  .cu-btn--ghost:hover { background: var(--core-button-secondary); color: var(--core-text-secondary); }
+  .cu-btn--outline { background: transparent; color: var(--core-text-main); box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); }
+  .cu-btn--outline:hover { background: var(--core-background-box); }
+  .cu-btn--lg { height: 48px; padding: 14px 20px; font-size: 18px; font-weight: 650; line-height: 1.3333; letter-spacing: -.36px; font-feature-settings: "calt" off; border-radius: 10px; }
+  .cu-btn--gradient { background: var(--gradient-cta); color: #fff; }
+  .cu-btn--gradient:hover { background: var(--gradient-cta-hover); }
+  .cu-btn--v4-secondary { background: #F8F8FC; color: #7612FA; box-shadow: inset 0 0 0 1px #DACFFF; }
+  .cu-btn--v4-secondary:hover { background: #7612FA; color: #fff; box-shadow: none; }
+  .cu-btn--v4-pill { border-radius: var(--radius-pill); height: 44px; padding: 12px 22px; font-size: 16px; }
+  .cu-btn--white { background: #fff; color: var(--core-text-main); }
+  .cu-btn--white:hover { background: #E8E8E8; }
+  .tab-demo { display: inline-flex; gap: 4px; padding: 4px; background: var(--core-background-box); border-radius: 10px; }
+  .tab-demo button { display: flex; gap: 8px; align-items: center; padding: 8px 14px; border: none; border-radius: var(--radius-button); background: transparent; color: var(--core-text-secondary); font-family: var(--font-body); font-size: 14px; font-weight: 600; letter-spacing: -.15px; cursor: pointer; transition: all var(--transition-fast); }
+  .tab-demo button.active { background: #fff; color: var(--core-text-main); box-shadow: var(--shadow-tab-active); }
+
+  /* forms */
+  .form-demo { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 22px; padding: 28px; border: 1px solid var(--core-border-default); border-radius: var(--radius-card); }
+  .field label { display: block; font-size: 13px; font-weight: 600; letter-spacing: -.1px; margin-bottom: 7px; }
+  .field input[type=text], .field input[type=email], .field select, .field textarea {
+    width: 100%; height: 44px; padding: 0 14px; border: 1px solid var(--core-border-hairline); border-radius: 10px;
+    font: inherit; font-size: 14px; letter-spacing: -.15px; color: var(--core-text-main); background: #fff; outline: none;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  }
+  .field textarea { height: auto; padding: 12px 14px; resize: vertical; }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--core-accent-purple); box-shadow: 0 0 0 3px var(--core-accent-purple-badge); }
+  .field input::placeholder, .field textarea::placeholder { color: var(--core-text-tertiary); }
+  .field .help { font-size: 12px; color: var(--core-text-secondary); margin-top: 6px; }
+  .check-row { display: flex; align-items: center; gap: 10px; font-size: 14px; letter-spacing: -.15px; }
+  .check-row input { width: 18px; height: 18px; accent-color: var(--core-accent-purple); }
+  .email-capture { display: flex; gap: 8px; max-width: 460px; }
+  .email-capture input { flex: 1; }
+
+  /* badges */
+  .badge-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .cu-badge { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 600; letter-spacing: -.05px; }
+  .cu-badge.mono { font-family: var(--font-mono); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .cu-badge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* cards */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 18px; align-items: start; }
+  .cu-card { border: 1px solid var(--core-border-default); border-radius: var(--radius-card); background: #fff; overflow: hidden; transition: box-shadow var(--transition-fast), transform var(--transition-fast); }
+  .cu-card:hover { box-shadow: var(--shadow-sm); transform: translateY(-3px); }
+  .cu-card .media { height: 130px; border-bottom: 1px solid var(--core-border-default); display: flex; align-items: center; justify-content: center; }
+  .cu-card .pad { padding: 20px 22px 24px; }
+  .cu-card h4 { font-family: var(--font-display); font-size: 18px; font-weight: 650; letter-spacing: -.3px; margin-bottom: 7px; }
+  .cu-card p { font-size: 14px; line-height: 1.5; letter-spacing: -.15px; color: var(--core-text-secondary); }
+  .cu-card .cta-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 14px; color: var(--core-text-main); font-size: 14px; font-weight: 600; letter-spacing: -.15px; text-decoration: none; }
+  .cu-card .cta-link:hover { color: var(--core-accent-purple); }
+  .cu-card.box { background: var(--core-background-box); border-color: transparent; }
+
+  .pricing-card { border: 1px solid var(--core-border-default); border-radius: var(--radius-card); padding: 26px 24px; position: relative; background: #fff; }
+  .pricing-card.popular { border-color: var(--core-text-main); box-shadow: var(--shadow-card); }
+  .pricing-card .plan { font-family: var(--font-display); font-size: 17px; font-weight: 650; letter-spacing: -.2px; }
+  .pricing-card .pop-badge { position: absolute; top: -11px; right: 18px; background: var(--core-button-primary); color: #fff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: var(--radius-pill); }
+  .pricing-card .price { font-family: var(--font-display); font-size: 44px; font-weight: 700; letter-spacing: -1.3px; line-height: 1.1; margin: 14px 0 2px; }
+  .pricing-card .price span { font-family: var(--font-body); font-size: 13px; font-weight: 400; letter-spacing: -.1px; color: var(--core-text-secondary); }
+  .pricing-card ul { list-style: none; margin: 18px 0 22px; display: grid; gap: 9px; }
+  .pricing-card li { display: flex; gap: 9px; align-items: flex-start; font-size: 13.5px; letter-spacing: -.12px; color: var(--core-text-secondary); }
+  .pricing-card li svg { flex-shrink: 0; width: 16px; height: 16px; color: var(--core-text-main); margin-top: 1px; }
+  .pricing-card .cu-btn { width: 100%; }
+
+  .testimonial { border: 1px solid var(--core-border-default); border-radius: var(--radius-card); padding: 26px; background: var(--core-background-box); }
+  .testimonial .label { font-family: var(--font-mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: var(--core-text-secondary); margin-bottom: 16px; }
+  .testimonial blockquote { font-family: var(--font-display); font-size: 19px; font-weight: 500; line-height: 1.42; letter-spacing: -.3px; color: var(--core-text-main); }
+  .testimonial .who { display: flex; align-items: center; gap: 12px; margin-top: 20px; }
+  .testimonial .avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--gradient-purple-blue); }
+  .testimonial .who b { display: block; font-size: 13.5px; font-weight: 600; letter-spacing: -.1px; }
+  .testimonial .who span { font-size: 12.5px; color: var(--core-text-secondary); }
+
+  .stat-block { text-align: left; }
+  .stat-block .stat-label { font-family: var(--font-mono); font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; color: var(--core-accent-purple); margin-bottom: 8px; }
+  .stat-block .stat-num { font-family: var(--font-display); font-size: 56px; font-weight: 700; letter-spacing: -2px; line-height: 1; }
+  .stat-block .stat-desc { font-size: 14px; letter-spacing: -.15px; color: var(--core-text-secondary); margin-top: 8px; }
+
+  .faq { border-top: 1px solid var(--core-border-default); }
+  .faq details { border-bottom: 1px solid var(--core-border-default); }
+  .faq summary { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 20px 4px; cursor: pointer; list-style: none; font-family: var(--font-display); font-size: 17px; font-weight: 600; letter-spacing: -.25px; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary svg { flex-shrink: 0; transition: transform var(--transition-medium); color: var(--core-text-secondary); }
+  .faq details[open] summary svg { transform: rotate(45deg); }
+  .faq .answer { padding: 0 4px 22px; font-size: 15px; line-height: 1.6; letter-spacing: -.2px; color: var(--core-text-secondary); max-width: 700px; }
+
+  /* nav anatomy demo */
+  .nav-demo { border: 1px solid var(--core-border-default); border-radius: var(--radius-card); overflow: hidden; }
+  .nav-demo .bar { height: 76px; display: flex; align-items: center; gap: 4px; padding: 0 22px; background: #fff; }
+  .nav-demo img { height: 22px; margin-right: 14px; }
+  .nav-demo .links { display: flex; gap: 2px; margin-right: auto; }
+  .nav-demo .annos { display: flex; gap: 8px; padding: 14px 22px; background: var(--core-background-box); border-top: 1px solid var(--core-border-default); flex-wrap: wrap; }
+
+  /* dark mode section */
+  .brain-panel { background: var(--dark-bg-main); border-radius: var(--radius-md); padding: 48px clamp(22px, 4vw, 54px); color: var(--dark-text-main); }
+  .brain-panel .eyebrow { color: var(--dark-accent-purple); }
+  .brain-panel h3.bp-title { font-family: var(--font-display); font-size: clamp(28px, 3vw, 40px); font-weight: 700; letter-spacing: -.035em; line-height: 1.15; background: linear-gradient(139deg, #EEE 25%, #646464 93%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px; }
+  .brain-panel .bp-sub { color: var(--dark-text-secondary); font-size: 15px; letter-spacing: -.2px; max-width: 560px; line-height: 1.55; }
+  .brain-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-top: 34px; }
+  .brain-card { background: var(--dark-bg-panel); border: 1px solid var(--dark-border-default); border-radius: 16px; padding: 20px; }
+  .brain-card .t { font-family: var(--font-mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: var(--dark-text-tertiary); margin-bottom: 10px; }
+  .brain-card .v { font-family: var(--font-mono); font-size: 12.5px; color: var(--dark-text-secondary); line-height: 1.8; }
+  .brain-card .v b { color: var(--dark-text-main); font-weight: 500; }
+  .brain-swatches { display: flex; gap: 8px; margin-top: 30px; flex-wrap: wrap; }
+  .brain-swatches .bs { width: 92px; border-radius: 10px; overflow: hidden; border: 1px solid var(--dark-border-default); cursor: copy; }
+  .brain-swatches .bs .w { height: 52px; }
+  .brain-swatches .bs .l { font-family: var(--font-mono); font-size: 9px; padding: 6px; color: var(--dark-text-secondary); background: var(--dark-bg-panel); text-align: center; }
+
+  /* elevation / radius / spacing */
+  .shadow-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 26px; padding: 36px 30px; background: var(--core-background-box); border-radius: var(--radius-card); }
+  .shadow-cell { background: #fff; border-radius: 14px; height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; cursor: copy; }
+  .shadow-cell b { font-size: 13px; font-weight: 600; }
+  .shadow-cell span { font-family: var(--font-mono); font-size: 10px; color: var(--core-text-tertiary); }
+  .radius-row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .radius-cell { width: 108px; height: 92px; background: var(--core-accent-purple-badge); border: 1.5px solid var(--core-accent-purple); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; cursor: copy; }
+  .radius-cell b { font-size: 13px; font-weight: 600; color: var(--core-accent-purple); }
+  .radius-cell span { font-family: var(--font-mono); font-size: 10px; color: var(--core-accent-purple); opacity: .75; }
+  .space-ruler { display: grid; gap: 9px; }
+  .space-ruler .row { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: 16px; }
+  .space-ruler .row .lbl { font-family: var(--font-mono); font-size: 11px; color: var(--core-text-secondary); }
+  .space-ruler .row .bar { height: 22px; background: var(--core-accent-purple-badge); border-left: 2px solid var(--core-accent-purple); border-right: 2px solid var(--core-accent-purple); }
+
+  /* motion */
+  .motion-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+  .motion-card { border: 1px solid var(--core-border-default); border-radius: var(--radius-card); padding: 22px; }
+  .motion-card b { display: block; font-size: 14px; font-weight: 600; letter-spacing: -.15px; margin-bottom: 4px; }
+  .motion-card p { font-size: 12.5px; line-height: 1.55; color: var(--core-text-secondary); margin-bottom: 16px; }
+  .motion-card .demo { height: 56px; display: flex; align-items: center; }
+  .shimmer-text {
+    font-family: var(--font-display); font-weight: 700; font-size: 24px; letter-spacing: -.5px;
+    background: linear-gradient(100deg, #7612FA -6%, #FA12E3 40%, #12D0FA 70%, #7612FA 110%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    animation: shimmer 3.2s linear infinite;
+  }
+  @keyframes shimmer { to { background-position: -220% 0; } }
+  .hover-lift { width: 90px; height: 56px; border-radius: 12px; border: 1px solid var(--core-border-default); background: #fff; transition: box-shadow var(--transition-fast), transform var(--transition-fast); display:flex; align-items:center; justify-content:center; font-family: var(--font-mono); font-size:10px; color: var(--core-text-tertiary); }
+  .hover-lift:hover { box-shadow: var(--shadow-sm); transform: translateY(-4px); }
+  .grad-rotate { width: 90px; height: 56px; border-radius: 12px; background: linear-gradient(var(--ga,263deg), #FA12E3, #7612FA, #12D0FA); animation: gradrot 4s linear infinite; }
+  @property --ga { syntax: "<angle>"; initial-value: 263deg; inherits: false; }
+  @keyframes gradrot { to { --ga: 623deg; } }
+
+  /* footer */
+  .guide-footer { border-top: 1px solid var(--core-border-default); margin-top: 90px; padding: 40px 0 26px; color: var(--core-text-secondary); font-size: 13px; letter-spacing: -.1px; line-height: 1.7; }
+  .guide-footer .mono { font-family: var(--font-mono); font-size: 11px; color: var(--core-text-tertiary); margin-top: 12px; }
+
+  /* toast */
+  #toast { position: fixed; bottom: 26px; left: 50%; transform: translate(-50%, 80px); background: var(--core-button-primary); color: #fff; font-size: 13px; font-weight: 600; letter-spacing: -.1px; padding: 11px 18px; border-radius: 10px; box-shadow: var(--shadow-md); transition: transform .3s var(--ease-spring); z-index: 99; pointer-events: none; max-width: 90vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #toast.show { transform: translate(-50%, 0); }
+  #toast code { font-family: var(--font-mono); font-weight: 400; opacity: .8; }
+
+  table.spec-table { width: 100%; border-collapse: collapse; font-size: 13.5px; letter-spacing: -.1px; }
+  table.spec-table th { font-family: var(--font-mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: var(--core-text-tertiary); text-align: left; padding: 0 14px 10px 0; border-bottom: 1px solid var(--core-border-default); }
+  table.spec-table td { padding: 11px 14px 11px 0; border-bottom: 1px solid var(--core-border-default); vertical-align: top; }
+  table.spec-table td:first-child { font-weight: 600; white-space: nowrap; }
+  table.spec-table td code, td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--core-text-secondary); }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; gap: 0; padding: 0 var(--space-gutter-mobile); }
+    aside.toc { display: none; }
+    .topbar { height: var(--nav-height-mobile); }
+    .topbar nav { display: none; }
+    .font-card { grid-template-columns: 1fr; gap: 14px; }
+    .type-row { grid-template-columns: 1fr; gap: 8px; }
+    section.block { padding-top: 60px; }
+    .hero { padding: 56px 0 44px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <img class="logo" src="assets/clickup-logo-text.png" alt="ClickUp">
+    <span class="doc-tag">Design System · Extracted 2026-06-11</span>
+    <nav>
+      <a href="#colors">Colors</a>
+      <a href="#typography">Type</a>
+      <a href="#icons">Icons</a>
+      <a href="#buttons">Buttons</a>
+      <a href="#components">Components</a>
+    </nav>
+    <a class="cu-btn" href="#provenance" style="margin-left:10px">Provenance</a>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="toc">
+    <div class="toc-label">Contents</div>
+    <a class="num" data-n="01" href="#brand">Brand &amp; Logo</a>
+    <a class="num" data-n="02" href="#colors">Color</a>
+    <a class="num" data-n="03" href="#gradients">Gradients</a>
+    <a class="num" data-n="04" href="#typography">Typography</a>
+    <a class="num" data-n="05" href="#icons">Iconography</a>
+    <a class="num" data-n="06" href="#buttons">Buttons</a>
+    <a class="num" data-n="07" href="#forms">Forms &amp; Inputs</a>
+    <a class="num" data-n="08" href="#badges">Badges &amp; Pills</a>
+    <a class="num" data-n="09" href="#cards">Cards</a>
+    <a class="num" data-n="10" href="#components">Components</a>
+    <a class="num" data-n="11" href="#dark">Dark Mode · Brain</a>
+    <a class="num" data-n="12" href="#elevation">Elevation &amp; Radius</a>
+    <a class="num" data-n="13" href="#layout">Spacing &amp; Layout</a>
+    <a class="num" data-n="14" href="#motion">Motion</a>
+    <a class="num" data-n="15" href="#provenance">Provenance</a>
+  </aside>
+
+  <main>
+    <!-- ════════ HERO ════════ -->
+    <div class="hero">
+      <div class="eyebrow">Reverse-engineered reference · clickup.com</div>
+      <h1>The ClickUp design&nbsp;system, extracted.</h1>
+      <p class="lede">Every token on this page was pulled from ClickUp's production CSS — the <code>--Core-*</code> semantic layer, the <code>--color-v3-*</code> brand palette, the V5 button system, 289 icon-sprite symbols, and the official brand-page gradients. Click any swatch, token, or icon to copy its value.</p>
+      <div class="bars">
+        <span style="background: var(--gradient-pink-orange)"></span>
+        <span style="background: var(--gradient-purple-blue)"></span>
+        <span style="background: var(--gradient-cta)"></span>
+      </div>
+      <div class="meta-row">
+        <span class="chip">15 pages crawled</span>
+        <span class="chip">19 css bundles · 1.67 MB</span>
+        <span class="chip">804 custom properties</span>
+        <span class="chip">265 unique hex values</span>
+        <span class="chip">289 icons</span>
+        <span class="chip">4 typefaces</span>
+      </div>
+    </div>
+
+    <!-- ════════ 01 BRAND ════════ -->
+    <section class="block" id="brand">
+      <div class="eyebrow">01 · Brand &amp; Logo</div>
+      <h2 class="display">Principles, assets and references</h2>
+      <p class="lede">From <code>clickup.com/brand</code>: the identity is built on <b>two core gradients</b>, three typefaces, and a logo that may appear in black or white for special-use cases. The voice of the 2026 brand: <i>"All humans, all agents."</i></p>
+
+      <div class="demo-row" style="justify-content:center; padding:44px">
+        <img src="assets/clickup-logo-text.png" alt="ClickUp full lockup" style="max-height:54px; max-width:70%">
+      </div>
+      <p class="demo-caption">full lockup · symbol uses gradient fills, wordmark in near-black; black/white variants permitted when necessary</p>
+
+      <h3 class="sub">Logo guidance (per brand page)</h3>
+      <table class="spec-table">
+        <tr><td>Clear space</td><td>Maintain clear space around the lockup; never crowd with other elements.</td></tr>
+        <tr><td>Don't</td><td>Change the color · outline · stretch · rotate · place on colored backgrounds · use the wordmark without the symbol.</td></tr>
+        <tr><td>Co-branding</td><td>Approved partnerships may use a "Lockup + Partner Logo" arrangement.</td></tr>
+        <tr><td>Sub-brands</td><td><b>ClickUp Brain</b> (intelligence layer) and <b>Brain MAX</b> (desktop AI app) carry their own marks derived from the system.</td></tr>
+      </table>
+    </section>
+
+    <!-- ════════ 02 COLOR ════════ -->
+    <section class="block" id="colors">
+      <div class="eyebrow">02 · Color</div>
+      <h2 class="display">A neutral canvas with electric accents</h2>
+      <p class="lede">The 2026 site is overwhelmingly <b>monochrome</b> — near-black text on white with grey boxes — so the four neon accents (pink, purple, blue, orange) land hard. Each accent ships with a pastel "badge" tint. Underneath sits the older <code>v3</code> brand palette and the classic logo colors, still alive in product UI.</p>
+
+      <h3 class="sub">Core semantic — text &amp; surfaces <span style="font-family:var(--font-mono);font-size:11px;color:var(--core-text-tertiary);font-weight:400">(--Core-*)</span></h3>
+      <div class="swatch-grid">
+        <div class="swatch" data-copy="#090C1D"><div class="well" style="background:#090C1D"></div><div class="info"><div class="name">Text Primary</div><div class="hex">#090C1D</div><span class="varname">--Core-Text-Primary</span></div></div>
+        <div class="swatch" data-copy="#202020"><div class="well" style="background:#202020"></div><div class="info"><div class="name">Text Main</div><div class="hex">#202020</div><span class="varname">--Core-Text-Main</span></div></div>
+        <div class="swatch" data-copy="#646464"><div class="well" style="background:#646464"></div><div class="info"><div class="name">Text Secondary</div><div class="hex">#646464</div><span class="varname">--Core-Text-Secondary</span></div></div>
+        <div class="swatch" data-copy="#838383"><div class="well" style="background:#838383"></div><div class="info"><div class="name">Text Tertiary</div><div class="hex">#838383</div><span class="varname">--Core-Text-Tertiary</span></div></div>
+        <div class="swatch" data-copy="#FFFFFF"><div class="well hairline" style="background:#FFFFFF"></div><div class="info"><div class="name">Background Main</div><div class="hex">#FFFFFF</div><span class="varname">--Core-Background-Main</span></div></div>
+        <div class="swatch" data-copy="#F8F9FA"><div class="well hairline" style="background:#F8F9FA"></div><div class="info"><div class="name">Background Box</div><div class="hex">#F8F9FA</div><span class="varname">--Core-Background-Box / -Card</span></div></div>
+        <div class="swatch" data-copy="#E8E8E8"><div class="well hairline" style="background:#E8E8E8"></div><div class="info"><div class="name">Border Default</div><div class="hex">#E8E8E8</div><span class="varname">--Core-Border-Default</span></div></div>
+        <div class="swatch" data-copy="#CFCFCF"><div class="well hairline" style="background:#CFCFCF"></div><div class="info"><div class="name">Border Hairline</div><div class="hex">#CFCFCF</div><span class="varname">most-used hex on site (1,008×)</span></div></div>
+      </div>
+
+      <h3 class="sub">Core accents + badge tints</h3>
+      <p class="note">Saturated accent for icons/text/strokes; pastel partner for badge and chip fills.</p>
+      <div class="swatch-grid">
+        <div class="swatch" data-copy="#FF02F0"><div class="well" style="background:#FF02F0"></div><div class="info"><div class="name">Accent Pink</div><div class="hex">#FF02F0</div><span class="varname">--Core-Accents-Pink</span></div></div>
+        <div class="swatch" data-copy="#6647F0"><div class="well" style="background:#6647F0"></div><div class="info"><div class="name">Accent Purple</div><div class="hex">#6647F0</div><span class="varname">--Core-Accents-Purple</span></div></div>
+        <div class="swatch" data-copy="#0091FF"><div class="well" style="background:#0091FF"></div><div class="info"><div class="name">Accent Blue</div><div class="hex">#0091FF</div><span class="varname">--Core-Accents-Blue</span></div></div>
+        <div class="swatch" data-copy="#FC6D2D"><div class="well" style="background:#FC6D2D"></div><div class="info"><div class="name">Accent Orange</div><div class="hex">#FC6D2D</div><span class="varname">--Core-Accents-Orange</span></div></div>
+        <div class="swatch" data-copy="#FEECFC"><div class="well hairline" style="background:#FEECFC"></div><div class="info"><div class="name">Pink Badge</div><div class="hex">#FEECFC</div><span class="varname">--Core-Accents-Pink-Badge</span></div></div>
+        <div class="swatch" data-copy="#EFEDFD"><div class="well hairline" style="background:#EFEDFD"></div><div class="info"><div class="name">Purple Badge</div><div class="hex">#EFEDFD</div><span class="varname">--Core-Accents-Purple-Badge</span></div></div>
+        <div class="swatch" data-copy="#EDF6FD"><div class="well hairline" style="background:#EDF6FD"></div><div class="info"><div class="name">Blue Badge</div><div class="hex">#EDF6FD</div><span class="varname">--Core-Accents-Blue-Badge</span></div></div>
+        <div class="swatch" data-copy="#FDEDE7"><div class="well hairline" style="background:#FDEDE7"></div><div class="info"><div class="name">Orange Badge</div><div class="hex">#FDEDE7</div><span class="varname">--Core-Accents-Orange-Badge</span></div></div>
+      </div>
+
+      <h3 class="sub">Utilities — success / error / info</h3>
+      <div class="swatch-grid">
+        <div class="swatch" data-copy="#078D3B"><div class="well" style="background:#078D3B"></div><div class="info"><div class="name">Green</div><div class="hex">#078D3B</div><span class="varname">--Core-Utilities-Green</span></div></div>
+        <div class="swatch" data-copy="#F0382D"><div class="well" style="background:#F0382D"></div><div class="info"><div class="name">Red</div><div class="hex">#F0382D</div><span class="varname">--Core-Utilities-Red</span></div></div>
+        <div class="swatch" data-copy="#4A2FFF"><div class="well" style="background:#4A2FFF"></div><div class="info"><div class="name">Deep Blue</div><div class="hex">#4A2FFF</div><span class="varname">--Core-Utilities-Deep-Blue</span></div></div>
+        <div class="swatch" data-copy="#E2F8EC"><div class="well hairline" style="background:#E2F8EC"></div><div class="info"><div class="name">Green Badge</div><div class="hex">#E2F8EC</div><span class="varname">--Core-Utilities-Green-Badge</span></div></div>
+        <div class="swatch" data-copy="#FBDDDD"><div class="well hairline" style="background:#FBDDDD"></div><div class="info"><div class="name">Red Badge</div><div class="hex">#FBDDDD</div><span class="varname">--Core-Utilities-Red-Badge</span></div></div>
+        <div class="swatch" data-copy="#E3E5FB"><div class="well hairline" style="background:#E3E5FB"></div><div class="info"><div class="name">Deep Blue Badge</div><div class="hex">#E3E5FB</div><span class="varname">--Core-Utilities-Deep-Blue-Badge</span></div></div>
+      </div>
+
+      <h3 class="sub">Brand v3 palette <span style="font-family:var(--font-mono);font-size:11px;color:var(--core-text-tertiary);font-weight:400">(--color-v3-*, stored as RGB triplets)</span></h3>
+      <p class="note">The gradient-era palette that powers CTAs and illustration accents on AI and pricing pages.</p>
+      <div class="swatch-grid">
+        <div class="swatch" data-copy="#7612FA"><div class="well" style="background:#7612FA"></div><div class="info"><div class="name">v3 Purple</div><div class="hex">#7612FA</div><span class="varname">--color-v3-purple</span></div></div>
+        <div class="swatch" data-copy="#FA12E3"><div class="well" style="background:#FA12E3"></div><div class="info"><div class="name">v3 Pink</div><div class="hex">#FA12E3</div><span class="varname">--color-v3-pink</span></div></div>
+        <div class="swatch" data-copy="#12D0FA"><div class="well" style="background:#12D0FA"></div><div class="info"><div class="name">v3 Cyan</div><div class="hex">#12D0FA</div><span class="varname">CTA gradient endpoint</span></div></div>
+        <div class="swatch" data-copy="#1F7CFF"><div class="well" style="background:#1F7CFF"></div><div class="info"><div class="name">v3 Blue</div><div class="hex">#1F7CFF</div><span class="varname">--color-v3-blue</span></div></div>
+        <div class="swatch" data-copy="#40DDFF"><div class="well" style="background:#40DDFF"></div><div class="info"><div class="name">v3 Light Blue</div><div class="hex">#40DDFF</div><span class="varname">--color-v3-light-blue</span></div></div>
+        <div class="swatch" data-copy="#FFD700"><div class="well" style="background:#FFD700"></div><div class="info"><div class="name">v3 Yellow</div><div class="hex">#FFD700</div><span class="varname">--color-v3-yellow</span></div></div>
+        <div class="swatch" data-copy="#FF6221"><div class="well" style="background:#FF6221"></div><div class="info"><div class="name">v3 Orange</div><div class="hex">#FF6221</div><span class="varname">--color-v3-orange</span></div></div>
+        <div class="swatch" data-copy="#F00250"><div class="well" style="background:#F00250"></div><div class="info"><div class="name">v3 Red</div><div class="hex">#F00250</div><span class="varname">--color-v3-red</span></div></div>
+        <div class="swatch" data-copy="#21C828"><div class="well" style="background:#21C828"></div><div class="info"><div class="name">v3 Green</div><div class="hex">#21C828</div><span class="varname">--color-v3-green</span></div></div>
+        <div class="swatch" data-copy="#101F52"><div class="well" style="background:#101F52"></div><div class="info"><div class="name">Navy</div><div class="hex">#101F52</div><span class="varname">--color-primary-navy</span></div></div>
+      </div>
+
+      <h3 class="sub">Ramps</h3>
+      <div class="ramp">
+        <div style="background:#4901AA" data-copy="#4901AA"><span style="color:#fff">0</span></div>
+        <div style="background:#5500C7" data-copy="#5500C7"><span style="color:#fff">1</span></div>
+        <div style="background:#6A06EF" data-copy="#6A06EF"><span style="color:#fff">2</span></div>
+        <div style="background:#7612FA" data-copy="#7612FA"><span style="color:#fff">★</span></div>
+        <div style="background:#8020FF" data-copy="#8020FF"><span style="color:#fff">3</span></div>
+        <div style="background:#892FFF" data-copy="#892FFF"><span style="color:#fff">4</span></div>
+      </div>
+      <div class="ramp-caption">purple ramp · --color-v3-purple-0…4 · #4901AA → #892FFF</div>
+      <div class="ramp">
+        <div style="background:#070C1C" data-copy="#070C1C"><span style="color:#9aa">0</span></div>
+        <div style="background:#0A1128" data-copy="#0A1128"><span style="color:#9aa">1</span></div>
+        <div style="background:#0D1530" data-copy="#0D1530"><span style="color:#9aa">2</span></div>
+        <div style="background:#0F193D" data-copy="#0F193D"><span style="color:#9aa">3</span></div>
+        <div style="background:#15224F" data-copy="#15224F"><span style="color:#9aa">4</span></div>
+        <div style="background:#2C4085" data-copy="#2C4085"><span style="color:#cdd">5</span></div>
+      </div>
+      <div class="ramp-caption">navy-black ramp · --color-v3-black-0…5 · shadows are cast in this navy (16,30,54), never pure black</div>
+      <div class="ramp">
+        <div style="background:#514B81" data-copy="#514B81"><span style="color:#fff">0</span></div>
+        <div style="background:#7F76B3" data-copy="#7F76B3"><span style="color:#fff">1</span></div>
+        <div style="background:#B6AEE0" data-copy="#B6AEE0"><span style="color:#445">2</span></div>
+        <div style="background:#BDBDDC" data-copy="#BDBDDC"><span style="color:#445">3</span></div>
+        <div style="background:#CECEEA" data-copy="#CECEEA"><span style="color:#445">4</span></div>
+        <div style="background:#F1F1F9" data-copy="#F1F1F9"><span style="color:#667">5</span></div>
+        <div style="background:#F8F2FF" data-copy="#F8F2FF"><span style="color:#667">6</span></div>
+      </div>
+      <div class="ramp-caption">violet-grey ramp · --color-v3-grey-0…6 · ClickUp greys lean purple, never neutral</div>
+
+      <h3 class="sub">Classic palette — the logo era</h3>
+      <p class="note">The original identity colors. <code>#7B68EE</code> remains the product's signature purple and the link color (<code>--color-brand-clickup</code>).</p>
+      <div class="swatch-grid">
+        <div class="swatch" data-copy="#7B68EE"><div class="well" style="background:#7B68EE"></div><div class="info"><div class="name">ClickUp Purple</div><div class="hex">#7B68EE</div><span class="varname">--color-purple-1 · brand</span></div></div>
+        <div class="swatch" data-copy="#FD71AF"><div class="well" style="background:#FD71AF"></div><div class="info"><div class="name">Pink</div><div class="hex">#FD71AF</div><span class="varname">--color-pink-1</span></div></div>
+        <div class="swatch" data-copy="#49CCF9"><div class="well" style="background:#49CCF9"></div><div class="info"><div class="name">Blue</div><div class="hex">#49CCF9</div><span class="varname">--color-blue-1</span></div></div>
+        <div class="swatch" data-copy="#FFC800"><div class="well" style="background:#FFC800"></div><div class="info"><div class="name">Yellow</div><div class="hex">#FFC800</div><span class="varname">--color-yellow-1</span></div></div>
+        <div class="swatch" data-copy="#00B884"><div class="well" style="background:#00B884"></div><div class="info"><div class="name">Green</div><div class="hex">#00B884</div><span class="varname">--color-green-1</span></div></div>
+        <div class="swatch" data-copy="#9B51E0"><div class="well" style="background:#9B51E0"></div><div class="info"><div class="name">Violet</div><div class="hex">#9B51E0</div><span class="varname">--color-violet-1</span></div></div>
+        <div class="swatch" data-copy="#292D34"><div class="well" style="background:#292D34"></div><div class="info"><div class="name">Slate</div><div class="hex">#292D34</div><span class="varname">--color-grey-0 · product text</span></div></div>
+        <div class="swatch" data-copy="#7C828D"><div class="well" style="background:#7C828D"></div><div class="info"><div class="name">Grey</div><div class="hex">#7C828D</div><span class="varname">--color-grey-1</span></div></div>
+      </div>
+
+      <h3 class="sub">Status</h3>
+      <div class="badge-grid" style="margin-bottom:8px">
+        <span class="cu-badge" style="background:#EBF5F0;color:#008844"><i></i>Success #008844</span>
+        <span class="cu-badge" style="background:#FEF9EB;color:#B07C00"><i style="background:#F8AE00"></i>Warning #F8AE00</span>
+        <span class="cu-badge" style="background:#FCEFF0;color:#D33D44"><i></i>Error #D33D44</span>
+      </div>
+    </section>
+
+    <!-- ════════ 03 GRADIENTS ════════ -->
+    <section class="block" id="gradients">
+      <div class="eyebrow">03 · Gradients</div>
+      <h2 class="display">The gradients that shape the brand</h2>
+      <p class="lede">ClickUp's brand page calls gradients "the visual language of the brand." Two core gradients anchor the identity; the tri-color CTA gradient powers primary buttons; headlines use a subtle dark-to-grey text fill. Click to copy CSS.</p>
+      <div class="grad-grid">
+        <div class="grad-card" data-copy="linear-gradient(90deg, #FF02F0 0%, #FC6D2D 100%)">
+          <div class="well" style="background:var(--gradient-pink-orange)"></div>
+          <div class="info"><div class="name">Core · Pink → Orange</div><span class="css">linear-gradient(90deg, #FF02F0, #FC6D2D)</span></div>
+        </div>
+        <div class="grad-card" data-copy="linear-gradient(90deg, #6647F0 22.6%, #0091FF 79.33%)">
+          <div class="well" style="background:var(--gradient-purple-blue)"></div>
+          <div class="info"><div class="name">Core · Purple → Blue</div><span class="css">linear-gradient(90deg, #6647F0 22.6%, #0091FF 79.33%)</span></div>
+        </div>
+        <div class="grad-card" data-copy="linear-gradient(263deg, #FA12E3 -35%, #7612FA 41%, #12D0FA 135%)">
+          <div class="well" style="background:var(--gradient-cta)"></div>
+          <div class="info"><div class="name">Primary CTA · AI tri-color</div><span class="css">linear-gradient(263deg, #FA12E3 -35%, #7612FA 41%, #12D0FA 135%)</span></div>
+        </div>
+        <div class="grad-card" data-copy="linear-gradient(100deg, #7612FA -6%, #FA12E3 60%, #FFC800 127%)">
+          <div class="well" style="background:var(--gradient-tri-warm)"></div>
+          <div class="info"><div class="name">Warm tri-color</div><span class="css">linear-gradient(100deg, #7612FA -6%, #FA12E3 60%, #FFC800 127%)</span></div>
+        </div>
+        <div class="grad-card" data-copy="linear-gradient(45deg, #45C4F9 -0.01%, #7D09FF 50.33%, #FF0BE5 100%)">
+          <div class="well" style="background:var(--gradient-ai-sweep)"></div>
+          <div class="info"><div class="name">AI sweep</div><span class="css">linear-gradient(45deg, #45C4F9, #7D09FF 50%, #FF0BE5)</span></div>
+        </div>
+        <div class="grad-card" data-copy="linear-gradient(98deg, #202020 43.06%, #8F8F8F 91.81%)">
+          <div class="well" style="background:var(--gradient-text-light); display:flex; align-items:center; justify-content:center"><span style="font-family:var(--font-display);font-weight:700;font-size:26px;color:#fff;letter-spacing:-.5px">Aa headline fill</span></div>
+          <div class="info"><div class="name">Headline text gradient</div><span class="css">linear-gradient(98deg, #202020 43.06%, #8F8F8F 91.81%) + background-clip:text</span></div>
+        </div>
+        <div class="grad-card" data-copy="linear-gradient(0deg, #FFD700, #FF488A)">
+          <div class="well" style="background:var(--gradient-fireup)"></div>
+          <div class="info"><div class="name">Fireup <span style="font-weight:400;color:var(--core-text-tertiary)">(legacy)</span></div><span class="css">--color-ui-bg-gradient-fireup</span></div>
+        </div>
+        <div class="grad-card" data-copy="linear-gradient(0deg, #7612FA, #9E52FF)">
+          <div class="well" style="background:var(--gradient-hazeup)"></div>
+          <div class="info"><div class="name">Hazeup <span style="font-weight:400;color:var(--core-text-tertiary)">(legacy)</span></div><span class="css">--color-ui-bg-gradient-hazeup</span></div>
+        </div>
+        <div class="grad-card" data-copy="linear-gradient(0deg, #40DDFF, #0091FF, #0038FF)">
+          <div class="well" style="background:var(--gradient-skyup)"></div>
+          <div class="info"><div class="name">Skyup <span style="font-weight:400;color:var(--core-text-tertiary)">(legacy)</span></div><span class="css">--color-ui-bg-gradient-skyup</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════ 04 TYPOGRAPHY ════════ -->
+    <section class="block" id="typography">
+      <div class="eyebrow">04 · Typography</div>
+      <h2 class="display">Three working typefaces, one for play</h2>
+      <p class="lede">All four families ship as self-hosted <b>variable fonts</b>. Plus Jakarta Sans owns every headline (including weight <code>650</code> — they use the variable axis, not just named weights). Inter runs body and UI with tight negative tracking. Sometype Mono is the signature: every eyebrow, caption and stat label, always uppercase.</p>
+
+      <div class="font-card">
+        <div class="meta">
+          <div class="fname">Plus Jakarta Sans</div>
+          <div class="frole">Headlines</div>
+          <div class="fweights">Variable 200–800 + italic<br>Used at 600 / 650 / 700<br>Tracking −0.015em to −0.035em</div>
+        </div>
+        <div class="specimen" style="font-family:var(--font-display); font-weight:700">Maximize human productivity</div>
+      </div>
+      <div class="font-card">
+        <div class="meta">
+          <div class="fname">Inter</div>
+          <div class="frole">Body &amp; UI</div>
+          <div class="fweights">Variable 100–900 + italic<br>Used at 400 / 500 / 600<br>Ligatures disabled in buttons</div>
+        </div>
+        <div class="specimen" style="font-family:var(--font-body); font-weight:400; font-size:30px; letter-spacing:-.32px">All humans, all agents — work in one place.</div>
+      </div>
+      <div class="font-card">
+        <div class="meta">
+          <div class="fname">Sometype Mono</div>
+          <div class="frole">Captions &amp; Labels</div>
+          <div class="fweights">Variable 400–700<br>Used at 500, always UPPERCASE<br>Tracking +0.06em</div>
+        </div>
+        <div class="specimen" style="font-family:var(--font-mono); font-weight:500; font-size:24px; text-transform:uppercase; letter-spacing:.06em; color:var(--core-accent-purple)">Infinite memory_</div>
+      </div>
+      <div class="font-card">
+        <div class="meta">
+          <div class="fname">Shantell Sans</div>
+          <div class="frole">Accent · annotations</div>
+          <div class="fweights">Variable 300–800<br>Handwritten notes &amp; doodles<br>sparing, illustrative use</div>
+        </div>
+        <div class="specimen" style="font-family:var(--font-accent); font-weight:600; font-size:30px; color:var(--core-accent-pink)">this one's for the humans!</div>
+      </div>
+
+      <h3 class="sub">Type scale</h3>
+      <p class="note">Desktop values; headings step down at the 900px and 600px breakpoints (H1 60 → 48 → 36). Headlines optionally take the gradient text fill.</p>
+
+      <div class="type-row">
+        <div class="spec"><b>Hero · display-2xl</b>PJS 700 · clamp(48px → 76px)<br>lh 1.1 · ls −0.035em · gradient fill</div>
+        <div class="sample" style="font-family:var(--font-display);font-weight:700;font-size:clamp(40px,5vw,68px);line-height:1.1;letter-spacing:-.035em;background:var(--gradient-text-light);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;padding-bottom:.1em">Software to replace all software</div>
+      </div>
+      <div class="type-row">
+        <div class="spec"><b>H1</b>PJS 700 · 60px / 1.1 · ls −2.1px</div>
+        <div class="sample" style="font-family:var(--font-display);font-weight:700;font-size:clamp(36px,4vw,60px);line-height:1.1;letter-spacing:-2.1px">One place for every team</div>
+      </div>
+      <div class="type-row">
+        <div class="spec"><b>H2</b>PJS 650 · 48px / 1.25 · ls −1.68px</div>
+        <div class="sample" style="font-family:var(--font-display);font-weight:650;font-size:clamp(32px,3.4vw,48px);line-height:1.25;letter-spacing:-1.68px">AI solutions for every team</div>
+      </div>
+      <div class="type-row">
+        <div class="spec"><b>H3</b>PJS 650 · 34px / 1.3 · ls −0.91px</div>
+        <div class="sample" style="font-family:var(--font-display);font-weight:650;font-size:34px;line-height:1.3;letter-spacing:-.91px">Connected search across apps</div>
+      </div>
+      <div class="type-row">
+        <div class="spec"><b>H4</b>PJS 600 · 24px / 1.35 · ls −0.54px</div>
+        <div class="sample" style="font-family:var(--font-display);font-weight:600;font-size:24px;line-height:1.35;letter-spacing:-.54px">Automations that run themselves</div>
+      </div>
+      <div class="type-row">
+        <div class="spec"><b>Body LG · text-lg</b>Inter 400 · 18px / 1.33 · ls −0.25px</div>
+        <div class="sample" style="font-size:18px;line-height:1.3333;letter-spacing:-.25px;color:var(--core-text-secondary)">60% of work is lost in context — and AI is lost without it. Bring tasks, docs, chat, and goals into one workspace.</div>
+      </div>
+      <div class="type-row">
+        <div class="spec"><b>Body MD · text-md</b>Inter 400 · 16px / 1.375 · ls −0.32px</div>
+        <div class="sample" style="font-size:16px;line-height:1.375;letter-spacing:-.32px;color:var(--core-text-secondary)">Plan, track, and manage any type of work with project management that flexes to your team's needs.</div>
+      </div>
+      <div class="type-row">
+        <div class="spec"><b>Body SM · text-sm</b>Inter 400 · 14px / 1.43 · ls −0.15px</div>
+        <div class="sample" style="font-size:14px;line-height:1.4286;letter-spacing:-.15px;color:var(--core-text-secondary)">Free forever. No credit card required. Used by 3 million+ teams.</div>
+      </div>
+      <div class="type-row">
+        <div class="spec"><b>Caption · text-xs</b>Inter 400 · 12px / 1.5 · ls −0.12px</div>
+        <div class="sample" style="font-size:12px;line-height:1.5;letter-spacing:-.12px;color:var(--core-text-secondary)">By continuing, you agree to our Terms of Service and Privacy Policy.</div>
+      </div>
+      <div class="type-row">
+        <div class="spec"><b>Eyebrow</b>Sometype Mono 500 · 13px<br>UPPERCASE · ls +0.06em</div>
+        <div class="sample"><span class="eyebrow" style="margin:0">Project Management</span></div>
+      </div>
+      <div class="type-row">
+        <div class="spec"><b>Button</b>Inter 600 · 14px / 16px · ls −0.15px<br>liga/clig/calt off</div>
+        <div class="sample"><span style="font-weight:600;font-size:14px;line-height:1.143;letter-spacing:-.15px;font-feature-settings:'liga' off,'clig' off,'calt' off">Get started — it's free</span></div>
+      </div>
+    </section>
+
+    <!-- ════════ 05 ICONS ════════ -->
+    <section class="block" id="icons">
+      <div class="eyebrow">05 · Iconography</div>
+      <h2 class="display">289 symbols, two grids, round caps</h2>
+      <p class="lede">ClickUp serves two SVG sprites: <code>icons.svg</code> (283 symbols) and <code>cuicons-v3.svg</code> (287 symbols, 281 shared) — both downloaded into this kit, 289 unique icons after dedupe. Icons draw with <b>1.5px–2px rounded strokes</b> on 16/20/24 grids, inherit <code>currentColor</code>, and switch to filled evenodd paths at small sizes.</p>
+
+      <div class="icon-anatomy">
+        <div class="cell">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <b>Stroke · 1.5px round</b>
+          <span>Utility icons on 16px grid. <code style="font-family:var(--font-mono);font-size:10px">stroke="currentColor" stroke-linecap="round"</code></span>
+        </div>
+        <div class="cell">
+          <svg viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M18.7071 7.29289C19.0976 7.68342 19.0976 8.31658 18.7071 8.70711L10.7112 16.703L10.7076 16.7066C10.317 17.0972 9.68342 17.0976 9.29289 16.7071L5.29289 12.7071C4.90237 12.3166 4.90237 11.6834 5.29289 11.2929C5.68342 10.9024 6.31658 10.9024 6.70711 11.2929L10 14.5858L17.2929 7.29289C17.6834 6.90237 18.3166 6.90237 18.7071 7.29289Z" fill="currentColor"/></svg>
+          <b>Fill · evenodd</b>
+          <span>24px grid; strokes pre-expanded to fills for crisp small rendering.</span>
+        </div>
+        <div class="cell">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <b>Chevrons &amp; arrows</b>
+          <span>Navigation set; 10×6 mini-chevrons in dropdowns, 1.3–1.5px strokes.</span>
+        </div>
+      </div>
+
+      <h3 class="sub">Official sprite library</h3>
+      <p class="note">Loaded live from the downloaded sprites. Click an icon to copy its <code>&lt;use&gt;</code> snippet.</p>
+      <div class="icon-tools">
+        <input type="text" id="iconSearch" placeholder="Search icons… (e.g. arrow, ai, calendar, chat)">
+        <span class="count" id="iconCount">loading…</span>
+      </div>
+      <div class="icon-grid" id="iconGrid"></div>
+    </section>
+
+    <!-- ════════ 06 BUTTONS ════════ -->
+    <section class="block" id="buttons">
+      <div class="eyebrow">06 · Buttons</div>
+      <h2 class="display">From neon gradient to matte black</h2>
+      <p class="lede">The 2026 system (<code>CuButtonV5</code>) is strikingly restrained: primary buttons are <b>flat #202020</b>, 32px tall, 8px radius, Inter 600 with ligatures off. The famous tri-color gradient survives as the AI-era CTA (<code>CuButtonV4</code>) on pricing and Brain pages.</p>
+
+      <h3 class="sub">V5 — current system</h3>
+      <div class="demo-row">
+        <button class="cu-btn">Sign Up</button>
+        <button class="cu-btn cu-btn--secondary">Get a Demo</button>
+        <button class="cu-btn cu-btn--outline">Contact Sales</button>
+        <button class="cu-btn cu-btn--ghost">Login</button>
+        <div class="tab-demo" role="tablist">
+          <button class="active">Monthly</button>
+          <button>Yearly</button>
+        </div>
+      </div>
+      <p class="demo-caption">primary · secondary · outline · ghost/nav · tab — h32 · pad 8×12 · r8 · Inter 600 14/16 · ls −.15px · hover = bg shift .2s ease</p>
+
+      <div class="demo-row">
+        <button class="cu-btn cu-btn--lg">Get Started. It's FREE</button>
+        <button class="cu-btn cu-btn--lg cu-btn--gradient">Try ClickUp Brain</button>
+      </div>
+      <p class="demo-caption">button-large — 18px · weight 650 · ls −.36px · the gradient variant is --color-button-primary-background</p>
+
+      <h3 class="sub">V4 — gradient era (AI &amp; pricing pages)</h3>
+      <div class="demo-row">
+        <button class="cu-btn cu-btn--v4-pill cu-btn--gradient">Get AI Super Credits</button>
+        <button class="cu-btn cu-btn--v4-pill cu-btn--v4-secondary">Build your own agent</button>
+        <button class="cu-btn cu-btn--v4-pill" style="background:#000">Book a demo</button>
+      </div>
+      <p class="demo-caption">v4 primary gradient (hover deepens) · secondary #F8F8FC + #7612FA + 1px #DACFFF ring (hover fills purple) · tertiary black (hover 70%)</p>
+
+      <div class="demo-row dark">
+        <button class="cu-btn cu-btn--white">Sign Up</button>
+        <button class="cu-btn" style="background:rgba(255,255,255,.07);">Watch Demo</button>
+        <button class="cu-btn cu-btn--gradient">Try Brain MAX</button>
+      </div>
+      <p class="demo-caption">on dark "Brain" surfaces — white fill, ghost rgba(255,255,255,.07), gradient unchanged</p>
+
+      <h3 class="sub">Anatomy</h3>
+      <table class="spec-table">
+        <tr><th>Property</th><th>V5 regular</th><th>V5 large</th><th>V4 pill</th></tr>
+        <tr><td>Height</td><td class="mono">32px</td><td class="mono">48px</td><td class="mono">44px</td></tr>
+        <tr><td>Padding</td><td class="mono">8px 12px</td><td class="mono">14px 20px</td><td class="mono">12px 22px</td></tr>
+        <tr><td>Radius</td><td class="mono">8px</td><td class="mono">10–12px</td><td class="mono">999px (pill)</td></tr>
+        <tr><td>Type</td><td class="mono">Inter 600 · 14/16 · −.15px</td><td class="mono">Inter 650 · 18/24 · −.36px</td><td class="mono">Inter 600 · 16px</td></tr>
+        <tr><td>Transition</td><td class="mono" colspan="3">background-color .2s ease, color .2s ease</td></tr>
+        <tr><td>Detail</td><td class="mono" colspan="3">font-feature-settings: "liga" off, "clig" off, "calt" off · gap 4px for icon+label</td></tr>
+      </table>
+    </section>
+
+    <!-- ════════ 07 FORMS ════════ -->
+    <section class="block" id="forms">
+      <div class="eyebrow">07 · Forms &amp; Inputs</div>
+      <h2 class="display">Quiet fields, purple focus</h2>
+      <p class="lede">Marketing forms (Marketo-powered) keep inputs minimal: white field, <code>#CFCFCF</code> hairline border, 10px radius, 44px height. Focus swaps the border to accent purple with a soft badge-tint halo.</p>
+      <div class="form-demo">
+        <div class="field">
+          <label>Work email</label>
+          <input type="email" placeholder="name@company.com">
+          <div class="help">Free forever. No credit card.</div>
+        </div>
+        <div class="field">
+          <label>Team size</label>
+          <select><option>1 – 10</option><option>11 – 50</option><option>51 – 200</option><option>200+</option></select>
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>How will you use ClickUp?</label>
+          <textarea rows="3" placeholder="Projects, docs, chat…"></textarea>
+        </div>
+        <label class="check-row"><input type="checkbox" checked> Send me product updates</label>
+        <div style="display:flex;align-items:flex-end;justify-content:flex-end"><button class="cu-btn">Get Started</button></div>
+      </div>
+      <h3 class="sub">Email capture pattern</h3>
+      <div class="demo-row" style="background:var(--core-background-box);border-color:transparent">
+        <div class="email-capture" style="flex:1">
+          <input type="email" placeholder="Enter your work email" style="height:44px;padding:0 14px;border:1px solid var(--core-border-hairline);border-radius:10px;font:inherit;font-size:14px;outline:none;background:#fff">
+          <button class="cu-btn" style="height:44px;padding:0 18px">Sign Up</button>
+        </div>
+      </div>
+      <p class="demo-caption">hero + footer CTA rows pair a single email input with the primary button, caption in text-xs below</p>
+    </section>
+
+    <!-- ════════ 08 BADGES ════════ -->
+    <section class="block" id="badges">
+      <div class="eyebrow">08 · Badges &amp; Pills</div>
+      <h2 class="display">Accent + badge-tint pairs</h2>
+      <p class="lede">Every accent has a designed pastel partner — badge background takes the tint, text takes the full accent. Mono variants label categories; dot variants signal status.</p>
+      <div class="badge-grid">
+        <span class="cu-badge" style="background:var(--core-accent-pink-badge);color:var(--core-accent-pink)">New</span>
+        <span class="cu-badge" style="background:var(--core-accent-purple-badge);color:var(--core-accent-purple)">AI</span>
+        <span class="cu-badge" style="background:var(--core-accent-blue-badge);color:var(--core-accent-blue)">Beta</span>
+        <span class="cu-badge" style="background:var(--core-accent-orange-badge);color:var(--core-accent-orange)">Popular</span>
+        <span class="cu-badge" style="background:var(--core-utility-green-badge);color:var(--core-utility-green)"><i></i>Live</span>
+        <span class="cu-badge" style="background:var(--core-utility-red-badge);color:var(--core-utility-red)"><i></i>Deprecated</span>
+        <span class="cu-badge" style="background:var(--core-utility-deep-blue-badge);color:var(--core-utility-deep-blue)">Enterprise</span>
+        <span class="cu-badge mono" style="background:var(--core-background-box);color:var(--core-text-secondary);border:1px solid var(--core-border-default)">Projects</span>
+        <span class="cu-badge mono" style="background:var(--core-accent-purple-badge);color:var(--core-accent-purple)">Brain</span>
+        <span class="cu-badge" style="background:var(--core-button-primary);color:#fff">Most Popular</span>
+      </div>
+    </section>
+
+    <!-- ════════ 09 CARDS ════════ -->
+    <section class="block" id="cards">
+      <div class="eyebrow">09 · Cards</div>
+      <h2 class="display">Hairline borders, generous radius</h2>
+      <p class="lede">Cards are white or <code>#F8F9FA</code> boxes with <code>#E8E8E8</code> borders and 12–16px radius. Elevation appears only on hover (<code>0 4px 10px rgba(13,21,48,.05)</code> → shadow-sm). Media corners use the dedicated 14px <code>--border-radius-v3-media</code>.</p>
+      <div class="card-grid">
+        <div class="cu-card">
+          <div class="media" style="background:var(--core-accent-purple-badge)">
+            <svg width="38" height="38" viewBox="0 0 16 16" fill="none" style="color:var(--core-accent-purple)"><path d="M5.33333 5.33333V3.46667C5.33333 2.71993 5.33333 2.34656 5.47866 2.06135C5.60648 1.81046 5.81046 1.60648 6.06135 1.47866C6.34656 1.33333 6.71993 1.33333 7.46667 1.33333H12.5333C13.2801 1.33333 13.6534 1.33333 13.9387 1.47866C14.1895 1.60648 14.3935 1.81046 14.5213 2.06135C14.6667 2.34656 14.6667 2.71993 14.6667 3.46667V8.53333C14.6667 9.28007 14.6667 9.65344 14.5213 9.93865C14.3935 10.1895 14.1895 10.3935 13.9387 10.5213C13.6534 10.6667 13.2801 10.6667 12.5333 10.6667H10.6667M3.46667 14.6667H8.53333C9.28007 14.6667 9.65344 14.6667 9.93865 14.5213C10.1895 14.3935 10.3935 14.1895 10.5213 13.9387C10.6667 13.6534 10.6667 13.2801 10.6667 12.5333V7.46667C10.6667 6.71993 10.6667 6.34656 10.5213 6.06135C10.3935 5.81046 10.1895 5.60648 9.93865 5.47866C9.65344 5.33333 9.28007 5.33333 8.53333 5.33333H3.46667C2.71993 5.33333 2.34656 5.33333 2.06135 5.47866C1.81046 5.60648 1.60648 5.81046 1.47866 6.06135C1.33333 6.34656 1.33333 6.71993 1.33333 7.46667V12.5333C1.33333 13.2801 1.33333 13.6534 1.47866 13.9387C1.60648 14.1895 1.81046 14.3935 2.06135 14.5213C2.34656 14.6667 2.71993 14.6667 3.46667 14.6667Z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="pad">
+            <h4>Feature card</h4>
+            <p>Icon well in a badge tint, PJS 650 title at 18px, Inter 14 secondary copy.</p>
+            <a class="cta-link" href="#cards">Explore solution <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+          </div>
+        </div>
+        <div class="cu-card box">
+          <div class="pad" style="padding-top:24px">
+            <span class="cu-badge mono" style="background:#fff;color:var(--core-text-secondary);border:1px solid var(--core-border-default);margin-bottom:14px">Template</span>
+            <h4>Box card</h4>
+            <p>Background-box variant: <span style="font-family:var(--font-mono);font-size:11px">#F8F9FA</span> fill, border dropped, used for template and resource grids.</p>
+            <a class="cta-link" href="#cards">Use template <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+          </div>
+        </div>
+        <div class="testimonial">
+          <div class="label">Customer story</div>
+          <blockquote>"We replaced five tools with one. ClickUp is the only place work actually happens."</blockquote>
+          <div class="who">
+            <div class="avatar"></div>
+            <div><b>Alex Rivera</b><span>VP Operations, Finastra</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════ 10 COMPONENTS ════════ -->
+    <section class="block" id="components">
+      <div class="eyebrow">10 · Components</div>
+      <h2 class="display">Recurring patterns across the site</h2>
+      <p class="lede">The pieces that repeat on nearly every page: the 76px glass nav, pricing cards, mono-labeled stats, and FAQ accordions.</p>
+
+      <h3 class="sub">Navigation bar</h3>
+      <div class="nav-demo">
+        <div class="bar">
+          <img src="assets/clickup-logo-text.png" alt="ClickUp">
+          <div class="links">
+            <a class="cu-btn cu-btn--ghost" href="#components" style="background:linear-gradient(100deg,#7612FA -6%,#FA12E3 60%,#FFC800 127%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:600">Brain AI</a>
+            <a class="cu-btn cu-btn--ghost" href="#components">Product <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="m1 1 4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+            <a class="cu-btn cu-btn--ghost" href="#components">Solutions <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="m1 1 4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+            <a class="cu-btn cu-btn--ghost" href="#components">Learn</a>
+            <a class="cu-btn cu-btn--ghost" href="#components">Pricing</a>
+          </div>
+          <a class="cu-btn cu-btn--outline" href="#components">Get a Demo</a>
+          <a class="cu-btn cu-btn--ghost" href="#components">Login</a>
+          <a class="cu-btn" href="#components">Sign Up</a>
+        </div>
+        <div class="annos">
+          <span class="chip">height 76px (60 mobile)</span>
+          <span class="chip">container 1120px</span>
+          <span class="chip">links: Inter 14/500 · #646464 · hover #F0F0F0 r8</span>
+          <span class="chip">"Brain AI" gets gradient text + shimmer</span>
+          <span class="chip">bg rgba(255,255,255,.82) + blur</span>
+        </div>
+      </div>
+
+      <h3 class="sub">Pricing cards</h3>
+      <div class="card-grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+        <div class="pricing-card">
+          <div class="plan">Free Forever</div>
+          <div class="price">$0 <span>per member / month</span></div>
+          <ul>
+            <li><svg viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M18.7071 7.29289C19.0976 7.68342 19.0976 8.31658 18.7071 8.70711L10.7112 16.703L10.7076 16.7066C10.317 17.0972 9.68342 17.0976 9.29289 16.7071L5.29289 12.7071C4.90237 12.3166 4.90237 11.6834 5.29289 11.2929C5.68342 10.9024 6.31658 10.9024 6.70711 11.2929L10 14.5858L17.2929 7.29289C17.6834 6.90237 18.3166 6.90237 18.7071 7.29289Z" fill="currentColor"/></svg>60MB storage</li>
+            <li><svg viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M18.7071 7.29289C19.0976 7.68342 19.0976 8.31658 18.7071 8.70711L10.7112 16.703L10.7076 16.7066C10.317 17.0972 9.68342 17.0976 9.29289 16.7071L5.29289 12.7071C4.90237 12.3166 4.90237 11.6834 5.29289 11.2929C5.68342 10.9024 6.31658 10.9024 6.70711 11.2929L10 14.5858L17.2929 7.29289C17.6834 6.90237 18.3166 6.90237 18.7071 7.29289Z" fill="currentColor"/></svg>Unlimited tasks</li>
+            <li><svg viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M18.7071 7.29289C19.0976 7.68342 19.0976 8.31658 18.7071 8.70711L10.7112 16.703L10.7076 16.7066C10.317 17.0972 9.68342 17.0976 9.29289 16.7071L5.29289 12.7071C4.90237 12.3166 4.90237 11.6834 5.29289 11.2929C5.68342 10.9024 6.31658 10.9024 6.70711 11.2929L10 14.5858L17.2929 7.29289C17.6834 6.90237 18.3166 6.90237 18.7071 7.29289Z" fill="currentColor"/></svg>Collaborative Docs</li>
+          </ul>
+          <button class="cu-btn cu-btn--secondary">Get Started</button>
+        </div>
+        <div class="pricing-card popular">
+          <div class="pop-badge">Most Popular</div>
+          <div class="plan">Unlimited</div>
+          <div class="price">$7 <span>per member / month</span></div>
+          <ul>
+            <li><svg viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M18.7071 7.29289C19.0976 7.68342 19.0976 8.31658 18.7071 8.70711L10.7112 16.703L10.7076 16.7066C10.317 17.0972 9.68342 17.0976 9.29289 16.7071L5.29289 12.7071C4.90237 12.3166 4.90237 11.6834 5.29289 11.2929C5.68342 10.9024 6.31658 10.9024 6.70711 11.2929L10 14.5858L17.2929 7.29289C17.6834 6.90237 18.3166 6.90237 18.7071 7.29289Z" fill="currentColor"/></svg>Unlimited storage</li>
+            <li><svg viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M18.7071 7.29289C19.0976 7.68342 19.0976 8.31658 18.7071 8.70711L10.7112 16.703L10.7076 16.7066C10.317 17.0972 9.68342 17.0976 9.29289 16.7071L5.29289 12.7071C4.90237 12.3166 4.90237 11.6834 5.29289 11.2929C5.68342 10.9024 6.31658 10.9024 6.70711 11.2929L10 14.5858L17.2929 7.29289C17.6834 6.90237 18.3166 6.90237 18.7071 7.29289Z" fill="currentColor"/></svg>Unlimited integrations</li>
+            <li><svg viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M18.7071 7.29289C19.0976 7.68342 19.0976 8.31658 18.7071 8.70711L10.7112 16.703L10.7076 16.7066C10.317 17.0972 9.68342 17.0976 9.29289 16.7071L5.29289 12.7071C4.90237 12.3166 4.90237 11.6834 5.29289 11.2929C5.68342 10.9024 6.31658 10.9024 6.70711 11.2929L10 14.5858L17.2929 7.29289C17.6834 6.90237 18.3166 6.90237 18.7071 7.29289Z" fill="currentColor"/></svg>AI compatible</li>
+          </ul>
+          <button class="cu-btn">Get Started</button>
+        </div>
+        <div class="pricing-card">
+          <div class="plan">Enterprise</div>
+          <div class="price" style="font-size:30px;letter-spacing:-.8px;padding-top:8px">Let's talk <span style="display:block;margin-top:4px">custom pricing</span></div>
+          <ul>
+            <li><svg viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M18.7071 7.29289C19.0976 7.68342 19.0976 8.31658 18.7071 8.70711L10.7112 16.703L10.7076 16.7066C10.317 17.0972 9.68342 17.0976 9.29289 16.7071L5.29289 12.7071C4.90237 12.3166 4.90237 11.6834 5.29289 11.2929C5.68342 10.9024 6.31658 10.9024 6.70711 11.2929L10 14.5858L17.2929 7.29289C17.6834 6.90237 18.3166 6.90237 18.7071 7.29289Z" fill="currentColor"/></svg>White glove onboarding</li>
+            <li><svg viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M18.7071 7.29289C19.0976 7.68342 19.0976 8.31658 18.7071 8.70711L10.7112 16.703L10.7076 16.7066C10.317 17.0972 9.68342 17.0976 9.29289 16.7071L5.29289 12.7071C4.90237 12.3166 4.90237 11.6834 5.29289 11.2929C5.68342 10.9024 6.31658 10.9024 6.70711 11.2929L10 14.5858L17.2929 7.29289C17.6834 6.90237 18.3166 6.90237 18.7071 7.29289Z" fill="currentColor"/></svg>SOC 2 · ISO · HIPAA</li>
+            <li><svg viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M18.7071 7.29289C19.0976 7.68342 19.0976 8.31658 18.7071 8.70711L10.7112 16.703L10.7076 16.7066C10.317 17.0972 9.68342 17.0976 9.29289 16.7071L5.29289 12.7071C4.90237 12.3166 4.90237 11.6834 5.29289 11.2929C5.68342 10.9024 6.31658 10.9024 6.70711 11.2929L10 14.5858L17.2929 7.29289C17.6834 6.90237 18.3166 6.90237 18.7071 7.29289Z" fill="currentColor"/></svg>Advanced permissions</li>
+          </ul>
+          <button class="cu-btn cu-btn--outline">Contact Sales</button>
+        </div>
+      </div>
+
+      <h3 class="sub">Stat blocks</h3>
+      <div class="demo-row" style="gap:54px">
+        <div class="stat-block">
+          <div class="stat-label">Active Teams</div>
+          <div class="stat-num">3M+</div>
+          <div class="stat-desc">teams run on ClickUp</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-label">Time Saved</div>
+          <div class="stat-num">1.1<span style="font-size:32px">days</span></div>
+          <div class="stat-desc">saved per week, per user</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-label">Productivity</div>
+          <div class="stat-num" style="background:var(--gradient-purple-blue);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">+30%</div>
+          <div class="stat-desc">faster project delivery</div>
+        </div>
+      </div>
+      <p class="demo-caption">mono uppercase label in accent purple (#6647F0) · PJS 700 number · Inter secondary description</p>
+
+      <h3 class="sub">FAQ accordion</h3>
+      <div class="faq">
+        <details open>
+          <summary>What does "design tokens" mean here? <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></summary>
+          <div class="answer">Named, reusable values — colors, type styles, spacing, radii, shadows — extracted from ClickUp's production CSS custom properties and recompiled into <code>tokens.css</code> / <code>tokens.json</code> in this kit.</div>
+        </details>
+        <details>
+          <summary>Border-bottom rows, PJS 600 titles, plus icon rotates 45° <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></summary>
+          <div class="answer">The production FAQ uses exactly this pattern: 1px #E8E8E8 dividers, 17px Plus Jakarta Sans question, secondary-grey answer capped near 700px measure.</div>
+        </details>
+        <details>
+          <summary>Where do the icons come from? <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></summary>
+          <div class="answer">Directly from ClickUp's two production sprites (<code>/assets/icons.svg</code>, <code>/assets/cuicons-v3.svg</code>), copied into <code>assets/</code> — 289 unique symbols, rendered above via <code>&lt;use&gt;</code>.</div>
+        </details>
+      </div>
+    </section>
+
+    <!-- ════════ 11 DARK / BRAIN ════════ -->
+    <section class="block" id="dark">
+      <div class="eyebrow">11 · Dark Mode — "Brain" surfaces</div>
+      <h2 class="display">The AI pages go full black</h2>
+      <p class="lede">Brain and AI pages flip to true-black surfaces (<code>--brain-*</code> tokens): #000 canvas, #0A0A0A panels, #2A2A2A borders, soft-lavender accents, and mono labels glowing in tertiary grey. Headlines switch to an #EEE→#646464 gradient fill.</p>
+      <div class="brain-panel">
+        <div class="eyebrow">ClickUp Brain</div>
+        <h3 class="bp-title">The only AI that works where you work</h3>
+        <p class="bp-sub">One AI to manage your tasks, docs, and team — with infinite memory of your workspace context.</p>
+        <div class="brain-cards">
+          <div class="brain-card"><div class="t">Surfaces</div><div class="v"><b>#000000</b> canvas<br><b>#0A0A0A</b> panel<br><b>#111111</b> elevated<br><b>#242424</b> pill</div></div>
+          <div class="brain-card"><div class="t">Borders</div><div class="v"><b>#2A2A2A</b> default<br><b>#222222</b> subtle<br>1px, never heavier</div></div>
+          <div class="brain-card"><div class="t">Text</div><div class="v"><b>#EEEEEE</b> main<br><b>#B4B4B4</b> secondary<br><b>#7B7B7B</b> tertiary</div></div>
+          <div class="brain-card"><div class="t">Accents</div><div class="v"><b style="color:#B38CFF">#B38CFF</b> purple<br><b style="color:#3DD68C">#3DD68C</b> green<br><b style="color:#ED5F00">#ED5F00</b> orange</div></div>
+        </div>
+        <div class="brain-swatches">
+          <div class="bs" data-copy="#000000"><div class="w" style="background:#000"></div><div class="l">#000000</div></div>
+          <div class="bs" data-copy="#0A0A0A"><div class="w" style="background:#0A0A0A"></div><div class="l">#0A0A0A</div></div>
+          <div class="bs" data-copy="#111111"><div class="w" style="background:#111"></div><div class="l">#111111</div></div>
+          <div class="bs" data-copy="#2A2A2A"><div class="w" style="background:#2A2A2A"></div><div class="l">#2A2A2A</div></div>
+          <div class="bs" data-copy="#B38CFF"><div class="w" style="background:#B38CFF"></div><div class="l">#B38CFF</div></div>
+          <div class="bs" data-copy="#7B68EE"><div class="w" style="background:#7B68EE"></div><div class="l">#7B68EE</div></div>
+          <div class="bs" data-copy="#3DD68C"><div class="w" style="background:#3DD68C"></div><div class="l">#3DD68C</div></div>
+          <div class="bs" data-copy="#ED5F00"><div class="w" style="background:#ED5F00"></div><div class="l">#ED5F00</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════ 12 ELEVATION & RADIUS ════════ -->
+    <section class="block" id="elevation">
+      <div class="eyebrow">12 · Elevation &amp; Radius</div>
+      <h2 class="display">Navy shadows, friendly corners</h2>
+      <p class="lede">Shadows are tinted with navy <code>rgb(16,30,54)</code> at 6–10% — never pure black — so elevation feels airy. The radius scale runs 4→60px with component-level conventions: buttons 8, cards 12–16, media 14, pills 999.</p>
+      <h3 class="sub">Shadow scale</h3>
+      <div class="shadow-grid">
+        <div class="shadow-cell" style="box-shadow:var(--shadow-xs)" data-copy="0 4px 12px rgba(16,30,54,0.06)"><b>xs</b><span>0 4 12 · 6%</span></div>
+        <div class="shadow-cell" style="box-shadow:var(--shadow-sm)" data-copy="0 10px 25px rgba(16,30,54,0.09)"><b>sm</b><span>0 10 25 · 9%</span></div>
+        <div class="shadow-cell" style="box-shadow:var(--shadow-md)" data-copy="0 20px 60px rgba(16,30,54,0.10)"><b>md</b><span>0 20 60 · 10%</span></div>
+        <div class="shadow-cell" style="box-shadow:var(--shadow-lg)" data-copy="0 16px 78px rgba(16,30,54,0.10)"><b>lg</b><span>0 16 78 · 10%</span></div>
+        <div class="shadow-cell" style="box-shadow:var(--shadow-xl)" data-copy="0 34px 54px rgba(16,30,54,0.10)"><b>xl</b><span>0 34 54 · 10%</span></div>
+        <div class="shadow-cell" style="box-shadow:var(--shadow-card)" data-copy="0 4px 10px rgba(13,21,48,0.05)"><b>card</b><span>0 4 10 · 5%</span></div>
+      </div>
+      <h3 class="sub">Radius scale</h3>
+      <div class="radius-row">
+        <div class="radius-cell" style="border-radius:4px" data-copy="4px"><b>xxs</b><span>4px</span></div>
+        <div class="radius-cell" style="border-radius:9px" data-copy="9px"><b>xs</b><span>9px</span></div>
+        <div class="radius-cell" style="border-radius:15px" data-copy="15px"><b>sm</b><span>15px</span></div>
+        <div class="radius-cell" style="border-radius:20px" data-copy="20px"><b>md</b><span>20px</span></div>
+        <div class="radius-cell" style="border-radius:25px" data-copy="25px"><b>lg</b><span>25px</span></div>
+        <div class="radius-cell" style="border-radius:35px" data-copy="35px"><b>xl</b><span>35px</span></div>
+        <div class="radius-cell" style="border-radius:46px" data-copy="60px"><b>xxl</b><span>60px</span></div>
+        <div class="radius-cell" style="border-radius:999px" data-copy="999px"><b>pill</b><span>999px</span></div>
+      </div>
+    </section>
+
+    <!-- ════════ 13 LAYOUT ════════ -->
+    <section class="block" id="layout">
+      <div class="eyebrow">13 · Spacing &amp; Layout</div>
+      <h2 class="display">A 10px rhythm inside 1160px</h2>
+      <p class="lede">Spacing steps by 10px from 10→150. Content sits in a 1160px container (nav 1120, Brain 1080) with 40/20px gutters. Sections breathe with 150px desktop / 60px mobile stack spacing. Breakpoints concentrate at <b>600 / 900 / 1200 / 1400</b>.</p>
+      <h3 class="sub">Spacing scale</h3>
+      <div class="space-ruler">
+        <div class="row"><span class="lbl">space-1 · 10px</span><div class="bar" style="width:10px"></div></div>
+        <div class="row"><span class="lbl">space-2 · 20px</span><div class="bar" style="width:20px"></div></div>
+        <div class="row"><span class="lbl">space-3 · 30px</span><div class="bar" style="width:30px"></div></div>
+        <div class="row"><span class="lbl">space-4 · 40px</span><div class="bar" style="width:40px"></div></div>
+        <div class="row"><span class="lbl">space-5 · 50px</span><div class="bar" style="width:50px"></div></div>
+        <div class="row"><span class="lbl">space-6 · 60px</span><div class="bar" style="width:60px"></div></div>
+        <div class="row"><span class="lbl">space-8 · 80px</span><div class="bar" style="width:80px"></div></div>
+        <div class="row"><span class="lbl">space-10 · 100px</span><div class="bar" style="width:100px"></div></div>
+        <div class="row"><span class="lbl">space-12 · 120px</span><div class="bar" style="width:120px"></div></div>
+        <div class="row"><span class="lbl">space-15 · 150px</span><div class="bar" style="width:150px"></div></div>
+      </div>
+      <h3 class="sub">Layout tokens</h3>
+      <table class="spec-table">
+        <tr><th>Token</th><th>Value</th><th>Use</th></tr>
+        <tr><td>container-content</td><td class="mono">1160px</td><td class="mono">--size-v3-container · main content column</td></tr>
+        <tr><td>container-nav</td><td class="mono">1120px</td><td class="mono">--size-nav-container · nav + 4.0 sections</td></tr>
+        <tr><td>container-brain</td><td class="mono">1080px</td><td class="mono">--brain-container-max · AI pages</td></tr>
+        <tr><td>gutters</td><td class="mono">40px / 20px</td><td class="mono">desktop / mobile padding-gutter</td></tr>
+        <tr><td>section stack</td><td class="mono">150px / 60px</td><td class="mono">vertical rhythm between sections</td></tr>
+        <tr><td>nav height</td><td class="mono">76px / 60px</td><td class="mono">desktop / mobile</td></tr>
+        <tr><td>breakpoints</td><td class="mono">600 · 900 · 1200 · 1400</td><td class="mono">by media-query frequency: 900 (698×), 600 (658×), 1200 (113×)</td></tr>
+      </table>
+    </section>
+
+    <!-- ════════ 14 MOTION ════════ -->
+    <section class="block" id="motion">
+      <div class="eyebrow">14 · Motion</div>
+      <h2 class="display">200ms ease, plus AI shimmer</h2>
+      <p class="lede">Interaction motion is conservative — <code>background-color .2s ease</code> on nearly everything clickable. The personality lives in AI moments: shimmer sweeps across "Brain AI" labels and animated gradient angles rotate on agent cards (<code>--gradient-angle</code> custom-property animation).</p>
+      <div class="motion-grid">
+        <div class="motion-card">
+          <b>Hover transition</b>
+          <p>background-color .2s ease, color .2s ease — buttons, nav links, tabs.</p>
+          <div class="demo"><button class="cu-btn">Hover me</button></div>
+        </div>
+        <div class="motion-card">
+          <b>Card lift</b>
+          <p>translateY(−2…4px) + shadow-sm on hover, .2s ease.</p>
+          <div class="demo"><div class="hover-lift">hover</div></div>
+        </div>
+        <div class="motion-card">
+          <b>AI shimmer</b>
+          <p>Gradient sweep via animated background-position on clipped text (nav "Brain AI").</p>
+          <div class="demo"><span class="shimmer-text">Brain&nbsp;MAX</span></div>
+        </div>
+        <div class="motion-card">
+          <b>Gradient rotate</b>
+          <p>@property --gradient-angle animates the CTA gradient's angle on featured cards.</p>
+          <div class="demo"><div class="grad-rotate"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════ 15 PROVENANCE ════════ -->
+    <section class="block" id="provenance">
+      <div class="eyebrow">15 · Provenance</div>
+      <h2 class="display">How this was built</h2>
+      <p class="lede">Crawled <code>clickup.com</code> on 2026-06-11: homepage + sitemap-selected archetypes. Every value traces to production CSS or the official brand page — nothing is eyeballed.</p>
+      <table class="spec-table">
+        <tr><th>Source</th><th>What it provided</th></tr>
+        <tr><td>/brand + /brand/logo</td><td>Official core gradients, typeface roles, logo rules</td></tr>
+        <tr><td>/ (home)</td><td>Hero type, V5 nav/buttons, Core token layer, icon sprites</td></tr>
+        <tr><td>/pricing</td><td>Pricing cards, V4 gradient CTAs, headline text-gradients, toggle tabs</td></tr>
+        <tr><td>/ai</td><td>Dark "Brain" palette, shimmer motion, mono labels</td></tr>
+        <tr><td>/enterprise · /about · /careers</td><td>Section patterns, stat blocks, testimonial cards</td></tr>
+        <tr><td>/features/* · /teams/* · /compare/* · /integrations · /templates · /blog</td><td>Cards, badges, FAQ, legacy v3/v4 token layers</td></tr>
+        <tr><td>19 CSS bundles (1.67MB, deduped)</td><td>804 custom properties · 265 hex values · @font-face set · breakpoint census</td></tr>
+        <tr><td>icons.svg + cuicons-v3.svg</td><td>289 unique official icon symbols (copied into assets/)</td></tr>
+      </table>
+      <div class="guide-footer">
+        <b style="color:var(--core-text-main)">Files in this kit</b> — <code>index.html</code> (this guide) · <code>tokens.css</code> (CSS custom properties) · <code>tokens.json</code> (W3C design-token format) · <code>assets/</code> (logo, icon sprites).
+        <div class="mono">Independent reference produced by reverse-engineering publicly served CSS. ClickUp, the ClickUp logo, ClickUp Brain and all assets shown remain trademarks &amp; property of ClickUp (Mango Technologies, Inc.). Not affiliated. For internal study/reference.</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast">Copied <code></code></div>
+
+<script>
+  // ── click-to-copy ──────────────────────────────────────────
+  const toast = document.getElementById('toast');
+  let toastTimer;
+  function showToast(v) {
+    toast.querySelector('code').textContent = v.length > 56 ? v.slice(0, 56) + '…' : v;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 1600);
+  }
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-copy]');
+    if (!el) return;
+    const v = el.getAttribute('data-copy');
+    navigator.clipboard?.writeText(v).then(() => showToast(v)).catch(() => showToast(v));
+  });
+
+  // ── tab demo ───────────────────────────────────────────────
+  document.querySelectorAll('.tab-demo').forEach(group => {
+    group.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => {
+      group.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }));
+  });
+
+  // ── icon sprite loader ─────────────────────────────────────
+  const grid = document.getElementById('iconGrid');
+  const search = document.getElementById('iconSearch');
+  const countEl = document.getElementById('iconCount');
+  const cells = [];
+  Promise.all(['assets/icons.svg', 'assets/cuicons-v3.svg'].map(u =>
+    fetch(u).then(r => r.ok ? r.text() : '').catch(() => '')
+  )).then(sprites => {
+    const holder = document.createElement('div');
+    holder.style.display = 'none';
+    document.body.appendChild(holder);
+    const seen = new Set();
+    sprites.forEach((txt, i) => {
+      if (!txt) return;
+      const doc = new DOMParser().parseFromString(txt, 'image/svg+xml');
+      doc.querySelectorAll('symbol[id]').forEach(sym => {
+        const id = sym.getAttribute('id');
+        if (!id || !id.startsWith('icon') || seen.has(id)) return;
+        seen.add(id);
+        holder.appendChild(document.importNode(sym, true));
+        const name = id.replace(/^icon-(v3-)?/, '');
+        const cell = document.createElement('div');
+        cell.className = 'icon-cell';
+        cell.dataset.name = name;
+        cell.setAttribute('data-copy', `<svg width="20" height="20"><use href="assets/${i === 0 ? 'icons' : 'cuicons-v3'}.svg#${id}"/></svg>`);
+        const vb = sym.getAttribute('viewBox') || '0 0 24 24';
+        cell.innerHTML = `<svg viewBox="${vb}"><use href="#${id}"/></svg><span class="iname">${name}</span>`;
+        grid.appendChild(cell);
+        cells.push(cell);
+      });
+    });
+    countEl.textContent = cells.length + ' icons';
+    if (!cells.length) countEl.textContent = 'sprites unavailable — see assets/icons.svg';
+  });
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    let n = 0;
+    cells.forEach(c => {
+      const hit = !q || c.dataset.name.includes(q);
+      c.style.display = hit ? '' : 'none';
+      if (hit) n++;
+    });
+    countEl.textContent = n + ' icons';
+  });
+</script>
+</body>
+</html>

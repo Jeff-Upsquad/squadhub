@@ -1,0 +1,191 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   CLICKUP DESIGN SYSTEM — DESIGN TOKENS
+   Reverse-engineered from clickup.com (crawled 2026-06-11, 15 pages,
+   19 unique CSS bundles). Token names mirror ClickUp's own custom
+   properties (--Core-*, --color-v3-*, --cu-*) where they exist in
+   production CSS; originals noted in comments.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ─── FONT FAMILIES ─────────────────────────────────────────────────
+     ClickUp self-hosts all four as variable fonts (woff2). */
+  --font-display: "Plus Jakarta Sans", -apple-system, Roboto, Helvetica, sans-serif; /* headlines · wght 200–800 */
+  --font-body: "Inter", -apple-system, Roboto, Helvetica, sans-serif;                /* body + UI · wght 100–900 */
+  --font-mono: "Sometype Mono", monospace;                                           /* eyebrows, captions, stats · wght 400–700 */
+  --font-accent: "Shantell Sans", cursive;                                           /* handwritten annotations · wght 300–800 */
+
+  /* ─── CORE SEMANTIC COLORS (2026 "Core" layer: --Core-*) ──────────── */
+  --core-text-primary: #090C1D;     /* --Core-Text-Primary  · deepest navy-black */
+  --core-text-main: #202020;        /* --Core-Text-Main     · default text */
+  --core-text-secondary: #646464;   /* --Core-Text-Secondary */
+  --core-text-tertiary: #838383;    /* --Core-Text-Tertiary */
+  --core-text-disabled: #606060;    /* --Core-Text-Disabled */
+  --core-background-main: #FFFFFF;  /* --Core-Background-Main */
+  --core-background-box: #F8F9FA;   /* --Core-Background-Box / -Card */
+  --core-grey-100: #F9F9F9;         /* --Core-Grey-100 */
+  --core-utilities-gray: #F7F7F7;   /* --Core-Utilities-Gray */
+  --core-border-default: #E8E8E8;   /* --Core-Border-Default */
+  --core-border-hairline: #CFCFCF;  /* most-used hex on the site (1,008×) — card/illustration hairlines */
+
+  /* Buttons */
+  --core-button-primary: #202020;           /* --Core-Button-Primary */
+  --core-button-primary-hover: rgba(32, 32, 32, 0.8);
+  --core-button-secondary: #F0F0F0;         /* --Core-Button-Secondary */
+  --core-button-secondary-hover: #DEDEDE;   /* --Core-Button-Secondary-Hover */
+
+  /* Accents + pastel badge pairs (--Core-Accents-*) */
+  --core-accent-pink: #FF02F0;       --core-accent-pink-badge: #FEECFC;
+  --core-accent-purple: #6647F0;     --core-accent-purple-badge: #EFEDFD;
+  --core-accent-blue: #0091FF;       --core-accent-blue-badge: #EDF6FD;
+  --core-accent-orange: #FC6D2D;     --core-accent-orange-badge: #FDEDE7;
+
+  /* Utilities (--Core-Utilities-*) */
+  --core-utility-green: #078D3B;     --core-utility-green-badge: #E2F8EC;
+  --core-utility-red: #F0382D;       --core-utility-red-badge: #FBDDDD;
+  --core-utility-deep-blue: #4A2FFF; --core-utility-deep-blue-badge: #E3E5FB;
+  --core-utility-black: #000000;
+  --core-utility-white: #FFFFFF;
+
+  /* ─── BRAND v3 PALETTE (--color-v3-*, stored as RGB triplets) ─────── */
+  --v3-purple: #7612FA;        /* 118,18,250 */
+  --v3-pink: #FA12E3;          /* 250,18,227 */
+  --v3-blue: #1F7CFF;          /* 31,124,255 */
+  --v3-light-blue: #40DDFF;    /* 64,221,255 */
+  --v3-cyan: #12D0FA;          /* gradient endpoint */
+  --v3-yellow: #FFD700;        /* 255,215,0 */
+  --v3-orange: #FF6221;        /* 255,98,33 */
+  --v3-green: #21C828;         /* 33,200,40 */
+  --v3-red: #F00250;           /* 240,2,80 */
+  --v3-navy: #101F52;          /* 16,31,82 · --color-primary-navy */
+
+  /* Purple ramp (--color-v3-purple-0…4) */
+  --v3-purple-0: #4901AA; --v3-purple-1: #5500C7; --v3-purple-2: #6A06EF;
+  --v3-purple-3: #8020FF; --v3-purple-4: #892FFF;
+
+  /* Navy-black ramp (--color-v3-black-0…5) */
+  --v3-black-0: #070C1C; --v3-black-1: #0A1128; --v3-black-2: #0D1530;
+  --v3-black-3: #0F193D; --v3-black-4: #15224F; --v3-black-5: #2C4085;
+
+  /* Violet-grey ramp (--color-v3-grey-0…6) */
+  --v3-grey-0: #514B81; --v3-grey-1: #7F76B3; --v3-grey-2: #B6AEE0;
+  --v3-grey-3: #BDBDDC; --v3-grey-4: #CECEEA; --v3-grey-5: #F1F1F9;
+  --v3-grey-6: #F8F2FF;
+
+  /* Tinted whites (--color-v3-white-0…4) */
+  --v3-white-0: #F8F8FC; --v3-white-1: #F1F1F9; --v3-white-2: #E9E9F6;
+  --v3-white-3: #F2E8FF; --v3-white-4: #EADAFD;
+
+  /* ─── CLASSIC PALETTE (logo-era, still live in product UI) ────────── */
+  --classic-purple: #7B68EE;   /* --color-purple-1 · the original ClickUp purple */
+  --classic-pink: #FD71AF;     /* --color-pink-1 */
+  --classic-blue: #49CCF9;     /* --color-blue-1 */
+  --classic-yellow: #FFC800;   /* --color-yellow-1 */
+  --classic-green: #00B884;    /* --color-green-1 */
+  --classic-violet: #9B51E0;   /* --color-violet-1 */
+  --classic-slate: #292D34;    /* --color-grey-0 / slate-900 · product app text */
+  --classic-grey: #7C828D;     /* --color-grey-1 */
+
+  /* Status (--color-error/-warning/-success) */
+  --status-error: #D33D44;   --status-error-bg: #FCEFF0;
+  --status-warning: #F8AE00; --status-warning-bg: #FEF9EB;
+  --status-success: #008844; --status-success-bg: #EBF5F0;
+
+  /* ─── DARK MODE — "BRAIN" SURFACES (--brain-*, --cu-*) ────────────── */
+  --dark-bg-main: #000000;        /* --brain-bg-main */
+  --dark-bg-panel: #0A0A0A;       /* --brain-showcase-brain-bg */
+  --dark-bg-elevated: #111111;    /* --cu-background-Main */
+  --dark-bg-pill: #242424;
+  --dark-border-default: #2A2A2A; /* --brain-border-default */
+  --dark-border-subtle: #222222;  /* --brain-border-subtle */
+  --dark-text-main: #EEEEEE;      /* --brain-text-main */
+  --dark-text-secondary: #B4B4B4; /* --brain-text-secondary */
+  --dark-text-tertiary: #7B7B7B;  /* --brain-text-tertiary */
+  --dark-accent-purple: #B38CFF;  /* --brain-accent-purple */
+  --dark-accent-purple-mid: #7B68EE;
+  --dark-accent-purple-light: #A78BFA;
+  --dark-accent-green: #3DD68C;   /* --brain-accent-green */
+  --dark-accent-orange: #ED5F00;  /* --cu-orange-900 */
+
+  /* ─── GRADIENTS ────────────────────────────────────────────────────── */
+  /* Core brand gradients (from clickup.com/brand) */
+  --gradient-pink-orange: linear-gradient(90deg, #FF02F0 0%, #FC6D2D 100%);
+  --gradient-purple-blue: linear-gradient(90deg, #6647F0 22.6%, #0091FF 79.33%); /* --color-gradient-purple-to-blue */
+  /* AI / primary CTA (--color-button-primary-background) */
+  --gradient-cta: linear-gradient(263deg, #FA12E3 -35%, #7612FA 41%, #12D0FA 135%);
+  --gradient-cta-hover: linear-gradient(261deg, #831778 -65%, #7612FA -22%, #12D0FA 135%);
+  --gradient-tri-warm: linear-gradient(100deg, #7612FA -6%, #FA12E3 60%, #FFC800 127%);
+  --gradient-ai-sweep: linear-gradient(45deg, #45C4F9 -0.01%, #7D09FF 50.33%, #FF0BE5 100%);
+  /* Headline text-fill gradients */
+  --gradient-text-light: linear-gradient(98deg, #202020 43.06%, #8F8F8F 91.81%);
+  --gradient-text-dark: linear-gradient(98deg, #FFFFFF 43.06%, #8F8F8F 91.81%);
+  /* Named legacy gradients (--color-ui-bg-gradient-*) */
+  --gradient-fireup: linear-gradient(0deg, #FFD700, #FF488A);
+  --gradient-hazeup: linear-gradient(0deg, #7612FA, #9E52FF);
+  --gradient-skyup: linear-gradient(0deg, #40DDFF, #0091FF, #0038FF);
+  --gradient-pinkup: linear-gradient(0deg, #FF92F4, rgba(255, 215, 0, 0.32)), #FA12E3;
+  --gradient-moonup: linear-gradient(0deg, rgba(119, 18, 250, 0.35), rgba(250, 18, 228, 0.63)), #101F52;
+
+  /* ─── ELEVATION (--shadow-* · navy shadow base 16,30,54) ──────────── */
+  --shadow-color: 16, 30, 54;
+  --shadow-xs: 0 4px 12px rgba(var(--shadow-color), 0.06);
+  --shadow-sm: 0 10px 25px rgba(var(--shadow-color), 0.09);
+  --shadow-md: 0 20px 60px rgba(var(--shadow-color), 0.10);
+  --shadow-lg: 0 16px 78px rgba(var(--shadow-color), 0.10);
+  --shadow-xl: 0 34px 54px rgba(var(--shadow-color), 0.10);
+  --shadow-card: 0 4px 10px rgba(13, 21, 48, 0.05);     /* most common card shadow */
+  --shadow-card-soft: 0 4px 4px rgba(13, 21, 48, 0.04);
+  --shadow-ring: inset 0 0 0 1px rgba(0, 0, 0, 0.15);   /* hairline ring */
+  --shadow-tab-active: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+
+  /* ─── RADIUS (--border-radius-*) ──────────────────────────────────── */
+  --radius-xxs: 4px;
+  --radius-xs: 9px;
+  --radius-sm: 15px;
+  --radius-md: 20px;
+  --radius-lg: 25px;
+  --radius-xl: 35px;
+  --radius-xxl: 60px;
+  --radius-button: 8px;     /* V5 buttons, nav links */
+  --radius-card: 16px;      /* common card rounding (12/14/16 family) */
+  --radius-media: 14px;     /* --border-radius-v3-media · screenshots, video */
+  --radius-pill: 999px;
+
+  /* ─── SPACING (--spacing-1…15 · 10px base step) ───────────────────── */
+  --space-1: 10px;  --space-2: 20px;  --space-3: 30px;  --space-4: 40px;
+  --space-5: 50px;  --space-6: 60px;  --space-7: 70px;  --space-8: 80px;
+  --space-9: 90px;  --space-10: 100px; --space-12: 120px; --space-15: 150px;
+  --space-section-desktop: 150px;  /* --spacing-stack-spacing-desktop */
+  --space-section-mobile: 60px;    /* --spacing-stack-spacing-mobile */
+  --space-gutter-desktop: 40px;    /* --spacing-desktop-padding-gutter */
+  --space-gutter-mobile: 20px;     /* --spacing-mobile-padding-gutter */
+
+  /* ─── LAYOUT ───────────────────────────────────────────────────────── */
+  --container-content: 1160px;  /* --size-v3-container / --size-container-current */
+  --container-nav: 1120px;      /* --size-nav-container / --size-4-dot-0-container */
+  --container-brain: 1080px;    /* --brain-container-max */
+  --nav-height: 76px;           /* --spacing-nav-height (60px mobile) */
+  --nav-height-mobile: 60px;
+  /* Breakpoints (most used: 600 · 900 · 1200): sm 600 / md 900 / lg 1200 / xl 1400 */
+
+  /* ─── TYPE SCALE ───────────────────────────────────────────────────── */
+  /* Display — Plus Jakarta Sans */
+  --text-hero: clamp(48px, 20px + 4.667vw, 76px); --text-hero-weight: 700; --text-hero-leading: 1.1;
+  --text-h1: 60px; --text-h1-tracking: -2.1px;    /* → 48px → 36px responsive */
+  --text-h2: 48px; --text-h2-weight: 650; --text-h2-leading: 1.25; --text-h2-tracking: -1.68px; /* → 40px mobile */
+  --text-h3: 34px; --text-h3-leading: 1.3; --text-h3-tracking: -0.91px;
+  --text-h4: 24px; --text-h4-leading: 1.35; --text-h4-tracking: -0.54px;
+  /* Body — Inter (v5 scale) */
+  --text-lg: 18px; --text-lg-leading: 1.3333; --text-lg-tracking: -0.25px;
+  --text-md: 16px; --text-md-leading: 1.375;  --text-md-tracking: -0.32px;
+  --text-sm: 14px; --text-sm-leading: 1.4286; --text-sm-tracking: -0.15px;
+  --text-xs: 12px; --text-xs-leading: 1.5;    --text-xs-tracking: -0.12px;
+  /* UI */
+  --text-button: 600 14px/1.143 var(--font-body);       /* ligatures off, -0.15px */
+  --text-button-lg: 650 18px/1.333 var(--font-body);    /* -0.36px */
+  --text-eyebrow: 500 13px/1.23 var(--font-mono);       /* uppercase, +0.06em */
+
+  /* ─── MOTION ───────────────────────────────────────────────────────── */
+  --transition-fast: 0.2s ease;            /* buttons, nav, color/background */
+  --transition-medium: 0.3s ease;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}

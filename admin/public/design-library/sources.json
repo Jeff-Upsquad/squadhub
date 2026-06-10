@@ -1,0 +1,18 @@
+{
+  "$schema_note": "Registry of captured design systems. Each entry = one folder. To add a source: create <id>/ with index.html + tokens.css + tokens.json + assets/, then append an entry here. The hub (index.html) renders this file.",
+  "sources": [
+    {
+      "id": "clickup",
+      "name": "ClickUp",
+      "url": "https://clickup.com",
+      "platform": ["web"],
+      "captured": "2026-06-11",
+      "path": "clickup/",
+      "description": "2026 AI-era rebrand: monochrome canvas, four neon accents with pastel badge tints, gradient CTAs, Plus Jakarta Sans headlines with gradient text fills, full dark \"Brain\" theme.",
+      "colors": ["#202020", "#FF02F0", "#6647F0", "#0091FF", "#FC6D2D", "#F8F9FA"],
+      "fonts": ["Plus Jakarta Sans", "Inter", "Sometype Mono", "Shantell Sans"],
+      "stats": { "pages": 15, "tokens": 804, "icons": 289 },
+      "tags": ["saas", "marketing-site", "ai", "gradients", "dark-mode", "icon-library"]
+    }
+  ]
+}
