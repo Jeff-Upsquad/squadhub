@@ -12,7 +12,10 @@ type RawParticipant =
 export function normalizeDm(raw: DmConversation & { participants?: RawParticipant[] }): DmConversation {
   const participants = (raw.participants || [])
     .map((p) => ('user' in p && p.user ? p.user : p))
-    .filter((p): p is { id: string; display_name?: string | null; avatar_url?: string | null } => !!p && 'id' in p && !!p.id);
+    .filter(
+      (p): p is { id: string; display_name?: string | null; avatar_url?: string | null } =>
+        typeof (p as { id?: unknown } | null | undefined)?.id === 'string',
+    );
   return { ...raw, participants } as DmConversation;
 }
 
