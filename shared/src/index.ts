@@ -619,6 +619,7 @@ export interface ServerToClientEvents {
   user_stop_typing: (data: { user_id: string; channel_id?: string; dm_conversation_id?: string }) => void;
   user_online: (data: { user_id: string }) => void;
   user_offline: (data: { user_id: string }) => void;
+  online_users: (data: { user_ids: string[] }) => void;
   new_notification: (notification: Notification) => void;
 }
 

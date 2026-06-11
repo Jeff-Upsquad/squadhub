@@ -25,6 +25,9 @@ export function setupSocketIO(httpServer: HttpServer) {
       methods: ['GET', 'POST'],
       credentials: true,
     },
+    // Next.js dev rewrites strip the trailing slash from /socket.io/ — without
+    // this, engine.io's prefix check misses and Express 404s every poll.
+    addTrailingSlash: false,
   });
 
   // Auth middleware — verify via Supabase (matches HTTP requireAuth). Supabase
@@ -60,6 +63,10 @@ export function setupSocketIO(httpServer: HttpServer) {
       io.emit('user_online', { user_id: userId });
     }
     onlineUsers.get(userId)!.add(socket.id);
+
+    // Seed the connecting client with everyone currently online — the
+    // user_online/user_offline deltas only cover changes after this point.
+    socket.emit('online_users', { user_ids: Array.from(onlineUsers.keys()) });
 
     // Always join a user-scoped room for cross-device fanout.
     socket.join(`chat_user:${userId}`);

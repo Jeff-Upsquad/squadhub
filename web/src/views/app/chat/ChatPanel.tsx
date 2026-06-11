@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { getSocket } from '../../../services/socket';
@@ -7,6 +7,98 @@ import MessageBubble, { DateSeparator } from './MessageBubble';
 import MessageComposer from './MessageComposer';
 import ThreadPanel from './ThreadPanel';
 import { useWorkspaceStore, type ChatKind } from '../../../stores/workspaceStore';
+import { useAuthStore } from '../../../stores/authStore';
+import { useIsOnline } from '../../../stores/presenceStore';
+
+// Stable gradient for users without an avatar — same hash as MessageBubble.
+function hashGradient(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
+  return `linear-gradient(135deg, hsl(${h} 70% 55%), hsl(${(h + 40) % 360} 65% 45%))`;
+}
+
+// ---- Slack-style conversation intros (top of history) ----
+function ChannelIntro({ channelId }: { channelId: string }) {
+  const channel = useWorkspaceStore((s) => s.channels.find((c) => c.id === channelId));
+  if (!channel) return null;
+  return (
+    <div className="sqc-intro">
+      <h2 className="sqc-intro__title">
+        <span className="wave">👋</span>
+        <span>
+          Welcome to the <span className="sqc-intro__hashlink"># {channel.name}</span> channel
+        </span>
+      </h2>
+      <p className="sqc-intro__desc">
+        {channel.description ? (
+          channel.description
+        ) : (
+          <>
+            This channel is for everything <span className="sqc-intro__hashlink">#{channel.name}</span>.{' '}
+            <span className="muted">Hold meetings, share docs, and make decisions together. Keep your team informed!</span>
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+
+function DmIntro({ dmId }: { dmId: string }) {
+  const dm = useWorkspaceStore((s) => s.dmConversations.find((d) => d.id === dmId));
+  const meId = useAuthStore((s) => s.user?.id);
+  const others = (dm?.participants || []).filter((p) => p.id !== meId);
+  const first = others[0];
+  const online = useIsOnline(first?.id);
+  if (!dm) return null;
+
+  // Note-to-self conversation
+  if (others.length === 0) {
+    const me = (dm.participants || [])[0];
+    return (
+      <div className="sqc-intro sqc-intro--dm">
+        <span className="sqc-intro__avatar" style={{ background: me?.avatar_url ? undefined : hashGradient(me?.id || 'me') }}>
+          {me?.avatar_url ? <img src={me.avatar_url} alt="" /> : (me?.display_name?.[0] || 'Y').toUpperCase()}
+        </span>
+        <div className="sqc-intro__namerow">
+          <span className="sqc-intro__name">{me?.display_name || 'You'} <span className="muted">(you)</span></span>
+        </div>
+        <p className="sqc-intro__desc muted">
+          This is your space. Draft messages, list your to-dos, or keep links and files handy.
+        </p>
+      </div>
+    );
+  }
+
+  const names = others.map((p, i) => (
+    <span key={p.id}>
+      <span className="sqc-mention-chip">@{p.display_name}</span>
+      {i < others.length - 1 ? ', ' : ''}
+    </span>
+  ));
+
+  return (
+    <div className="sqc-intro sqc-intro--dm">
+      <span className="sqc-intro__avatar" style={{ background: first?.avatar_url ? undefined : hashGradient(first?.id || 'x') }}>
+        {first?.avatar_url ? <img src={first.avatar_url} alt="" /> : (first?.display_name?.[0] || '?').toUpperCase()}
+      </span>
+      <div className="sqc-intro__namerow">
+        <span className="sqc-intro__name">
+          {others.map((p) => p.display_name).join(', ')}
+        </span>
+        {others.length === 1 && (
+          <span
+            className={`sqc-presence${online ? ' is-online' : ''}`}
+            title={online ? 'Active' : 'Away'}
+          />
+        )}
+      </div>
+      <p className="sqc-intro__desc">
+        This conversation is just between {names} and you. Check out {others.length === 1 ? 'their' : 'everyone’s'} profile to
+        learn more about them.
+      </p>
+    </div>
+  );
+}
 
 // ---- Format date for separator ----
 function formatDateLabel(dateStr: string): string {
@@ -29,6 +121,26 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
   const queryClient = useQueryClient();
   const activeThreadParentId = useWorkspaceStore((s) => s.activeThreadParentId);
   const setActiveThread = useWorkspaceStore((s) => s.setActiveThread);
+  const meId = useAuthStore((s) => s.user?.id);
+
+  // "Message #design" / "Message Jane D" placeholder, like Slack.
+  const channelName = useWorkspaceStore((s) =>
+    kind === 'channel' ? s.channels.find((c) => c.id === channelId)?.name : undefined,
+  );
+  const dmName = useWorkspaceStore((s) => {
+    if (kind !== 'dm') return undefined;
+    const dm = s.dmConversations.find((d) => d.id === channelId);
+    const others = (dm?.participants || []).filter((p) => p.id !== meId);
+    return others.map((p) => p.display_name).join(', ');
+  });
+  const composerPlaceholder =
+    kind === 'dm'
+      ? dmName
+        ? `Message ${dmName}`
+        : 'Jot something down'
+      : channelName
+        ? `Message #${channelName}`
+        : undefined;
 
   // Stable param so cache keys & GET URL stay consistent.
   const param = kind === 'dm' ? 'dm_conversation_id' : 'channel_id';
@@ -114,6 +226,22 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
     return items;
   }, [topLevelMessages]);
 
+  // Keep the view pinned to the newest message: jump on conversation switch
+  // and first load, stick to the bottom on new messages unless the user has
+  // scrolled up to read history.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const lastChannelRef = useRef<string | null>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || topLevelMessages.length === 0) return;
+    const isNewConversation = lastChannelRef.current !== channelId;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+    if (isNewConversation || nearBottom) {
+      el.scrollTop = el.scrollHeight;
+      lastChannelRef.current = channelId;
+    }
+  }, [channelId, topLevelMessages]);
+
   // Tag a message as "grouped" when the prior visible message is from the
   // same author and within 5 minutes — matches the Slack-style stacking.
   const isGrouped = (idx: number) => {
@@ -131,10 +259,9 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
       {/* Main message column */}
       <div className="flex flex-1 flex-col min-w-0">
         {/* Scrollable messages area */}
-        <div className="sqc-msg-scroll">
-          {topLevelMessages.length === 0 && (
-            <p className="px-5 py-8 text-center text-sm text-[var(--sh-text-2)]">No messages yet. Say something!</p>
-          )}
+        <div className="sqc-msg-scroll" ref={scrollRef}>
+          {/* Slack-style intro at the start of history */}
+          {kind === 'dm' ? <DmIntro dmId={channelId} /> : <ChannelIntro channelId={channelId} />}
           {messagesWithDates.map((item, i) =>
             item.type === 'date' ? (
               <DateSeparator key={`date-${i}`} date={item.date!} />
@@ -153,6 +280,7 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
         <MessageComposer
           channelId={channelId}
           kind={kind}
+          placeholder={composerPlaceholder}
           onSend={() => queryClient.invalidateQueries({ queryKey })}
         />
       </div>

@@ -4892,42 +4892,69 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
 .sqc-msg-scroll {
   flex: 1;
   overflow-y: auto;
+  /* overflow-x would compute to auto; with classic (layout-consuming)
+     scrollbars the vertical bar's width-steal can tip wrapped content into
+     a stray horizontal scrollbar above the composer. Content wraps anyway. */
+  overflow-x: hidden;
   min-height: 0;
   padding-bottom: 4px;
 }
 .sqc-msg-scroll::-webkit-scrollbar { width: 10px; }
 .sqc-msg-scroll::-webkit-scrollbar-thumb {
-  background: #d6d6d4;
-  border-radius: 4px;
+  background: var(--sh-border); /* follows theme — hardcoded gray glared in dark mode */
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
+.sqc-msg-scroll::-webkit-scrollbar-track { background: transparent; }
 
+/* Slack-style day divider: hairline across, floating pill with chevron */
 .sqc-day-divider {
   display: flex;
   align-items: center;
-  padding: 12px 16px 6px;
+  justify-content: center;
+  position: relative;
+  padding: 14px 0 8px;
+  z-index: 1;
 }
-.sqc-day-divider::before,
-.sqc-day-divider::after {
+.sqc-day-divider::before {
   content: "";
-  flex: 1;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% + 3px);
   height: 1px;
-  background: var(--sh-border);
+  background: var(--sh-border-soft);
 }
 .sqc-day-divider__label {
-  margin: 0 8px;
-  padding: 2px 10px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
   border: 1px solid var(--sh-border);
   border-radius: 999px;
   font-size: 13px;
   font-weight: 700;
-  background: #fff;
+  background: var(--sh-bg);
   color: var(--sh-text);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  cursor: default;
+}
+.sqc-day-divider__label::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--sh-text-2);
+  border-bottom: 1.5px solid var(--sh-text-2);
+  transform: rotate(45deg) translateY(-2px);
+  margin-left: 2px;
 }
 
 .sqc-msg {
   display: grid;
   grid-template-columns: 44px 1fr;
-  padding: 8px 16px;
+  padding: 8px 20px;
   position: relative;
   gap: 8px;
   font-family: var(--sh-font);
@@ -4937,7 +4964,7 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
 .sqc-msg.is-mentioned {
   background: linear-gradient(90deg, rgba(255,90,31,0.06), transparent 40%);
   border-left: 3px solid var(--sh-brand);
-  padding-left: 13px;
+  padding-left: 17px;
 }
 .sqc-msg.is-mentioned:hover {
   background: linear-gradient(90deg, rgba(255,90,31,0.09), transparent 40%);
@@ -4948,13 +4975,14 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
 .sqc-msg.is-grouped .sqc-msg__header { display: none; }
 .sqc-msg__time-mini {
   display: none;
+  visibility: hidden; /* Slack: grouped-row timestamps appear only on hover */
   font-size: 11px;
   color: var(--sh-text-3);
   text-align: right;
   padding-top: 2px;
   font-variant-numeric: tabular-nums;
 }
-.sqc-msg:hover .sqc-msg__time-mini { color: var(--sh-text-2); }
+.sqc-msg:hover .sqc-msg__time-mini { visibility: visible; color: var(--sh-text-2); }
 .sqc-msg__gutter {
   display: flex;
   justify-content: center;
@@ -4963,7 +4991,7 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
 .sqc-msg__avatar {
   width: 36px;
   height: 36px;
-  border-radius: 6px;
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -5169,23 +5197,42 @@ ol.sqc-list {
 }
 .sqc-reaction__add:hover { border-color: var(--sh-link); color: var(--sh-link); }
 
-/* Thread footer on message */
+/* Thread footer on message — Slack: blue count + time; hover expands the bar,
+   swaps the time for "View thread" and reveals a chevron on the right. */
 .sqc-thread-foot {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 4px;
   border: 1px solid transparent;
   border-radius: 8px;
-  padding: 4px 8px 4px 6px;
+  padding: 4px 8px 4px 4px;
   cursor: pointer;
   background: transparent;
+  width: fit-content;
+  max-width: 600px;
+  text-align: left;
 }
 .sqc-thread-foot:hover {
-  background: #fff;
+  background: var(--sh-bg);
   border-color: var(--sh-border);
-  box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  width: 100%;
 }
+.sqc-thread-foot__view {
+  display: none;
+  color: var(--sh-text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.sqc-thread-foot__chev {
+  display: none;
+  margin-left: auto;
+  color: var(--sh-text-3);
+}
+.sqc-thread-foot:hover .sqc-thread-foot__last { display: none; }
+.sqc-thread-foot:hover .sqc-thread-foot__view { display: inline; }
+.sqc-thread-foot:hover .sqc-thread-foot__chev { display: inline-flex; }
 .sqc-thread-foot__avs { display: flex; }
 .sqc-thread-foot__avs > * {
   width: 22px;
@@ -5265,15 +5312,17 @@ ol.sqc-list {
   border-color: rgba(29,28,29,0.4);
   box-shadow: 0 0 0 1px rgba(29,28,29,0.1);
 }
+/* Formatting toolbar shows by default (Slack); the Aa button toggles it off. */
 .sqc-composer__toolbar {
-  display: none;
-  align-items: center;
-  padding: 6px 6px;
-  border-bottom: 1px solid var(--sh-border-soft);
-  gap: 1px;
-}
-.sqc-composer[data-focused="true"] .sqc-composer__toolbar {
   display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--sh-border-soft);
+  background: var(--sh-bg-soft);
+  gap: 2px;
+}
+.sqc-composer[data-fmt="off"] .sqc-composer__toolbar {
+  display: none;
 }
 .sqc-composer__tool {
   width: 28px;
@@ -5323,6 +5372,10 @@ ol.sqc-list {
   cursor: text;
   max-height: 220px;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+.sqc-composer__editor-wrap .ProseMirror {
+  overflow-wrap: anywhere; /* long URLs/tokens wrap instead of scrolling */
 }
 .sqc-composer__editor-wrap .ProseMirror {
   outline: none;
@@ -5415,8 +5468,9 @@ ol.sqc-list {
   gap: 6px;
 }
 .sqc-composer__send {
-  width: 30px;
+  min-width: 34px;
   height: 28px;
+  padding: 0 9px;
   border-radius: 6px;
   display: inline-flex;
   align-items: center;
@@ -5425,13 +5479,223 @@ ol.sqc-list {
   background: transparent;
   border: 0;
   cursor: pointer;
+  transition: background .12s ease, color .12s ease;
 }
 .sqc-composer__send.is-active {
-  background: #1A1D29;
+  background: #007A5A; /* Slack send green */
   color: #fff;
 }
-.sqc-composer__send.is-active:hover { background: #000; }
+.sqc-composer__send.is-active:hover { background: #00614A; }
 .sqc-composer__send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Round attach button (Slack's ⊕) */
+.sqc-composer__attach {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sh-text-2);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.sqc-composer__attach:hover {
+  background: var(--sh-bg-hover);
+  color: var(--sh-text);
+}
+.sqc-composer__attach:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* "Shift + Return to add a new line" hint under the composer */
+.sqc-composer__hint {
+  text-align: right;
+  font-size: 11px;
+  color: var(--sh-text-2);
+  padding: 4px 2px 0;
+  min-height: 0;
+}
+.sqc-composer__hint strong { font-weight: 700; }
+
+/* ── Conversation intros (top of history) ───────────────── */
+.sqc-intro {
+  padding: 40px 20px 12px;
+}
+.sqc-intro__title {
+  font-family: var(--sh-font-display);
+  font-weight: 800;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+  color: var(--sh-text);
+  margin: 0 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sqc-intro__title .wave { font-size: 30px; }
+.sqc-intro__desc {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--sh-text);
+  max-width: 720px;
+}
+.sqc-intro__desc .muted { color: var(--sh-text-2); }
+.sqc-intro__hashlink {
+  color: var(--sh-link);
+  background: rgba(18,100,163,0.08);
+  border-radius: 4px;
+  padding: 0 3px;
+  font-weight: 500;
+}
+/* DM intro */
+.sqc-intro--dm .sqc-intro__avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 28px;
+  font-family: var(--sh-font-display);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.sqc-intro--dm .sqc-intro__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.sqc-intro__namerow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 8px;
+}
+.sqc-intro__name {
+  font-family: var(--sh-font-display);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--sh-text);
+}
+.sqc-mention-chip {
+  color: var(--sh-link);
+  background: rgba(18,100,163,0.08);
+  border-radius: 4px;
+  padding: 0 3px;
+  font-weight: 500;
+}
+
+/* ── Presence dot (filled green = active, hollow = away) ──
+   Also used outside .squadhub-chat (sidebar DM rows), hence the fallbacks. */
+.sqc-presence {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  border: 1.5px solid var(--sh-text-3, #868686);
+  background: transparent;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.sqc-presence.is-online {
+  border-color: #2BAC76;
+  background: #2BAC76;
+}
+/* Dot overlapping an avatar corner (sidebar DM rows) */
+.sqc-presence--badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  box-shadow: 0 0 0 2px var(--sh-sidebar, #fff);
+}
+
+/* ── Slack-style file / document card ───────────────────── */
+.sqc-file-card {
+  margin-top: 6px;
+  max-width: 480px;
+  border: 1px solid var(--sh-border);
+  border-radius: 12px;
+  background: var(--sh-bg);
+  overflow: hidden;
+}
+.sqc-file-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  text-decoration: none;
+  color: inherit;
+}
+.sqc-file-card__head:hover .sqc-file-card__name { text-decoration: underline; }
+.sqc-file-card__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: #E5483F; /* PDF red */
+}
+.sqc-file-card__icon--generic { background: #6B7280; }
+.sqc-file-card__icon--sheet { background: #1F7244; }
+.sqc-file-card__icon--doc { background: #2463CE; }
+.sqc-file-card__icon--zip { background: #8B5CF6; }
+.sqc-file-card__name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sh-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sqc-file-card__type {
+  font-size: 12.5px;
+  color: var(--sh-text-2);
+}
+.sqc-file-card__preview {
+  border-top: 1px solid var(--sh-border-soft);
+  background: var(--sh-bg-soft);
+}
+.sqc-file-card__preview object {
+  display: block;
+  width: 100%;
+  height: 300px;
+  border: 0;
+}
+/* Collapse caret label above file cards ("PDF ⌄") */
+.sqc-file-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 4px;
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 12.5px;
+  color: var(--sh-text-2);
+  cursor: pointer;
+}
+.sqc-file-toggle:hover { color: var(--sh-text); }
+.sqc-file-toggle svg { transition: transform .12s ease; }
+.sqc-file-toggle[data-collapsed="true"] svg { transform: rotate(-90deg); }
+
+/* ── Thread panel internals ─────────────────────────────── */
+.sqc-thread-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 20px 2px;
+  font-size: 12.5px;
+  color: var(--sh-text-2);
+}
+.sqc-thread-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--sh-border-soft);
+}
 
 /* Thread panel — drop shadow on the left edge so it floats above the main chat */
 .sqc-thread-panel {
@@ -5461,10 +5725,14 @@ ol.sqc-list {
 .dark .sqc-composer,
 .dark .sqc-msg__hover,
 .dark .sqc-thread-foot:hover,
+.dark .sqc-file-card,
 .dark .sqc-day-divider__label {
   background: var(--surface);
   color: var(--foreground);
 }
+.dark .sqc-file-card__preview { background: var(--surface-alt); }
+.dark .sqc-presence--badge { box-shadow: 0 0 0 2px var(--surface); }
+.dark .sqc-composer__toolbar { background: var(--surface-alt); }
 
 /* ── Mobile overrides ─────────────────────────────────────────────────────
  * Below the md breakpoint (Tailwind 768px) the TaskDetailPanel takes the

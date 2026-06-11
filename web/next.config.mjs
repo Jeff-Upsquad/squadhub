@@ -15,6 +15,10 @@ const nextConfig = {
 
   rewrites: async () => ({
     beforeFiles: [
+      // Dev-only in practice: prod nginx proxies /socket.io before Next sees it
+      // (web/nginx.conf). Without this, the socket client silently dies in dev
+      // (no realtime messages, no presence) because io('/') has no route.
+      { source: '/socket.io/:path*', destination: `${API_URL}/socket.io/:path*` },
       { source: '/auth/:path*', destination: `${API_URL}/auth/:path*` },
       { source: '/workspaces/:path*', destination: `${API_URL}/workspaces/:path*` },
       { source: '/channels/:path*', destination: `${API_URL}/channels/:path*` },
