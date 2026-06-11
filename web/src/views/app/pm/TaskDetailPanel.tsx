@@ -16,11 +16,12 @@ import {
   useDeleteChecklistItem,
 } from '../../../hooks/useChecklists';
 import api from '../../../services/api';
-import type { SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority, TaskStatusKey } from '@squadhub/shared';
-import { getTaskStatusDef } from '@squadhub/shared';
+import type { SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority, TaskStatusKey, TaskRecurrence } from '@squadhub/shared';
+import { getTaskStatusDef, describeTaskRecurrence } from '@squadhub/shared';
 import AssigneePicker from './AssigneePicker';
 import MentionPicker from '../../../components/MentionPicker';
 import DatePicker from './DatePicker';
+import RepeatPicker from './RepeatPicker';
 import { nextQuickDate } from './taskHelpers';
 import EmergencyConfirm from './EmergencyConfirm';
 import TaskStatusPicker from './TaskStatusPicker';
@@ -250,6 +251,8 @@ export default function TaskDetailPanel({
   const [startDateAnchor, setStartDateAnchor] = useState<DOMRect | null>(null);
   const [dueDateOpen, setDueDateOpen] = useState(false);
   const [dueDateAnchor, setDueDateAnchor] = useState<DOMRect | null>(null);
+  const [repeatOpen, setRepeatOpen] = useState(false);
+  const [repeatAnchor, setRepeatAnchor] = useState<DOMRect | null>(null);
   const [newItemDrafts, setNewItemDrafts] = useState<Record<string, string>>({});
   const [newChecklistTitle, setNewChecklistTitle] = useState<string | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState<string | null>(null);
@@ -1129,6 +1132,47 @@ export default function TaskDetailPanel({
                   </span>
                 </div>
 
+                {/* Repeat — template shows its rule; a spawned copy links back
+                    to its routine; plain tasks can become routines here. */}
+                <div
+                  className="td-settings-row"
+                  data-half="true"
+                  style={{ cursor: canEdit || task.recurring_parent_id ? 'pointer' : 'default' }}
+                  onClick={(e) => {
+                    if (task.recurring_parent_id) {
+                      setActiveTask(task.recurring_parent_id);
+                      return;
+                    }
+                    if (!canEdit) return;
+                    setRepeatAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                    setRepeatOpen((v) => !v);
+                  }}
+                >
+                  <span className="k">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }} aria-hidden>
+                      <path d="m17 2 4 4-4 4" />
+                      <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+                      <path d="m7 22-4-4 4-4" />
+                      <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+                    </svg>
+                    Repeat
+                  </span>
+                  <span className="v">
+                    {task.recurring_parent_id ? (
+                      <span className="td-date-text" title="Open the routine this task came from">
+                        Part of a routine ↗
+                      </span>
+                    ) : task.recurrence ? (
+                      <span className="td-date-text">
+                        {describeTaskRecurrence(task.recurrence as TaskRecurrence)}
+                        {task.recurrence_paused ? ' · Paused' : ''}
+                      </span>
+                    ) : (
+                      <span className="td-prop-empty">Does not repeat</span>
+                    )}
+                  </span>
+                </div>
+
                 {/* Estimate */}
                 <div
                   className="td-settings-row"
@@ -1687,6 +1731,15 @@ export default function TaskDetailPanel({
           mode="datetime"
           onChange={(next) => updateTask.mutate({ id: task.id, due_date: next })}
           onClose={() => setDueDateOpen(false)}
+        />
+      )}
+
+      {repeatOpen && task && (
+        <RepeatPicker
+          anchorRect={repeatAnchor}
+          value={(task.recurrence as TaskRecurrence | null) ?? null}
+          onChange={(next) => updateTask.mutate({ id: task.id, recurrence: next } as any)}
+          onClose={() => setRepeatOpen(false)}
         />
       )}
 
