@@ -10,7 +10,11 @@ const router = Router();
 const sendMessageSchema = z.object({
   channel_id: z.string().uuid().optional(),
   dm_conversation_id: z.string().uuid().optional(),
-  content: z.string().max(4000).optional(),
+  // Nullable: clients send content: null for caption-less attachments (voice
+  // notes always, files when no text typed). Insert/unfurl below already
+  // handle null; rejecting it broke every no-caption send with
+  // "Expected string, received null".
+  content: z.string().max(4000).nullable().optional(),
   type: z.enum(['text', 'image', 'audio', 'video', 'file']).default('text'),
   file_url: z.string().url().optional(),
   file_name: z.string().max(255).optional(),
