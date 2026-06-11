@@ -85,7 +85,7 @@ export default function CourseView({ item, assignment }: Props) {
           <article className="mx-auto w-full max-w-3xl px-6 py-8">
             <header className="mb-6">
               <p className="text-[12px] font-medium uppercase tracking-wider text-[var(--sh-ink-3)]">Lesson {activeIndex + 1} of {item.lessons.length}</p>
-              <h1 className="mt-1 serif text-[32px] leading-tight text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', letterSpacing: '-0.01em' }}>
+              <h1 className="mt-1 serif text-[32px] leading-tight text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>
                 {activeLesson.title}
               </h1>
               {activeLesson.summary && <p className="mt-2 text-[14px] text-[var(--sh-ink-2)]">{activeLesson.summary}</p>}

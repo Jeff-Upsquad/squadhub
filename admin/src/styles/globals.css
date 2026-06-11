@@ -25,10 +25,10 @@
   --color-sidebar-text: #62748E;
   --color-sidebar-text-bright: #0F172B;
 
-  /* Font families */
-  --font-display: 'Google Sans Flex', sans-serif;
-  --font-body: 'Google Sans Flex', system-ui, -apple-system, sans-serif;
-  --font-mono: 'Geist Mono', monospace;
+  /* Font families — brand kit: Plus Jakarta Sans (display) + Inter (everything else) */
+  --font-display: var(--font-jakarta), system-ui, sans-serif;
+  --font-body: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-inter), system-ui, sans-serif;
 
   /* SquadHire palette (additive — used inside the Published Cards module only) */
   --color-sh-lime: #FCF487;
@@ -47,7 +47,7 @@
 
 /* Base */
 body {
-  font-family: 'Google Sans Flex', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.011em;
@@ -102,7 +102,7 @@ body {
 
 /* Display heading — Plus Jakarta Sans, tight tracking */
 .sh-display {
-  font-family: var(--font-jakarta), 'Google Sans Flex', system-ui, sans-serif;
+  font-family: var(--font-jakarta), system-ui, sans-serif;
   font-weight: 700;
   letter-spacing: -0.025em;
   line-height: 1.15;
@@ -340,7 +340,7 @@ body {
 
 /* Section heading — uppercase, tight tracking */
 .sh-section-heading {
-  font-family: var(--font-jakarta), 'Google Sans Flex', system-ui, sans-serif;
+  font-family: var(--font-jakarta), system-ui, sans-serif;
   font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.08em;

@@ -163,7 +163,7 @@ export default function MentionPicker({
 
   const baseClass =
     className ||
-    'w-full bg-transparent font-[Lato] text-[15px] font-normal leading-[22px] text-foreground placeholder:text-foreground-dim focus:outline-none';
+    'w-full bg-transparent font-[Inter] text-[15px] font-normal leading-[22px] text-foreground placeholder:text-foreground-dim focus:outline-none';
 
   return (
     <div className="relative w-full">

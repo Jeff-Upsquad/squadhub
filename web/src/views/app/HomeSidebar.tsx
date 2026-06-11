@@ -107,7 +107,7 @@ function NavItem({
               ? 'bg-[var(--sh-ink)] text-[var(--sidebar)]'
               : 'bg-[var(--sh-hair-3)] text-[var(--sh-ink-3)]'
           }`}
-          style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)' }}
+          style={{ fontFamily: 'var(--font-mono, Inter, sans-serif)' }}
         >
           {count}
         </span>
@@ -225,7 +225,7 @@ export default function HomeSidebar({
         <button className="flex items-center gap-2 hover:opacity-80 transition">
           <span
             className="grid h-[22px] w-[22px] place-items-center rounded-[6px] bg-[var(--sh-ink)] text-[var(--sidebar)]"
-            style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', fontSize: 12, fontWeight: 700 }}
+            style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', fontSize: 12, fontWeight: 700 }}
           >
             {(currentWorkspace?.name || 'S').charAt(0).toUpperCase()}
           </span>
@@ -266,7 +266,7 @@ export default function HomeSidebar({
         </button>
         <span
           className="absolute right-[18px] top-1/2 -translate-y-1/2 text-[10px] text-[var(--sh-ink-4)] bg-[var(--sh-hair-3)] border border-[var(--sh-hair)] rounded px-[4px] py-[1px] pointer-events-none"
-          style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)' }}
+          style={{ fontFamily: 'var(--font-mono, Inter, sans-serif)' }}
         >⌘K</span>
       </div>
 

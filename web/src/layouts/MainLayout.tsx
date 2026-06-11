@@ -444,7 +444,7 @@ export default function MainLayout() {
           </svg>
         </button>
         <div className="flex items-center gap-2">
-          <div className="grid h-7 w-7 place-items-center rounded-[8px] bg-[var(--sh-ink)] text-[var(--sidebar)]" style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', fontSize: 18, letterSpacing: '-0.02em' }}>S</div>
+          <div className="grid h-7 w-7 place-items-center rounded-[8px] bg-[var(--sh-ink)] text-[var(--sidebar)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', fontSize: 18, letterSpacing: '-0.02em' }}>S</div>
           <span className="text-[13px] font-medium text-[var(--sh-ink)] truncate max-w-[140px]">
             {activeSection === 'home' ? SECTION_TITLES.home : SECTION_TITLES[activeSection]}
           </span>
@@ -485,7 +485,7 @@ export default function MainLayout() {
         {/* Serif "S" logo */}
         <div
           className="mb-[14px] grid h-9 w-9 place-items-center rounded-[10px] bg-[var(--sh-ink)] text-[var(--sidebar)]"
-          style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', fontSize: 22, letterSpacing: '-0.02em', boxShadow: 'var(--sh-shadow-sm)' }}
+          style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', fontSize: 22, letterSpacing: '-0.02em', boxShadow: 'var(--sh-shadow-sm)' }}
           title="SquadHub"
         >
           S
@@ -641,7 +641,7 @@ export default function MainLayout() {
         ) : activeSection !== 'home' ? (
           <div className="sh-view flex flex-1 flex-col items-center justify-center">
             <div className="mb-4 opacity-20 text-[var(--sh-ink-3)]">{ICON[(activeSection === 'clients' ? 'users' : activeSection) as keyof typeof ICON]}</div>
-            <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', letterSpacing: '-0.01em' }}>{SECTION_TITLES[activeSection]}</h3>
+            <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>{SECTION_TITLES[activeSection]}</h3>
             <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Coming soon</p>
           </div>
         ) : homeView === 'inbox' ? (
@@ -652,12 +652,12 @@ export default function MainLayout() {
           <DayPlannerView />
         ) : homeView === 'mentions' ? (
           <div className="sh-view flex flex-1 flex-col items-center justify-center">
-            <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', letterSpacing: '-0.01em' }}>Mentions</h3>
+            <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>Mentions</h3>
             <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Coming soon</p>
           </div>
         ) : homeView === 'later' ? (
           <div className="sh-view flex flex-1 flex-col items-center justify-center">
-            <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', letterSpacing: '-0.01em' }}>Later</h3>
+            <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>Later</h3>
             <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Coming soon</p>
           </div>
         ) : (
