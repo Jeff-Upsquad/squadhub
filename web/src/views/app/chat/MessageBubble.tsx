@@ -327,43 +327,73 @@ function AttachmentBlock({ message }: { message: Message }) {
     );
   }
 
-  if (mime === 'application/pdf') {
-    return (
-      <div className="mt-2 flex max-w-[520px] flex-col gap-2">
-        <object data={message.file_url} type="application/pdf" className="h-[420px] w-full rounded-[8px] border border-[var(--sh-border)]">
-          <a href={message.file_url} target="_blank" rel="noopener noreferrer" className="sqc-link underline">
-            Open PDF
-          </a>
-        </object>
-        <div className="flex items-center gap-2 text-[12px] text-[var(--sh-text-2)]">
-          <span className="truncate">{message.file_name || 'document.pdf'}</span>
-          <span>·</span>
-          <span>{fmtBytes(message.file_size)}</span>
-          <a href={message.file_url} target="_blank" rel="noopener noreferrer" className="ml-auto sqc-link hover:underline">
-            Download
-          </a>
-        </div>
-      </div>
-    );
-  }
+  // Documents and generic files render as a Slack-style card: a "TYPE ⌄"
+  // collapse toggle, then [icon · bold name · type], with an inline preview
+  // below for PDFs.
+  return <FileCard message={message} />;
+}
+
+const FILE_KIND: Record<string, { label: string; iconClass: string }> = {
+  pdf: { label: 'PDF', iconClass: '' },
+  doc: { label: 'Word', iconClass: 'sqc-file-card__icon--doc' },
+  docx: { label: 'Word', iconClass: 'sqc-file-card__icon--doc' },
+  xls: { label: 'Excel', iconClass: 'sqc-file-card__icon--sheet' },
+  xlsx: { label: 'Excel', iconClass: 'sqc-file-card__icon--sheet' },
+  csv: { label: 'CSV', iconClass: 'sqc-file-card__icon--sheet' },
+  ppt: { label: 'PowerPoint', iconClass: 'sqc-file-card__icon--doc' },
+  pptx: { label: 'PowerPoint', iconClass: 'sqc-file-card__icon--doc' },
+  zip: { label: 'Zip', iconClass: 'sqc-file-card__icon--zip' },
+  txt: { label: 'Text', iconClass: 'sqc-file-card__icon--generic' },
+};
+
+function FileCard({ message }: { message: Message }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const isPdf = (message.file_mime || '') === 'application/pdf';
+  const ext = (message.file_name || '').split('.').pop()?.toLowerCase() || '';
+  const kind = isPdf
+    ? FILE_KIND.pdf
+    : FILE_KIND[ext] || { label: ext ? ext.toUpperCase() : 'File', iconClass: 'sqc-file-card__icon--generic' };
+  const size = fmtBytes(message.file_size);
 
   return (
-    <a
-      href={message.file_url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="mt-2 flex max-w-[420px] items-center gap-3 rounded-[8px] border border-[var(--sh-border)] bg-[var(--sh-bg-soft)] p-3 hover:bg-[var(--sh-bg-hover)] transition"
-    >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[6px] bg-[#E2E8F0]">
-        <svg className="h-5 w-5 text-[#0F172B]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+    <div>
+      <button
+        type="button"
+        className="sqc-file-toggle"
+        data-collapsed={collapsed ? 'true' : 'false'}
+        onClick={() => setCollapsed((v) => !v)}
+        title={collapsed ? 'Show file' : 'Hide file'}
+      >
+        {kind.label}
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
-      </span>
-      <span className="flex min-w-0 flex-col">
-        <span className="truncate text-[14px] font-medium text-[var(--sh-text)]">{message.file_name || 'attachment'}</span>
-        <span className="text-[12px] text-[var(--sh-text-2)]">{fmtBytes(message.file_size)}</span>
-      </span>
-    </a>
+      </button>
+      {!collapsed && (
+        <div className="sqc-file-card">
+          <a className="sqc-file-card__head" href={message.file_url!} target="_blank" rel="noopener noreferrer">
+            <span className={`sqc-file-card__icon ${kind.iconClass}`}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 001 1h4M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z" />
+              </svg>
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="sqc-file-card__name">{message.file_name || 'attachment'}</span>
+              <span className="sqc-file-card__type">{kind.label}{size ? ` · ${size}` : ''}</span>
+            </span>
+          </a>
+          {isPdf && (
+            <div className="sqc-file-card__preview">
+              <object data={message.file_url!} type="application/pdf">
+                <a href={message.file_url!} target="_blank" rel="noopener noreferrer" className="sqc-link block p-3 underline">
+                  Open PDF
+                </a>
+              </object>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -422,8 +452,12 @@ function ThreadFoot({
       <span className="sqc-thread-foot__count">
         {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
       </span>
-      <span className="sqc-thread-foot__last">
-        {lastReplyAt ? `Last reply ${fmtReplyTime(lastReplyAt)}` : 'View thread'}
+      {lastReplyAt && <span className="sqc-thread-foot__last">{fmtReplyTime(lastReplyAt)}</span>}
+      <span className="sqc-thread-foot__view">View thread</span>
+      <span className="sqc-thread-foot__chev">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
       </span>
     </button>
   );

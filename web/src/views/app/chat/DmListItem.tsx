@@ -1,5 +1,6 @@
 import type { DmConversation } from '@squadhub/shared';
 import { useAuthStore } from '../../../stores/authStore';
+import { useIsOnline } from '../../../stores/presenceStore';
 
 interface Props {
   dm: DmConversation;
@@ -10,6 +11,7 @@ interface Props {
 export default function DmListItem({ dm, active, onClick }: Props) {
   const meId = useAuthStore((s) => s.user?.id);
   const others = (dm.participants || []).filter((p) => p.id !== meId);
+  const online = useIsOnline(others[0]?.id);
 
   const label =
     others.length === 0
@@ -33,11 +35,17 @@ export default function DmListItem({ dm, active, onClick }: Props) {
       }`}
       style={active ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
     >
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] bg-[#E2E8F0] text-[10px] font-bold text-[#0F172B] overflow-hidden">
-        {firstAvatar?.avatar_url ? (
-          <img src={firstAvatar.avatar_url} alt="" className="h-full w-full object-cover" />
-        ) : (
-          initials
+      <span className="relative inline-flex shrink-0">
+        <span className="flex h-5 w-5 items-center justify-center rounded-[5px] bg-[#E2E8F0] text-[10px] font-bold text-[#0F172B] overflow-hidden">
+          {firstAvatar?.avatar_url ? (
+            <img src={firstAvatar.avatar_url} alt="" className="h-full w-full object-cover" />
+          ) : (
+            initials
+          )}
+        </span>
+        {/* Slack-style presence: filled green when active, hollow when away */}
+        {others.length === 1 && (
+          <span className={`sqc-presence sqc-presence--badge${online ? ' is-online' : ''}`} />
         )}
       </span>
       <span className="truncate">{label}</span>

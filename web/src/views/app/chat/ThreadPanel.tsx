@@ -5,7 +5,8 @@ import { getSocket } from '../../../services/socket';
 import type { Message } from '@squadhub/shared';
 import MessageBubble from './MessageBubble';
 import MessageComposer from './MessageComposer';
-import type { ChatKind } from '../../../stores/workspaceStore';
+import { useWorkspaceStore, type ChatKind } from '../../../stores/workspaceStore';
+import { useAuthStore } from '../../../stores/authStore';
 
 interface Props {
   parentId: string;
@@ -20,6 +21,18 @@ interface Props {
 export default function ThreadPanel({ parentId, channelId, kind, onClose }: Props) {
   const queryClient = useQueryClient();
   const queryKey = ['thread', parentId];
+
+  // Context label under the "Thread" title — "# design" or the DM name.
+  const channel = useWorkspaceStore((s) => s.channels.find((c) => c.id === channelId));
+  const dm = useWorkspaceStore((s) => s.dmConversations.find((d) => d.id === channelId));
+  const meId = useAuthStore((s) => s.user?.id);
+  const dmOthers = (dm?.participants || []).filter((p) => p.id !== meId);
+  const contextLabel =
+    kind === 'dm'
+      ? dmOthers.map((p) => p.display_name).join(', ') || 'Conversation'
+      : channel
+        ? `# ${channel.name}`
+        : '';
 
   const { data: threadRes } = useQuery({
     queryKey,
@@ -47,16 +60,18 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
   const replies: Message[] = threadRes?.data?.replies || [];
 
   return (
-    <div className="sqc-thread-panel relative flex w-[420px] shrink-0 flex-col border-l border-divider bg-white dark:bg-surface">
+    <div className="sqc-thread-panel relative flex w-[400px] shrink-0 flex-col border-l border-divider bg-white dark:bg-surface">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-divider px-4 py-[10px]">
-        <div className="flex flex-col">
-          <h3 className="text-[15px] font-bold text-foreground">Thread</h3>
-          <p className="text-[11px] text-foreground-muted">{replies.length} {replies.length === 1 ? 'reply' : 'replies'}</p>
+      <div className="flex items-center justify-between border-b border-divider px-4 py-[9px]">
+        <div className="flex items-baseline gap-2 min-w-0">
+          <h3 className="text-[18px] font-extrabold leading-tight text-foreground">Thread</h3>
+          {contextLabel && (
+            <span className="truncate text-[13px] text-foreground-muted">{contextLabel}</span>
+          )}
         </div>
         <button
           onClick={onClose}
-          className="rounded-[4px] p-1 text-foreground-muted hover:bg-surface-alt hover:text-foreground"
+          className="rounded-[6px] p-1.5 text-foreground-muted hover:bg-surface-alt hover:text-foreground"
           aria-label="Close thread"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -69,12 +84,14 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
       <div className="flex flex-1 flex-col overflow-y-auto">
         {root && (
           <>
-            <MessageBubble message={root} inThread />
-            <div className="mx-5 my-2 flex items-center gap-2 text-[11px] text-foreground-muted">
-              <span className="h-px flex-1 bg-divider" />
-              <span>{replies.length} {replies.length === 1 ? 'reply' : 'replies'}</span>
-              <span className="h-px flex-1 bg-divider" />
+            <div className="pt-2">
+              <MessageBubble message={root} inThread />
             </div>
+            {replies.length > 0 && (
+              <div className="sqc-thread-divider">
+                {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
+              </div>
+            )}
           </>
         )}
         {replies.map((r) => (
@@ -87,6 +104,7 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
         channelId={channelId}
         kind={kind}
         parentMessageId={parentId}
+        placeholder="Reply…"
         onSend={() => queryClient.invalidateQueries({ queryKey })}
       />
     </div>

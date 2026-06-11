@@ -126,6 +126,8 @@ export default function MessageComposer({
   const [sendError, setSendError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
   const [hasText, setHasText] = useState(false);
+  // Slack shows the formatting bar by default; the Aa button toggles it.
+  const [showFmt, setShowFmt] = useState(true);
   // Bumped on every send/state change to force toolbar buttons to re-render
   // with the latest editor.isActive(...) results.
   const [, setEditorTick] = useState(0);
@@ -179,7 +181,9 @@ export default function MessageComposer({
     onSelectionUpdate: () => setEditorTick((t) => t + 1),
     onFocus: () => setFocused(true),
     onBlur: () => setFocused(false),
-  });
+    // Recreate when the conversation (and so the placeholder) changes —
+    // Placeholder is baked into the extension config at creation time.
+  }, [effectivePlaceholder]);
 
   // Reset the editor when switching channels/DMs/threads
   useEffect(() => {
@@ -357,6 +361,7 @@ export default function MessageComposer({
         className="sqc-composer"
         ref={composerBoxRef}
         data-focused={focused || hasText ? 'true' : 'false'}
+        data-fmt={showFmt ? 'on' : 'off'}
       >
         {recording ? (
           <div className="p-2">
@@ -388,14 +393,20 @@ export default function MessageComposer({
                 </svg>
               </ToolBtn>
               <Divider />
+              <ToolBtn title="Ordered list" active={isActive('orderedList')} onClick={() => editor?.chain().focus().toggleOrderedList().run()}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 6h11M10 12h11M10 18h11M4 6h1v4M4 10h2M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" />
+                </svg>
+              </ToolBtn>
               <ToolBtn title="Bulleted list" active={isActive('bulletList')} onClick={() => editor?.chain().focus().toggleBulletList().run()}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
                 </svg>
               </ToolBtn>
-              <ToolBtn title="Numbered list" active={isActive('orderedList')} onClick={() => editor?.chain().focus().toggleOrderedList().run()}>
+              <Divider />
+              <ToolBtn title="Blockquote" active={isActive('blockquote')} onClick={() => editor?.chain().focus().toggleBlockquote().run()}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10 6h11M10 12h11M10 18h11M4 6h1v4M4 10h2M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" />
+                  <path d="M3 21V11a4 4 0 014-4M14 21V11a4 4 0 014-4" />
                 </svg>
               </ToolBtn>
               <Divider />
@@ -408,11 +419,6 @@ export default function MessageComposer({
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="4" width="18" height="16" rx="2" />
                   <path d="M10 10l-2 2 2 2M14 10l2 2-2 2" />
-                </svg>
-              </ToolBtn>
-              <ToolBtn title="Blockquote" active={isActive('blockquote')} onClick={() => editor?.chain().focus().toggleBlockquote().run()}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 21V11a4 4 0 014-4M14 21V11a4 4 0 014-4" />
                 </svg>
               </ToolBtn>
             </div>
@@ -429,11 +435,12 @@ export default function MessageComposer({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
-                  className="sqc-composer__tool"
+                  className="sqc-composer__attach"
                   title="Attach file"
                 >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 5v14m7-7H5" />
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 8v8m4-4H8" />
                   </svg>
                 </button>
                 <input
@@ -443,12 +450,8 @@ export default function MessageComposer({
                   onChange={handlePickFile}
                   accept="image/*,audio/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip"
                 />
-                <Divider />
-                <ToolBtn title="Mention" onClick={() => editor?.chain().focus().insertContent('@').run()}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="4" />
-                    <path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94" />
-                  </svg>
+                <ToolBtn title={showFmt ? 'Hide formatting' : 'Show formatting'} active={showFmt} onClick={() => setShowFmt((v) => !v)}>
+                  <span style={{ fontSize: 13, fontWeight: 700, textDecoration: 'underline', textUnderlineOffset: 2 }}>Aa</span>
                 </ToolBtn>
                 <div className="relative">
                   <ToolBtn title="Emoji" onClick={() => setShowEmoji((v) => !v)} active={showEmoji}>
@@ -462,6 +465,13 @@ export default function MessageComposer({
                     </div>
                   )}
                 </div>
+                <ToolBtn title="Mention" onClick={() => editor?.chain().focus().insertContent('@').run()}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94" />
+                  </svg>
+                </ToolBtn>
+                <Divider />
                 <ToolBtn title="Record voice note" onClick={() => setRecording(true)}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
@@ -489,6 +499,13 @@ export default function MessageComposer({
           </>
         )}
       </div>
+
+      {/* Slack-style keyboard hint */}
+      {(focused || hasText) && !recording && (
+        <div className="sqc-composer__hint">
+          <strong>Shift + Return</strong> to add a new line
+        </div>
+      )}
     </form>
   );
 }

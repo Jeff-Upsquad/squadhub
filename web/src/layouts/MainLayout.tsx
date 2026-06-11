@@ -9,6 +9,7 @@ import { usePMStore } from '../stores/pmStore';
 import { loadViewPreferences } from '../stores/viewPreferencesSync';
 import type { Workspace, Channel, RoleHomeView } from '@squadhub/shared';
 import { connectSocket, disconnectSocket } from '../services/socket';
+import { usePresenceStore } from '../stores/presenceStore';
 import ChatPanel from '../views/app/chat/ChatPanel';
 import CreateChannelModal from '../views/app/chat/CreateChannelModal';
 import GlobalCreateTaskModal from '../views/app/pm/GlobalCreateTaskModal';
@@ -205,6 +206,9 @@ export default function MainLayout() {
   const isPartner = useIsPartner();
   const [activeSection, setActiveSection] = useState<ActiveSection>('home');
   const [homeView, setHomeView] = useState<HomeView>('hub');
+  // Live presence set for the chat header dot (hooks can't run inside the
+  // header IIFE below, so subscribe here).
+  const onlineUserIds = usePresenceStore((s) => s.onlineUserIds);
   const { data: unreadCount = 0 } = useUnreadCount();
   useBrowserNotifications(currentWorkspace?.id);
   // Schedule in-app toasts for upcoming work-block windows today.
@@ -679,21 +683,38 @@ export default function MainLayout() {
                 const memberCount = isDm
                   ? (activeDm?.participants?.length || 0)
                   : null;
+                // For a note-to-self DM there are no "others" — show the user's own avatar.
+                const firstOther = otherParticipants[0] || activeDm?.participants?.[0];
+                const dmOnline = !!firstOther && onlineUserIds.has(firstOther.id);
+                const avatarGradient = (id: string) => {
+                  let h = 0;
+                  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
+                  return `linear-gradient(135deg, hsl(${h} 70% 55%), hsl(${(h + 40) % 360} 65% 45%))`;
+                };
                 return (
                   <div className="sqc-header">
                     <div className="sqc-header__title" title={isDm ? 'Conversation' : 'Channel details'}>
                       {isDm ? (
                         <span
-                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] text-[10px] font-bold text-white"
-                          style={{ background: 'linear-gradient(135deg, #9b6cff, #ff5a1f)' }}
+                          className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-[6px] text-[11px] font-bold text-white"
+                          style={{ background: firstOther?.avatar_url ? undefined : avatarGradient(firstOther?.id || 'x') }}
                         >
-                          {(otherParticipants[0]?.display_name?.[0] || '?').toUpperCase()}
+                          {firstOther?.avatar_url ? (
+                            <img src={firstOther.avatar_url} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            (firstOther?.display_name?.[0] || '?').toUpperCase()
+                          )}
                         </span>
                       ) : (
                         <span className="text-[18px] font-black leading-none text-[var(--sh-text-2)]">#</span>
                       )}
                       <span>{headerName}</span>
-                      {memberCount != null && <small>· {memberCount}</small>}
+                      {isDm && otherParticipants.length === 1 && (
+                        <span
+                          className={`sqc-presence${dmOnline ? ' is-online' : ''}`}
+                          title={dmOnline ? 'Active' : 'Away'}
+                        />
+                      )}
                       <svg className="h-3.5 w-3.5 text-[var(--sh-text-2)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
@@ -704,6 +725,26 @@ export default function MainLayout() {
                       </button>
                     )}
                     <div className="sqc-header__actions">
+                      {isDm && memberCount != null && memberCount > 0 && (
+                        <span className="sqc-pill" title={`${memberCount} ${memberCount === 1 ? 'member' : 'members'}`}>
+                          <span className="sqc-pill__avatars">
+                            {(activeDm?.participants || []).slice(0, 3).map((p) => (
+                              <span
+                                key={p.id}
+                                style={{ background: p.avatar_url ? undefined : avatarGradient(p.id) }}
+                                className="overflow-hidden"
+                              >
+                                {p.avatar_url ? (
+                                  <img src={p.avatar_url} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                  (p.display_name?.[0] || '?').toUpperCase()
+                                )}
+                              </span>
+                            ))}
+                          </span>
+                          <span>{memberCount}</span>
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={() => setShowChannelSettings(!showChannelSettings)}
