@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../services/api';
 
 const ADMIN_APP_URL = process.env.NEXT_PUBLIC_ADMIN_URL || (process.env.NODE_ENV === 'production' ? '/admin' : 'http://localhost:3001');
-import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useWorkspaceStore, type ChatKind } from '../stores/workspaceStore';
 import { useAuthStore } from '../stores/authStore';
 import { usePMStore } from '../stores/pmStore';
 import { loadViewPreferences } from '../stores/viewPreferencesSync';
@@ -49,6 +49,7 @@ import MyTasksView from '../views/app/MyTasksView';
 import DayPlannerView from '../views/app/DayPlannerView';
 import LearningShell from '../views/app/learning/LearningShell';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
+import { useNavHistory } from '../hooks/useNavHistory';
 import { useUnreadCount } from '../hooks/useUnreadCount';
 import { useBrowserNotifications } from '../hooks/useBrowserNotifications';
 import BrowserNotificationsToggle from '../components/BrowserNotificationsToggle';
@@ -57,6 +58,21 @@ import { useIsMobile } from '../hooks/useIsMobile';
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'learning' | 'more';
 export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner';
+
+// One entry in the in-app navigation history: everything needed to bring the
+// user back to a view. Views switch via local state rather than URLs, so the
+// browser's history can't drive the sidebar back/forward buttons.
+type NavSnapshot = {
+  section: ActiveSection;
+  homeView: HomeView;
+  channelId: string | null;
+  channelKind: ChatKind;
+  spaceId: string | null;
+  listId: string | null;
+  folderId: string | null;
+  spacePageId: string | null;
+  designFolderId: string | null;
+};
 
 // ---- Role Home lookup ----
 // Picks which Home component to render based on the role's home_view.
@@ -197,6 +213,7 @@ export default function MainLayout() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const pmReset = usePMStore((s) => s.reset);
+  const activeSpaceId = usePMStore((s) => s.activeSpaceId);
   const activeListId = usePMStore((s) => s.activeListId);
   const activeFolderId = usePMStore((s) => s.activeFolderId);
   const activeSpacePageId = usePMStore((s) => s.activeSpacePageId);
@@ -274,23 +291,33 @@ export default function MainLayout() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // True for the commit produced by a nav-history restore: the auto-switch
+  // effects below must not fight the exact view being restored (e.g. forcing
+  // 'tasks' when the snapshot being applied is the inbox with a list still
+  // selected). Cleared by an effect declared after the nav-history wiring.
+  const navRestoringRef = useRef(false);
+
   // Auto-switch to tasks view when a list is selected
   useEffect(() => {
+    if (navRestoringRef.current) return;
     if (activeListId) { setHomeView('tasks'); setMobileDrawerOpen(false); }
   }, [activeListId]);
 
   // Auto-switch to tasks view when a folder is selected
   useEffect(() => {
+    if (navRestoringRef.current) return;
     if (activeFolderId) { setHomeView('tasks'); setMobileDrawerOpen(false); }
   }, [activeFolderId]);
 
   // Auto-switch to tasks view when a space is opened (space page)
   useEffect(() => {
+    if (navRestoringRef.current) return;
     if (activeSpacePageId) { setHomeView('tasks'); setMobileDrawerOpen(false); }
   }, [activeSpacePageId]);
 
   // Auto-switch to tasks view when a client opens a design folder
   useEffect(() => {
+    if (navRestoringRef.current) return;
     if (activeDesignFolderId) { setHomeView('tasks'); setMobileDrawerOpen(false); }
   }, [activeDesignFolderId]);
 
@@ -399,6 +426,65 @@ export default function MainLayout() {
   const handleOpenSpaces = () => {
     setHomeView('tasks');
   };
+
+  // ---- In-app navigation history (sidebar back/forward buttons) ----
+  // Page identity: which fields matter depends on the view, so background
+  // changes (e.g. default channel auto-selecting while on a tasks view)
+  // don't record entries.
+  const navKey =
+    activeSection !== 'home'
+      ? `section:${activeSection}`
+      : homeView === 'chat'
+        ? `chat:${activeChannelKind}:${activeChannelId ?? ''}`
+        : homeView === 'tasks'
+          ? `tasks:${activeSpaceId ?? ''}:${activeFolderId ?? ''}:${activeListId ?? ''}:${activeSpacePageId ?? ''}:${activeDesignFolderId ?? ''}`
+          : `home:${homeView}`;
+  const navSnapshot = useMemo<NavSnapshot>(
+    () => ({
+      section: activeSection,
+      homeView,
+      channelId: activeChannelId,
+      channelKind: activeChannelKind,
+      spaceId: activeSpaceId,
+      listId: activeListId,
+      folderId: activeFolderId,
+      spacePageId: activeSpacePageId,
+      designFolderId: activeDesignFolderId,
+    }),
+    [activeSection, homeView, activeChannelId, activeChannelKind, activeSpaceId, activeListId, activeFolderId, activeSpacePageId, activeDesignFolderId],
+  );
+  const nav = useNavHistory<NavSnapshot>({
+    snapshot: navSnapshot,
+    key: navKey,
+    resetKey: currentWorkspace?.id,
+    restoringRef: navRestoringRef,
+    onRestore: (s) => {
+      setActiveSection(s.section);
+      setHomeView(s.homeView);
+      if (s.section === 'home' && s.homeView === 'chat') {
+        setActiveChannel(s.channelId, s.channelKind);
+      } else if (s.section === 'home' && s.homeView === 'tasks') {
+        // Raw setState: the individual pm setters clear sibling selections,
+        // which would fight the exact state being restored.
+        usePMStore.setState({
+          activeSpaceId: s.spaceId,
+          activeListId: s.listId,
+          activeFolderId: s.folderId,
+          activeSpacePageId: s.spacePageId,
+          activeDesignFolderId: s.designFolderId,
+          contextListId: s.listId,
+          selectedTasks: [],
+        });
+      }
+      setMobileDrawerOpen(false);
+    },
+  });
+  // Declared after the auto-switch effects and the recorder inside
+  // useNavHistory, so it runs last in the restore commit and closes the
+  // window navRestoringRef opens.
+  useEffect(() => {
+    navRestoringRef.current = false;
+  });
 
   // Loading state
   if (workspacesLoading) {
@@ -608,6 +694,10 @@ export default function MainLayout() {
             channels={channels}
             activeChannelId={activeChannelId}
             homeView={homeView}
+            canGoBack={nav.canGoBack}
+            canGoForward={nav.canGoForward}
+            onNavBack={nav.goBack}
+            onNavForward={nav.goForward}
             onChangeView={(v) => { setActiveSection('home'); setHomeView(v); setMobileDrawerOpen(false); }}
             onSelectChannel={handleSelectChannel}
             onSelectDm={handleSelectDm}

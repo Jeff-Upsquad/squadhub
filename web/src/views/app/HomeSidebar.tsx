@@ -27,6 +27,10 @@ interface HomeSidebarProps {
   channels: Channel[];
   activeChannelId: string | null;
   homeView: HomeView;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  onNavBack: () => void;
+  onNavForward: () => void;
   onChangeView: (view: HomeView) => void;
   onSelectChannel: (channelId: string) => void;
   onSelectDm: (dmId: string) => void;
@@ -166,6 +170,10 @@ export default function HomeSidebar({
   channels,
   activeChannelId,
   homeView,
+  canGoBack,
+  canGoForward,
+  onNavBack,
+  onNavForward,
   onChangeView,
   onSelectChannel,
   onSelectDm,
@@ -237,14 +245,26 @@ export default function HomeSidebar({
           </svg>
         </button>
         <div className="flex items-center gap-[2px]">
-          <button className="grid h-[26px] w-[26px] place-items-center rounded-[6px] text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition" title="Filter">
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+          <button
+            onClick={onNavBack}
+            disabled={!canGoBack}
+            className="grid h-[26px] w-[26px] place-items-center rounded-[6px] text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition disabled:pointer-events-none disabled:opacity-35"
+            title="Back"
+            aria-label="Go back"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
           </button>
-          <button className="grid h-[26px] w-[26px] place-items-center rounded-[6px] text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition" title="New message">
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+          <button
+            onClick={onNavForward}
+            disabled={!canGoForward}
+            className="grid h-[26px] w-[26px] place-items-center rounded-[6px] text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition disabled:pointer-events-none disabled:opacity-35"
+            title="Forward"
+            aria-label="Go forward"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
           </button>
         </div>
