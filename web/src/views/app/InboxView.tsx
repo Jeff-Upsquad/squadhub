@@ -9,7 +9,7 @@ import InboxMessageDetail from './inbox/InboxMessageDetail';
 import ViewSearchInput from '../../components/pm/ViewSearchInput';
 import DesktopNotificationsBanner from '../../components/DesktopNotificationsBanner';
 
-type Notification = {
+export type Notification = {
   id: string;
   user_id: string;
   type:
@@ -43,7 +43,7 @@ function isMention(t: Notification['type']) {
   return t === 'mention' || t === 'message_mention';
 }
 
-function avatarFor(n: Notification): { initials: string; color: string } {
+export function avatarFor(n: Notification): { initials: string; color: string } {
   const name = n.actor?.display_name || 'Someone';
   const initials = name
     .split(' ')

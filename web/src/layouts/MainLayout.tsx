@@ -45,6 +45,7 @@ import GlobalTaskDetailPanel from '../views/app/home/GlobalTaskDetailPanel';
 import GlobalTaskPeekPanel from '../views/app/home/GlobalTaskPeekPanel';
 import EmergencyBanner from '../views/app/pm/EmergencyBanner';
 import InboxView from '../views/app/InboxView';
+import InboxSlider from '../components/InboxSlider';
 import MyTasksView from '../views/app/MyTasksView';
 import DayPlannerView from '../views/app/DayPlannerView';
 import LearningShell from '../views/app/learning/LearningShell';
@@ -218,6 +219,7 @@ export default function MainLayout() {
   const [resumingDraft, setResumingDraft] = useState<SavedDraft | null>(null);
   const [timesheetOpen, setTimesheetOpen] = useState(false);
   const [timesheetAnchor, setTimesheetAnchor] = useState<DOMRect | null>(null);
+  const [inboxSliderOpen, setInboxSliderOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -353,6 +355,7 @@ export default function MainLayout() {
   const openInboxNotification = (notificationId: string) => {
     setActiveSection('home');
     setHomeView('inbox');
+    setInboxSliderOpen(false);
     window.__pendingInboxNotificationId = notificationId;
   };
 
@@ -503,8 +506,14 @@ export default function MainLayout() {
             icon={ICON.inbox}
             label="Inbox"
             badge={unreadCount > 0 ? unreadCount : undefined}
-            active={activeSection === 'home' && homeView === 'inbox'}
-            onClick={() => { setActiveSection('home'); setHomeView('inbox'); }}
+            active={(activeSection === 'home' && homeView === 'inbox') || inboxSliderOpen}
+            onClick={() => {
+              // The rail always toggles the slide-over; the full inbox view is
+              // reached through the Home sidebar's Inbox item (or deep links).
+              if (activeSection === 'home' && homeView === 'inbox') return;
+              setMobileDrawerOpen(false);
+              setInboxSliderOpen((v) => !v);
+            }}
           />
           <RailBtn
             icon={ICON.tasks}
@@ -784,6 +793,14 @@ export default function MainLayout() {
           )
         )}
       </div>
+
+      {/* Inbox panel — floating feed opened by the rail's inbox button */}
+      {inboxSliderOpen && (
+        <InboxSlider
+          onClose={() => setInboxSliderOpen(false)}
+          setHomeView={(v) => { setActiveSection('home'); setHomeView(v); }}
+        />
+      )}
 
       {/* Global task detail panel — opens from any view when activeTaskId is set */}
       <GlobalTaskDetailPanel />
