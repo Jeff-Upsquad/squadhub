@@ -247,6 +247,7 @@ export interface Space {
   created_at: string;
   updated_at: string;
   position: number;
+  client_id?: string | null;
   my_access_level?: AccessLevel;
   // Joined
   statuses?: SpaceStatus[];
