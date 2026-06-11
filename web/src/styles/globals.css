@@ -4892,14 +4892,21 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
 .sqc-msg-scroll {
   flex: 1;
   overflow-y: auto;
+  /* overflow-x would compute to auto; with classic (layout-consuming)
+     scrollbars the vertical bar's width-steal can tip wrapped content into
+     a stray horizontal scrollbar above the composer. Content wraps anyway. */
+  overflow-x: hidden;
   min-height: 0;
   padding-bottom: 4px;
 }
 .sqc-msg-scroll::-webkit-scrollbar { width: 10px; }
 .sqc-msg-scroll::-webkit-scrollbar-thumb {
-  background: #d6d6d4;
-  border-radius: 4px;
+  background: var(--sh-border); /* follows theme — hardcoded gray glared in dark mode */
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
+.sqc-msg-scroll::-webkit-scrollbar-track { background: transparent; }
 
 /* Slack-style day divider: hairline across, floating pill with chevron */
 .sqc-day-divider {
@@ -5365,6 +5372,10 @@ ol.sqc-list {
   cursor: text;
   max-height: 220px;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+.sqc-composer__editor-wrap .ProseMirror {
+  overflow-wrap: anywhere; /* long URLs/tokens wrap instead of scrolling */
 }
 .sqc-composer__editor-wrap .ProseMirror {
   outline: none;

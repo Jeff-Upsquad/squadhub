@@ -666,7 +666,10 @@ export default function MainLayout() {
           </div>
         ) : (
           homeView === 'chat' ? (
-            <div className="squadhub-chat flex flex-1 flex-col min-w-0">
+            // min-h-0 is load-bearing: without it this flex child's automatic
+            // minimum is its content height, so a long conversation overflows
+            // the viewport and clips the composer instead of scrolling.
+            <div className="squadhub-chat flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
               {activeChannelId && (() => {
                 const isDm = activeChannelKind === 'dm';
                 const activeDm = isDm ? dmConversations.find((d) => d.id === activeChannelId) : null;
