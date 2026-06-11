@@ -57,7 +57,7 @@ export default function DashboardHome() {
           <div className="date">
             {day.toUpperCase()}
             <span className="big">{date}</span>
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: 'var(--sh-ink-4)' }}>{week}</span>
+            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: 'var(--sh-ink-4)' }}>{week}</span>
           </div>
         </div>
 

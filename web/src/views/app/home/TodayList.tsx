@@ -76,62 +76,38 @@ export default function TodayList() {
   const currentLabel = GROUP_OPTIONS.find((o) => o.value === groupBy)?.label ?? 'None';
 
   return (
-    <div className="card" style={{ marginBottom: 28 }}>
-      <div className="card-head">
-        <h3>Today — focus list</h3>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    <div className="hm-card">
+      <div className="hm-card-head">
+        <h3>Today</h3>
+        {view === 'list' && !isLoading && !isError && (
+          <span className="hm-count">· {tasks.length}</span>
+        )}
+        <div className="hm-head-actions">
           {view === 'list' && (
             <div ref={anchorRef} style={{ position: 'relative' }}>
               <button
                 type="button"
-                className="td-pill-btn"
+                className="hm-pill"
                 onClick={() => setMenuOpen((v) => !v)}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
               >
-                <span style={{ color: 'var(--sh-ink-3)', marginRight: 2 }}>Group:</span>
+                <span className="dim">Group:</span>
                 {currentLabel}
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M6 9l6 6 6-6" />
                 </svg>
               </button>
               {menuOpen && (
-                <div
-                  role="menu"
-                  style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 6px)',
-                    right: 0,
-                    minWidth: 160,
-                    background: 'var(--surface, #fff)',
-                    border: '1px solid var(--sh-hair-2, #eee)',
-                    borderRadius: 10,
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-                    padding: 4,
-                    zIndex: 40,
-                    fontSize: 12.5,
-                  }}
-                >
+                <div className="hm-menu" role="menu">
                   {GROUP_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}
                       type="button"
                       role="menuitem"
+                      className="hm-menu-item"
+                      data-active={groupBy === opt.value}
                       onClick={() => { setTodayListGroupBy(opt.value); setMenuOpen(false); }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        width: '100%',
-                        padding: '6px 10px',
-                        borderRadius: 6,
-                        background: groupBy === opt.value ? 'var(--sh-hair-3)' : 'transparent',
-                        color: 'var(--sh-ink)',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        border: 'none',
-                        font: 'inherit',
-                      }}
                     >
                       <span>{opt.label}</span>
                       {groupBy === opt.value && (
@@ -147,11 +123,11 @@ export default function TodayList() {
           )}
           <button
             type="button"
-            className="td-pill-btn"
+            className="hm-pill"
             onClick={() => setTodayListView(view === 'list' ? 'calendar' : 'list')}
             aria-label={view === 'list' ? 'Switch to calendar view' : 'Switch to list view'}
             title={view === 'list' ? 'Switch to calendar view' : 'Switch to list view'}
-            style={{ padding: '4px 8px' }}
+            style={{ padding: '0 8px' }}
           >
             {view === 'list' ? (
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -181,49 +157,44 @@ export default function TodayList() {
       ) : (
         <>
           {isLoading && (
-            <div className="home-task-list">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="home-task-item" style={{ opacity: 0.5 }}>
-                  <div className="checkbox" />
-                  <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
-                    <span className="ht-title" style={{ background: 'var(--sh-ink-6, #eee)', height: 12, borderRadius: 4, width: '60%' }} />
-                    <span className="ht-meta" style={{ background: 'var(--sh-ink-6, #eee)', height: 10, borderRadius: 4, width: 80 }} />
-                  </div>
-                  <div className="ht-ava ava" style={{ background: 'var(--sh-ink-6, #eee)' }} />
-                </div>
-              ))}
+            <div className="hm-list" aria-hidden="true">
+              <div className="hm-skel" />
+              <div className="hm-skel" style={{ animationDelay: '0.15s' }} />
+              <div className="hm-skel" style={{ animationDelay: '0.3s' }} />
             </div>
           )}
 
           {isError && !isLoading && (
-            <div style={{ padding: '18px 4px', textAlign: 'center', color: 'var(--sh-ink-4)' }}>
+            <div className="hm-state">
               Couldn't load today's list.{' '}
-              <span className="link" style={{ cursor: 'pointer' }} onClick={() => refetch()}>Retry</span>
+              <span className="retry" role="button" tabIndex={0} onClick={() => refetch()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); refetch(); } }}>Retry</span>
             </div>
           )}
 
           {!isLoading && !isError && tasks.length === 0 && (
-            <div style={{ padding: '18px 4px', textAlign: 'center', color: 'var(--sh-ink-4)' }}>
-              Nothing on the list for today.
+            <div className="hm-empty">
+              <div className="rule" />
+              <div className="h">Nothing on the list for today.</div>
+              <div className="p">Star a task or set its work date to today and it shows up here.</div>
             </div>
           )}
 
           {!isLoading && !isError && tasks.length > 0 && (
             groupBy === 'none' ? (
-              <div className="home-task-list">
+              <div className="hm-list">
                 {tasks.map((t) => (
                   <TodayRow key={t.id} task={t} onOpen={openTask} />
                 ))}
               </div>
             ) : (
               groups.map((g) => (
-                <div key={g.key} className="today-group">
-                  <div className="today-group-head">
+                <div key={g.key} className="hm-group">
+                  <div className="hm-group-head">
                     <span>{g.label}</span>
                     <span className="count">· {g.tasks.length}</span>
                   </div>
-                  <div className="home-task-list">
-                    {tasks.map((t) => (
+                  <div className="hm-list" style={{ paddingTop: 0 }}>
+                    {g.tasks.map((t) => (
                       <TodayRow key={t.id} task={t} onOpen={openTask} />
                     ))}
                   </div>
@@ -270,7 +241,7 @@ function TodayRow({ task: t, onOpen }: { task: Task; onOpen: (id: string) => voi
 
   return (
     <div
-      className="home-task-item"
+      className="hm-task"
       data-done={displayDone}
       data-fading={isFadingOut}
       data-subtask={isSubtask || undefined}
@@ -279,7 +250,7 @@ function TodayRow({ task: t, onOpen }: { task: Task; onOpen: (id: string) => voi
       role="button"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(t.id); } }}
-      style={isSubtask ? { paddingLeft: 20 } : undefined}
+      style={isSubtask ? { paddingLeft: 26 } : undefined}
     >
       <div
         className="checkbox"
@@ -289,44 +260,29 @@ function TodayRow({ task: t, onOpen }: { task: Task; onOpen: (id: string) => voi
         aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
         onClick={onToggleDone}
       />
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
-        <span className="ht-title">
+      <div className="t">
+        <span className="title">
           {isSubtask && <span style={{ color: 'var(--sh-ink-4)', marginRight: 4 }}>↳</span>}
           {t.title}
         </span>
-        {(label || when.text || (isSubtask && parentTitle)) && (
-          <span className="ht-meta" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {isSubtask && parentTitle && (
-              <span style={{ color: 'var(--sh-ink-4)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>↳ {parentTitle}</span>
-            )}
-            {label && <span className="tag" style={{ fontSize: 10, padding: '0 5px' }}>{label}</span>}
-            {when.text && (
-              <span style={when.state === 'overdue' ? { color: 'var(--sh-danger, #c43)' } : undefined}>
-                {when.text}
-              </span>
-            )}
-          </span>
-        )}
+        {isSubtask && parentTitle && <span className="hm-parent">↳ {parentTitle}</span>}
+        {label && <span className="hm-tag">{label}</span>}
       </div>
+      {when.text && (
+        <span className="hm-when" data-overdue={when.state === 'overdue' || undefined}>
+          {when.text}
+        </span>
+      )}
       {assignee ? (
         <div
-          className="ht-ava ava"
-          style={{
-            background: avatarColor(assignee.id || assignee.email),
-          }}
+          className="hm-ava"
+          style={{ background: avatarColor(assignee.id || assignee.email) }}
           title={assignee.display_name || assignee.email}
         >
           {initialOf(assignee.display_name || assignee.email)}
         </div>
       ) : (
-        <div
-          className="ht-ava ava"
-          style={{
-            background: 'var(--sh-ink-6, #eee)',
-            color: 'var(--sh-ink-4)',
-          }}
-          title="Unassigned"
-        >
+        <div className="hm-ava" data-empty="true" title="Unassigned">
           –
         </div>
       )}

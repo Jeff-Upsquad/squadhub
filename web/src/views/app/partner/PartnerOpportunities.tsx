@@ -47,7 +47,7 @@ export default function PartnerOpportunities() {
       <div className="flex items-center gap-3 border-b border-[var(--sh-hair)] px-6 py-4">
         <h2
           className="text-[28px] font-semibold text-[var(--sh-ink)]"
-          style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', letterSpacing: '-0.01em' }}
+          style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}
         >
           Opportunities
         </h2>

@@ -174,7 +174,7 @@ function BoardColumn({
       className="bv-column"
       data-dragover={isDragOver}
     >
-      {/* Column header — Instrument Serif title to match list group-head */}
+      {/* Column header — display title to match list group-head */}
       <div className="bv-column-head">
         <span className="dot" style={{ backgroundColor: status.color }} />
         <span className="title">{status.name}</span>

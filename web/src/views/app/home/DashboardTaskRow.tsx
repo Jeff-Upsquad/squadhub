@@ -66,6 +66,8 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
   const priorityLabel = PRIORITY_LABEL[task.priority as string] || null;
   const isSubtask = !!task.parent_task_id;
   const parentTitle = task.parent_task?.title || null;
+  const whenText = formatWhen(task.due_date);
+  const isOverdue = whenText.startsWith('Overdue');
 
   const onOpen = () => {
     if (isMobile) {
@@ -95,7 +97,7 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
 
   return (
     <div
-      className="today-item"
+      className="hmp-task"
       data-done={displayDone}
       data-fading={isFadingOut}
       data-subtask={isSubtask || undefined}
@@ -114,24 +116,26 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
         aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
         onClick={onToggleDone}
       />
-      <div>
-        <div className="ti-title">
+      <div className="body">
+        <div className="title">
           {isSubtask && <span style={{ color: 'var(--sh-ink-4)', marginRight: 4 }}>↳</span>}
           {task.title}
         </div>
-        <div className="ti-meta">
-          {isSubtask && parentTitle && (
-            <>
-              <span style={{ color: 'var(--sh-ink-4)' }}>From: {parentTitle}</span>
-              <span>·</span>
-            </>
+        <div className="meta">
+          {isSubtask && parentTitle && <span>From: {parentTitle}</span>}
+          <span className="when" data-overdue={isOverdue || undefined}>{whenText}</span>
+          {priorityLabel && (
+            <span className="pri" data-urgent={task.priority === 'urgent' || undefined}>{priorityLabel}</span>
           )}
-          <span>{formatWhen(task.due_date)}</span>
-          {priorityLabel && (<><span>·</span><span>{priorityLabel}</span></>)}
-          {firstAssignee?.display_name && (<><span>·</span><span>{firstAssignee.display_name}</span></>)}
+          {firstAssignee?.display_name && <span>{firstAssignee.display_name}</span>}
         </div>
       </div>
-      <div className="ava" style={{ width: 22, height: 22, borderRadius: '50%', background: color, fontSize: 9.5 }}>{label}</div>
+      <div className="hm-ava" style={{ background: color }} title={firstAssignee?.display_name || firstAssignee?.email || 'Unassigned'}>
+        {label}
+      </div>
+      <svg className="open-ind" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="m9 18 6-6-6-6" />
+      </svg>
     </div>
   );
 }

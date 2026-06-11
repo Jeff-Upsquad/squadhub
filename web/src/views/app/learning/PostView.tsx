@@ -30,7 +30,7 @@ export default function PostView({ item, assignment }: Props) {
             {item.category.name}
           </span>
         )}
-        <h1 className="serif text-[40px] leading-[1.1] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', letterSpacing: '-0.02em' }}>
+        <h1 className="serif text-[40px] leading-[1.1] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.02em' }}>
           {item.title}
         </h1>
         {item.summary && <p className="mt-3 text-[15px] leading-relaxed text-[var(--sh-ink-2)]">{item.summary}</p>}

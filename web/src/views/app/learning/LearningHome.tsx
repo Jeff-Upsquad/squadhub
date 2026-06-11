@@ -29,7 +29,7 @@ export default function LearningHome({ onOpenItem }: { onOpenItem: (id: string) 
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
       <div className="border-b border-[var(--sh-hair)] px-6 pt-5 pb-0">
-        <h1 className="serif text-[32px] leading-tight text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)', letterSpacing: '-0.01em' }}>
+        <h1 className="serif text-[32px] leading-tight text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>
           Learning
         </h1>
         <p className="mt-1 text-[13px] text-[var(--sh-ink-3)]">Training and updates assigned to you.</p>
@@ -105,7 +105,7 @@ function LearningCard({ entry, onClick }: { entry: MyLearningEntry; onClick: () 
         </div>
       ) : (
         <div className="flex aspect-[16/9] w-full items-center justify-center bg-gradient-to-br from-[var(--sh-hair-3)] to-[var(--sh-hair)]">
-          <span className="serif text-3xl text-[var(--sh-ink-3)]" style={{ fontFamily: 'var(--font-serif, Instrument Serif, serif)' }}>
+          <span className="serif text-3xl text-[var(--sh-ink-3)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)' }}>
             {item.kind === 'course' ? '📚' : '📝'}
           </span>
         </div>
