@@ -53,6 +53,27 @@ async function refreshAccessToken(): Promise<string | null> {
   return refreshPromise;
 }
 
+function jwtExpMs(token: string): number {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return (payload.exp ?? 0) * 1000;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Returns an access token valid for at least `minTtlMs`, refreshing through
+ * the shared in-flight machinery when needed. Used for cross-app token handoff
+ * (Squad Clips iframe) — hands out ONLY the access token, never the refresh
+ * token (it rotates; concurrent use elsewhere would kill this session).
+ */
+export async function getFreshAccessToken(minTtlMs = 120_000): Promise<string | null> {
+  const { accessToken } = useAuthStore.getState();
+  if (accessToken && jwtExpMs(accessToken) - Date.now() > minTtlMs) return accessToken;
+  return refreshAccessToken();
+}
+
 // Handle 401 — attempt a one-shot refresh+retry; logout only if refresh fails.
 api.interceptors.response.use(
   (response) => response,

@@ -50,6 +50,7 @@ import InboxSlider from '../components/InboxSlider';
 import MyTasksView from '../views/app/MyTasksView';
 import DayPlannerView from '../views/app/DayPlannerView';
 import LearningShell from '../views/app/learning/LearningShell';
+import ClipsView from '../views/app/clips/ClipsView';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
 import { useNavHistory } from '../hooks/useNavHistory';
 import { useUnreadCount } from '../hooks/useUnreadCount';
@@ -59,7 +60,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner' | 'clips';
 
 // One entry in the in-app navigation history: everything needed to bring the
 // user back to a view. Views switch via local state rather than URLs, so the
@@ -907,6 +908,8 @@ export default function MainLayout() {
             <TimeManagementPage />
           ) : homeView === 'sales-leads' ? (
             <SalesLeadsPage />
+          ) : homeView === 'clips' ? (
+            <ClipsView />
           ) : homeView === 'hub' && !useRoleHome && (userType === 'client' || userType === 'client_staff') ? (
             <ClientDashboard />
           ) : homeView === 'hub' && !useRoleHome && isPartner ? (
