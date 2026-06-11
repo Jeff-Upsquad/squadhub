@@ -3,6 +3,7 @@ import { forwardRef, useImperativeHandle, useRef, useState, useCallback, useEffe
 import api from '../../../services/api';
 import type { TaskAttachment } from '@squadhub/shared';
 import { useTaskAttachments, useDeleteTaskAttachment } from '../../../hooks/useTaskAttachments';
+import AttachmentPreview from './AttachmentPreview';
 
 export type TaskAttachmentsHandle = {
   addFiles: (files: FileList | File[]) => void;
@@ -45,6 +46,7 @@ const TaskAttachments = forwardRef<TaskAttachmentsHandle, Props>(function TaskAt
   const inputRef = useRef<HTMLInputElement>(null);
   const [inFlight, setInFlight] = useState<InFlight[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   const { data: allAttachments = [], refetch } = useTaskAttachments(taskId);
   const attachments = excludeAudio ? allAttachments.filter((a) => !isAudioMime(a.mime_type)) : allAttachments;
@@ -228,18 +230,31 @@ const TaskAttachments = forwardRef<TaskAttachmentsHandle, Props>(function TaskAt
             className="td-file flex items-center gap-3 p-3 rounded-xl border"
             style={{ borderColor: 'var(--sh-hair-3)' }}
           >
-            <div className="td-doc-icon">{fileExtension(f.file_name)}</div>
-            <div className="flex-1 min-w-0">
-              <a
-                href={f.file_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block text-[13.5px] font-medium text-[color:var(--sh-ink)] truncate hover:underline"
-              >
-                {f.file_name}
-              </a>
-              <div className="text-[11.5px] text-[color:var(--sh-ink-3)] mt-0.5">{formatSize(f.file_size)}</div>
-            </div>
+            {/* Opens the in-panel preview (was: open file in a new tab) */}
+            <button
+              type="button"
+              onClick={() => setPreviewId(f.id)}
+              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+              title="Preview"
+            >
+              {f.mime_type?.startsWith('image/') ? (
+                <img
+                  src={f.file_url}
+                  alt=""
+                  loading="lazy"
+                  className="h-10 w-10 shrink-0 rounded-lg border object-cover"
+                  style={{ borderColor: 'var(--sh-hair-3)' }}
+                />
+              ) : (
+                <div className="td-doc-icon">{fileExtension(f.file_name)}</div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="block text-[13.5px] font-medium text-[color:var(--sh-ink)] truncate hover:underline">
+                  {f.file_name}
+                </div>
+                <div className="text-[11.5px] text-[color:var(--sh-ink-3)] mt-0.5">{formatSize(f.file_size)}</div>
+              </div>
+            </button>
             {canEdit && (
               <button
                 type="button"
@@ -257,6 +272,15 @@ const TaskAttachments = forwardRef<TaskAttachmentsHandle, Props>(function TaskAt
       ) : inFlight.length === 0 ? (
         <div className="text-[13px] text-[color:var(--sh-ink-3)] py-2">No files yet.</div>
       ) : null}
+
+      {previewId && (
+        <AttachmentPreview
+          attachments={attachments}
+          openId={previewId}
+          onNavigate={setPreviewId}
+          onClose={() => setPreviewId(null)}
+        />
+      )}
     </div>
   );
 });
