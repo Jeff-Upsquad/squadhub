@@ -4,6 +4,8 @@ import { requireAuth } from '../middleware/auth';
 import { checkResourceAccess, meetsAccessLevel, requirePermission } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 import { findFirstUrl, unfurl } from '../services/unfurl';
+import { deleteR2Object } from '../r2';
+import { config } from '../config';
 
 const router = Router();
 
@@ -358,6 +360,124 @@ router.post('/:id/reactions', requireAuth, async (req: Request, res: Response) =
     res.status(201).json({ success: true, data });
   } catch (err) {
     console.error('Reaction error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Sender-side edits are allowed for 10 minutes after sending (Slack-style window).
+const EDIT_WINDOW_MS = 10 * 60 * 1000;
+
+// PATCH /messages/:id — edit your own text message within the edit window
+router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
+    if (!content) {
+      res.status(400).json({ success: false, error: 'content is required' });
+      return;
+    }
+
+    const { data: msg } = await supabaseAdmin
+      .from('messages')
+      .select('id, sender_id, type, created_at, is_deleted')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (!msg || (msg as any).is_deleted) {
+      res.status(404).json({ success: false, error: 'Message not found' });
+      return;
+    }
+    if ((msg as any).sender_id !== req.userId) {
+      res.status(403).json({ success: false, error: 'You can only edit your own messages' });
+      return;
+    }
+    if ((msg as any).type !== 'text') {
+      res.status(400).json({ success: false, error: 'Only text messages can be edited' });
+      return;
+    }
+    if (Date.now() - new Date((msg as any).created_at).getTime() > EDIT_WINDOW_MS) {
+      res.status(403).json({ success: false, error: 'Messages can only be edited within 10 minutes of sending' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('messages')
+      .update({ content, edited_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('*, sender:users!sender_id(id, display_name, avatar_url)')
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const io = req.app.get('io');
+    if (io) {
+      const room = (data as any).channel_id || (data as any).dm_conversation_id;
+      io.to(room).emit('message_updated', data);
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Edit message error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /messages/:id — soft-delete your own message; attachment files are
+// also removed from R2 (best-effort).
+router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+
+    const { data: msg } = await supabaseAdmin
+      .from('messages')
+      .select('id, sender_id, file_url, channel_id, dm_conversation_id, is_deleted')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (!msg || (msg as any).is_deleted) {
+      res.status(404).json({ success: false, error: 'Message not found' });
+      return;
+    }
+    if ((msg as any).sender_id !== req.userId) {
+      res.status(403).json({ success: false, error: 'You can only delete your own messages' });
+      return;
+    }
+
+    const { error } = await supabaseAdmin
+      .from('messages')
+      .update({ is_deleted: true })
+      .eq('id', id);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const fileUrl = (msg as any).file_url as string | null;
+    if (fileUrl && config.r2PublicUrl && fileUrl.startsWith(`${config.r2PublicUrl}/`)) {
+      try {
+        await deleteR2Object(fileUrl.slice(config.r2PublicUrl.length + 1));
+      } catch (e) {
+        console.error('R2 cleanup failed for deleted message', id, e);
+      }
+    }
+
+    const io = req.app.get('io');
+    if (io) {
+      const room = (msg as any).channel_id || (msg as any).dm_conversation_id;
+      io.to(room).emit('message_deleted', {
+        id,
+        channel_id: (msg as any).channel_id,
+        dm_conversation_id: (msg as any).dm_conversation_id,
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete message error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
