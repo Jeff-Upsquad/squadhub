@@ -1,5 +1,5 @@
 -- ============================================================
--- 097: Clients → Areas
+-- 098: Clients → Areas
 -- The sidebar "Clients" section merges into "Areas" (spaces).
 -- Each client becomes its own private space:
 --   • spaces.client_id links the area to its client
