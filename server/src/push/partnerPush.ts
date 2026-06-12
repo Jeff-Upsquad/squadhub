@@ -9,6 +9,9 @@ export interface PartnerNotification {
   body: string | null;
   reference_type: string | null;
   reference_id: string | null;
+  // Carries chat routing ids (channel_id / dm_conversation_id) for message
+  // notifications so the app can deep-link the tap to the conversation.
+  metadata?: Record<string, unknown> | null;
 }
 
 /**
@@ -28,12 +31,16 @@ export async function sendPartnerPush(notification: PartnerNotification): Promis
 
   if (!tokens || tokens.length === 0) return;
 
+  const meta = (notification.metadata || {}) as Record<string, unknown>;
+  const asStr = (v: unknown): string => (v === null || v === undefined ? '' : String(v));
   const data: Record<string, string> = {
     title: notification.title || 'SquadHub',
     body: notification.body || '',
     type: notification.type || '',
     reference_type: notification.reference_type || '',
     reference_id: notification.reference_id || '',
+    channel_id: asStr(meta.channel_id),
+    dm_conversation_id: asStr(meta.dm_conversation_id),
   };
 
   try {
