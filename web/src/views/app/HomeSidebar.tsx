@@ -617,6 +617,12 @@ export default function HomeSidebar({
                         if (item.resource_type === 'list') {
                           setActiveSpace(item.space_id);
                           setActiveList(item.resource_id);
+                          // Explicitly switch to the tasks view (like Favorites
+                          // does). Relying on MainLayout's activeListId-change
+                          // effect silently fails when the clicked list is
+                          // already the active one, so nothing opens until a
+                          // page refresh re-runs that effect on mount.
+                          onChangeView('tasks');
                         }
                       }}
                       className="flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
