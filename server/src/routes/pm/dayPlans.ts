@@ -41,6 +41,31 @@ function occursOn(rule: Recurrence | null | undefined, dateStr: string): boolean
   return false;
 }
 
+// Formatter for splitting a TIMESTAMPTZ into local day + minute-of-day in the
+// caller's tz. Returns null for an invalid/unknown IANA name so a bad ?tz=
+// simply disables date-derived occurrences instead of 500ing the endpoint.
+function makeTzFmt(tz: string): Intl.DateTimeFormat | null {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    });
+  } catch {
+    return null;
+  }
+}
+
+function dayMinuteOf(fmt: Intl.DateTimeFormat, iso: string): { day: string; minute: number } {
+  const parts = fmt.formatToParts(new Date(iso));
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? '0';
+  return {
+    day: `${get('year')}-${get('month')}-${get('day')}`,
+    minute: Number(get('hour')) * 60 + Number(get('minute')),
+  };
+}
+
 const createSchema = z.object({
   task_id: z.string().uuid(),
   plan_date: z.string().regex(dateRe),
@@ -95,11 +120,16 @@ async function hydrate(plans: any[]): Promise<any[]> {
   });
 }
 
-// GET /pm/day-plans?date=YYYY-MM-DD — caller's plan blocks for the date,
-// merged with virtual work-block occurrences whose recurrence rule fires on
-// that date. Virtual rows carry `virtual: true` and `kind: 'work_block_occurrence'`
-// so the client knows to PATCH them as new task_day_plans rows instead of
-// updating a non-existent id.
+// GET /pm/day-plans?date=YYYY-MM-DD&tz=Area/City — caller's plan blocks for
+// the date, merged with two kinds of virtual rows:
+//   - work-block occurrences whose recurrence rule fires on that date, and
+//   - date-derived occurrences: assigned tasks whose work/due/start date lands
+//     on that date in the caller's tz. A timestamp with a time-of-day becomes
+//     a timed block; a date-only value (midnight local) becomes an all-day row
+//     (`all_day: true`). Only computed when ?tz= is present — minute-of-day is
+//     meaningless without it, and older clients keep their old payload.
+// Virtual rows carry `virtual: true` and a `kind` so the client knows to POST
+// them as new task_day_plans rows instead of updating a non-existent id.
 router.get('/day-plans', async (req: Request, res: Response) => {
   try {
     const date = req.query.date as string;
@@ -152,7 +182,73 @@ router.get('/day-plans', async (req: Request, res: Response) => {
       });
     }
 
-    const merged = [...realPlans, ...virtualPlans].sort(
+    // Date-derived occurrences. Tasks the user has already placed (real plan)
+    // or that fired as a work-block occurrence above are skipped — an explicit
+    // placement always outranks one inferred from a date field.
+    const dateVirtuals: any[] = [];
+    const tzFmt = typeof req.query.tz === 'string' && req.query.tz ? makeTzFmt(req.query.tz) : null;
+    if (tzFmt) {
+      const occupied = new Set<string>([
+        ...realPlanTaskIds,
+        ...virtualPlans.map((p) => p.task_id as string),
+      ]);
+      // UTC window wide enough to contain local-day `date` for any tz offset
+      // (-12..+14). Exact day matching happens below in the caller's tz.
+      // Millisecond part is stripped — PostgREST's or() parser chokes on the
+      // extra dot inside the value.
+      const base = new Date(`${date}T00:00:00Z`).getTime();
+      const fromIso = new Date(base - 24 * 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+      const toIso = new Date(base + 48 * 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+      const win = (f: string) => `and(${f}.gte.${fromIso},${f}.lt.${toIso})`;
+      const { data: dateTasks, error: dateErr } = await supabaseAdmin
+        .from('tasks')
+        .select('id, work_date, due_date, start_date, time_estimate, snoozed_until')
+        .contains('assignee_ids', [req.userId!])
+        .not('status', 'in', '(done,closed)')
+        .or([win('work_date'), win('due_date'), win('start_date')].join(','));
+      if (dateErr) {
+        console.error('[dayPlans GET] date-task lookup failed:', dateErr);
+      }
+      const now = new Date();
+      for (const t of (dateTasks || []) as any[]) {
+        if (occupied.has(t.id)) continue;
+        if (t.snoozed_until && new Date(t.snoozed_until) > now) continue;
+        // First field that lands on the viewed day wins; work_date outranks
+        // due/start because the planner is about when you'll do the work.
+        let field: 'work' | 'due' | 'start' | null = null;
+        let minute = 0;
+        for (const [f, v] of [
+          ['work', t.work_date],
+          ['due', t.due_date],
+          ['start', t.start_date],
+        ] as const) {
+          if (!v) continue;
+          const dm = dayMinuteOf(tzFmt, v);
+          if (dm.day === date) { field = f; minute = dm.minute; break; }
+        }
+        if (!field) continue;
+        // Midnight local = no time picked — same convention as the web
+        // client's hasTime check in taskHelpers.ts.
+        const allDay = minute === 0;
+        const est = typeof t.time_estimate === 'number' && t.time_estimate > 0 ? t.time_estimate : 30;
+        dateVirtuals.push({
+          id: `td:${t.id}:${date}:${field}`,
+          task_id: t.id,
+          user_id: req.userId!,
+          plan_date: date,
+          start_minute: allDay ? 0 : minute,
+          duration_minutes: allDay ? 1440 : Math.max(15, Math.min(est, 1440 - minute)),
+          created_at: null,
+          updated_at: null,
+          virtual: true,
+          kind: 'date_occurrence',
+          all_day: allDay,
+          date_field: field,
+        });
+      }
+    }
+
+    const merged = [...realPlans, ...virtualPlans, ...dateVirtuals].sort(
       (a, b) => (a.start_minute || 0) - (b.start_minute || 0),
     );
     const hydrated = await hydrate(merged);

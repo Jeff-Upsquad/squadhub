@@ -51,9 +51,11 @@ export default function TodayList() {
   // Tasks already on today's calendar are hidden from this list. The query
   // invalidates whenever a plan is created / moved / deleted, so the row
   // reappears automatically when a block is removed from the calendar.
+  // All-day rows don't count — a date-only task sits in the strip *and*
+  // stays here until it's dragged onto the grid and given a time.
   const { data: todayPlans = [] } = useDayPlans(todayStr);
   const scheduledTaskIds = useMemo(
-    () => new Set(todayPlans.map((p) => p.task_id)),
+    () => new Set(todayPlans.filter((p) => !p.all_day).map((p) => p.task_id)),
     [todayPlans],
   );
   const visibleTasks = useMemo(

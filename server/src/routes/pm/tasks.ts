@@ -1,16 +1,30 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import type { User } from '@squadhub/shared';
+import type { User, TaskRecurrence } from '@squadhub/shared';
+import { taskRecurrenceOccursOn } from '@squadhub/shared';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAdmin, isResourceLocked, getPrimaryRolePermissions } from '../../middleware/permissions';
 import { getUserRoleIds } from '../../utils/roles';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
+import { spawnRoutineInstance } from '../../services/routineSpawner';
+import { todayIST } from '../../utils/ist';
 
 const router = Router();
 router.use(requireAuth);
 router.use(requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_staff'));
+
+// Routines: recurrence rule shape (same dialect as work_blocks, but no
+// 'none' kind — "does not repeat" is recurrence = null).
+const recurrenceDateRe = /^\d{4}-\d{2}-\d{2}$/;
+const recurrenceSchema = z.object({
+  kind: z.enum(['daily', 'weekdays', 'weekly', 'monthly']),
+  weekdays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+  day_of_month: z.number().int().min(1).max(28).optional(),
+  starts_on: z.string().regex(recurrenceDateRe).optional(),
+  ends_on: z.string().regex(recurrenceDateRe).nullable().optional(),
+});
 
 const createSchema = z.object({
   list_id: z.string().uuid(),
@@ -25,6 +39,7 @@ const createSchema = z.object({
   parent_task_id: z.string().uuid().nullable().optional(),
   assignee_ids: z.array(z.string().uuid()).optional(),
   metadata: z.record(z.string(), z.any()).optional(),
+  recurrence: recurrenceSchema.nullable().optional(),
 });
 
 const updateSchema = z.object({
@@ -41,6 +56,7 @@ const updateSchema = z.object({
   assignee_ids: z.array(z.string().uuid()).optional(),
   metadata: z.record(z.string(), z.any()).optional(),
   list_id: z.string().uuid().optional(),
+  recurrence: recurrenceSchema.nullable().optional(),
 });
 
 // Helper to get list_id from a task
@@ -52,7 +68,7 @@ async function getTaskListId(taskId: string): Promise<string | null> {
 // Helper to attach hydrated assignees to one or more task rows.
 // Tasks are stored with `assignee_ids: UUID[]`; the frontend expects
 // `assignees: User[]` on each task.
-async function hydrateAssignees<T extends { assignee_ids?: string[] | null }>(
+export async function hydrateAssignees<T extends { assignee_ids?: string[] | null }>(
   tasks: T[],
 ): Promise<(T & { assignees: User[] })[]> {
   const allIds = Array.from(new Set(tasks.flatMap(t => t.assignee_ids || [])));
@@ -75,7 +91,7 @@ async function hydrateAssignees<T extends { assignee_ids?: string[] | null }>(
 // Attach `list: { id, name }`, `folder: { id, name }`, and `space: { id, name }`
 // to each task so the frontend can show the task's parent list/folder/space
 // without a second round-trip.
-async function hydrateLists<T extends { list_id: string }>(
+export async function hydrateLists<T extends { list_id: string }>(
   tasks: T[],
 ): Promise<(T & {
   list: { id: string; name: string } | null;
@@ -252,7 +268,9 @@ router.get('/tasks', async (req: Request, res: Response) => {
     let query = supabaseAdmin
       .from('tasks')
       .select('*')
-      .eq('list_id', listId);
+      .eq('list_id', listId)
+      // Routine templates never render in list views — only their spawned copies do.
+      .is('recurrence', null);
 
     // Filters
     if (req.query.status) query = query.eq('status', req.query.status as string);
@@ -300,7 +318,9 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     let query = supabaseAdmin
       .from('tasks')
       .select('*')
-      .contains('assignee_ids', [req.userId!]);
+      .contains('assignee_ids', [req.userId!])
+      // Hide routine templates — their spawned copies carry the real work.
+      .is('recurrence', null);
 
     if (!includeDone) {
       query = query.not('status', 'in', '(done,closed)');
@@ -424,6 +444,7 @@ router.get('/tasks/emergency', async (req: Request, res: Response) => {
       .eq('priority', 'emergency')
       .not('status', 'in', '(done,closed)')
       .is('parent_task_id', null)
+      .is('recurrence', null)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -664,6 +685,18 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
     const [hydratedTask] = await hydrateAssignees([task]);
     const hydratedSubtasks = await hydrateAssignees(subtasks || []);
 
+    // Spawned routine copies link back to their template so the detail
+    // panel can show "Part of routine" with the rule and a jump link.
+    let routineTemplate: { id: string; title: string; recurrence: unknown } | null = null;
+    if ((task as any).recurring_parent_id) {
+      const { data: tpl } = await supabaseAdmin
+        .from('tasks')
+        .select('id, title, recurrence')
+        .eq('id', (task as any).recurring_parent_id)
+        .maybeSingle();
+      if (tpl) routineTemplate = tpl as any;
+    }
+
     res.json({
       success: true,
       data: {
@@ -671,6 +704,7 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
         subtasks: hydratedSubtasks,
         comment_count: commentCount,
         creator,
+        routine_template: routineTemplate,
       },
     });
   } catch (err) {
@@ -764,6 +798,11 @@ router.post('/tasks', async (req: Request, res: Response) => {
     if (displayNumber != null) {
       insertData.display_number = displayNumber;
     }
+    // A recurrence rule makes this task a routine template (hidden from
+    // list views; the spawner materialises dated copies).
+    if (body.recurrence) {
+      insertData.recurrence = body.recurrence;
+    }
 
     const { data: task, error } = await supabaseAdmin
       .from('tasks')
@@ -774,6 +813,12 @@ router.post('/tasks', async (req: Request, res: Response) => {
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
+    }
+
+    // If the brand-new routine already fires today, materialise today's copy
+    // immediately so the user sees it without waiting for the midnight cron.
+    if (body.recurrence && taskRecurrenceOccursOn(body.recurrence as TaskRecurrence, todayIST())) {
+      await spawnRoutineInstance(task, todayIST());
     }
 
     const [hydratedTask] = await hydrateAssignees([task]);
@@ -833,9 +878,24 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       }
     }
 
+    const updatePayload: Record<string, any> = { ...body, last_modified_by: req.userId! };
+    if (body.recurrence !== undefined) {
+      if (body.recurrence) {
+        // Task becomes (or updates) a routine template. If it was itself a
+        // spawned copy, detach it from its old routine first — a task is
+        // either a template or an instance, never both.
+        updatePayload.recurring_parent_id = null;
+        updatePayload.recurrence_instance_date = null;
+      } else {
+        // Rule removed: back to a normal task; clear pause so a future
+        // re-enable starts fresh.
+        updatePayload.recurrence_paused = false;
+      }
+    }
+
     const { data, error } = await supabaseAdmin
       .from('tasks')
-      .update({ ...body, last_modified_by: req.userId! })
+      .update(updatePayload)
       .eq('id', id)
       .select()
       .single();
@@ -843,6 +903,13 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
+    }
+
+    // Rule just set/changed and fires today → materialise today's copy now
+    // (idempotent: skipped if today's instance already exists).
+    if (body.recurrence && !(data as any).recurrence_paused
+      && taskRecurrenceOccursOn(body.recurrence as TaskRecurrence, todayIST())) {
+      await spawnRoutineInstance(data, todayIST());
     }
 
     const [hydratedTask] = await hydrateAssignees([data]);

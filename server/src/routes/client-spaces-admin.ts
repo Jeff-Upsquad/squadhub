@@ -236,14 +236,12 @@ router.get('/:id/usage', async (req: Request, res: Response) => {
 });
 
 // POST /admin/client-spaces/:id/instances — share a template with a client.
-// Auto-resolves the target workspace + space (picks admin's first workspace,
-// and a default "Client Spaces" space within it, creating one if missing).
+// Targets the client's own area (spaces.client_id), creating it if missing
+// (Clients/Areas merge: every client gets its own space).
 const instantiateSchema = z.object({
   client_id: z.string().uuid(),
   name: z.string().min(1).max(100).optional(),
 });
-
-const DEFAULT_CLIENT_SPACE_NAME = 'Client Spaces';
 
 router.post('/:id/instances', async (req: Request, res: Response) => {
   try {
@@ -303,34 +301,62 @@ router.post('/:id/instances', async (req: Request, res: Response) => {
       return;
     }
 
-    // Resolve space: reuse existing "Client Spaces" space, or create it
+    // Resolve the client's own area space, creating it if missing
     const { data: existingSpace } = await supabaseAdmin
       .from('spaces')
       .select('id')
-      .eq('workspace_id', workspaceId)
-      .eq('name', DEFAULT_CLIENT_SPACE_NAME)
+      .eq('client_id', body.client_id)
+      .is('deleted_at', null)
       .limit(1)
       .maybeSingle();
 
     let spaceId = existingSpace?.id as string | undefined;
     if (!spaceId) {
+      const businessName = client.business_name.trim();
+
+      const { count: spaceCount } = await supabaseAdmin
+        .from('spaces')
+        .select('*', { count: 'exact', head: true })
+        .eq('workspace_id', workspaceId)
+        .is('deleted_at', null);
+
       const { data: createdSpace, error: spaceErr } = await supabaseAdmin
         .from('spaces')
         .insert({
           workspace_id: workspaceId,
-          name: DEFAULT_CLIENT_SPACE_NAME,
+          name: businessName,
           color: '#7c3aed',
           icon: 'users',
-          description: 'Auto-created container for client spaces',
+          description: `Client area for ${businessName}`,
           created_by: userId,
+          position: spaceCount || 0,
+          client_id: body.client_id,
         })
         .select('id')
         .single();
       if (spaceErr || !createdSpace) {
-        res.status(500).json({ success: false, error: spaceErr?.message || 'Failed to create host space' });
+        res.status(500).json({ success: false, error: spaceErr?.message || 'Failed to create client area' });
         return;
       }
       spaceId = createdSpace.id;
+
+      // Carry the client's existing access grants over to the new area
+      const { data: grants } = await supabaseAdmin
+        .from('client_user_access')
+        .select('user_id, created_by, roles(name)')
+        .eq('client_id', body.client_id);
+      if (grants && grants.length > 0) {
+        await supabaseAdmin.from('resource_memberships').upsert(
+          grants.map((g: any) => ({
+            resource_type: 'space',
+            resource_id: spaceId,
+            user_id: g.user_id,
+            access_level: g.roles?.name === 'Squad Manager' ? 'manager' : 'member',
+            invited_by: g.created_by,
+          })),
+          { onConflict: 'resource_type,resource_id,user_id', ignoreDuplicates: true },
+        );
+      }
     }
 
     const { count } = await supabaseAdmin

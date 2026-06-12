@@ -46,7 +46,9 @@ export function useWorkBlockNotifier() {
 
     const wbPlans = plans.filter((p) => {
       const planObj = p as VirtualWorkBlockPlan;
-      return planObj.task?.task_type_key === 'work_block';
+      // date_occurrence rows are due/work/start-date markers, not scheduled
+      // occurrences — they carry no wb_notify_* config and must never toast.
+      return planObj.task?.task_type_key === 'work_block' && planObj.kind !== 'date_occurrence';
     }) as VirtualWorkBlockPlan[];
 
     const now = Date.now();

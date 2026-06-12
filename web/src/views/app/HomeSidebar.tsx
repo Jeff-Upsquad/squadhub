@@ -14,9 +14,6 @@ import { useHasMiniApp } from '../../hooks/useMiniApps';
 import { useUnreadCount } from '../../hooks/useUnreadCount';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useIsClient, useIsPartner } from '../../hooks/useUserType';
-import { useMyClients, useClientFolders, type MyClientEntry } from '../../hooks/useMyClients';
-import { useIsWorkspaceAdmin } from '../../hooks/useIsWorkspaceAdmin';
-import AddClientSpaceModal from './clients/AddClientSpaceModal';
 import { useDms } from '../../hooks/useDms';
 import NewDmModal from './chat/NewDmModal';
 import DmListItem from './chat/DmListItem';
@@ -195,13 +192,11 @@ export default function HomeSidebar({
   }, [dmsData, setDmConversations]);
   const { data: favorites, isLoading: favoritesLoading } = useFavorites(workspaceId);
   const { data: sharedItems, isLoading: sharedLoading } = useSharedWithMe(workspaceId);
-  const { data: myClients, isLoading: myClientsLoading, isError: myClientsError } = useMyClients();
   const removeFavorite = useRemoveFavorite(workspaceId);
   const { setActiveSpace, setActiveList, setActiveFolder, setActiveSpacePage } = usePMStore();
   const canCreateChannels = useHasPermission('can_create_channels');
   const canCreateSpaces = useHasPermission('can_create_spaces');
   const [showCreateSpace, setShowCreateSpace] = useState(false);
-  const [addSpaceForClient, setAddSpaceForClient] = useState<MyClientEntry | null>(null);
   const isClient = useIsClient();
   const isPartner = useIsPartner();
   const currentUserEmail = useAuthStore((s) => s.user?.email);
@@ -216,7 +211,6 @@ export default function HomeSidebar({
 
   const [expandedSections, setExpandedSections] = useState({
     favorites: true,
-    clients: true,
     sharedWithMe: true,
     spaces: true,
     channels: true,
@@ -329,6 +323,19 @@ export default function HomeSidebar({
             label="Day Planner"
             active={homeView === 'day-planner'}
             onClick={() => onChangeView('day-planner')}
+          />
+          <NavItem
+            icon={
+              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <path d="m17 2 4 4-4 4" />
+                <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+                <path d="m7 22-4-4 4-4" />
+                <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+              </svg>
+            }
+            label="Routines"
+            active={homeView === 'routines'}
+            onClick={() => onChangeView('routines')}
           />
           {canSeeDogfoodNav && (
             <>
@@ -558,39 +565,6 @@ export default function HomeSidebar({
           )}
         </div>
 
-        {/* Clients section — hidden for client users; otherwise always visible */}
-        {!isClient && (
-          <>
-            <div className="mx-2 border-t border-[var(--sh-hair)]" />
-            <div className="pb-1">
-              <SectionHeader
-                title="Clients"
-                expanded={expandedSections.clients}
-                onToggle={() => toggleSection('clients')}
-              />
-              {expandedSections.clients && (
-                <div className="pb-1">
-                  {myClientsLoading ? (
-                    <p className="px-3 py-[5px] text-[11.5px] text-[var(--sh-ink-4)]">Loading…</p>
-                  ) : myClientsError ? (
-                    <p className="px-3 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">Couldn't load clients</p>
-                  ) : !myClients || myClients.length === 0 ? (
-                    <p className="px-3 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)]">No clients yet</p>
-                  ) : (
-                    myClients.map((entry) => (
-                      <ClientRow
-                        key={entry.id}
-                        entry={entry}
-                        onAddSpace={() => setAddSpaceForClient(entry)}
-                      />
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
         {/* Shared with me section — only show when there are shared items */}
         {sharedItems && sharedItems.length > 0 && (
           <>
@@ -784,116 +758,6 @@ export default function HomeSidebar({
         )}
       </div>
 
-      {addSpaceForClient && (
-        <AddClientSpaceModal
-          clientId={addSpaceForClient.client_id}
-          clientName={addSpaceForClient.client.business_name}
-          onClose={() => setAddSpaceForClient(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-// ---- Client row (collapsible list of a client's spaces) ----
-function ClientRow({
-  entry,
-  onAddSpace,
-}: {
-  entry: MyClientEntry;
-  onAddSpace: () => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const setActiveDesignFolder = usePMStore((s) => s.setActiveDesignFolder);
-  const activeDesignFolderId = usePMStore((s) => s.activeDesignFolderId);
-  const { data: foldersRes, isLoading } = useClientFolders(expanded ? entry.client_id : null);
-  const folders = foldersRes?.folders || [];
-  const isWorkspaceAdmin = useIsWorkspaceAdmin();
-
-  return (
-    <div className="px-2">
-      <div className="group flex items-center">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--sh-ink-4)] hover:text-[var(--sh-ink)]"
-          aria-label={expanded ? 'Collapse' : 'Expand'}
-        >
-          <svg
-            className={`h-3 w-3 transition-transform ${expanded ? '' : '-rotate-90'}`}
-            viewBox="0 0 18 18"
-            fill="currentColor"
-          >
-            <path d="M5 7h8L9 11z" />
-          </svg>
-        </button>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-[6px] px-[5px] py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
-        >
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] bg-[var(--sh-hair-3)] text-[9px] font-semibold uppercase text-[var(--sh-ink-2)]">
-            {entry.client.business_name.slice(0, 2)}
-          </span>
-          <span className="truncate">{entry.client.business_name}</span>
-        </button>
-        {isWorkspaceAdmin && (
-          <button
-            onClick={onAddSpace}
-            title="Add space"
-            className="mr-1 hidden rounded p-0.5 text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)] group-hover:block"
-          >
-            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
-        )}
-      </div>
-      {expanded && (
-        <div className="pb-1 pl-8 pr-2">
-          {isLoading && (
-            <p className="px-2 py-1 text-[11px] text-[var(--sh-ink-4)]">Loading…</p>
-          )}
-          {!isLoading && folders.length === 0 && (
-            <p className="px-2 py-1 text-[11px] text-[var(--sh-ink-4)]">
-              {isWorkspaceAdmin ? 'No spaces yet. Click + to add.' : 'No spaces yet.'}
-            </p>
-          )}
-          {folders.map((f) => {
-            const isActive = f.id === activeDesignFolderId;
-            const slug = (f.client_space_template as any)?.slug;
-            const isDesign = slug === 'design-space';
-            const isVideo = slug === 'video-editing-space';
-            return (
-              <button
-                key={f.id}
-                onClick={() => setActiveDesignFolder(f.id)}
-                className={`flex w-full items-center gap-2 rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
-                  isActive
-                    ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
-                    : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-                }`}
-                style={isActive ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
-              >
-                <span className={`shrink-0 ${isActive ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`}>
-                  {isVideo ? (
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                  ) : isDesign ? (
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                    </svg>
-                  ) : (
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                    </svg>
-                  )}
-                </span>
-                <span className="truncate">{f.name}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

@@ -247,6 +247,7 @@ export interface Space {
   created_at: string;
   updated_at: string;
   position: number;
+  client_id?: string | null;
   my_access_level?: AccessLevel;
   // Joined
   statuses?: SpaceStatus[];
@@ -441,6 +442,13 @@ export interface Task {
   created_by: string;
   created_at: string;
   updated_at: string;
+  // Routines: a non-null rule marks this task as a routine TEMPLATE
+  // (hidden from normal task views; the nightly spawner copies it).
+  recurrence?: TaskRecurrence | null;
+  recurrence_paused?: boolean;
+  // Set on spawned copies: which template they came from + the occurrence date.
+  recurring_parent_id?: string | null;
+  recurrence_instance_date?: string | null;
   // Joined
   status?: SpaceStatus;
   task_type?: TaskType;
@@ -453,6 +461,8 @@ export interface Task {
   folder?: { id: string; name: string } | null;
   space?: { id: string; name: string } | null;
   parent_task?: { id: string; title: string } | null;
+  // Hydrated on GET /pm/tasks/:id for spawned routine copies.
+  routine_template?: { id: string; title: string; recurrence: TaskRecurrence | null } | null;
 }
 
 // Per-user, per-day calendar block placed on the Day Planner's hourly grid.
@@ -466,12 +476,24 @@ export interface TaskDayPlan {
   duration_minutes: number;
   created_at: string;
   updated_at: string;
+  // Synthesized rows merged into GET /pm/day-plans (not real task_day_plans
+  // rows): work-block occurrences fired by recurrence rules, and date-derived
+  // occurrences from a task's work/due/start date landing on the viewed day.
+  virtual?: boolean;
+  kind?: 'work_block_occurrence' | 'date_occurrence';
+  // Date-derived rows only: true when the source date carries no time-of-day
+  // (midnight local) — the calendar renders these in its all-day strip.
+  all_day?: boolean;
+  date_field?: 'work' | 'due' | 'start';
   // Joined task summary so the calendar block can render without a second fetch.
   task?: Pick<Task, 'id' | 'title' | 'priority' | 'status_id' | 'time_estimate' | 'list_id'> & {
     // TEXT status (catalog key like 'closed' or legacy 'done'/'todo'). Used to
     // grey out blocks for completed tasks. Not on the base Task type today.
     status?: string | null;
     list?: { id: string; name: string } | null;
+    // Flattened task_types join from the day-plans hydrate.
+    task_type_key?: string | null;
+    task_type_color?: string | null;
   };
 }
 
@@ -2010,4 +2032,91 @@ export interface UpdateProfileAccessGrantInput {
 
 export interface ExtendProfileAccessGrantInput {
   days: number;
+}
+
+// ============================================================
+// Routines / recurring tasks
+//
+// Same recurrence dialect as work_blocks (see migration 091), but for
+// tasks the rule lives on the task row itself and a `kind` is always a
+// real cadence — "does not repeat" is recurrence = null, not kind='none'.
+// All date strings are YYYY-MM-DD and are evaluated in IST on the server.
+// ============================================================
+
+export type TaskRecurrenceKind = 'daily' | 'weekdays' | 'weekly' | 'monthly';
+
+export interface TaskRecurrence {
+  kind: TaskRecurrenceKind;
+  weekdays?: number[];      // kind='weekly', 0=Sun..6=Sat
+  day_of_month?: number;    // kind='monthly', 1..28
+  starts_on?: string;       // YYYY-MM-DD, inclusive
+  ends_on?: string | null;  // YYYY-MM-DD, inclusive; null/absent = forever
+}
+
+// Day-of-week (0=Sun..6=Sat) for a YYYY-MM-DD string, timezone-proof:
+// the string is interpreted as a plain calendar date, not a UTC instant
+// shifted into the local zone.
+function dowOfDateStr(dateStr: string): number {
+  const [y, m, d] = dateStr.split('-').map((n) => parseInt(n, 10));
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+export function taskRecurrenceOccursOn(
+  rule: TaskRecurrence | null | undefined,
+  dateStr: string,
+): boolean {
+  if (!rule) return false;
+  if (rule.starts_on && dateStr < rule.starts_on) return false;
+  if (rule.ends_on && dateStr > rule.ends_on) return false;
+  if (rule.kind === 'daily') return true;
+  const dow = dowOfDateStr(dateStr);
+  if (rule.kind === 'weekdays') return dow >= 1 && dow <= 5;
+  if (rule.kind === 'weekly') return Array.isArray(rule.weekdays) && rule.weekdays.includes(dow);
+  if (rule.kind === 'monthly') {
+    const dom = parseInt(dateStr.slice(8, 10), 10);
+    return typeof rule.day_of_month === 'number' && rule.day_of_month === dom;
+  }
+  return false;
+}
+
+// First date >= fromStr the rule fires on, or null if it never does
+// (rule ended, or weekly with no weekdays selected).
+export function nextTaskRecurrenceDate(
+  rule: TaskRecurrence | null | undefined,
+  fromStr: string,
+): string | null {
+  if (!rule) return null;
+  const [y, m, d] = fromStr.split('-').map((n) => parseInt(n, 10));
+  const cursor = new Date(Date.UTC(y, m - 1, d));
+  // 62 days covers the worst gap for any supported cadence (monthly).
+  for (let i = 0; i < 62; i++) {
+    const key = cursor.toISOString().slice(0, 10);
+    if (rule.ends_on && key > rule.ends_on) return null;
+    if (taskRecurrenceOccursOn(rule, key)) return key;
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return null;
+}
+
+const RECURRENCE_DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+export function describeTaskRecurrence(rule: TaskRecurrence | null | undefined): string {
+  if (!rule) return 'Does not repeat';
+  if (rule.kind === 'daily') return 'Every day';
+  if (rule.kind === 'weekdays') return 'Every weekday';
+  if (rule.kind === 'weekly') {
+    if (!rule.weekdays || rule.weekdays.length === 0) return 'Weekly';
+    const sorted = [...rule.weekdays].sort();
+    return `Weekly on ${sorted.map((d) => RECURRENCE_DOW_NAMES[d]).join(', ')}`;
+  }
+  if (rule.kind === 'monthly') {
+    if (typeof rule.day_of_month !== 'number') return 'Monthly';
+    const n = rule.day_of_month;
+    const suffix = n % 10 === 1 && n !== 11 ? 'st'
+      : n % 10 === 2 && n !== 12 ? 'nd'
+      : n % 10 === 3 && n !== 13 ? 'rd'
+      : 'th';
+    return `Monthly on the ${n}${suffix}`;
+  }
+  return 'Repeats';
 }

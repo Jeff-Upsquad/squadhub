@@ -82,11 +82,18 @@ function tzLabel(): string {
   return `GMT${sign}${hh}${mm > 0 ? ':' + mm.toString().padStart(2, '0') : ''}`;
 }
 
-// Plans created during the brief life of the all-day row used start_minute=0 +
-// duration_minutes=1440 as a sentinel. We no longer render an all-day section,
-// so hide those rows from the timed grid (a 24-hour block at midnight isn't useful).
+// Plans created during the brief life of the legacy all-day row used
+// start_minute=0 + duration_minutes=1440 as a sentinel. Those real rows are
+// hidden from the timed grid (a 24-hour block at midnight isn't useful);
+// today's all-day strip is fed by `all_day` virtual rows from the server.
 function isAllDaySentinel(p: { start_minute: number; duration_minutes: number }) {
   return p.start_minute === 0 && p.duration_minutes === 1440;
+}
+
+function dateFieldLabel(f?: 'work' | 'due' | 'start'): string {
+  if (f === 'due') return 'Due';
+  if (f === 'start') return 'Starts';
+  return 'Work';
 }
 
 export default function DayCalendar({ date, today, onDateChange }: Props) {
@@ -147,8 +154,13 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isToday]);
 
-  // Drop all-day-sentinel rows from the grid display.
-  const timedPlans = useMemo(() => plans.filter((p) => !isAllDaySentinel(p)), [plans]);
+  // Date-only occurrences go to the all-day strip; everything else (minus
+  // legacy all-day sentinels) lands on the timed grid.
+  const allDayPlans = useMemo(() => plans.filter((p) => p.all_day === true), [plans]);
+  const timedPlans = useMemo(
+    () => plans.filter((p) => !p.all_day && !isAllDaySentinel(p)),
+    [plans],
+  );
 
   // Sort + lay out timed plans in overlap columns.
   const positioned = useMemo(() => positionBlocks(timedPlans), [timedPlans]);
@@ -343,10 +355,16 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
           )}
           <h2>{weekLabel}</h2>
         </div>
-        <div className="dp-cal-meta">{isLoading ? 'Loading…' : `${plans.length} scheduled`}</div>
+        <div className="dp-cal-meta">
+          {isLoading
+            ? 'Loading…'
+            : `${timedPlans.length} scheduled${allDayPlans.length ? ` · ${allDayPlans.length} all-day` : ''}`}
+        </div>
       </div>
 
-      {/* Day column header: tz on the left gutter, day chip in the column */}
+      {/* Day column header: tz on the left gutter, day chip in the column.
+          The all-day strip renders as a second row of this sticky grid so
+          date-only tasks stay visible while the hour grid scrolls. */}
       <div className="dp-col-head">
         <div className="dp-gmt" title={tzLabel()}>{tzLabel()}</div>
         <div className="dp-col-day">
@@ -355,6 +373,43 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
             <span className="dom">{dayOfMonth}</span>
           </div>
         </div>
+        {allDayPlans.length > 0 && (
+          <>
+            <div className="dp-allday-label">All-day</div>
+            <div className="dp-allday-items">
+              {allDayPlans.map((p) => {
+                const isWb = p.task?.task_type_key === 'work_block';
+                const wbColor = p.task?.task_type_color || '#8b5cf6';
+                return (
+                  <div
+                    key={p.id}
+                    className="dp-allday-chip"
+                    draggable
+                    data-type={isWb ? 'work_block' : undefined}
+                    style={
+                      isWb
+                        ? {
+                            background: `color-mix(in oklch, ${wbColor} 18%, transparent)`,
+                            borderLeftColor: wbColor,
+                          }
+                        : undefined
+                    }
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('application/x-task-id', p.task_id);
+                      e.dataTransfer.setData('application/x-task-estimate', String(p.task?.time_estimate ?? 30));
+                      e.dataTransfer.effectAllowed = 'copyMove';
+                    }}
+                    onClick={() => setActiveTask(p.task_id)}
+                    title={`${p.task?.title ?? 'Task'} · ${dateFieldLabel(p.date_field)} ${date} · drag onto the grid to give it a time`}
+                  >
+                    <span className="t">{p.task?.title ?? 'Task'}</span>
+                    <span className="f">{dateFieldLabel(p.date_field)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Hour grid */}
@@ -445,6 +500,7 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
                     <path d="M12 7v5l3 2" />
                   </svg>
                   {fmtTimeRange(renderStart, renderDur)}
+                  {p.date_field && <span className="b-src">{dateFieldLabel(p.date_field)}</span>}
                 </div>
               </div>
 
@@ -477,6 +533,7 @@ interface Positioned {
   col: number;
   cols: number;
   virtual?: boolean;
+  date_field?: 'work' | 'due' | 'start';
 }
 
 // "Completed" covers both the catalog 'closed' key and the legacy 'done'/'closed'
@@ -528,6 +585,7 @@ function positionBlocks(plans: any[]): Positioned[] {
           }
         : undefined,
       virtual: p.virtual === true,
+      date_field: p.date_field,
       col,
       cols: 1,
     });

@@ -128,6 +128,45 @@ router.get('/:clientId', async (req: Request, res: Response) => {
   }
 });
 
+// ---- Clients/Areas merge helpers ----
+// Each client can have its own area (spaces.client_id). Access grants are
+// mirrored onto that space so Areas visibility stays in sync.
+async function getClientSpaceId(clientId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from('spaces')
+    .select('id')
+    .eq('client_id', clientId)
+    .is('deleted_at', null)
+    .limit(1)
+    .maybeSingle();
+  return data?.id || null;
+}
+
+async function roleAccessLevel(roleId: string | null): Promise<'manager' | 'member'> {
+  if (!roleId) return 'member';
+  const { data } = await supabaseAdmin
+    .from('roles')
+    .select('name')
+    .eq('id', roleId)
+    .maybeSingle();
+  return data?.name === 'Squad Manager' ? 'manager' : 'member';
+}
+
+async function mirrorGrantToSpace(clientId: string, userId: string, roleId: string | null, invitedBy: string) {
+  const spaceId = await getClientSpaceId(clientId);
+  if (!spaceId) return;
+  await supabaseAdmin.from('resource_memberships').upsert(
+    {
+      resource_type: 'space',
+      resource_id: spaceId,
+      user_id: userId,
+      access_level: await roleAccessLevel(roleId),
+      invited_by: invitedBy,
+    },
+    { onConflict: 'resource_type,resource_id,user_id' },
+  );
+}
+
 // POST /admin/client-access/:clientId/users — grant a user access at a specific role
 const addSchema = z.object({
   user_id: z.string().uuid(),
@@ -169,6 +208,8 @@ router.post('/:clientId/users', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    await mirrorGrantToSpace(req.params.clientId as string, body.user_id, roleId, req.userId!);
 
     const { data: user } = await supabaseAdmin
       .from('users')
@@ -214,6 +255,9 @@ router.put('/:clientId/users/:userId', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    await mirrorGrantToSpace(req.params.clientId as string, req.params.userId as string, body.role_id, req.userId!);
+
     res.json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -237,6 +281,18 @@ router.delete('/:clientId/users/:userId', async (req: Request, res: Response) =>
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    // Drop the mirrored space membership (if the client has an area)
+    const spaceId = await getClientSpaceId(req.params.clientId as string);
+    if (spaceId) {
+      await supabaseAdmin
+        .from('resource_memberships')
+        .delete()
+        .eq('resource_type', 'space')
+        .eq('resource_id', spaceId)
+        .eq('user_id', req.params.userId);
+    }
+
     res.json({ success: true, message: 'Access revoked' });
   } catch (err) {
     console.error('Revoke access error:', err);

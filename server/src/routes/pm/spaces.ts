@@ -122,14 +122,13 @@ router.get('/spaces/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    // Fetch non-deleted folders. Exclude folders tagged with a client —
-    // those appear in the Clients section, not under regular Spaces.
+    // Fetch non-deleted folders (client-tagged folders included — client
+    // areas are regular spaces since the Clients/Areas merge).
     const { data: folders } = await supabaseAdmin
       .from('folders')
       .select('*')
       .eq('space_id', id)
       .is('deleted_at', null)
-      .is('client_id', null)
       .order('position');
 
     const visibleFolderIds = new Set((folders || []).map((f: any) => f.id));

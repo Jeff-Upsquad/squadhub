@@ -49,6 +49,7 @@ import InboxView from '../views/app/InboxView';
 import InboxSlider from '../components/InboxSlider';
 import MyTasksView from '../views/app/MyTasksView';
 import DayPlannerView from '../views/app/DayPlannerView';
+import RoutinesView from '../views/app/RoutinesView';
 import LearningShell from '../views/app/learning/LearningShell';
 import ClipsView from '../views/app/clips/ClipsView';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
@@ -59,8 +60,8 @@ import BrowserNotificationsToggle from '../components/BrowserNotificationsToggle
 import { useIsMobile } from '../hooks/useIsMobile';
 
 // ---- Types ----
-type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'clients' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner' | 'clips';
+type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner' | 'routines' | 'clips';
 
 // One entry in the in-app navigation history: everything needed to bring the
 // user back to a view. Views switch via local state rather than URLs, so the
@@ -167,7 +168,6 @@ const SECTION_TITLES: Record<ActiveSection, string> = {
   docs: 'Documents',
   teams: 'Teams',
   apps: 'Apps',
-  clients: 'Clients',
   learning: 'Learning',
   more: 'More',
 };
@@ -636,9 +636,8 @@ export default function MainLayout() {
         {/* Divider */}
         <div className="h-px w-7 bg-[var(--sh-hair-2)] my-2" />
 
-        {/* Second nav: Clients / More */}
+        {/* Second nav: More */}
         <div className="flex w-full flex-col items-center gap-[2px]">
-          <RailBtn icon={ICON.users} label="Clients" active={activeSection === 'clients'} onClick={() => setActiveSection('clients')} />
           <RailBtn icon={ICON.more}  label="More"    active={activeSection === 'more'}    onClick={() => setActiveSection('more')} />
         </div>
 
@@ -744,7 +743,7 @@ export default function MainLayout() {
           <LearningShell />
         ) : activeSection !== 'home' ? (
           <div className="sh-view flex flex-1 flex-col items-center justify-center">
-            <div className="mb-4 opacity-20 text-[var(--sh-ink-3)]">{ICON[(activeSection === 'clients' ? 'users' : activeSection) as keyof typeof ICON]}</div>
+            <div className="mb-4 opacity-20 text-[var(--sh-ink-3)]">{ICON[activeSection as keyof typeof ICON]}</div>
             <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>{SECTION_TITLES[activeSection]}</h3>
             <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Coming soon</p>
           </div>
@@ -754,6 +753,8 @@ export default function MainLayout() {
           <MyTasksView />
         ) : homeView === 'day-planner' ? (
           <DayPlannerView />
+        ) : homeView === 'routines' ? (
+          <RoutinesView />
         ) : homeView === 'mentions' ? (
           <div className="sh-view flex flex-1 flex-col items-center justify-center">
             <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>Mentions</h3>
