@@ -466,12 +466,24 @@ export interface TaskDayPlan {
   duration_minutes: number;
   created_at: string;
   updated_at: string;
+  // Synthesized rows merged into GET /pm/day-plans (not real task_day_plans
+  // rows): work-block occurrences fired by recurrence rules, and date-derived
+  // occurrences from a task's work/due/start date landing on the viewed day.
+  virtual?: boolean;
+  kind?: 'work_block_occurrence' | 'date_occurrence';
+  // Date-derived rows only: true when the source date carries no time-of-day
+  // (midnight local) — the calendar renders these in its all-day strip.
+  all_day?: boolean;
+  date_field?: 'work' | 'due' | 'start';
   // Joined task summary so the calendar block can render without a second fetch.
   task?: Pick<Task, 'id' | 'title' | 'priority' | 'status_id' | 'time_estimate' | 'list_id'> & {
     // TEXT status (catalog key like 'closed' or legacy 'done'/'todo'). Used to
     // grey out blocks for completed tasks. Not on the base Task type today.
     status?: string | null;
     list?: { id: string; name: string } | null;
+    // Flattened task_types join from the day-plans hydrate.
+    task_type_key?: string | null;
+    task_type_color?: string | null;
   };
 }
 

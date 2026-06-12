@@ -92,7 +92,9 @@ export function useDayPlans(date: string) {
   return useQuery<TaskDayPlan[]>({
     queryKey: ['day-plans', date],
     queryFn: async () => {
-      const res = await api.get(`/pm/day-plans?date=${encodeURIComponent(date)}`);
+      // tz lets the server derive timed/all-day occurrences from task dates.
+      const params = new URLSearchParams({ date, tz: tzNow() });
+      const res = await api.get(`/pm/day-plans?${params.toString()}`);
       return (res.data?.data ?? []) as TaskDayPlan[];
     },
     enabled: !!date,
