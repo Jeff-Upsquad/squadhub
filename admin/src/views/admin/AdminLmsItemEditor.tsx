@@ -22,6 +22,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   const qc = useQueryClient();
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [publishBusy, setPublishBusy] = useState(false);
+  const [showLessonAudience, setShowLessonAudience] = useState(false);
 
   const { data: itemRes, isLoading } = useQuery({
     queryKey: ['lms-item', itemId],
@@ -94,12 +95,20 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
     },
   });
 
+  const setLessonAudience = useMutation({
+    mutationFn: ({ id, ...body }: any) => api.put(`/admin/lms/lessons/${id}/audience`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['lms-item', itemId] }),
+  });
+
   if (isLoading || !item) {
     return <div className="p-8 text-sm text-[#90A1B9]">Loading…</div>;
   }
 
   const activeLesson = item.lessons.find((l) => l.id === activeLessonId) || item.lessons[0];
   const isCourse = item.kind === 'course';
+  const lessonAudTypes: UserType[] = (activeLesson?.audience_types as UserType[]) || [];
+  const lessonAudUsers: string[] = activeLesson?.audience_user_ids || [];
+  const lessonRestricted = lessonAudTypes.length > 0 || lessonAudUsers.length > 0;
 
   return (
     <div>
@@ -266,6 +275,38 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                     >
                       Delete lesson
                     </button>
+                  )}
+                </div>
+              )}
+              {isCourse && (
+                <div className="mb-4 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC]">
+                  <button
+                    type="button"
+                    onClick={() => setShowLessonAudience((v) => !v)}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left"
+                  >
+                    <span className="text-[#90A1B9]">{showLessonAudience ? '▾' : '▸'}</span>
+                    <span className="text-[12px] font-medium text-[#0F172B]">Who can see this lesson</span>
+                    <span className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      lessonRestricted ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {lessonRestricted
+                        ? `Restricted${lessonAudTypes.length ? ` · ${lessonAudTypes.length} type${lessonAudTypes.length > 1 ? 's' : ''}` : ''}${lessonAudUsers.length ? ` · ${lessonAudUsers.length} ${lessonAudUsers.length > 1 ? 'people' : 'person'}` : ''}`
+                        : 'Everyone in this course'}
+                    </span>
+                  </button>
+                  {showLessonAudience && (
+                    <div className="border-t border-[#E2E8F0] p-3">
+                      <p className="mb-3 text-[11px] leading-snug text-[#90A1B9]">
+                        Leave everything empty to show this lesson to everyone enrolled in the course.
+                        Pick user types or specific people to restrict it — everyone else won&apos;t see the lesson at all.
+                      </p>
+                      <AudiencePicker
+                        userTypes={lessonAudTypes}
+                        userIds={lessonAudUsers}
+                        onChange={(next) => setLessonAudience.mutate({ id: activeLesson.id, ...next })}
+                      />
+                    </div>
                   )}
                 </div>
               )}
