@@ -278,6 +278,95 @@ router.post(
 );
 
 // ------------------------------------------------------------
+// POST /card-activation-undo — SquadHire unassigned a card whose
+// subscription had already been ACTIVATED (finalized). Reverse the
+// finalize-selection so the card reopens for re-selection.
+//
+// Profiles fires this alongside /card-selection-undo when an *activated*
+// card is unassigned, in no guaranteed order — so this handler is a
+// self-sufficient, idempotent superset of selection-undo: it fully reopens
+// the card AND clears the finalize + activation-notify residue.
+//
+// NOTE: activation on this side does NOT start billing — `client_subscriptions`
+// are owned by the lead→client pipeline and have no FK to the card — so we
+// deliberately do NOT touch billing here.
+// ------------------------------------------------------------
+
+const cardActivationUndoSchema = z
+  .object({
+    external_id: z.string().min(1),
+    unassigned_at: z.string().datetime().optional(),
+  })
+  .strict();
+
+router.post(
+  '/card-activation-undo',
+  verifySquadhireCallbackSecret,
+  async (req: Request, res: Response) => {
+    try {
+      const body = cardActivationUndoSchema.parse(req.body);
+
+      const { data: card } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id')
+        .eq('id', body.external_id)
+        .maybeSingle();
+      if (!card) { res.status(200).json({ success: true, ignored: 'card_not_found' }); return; }
+
+      // Clear selection on both recipient tables (partners + SquadHire talents).
+      await supabaseAdmin
+        .from('subscription_card_recipients')
+        .update({ selected_at: null, selected_by: null, passed_over_at: null })
+        .eq('card_id', card.id)
+        .not('selected_at', 'is', null);
+
+      await supabaseAdmin
+        .from('subscription_card_recipients')
+        .update({ passed_over_at: null })
+        .eq('card_id', card.id)
+        .not('passed_over_at', 'is', null);
+
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .update({ selected_at: null, selected_by: null, passed_over_at: null })
+        .eq('card_id', card.id)
+        .not('selected_at', 'is', null);
+
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .update({ passed_over_at: null })
+        .eq('card_id', card.id)
+        .not('passed_over_at', 'is', null);
+
+      // Reopen the card and clear the finalize + activation-notify residue so a
+      // fresh selection/activation can happen cleanly later.
+      await supabaseAdmin
+        .from('subscription_cards')
+        .update({
+          state: 'published',
+          closed_at: null,
+          assigned_at: null,
+          selected_recipient_type: null,
+          selected_recipient_id: null,
+          squadhire_activation_notified_at: null,
+          squadhire_activation_notify_attempts: 0,
+          squadhire_activation_notify_error: null,
+        })
+        .eq('id', card.id);
+
+      res.json({ success: true });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ success: false, error: err.errors[0].message });
+        return;
+      }
+      console.error('[squadhire-callback card-activation-undo] error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  },
+);
+
+// ------------------------------------------------------------
 // Profile access grants: inbound sync from Profiles → SquadHub
 // ------------------------------------------------------------
 
