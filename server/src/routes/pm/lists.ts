@@ -96,7 +96,8 @@ router.get('/lists/:id', async (req: Request, res: Response) => {
         .from('tasks')
         .select('*', { count: 'exact', head: true })
         .eq('list_id', id)
-        .is('parent_task_id', null),
+        .is('parent_task_id', null)
+        .is('recurrence', null),
       supabaseAdmin
         .from('space_statuses')
         .select('*')

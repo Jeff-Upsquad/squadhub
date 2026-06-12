@@ -206,6 +206,7 @@ router.get('/search', async (req: Request, res: Response) => {
       .select('id, title, status, priority, due_date, list_id, parent_task_id, created_at')
       .in('list_id', accessibleListIds)
       .is('parent_task_id', null)
+      .is('recurrence', null)
       .ilike('title', `%${safeQ}%`)
       .order('created_at', { ascending: false })
       .limit(limit);
