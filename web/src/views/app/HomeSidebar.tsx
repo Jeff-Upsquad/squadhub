@@ -34,6 +34,10 @@ interface HomeSidebarProps {
   onCreateChannel: () => void;
   onOpenSpaces: () => void;
   onOpenSearch: () => void;
+  /** Inbox notification badge is in its "recent" (red) window. */
+  inboxAlert?: boolean;
+  /** Inbox notification badge should pulse (just arrived). */
+  inboxPulse?: boolean;
 }
 
 // ---- Favorite icon helper ----
@@ -80,6 +84,8 @@ function NavItem({
   active,
   count,
   unread,
+  alert = false,
+  pulse = false,
   onClick,
 }: {
   icon: React.ReactNode;
@@ -87,6 +93,10 @@ function NavItem({
   active?: boolean;
   count?: number;
   unread?: boolean;
+  /** Render the count badge red (a notification arrived recently). */
+  alert?: boolean;
+  /** Play the expanding pulse ring (a notification just arrived). */
+  pulse?: boolean;
   onClick?: () => void;
 }) {
   return (
@@ -102,15 +112,29 @@ function NavItem({
       <span className={active ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}>{icon}</span>
       <span className="flex-1 truncate">{label}</span>
       {count != null && count > 0 && (
-        <span
-          className={`text-[10.5px] font-semibold rounded-full px-[6px] py-[1px] leading-none ${
-            unread
-              ? 'bg-[var(--sh-ink)] text-[var(--sidebar)]'
-              : 'bg-[var(--sh-hair-3)] text-[var(--sh-ink-3)]'
-          }`}
-          style={{ fontFamily: 'var(--font-mono, Inter, sans-serif)' }}
-        >
-          {count}
+        <span className="relative grid place-items-center">
+          {alert && pulse && (
+            <span
+              aria-hidden
+              className="sh-badge-ping absolute inset-0 rounded-full"
+              style={{ background: 'var(--sh-badge-alert)' }}
+            />
+          )}
+          <span
+            className={`relative text-[10.5px] font-semibold rounded-full px-[6px] py-[1px] leading-none ${
+              alert
+                ? 'text-white'
+                : unread
+                  ? 'bg-[var(--sh-ink)] text-[var(--sidebar)]'
+                  : 'bg-[var(--sh-hair-3)] text-[var(--sh-ink-3)]'
+            }`}
+            style={{
+              fontFamily: 'var(--font-mono, Inter, sans-serif)',
+              ...(alert ? { background: 'var(--sh-badge-alert)' } : null),
+            }}
+          >
+            {count}
+          </span>
         </span>
       )}
     </button>
@@ -177,6 +201,8 @@ export default function HomeSidebar({
   onCreateChannel,
   onOpenSpaces,
   onOpenSearch,
+  inboxAlert = false,
+  inboxPulse = false,
 }: HomeSidebarProps) {
   const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
   const activeChannelKind = useWorkspaceStore((s) => s.activeChannelKind);
@@ -310,6 +336,8 @@ export default function HomeSidebar({
             active={homeView === 'inbox'}
             count={inboxUnreadCount ?? 0}
             unread
+            alert={inboxAlert}
+            pulse={inboxPulse}
             onClick={() => onChangeView('inbox')}
           />
           <NavItem

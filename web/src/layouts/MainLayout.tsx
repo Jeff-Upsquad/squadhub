@@ -55,6 +55,7 @@ import ClipsView from '../views/app/clips/ClipsView';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
 import { useNavHistory } from '../hooks/useNavHistory';
 import { useUnreadCount } from '../hooks/useUnreadCount';
+import { useNotificationFreshness } from '../hooks/useNotificationFreshness';
 import { useBrowserNotifications } from '../hooks/useBrowserNotifications';
 import BrowserNotificationsToggle from '../components/BrowserNotificationsToggle';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -178,12 +179,18 @@ function RailBtn({
   label,
   active,
   badge,
+  badgeAlert = false,
+  badgePulse = false,
   onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   active: boolean;
   badge?: number;
+  /** Render the badge red (a notification arrived recently). */
+  badgeAlert?: boolean;
+  /** Play the expanding pulse ring (a notification just arrived). */
+  badgePulse?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -199,10 +206,22 @@ function RailBtn({
     >
       {icon}
       {badge != null && badge > 0 && (
-        <span
-          className="absolute top-[3px] right-[3px] grid min-w-[14px] h-[14px] place-items-center rounded-full bg-[var(--sh-ink)] text-[var(--sidebar)] text-[9px] font-semibold px-[3px] leading-none"
-        >
-          {badge}
+        <span className="absolute top-[3px] right-[3px] grid place-items-center">
+          {badgeAlert && badgePulse && (
+            <span
+              aria-hidden
+              className="sh-badge-ping absolute inset-0 rounded-full"
+              style={{ background: 'var(--sh-badge-alert)' }}
+            />
+          )}
+          <span
+            className={`relative grid min-w-[14px] h-[14px] place-items-center rounded-full text-[9px] font-semibold px-[3px] leading-none ${
+              badgeAlert ? 'text-white' : 'text-[var(--sidebar)]'
+            }`}
+            style={{ background: badgeAlert ? 'var(--sh-badge-alert)' : 'var(--sh-ink)' }}
+          >
+            {badge}
+          </span>
         </span>
       )}
     </button>
@@ -228,7 +247,10 @@ export default function MainLayout() {
   // Live presence set for the chat header dot (hooks can't run inside the
   // header IIFE below, so subscribe here).
   const onlineUserIds = usePresenceStore((s) => s.onlineUserIds);
-  const { data: unreadCount = 0 } = useUnreadCount();
+  const { data: unreadData } = useUnreadCount();
+  const unreadCount = unreadData ?? 0;
+  // Drive the notification badge's red/pulse states from changes in the count.
+  const { alert: inboxAlert, pulse: inboxPulse } = useNotificationFreshness(unreadData);
   useBrowserNotifications(currentWorkspace?.id);
   // Schedule in-app toasts for upcoming work-block windows today.
   useWorkBlockNotifier();
@@ -597,6 +619,8 @@ export default function MainLayout() {
             icon={ICON.inbox}
             label="Inbox"
             badge={unreadCount > 0 ? unreadCount : undefined}
+            badgeAlert={inboxAlert}
+            badgePulse={inboxPulse}
             active={(activeSection === 'home' && homeView === 'inbox') || inboxSliderOpen}
             onClick={() => {
               // The rail always toggles the slide-over; the full inbox view is
@@ -707,6 +731,8 @@ export default function MainLayout() {
             channels={channels}
             activeChannelId={activeChannelId}
             homeView={homeView}
+            inboxAlert={inboxAlert}
+            inboxPulse={inboxPulse}
             canGoBack={nav.canGoBack}
             canGoForward={nav.canGoForward}
             onNavBack={nav.goBack}
