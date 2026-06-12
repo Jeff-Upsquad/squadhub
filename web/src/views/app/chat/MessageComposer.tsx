@@ -9,6 +9,8 @@ import { useUploadAttachment } from '../../../hooks/useUploadAttachment';
 import type { ChatKind } from '../../../stores/workspaceStore';
 import EmojiPicker from './EmojiPicker';
 import VoiceRecorder from './VoiceRecorder';
+import { ScheduleSendModal, ScheduledStrip, formatScheduledTime } from './ScheduleSend';
+import { useScheduleMessage } from '../../../hooks/useScheduledMessages';
 
 // ---- Convert Tiptap HTML output → markdown (matches the renderer in MessageBubble) ----
 function htmlToMarkdown(html: string): string {
@@ -128,6 +130,8 @@ export default function MessageComposer({
   const [hasText, setHasText] = useState(false);
   // Slack shows the formatting bar by default; the Aa button toggles it.
   const [showFmt, setShowFmt] = useState(true);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduledNote, setScheduledNote] = useState<string | null>(null);
   // Bumped on every send/state change to force toolbar buttons to re-render
   // with the latest editor.isActive(...) results.
   const [, setEditorTick] = useState(0);
@@ -135,6 +139,7 @@ export default function MessageComposer({
   const composerBoxRef = useRef<HTMLDivElement>(null);
 
   const { upload, uploading, progress } = useUploadAttachment(kind, channelId);
+  const scheduleMutation = useScheduleMessage(kind, channelId);
   const idField = kind === 'dm' ? 'dm_conversation_id' : 'channel_id';
 
   const effectivePlaceholder =
@@ -252,6 +257,32 @@ export default function MessageComposer({
     }
   };
 
+  // Queue the drafted text for later delivery (text-only, like the partner app)
+  const scheduleMessage = async (isoUtc: string) => {
+    setShowSchedule(false);
+    const md = editor ? htmlToMarkdown(editor.getHTML()) : '';
+    if (!md) return;
+    setSendError(null);
+    try {
+      await scheduleMutation.mutateAsync({
+        content: md,
+        scheduled_at: isoUtc,
+        parent_message_id: parentMessageId,
+      });
+      editor?.commands.clearContent(true);
+      setHasText(false);
+      setScheduledNote(`Scheduled for ${formatScheduledTime(isoUtc)}`);
+      setTimeout(() => setScheduledNote(null), 4000);
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        (err as Error)?.message ||
+        'Could not schedule the message.';
+      console.error('Schedule message failed:', err);
+      setSendError(message);
+    }
+  };
+
   const handlePickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (f) setPendingFile(f);
@@ -318,6 +349,9 @@ export default function MessageComposer({
       }}
       className="sqc-composer-wrap"
     >
+      {/* Pending scheduled messages for this conversation (main composer only) */}
+      {!parentMessageId && <ScheduledStrip kind={kind} conversationId={channelId} />}
+
       {/* Send error banner */}
       {sendError && (
         <div className="mb-2 flex w-full items-center justify-between rounded-[6px] border border-[#E11D48] bg-[#FFF1F2] px-3 py-2 text-[12px] text-[#9F1239]">
@@ -471,6 +505,14 @@ export default function MessageComposer({
                     <path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94" />
                   </svg>
                 </ToolBtn>
+                {hasText && !pendingFile && (
+                  <ToolBtn title="Schedule send" onClick={() => setShowSchedule(true)} active={showSchedule}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 7v5l3 2" />
+                    </svg>
+                  </ToolBtn>
+                )}
                 <Divider />
                 <ToolBtn title="Record voice note" onClick={() => setRecording(true)}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -500,11 +542,19 @@ export default function MessageComposer({
         )}
       </div>
 
-      {/* Slack-style keyboard hint */}
-      {(focused || hasText) && !recording && (
-        <div className="sqc-composer__hint">
-          <strong>Shift + Return</strong> to add a new line
-        </div>
+      {/* Slack-style keyboard hint / schedule confirmation */}
+      {scheduledNote ? (
+        <div className="sqc-composer__hint">{scheduledNote}</div>
+      ) : (
+        (focused || hasText) && !recording && (
+          <div className="sqc-composer__hint">
+            <strong>Shift + Return</strong> to add a new line
+          </div>
+        )
+      )}
+
+      {showSchedule && (
+        <ScheduleSendModal onPick={scheduleMessage} onClose={() => setShowSchedule(false)} />
       )}
     </form>
   );
