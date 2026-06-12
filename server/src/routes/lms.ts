@@ -6,6 +6,47 @@ import { supabaseAdmin } from '../supabase';
 const router = Router();
 router.use(requireAuth);
 
+// Which lessons of a set is this user allowed to see?
+// A lesson with no audience rows is visible to everyone enrolled; otherwise it
+// is visible only to matching user_types OR explicitly listed users.
+async function getVisibleLessonIds(
+  lessonIds: string[],
+  userId: string,
+  userType: string | null,
+): Promise<Set<string>> {
+  if (lessonIds.length === 0) return new Set();
+
+  const [{ data: typeRows }, { data: userRows }] = await Promise.all([
+    supabaseAdmin.from('lms_lesson_audience_types').select('lesson_id, user_type').in('lesson_id', lessonIds),
+    supabaseAdmin.from('lms_lesson_audience_users').select('lesson_id, user_id').in('lesson_id', lessonIds),
+  ]);
+
+  const typesByLesson = new Map<string, string[]>();
+  for (const r of typeRows || []) {
+    const list = typesByLesson.get((r as any).lesson_id) || [];
+    list.push((r as any).user_type);
+    typesByLesson.set((r as any).lesson_id, list);
+  }
+  const usersByLesson = new Map<string, string[]>();
+  for (const r of userRows || []) {
+    const list = usersByLesson.get((r as any).lesson_id) || [];
+    list.push((r as any).user_id);
+    usersByLesson.set((r as any).lesson_id, list);
+  }
+
+  const visible = new Set<string>();
+  for (const id of lessonIds) {
+    const types = typesByLesson.get(id) || [];
+    const users = usersByLesson.get(id) || [];
+    if (types.length === 0 && users.length === 0) {
+      visible.add(id); // unrestricted — inherits the course audience
+    } else if ((userType && types.includes(userType)) || users.includes(userId)) {
+      visible.add(id);
+    }
+  }
+  return visible;
+}
+
 // ------------------------------------------------------------
 // GET /lms/my-items — assignments for the current user
 // ------------------------------------------------------------
@@ -65,6 +106,16 @@ router.get('/items/:id', async (req: Request, res: Response) => {
   try {
     const itemId = req.params.id;
 
+    // Load the requesting user's profile once — user_type drives lesson-level
+    // audience filtering, is_admin gates access + preview.
+    const { data: profile } = await supabaseAdmin
+      .from('users')
+      .select('is_admin, user_type')
+      .eq('id', req.userId!)
+      .single();
+    const isAdmin = !!(profile as any)?.is_admin;
+    const userType = (profile as any)?.user_type ?? null;
+
     // Check access: either there's an assignment or the user is admin
     const { data: assignment } = await supabaseAdmin
       .from('lms_assignments')
@@ -73,18 +124,9 @@ router.get('/items/:id', async (req: Request, res: Response) => {
       .eq('user_id', req.userId!)
       .maybeSingle();
 
-    let isAdmin = false;
-    if (!assignment) {
-      const { data: profile } = await supabaseAdmin
-        .from('users')
-        .select('is_admin')
-        .eq('id', req.userId!)
-        .single();
-      isAdmin = !!(profile as any)?.is_admin;
-      if (!isAdmin) {
-        res.status(403).json({ success: false, error: 'Not assigned to this content' });
-        return;
-      }
+    if (!assignment && !isAdmin) {
+      res.status(403).json({ success: false, error: 'Not assigned to this content' });
+      return;
     }
 
     const { data: item, error: itemErr } = await supabaseAdmin
@@ -106,13 +148,24 @@ router.get('/items/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const { data: lessons } = await supabaseAdmin
+    let lessons = (await supabaseAdmin
       .from('lms_lessons')
       .select('*')
       .eq('item_id', itemId)
-      .order('position', { ascending: true });
+      .order('position', { ascending: true })).data || [];
 
-    const lessonIds = (lessons || []).map((l: any) => l.id);
+    // Apply lesson-level audience for real learners. Admins previewing an item
+    // they aren't enrolled in still see every lesson.
+    if (assignment) {
+      const visibleIds = await getVisibleLessonIds(
+        lessons.map((l: any) => l.id),
+        req.userId!,
+        userType,
+      );
+      lessons = lessons.filter((l: any) => visibleIds.has(l.id));
+    }
+
+    const lessonIds = lessons.map((l: any) => l.id);
     const { data: blocks } = lessonIds.length
       ? await supabaseAdmin
           .from('lms_content_blocks')
@@ -237,7 +290,8 @@ router.post('/assignments/:id/start', async (req: Request, res: Response) => {
 // ------------------------------------------------------------
 router.post('/assignments/:id/lessons/:lessonId/complete', async (req: Request, res: Response) => {
   try {
-    const { id: assignmentId, lessonId } = req.params;
+    const assignmentId = req.params.id as string;
+    const lessonId = req.params.lessonId as string;
 
     const { data: assignment } = await supabaseAdmin
       .from('lms_assignments')
@@ -263,6 +317,29 @@ router.post('/assignments/:id/lessons/:lessonId/complete', async (req: Request, 
       return;
     }
 
+    // Which lessons can this user see? Progress is measured against their
+    // visible set, and a hidden lesson can't be completed at all.
+    const { data: profile } = await supabaseAdmin
+      .from('users')
+      .select('user_type')
+      .eq('id', req.userId!)
+      .single();
+
+    const { data: allLessons } = await supabaseAdmin
+      .from('lms_lessons')
+      .select('id')
+      .eq('item_id', (assignment as any).item_id);
+    const visibleIds = await getVisibleLessonIds(
+      (allLessons || []).map((l: any) => l.id),
+      req.userId!,
+      (profile as any)?.user_type ?? null,
+    );
+
+    if (!visibleIds.has(lessonId)) {
+      res.status(403).json({ success: false, error: 'Lesson not available' });
+      return;
+    }
+
     // Upsert progress row
     const { error: upsertErr } = await supabaseAdmin
       .from('lms_lesson_progress')
@@ -276,22 +353,16 @@ router.post('/assignments/:id/lessons/:lessonId/complete', async (req: Request, 
       return;
     }
 
-    // Recompute progress
-    const [{ count: totalLessons }, { count: completedLessons }] = await Promise.all([
-      supabaseAdmin
-        .from('lms_lessons')
-        .select('*', { count: 'exact', head: true })
-        .eq('item_id', (assignment as any).item_id),
-      supabaseAdmin
-        .from('lms_lesson_progress')
-        .select('*', { count: 'exact', head: true })
-        .eq('assignment_id', assignmentId),
-    ]);
+    // Recompute progress against the user's visible lessons only.
+    const { data: progressRows } = await supabaseAdmin
+      .from('lms_lesson_progress')
+      .select('lesson_id')
+      .eq('assignment_id', assignmentId);
+    const done = (progressRows || []).filter((p: any) => visibleIds.has(p.lesson_id)).length;
 
-    const total = totalLessons || 1;
-    const done = completedLessons || 0;
+    const total = visibleIds.size || 1;
     const percent = Math.round((done / total) * 100);
-    const isComplete = done >= total;
+    const isComplete = visibleIds.size > 0 && done >= visibleIds.size;
 
     const patch: Record<string, any> = {
       progress_percent: percent,

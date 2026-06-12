@@ -307,9 +307,32 @@ router.get('/items/:id', async (req: Request, res: Response) => {
       blocksByLesson.set((b as any).lesson_id, list);
     }
 
+    // Lesson-level audience overrides (empty arrays = visible to everyone enrolled)
+    const [{ data: lessonATypes }, { data: lessonAUsers }] = lessonIds.length
+      ? await Promise.all([
+          supabaseAdmin.from('lms_lesson_audience_types').select('lesson_id, user_type').in('lesson_id', lessonIds),
+          supabaseAdmin.from('lms_lesson_audience_users').select('lesson_id, user_id').in('lesson_id', lessonIds),
+        ])
+      : [{ data: [] as any[] }, { data: [] as any[] }];
+
+    const lessonTypesByLesson = new Map<string, string[]>();
+    for (const r of lessonATypes || []) {
+      const list = lessonTypesByLesson.get((r as any).lesson_id) || [];
+      list.push((r as any).user_type);
+      lessonTypesByLesson.set((r as any).lesson_id, list);
+    }
+    const lessonUsersByLesson = new Map<string, string[]>();
+    for (const r of lessonAUsers || []) {
+      const list = lessonUsersByLesson.get((r as any).lesson_id) || [];
+      list.push((r as any).user_id);
+      lessonUsersByLesson.set((r as any).lesson_id, list);
+    }
+
     const fullLessons = (lessons || []).map((l: any) => ({
       ...l,
       blocks: blocksByLesson.get(l.id) || [],
+      audience_types: lessonTypesByLesson.get(l.id) || [],
+      audience_user_ids: lessonUsersByLesson.get(l.id) || [],
     }));
 
     const [{ data: aTypes }, { data: aUsers }] = await Promise.all([
@@ -682,6 +705,60 @@ router.put('/items/:id/lessons/reorder', async (req: Request, res: Response) => 
       res.status(400).json({ success: false, error: err.errors[0].message });
       return;
     }
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /admin/lms/lessons/:id/audience — restrict a lesson to a subset of the
+// course audience. Empty arrays clear the restriction (visible to everyone).
+router.put('/lessons/:id/audience', async (req: Request, res: Response) => {
+  try {
+    const body = audienceSchema.parse(req.body);
+    const lessonId = req.params.id;
+
+    const { error: delTypesErr } = await supabaseAdmin
+      .from('lms_lesson_audience_types')
+      .delete()
+      .eq('lesson_id', lessonId);
+    if (delTypesErr) {
+      res.status(500).json({ success: false, error: delTypesErr.message });
+      return;
+    }
+
+    const { error: delUsersErr } = await supabaseAdmin
+      .from('lms_lesson_audience_users')
+      .delete()
+      .eq('lesson_id', lessonId);
+    if (delUsersErr) {
+      res.status(500).json({ success: false, error: delUsersErr.message });
+      return;
+    }
+
+    if (body.user_types.length) {
+      const rows = body.user_types.map((t) => ({ lesson_id: lessonId, user_type: t }));
+      const { error } = await supabaseAdmin.from('lms_lesson_audience_types').insert(rows);
+      if (error) {
+        res.status(500).json({ success: false, error: error.message });
+        return;
+      }
+    }
+
+    if (body.user_ids.length) {
+      const rows = body.user_ids.map((uid) => ({ lesson_id: lessonId, user_id: uid }));
+      const { error } = await supabaseAdmin.from('lms_lesson_audience_users').insert(rows);
+      if (error) {
+        res.status(500).json({ success: false, error: error.message });
+        return;
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Set lesson audience error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

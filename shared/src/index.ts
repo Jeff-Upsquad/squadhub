@@ -1706,6 +1706,11 @@ export interface LmsLesson {
   created_at: string;
   updated_at: string;
   blocks?: LmsContentBlock[];
+  // Lesson-level audience override. Empty on both = visible to everyone
+  // enrolled in the course; otherwise the lesson is hidden from users who
+  // don't match a type or aren't listed individually. (Populated by admin API.)
+  audience_types?: UserType[];
+  audience_user_ids?: string[];
 }
 
 export interface LmsContentBlock {
