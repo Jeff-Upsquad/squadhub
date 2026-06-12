@@ -192,11 +192,16 @@ function ListItem({ list, isManager = false, myAccess }: { list: List; isManager
   const { activeListId, setActiveList, setActiveSpace } = usePMStore();
   const [showSettings, setShowSettings] = useState(false);
   const isActive = activeListId === list.id;
+  const openList = () => { setActiveSpace(list.space_id); setActiveList(list.id); };
 
   return (
     <>
-      <button
-        onClick={() => { setActiveSpace(list.space_id); setActiveList(list.id); }}
+      {/* role=button div (not <button>) so the nested settings button is valid HTML */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={openList}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openList(); } }}
         className={`flex w-full items-center gap-2 rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
           isActive
             ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
@@ -218,7 +223,7 @@ function ListItem({ list, isManager = false, myAccess }: { list: List; isManager
         {isManager && !list.is_locked && (
           <EllipsisButton onClick={() => setShowSettings(true)} title="List settings" />
         )}
-      </button>
+      </div>
 
       {showSettings && typeof document !== 'undefined' && createPortal((
         <>
