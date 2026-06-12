@@ -28,6 +28,7 @@
   --sh-hair:          #E6E6E6;
   --sh-hair-2:        #D0D0D0;
   --sh-hair-3:        #F0F0F0;
+  --sh-badge-alert:   #EF4444;
   --sh-shadow-sm:     0 1px 0 rgba(26,24,21,0.04), 0 1px 2px rgba(26,24,21,0.03);
   --sh-rail-inset:    inset -6px 0 10px -6px rgba(0,0,0,0.08);
   --sh-sidebar-drop:  4px 0 14px -6px rgba(0,0,0,0.1);
@@ -56,6 +57,7 @@
   --sh-hair:          #242424;
   --sh-hair-2:        #333333;
   --sh-hair-3:        #161616;
+  --sh-badge-alert:   #FB5A5A;
   --sh-shadow-sm:     0 1px 0 rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
   --sh-rail-inset:    inset -6px 0 10px -6px rgba(0,0,0,0.6);
   --sh-sidebar-drop:  4px 0 14px -6px rgba(0,0,0,0.6);
@@ -169,6 +171,17 @@ body {
 .sh-view .briefing .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--sh-ink); position: relative; }
 .sh-view .briefing .pulse::before { content: ''; position: absolute; inset: -3px; border-radius: 50%; border: 1px solid var(--sh-ink); animation: sh-pulse 2s ease-out infinite; }
 @keyframes sh-pulse { 0% { transform: scale(0.7); opacity: 1; } 100% { transform: scale(1.8); opacity: 0; } }
+
+/* Notification badge — expanding ring shown for ~20s after a new notification.
+   Rendered as a sibling layer behind the badge pill (see RailBtn / NavItem). */
+.sh-badge-ping { animation: sh-badge-ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; }
+@keyframes sh-badge-ping {
+  0%        { transform: scale(0.9); opacity: 0.55; }
+  70%, 100% { transform: scale(2.3); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sh-badge-ping { animation: none; opacity: 0; }
+}
 .sh-view .briefing h2 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 26px; line-height: 1.22; margin: 10px 0 14px; max-width: 58ch; color: var(--sh-ink); letter-spacing: -0.005em; font-weight: 400; }
 .sh-view .briefing h2 mark { background: linear-gradient(transparent 62%, var(--sh-ink) 62%, var(--sh-ink) 96%, transparent 96%); color: inherit; padding: 0 2px; }
 .sh-view .briefing .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
