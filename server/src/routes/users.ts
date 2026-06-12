@@ -43,6 +43,39 @@ router.get('/search', requireAuth, async (req: Request, res: Response) => {
   try {
     const q = ((req.query.q as string) || '').trim();
     const limit = Math.min(parseInt((req.query.limit as string) || '10', 10), 25);
+    const channelId = (req.query.channel_id as string) || '';
+    const dmConversationId = (req.query.dm_conversation_id as string) || '';
+
+    // Scope the mention picker to a conversation when asked: channel → its
+    // members (resource_memberships) + creator; DM → its participants. With no
+    // scope param the search stays global (other callers rely on that).
+    let allowedIds: string[] | null = null;
+    if (channelId) {
+      const { data: members } = await supabaseAdmin
+        .from('resource_memberships')
+        .select('user_id')
+        .eq('resource_type', 'channel')
+        .eq('resource_id', channelId);
+      const ids = new Set<string>((members || []).map((m: any) => m.user_id));
+      const { data: ch } = await supabaseAdmin
+        .from('channels')
+        .select('created_by')
+        .eq('id', channelId)
+        .single();
+      if ((ch as any)?.created_by) ids.add((ch as any).created_by);
+      allowedIds = [...ids];
+    } else if (dmConversationId) {
+      const { data: parts } = await supabaseAdmin
+        .from('dm_participants')
+        .select('user_id')
+        .eq('conversation_id', dmConversationId);
+      allowedIds = [...new Set<string>((parts || []).map((p: any) => p.user_id))];
+    }
+
+    if (allowedIds !== null && allowedIds.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
 
     let query = supabaseAdmin
       .from('users')
@@ -51,6 +84,10 @@ router.get('/search', requireAuth, async (req: Request, res: Response) => {
       .neq('id', req.userId!)
       .order('display_name', { ascending: true })
       .limit(limit);
+
+    if (allowedIds !== null) {
+      query = query.in('id', allowedIds);
+    }
 
     if (q.length > 0) {
       query = query.ilike('display_name', `%${q}%`);
