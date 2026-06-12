@@ -2,6 +2,7 @@ import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import { config } from '../config';
 import { supabaseAdmin, supabaseAuth } from '../supabase';
+import { sendPartnerPush } from '../push/partnerPush';
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
@@ -254,6 +255,9 @@ export function setupSocketIO(httpServer: HttpServer) {
           const sockets = io.sockets.adapter.rooms.get(room);
           console.log(`[socket] emitting to ${room} (${sockets?.size || 0} clients): ${notification.title}`);
           io.to(room).emit('new_notification', notification);
+          // Mirror to the native partner app via FCM (fire-and-forget; no-ops
+          // if FCM is unconfigured or the user has no registered partner tokens).
+          sendPartnerPush(notification).catch((e) => console.error('[socket] partner push error:', e));
         }
       }
     } catch (e) {

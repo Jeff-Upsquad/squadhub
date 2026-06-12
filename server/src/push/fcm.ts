@@ -7,7 +7,7 @@ import type { ChatPushPayload } from './expo';
 let app: admin.app.App | null = null;
 let initAttempted = false;
 
-function getApp(): admin.app.App | null {
+export function getFirebaseApp(): admin.app.App | null {
   if (initAttempted) return app;
   initAttempted = true;
 
@@ -33,7 +33,7 @@ function getApp(): admin.app.App | null {
 // Prunes tokens that FCM reports as unregistered.
 // Tokens with `provider = 'expo'` are handled by ./expo.ts.
 export async function sendFcmChatPush(userId: string, payload: ChatPushPayload): Promise<void> {
-  const firebase = getApp();
+  const firebase = getFirebaseApp();
   if (!firebase) return;
 
   const { data: tokens } = await supabaseAdmin
