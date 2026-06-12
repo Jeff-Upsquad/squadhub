@@ -1702,6 +1702,9 @@ export interface LmsLesson {
   item_id: string;
   title: string;
   summary: string | null;
+  // Inactive lessons are hidden from learners but stay visible/editable in the
+  // admin editor. Existing rows default to active (see migration 100).
+  is_active: boolean;
   position: number;
   created_at: string;
   updated_at: string;

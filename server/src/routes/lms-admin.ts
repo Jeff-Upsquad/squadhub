@@ -640,6 +640,7 @@ router.post('/items/:id/lessons', async (req: Request, res: Response) => {
 
 const lessonUpdateSchema = lessonCreateSchema.extend({
   position: z.number().int().min(0).optional(),
+  is_active: z.boolean().optional(),
 });
 
 router.patch('/lessons/:id', async (req: Request, res: Response) => {
@@ -649,6 +650,7 @@ router.patch('/lessons/:id', async (req: Request, res: Response) => {
     if (body.title !== undefined) patch.title = body.title;
     if (body.summary !== undefined) patch.summary = body.summary;
     if (body.position !== undefined) patch.position = body.position;
+    if (body.is_active !== undefined) patch.is_active = body.is_active;
 
     const { data, error } = await supabaseAdmin
       .from('lms_lessons')

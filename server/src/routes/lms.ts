@@ -148,10 +148,13 @@ router.get('/items/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    // Inactive lessons are hidden from every learner-facing view (admins manage
+    // them in the admin editor). Audience filtering below further narrows these.
     let lessons = (await supabaseAdmin
       .from('lms_lessons')
       .select('*')
       .eq('item_id', itemId)
+      .eq('is_active', true)
       .order('position', { ascending: true })).data || [];
 
     // Apply lesson-level audience for real learners. Admins previewing an item

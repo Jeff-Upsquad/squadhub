@@ -234,19 +234,25 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                 </button>
               </div>
               <ul className="p-2">
-                {item.lessons.map((lesson, i) => (
-                  <li key={lesson.id}>
-                    <button
-                      onClick={() => setActiveLessonId(lesson.id)}
-                      className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition ${
-                        activeLessonId === lesson.id ? 'bg-[#F1F5F9] text-[#0F172B]' : 'text-[#62748E] hover:bg-[#F8FAFC]'
-                      }`}
-                    >
-                      <span className="w-5 text-right font-mono text-[11px] text-[#90A1B9]">{i + 1}.</span>
-                      <span className="flex-1 truncate font-medium">{lesson.title}</span>
-                    </button>
-                  </li>
-                ))}
+                {item.lessons.map((lesson, i) => {
+                  const inactive = lesson.is_active === false;
+                  return (
+                    <li key={lesson.id}>
+                      <button
+                        onClick={() => setActiveLessonId(lesson.id)}
+                        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition ${
+                          activeLessonId === lesson.id ? 'bg-[#F1F5F9] text-[#0F172B]' : 'text-[#62748E] hover:bg-[#F8FAFC]'
+                        }`}
+                      >
+                        <span className="w-5 text-right font-mono text-[11px] text-[#90A1B9]">{i + 1}.</span>
+                        <span className={`flex-1 truncate font-medium ${inactive ? 'text-[#90A1B9] line-through decoration-[#CAD5E2]' : ''}`}>{lesson.title}</span>
+                        {inactive && (
+                          <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">Inactive</span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
                 {item.lessons.length === 0 && (
                   <li className="px-3 py-4 text-center text-[12px] text-[#90A1B9]">No lessons yet</li>
                 )}
@@ -257,25 +263,59 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
           {activeLesson && (
             <div className="rounded-xl border border-[#E2E8F0] bg-white p-4">
               {isCourse && (
-                <div className="mb-4 flex items-start gap-2">
-                  <input
-                    key={activeLesson.id}
-                    defaultValue={activeLesson.title}
-                    onBlur={(e) => {
-                      if (e.target.value !== activeLesson.title) {
-                        patchLesson.mutate({ id: activeLesson.id, title: e.target.value });
-                      }
-                    }}
-                    className="flex-1 border-none bg-transparent text-base font-semibold text-[#0F172B] outline-none"
-                  />
-                  {item.lessons.length > 1 && (
-                    <button
-                      onClick={() => { if (confirm(`Delete lesson "${activeLesson.title}"?`)) deleteLesson.mutate(activeLesson.id); }}
-                      className="text-[12px] text-red-600 hover:underline"
-                    >
-                      Delete lesson
-                    </button>
-                  )}
+                <div className="mb-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1">
+                      <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-[#90A1B9]">Lesson name</label>
+                      <input
+                        key={activeLesson.id}
+                        defaultValue={activeLesson.title}
+                        onBlur={(e) => {
+                          const v = e.target.value.trim();
+                          if (v && v !== activeLesson.title) patchLesson.mutate({ id: activeLesson.id, title: v });
+                        }}
+                        placeholder="Lesson name"
+                        className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-base font-semibold text-[#0F172B] focus:border-[#0F172B] focus:outline-none"
+                      />
+                    </div>
+                    {item.lessons.length > 1 && (
+                      <button
+                        onClick={() => { if (confirm(`Delete lesson "${activeLesson.title}"?`)) deleteLesson.mutate(activeLesson.id); }}
+                        className="mt-6 shrink-0 text-[12px] text-red-600 hover:underline"
+                      >
+                        Delete lesson
+                      </button>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-[#90A1B9]">Description</label>
+                    <textarea
+                      key={`desc-${activeLesson.id}`}
+                      defaultValue={activeLesson.summary || ''}
+                      onBlur={(e) => {
+                        if (e.target.value !== (activeLesson.summary || '')) {
+                          patchLesson.mutate({ id: activeLesson.id, summary: e.target.value || null });
+                        }
+                      }}
+                      rows={2}
+                      placeholder="Optional — shown to learners under the lesson title"
+                      className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm placeholder-[#90A1B9] focus:border-[#0F172B] focus:outline-none"
+                    />
+                  </div>
+
+                  <label className="flex cursor-pointer items-center gap-2.5 rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={activeLesson.is_active ?? true}
+                      onChange={(e) => patchLesson.mutate({ id: activeLesson.id, is_active: e.target.checked })}
+                      className="h-4 w-4 rounded border-[#CAD5E2] accent-[#0F172B]"
+                    />
+                    <span className="text-[13px] font-medium text-[#0F172B]">Active</span>
+                    <span className="text-[12px] text-[#90A1B9]">
+                      {(activeLesson.is_active ?? true) ? 'Visible to learners' : 'Hidden from learners — only visible here'}
+                    </span>
+                  </label>
                 </div>
               )}
               {isCourse && (
