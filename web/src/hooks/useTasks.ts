@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import api from '../services/api';
-import type { Task, SpaceStatus, TaskComment, TaskMetadata } from '@squadhub/shared';
+import type { Task, SpaceStatus, TaskComment, TaskMetadata, TaskRecurrence } from '@squadhub/shared';
 import { getTaskStatusCategory } from '@squadhub/shared';
 import { showToastCard } from '../components/Toast';
 import { usePMStore } from '../stores/pmStore';
@@ -114,6 +114,7 @@ export function useCreateTask(listId: string | null) {
       list_id?: string;
       parent_task_id?: string | null;
       task_type_id?: string | null;
+      recurrence?: TaskRecurrence | null;
     }) => {
       const targetListId = body.list_id || listId;
       const res = await api.post('/pm/tasks', { ...body, list_id: targetListId });
@@ -156,6 +157,7 @@ export function useUpdateTask(listId: string | null) {
       assignee_ids?: string[];
       metadata?: TaskMetadata;
       list_id?: string;
+      recurrence?: TaskRecurrence | null;
     }) => {
       const res = await api.put(`/pm/tasks/${id}`, body);
       return res.data.data;

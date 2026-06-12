@@ -24,6 +24,7 @@ import pmListRoutes from './routes/pm/lists';
 import pmTaskRoutes from './routes/pm/tasks';
 import pmDayPlansRoutes from './routes/pm/dayPlans';
 import pmWorkBlocksRoutes from './routes/pm/workBlocks';
+import pmRoutinesRoutes from './routes/pm/routines';
 import pmSharedWithMeRoutes from './routes/pm/shared-with-me';
 import pmSearchRoutes from './routes/pm/search';
 import favoritesRoutes from './routes/favorites';
@@ -89,6 +90,7 @@ import viewPreferencesRoutes from './routes/view-preferences';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimerCron } from './cron/timer-cron';
 import { startScheduledMessagesSweeper } from './cron/scheduled-messages-cron';
+import { startRoutineCron } from './cron/routine-cron';
 import { startSquadhireSyncSweeper, startManualAssignmentSweeper, startSelectionNotifySweeper, startActivationNotifySweeper, startTalentAcceptedNotifySweeper } from './utils/squadhireWebhook';
 import { startProfileAccessGrantsSyncSweeper } from './utils/squadhireGrantsWebhook';
 
@@ -136,6 +138,7 @@ app.use('/pm', pmListRoutes);
 app.use('/pm', pmTaskRoutes);
 app.use('/pm', pmDayPlansRoutes);
 app.use('/pm', pmWorkBlocksRoutes);
+app.use('/pm', pmRoutinesRoutes);
 app.use('/pm', pmSharedWithMeRoutes);
 app.use('/pm', pmSearchRoutes);
 app.use('/favorites', favoritesRoutes);
@@ -228,6 +231,7 @@ server.listen(config.port, () => {
   startCheckInCron();
   startTimerCron();
   startScheduledMessagesSweeper(io);
+  startRoutineCron();
 
   // Outbound SquadHire webhook retry sweeper. No-ops when SQUADHIRE_WEBHOOK_URL
   // is unset, so dev environments without SquadHire configured are unaffected.

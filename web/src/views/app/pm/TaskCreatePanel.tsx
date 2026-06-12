@@ -4,11 +4,12 @@ import { useAssignableUsersByList } from '../../../hooks/useAssignableUsers';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useSpace } from '../../../hooks/useSpaces';
 import { useAuthStore } from '../../../stores/authStore';
-import type { SpaceStatus, Task, TaskPriority, TaskStatusKey, TaskTypeField } from '@squadhub/shared';
-import { getTaskStatusDef } from '@squadhub/shared';
+import type { SpaceStatus, Task, TaskPriority, TaskStatusKey, TaskTypeField, TaskRecurrence } from '@squadhub/shared';
+import { getTaskStatusDef, describeTaskRecurrence } from '@squadhub/shared';
 import api from '../../../services/api';
 import AssigneePicker from './AssigneePicker';
 import DatePicker from './DatePicker';
+import RepeatPicker from './RepeatPicker';
 import EmergencyConfirm from './EmergencyConfirm';
 import ListPickerCombobox from './ListPickerCombobox';
 import TaskStatusPicker from './TaskStatusPicker';
@@ -200,6 +201,7 @@ type Draft = {
   due_date: string | null;
   task_type_id: string | null;
   time_estimate: number | null;
+  recurrence: TaskRecurrence | null;
   subtasks: DraftSubtask[];
   checklists: DraftChecklist[];
   pendingFiles: DraftFile[];
@@ -217,6 +219,7 @@ function makeDraft(defaultStatus: string | undefined): Draft {
     due_date: null,
     task_type_id: null,
     time_estimate: null,
+    recurrence: null,
     subtasks: [],
     checklists: [],
     pendingFiles: [],
@@ -235,6 +238,7 @@ function isDraftNonEmpty(d: Draft): boolean {
     d.start_date !== null ||
     d.due_date !== null ||
     d.time_estimate !== null ||
+    d.recurrence !== null ||
     d.priority !== 'none'
   );
 }
@@ -341,7 +345,8 @@ export default function TaskCreatePanel({
   const initialStatus = defaultStatus || effectiveStatuses[0]?.name || 'todo';
   const [draft, setDraft] = useState<Draft>(() => {
     if (initialDraft) {
-      return { ...initialDraft, pendingFiles: [] };
+      // Older persisted drafts predate `recurrence` — default it.
+      return { recurrence: null, ...initialDraft, pendingFiles: [] };
     }
     return makeDraft(initialStatus);
   });
@@ -388,6 +393,8 @@ export default function TaskCreatePanel({
   const [startDateAnchor, setStartDateAnchor] = useState<DOMRect | null>(null);
   const [dueDateOpen, setDueDateOpen] = useState(false);
   const [dueDateAnchor, setDueDateAnchor] = useState<DOMRect | null>(null);
+  const [repeatOpen, setRepeatOpen] = useState(false);
+  const [repeatAnchor, setRepeatAnchor] = useState<DOMRect | null>(null);
   const [editingEstimate, setEditingEstimate] = useState(false);
   const [estimateInput, setEstimateInput] = useState('');
   const [newSubtaskTitle, setNewSubtaskTitle] = useState<string | null>(null);
@@ -497,6 +504,7 @@ export default function TaskCreatePanel({
         due_date: draft.due_date || undefined,
         task_type_id: isDesignTask ? (designTaskTypeId || designType?.id || draft.task_type_id || undefined) : (draft.task_type_id || undefined),
         list_id: effectiveListId,
+        recurrence: draft.recurrence || undefined,
         ...(metadata ? { metadata } : {}),
       });
 
@@ -1232,6 +1240,34 @@ export default function TaskCreatePanel({
                 </span>
               </div>
 
+              {/* Repeat — non-null rule creates this task as a routine */}
+              <div
+                className="td-settings-row"
+                data-half="true"
+                style={{ cursor: 'pointer' }}
+                onClick={(e) => {
+                  setRepeatAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                  setRepeatOpen((v) => !v);
+                }}
+              >
+                <span className="k">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }} aria-hidden>
+                    <path d="m17 2 4 4-4 4" />
+                    <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+                    <path d="m7 22-4-4 4-4" />
+                    <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+                  </svg>
+                  Repeat
+                </span>
+                <span className="v">
+                  {draft.recurrence ? (
+                    <span className="td-date-text">{describeTaskRecurrence(draft.recurrence)}</span>
+                  ) : (
+                    <span className="td-prop-empty">Does not repeat</span>
+                  )}
+                </span>
+              </div>
+
               {/* Estimate */}
               <div
                 className="td-settings-row"
@@ -1700,6 +1736,15 @@ export default function TaskCreatePanel({
           mode="datetime"
           onChange={(next) => setDraft((d) => ({ ...d, due_date: next }))}
           onClose={() => setDueDateOpen(false)}
+        />
+      )}
+
+      {repeatOpen && (
+        <RepeatPicker
+          anchorRect={repeatAnchor}
+          value={draft.recurrence}
+          onChange={(next) => setDraft((d) => ({ ...d, recurrence: next }))}
+          onClose={() => setRepeatOpen(false)}
         />
       )}
 

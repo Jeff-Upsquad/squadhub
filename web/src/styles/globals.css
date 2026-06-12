@@ -346,6 +346,19 @@ body {
 .sh-view .dp-day-chip[data-today="true"] .wd { color: #b91c1c; }
 .sh-view .dp-day-chip[data-today="true"] .dom { background: #dc2626; color: #fff; border-color: #dc2626; }
 
+/* All-day strip: second row of the sticky column-header grid. Date-only
+   tasks land here as chips; drag one onto the hour grid to give it a time. */
+.sh-view .dp-allday-label { border-top: 1px solid var(--sh-hair); padding: 7px 8px 6px 16px; font-size: 10px; color: var(--sh-ink-4); font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.06em; text-align: right; align-self: stretch; }
+.sh-view .dp-allday-items { border-top: 1px solid var(--sh-hair); border-left: 1px solid var(--sh-hair); display: flex; flex-wrap: wrap; gap: 4px; padding: 5px 8px 5px 4px; min-width: 0; align-self: stretch; }
+.sh-view .dp-allday-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 240px; padding: 2px 8px 2px 6px; border-radius: 4px; background: #fef9c3; border-left: 3px solid #ca8a04; color: #422006; font-size: 12px; line-height: 1.4; cursor: grab; user-select: none; transition: background 0.12s; }
+.sh-view .dp-allday-chip:hover { background: #fef08a; }
+.sh-view .dp-allday-chip:active { cursor: grabbing; }
+.sh-view .dp-allday-chip .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.sh-view .dp-allday-chip .f { flex: none; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.65; }
+
+/* Source tag on timed blocks derived from a task date (Due / Work / Starts). */
+.sh-view .dp-block .b-meta .b-src { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.75; padding-left: 2px; }
+
 /* Hour grid: each row is a 2-column grid (label gutter + slot). */
 .sh-view .dp-cal-grid { position: relative; padding: 0 22px 60px 0; display: block; }
 .sh-view .dp-hour { position: relative; display: grid; grid-template-columns: 70px 1fr; height: 60px; border-top: 1px solid var(--sh-hair); }

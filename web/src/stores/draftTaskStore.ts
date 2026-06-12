@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { TaskPriority } from '@squadhub/shared';
+import type { TaskPriority, TaskRecurrence } from '@squadhub/shared';
 
 const MAX_DRAFTS = 10;
 
@@ -15,6 +15,7 @@ export type SerializableDraft = {
   due_date: string | null;
   task_type_id: string | null;
   time_estimate: number | null;
+  recurrence?: TaskRecurrence | null;
   subtasks: { id: string; title: string }[];
   checklists: {
     id: string;

@@ -49,6 +49,7 @@ import InboxView from '../views/app/InboxView';
 import InboxSlider from '../components/InboxSlider';
 import MyTasksView from '../views/app/MyTasksView';
 import DayPlannerView from '../views/app/DayPlannerView';
+import RoutinesView from '../views/app/RoutinesView';
 import LearningShell from '../views/app/learning/LearningShell';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
 import { useNavHistory } from '../hooks/useNavHistory';
@@ -59,7 +60,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner' | 'routines';
 
 // One entry in the in-app navigation history: everything needed to bring the
 // user back to a view. Views switch via local state rather than URLs, so the
@@ -751,6 +752,8 @@ export default function MainLayout() {
           <MyTasksView />
         ) : homeView === 'day-planner' ? (
           <DayPlannerView />
+        ) : homeView === 'routines' ? (
+          <RoutinesView />
         ) : homeView === 'mentions' ? (
           <div className="sh-view flex flex-1 flex-col items-center justify-center">
             <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>Mentions</h3>
