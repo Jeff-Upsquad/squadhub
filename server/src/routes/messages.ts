@@ -364,8 +364,8 @@ router.post('/:id/reactions', requireAuth, async (req: Request, res: Response) =
   }
 });
 
-// Sender-side edits are allowed for 10 minutes after sending (Slack-style window).
-const EDIT_WINDOW_MS = 10 * 60 * 1000;
+// Sender-side edits AND deletes are allowed for 10 minutes after sending.
+const MESSAGE_ACTION_WINDOW_MS = 10 * 60 * 1000;
 
 // PATCH /messages/:id — edit your own text message within the edit window
 router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
@@ -395,7 +395,7 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'Only text messages can be edited' });
       return;
     }
-    if (Date.now() - new Date((msg as any).created_at).getTime() > EDIT_WINDOW_MS) {
+    if (Date.now() - new Date((msg as any).created_at).getTime() > MESSAGE_ACTION_WINDOW_MS) {
       res.status(403).json({ success: false, error: 'Messages can only be edited within 10 minutes of sending' });
       return;
     }
@@ -433,7 +433,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
 
     const { data: msg } = await supabaseAdmin
       .from('messages')
-      .select('id, sender_id, file_url, channel_id, dm_conversation_id, is_deleted')
+      .select('id, sender_id, file_url, channel_id, dm_conversation_id, created_at, is_deleted')
       .eq('id', id)
       .maybeSingle();
 
@@ -443,6 +443,10 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
     }
     if ((msg as any).sender_id !== req.userId) {
       res.status(403).json({ success: false, error: 'You can only delete your own messages' });
+      return;
+    }
+    if (Date.now() - new Date((msg as any).created_at).getTime() > MESSAGE_ACTION_WINDOW_MS) {
+      res.status(403).json({ success: false, error: 'Messages can only be deleted within 10 minutes of sending' });
       return;
     }
 
