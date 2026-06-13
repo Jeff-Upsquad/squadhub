@@ -277,7 +277,11 @@ export default function MessageComposer({
     setMentionLoading(true);
     const t = setTimeout(async () => {
       try {
-        const res = await api.get('/users/search', { params: { q: mentionQuery, limit: 8 } });
+        // Scope suggestions to this conversation's members (channel members +
+        // creator, or DM participants) — the server filters when given the id.
+        const res = await api.get('/users/search', {
+          params: { q: mentionQuery, limit: 8, [idField]: channelId },
+        });
         if (cancel) return;
         const users: MentionUser[] = res.data.data || [];
         setMentionResults(users);
@@ -293,7 +297,7 @@ export default function MessageComposer({
       cancel = true;
       clearTimeout(t);
     };
-  }, [mentionQuery]);
+  }, [mentionQuery, channelId, idField]);
 
   // Mirror picker state into refs so the editor's captured keydown handler and
   // selectUser always read live values.
