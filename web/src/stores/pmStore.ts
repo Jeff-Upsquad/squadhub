@@ -25,6 +25,10 @@ interface PMState {
   activeTaskId: string | null;
   activeDesignFolderId: string | null;
   activeDashboardTab: DashboardTab | null;
+  // The full-page "New Tasks" review popup (My Home). Separate from
+  // activeDashboardTab — that drives the right-sliding bucket panel; this is a
+  // distinct full-screen overlay. Not persisted (a modal shouldn't reopen on reload).
+  newTasksOpen: boolean;
   contextListId: string | null;
   viewMode: ViewMode;
   listGroupBy: ListGroupBy;
@@ -59,6 +63,7 @@ interface PMState {
   setActiveDesignFolder: (id: string | null) => void;
   setContextListId: (id: string | null) => void;
   setActiveDashboardTab: (tab: DashboardTab | null) => void;
+  setNewTasksOpen: (open: boolean) => void;
   setViewMode: (mode: ViewMode) => void;
   setListGroupBy: (g: ListGroupBy) => void;
   setMyTasksOnly: (v: boolean) => void;
@@ -108,6 +113,7 @@ export const usePMStore = create<PMState>()(
       activeTaskId: null,
       activeDesignFolderId: null,
       activeDashboardTab: null,
+      newTasksOpen: false,
       contextListId: null,
       viewMode: 'list',
       listGroupBy: 'status',
@@ -137,6 +143,7 @@ export const usePMStore = create<PMState>()(
       setActiveDesignFolder: (id) => set({ activeDesignFolderId: id, activeListId: null, activeFolderId: null, activeSpacePageId: null, contextListId: null, selectedTasks: [] }),
       setContextListId: (id) => set({ contextListId: id }),
       setActiveDashboardTab: (tab) => set({ activeDashboardTab: tab }),
+      setNewTasksOpen: (open) => set({ newTasksOpen: open }),
       setViewMode: (mode) => set({ viewMode: mode }),
       setListGroupBy: (g) => { set({ listGroupBy: g }); triggerSave(); },
       setMyTasksOnly: (v) => { set({ myTasksOnly: v }); triggerSave(); },
@@ -291,7 +298,7 @@ export const usePMStore = create<PMState>()(
           focusedTodayDate: s.focusedTodayDate,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, newTasksOpen: false, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list' }),
     }),
     {
       name: 'squadhub-pm',

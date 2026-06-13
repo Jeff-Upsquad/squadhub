@@ -434,6 +434,72 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
   }
 });
 
+// GET /pm/tasks/new — the My Home "New Tasks" review queue: open tasks the caller
+// is assigned to, PLUS open tasks they created that are still unassigned. Tasks the
+// caller has already ticked as reviewed (task_reviews) drop out, unless
+// ?include_reviewed=true, in which case every row carries a `reviewed` boolean so
+// the popup can render its "Show reviewed" mode and un-review.
+//
+// MUST stay declared before '/tasks/:id' below, or that param route swallows "new".
+router.get('/tasks/new', async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const includeReviewed = req.query.include_reviewed === 'true';
+
+    // Same base shape as /tasks/my: skip routine templates and done/closed tasks.
+    const base = () =>
+      supabaseAdmin
+        .from('tasks')
+        .select('*')
+        .is('recurrence', null)
+        .not('status', 'in', '(done,closed)');
+
+    // (A) Assigned to me.
+    const assignedRes = await base().contains('assignee_ids', [userId]);
+    if (assignedRes.error) {
+      res.status(500).json({ success: false, error: assignedRes.error.message });
+      return;
+    }
+
+    // (B) Created by me and still unassigned. An empty UUID[] is '{}', not NULL, so
+    // PostgREST can't express "no assignees" cleanly — filter in JS after the fetch.
+    const createdRes = await base().eq('created_by', userId);
+    if (createdRes.error) {
+      res.status(500).json({ success: false, error: createdRes.error.message });
+      return;
+    }
+    const createdUnassigned = (createdRes.data || []).filter(
+      (t: any) => !t.assignee_ids || t.assignee_ids.length === 0,
+    );
+
+    // Merge + dedupe (a task I created and assigned to myself hits both queries).
+    const byId = new Map<string, any>();
+    for (const t of [...(assignedRes.data || []), ...createdUnassigned]) byId.set(t.id, t);
+
+    // Which of these has the caller already reviewed?
+    const reviewedRes = await supabaseAdmin
+      .from('task_reviews')
+      .select('task_id')
+      .eq('user_id', userId);
+    const reviewedSet = new Set((reviewedRes.data || []).map((r: any) => r.task_id as string));
+
+    let rows = Array.from(byId.values());
+    if (!includeReviewed) rows = rows.filter((t) => !reviewedSet.has(t.id));
+    // Newest first — a review queue reads top-down as "what just landed".
+    rows.sort((a, b) =>
+      a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0,
+    );
+
+    const hydrated = await hydrateParents(await hydrateLists(await hydrateAssignees(rows)));
+    const data = hydrated.map((t: any) => ({ ...t, reviewed: reviewedSet.has(t.id) }));
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Get new tasks error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // GET /pm/tasks/emergency — all active EMERGENCY tasks the caller can see.
 // Feeds the global EMERGENCY banner.
 router.get('/tasks/emergency', async (req: Request, res: Response) => {
@@ -1320,6 +1386,48 @@ router.patch('/tasks/:id/snooze', async (req: Request, res: Response) => {
     res.json({ success: true, data });
   } catch (err) {
     console.error('Patch snooze error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /pm/tasks/:id/review — mark a task reviewed for the caller, dropping it from
+// their New Tasks card. Idempotent (re-ticking is a no-op).
+router.post('/tasks/:id/review', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const { error } = await supabaseAdmin
+      .from('task_reviews')
+      .upsert(
+        { task_id: id, user_id: req.userId!, reviewed_at: new Date().toISOString() },
+        { onConflict: 'task_id,user_id' },
+      );
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Review task error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /pm/tasks/:id/review — un-review (restore the task to the caller's card).
+router.delete('/tasks/:id/review', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const { error } = await supabaseAdmin
+      .from('task_reviews')
+      .delete()
+      .eq('task_id', id)
+      .eq('user_id', req.userId!);
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Unreview task error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
