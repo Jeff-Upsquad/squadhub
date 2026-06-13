@@ -8,7 +8,6 @@ COPY server/package.json server/
 COPY web/package.json web/
 COPY admin/package.json admin/
 COPY desktop/package.json desktop/
-COPY mobile/package.json mobile/
 
 # Full install to ensure workspace symlinks are created
 RUN npm install
