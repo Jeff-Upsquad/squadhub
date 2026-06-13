@@ -121,7 +121,11 @@ export default function ListPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    // min-h-0 is load-bearing: without it this flex child's automatic minimum
+    // is its content height, so the .lv-canvas scroll area below grows past the
+    // viewport and gets clipped by MainLayout's overflow-hidden instead of
+    // scrolling (same fix as the chat view in MainLayout).
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Row 1: Breadcrumb + global actions */}
       <div className="lv-breadcrumb-row">
         {/* Left: breadcrumb */}
