@@ -235,6 +235,9 @@ export function useUpdateTask(listId: string | null) {
       qc.invalidateQueries({ queryKey: ['task', vars.id] });
       qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
       qc.invalidateQueries({ queryKey: ['notifications', 'list'] });
+      // Keep My Home's "New Tasks" review queue in sync — completing/closing a task
+      // (e.g. from the detail panel opened off a New Tasks row) should drop it from the list.
+      qc.invalidateQueries({ queryKey: ['new-tasks'] });
     },
   });
 }
