@@ -71,6 +71,14 @@ export function isToday(dateStr: string | null | undefined, tz: string): boolean
   return fmt.format(new Date(dateStr)) === fmt.format(new Date());
 }
 
+// True when the date falls on a day strictly after today (in the given tz).
+// 'YYYY-MM-DD' keys compare lexicographically. Null/undefined → not future.
+export function isFutureDay(dateStr: string | null | undefined, tz: string): boolean {
+  if (!dateStr) return false;
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+  return fmt.format(new Date(dateStr)) > fmt.format(new Date());
+}
+
 export function isTaskForToday(t: Task, tz: string): boolean {
   return isToday(t.work_date, tz) || isToday(t.due_date, tz);
 }
@@ -275,11 +283,13 @@ export function groupTasks(
 export function buildFocusTodayGroup(
   tasks: Task[],
   focusedTodayIds: string[],
-  focusedTodayDate: string,
-  todayKey: string,
+  _focusedTodayDate: string,
+  _todayKey: string,
   sortBy: SortBy = 'manual',
 ): Group | null {
-  if (focusedTodayDate !== todayKey || focusedTodayIds.length === 0) return null;
+  // Focus is persistent now — no date gate; just whether anything is starred.
+  // The date params are kept for call-site compatibility but no longer read.
+  if (focusedTodayIds.length === 0) return null;
   const ids = new Set(focusedTodayIds);
   const matched = tasks.filter((t) => ids.has(t.id));
   if (matched.length === 0) return null;

@@ -48,15 +48,15 @@ export default function ListView({
       });
     }
     if (focusToday) {
-      const today = todayKey();
-      const focusedSet = focusedTodayDate === today ? new Set(focusedTodayIds) : new Set<string>();
+      // Focus stars are persistent (no overnight reset).
+      const focusedSet = new Set(focusedTodayIds);
       arr = arr.filter((t) => focusedSet.has(t.id));
     }
     if (sortBy !== 'manual') {
       arr = sortTasks(arr, sortBy);
     }
     return arr;
-  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, focusedTodayIds, focusedTodayDate]);
+  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, focusedTodayIds]);
 
   const activeFilterCount = countActiveFilters(filters);
 

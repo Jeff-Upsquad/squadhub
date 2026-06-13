@@ -60,15 +60,9 @@ export type MyTasksBuckets = {
   focused: Task[];
 };
 
-function todayKeyLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 function useActiveFocusedIds(): string[] {
-  const focusedTodayIds = usePMStore((s) => s.focusedTodayIds);
-  const focusedTodayDate = usePMStore((s) => s.focusedTodayDate);
-  return focusedTodayDate === todayKeyLocal() ? focusedTodayIds : [];
+  // Focus stars are persistent (no overnight reset), so always use them.
+  return usePMStore((s) => s.focusedTodayIds);
 }
 
 export function useMyTasks() {

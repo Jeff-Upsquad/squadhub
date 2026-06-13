@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
-import { usePMStore, todayKey } from '../../../stores/pmStore';
+import { usePMStore } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
-import { groupTasks, isToday, type GroupBy } from '../../../lib/taskGrouping';
+import { groupTasks, isFutureDay, type GroupBy } from '../../../lib/taskGrouping';
 import DayCalendar from '../day-planner/DayCalendar';
 import { planDateKey } from '../../../hooks/useDayPlanner';
 
@@ -21,7 +21,6 @@ export default function TodayList() {
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
   const focusedTodayIds = usePMStore((s) => s.focusedTodayIds);
-  const focusedTodayDate = usePMStore((s) => s.focusedTodayDate);
 
   const openTask = (id: string) => {
     setActiveDashboardTab(null);
@@ -30,19 +29,20 @@ export default function TodayList() {
 
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
 
-  // Show ONLY tasks the user has marked Focus today (★) or whose work_date is
-  // today. The pmStore focus list auto-resets when the date rolls over. The
-  // server-side `focused` bucket carries starred tasks that aren't otherwise
-  // assigned to or dated for the user, so they can still surface here.
+  // Show ONLY tasks the user has starred (★ Focus) — the focus list is
+  // persistent and no longer resets overnight. A starred task whose work_date
+  // is in the future is hidden until that day arrives (set it ahead → it drops
+  // off here, then comes back when its work date is today). The server-side
+  // `focused` bucket carries starred tasks regardless of date so they're always
+  // candidates here. (done/closed tasks are filtered out server-side.)
   const tasks: Task[] = useMemo(() => {
     if (!data) return [];
     const merged = [...data.overdue, ...data.today, ...(data.focused ?? [])];
     const seen = new Set<string>();
     const unique = merged.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
-    const today = todayKey();
-    const focusedSet = focusedTodayDate === today ? new Set(focusedTodayIds) : new Set<string>();
-    return unique.filter((t) => focusedSet.has(t.id) || isToday(t.work_date, tz));
-  }, [data, focusedTodayIds, focusedTodayDate, tz]);
+    const focusedSet = new Set(focusedTodayIds);
+    return unique.filter((t) => focusedSet.has(t.id) && !isFutureDay(t.work_date, tz));
+  }, [data, focusedTodayIds, tz]);
 
   const groupBy = usePMStore((s) => s.todayListGroupBy);
   const setTodayListGroupBy = usePMStore((s) => s.setTodayListGroupBy);
@@ -174,8 +174,8 @@ export default function TodayList() {
           {!isLoading && !isError && tasks.length === 0 && (
             <div className="hm-empty">
               <div className="rule" />
-              <div className="h">Nothing on the list for today.</div>
-              <div className="p">Star a task or set its work date to today and it shows up here.</div>
+              <div className="h">Nothing starred yet.</div>
+              <div className="p">Star a task (★) and it shows up here.</div>
             </div>
           )}
 

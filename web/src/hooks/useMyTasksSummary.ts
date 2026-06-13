@@ -12,16 +12,10 @@ export type MyTasksBuckets = {
   focused: Task[];
 };
 
-function todayKeyLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 export function useMyTasksSummary(enabled = true) {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  const focusedTodayIds = usePMStore((s) => s.focusedTodayIds);
-  const focusedTodayDate = usePMStore((s) => s.focusedTodayDate);
-  const focusedIds = focusedTodayDate === todayKeyLocal() ? focusedTodayIds : [];
+  // Focus stars are persistent (no overnight reset), so always use them.
+  const focusedIds = usePMStore((s) => s.focusedTodayIds);
   const focusedKey = focusedIds.join(',');
   return useQuery<MyTasksBuckets>({
     queryKey: ['my-tasks-summary', tz, focusedKey],
