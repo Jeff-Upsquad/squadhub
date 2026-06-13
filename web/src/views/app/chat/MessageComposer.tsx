@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -7,6 +7,7 @@ import api from '../../../services/api';
 import { getSocket } from '../../../services/socket';
 import { useUploadAttachment } from '../../../hooks/useUploadAttachment';
 import type { ChatKind } from '../../../stores/workspaceStore';
+import type { MentionUser } from '../../../components/MentionPicker';
 import EmojiPicker from './EmojiPicker';
 import VoiceRecorder from './VoiceRecorder';
 import { ScheduleSendModal, ScheduledStrip, formatScheduledTime } from './ScheduleSend';
@@ -75,6 +76,31 @@ function htmlToMarkdown(html: string): string {
   return Array.from(doc.body.childNodes).map(walk).join('').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+// ---- @-mention helpers (mirror MentionPicker, adapted to the Tiptap editor) ----
+// The active @token before the caret, or null when the caret isn't in a mention.
+function detectMentionQuery(editor: Editor): string | null {
+  const { $from } = editor.state.selection;
+  if (!$from.parent.isTextblock) return null;
+  const before = $from.parent.textBetween(0, $from.parentOffset, '\n', '￼');
+  const at = before.lastIndexOf('@');
+  if (at === -1) return null;
+  // Must start the line or follow whitespace; the token has no whitespace, ≤ 40 chars.
+  if (at > 0 && !/\s/.test(before[at - 1])) return null;
+  const token = before.slice(at + 1);
+  if (/\s/.test(token) || token.length > 40) return null;
+  return token;
+}
+
+// Keep only mention ids whose resolved display_name still appears as `@name`,
+// so backspacing a mention drops it from the payload.
+function reconcileMentions(text: string, mentions: string[], resolve: Map<string, string>): string[] {
+  return mentions.filter((id) => {
+    const name = resolve.get(id);
+    if (!name) return true;
+    return text.includes(`@${name}`);
+  });
+}
+
 function ToolBtn({
   children,
   title,
@@ -135,6 +161,19 @@ export default function MessageComposer({
   // Bumped on every send/state change to force toolbar buttons to re-render
   // with the latest editor.isActive(...) results.
   const [, setEditorTick] = useState(0);
+  // @-mention picker. The picked-id list lives in a ref (read by the editor's
+  // captured keydown handler and on send); query/results/highlight are state
+  // for rendering and are mirrored into refs for the keydown handler.
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionResults, setMentionResults] = useState<MentionUser[]>([]);
+  const [mentionHighlight, setMentionHighlight] = useState(0);
+  const [mentionLoading, setMentionLoading] = useState(false);
+  const mentionsRef = useRef<string[]>([]);
+  const resolveRef = useRef<Map<string, string>>(new Map());
+  const mentionQueryRef = useRef<string | null>(null);
+  const mentionResultsRef = useRef<MentionUser[]>([]);
+  const mentionHighlightRef = useRef(0);
+  const selectUserRef = useRef<(u: MentionUser) => void>(() => {});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const composerBoxRef = useRef<HTMLDivElement>(null);
 
@@ -168,6 +207,29 @@ export default function MessageComposer({
         'aria-label': 'Message composer',
       },
       handleKeyDown: (_view, event) => {
+        // When the @-mention picker is open the arrow/enter/tab/esc keys drive
+        // it instead of the editor. Read live state via refs (this handler is
+        // captured once at editor creation).
+        const results = mentionResultsRef.current;
+        if (mentionQueryRef.current !== null && results.length > 0) {
+          if (event.key === 'ArrowDown') {
+            setMentionHighlight((h) => (h + 1) % results.length);
+            return true;
+          }
+          if (event.key === 'ArrowUp') {
+            setMentionHighlight((h) => (h - 1 + results.length) % results.length);
+            return true;
+          }
+          if (event.key === 'Enter' || event.key === 'Tab') {
+            const u = results[mentionHighlightRef.current];
+            if (u) selectUserRef.current(u);
+            return true;
+          }
+          if (event.key === 'Escape') {
+            setMentionQuery(null);
+            return true;
+          }
+        }
         if (event.key === 'Enter' && !event.shiftKey) {
           event.preventDefault();
           submitMessage();
@@ -182,10 +244,19 @@ export default function MessageComposer({
       // Lightweight typing indicator
       const socket = getSocket();
       if (socket) socket.emit('typing', { [idField]: channelId });
+      // @-mention: track the active @token and drop mentions whose name was edited out.
+      setMentionQuery(detectMentionQuery(editor));
+      mentionsRef.current = reconcileMentions(editor.getText(), mentionsRef.current, resolveRef.current);
     },
-    onSelectionUpdate: () => setEditorTick((t) => t + 1),
+    onSelectionUpdate: ({ editor }) => {
+      setEditorTick((t) => t + 1);
+      setMentionQuery(detectMentionQuery(editor));
+    },
     onFocus: () => setFocused(true),
-    onBlur: () => setFocused(false),
+    onBlur: () => {
+      setFocused(false);
+      setMentionQuery(null);
+    },
     // Recreate when the conversation (and so the placeholder) changes —
     // Placeholder is baked into the extension config at creation time.
   }, [effectivePlaceholder]);
@@ -194,19 +265,79 @@ export default function MessageComposer({
   useEffect(() => {
     editor?.commands.clearContent(true);
     setHasText(false);
+    mentionsRef.current = [];
+    setMentionQuery(null);
   }, [channelId, parentMessageId, editor]);
+
+  // Debounced user search for the @-mention picker.
+  useEffect(() => {
+    if (mentionQuery === null) return;
+    let cancel = false;
+    setMentionLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await api.get('/users/search', { params: { q: mentionQuery, limit: 8 } });
+        if (cancel) return;
+        const users: MentionUser[] = res.data.data || [];
+        setMentionResults(users);
+        setMentionHighlight(0);
+        users.forEach((u) => resolveRef.current.set(u.id, u.display_name));
+      } catch {
+        if (!cancel) setMentionResults([]);
+      } finally {
+        if (!cancel) setMentionLoading(false);
+      }
+    }, 150);
+    return () => {
+      cancel = true;
+      clearTimeout(t);
+    };
+  }, [mentionQuery]);
+
+  // Mirror picker state into refs so the editor's captured keydown handler and
+  // selectUser always read live values.
+  useEffect(() => { mentionQueryRef.current = mentionQuery; }, [mentionQuery]);
+  useEffect(() => { mentionResultsRef.current = mentionResults; }, [mentionResults]);
+  useEffect(() => { mentionHighlightRef.current = mentionHighlight; }, [mentionHighlight]);
+
+  // Replace the typed `@token` with `@Name ` and record the user's id.
+  const selectUser = (u: MentionUser) => {
+    if (!editor) return;
+    const { $from } = editor.state.selection;
+    const before = $from.parent.textBetween(0, $from.parentOffset, '\n', '￼');
+    const at = before.lastIndexOf('@');
+    if (at === -1) return;
+    resolveRef.current.set(u.id, u.display_name);
+    mentionsRef.current = Array.from(new Set([...mentionsRef.current, u.id]));
+    editor
+      .chain()
+      .focus()
+      .insertContentAt({ from: $from.start() + at, to: $from.pos }, `@${u.display_name} `)
+      .run();
+    setMentionQuery(null);
+    setMentionResults([]);
+  };
+  useEffect(() => {
+    selectUserRef.current = selectUser;
+  });
 
   const postMessage = async (extra: Record<string, unknown> = {}) => {
     const md = editor ? htmlToMarkdown(editor.getHTML()) : '';
+    const mentions = editor
+      ? reconcileMentions(editor.getText(), mentionsRef.current, resolveRef.current)
+      : [];
     await api.post('/messages', {
       [idField]: channelId,
       content: md || null,
       type: extra.type || 'text',
       parent_message_id: parentMessageId,
+      mentions,
       ...extra,
     });
     editor?.commands.clearContent(true);
     setHasText(false);
+    mentionsRef.current = [];
+    setMentionQuery(null);
     onSend();
   };
 
@@ -271,6 +402,8 @@ export default function MessageComposer({
       });
       editor?.commands.clearContent(true);
       setHasText(false);
+      mentionsRef.current = [];
+      setMentionQuery(null);
       setScheduledNote(`Scheduled for ${formatScheduledTime(isoUtc)}`);
       setTimeout(() => setScheduledNote(null), 4000);
     } catch (err: unknown) {
@@ -458,8 +591,46 @@ export default function MessageComposer({
             </div>
 
             {/* Editor */}
-            <div className="sqc-composer__editor-wrap" onClick={handleEditorBoxClick}>
+            <div className="sqc-composer__editor-wrap relative" onClick={handleEditorBoxClick}>
               <EditorContent editor={editor} />
+              {/* @-mention typeahead */}
+              {mentionQuery !== null && (mentionResults.length > 0 || mentionLoading) && (
+                <div
+                  className="absolute bottom-full left-0 z-50 mb-2 w-[min(260px,calc(100vw-32px))] overflow-hidden rounded-[6px] border border-divider bg-surface shadow-lg"
+                  role="listbox"
+                >
+                  {mentionLoading && mentionResults.length === 0 ? (
+                    <div className="px-3 py-2 text-[13px] text-foreground-dim">Searching…</div>
+                  ) : (
+                    mentionResults.map((u, i) => (
+                      <button
+                        type="button"
+                        key={u.id}
+                        role="option"
+                        aria-selected={i === mentionHighlight}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          selectUser(u);
+                        }}
+                        onMouseEnter={() => setMentionHighlight(i)}
+                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] transition ${
+                          i === mentionHighlight ? 'bg-sidebar-hover' : ''
+                        }`}
+                      >
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-foreground/10 text-[10px] font-semibold text-foreground">
+                          {u.avatar_url ? (
+                            <img src={u.avatar_url} alt="" className="h-full w-full rounded-full object-cover" />
+                          ) : (
+                            u.display_name.slice(0, 2).toUpperCase()
+                          )}
+                        </div>
+                        <span className="flex-1 truncate text-foreground">{u.display_name}</span>
+                        {u.user_type && <span className="text-[10px] text-foreground-dim">{u.user_type}</span>}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Bottom action row */}
@@ -499,7 +670,18 @@ export default function MessageComposer({
                     </div>
                   )}
                 </div>
-                <ToolBtn title="Mention" onClick={() => editor?.chain().focus().insertContent('@').run()}>
+                <ToolBtn
+                  title="Mention"
+                  onClick={() => {
+                    if (!editor) return;
+                    const { $from } = editor.state.selection;
+                    const prev =
+                      $from.parentOffset > 0
+                        ? $from.parent.textBetween($from.parentOffset - 1, $from.parentOffset)
+                        : '';
+                    editor.chain().focus().insertContent(prev && !/\s/.test(prev) ? ' @' : '@').run();
+                  }}
+                >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="4" />
                     <path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94" />
