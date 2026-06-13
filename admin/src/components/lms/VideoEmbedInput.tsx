@@ -10,6 +10,8 @@ function detectProvider(url: string): string {
   if (/youtube\.com|youtu\.be/.test(url)) return 'youtube';
   if (/vimeo\.com/.test(url)) return 'vimeo';
   if (/loom\.com/.test(url)) return 'loom';
+  // Squad Clips share links render via the lesson's chrome-free /embed iframe.
+  if (/clips\.squadhub\.in|localhost:3200/.test(url)) return 'squadclips';
   return 'other';
 }
 
