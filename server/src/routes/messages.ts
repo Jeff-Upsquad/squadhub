@@ -33,6 +33,22 @@ const sendMessageSchema = z.object({
   { message: 'Either content or file_url is required' },
 );
 
+// Resolve each message's `mentions` (user ids) → `mentioned_users` (id +
+// display_name), so the mobile renderer can highlight the full "@First Last"
+// span (the body text alone can't tell where a multi-word name ends).
+async function attachMentionedUsers(messages: any[]): Promise<void> {
+  const ids = Array.from(new Set(messages.flatMap((m) => (m?.mentions as string[]) || [])));
+  if (ids.length === 0) return;
+  const { data: users } = await supabaseAdmin
+    .from('users')
+    .select('id, display_name, avatar_url')
+    .in('id', ids);
+  const byId = new Map((users || []).map((u: any) => [u.id, u]));
+  for (const m of messages) {
+    m.mentioned_users = ((m.mentions as string[]) || []).map((id) => byId.get(id)).filter(Boolean);
+  }
+}
+
 // GET /messages?channel_id=xxx&cursor=xxx&limit=50
 router.get('/', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -120,6 +136,8 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
         }
       }
     }
+
+    await attachMentionedUsers(messages);
 
     res.json({
       success: true,
@@ -295,6 +313,8 @@ router.get('/:id/thread', requireAuth, async (req: Request, res: Response) => {
         .eq('is_deleted', false)
         .order('created_at', { ascending: true }),
     ]);
+
+    await attachMentionedUsers([root, ...(replies || [])].filter(Boolean) as any[]);
 
     res.json({ success: true, data: { root, replies: replies || [] } });
   } catch (err) {
