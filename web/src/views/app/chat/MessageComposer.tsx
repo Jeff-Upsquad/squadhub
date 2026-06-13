@@ -175,6 +175,7 @@ export default function MessageComposer({
   const mentionResultsRef = useRef<MentionUser[]>([]);
   const mentionHighlightRef = useRef(0);
   const selectUserRef = useRef<(u: MentionUser) => void>(() => {});
+  const submitMessageRef = useRef<() => void>(() => {});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const composerBoxRef = useRef<HTMLDivElement>(null);
 
@@ -233,7 +234,9 @@ export default function MessageComposer({
         }
         if (event.key === 'Enter' && !event.shiftKey) {
           event.preventDefault();
-          submitMessage();
+          // Via ref: this handler is captured at editor creation, so a direct
+          // submitMessage() would see stale state (hasText=false) and bail.
+          submitMessageRef.current();
           return true;
         }
         return false;
@@ -392,6 +395,12 @@ export default function MessageComposer({
       setSending(false);
     }
   };
+
+  // Keep the ref current so the editor's captured keydown handler always calls
+  // the latest submitMessage (fresh hasText / pendingFile / sending).
+  useEffect(() => {
+    submitMessageRef.current = submitMessage;
+  });
 
   // Queue the drafted text for later delivery (text-only, like the partner app)
   const scheduleMessage = async (isoUtc: string) => {
