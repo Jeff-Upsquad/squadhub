@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
@@ -474,6 +475,12 @@ export default function MessageComposer({
     editor?.chain().focus().run();
   };
 
+  // The mention menu renders in a portal — the composer box has overflow:hidden
+  // and the editor-wrap overflow-y:auto, which would clip an in-flow dropdown.
+  // Position it (fixed) just above the composer box.
+  const mentionMenuOpen = mentionQuery !== null && (mentionResults.length > 0 || mentionLoading);
+  const composerRect = mentionMenuOpen ? composerBoxRef.current?.getBoundingClientRect() : undefined;
+
   return (
     <form
       onSubmit={(e) => {
@@ -591,46 +598,8 @@ export default function MessageComposer({
             </div>
 
             {/* Editor */}
-            <div className="sqc-composer__editor-wrap relative" onClick={handleEditorBoxClick}>
+            <div className="sqc-composer__editor-wrap" onClick={handleEditorBoxClick}>
               <EditorContent editor={editor} />
-              {/* @-mention typeahead */}
-              {mentionQuery !== null && (mentionResults.length > 0 || mentionLoading) && (
-                <div
-                  className="absolute bottom-full left-0 z-50 mb-2 w-[min(260px,calc(100vw-32px))] overflow-hidden rounded-[6px] border border-divider bg-surface shadow-lg"
-                  role="listbox"
-                >
-                  {mentionLoading && mentionResults.length === 0 ? (
-                    <div className="px-3 py-2 text-[13px] text-foreground-dim">Searching…</div>
-                  ) : (
-                    mentionResults.map((u, i) => (
-                      <button
-                        type="button"
-                        key={u.id}
-                        role="option"
-                        aria-selected={i === mentionHighlight}
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          selectUser(u);
-                        }}
-                        onMouseEnter={() => setMentionHighlight(i)}
-                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] transition ${
-                          i === mentionHighlight ? 'bg-sidebar-hover' : ''
-                        }`}
-                      >
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-foreground/10 text-[10px] font-semibold text-foreground">
-                          {u.avatar_url ? (
-                            <img src={u.avatar_url} alt="" className="h-full w-full rounded-full object-cover" />
-                          ) : (
-                            u.display_name.slice(0, 2).toUpperCase()
-                          )}
-                        </div>
-                        <span className="flex-1 truncate text-foreground">{u.display_name}</span>
-                        {u.user_type && <span className="text-[10px] text-foreground-dim">{u.user_type}</span>}
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
             </div>
 
             {/* Bottom action row */}
@@ -738,6 +707,54 @@ export default function MessageComposer({
       {showSchedule && (
         <ScheduleSendModal onPick={scheduleMessage} onClose={() => setShowSchedule(false)} />
       )}
+
+      {/* @-mention typeahead — portaled out so it isn't clipped by the composer's overflow */}
+      {mentionMenuOpen && composerRect &&
+        createPortal(
+          <div
+            role="listbox"
+            style={{
+              position: 'fixed',
+              left: composerRect.left,
+              bottom: window.innerHeight - composerRect.top + 6,
+              width: 'min(280px, calc(100vw - 32px))',
+              zIndex: 1000,
+            }}
+            className="max-h-[260px] overflow-y-auto rounded-[6px] border border-divider bg-surface shadow-lg"
+          >
+            {mentionLoading && mentionResults.length === 0 ? (
+              <div className="px-3 py-2 text-[13px] text-foreground-dim">Searching…</div>
+            ) : (
+              mentionResults.map((u, i) => (
+                <button
+                  type="button"
+                  key={u.id}
+                  role="option"
+                  aria-selected={i === mentionHighlight}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    selectUser(u);
+                  }}
+                  onMouseEnter={() => setMentionHighlight(i)}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] transition ${
+                    i === mentionHighlight ? 'bg-sidebar-hover' : ''
+                  }`}
+                >
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-foreground/10 text-[10px] font-semibold text-foreground">
+                    {u.avatar_url ? (
+                      <img src={u.avatar_url} alt="" className="h-full w-full rounded-full object-cover" />
+                    ) : (
+                      u.display_name.slice(0, 2).toUpperCase()
+                    )}
+                  </div>
+                  <span className="flex-1 truncate text-foreground">{u.display_name}</span>
+                  {u.user_type && <span className="text-[10px] text-foreground-dim">{u.user_type}</span>}
+                </button>
+              ))
+            )}
+          </div>,
+          document.body,
+        )}
     </form>
   );
 }
