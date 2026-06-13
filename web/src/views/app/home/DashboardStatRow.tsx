@@ -1,7 +1,8 @@
 import { useMyTasksSummary } from '../../../hooks/useMyTasksSummary';
-import { useUnreadCount } from '../../../hooks/useUnreadCount';
+import { useNewTasks } from '../../../hooks/useNewTasks';
 import { usePMStore } from '../../../stores/pmStore';
 import DashboardListPanel from './DashboardListPanel';
+import NewTasksPanel from './NewTasksPanel';
 
 const icoProps = {
   width: 12,
@@ -25,12 +26,16 @@ function truncate(s: string, n = 32) {
   return s.length > n ? `${s.slice(0, n - 1)}…` : s;
 }
 
-export default function DashboardStatRow({ onOpenInbox }: { onOpenInbox: () => void }) {
+// onOpenInbox is still passed by every role-home caller, but the Inbox now lives only
+// in the sidebar — the leading dashboard card is "New Tasks". Kept in the signature to
+// avoid churning all six callers.
+export default function DashboardStatRow({ onOpenInbox: _onOpenInbox }: { onOpenInbox: () => void }) {
   const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
+  const setNewTasksOpen = usePMStore((s) => s.setNewTasksOpen);
   const { data: buckets, isLoading: tasksLoading } = useMyTasksSummary();
-  const { data: unread, isLoading: unreadLoading } = useUnreadCount();
+  const { data: newTasks, isLoading: newLoading } = useNewTasks();
 
-  const inboxCount = unread ?? 0;
+  const newCount = newTasks?.length ?? 0;
   const todayCount = buckets?.today.length ?? 0;
   const overdueCount = buckets?.overdue.length ?? 0;
   const tomorrowCount = buckets?.tomorrow.length ?? 0;
@@ -39,11 +44,13 @@ export default function DashboardStatRow({ onOpenInbox }: { onOpenInbox: () => v
     : [];
   const allCount = allTasks.length;
 
-  const inboxDelta = unreadLoading
+  const newDelta = newLoading
     ? ''
-    : inboxCount === 0
-      ? 'All caught up'
-      : `${inboxCount} unread`;
+    : newCount === 0
+      ? 'All reviewed'
+      : newTasks?.[0]?.title
+        ? truncate(newTasks[0].title, 34)
+        : `${newCount} to review`;
 
   const todayDelta = tasksLoading
     ? ''
@@ -86,16 +93,16 @@ export default function DashboardStatRow({ onOpenInbox }: { onOpenInbox: () => v
           className="hm-stat"
           role="button"
           tabIndex={0}
-          onClick={onOpenInbox}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenInbox(); } }}
+          onClick={() => setNewTasksOpen(true)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setNewTasksOpen(true); } }}
         >
           <div className="lbl">
-            <svg {...icoProps}><path d="M3 13V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8" /><path d="M3 13h5l2 3h4l2-3h5v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
-            Inbox
-            {inboxCount > 0 && <span className="ping" />}
+            <svg {...icoProps}><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" /><path d="m9 14 2 2 4-4" /></svg>
+            New Tasks
+            {newCount > 0 && <span className="ping" />}
           </div>
-          <div className="val">{unreadLoading ? loadingVal : inboxCount}<span className="unit">unread</span></div>
-          <div className="sub">{inboxDelta}</div>
+          <div className="val">{newLoading ? loadingVal : newCount}<span className="unit">to review</span></div>
+          <div className="sub">{newDelta}</div>
           <GoArrow />
         </div>
 
@@ -166,6 +173,7 @@ export default function DashboardStatRow({ onOpenInbox }: { onOpenInbox: () => v
       </div>
 
       <DashboardListPanel />
+      <NewTasksPanel />
     </>
   );
 }
