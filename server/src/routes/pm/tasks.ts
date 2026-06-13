@@ -490,7 +490,30 @@ router.get('/tasks/new', async (req: Request, res: Response) => {
       a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0,
     );
 
-    const hydrated = await hydrateParents(await hydrateLists(await hydrateAssignees(rows)));
+    let hydrated = await hydrateParents(await hydrateLists(await hydrateAssignees(rows)));
+
+    // Drop tasks completed under a custom (space) status whose category is done/closed.
+    // Catalog (task_type='task') completes resolve to 'closed' and were already removed by
+    // the status NOT IN (done,closed) filter above; this catches custom task types whose
+    // "done" status is a space-specific name (e.g. "Delivered", "Shipped").
+    const spaceIds = Array.from(new Set(hydrated.map((t: any) => t.space?.id).filter(Boolean)));
+    if (spaceIds.length > 0) {
+      const { data: spaceStatuses } = await supabaseAdmin
+        .from('space_statuses')
+        .select('space_id, name, category')
+        .in('space_id', spaceIds as string[]);
+      const doneStatusKeys = new Set(
+        (spaceStatuses || [])
+          .filter((s: any) => s.category === 'done' || s.category === 'closed')
+          .map((s: any) => `${s.space_id}::${s.name}`),
+      );
+      if (doneStatusKeys.size > 0) {
+        hydrated = hydrated.filter(
+          (t: any) => !(t.space?.id && doneStatusKeys.has(`${t.space.id}::${t.status}`)),
+        );
+      }
+    }
+
     const data = hydrated.map((t: any) => ({ ...t, reviewed: reviewedSet.has(t.id) }));
 
     res.json({ success: true, data });
