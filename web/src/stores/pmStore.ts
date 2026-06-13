@@ -237,30 +237,21 @@ export const usePMStore = create<PMState>()(
         set({ todayListView: value });
         triggerSave();
       },
-      resetFocusTodayIfStale: () => {
-        const today = todayKey();
-        const state = get();
-        if (state.focusedTodayDate !== today) {
-          set({ focusedTodayIds: [], focusedTodayDate: today });
-        }
-      },
+      // Focus stars are persistent now — they no longer clear overnight. Kept
+      // as a no-op so existing callers (e.g. useDayPlanner) stay valid.
+      resetFocusTodayIfStale: () => {},
       toggleFocusToday: (taskId) => {
-        const today = todayKey();
         set((state) => {
-          const sameDay = state.focusedTodayDate === today;
-          const current = sameDay ? state.focusedTodayIds : [];
-          const next = current.includes(taskId)
-            ? current.filter((id) => id !== taskId)
-            : [...current, taskId];
-          return { focusedTodayIds: next, focusedTodayDate: today };
+          const next = state.focusedTodayIds.includes(taskId)
+            ? state.focusedTodayIds.filter((id) => id !== taskId)
+            : [...state.focusedTodayIds, taskId];
+          // focusedTodayDate is no longer used for gating; keep it as a
+          // "last changed" marker on the persisted payload.
+          return { focusedTodayIds: next, focusedTodayDate: todayKey() };
         });
         triggerSave();
       },
-      isFocusedToday: (taskId) => {
-        const state = get();
-        if (state.focusedTodayDate !== todayKey()) return false;
-        return state.focusedTodayIds.includes(taskId);
-      },
+      isFocusedToday: (taskId) => get().focusedTodayIds.includes(taskId),
       _hydrateFromServer: (prefs) => {
         const patch: Partial<PMState> = {};
         if (prefs.listGroupBy !== undefined) patch.listGroupBy = prefs.listGroupBy as ListGroupBy;
@@ -273,13 +264,13 @@ export const usePMStore = create<PMState>()(
         if (prefs.todayListView === 'list' || prefs.todayListView === 'calendar') {
           patch.todayListView = prefs.todayListView;
         }
-        // Stars only carry over if the server's date matches today locally —
-        // otherwise they're stale and we let the existing reset behavior win.
-        if (Array.isArray(prefs.focusedTodayIds) && typeof prefs.focusedTodayDate === 'string') {
-          if (prefs.focusedTodayDate === todayKey()) {
-            patch.focusedTodayIds = prefs.focusedTodayIds as string[];
-            patch.focusedTodayDate = prefs.focusedTodayDate as string;
-          }
+        // Focus is persistent — always restore the saved stars (no overnight
+        // reset / staleness check).
+        if (Array.isArray(prefs.focusedTodayIds)) {
+          patch.focusedTodayIds = prefs.focusedTodayIds as string[];
+        }
+        if (typeof prefs.focusedTodayDate === 'string') {
+          patch.focusedTodayDate = prefs.focusedTodayDate as string;
         }
         if (Object.keys(patch).length > 0) set(patch);
       },
