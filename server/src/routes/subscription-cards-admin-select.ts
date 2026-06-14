@@ -7,6 +7,8 @@ import {
   notifySquadhireOfSelection,
   notifySquadhireOfSelectionUndo,
   notifySquadhireOfActivation,
+  buildSquadhirePayloadForCard,
+  deliverCardToSquadhire,
 } from '../utils/squadhireWebhook';
 import { stageSubscriptionsFromAssignedCards } from '../utils/submissionPipeline';
 import crypto from 'crypto';
@@ -187,10 +189,60 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
   }
 });
 
+// Clear any selection/assignment on a card and reopen it to `published`.
+// Resets both recipient tables (selected_at / selected_by / passed_over_at) and
+// the card's finalize fields + SquadHire activation-notify residue. Shared by
+// undo-selection (Unassign) and reopen-for-new-talents.
+async function resetCardSelection(cardId: string): Promise<void> {
+  await supabaseAdmin
+    .from('subscription_card_recipients')
+    .update({ selected_at: null, selected_by: null, passed_over_at: null })
+    .eq('card_id', cardId)
+    .not('selected_at', 'is', null);
+  await supabaseAdmin
+    .from('subscription_card_recipients')
+    .update({ passed_over_at: null })
+    .eq('card_id', cardId)
+    .not('passed_over_at', 'is', null);
+  await supabaseAdmin
+    .from('subscription_card_external_recipients')
+    .update({ selected_at: null, selected_by: null, passed_over_at: null })
+    .eq('card_id', cardId)
+    .not('selected_at', 'is', null);
+  await supabaseAdmin
+    .from('subscription_card_external_recipients')
+    .update({ passed_over_at: null })
+    .eq('card_id', cardId)
+    .not('passed_over_at', 'is', null);
+  await supabaseAdmin
+    .from('subscription_cards')
+    .update({
+      state: 'published',
+      assigned_at: null,
+      admin_reviewed_at: null,
+      selected_recipient_type: null,
+      selected_recipient_id: null,
+      squadhire_activation_notified_at: null,
+      squadhire_activation_notify_attempts: 0,
+      squadhire_activation_notify_error: null,
+    })
+    .eq('id', cardId);
+
+  // Close any active assignment term for this card (records the work end date).
+  const endIso = new Date().toISOString();
+  await supabaseAdmin
+    .from('subscription_assignment_terms')
+    .update({ unassigned_date: endIso, work_end_date: endIso.slice(0, 10), status: 'ended', updated_at: endIso })
+    .eq('card_id', cardId)
+    .eq('status', 'active');
+}
+
 // ============================================================
 // POST /admin/subscription-cards/:id/undo-selection
 //
-// Clears all selections and reverts card to published.
+// Clears all selections and reverts card to published. Works for both the
+// pre-finalize "Selected" bucket and the finalized "Assigned" bucket (both have
+// state='assigned') — for an assigned card this is the "Unassign" action.
 // ============================================================
 router.post('/subscription-cards/:id/undo-selection', async (req: Request, res: Response) => {
   try {
@@ -208,42 +260,7 @@ router.post('/subscription-cards/:id/undo-selection', async (req: Request, res: 
       return;
     }
 
-    // Clear selection on partner recipients
-    await supabaseAdmin
-      .from('subscription_card_recipients')
-      .update({ selected_at: null, selected_by: null, passed_over_at: null })
-      .eq('card_id', cardId)
-      .not('selected_at', 'is', null);
-
-    await supabaseAdmin
-      .from('subscription_card_recipients')
-      .update({ passed_over_at: null })
-      .eq('card_id', cardId)
-      .not('passed_over_at', 'is', null);
-
-    // Clear selection on external recipients
-    await supabaseAdmin
-      .from('subscription_card_external_recipients')
-      .update({ selected_at: null, selected_by: null, passed_over_at: null })
-      .eq('card_id', cardId)
-      .not('selected_at', 'is', null);
-
-    await supabaseAdmin
-      .from('subscription_card_external_recipients')
-      .update({ passed_over_at: null })
-      .eq('card_id', cardId)
-      .not('passed_over_at', 'is', null);
-
-    // Revert card to published
-    await supabaseAdmin
-      .from('subscription_cards')
-      .update({
-        state: 'published',
-        assigned_at: null,
-        selected_recipient_type: null,
-        selected_recipient_id: null,
-      })
-      .eq('id', cardId);
+    await resetCardSelection(cardId);
 
     notifySquadhireOfSelectionUndo(cardId).catch((err) => {
       console.error('[undo-selection] notify squadhire failed', err);
@@ -329,6 +346,47 @@ router.post('/subscription-cards/:id/finalize-selection', async (req: Request, r
       .eq('id', cardId);
     if (updErr) { res.status(500).json({ success: false, error: updErr.message }); return; }
 
+    // Record the assignment term (auto assigned_date + default work_start_date).
+    // Non-fatal: the assignment itself already succeeded.
+    try {
+      const startIso = new Date().toISOString();
+      let recipientName: string | null = null;
+      if (recipientType === 'talent') {
+        const { data: tr } = await supabaseAdmin
+          .from('subscription_card_external_recipients')
+          .select('talent_name')
+          .eq('card_id', cardId)
+          .eq('external_user_id', recipientId)
+          .maybeSingle();
+        recipientName = (tr as any)?.talent_name ?? null;
+      } else {
+        const { data: pu } = await supabaseAdmin
+          .from('users')
+          .select('display_name')
+          .eq('id', recipientId)
+          .maybeSingle();
+        recipientName = (pu as any)?.display_name ?? null;
+      }
+      const { data: cardMeta } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('brand_name, plan_name')
+        .eq('id', cardId)
+        .maybeSingle();
+      await supabaseAdmin.from('subscription_assignment_terms').insert({
+        card_id: cardId,
+        recipient_type: recipientType,
+        recipient_id: recipientId,
+        recipient_name: recipientName,
+        business_name: (cardMeta as any)?.brand_name ?? null,
+        subscription_name: (cardMeta as any)?.plan_name ?? null,
+        assigned_date: startIso,
+        work_start_date: startIso.slice(0, 10),
+        status: 'active',
+      });
+    } catch (termErr) {
+      console.error('[finalize] assignment-term insert failed', termErr);
+    }
+
     notifySquadhireOfActivation(cardId).catch((err) => {
       console.error('[finalize] notify squadhire failed', err);
     });
@@ -336,6 +394,54 @@ router.post('/subscription-cards/:id/finalize-selection', async (req: Request, r
     res.json({ success: true });
   } catch (err: any) {
     console.error('Finalize selection error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/reopen-for-new-talents
+//
+// Unassign the current talent AND reopen the card to a fresh pool. Resets the
+// selection/assignment and notifies SquadHire to clear its side; for broadcast
+// cards, re-delivers the card so SquadHire re-broadcasts to matching talents.
+// Manual cards are just reopened (admin re-queues talents, then broadcast-pending).
+// Mirrors the SquadHire-side "Reopen for new talents".
+// ============================================================
+router.post('/subscription-cards/:id/reopen-for-new-talents', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    const { data: card, error: cardErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, distribution')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
+    if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
+    if (card.state === 'closed') {
+      res.status(409).json({ success: false, error: 'Card is closed' });
+      return;
+    }
+
+    await resetCardSelection(cardId);
+
+    notifySquadhireOfSelectionUndo(cardId).catch((err) => {
+      console.error('[reopen] notify squadhire selection-undo failed', err);
+    });
+
+    // Broadcast cards: re-deliver so SquadHire re-broadcasts to a fresh pool.
+    let rebroadcast = false;
+    if (card.distribution === 'broadcast') {
+      const payload = await buildSquadhirePayloadForCard(cardId);
+      if (payload) {
+        await deliverCardToSquadhire(cardId, payload);
+        rebroadcast = true;
+      }
+    }
+
+    res.json({ success: true, rebroadcast });
+  } catch (err: any) {
+    console.error('Reopen for new talents error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });

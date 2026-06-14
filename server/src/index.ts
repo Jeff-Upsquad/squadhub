@@ -49,6 +49,7 @@ import subscriptionCardsAdminSelectRoutes from './routes/subscription-cards-admi
 import subscriptionCardsPartnerRoutes from './routes/subscription-cards-partner';
 import subscriptionCardsLinkingRoutes from './routes/subscription-cards-linking';
 import subscriptionsAdminRoutes from './routes/subscriptions-admin';
+import subscriptionAssignmentsAdminRoutes from './routes/subscription-assignments-admin';
 import countriesAdminRoutes from './routes/countries-admin';
 import grossProfitAdminRoutes from './routes/gross-profit-admin';
 import timerRoutes from './routes/timer';
@@ -164,6 +165,7 @@ app.use('/admin', subscriptionCardsAdminSelectRoutes);
 app.use('/admin', subscriptionCardsLinkingRoutes);
 app.use('/partner/opportunities', subscriptionCardsPartnerRoutes);
 app.use('/admin/subscriptions', subscriptionsAdminRoutes);
+app.use('/admin/subscription-assignments', subscriptionAssignmentsAdminRoutes);
 app.use('/admin/subscriptions', subscriptionSquadhireProfilesAdminRoutes);
 app.use('/admin/countries', countriesAdminRoutes);
 app.use('/admin/gross-profit', grossProfitAdminRoutes);

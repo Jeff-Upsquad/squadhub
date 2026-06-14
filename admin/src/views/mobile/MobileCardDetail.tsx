@@ -151,6 +151,11 @@ export default function MobileCardDetail({
     onSuccess: () => { invalidateAll(); setUndoSheetOpen(false); },
   });
 
+  const reopenForNewTalents = useMutation({
+    mutationFn: () => api.post(`/admin/subscription-cards/${activeCardId}/reopen-for-new-talents`),
+    onSuccess: () => { invalidateAll(); setUndoSheetOpen(false); },
+  });
+
   const removePartner = useMutation({
     mutationFn: (partnerId: string) =>
       api.delete(`/admin/subscription-cards/${activeCardId}/recipients/${partnerId}`),
@@ -718,7 +723,7 @@ export default function MobileCardDetail({
                   className="sh-btn-ghost flex-1"
                   style={{ padding: '0.75rem 1rem', fontSize: '0.875rem' }}
                 >
-                  Undo Selection
+                  Unassign
                 </button>
                 <button
                   onClick={() => setMoreSheetOpen(true)}
@@ -812,14 +817,22 @@ export default function MobileCardDetail({
       <MobileActionSheet
         open={undoSheetOpen}
         onClose={() => setUndoSheetOpen(false)}
-        title="Undo selection?"
-        description="The card will reopen as published and the selected recipient will be deselected."
-        actions={[{
-          label: undoSelection.isPending ? 'Undoing…' : 'Undo Selection',
-          variant: 'primary',
-          disabled: undoSelection.isPending,
-          onPress: () => undoSelection.mutate(),
-        }]}
+        title="Unassign or reopen?"
+        description="Unassign clears the selected talent and reopens the card. Reopen also re-invites a fresh pool of matching talents. Either ends the live subscription on SquadHire."
+        actions={[
+          {
+            label: undoSelection.isPending ? 'Unassigning…' : 'Unassign',
+            variant: 'danger',
+            disabled: undoSelection.isPending || reopenForNewTalents.isPending,
+            onPress: () => undoSelection.mutate(),
+          },
+          {
+            label: reopenForNewTalents.isPending ? 'Reopening…' : 'Reopen for new talents',
+            variant: 'primary',
+            disabled: undoSelection.isPending || reopenForNewTalents.isPending,
+            onPress: () => reopenForNewTalents.mutate(),
+          },
+        ]}
       />
       <MobileActionSheet
         open={moreSheetOpen}

@@ -224,6 +224,32 @@ export default function AdminPublishedCardRecipientsView({
       setCheckedIds(new Set());
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      showToast('Selection cleared — card reopened.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to unassign', 'error');
+    },
+  });
+
+  const reopenMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${card.id}/reopen-for-new-talents`),
+    onSuccess: (res: any) => {
+      setCheckedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      showToast(
+        res?.data?.rebroadcast
+          ? 'Card reopened and re-broadcast to new talents.'
+          : 'Card reopened. Re-invite talents as needed.',
+        'success',
+      );
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to reopen card', 'error');
     },
   });
 
@@ -595,6 +621,31 @@ export default function AdminPublishedCardRecipientsView({
                     </div>
                   ))}
                 </div>
+                {bucket === 'assigned' && (
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-emerald-200 pt-4">
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Unassign this talent?\n\nThis ends the live subscription on SquadHire — reconcile it there too. The card reopens so you can select someone else.')) undoMutation.mutate();
+                      }}
+                      disabled={undoMutation.isPending || reopenMutation.isPending}
+                      className="sh-btn-danger"
+                    >
+                      {undoMutation.isPending ? 'Unassigning…' : 'Unassign'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Reopen this card to new talents?\n\nThis unassigns the current talent and ends the live subscription on SquadHire. Matching talents will be re-invited.')) reopenMutation.mutate();
+                      }}
+                      disabled={undoMutation.isPending || reopenMutation.isPending}
+                      className="sh-btn-ghost"
+                    >
+                      {reopenMutation.isPending ? 'Reopening…' : 'Reopen for new talents'}
+                    </button>
+                    <span className="text-[11px] text-emerald-700/80">
+                      To reassign, unassign and then pick another talent below.
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
