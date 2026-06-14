@@ -46,17 +46,30 @@ router.get('/personal', async (req: Request, res: Response) => {
       return;
     }
 
-    // 1. Find or create the personal space.
-    let { data: space } = await supabaseAdmin
-      .from('spaces')
-      .select('*, space_statuses(*)')
-      .eq('workspace_id', workspaceId)
-      .eq('created_by', userId)
-      .eq('kind', 'personal')
-      .is('deleted_at', null)
-      .order('created_at')
-      .limit(1)
-      .maybeSingle();
+    // 1. Find or create the personal space. IMPORTANT: the spaces table has no
+    //    created_at column — order by columns that DO exist (position, then id)
+    //    so the lookup is deterministic and never errors. (Ordering by a missing
+    //    column made this select fail silently, so the endpoint created a brand
+    //    new personal space on every call — see migration 106.)
+    const findSpace = () =>
+      supabaseAdmin
+        .from('spaces')
+        .select('*, space_statuses(*)')
+        .eq('workspace_id', workspaceId)
+        .eq('created_by', userId)
+        .eq('kind', 'personal')
+        .is('deleted_at', null)
+        .order('position')
+        .order('id')
+        .limit(1);
+
+    const { data: foundSpaces, error: findErr } = await findSpace();
+    if (findErr) {
+      console.error('Personal space lookup error:', findErr);
+      res.status(500).json({ success: false, error: findErr.message });
+      return;
+    }
+    let space: any = foundSpaces?.[0] ?? null;
 
     if (!space) {
       const { count } = await supabaseAdmin
@@ -80,26 +93,33 @@ router.get('/personal', async (req: Request, res: Response) => {
         .single();
 
       if (insertErr || !inserted) {
-        console.error('Personal space insert error:', insertErr);
-        res.status(500).json({ success: false, error: insertErr?.message || 'Failed to create personal space' });
-        return;
+        // A concurrent request may have created it first (the unique index
+        // rejects the duplicate) — re-select and use the winner instead of 500.
+        const { data: retry } = await findSpace();
+        if (retry && retry[0]) {
+          space = retry[0];
+        } else {
+          console.error('Personal space insert error:', insertErr);
+          res.status(500).json({ success: false, error: insertErr?.message || 'Failed to create personal space' });
+          return;
+        }
+      } else {
+        await supabaseAdmin.from('resource_memberships').insert({
+          resource_type: 'space',
+          resource_id: inserted.id,
+          user_id: userId,
+          access_level: 'manager',
+        });
+
+        // Re-fetch with statuses (seeded by the on-insert trigger, not visible in
+        // the insert's RETURNING clause).
+        const { data: hydrated } = await supabaseAdmin
+          .from('spaces')
+          .select('*, space_statuses(*)')
+          .eq('id', inserted.id)
+          .single();
+        space = hydrated ?? inserted;
       }
-
-      await supabaseAdmin.from('resource_memberships').insert({
-        resource_type: 'space',
-        resource_id: inserted.id,
-        user_id: userId,
-        access_level: 'manager',
-      });
-
-      // Re-fetch with statuses (seeded by the on-insert trigger, not visible in
-      // the insert's RETURNING clause).
-      const { data: hydrated } = await supabaseAdmin
-        .from('spaces')
-        .select('*, space_statuses(*)')
-        .eq('id', inserted.id)
-        .single();
-      space = hydrated ?? inserted;
     }
 
     // 2. Find or create the default list inside the personal space (first by
