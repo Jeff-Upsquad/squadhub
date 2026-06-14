@@ -203,6 +203,8 @@ async function resetCardAndCloseTerms(cardId: string): Promise<void> {
       state: 'published',
       assigned_at: null,
       admin_reviewed_at: null,
+      recalled_at: null,
+      closed_at: null,
       selected_recipient_type: null,
       selected_recipient_id: null,
       squadhire_activation_notified_at: null,
@@ -468,16 +470,14 @@ router.post('/subscription-cards/:id/reopen-for-new-talents', async (req: Reques
 });
 
 // ============================================================
-// POST /admin/subscription-cards/:id/broadcast
+// POST /admin/subscription-cards/:id/rebroadcast
 //
-// Broadcast a published card to a fresh pool of talents by re-delivering it to
-// SquadHire so it (re-)broadcasts to matching talents.
-//
-// NOTE: the full "wipe & re-ask everyone" fresh round is completed by the
-// SquadHire-side fresh-broadcast handler (next stage); until that lands, this
-// re-delivers the card (SquadHire adds newly-matching talents).
+// Broadcast a reopened published card to a FRESH pool of talents: signals
+// SquadHire to wipe the prior round and re-fan-out to the full matching pool.
+// Named /rebroadcast (NOT /broadcast) to avoid colliding with the requests
+// router's /broadcast, which upgrades a manual card to broadcast distribution.
 // ============================================================
-router.post('/subscription-cards/:id/broadcast', async (req: Request, res: Response) => {
+router.post('/subscription-cards/:id/rebroadcast', async (req: Request, res: Response) => {
   try {
     const cardId = req.params.id as string;
 

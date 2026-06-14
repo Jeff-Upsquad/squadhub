@@ -250,7 +250,7 @@ export default function AdminPublishedCardRecipientsView({
 
   const broadcastToTalentsMutation = useMutation({
     mutationFn: () =>
-      api.post(`/admin/subscription-cards/${card.id}/broadcast`),
+      api.post(`/admin/subscription-cards/${card.id}/rebroadcast`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
