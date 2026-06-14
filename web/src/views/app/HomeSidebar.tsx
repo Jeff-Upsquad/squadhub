@@ -6,7 +6,6 @@ import api, { getFreshAccessToken } from '../../services/api';
 import { useFavorites, useRemoveFavorite } from '../../hooks/useFavorites';
 import { useSharedWithMe } from '../../hooks/useSharedWithMe';
 import { useHasPermission } from '../../hooks/usePermissions';
-import { useAuthStore } from '../../stores/authStore';
 import { usePMStore } from '../../stores/pmStore';
 import SpaceTree from './pm/SpaceTree';
 import CreateSpaceModal from './pm/CreateSpaceModal';
@@ -231,8 +230,6 @@ export default function HomeSidebar({
   const [showCreateSpace, setShowCreateSpace] = useState(false);
   const isClient = useIsClient();
   const isPartner = useIsPartner();
-  const currentUserEmail = useAuthStore((s) => s.user?.email);
-  const canSeeDogfoodNav = currentUserEmail === 'jeff@upsquadconnect.com';
   const hasCheckin = useHasMiniApp('daily-checkin');
   const hasCheckinPartners = useHasMiniApp('daily-checkin-partners');
   const hasTimeManagement = useHasMiniApp('time-management');
@@ -384,35 +381,6 @@ export default function HomeSidebar({
             active={homeView === 'my-tasks'}
             onClick={() => onChangeView('my-tasks')}
           />
-          {canSeeDogfoodNav && (
-            <>
-              <NavItem
-                icon={
-                  <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="4" />
-                    <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
-                  </svg>
-                }
-                label="Mentions"
-                active={homeView === 'mentions'}
-                count={3}
-                unread
-                onClick={() => onChangeView('mentions')}
-              />
-              <NavItem
-                icon={
-                  <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 7v5l3 2" />
-                  </svg>
-                }
-                label="Later"
-                active={homeView === 'later'}
-                onClick={() => onChangeView('later')}
-              />
-            </>
-          )}
-
           {hasCheckin && (
             <button
               onClick={() => onChangeView('checkin')}
