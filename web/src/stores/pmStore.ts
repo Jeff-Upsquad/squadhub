@@ -59,6 +59,13 @@ interface PMState {
   focusTodayScope: Record<string, boolean>;
   todayListGroupBy: GroupBy;
   todayListView: TodayListView;
+  // Last in-app view (MainLayout's section + home sub-view), persisted so a
+  // full-page refresh restores where the user was instead of resetting to My
+  // Home. Stored as plain strings to avoid a store→layout import cycle;
+  // MainLayout casts on read and its render switch falls back to My Home for
+  // any unknown value.
+  lastActiveSection: string;
+  lastHomeView: string;
   setActiveSpace: (id: string | null) => void;
   setActiveList: (id: string | null) => void;
   setActiveFolder: (id: string | null) => void;
@@ -87,6 +94,7 @@ interface PMState {
   setScopedFocusToday: (scopeKey: string, value: boolean) => void;
   setTodayListGroupBy: (value: GroupBy) => void;
   setTodayListView: (value: TodayListView) => void;
+  setLastView: (section: string, homeView: string) => void;
   toggleFocusToday: (taskId: string) => void;
   setFocusBucket: (taskId: string, bucket: FocusBucket | null) => void;
   isFocusedToday: (taskId: string) => boolean;
@@ -138,6 +146,8 @@ export const usePMStore = create<PMState>()(
       focusTodayScope: {},
       todayListGroupBy: 'none',
       todayListView: 'list',
+      lastActiveSection: 'home',
+      lastHomeView: 'hub',
 
       setActiveSpace: (id) => set({ activeSpaceId: id }),
       setActiveList: (id) => set({ activeListId: id, contextListId: id, selectedTasks: [], activeDesignFolderId: null, activeFolderId: null, activeSpacePageId: null }),
@@ -244,6 +254,7 @@ export const usePMStore = create<PMState>()(
         set({ todayListView: value });
         triggerSave();
       },
+      setLastView: (section, homeView) => set({ lastActiveSection: section, lastHomeView: homeView }),
       // Focus stars are persistent now — they no longer clear overnight. Kept
       // as a no-op so existing callers (e.g. useDayPlanner) stay valid.
       resetFocusTodayIfStale: () => {},
@@ -318,7 +329,7 @@ export const usePMStore = create<PMState>()(
           focusBuckets: s.focusBuckets,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, newTasksOpen: false, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, newTasksOpen: false, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',
@@ -343,6 +354,8 @@ export const usePMStore = create<PMState>()(
         focusTodayScope: state.focusTodayScope,
         todayListGroupBy: state.todayListGroupBy,
         todayListView: state.todayListView,
+        lastActiveSection: state.lastActiveSection,
+        lastHomeView: state.lastHomeView,
       }),
       version: 3,
       migrate: (persisted: unknown, fromVersion: number) => {
