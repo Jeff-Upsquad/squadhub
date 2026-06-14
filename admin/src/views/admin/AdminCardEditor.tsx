@@ -10,6 +10,7 @@ const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
   Designers: 'designer',
   Editors: 'video_editor',
   'Designer plus Editor': 'designer_video_editor',
+  Accountants: 'accountant',
 };
 
 const PLAN_TO_CANONICAL: Record<string, string> = {
@@ -101,7 +102,7 @@ interface Deliverable {
 const VALID_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const VALID_TIERS = ['Junior', 'Pro', 'Elite', 'Top Talents', 'Custom'];
 const VALID_PLANS = ['starter', 'basic', 'plus', 'pro', 'personal'];
-const SERVICE_TYPES = ['Designers', 'Editors', 'Designer plus Editor'];
+const SERVICE_TYPES = ['Designers', 'Editors', 'Designer plus Editor', 'Accountants'];
 
 export default function AdminCardEditor({
   cardId,

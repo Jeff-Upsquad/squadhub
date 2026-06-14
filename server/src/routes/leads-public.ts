@@ -11,6 +11,7 @@ const SLUG_TO_SERVICE_TYPE: Record<string, string> = {
   designer: 'Designers',
   video_editor: 'Editors',
   designer_video_editor: 'Designer plus Editor',
+  accountant: 'Accountants',
 };
 
 const VALID_DAYS = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
@@ -214,9 +215,9 @@ const submissionSchema = z.object({
   // two cards. The "Designer + Editor" combo box is its own distinct slug
   // (`designer_video_editor`) meaning one hybrid person, not two specialists.
   service_types: z
-    .array(z.enum(['designer', 'video_editor', 'designer_video_editor']))
+    .array(z.enum(['designer', 'video_editor', 'designer_video_editor', 'accountant']))
     .min(1)
-    .max(3)
+    .max(4)
     .refine((arr) => new Set(arr).size === arr.length, {
       message: 'service_types must be unique',
     }),
@@ -243,7 +244,7 @@ const submissionSchema = z.object({
   // forward; legacy rows retain their existing value.
   role_requirements: z
     .record(
-      z.enum(['designer', 'video_editor', 'designer_video_editor']),
+      z.enum(['designer', 'video_editor', 'designer_video_editor', 'accountant']),
       z.object({
         note: z.string().trim().max(2000).optional(),
         hours: z.string().trim().max(200).optional(),

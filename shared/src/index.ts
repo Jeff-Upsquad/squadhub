@@ -1007,7 +1007,7 @@ export interface PartnerClientAssignment {
 // ---- Clients Mini-App ----
 export type SubscriptionPlan = 'Starter' | 'Basic' | 'Plus' | 'Pro' | 'Personal';
 export type SubscriptionTier = 'Junior' | 'Pro' | 'Elite' | 'Top Talents';
-export type SubscriptionSlug = 'designer' | 'video_editor';
+export type SubscriptionSlug = 'designer' | 'video_editor' | 'accountant';
 export type DeliverableKind = 'hours' | 'item';
 export type CurrencyCode = 'INR' | 'USD';
 
@@ -1198,7 +1198,7 @@ export type BrandSource = 'shared_form' | 'landing_page_form';
 
 // Service-type slug stored on the brand. Lets the brief form rehydrate
 // Step 1 roles on autofill without a label<->slug reverse map.
-export type BrandServiceType = 'designer' | 'video_editor' | 'designer_video_editor';
+export type BrandServiceType = 'designer' | 'video_editor' | 'designer_video_editor' | 'accountant';
 
 export interface ClientSubmissionBrand {
   id: string;
