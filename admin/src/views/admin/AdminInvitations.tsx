@@ -9,6 +9,8 @@ export default function AdminInvitations() {
   const [roleId, setRoleId] = useState('');
   const [userType, setUserType] = useState<UserType>('internal');
   const [clientId, setClientId] = useState('');
+  const [crmWorkspaceId, setCrmWorkspaceId] = useState('');
+  const [crmRole, setCrmRole] = useState<'admin' | 'member' | 'guest'>('member');
   const [formError, setFormError] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'accepted' | 'expired'>('all');
 
@@ -30,19 +32,32 @@ export default function AdminInvitations() {
     queryFn: () => api.get('/admin/clients').then((r) => r.data),
   });
 
+  const { data: crmWsRes } = useQuery({
+    queryKey: ['crm-access-workspaces'],
+    queryFn: () => api.get('/admin/crm-access/workspaces').then((r) => r.data),
+  });
+
   const roles: Role[] = rolesRes?.data || [];
   const clients: { id: string; business_name: string }[] = clientsRes?.data || [];
+  const crmWorkspaces: { id: string; name: string }[] = crmWsRes?.data || [];
   const invitations: Invitation[] = res?.data || [];
 
   const createMutation = useMutation({
-    mutationFn: (body: { email: string; role_id?: string; user_type: UserType; client_id?: string }) =>
-      api.post('/admin/invitations', body),
+    mutationFn: (body: {
+      email: string;
+      role_id?: string;
+      user_type: UserType;
+      client_id?: string;
+      crm_access?: { app: string; workspace_id: string; role: 'admin' | 'member' | 'guest' };
+    }) => api.post('/admin/invitations', body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-invitations'] });
       setEmail('');
       setRoleId('');
       setUserType('internal');
       setClientId('');
+      setCrmWorkspaceId('');
+      setCrmRole('member');
       setFormError('');
     },
     onError: (err: any) => {
@@ -72,6 +87,9 @@ export default function AdminInvitations() {
       role_id: roleId || undefined,
       user_type: userType,
       client_id: clientId || undefined,
+      crm_access: crmWorkspaceId
+        ? { app: 'squadcrm', workspace_id: crmWorkspaceId, role: crmRole }
+        : undefined,
     });
   };
 
@@ -162,6 +180,33 @@ export default function AdminInvitations() {
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>{c.business_name}</option>
                 ))}
+              </select>
+            </div>
+          )}
+          <div className="min-w-[160px]">
+            <label className="mb-1.5 block text-xs font-medium text-[#62748E]">CRM Access</label>
+            <select
+              value={crmWorkspaceId}
+              onChange={(e) => setCrmWorkspaceId(e.target.value)}
+              className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] outline-none focus:border-[#2962FF]"
+            >
+              <option value="">No CRM access</option>
+              {crmWorkspaces.map((w) => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+          {crmWorkspaceId && (
+            <div className="min-w-[130px]">
+              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">CRM Role</label>
+              <select
+                value={crmRole}
+                onChange={(e) => setCrmRole(e.target.value as 'admin' | 'member' | 'guest')}
+                className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] outline-none focus:border-[#2962FF]"
+              >
+                <option value="admin">Admin</option>
+                <option value="member">Member</option>
+                <option value="guest">Guest</option>
               </select>
             </div>
           )}
