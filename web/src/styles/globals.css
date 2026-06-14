@@ -257,7 +257,9 @@ body {
 /* Inbox */
 .sh-view.inbox-view { display: grid; grid-template-columns: 380px 1fr; height: 100%; }
 .sh-view .inbox-list { border-right: 1px solid var(--sh-hair); overflow-y: auto; background: var(--surface); }
-.sh-view .inbox-filter { display: flex; gap: 4px; padding: 12px 16px; border-bottom: 1px solid var(--sh-hair); font-size: 12px; position: sticky; top: 0; background: var(--surface); z-index: 2; }
+.sh-view .inbox-filter { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; row-gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--sh-hair); font-size: 12px; position: sticky; top: 0; background: var(--surface); z-index: 2; }
+.sh-view .inbox-filter .pill { white-space: nowrap; }
+.sh-view .inbox-filter .lv-search { flex: 1 1 160px; width: auto; min-width: 0; }
 .sh-view .pill { padding: 4px 10px; border-radius: 999px; cursor: pointer; color: var(--sh-ink-3); font-weight: 500; }
 .sh-view .pill:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
 .sh-view .pill[data-active="true"] { background: var(--sh-ink); color: var(--surface); }
