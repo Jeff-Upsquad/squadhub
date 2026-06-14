@@ -28,7 +28,7 @@ export default function AdminMiniAppDetail({ miniAppId, onBack }: Props) {
   };
 
   if (isLoading || !app) {
-    return <p className="py-8 text-center text-sm text-[#90A1B9]">Loading...</p>;
+    return <p className="py-8 text-center text-sm text-foreground-dim">Loading...</p>;
   }
 
   return (
@@ -37,7 +37,7 @@ export default function AdminMiniAppDetail({ miniAppId, onBack }: Props) {
       <div className="mb-6">
         <button
           onClick={onBack}
-          className="mb-3 flex items-center gap-1 text-sm text-[#62748E] hover:text-[#0F172B]"
+          className="mb-3 flex items-center gap-1 text-sm text-foreground-muted hover:text-foreground"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -45,7 +45,7 @@ export default function AdminMiniAppDetail({ miniAppId, onBack }: Props) {
           Back to Mini Apps
         </button>
         <div className="flex items-center gap-3">
-          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">{app.name}</h1>
+          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">{app.name}</h1>
           <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
             app.is_enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
           }`}>
@@ -54,21 +54,21 @@ export default function AdminMiniAppDetail({ miniAppId, onBack }: Props) {
           </span>
         </div>
         {app.description && (
-          <p className="mt-1 text-sm text-[#62748E]">{app.description}</p>
+          <p className="mt-1 text-sm text-foreground-muted">{app.description}</p>
         )}
-        <p className="mt-1 font-mono text-xs text-[#90A1B9]">slug: {app.slug}</p>
+        <p className="mt-1 font-mono text-xs text-foreground-dim">slug: {app.slug}</p>
       </div>
 
       {/* Tabs */}
-      <div className="mb-4 flex gap-1 border-b border-[#E2E8F0]">
+      <div className="mb-4 flex gap-1 border-b border-divider">
         {(['roles', 'users'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium transition border-b-2 ${
               tab === t
-                ? 'border-[#0F172B] text-[#0F172B]'
-                : 'border-transparent text-[#62748E] hover:text-[#0F172B]'
+                ? 'border-ink text-foreground'
+                : 'border-transparent text-foreground-muted hover:text-foreground'
             }`}
           >
             {t === 'roles' ? `Roles (${(app.role_access || []).length})` : `Users (${(app.user_access || []).length})`}
@@ -119,12 +119,12 @@ function RoleAccessTab({ app, onUpdate }: { app: MiniApp; onUpdate: () => void }
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-[#62748E]">
+        <p className="text-sm text-foreground-muted">
           Users with these roles will see this mini app in their sidebar.
         </p>
         <button
           onClick={() => setShowAdd(true)}
-          className="rounded-lg bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1D293D]"
+          className="rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-white hover:bg-ink-hover"
         >
           + Add Role
         </button>
@@ -132,19 +132,19 @@ function RoleAccessTab({ app, onUpdate }: { app: MiniApp; onUpdate: () => void }
 
       {/* Add role dropdown */}
       {showAdd && (
-        <div className="mb-4 rounded-lg border border-[#E2E8F0] bg-white p-4">
+        <div className="mb-4 rounded-lg border border-divider bg-surface p-4">
           {availableRoles.length === 0 ? (
-            <p className="text-sm text-[#90A1B9]">All roles already have access.</p>
+            <p className="text-sm text-foreground-dim">All roles already have access.</p>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-[#62748E]">Select a role to grant access:</p>
+              <p className="text-xs font-medium text-foreground-muted">Select a role to grant access:</p>
               <div className="flex flex-wrap gap-2">
                 {availableRoles.map((role) => (
                   <button
                     key={role.id}
                     onClick={() => addMutation.mutate(role.id)}
                     disabled={addMutation.isPending}
-                    className="rounded-full border border-[#E2E8F0] px-3 py-1 text-xs font-medium text-[#62748E] hover:bg-[#F8FAFC] hover:text-[#0F172B] disabled:opacity-50"
+                    className="rounded-full border border-divider px-3 py-1 text-xs font-medium text-foreground-muted hover:bg-surface-alt hover:text-foreground disabled:opacity-50"
                     style={{ borderColor: role.color || '#E2E8F0' }}
                   >
                     {role.name}
@@ -155,7 +155,7 @@ function RoleAccessTab({ app, onUpdate }: { app: MiniApp; onUpdate: () => void }
           )}
           <button
             onClick={() => setShowAdd(false)}
-            className="mt-3 text-xs text-[#90A1B9] hover:text-[#0F172B]"
+            className="mt-3 text-xs text-foreground-dim hover:text-foreground"
           >
             Cancel
           </button>
@@ -164,22 +164,22 @@ function RoleAccessTab({ app, onUpdate }: { app: MiniApp; onUpdate: () => void }
 
       {/* Current roles */}
       {(app.role_access || []).length === 0 ? (
-        <div className="rounded-lg border border-[#E2E8F0] bg-white py-8 text-center">
-          <p className="text-sm text-[#90A1B9]">No roles assigned. Click "Add Role" to grant access.</p>
+        <div className="rounded-lg border border-divider bg-surface py-8 text-center">
+          <p className="text-sm text-foreground-dim">No roles assigned. Click "Add Role" to grant access.</p>
         </div>
       ) : (
         <div className="space-y-2">
           {(app.role_access || []).map((ra) => (
             <div
               key={ra.id}
-              className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-4 py-3"
+              className="flex items-center justify-between rounded-lg border border-divider bg-surface px-4 py-3"
             >
               <div className="flex items-center gap-3">
                 <span
                   className="h-3 w-3 rounded-full"
                   style={{ backgroundColor: ra.role?.color || '#90A1B9' }}
                 />
-                <span className="text-sm font-medium text-[#0F172B]">{ra.role?.name || 'Unknown Role'}</span>
+                <span className="text-sm font-medium text-foreground">{ra.role?.name || 'Unknown Role'}</span>
               </div>
               <button
                 onClick={() => removeMutation.mutate(ra.role_id)}
@@ -234,12 +234,12 @@ function UserAccessTab({ app, onUpdate }: { app: MiniApp; onUpdate: () => void }
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-[#62748E]">
+        <p className="text-sm text-foreground-muted">
           Grant direct access to individual users (supplements role-based access).
         </p>
         <button
           onClick={() => setShowAdd(true)}
-          className="rounded-lg bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1D293D]"
+          className="rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-white hover:bg-ink-hover"
         >
           + Add User
         </button>
@@ -247,30 +247,30 @@ function UserAccessTab({ app, onUpdate }: { app: MiniApp; onUpdate: () => void }
 
       {/* Add user panel */}
       {showAdd && (
-        <div className="mb-4 rounded-lg border border-[#E2E8F0] bg-white p-4">
+        <div className="mb-4 rounded-lg border border-divider bg-surface p-4">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search users by name or email..."
-            className="mb-3 w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
+            className="mb-3 w-full rounded-md border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
           />
           <div className="max-h-48 space-y-1 overflow-y-auto">
             {availableUsers.length === 0 ? (
-              <p className="text-sm text-[#90A1B9]">No matching users found.</p>
+              <p className="text-sm text-foreground-dim">No matching users found.</p>
             ) : (
               availableUsers.slice(0, 20).map((user) => (
                 <button
                   key={user.id}
                   onClick={() => addMutation.mutate(user.id)}
                   disabled={addMutation.isPending}
-                  className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-[#F8FAFC] disabled:opacity-50"
+                  className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-surface-alt disabled:opacity-50"
                 >
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#E2E8F0] text-xs font-medium text-[#62748E]">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-well text-xs font-medium text-foreground-muted">
                     {user.display_name?.[0]?.toUpperCase() || '?'}
                   </div>
                   <div>
-                    <div className="text-sm text-[#0F172B]">{user.display_name}</div>
-                    <div className="text-xs text-[#90A1B9]">{user.email}</div>
+                    <div className="text-sm text-foreground">{user.display_name}</div>
+                    <div className="text-xs text-foreground-dim">{user.email}</div>
                   </div>
                 </button>
               ))
@@ -278,7 +278,7 @@ function UserAccessTab({ app, onUpdate }: { app: MiniApp; onUpdate: () => void }
           </div>
           <button
             onClick={() => { setShowAdd(false); setSearch(''); }}
-            className="mt-3 text-xs text-[#90A1B9] hover:text-[#0F172B]"
+            className="mt-3 text-xs text-foreground-dim hover:text-foreground"
           >
             Close
           </button>
@@ -287,23 +287,23 @@ function UserAccessTab({ app, onUpdate }: { app: MiniApp; onUpdate: () => void }
 
       {/* Current users */}
       {(app.user_access || []).length === 0 ? (
-        <div className="rounded-lg border border-[#E2E8F0] bg-white py-8 text-center">
-          <p className="text-sm text-[#90A1B9]">No direct user grants. Click "Add User" to grant access.</p>
+        <div className="rounded-lg border border-divider bg-surface py-8 text-center">
+          <p className="text-sm text-foreground-dim">No direct user grants. Click "Add User" to grant access.</p>
         </div>
       ) : (
         <div className="space-y-2">
           {(app.user_access || []).map((ua) => (
             <div
               key={ua.id}
-              className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-4 py-3"
+              className="flex items-center justify-between rounded-lg border border-divider bg-surface px-4 py-3"
             >
               <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#E2E8F0] text-xs font-medium text-[#62748E]">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-well text-xs font-medium text-foreground-muted">
                   {ua.user?.display_name?.[0]?.toUpperCase() || '?'}
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-[#0F172B]">{ua.user?.display_name || 'Unknown'}</div>
-                  <div className="text-xs text-[#90A1B9]">{ua.user?.email || ''}</div>
+                  <div className="text-sm font-medium text-foreground">{ua.user?.display_name || 'Unknown'}</div>
+                  <div className="text-xs text-foreground-dim">{ua.user?.email || ''}</div>
                 </div>
               </div>
               <button

@@ -38,8 +38,8 @@ export default function AdminDesignLibrary() {
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Design Library</h1>
-          <p className="mt-1 text-sm text-[#62748E]">
+          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Design Library</h1>
+          <p className="mt-1 text-sm text-foreground-muted">
             Design systems captured from other products — tokens, typography, icons and components, extracted from their production CSS.
           </p>
         </div>
@@ -47,7 +47,7 @@ export default function AdminDesignLibrary() {
           href={iframeSrc}
           target="_blank"
           rel="noreferrer"
-          className="flex shrink-0 items-center gap-1.5 rounded-md border border-[#E2E8F0] px-3 py-2 text-sm text-[#62748E] transition hover:bg-[#F8FAFC] hover:text-[#0F172B]"
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-divider px-3 py-2 text-sm text-foreground-muted transition hover:bg-surface-alt hover:text-foreground"
         >
           Open full screen
           <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
@@ -58,10 +58,10 @@ export default function AdminDesignLibrary() {
 
       {/* Source cards */}
       {isLoading ? (
-        <p className="py-8 text-center text-sm text-[#90A1B9]">Loading sources...</p>
+        <p className="py-8 text-center text-sm text-foreground-dim">Loading sources...</p>
       ) : !sources || sources.length === 0 ? (
-        <div className="mb-4 rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-          <p className="text-sm text-[#90A1B9]">No sources captured yet.</p>
+        <div className="mb-4 rounded-lg border border-divider bg-surface py-12 text-center">
+          <p className="text-sm text-foreground-dim">No sources captured yet.</p>
         </div>
       ) : (
         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -69,8 +69,8 @@ export default function AdminDesignLibrary() {
             <button
               key={s.id}
               onClick={() => setActive(s.id)}
-              className={`overflow-hidden rounded-lg border bg-white text-left transition hover:shadow-sm ${
-                active === s.id ? 'border-[#0F172B]' : 'border-[#E2E8F0]'
+              className={`overflow-hidden rounded-lg border bg-surface text-left transition hover:shadow-sm ${
+                active === s.id ? 'border-ink' : 'border-divider'
               }`}
             >
               <div className="flex h-7">
@@ -80,21 +80,21 @@ export default function AdminDesignLibrary() {
               </div>
               <div className="px-4 py-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-[#0F172B]">{s.name}</span>
+                  <span className="text-sm font-semibold text-foreground">{s.name}</span>
                   {s.platform.map((p) => (
                     <span
                       key={p}
                       className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${
-                        p === 'mobile' ? 'bg-indigo-50 text-indigo-600' : 'bg-[#F1F5F9] text-[#62748E]'
+                        p === 'mobile' ? 'bg-indigo-50 text-indigo-600' : 'bg-canvas text-foreground-muted'
                       }`}
                     >
                       {p}
                     </span>
                   ))}
-                  <span className="ml-auto text-[11px] text-[#90A1B9]">{s.captured}</span>
+                  <span className="ml-auto text-[11px] text-foreground-dim">{s.captured}</span>
                 </div>
-                <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-[#62748E]">{s.description}</p>
-                <div className="mt-2 flex items-center gap-3 text-[11px] text-[#90A1B9]">
+                <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-foreground-muted">{s.description}</p>
+                <div className="mt-2 flex items-center gap-3 text-[11px] text-foreground-dim">
                   <span className="truncate">{s.fonts.slice(0, 3).join(' · ')}</span>
                   {s.stats?.tokens ? <span className="shrink-0">{s.stats.tokens} tokens</span> : null}
                   {s.stats?.icons ? <span className="shrink-0">{s.stats.icons} icons</span> : null}
@@ -106,12 +106,12 @@ export default function AdminDesignLibrary() {
       )}
 
       {/* Viewer */}
-      <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
-        <div className="flex items-center gap-1 border-b border-[#E2E8F0] px-2 py-1.5">
+      <div className="overflow-hidden rounded-lg border border-divider bg-surface">
+        <div className="flex items-center gap-1 border-b border-divider px-2 py-1.5">
           <button
             onClick={() => setActive('hub')}
             className={`rounded-md px-3 py-1.5 text-sm transition ${
-              active === 'hub' ? 'bg-[#F8FAFC] font-medium text-[#0F172B]' : 'text-[#62748E] hover:bg-[#F8FAFC] hover:text-[#0F172B]'
+              active === 'hub' ? 'bg-surface-alt font-medium text-foreground' : 'text-foreground-muted hover:bg-surface-alt hover:text-foreground'
             }`}
           >
             Hub
@@ -121,7 +121,7 @@ export default function AdminDesignLibrary() {
               key={s.id}
               onClick={() => setActive(s.id)}
               className={`rounded-md px-3 py-1.5 text-sm transition ${
-                active === s.id ? 'bg-[#F8FAFC] font-medium text-[#0F172B]' : 'text-[#62748E] hover:bg-[#F8FAFC] hover:text-[#0F172B]'
+                active === s.id ? 'bg-surface-alt font-medium text-foreground' : 'text-foreground-muted hover:bg-surface-alt hover:text-foreground'
               }`}
             >
               {s.name}
@@ -132,12 +132,12 @@ export default function AdminDesignLibrary() {
           key={iframeSrc}
           src={iframeSrc}
           title="Design library viewer"
-          className="h-[72vh] w-full bg-white"
+          className="h-[72vh] w-full bg-surface"
         />
       </div>
 
-      <p className="mt-3 text-xs text-[#90A1B9]">
-        To capture a new source, ask Claude Code: <span className="rounded bg-[#F1F5F9] px-1.5 py-0.5 font-mono text-[11px] text-[#62748E]">Add &lt;url&gt; to the design library</span> — it lands in <span className="font-mono text-[11px]">admin/public/design-library/</span> and registers itself here.
+      <p className="mt-3 text-xs text-foreground-dim">
+        To capture a new source, ask Claude Code: <span className="rounded bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-foreground-muted">Add &lt;url&gt; to the design library</span> — it lands in <span className="font-mono text-[11px]">admin/public/design-library/</span> and registers itself here.
       </p>
     </div>
   );

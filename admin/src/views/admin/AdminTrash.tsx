@@ -76,19 +76,19 @@ export default function AdminTrash() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[#0F172B]">Trash</h1>
-          <p className="mt-1 text-sm text-[#62748E]">Deleted spaces, folders, and lists. Restore or permanently delete them.</p>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">Trash</h1>
+          <p className="mt-1 text-sm text-foreground-muted">Deleted spaces, folders, and lists. Restore or permanently delete them.</p>
         </div>
       </div>
 
       {/* Filter tabs */}
-      <div className="mb-4 flex gap-1 rounded-lg bg-white p-1 border border-[#E2E8F0] w-fit">
+      <div className="mb-4 flex gap-1 rounded-lg bg-surface p-1 border border-divider w-fit">
         {(['all', 'space', 'folder', 'list', 'channel'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setFilter(t)}
             className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-              filter === t ? 'bg-[#0F172B] text-white' : 'text-[#62748E] hover:text-[#0F172B]'
+              filter === t ? 'bg-ink text-white' : 'text-foreground-muted hover:text-foreground'
             }`}
           >
             {t === 'all' ? 'All' : `${t.charAt(0).toUpperCase() + t.slice(1)}s`}
@@ -102,31 +102,31 @@ export default function AdminTrash() {
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-[#E2E8F0] bg-white overflow-hidden">
+      <div className="rounded-xl border border-divider bg-surface overflow-hidden">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#62748E]">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#62748E]">Type</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#62748E]">Parent</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#62748E]">Deleted by</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#62748E]">Deleted</th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[#62748E]">Actions</th>
+            <tr className="border-b border-divider bg-surface-alt">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-foreground-muted">Name</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-foreground-muted">Type</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-foreground-muted">Parent</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-foreground-muted">Deleted by</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-foreground-muted">Deleted</th>
+              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-foreground-muted">Actions</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-[#999999]">Loading...</td>
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-foreground-dim">Loading...</td>
               </tr>
             )}
             {!isLoading && filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-[#999999]">Trash is empty</td>
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-foreground-dim">Trash is empty</td>
               </tr>
             )}
             {filtered.map(({ type, item }) => (
-              <tr key={`${type}-${item.id}`} className="border-b border-[#E2E8F0] last:border-0 hover:bg-[#F8FAFC]">
+              <tr key={`${type}-${item.id}`} className="border-b border-divider last:border-0 hover:bg-surface-alt">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     {type === 'space' && (
@@ -143,28 +143,28 @@ export default function AdminTrash() {
                       </svg>
                     )}
                     {type === 'list' && (
-                      <svg className="h-4 w-4 text-[#999999]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="h-4 w-4 text-foreground-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                       </svg>
                     )}
                     {type === 'channel' && (
-                      <span className="text-sm text-[#90A1B9]">#</span>
+                      <span className="text-sm text-foreground-dim">#</span>
                     )}
-                    <span className="text-sm font-medium text-[#0F172B]">{item.name}</span>
+                    <span className="text-sm font-medium text-foreground">{item.name}</span>
                   </div>
                 </td>
                 <td className="px-4 py-3"><TypeBadge type={type} /></td>
-                <td className="px-4 py-3 text-sm text-[#62748E]">
+                <td className="px-4 py-3 text-sm text-foreground-muted">
                   {type === 'space' ? '—' : item.spaces?.name || '—'}
                 </td>
-                <td className="px-4 py-3 text-sm text-[#62748E]">{item.created_by_name || '—'}</td>
-                <td className="px-4 py-3 text-sm text-[#62748E]">{timeAgo(item.deleted_at)}</td>
+                <td className="px-4 py-3 text-sm text-foreground-muted">{item.created_by_name || '—'}</td>
+                <td className="px-4 py-3 text-sm text-foreground-muted">{timeAgo(item.deleted_at)}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-2">
                     <button
                       onClick={() => restore.mutate({ type, id: item.id })}
                       disabled={restore.isPending}
-                      className="rounded-md bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1D293D] disabled:opacity-50"
+                      className="rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white hover:bg-ink-hover disabled:opacity-50"
                     >
                       Restore
                     </button>

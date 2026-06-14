@@ -98,7 +98,7 @@ export default function AdminPublishedCardRecipientsPanel({
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="relative flex h-full w-[480px] flex-col bg-[var(--color-sh-cream)] shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[var(--color-sh-warm-border)] bg-white px-5 py-4">
+        <div className="flex items-center justify-between border-b border-[var(--color-sh-warm-border)] bg-surface px-5 py-4">
           {isSecondaryView ? (
             <div className="flex items-center gap-2 min-w-0">
               <button
@@ -451,7 +451,7 @@ function CardPanelContent({
         <div className="mx-5 mb-4 sh-card flex items-center justify-between p-3">
           {hasSelection ? (
             <>
-              <p className="text-xs font-semibold text-[#1E40AF]">A recipient has been selected for this card.</p>
+              <p className="text-xs font-semibold text-accent-strong">A recipient has been selected for this card.</p>
               <button
                 onClick={() => setConfirmAction({ kind: 'undoSelection' })}
                 disabled={undoSelection.isPending}
@@ -570,7 +570,7 @@ function CardPanelContent({
           )}
         </div>
 
-        <div className="border-t border-[var(--color-sh-warm-border)] bg-white px-5 py-4">
+        <div className="border-t border-[var(--color-sh-warm-border)] bg-surface px-5 py-4">
           {!activeCard.archived_at ? (
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs text-[var(--color-sh-ink-muted)]">

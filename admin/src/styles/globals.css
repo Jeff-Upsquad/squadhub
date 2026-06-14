@@ -1,10 +1,107 @@
 @import "tailwindcss";
 
-/* Hashnode design language */
-@theme {
-  /* Primary accent — Hashnode Royal Blue */
-  --color-accent: #2962FF;
+/* Class-based dark mode — .dark on <html> (mirrors the web app) */
+@variant dark (&:where(.dark, .dark *));
 
+/* ── Semantic theme tokens ──────────────────────────────────
+ * Light values are the Hashnode slate scale the admin shipped with.
+ * Dark values mirror the web app's palette so both apps feel identical.
+ * Flipped per-class via @theme inline below — DO NOT hardcode hex in JSX;
+ * use the semantic utilities (bg-surface, text-foreground, border-divider…). */
+:root {
+  --canvas:           #F1F5F9;  /* page behind panels (main content area) */
+  --surface:          #ffffff;  /* cards, sidebar, white surfaces */
+  --surface-alt:      #F8FAFC;  /* hover / subtle raised surfaces */
+  --well:             #E2E8F0;  /* avatar wells, track fills */
+  --foreground:       #0F172B;  /* primary text */
+  --foreground-muted: #62748E;  /* labels / secondary text */
+  --foreground-dim:   #90A1B9;  /* placeholders / tertiary text */
+  --divider:          #E2E8F0;  /* default hairline borders */
+  --divider-strong:   #CBD5E1;  /* input borders / stronger dividers */
+  --ink:              #0F172B;  /* solid dark fills (primary buttons, badges) */
+  --ink-hover:        #1D293D;  /* hover on ink fills */
+  --accent:           #2962FF;  /* royal-blue accent */
+  --accent-strong:    #1E50D8;  /* accent hover / pressed */
+
+  /* SquadHire palette (Published Cards / mobile neo-brutalist module) */
+  --sh-lime:          #FCF487;
+  --sh-lime-hover:    #E8DD68;
+  --sh-lime-soft:     #FDFAC2;
+  --sh-cream:         #F7F6F3;
+  --sh-warm-border:   #E8E5DE;
+  --sh-ink:           #0a0a0a;
+  --sh-ink-muted:     #525252;
+  --sh-ink-subtle:    #737373;
+  --sh-ink-faint:     #a3a3a3;
+  --sh-mint:          #a8e8e8;
+  --sh-success:       #42cc77;
+  --sh-warning:       #F76808;
+  --sh-offset:        #000000;  /* neo-brutalist hard-shadow color */
+}
+
+.dark {
+  --canvas:           #0f1117;
+  --surface:          #161b22;
+  --surface-alt:      #1c2030;
+  --well:             #232a36;
+  --foreground:       #e2e8f0;
+  --foreground-muted: #8b97a8;
+  --foreground-dim:   #6b7a8f;
+  --divider:          #262d3a;
+  --divider-strong:   #313a49;
+  --ink:              #3b82f6;  /* navy primary → bright blue in dark */
+  --ink-hover:        #2563eb;
+  --accent:           #4d7cff;
+  --accent-strong:    #3b6df0;
+
+  /* SquadHire module — keep the lime identity, flip the warm-light shell dark */
+  --sh-lime:          #FCF487;
+  --sh-lime-hover:    #E8DD68;
+  --sh-lime-soft:     #2c2a18;  /* soft lime tint → dark olive wash */
+  --sh-cream:         #14161c;  /* warm cream page → near-black */
+  --sh-warm-border:   #2a2d33;
+  --sh-ink:           #f5f5f5;  /* ink text flips light */
+  --sh-ink-muted:     #b8b8b8;
+  --sh-ink-subtle:    #9a9a9a;
+  --sh-ink-faint:     #6a6a6a;
+  --sh-mint:          #2a4a4a;
+  --sh-success:       #42cc77;
+  --sh-warning:       #F76808;
+  --sh-offset:        rgba(255, 255, 255, 0.22);  /* light hard-edge so the 3D pop survives on dark */
+}
+
+/* Expose tokens as Tailwind color utilities (bg-*, text-*, border-*, ring-*…) */
+@theme inline {
+  --color-canvas:           var(--canvas);
+  --color-surface:          var(--surface);
+  --color-surface-alt:      var(--surface-alt);
+  --color-well:             var(--well);
+  --color-foreground:       var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-dim:   var(--foreground-dim);
+  --color-divider:          var(--divider);
+  --color-divider-strong:   var(--divider-strong);
+  --color-ink:              var(--ink);
+  --color-ink-hover:        var(--ink-hover);
+  --color-accent:           var(--accent);
+  --color-accent-strong:    var(--accent-strong);
+
+  --color-sh-lime:          var(--sh-lime);
+  --color-sh-lime-hover:    var(--sh-lime-hover);
+  --color-sh-lime-soft:     var(--sh-lime-soft);
+  --color-sh-cream:         var(--sh-cream);
+  --color-sh-warm-border:   var(--sh-warm-border);
+  --color-sh-ink:           var(--sh-ink);
+  --color-sh-ink-muted:     var(--sh-ink-muted);
+  --color-sh-ink-subtle:    var(--sh-ink-subtle);
+  --color-sh-ink-faint:     var(--sh-ink-faint);
+  --color-sh-mint:          var(--sh-mint);
+  --color-sh-success:       var(--sh-success);
+  --color-sh-warning:       var(--sh-warning);
+}
+
+/* Hashnode design language — static tokens (do not change with theme) */
+@theme {
   /* Slate scale (Hashnode neutrals) */
   --color-gray-50: #F8FAFC;
   --color-gray-100: #F1F5F9;
@@ -18,7 +115,7 @@
   --color-gray-900: #0F172B;
   --color-gray-950: #020618;
 
-  /* Surfaces */
+  /* Legacy sidebar aliases (retained for any direct references) */
   --color-sidebar: #ffffff;
   --color-sidebar-hover: #F1F5F9;
   --color-sidebar-active: #F1F5F9;
@@ -29,20 +126,6 @@
   --font-display: var(--font-jakarta), system-ui, sans-serif;
   --font-body: var(--font-inter), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-inter), system-ui, sans-serif;
-
-  /* SquadHire palette (additive — used inside the Published Cards module only) */
-  --color-sh-lime: #FCF487;
-  --color-sh-lime-hover: #E8DD68;
-  --color-sh-lime-soft: #FDFAC2;
-  --color-sh-cream: #F7F6F3;
-  --color-sh-warm-border: #E8E5DE;
-  --color-sh-ink: #0a0a0a;
-  --color-sh-ink-muted: #525252;
-  --color-sh-ink-subtle: #737373;
-  --color-sh-ink-faint: #a3a3a3;
-  --color-sh-mint: #a8e8e8;
-  --color-sh-success: #42cc77;
-  --color-sh-warning: #F76808;
 }
 
 /* Base */
@@ -51,6 +134,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.011em;
+  background-color: var(--canvas);
+  color: var(--foreground);
 }
 
 /* Minimal scrollbar */
@@ -62,16 +147,16 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #CAD5E2;
+  background: var(--divider-strong);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #90A1B9;
+  background: var(--foreground-dim);
 }
 
 ::selection {
   background: rgba(41, 98, 255, 0.15);
-  color: #000;
+  color: inherit;
 }
 
 /* Mobile neo-brutalist animations */
@@ -115,7 +200,7 @@ body {
 /* Card — rounded-14, warm border, soft shadow */
 .sh-card {
   border-radius: 14px;
-  background: #fff;
+  background: var(--color-surface);
   border: 1px solid var(--color-sh-warm-border);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   transition: box-shadow 0.18s ease, transform 0.18s ease;
@@ -127,7 +212,7 @@ body {
 }
 .sh-card-flat {
   border-radius: 14px;
-  background: #fff;
+  background: var(--color-surface);
   border: 1px solid var(--color-sh-warm-border);
 }
 
@@ -138,9 +223,9 @@ body {
   gap: 0.5rem;
   padding: 0.25rem 0.75rem;
   border-radius: 9999px;
-  background: #fff;
+  background: var(--color-surface);
   border: 1.5px solid var(--color-sh-ink);
-  box-shadow: 2px 2px 0 0 #000;
+  box-shadow: 2px 2px 0 0 var(--sh-offset);
   font-family: var(--font-inter), system-ui, sans-serif;
   font-size: 0.75rem;
   font-weight: 600;
@@ -171,7 +256,7 @@ body {
   display: inline-flex;
   gap: 0.25rem;
   padding: 0.25rem;
-  background: #fff;
+  background: var(--color-surface);
   border: 1px solid var(--color-sh-warm-border);
   border-radius: 12px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -202,7 +287,7 @@ body {
   width: 100%;
   border-radius: 10px;
   border: 1px solid var(--color-sh-warm-border);
-  background: #fff;
+  background: var(--color-surface);
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
   color: var(--color-sh-ink);
@@ -242,7 +327,7 @@ body {
   color: var(--color-sh-ink);
   background: var(--color-sh-lime);
   border: 2px solid var(--color-sh-ink);
-  box-shadow: 4px 4px 0 0 #000;
+  box-shadow: 4px 4px 0 0 var(--sh-offset);
   cursor: pointer;
   transition: transform 0.16s ease, box-shadow 0.18s ease, background-color 0.2s ease;
   white-space: nowrap;
@@ -250,15 +335,15 @@ body {
 .sh-btn-primary:hover:not(:disabled) {
   transform: translate(-2px, -2px);
   background: var(--color-sh-lime-hover);
-  box-shadow: 6px 6px 0 0 #000;
+  box-shadow: 6px 6px 0 0 var(--sh-offset);
 }
 .sh-btn-primary:active:not(:disabled) {
   transform: translate(2px, 2px);
-  box-shadow: 1px 1px 0 0 #000;
+  box-shadow: 1px 1px 0 0 var(--sh-offset);
 }
 .sh-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-.sh-btn-primary-sm { padding: 0.4rem 0.875rem; font-size: 0.8125rem; box-shadow: 3px 3px 0 0 #000; }
-.sh-btn-primary-sm:hover:not(:disabled) { box-shadow: 5px 5px 0 0 #000; }
+.sh-btn-primary-sm { padding: 0.4rem 0.875rem; font-size: 0.8125rem; box-shadow: 3px 3px 0 0 var(--sh-offset); }
+.sh-btn-primary-sm:hover:not(:disabled) { box-shadow: 5px 5px 0 0 var(--sh-offset); }
 
 /* Ghost button — white with warm border + ink text, no shadow */
 .sh-btn-ghost {
@@ -272,7 +357,7 @@ body {
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--color-sh-ink);
-  background: #fff;
+  background: var(--color-surface);
   border: 1px solid var(--color-sh-warm-border);
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
@@ -347,5 +432,19 @@ body {
   text-transform: uppercase;
   color: var(--color-sh-ink-subtle);
 }
+
+/* ── Dark-mode treatment for the tinted SquadHire action buttons ──
+ * The light pastel tints glow on a dark canvas; swap to translucent
+ * tints of the same hue with brighter text so they stay legible. */
+.dark .sh-btn-warning { background: rgba(247, 104, 8, 0.16); color: #F6A560; border-color: rgba(247, 104, 8, 0.3); }
+.dark .sh-btn-warning:hover:not(:disabled) { background: rgba(247, 104, 8, 0.26); }
+.dark .sh-btn-danger { background: rgba(239, 68, 68, 0.16); color: #F58A82; border-color: rgba(239, 68, 68, 0.3); }
+.dark .sh-btn-danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.26); }
+.dark .sh-btn-success { background: rgba(34, 197, 94, 0.16); color: #5FD98A; border-color: rgba(34, 197, 94, 0.3); }
+.dark .sh-btn-success:hover:not(:disabled) { background: rgba(34, 197, 94, 0.26); }
+.dark .sh-btn-info { background: rgba(59, 130, 246, 0.18); color: #7FA6F5; border-color: rgba(59, 130, 246, 0.32); }
+.dark .sh-btn-info:hover:not(:disabled) { background: rgba(59, 130, 246, 0.28); }
+.dark .sh-btn-violet { background: rgba(147, 51, 234, 0.18); color: #C08CF0; border-color: rgba(147, 51, 234, 0.32); }
+.dark .sh-btn-violet:hover:not(:disabled) { background: rgba(147, 51, 234, 0.28); }
 
 } /* end @layer components */

@@ -8,7 +8,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   video: { bg: 'bg-pink-50', text: 'text-pink-700' },
   development: { bg: 'bg-blue-50', text: 'text-blue-700' },
   marketing: { bg: 'bg-orange-50', text: 'text-orange-700' },
-  general: { bg: 'bg-gray-50', text: 'text-gray-600' },
+  general: { bg: 'bg-surface-alt', text: 'text-foreground-muted' },
 };
 
 export default function AdminCustomProfiles() {
@@ -35,16 +35,16 @@ export default function AdminCustomProfiles() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Custom Lists</h1>
-        <p className="mt-1 text-sm text-[#62748E]">Enable or disable predefined folder and list templates, and control who can access them</p>
+        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Custom Lists</h1>
+        <p className="mt-1 text-sm text-foreground-muted">Enable or disable predefined folder and list templates, and control who can access them</p>
       </div>
 
       {/* Profile list */}
       {isLoading ? (
-        <p className="py-8 text-center text-sm text-[#90A1B9]">Loading...</p>
+        <p className="py-8 text-center text-sm text-foreground-dim">Loading...</p>
       ) : !profiles || profiles.length === 0 ? (
-        <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-          <p className="text-sm text-[#90A1B9]">No custom list types found.</p>
+        <div className="rounded-lg border border-divider bg-surface py-12 text-center">
+          <p className="text-sm text-foreground-dim">No custom list types found.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -53,12 +53,12 @@ export default function AdminCustomProfiles() {
             return (
               <div
                 key={profile.id}
-                className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 transition hover:shadow-sm"
+                className="flex items-center justify-between rounded-lg border border-divider bg-surface px-5 py-4 transition hover:shadow-sm"
               >
                 <div className="flex items-center gap-4">
                   {/* Icon */}
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#F1F5F9]">
-                    <svg className="h-5 w-5 text-[#62748E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-canvas">
+                    <svg className="h-5 w-5 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       {profile.target_type === 'folder' ? (
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                       ) : (
@@ -69,7 +69,7 @@ export default function AdminCustomProfiles() {
                   {/* Info */}
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-[#0F172B]">{profile.name}</span>
+                      <span className="text-sm font-semibold text-foreground">{profile.name}</span>
                       <button
                         onClick={() => toggleMutation.mutate({ id: profile.id, is_enabled: !profile.is_enabled })}
                         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition ${
@@ -84,13 +84,13 @@ export default function AdminCustomProfiles() {
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${cat.bg} ${cat.text}`}>
                         {profile.category}
                       </span>
-                      <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
+                      <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] font-medium text-foreground-muted">
                         {profile.target_type}
                       </span>
-                      <span className="text-[10px] text-[#90A1B9]">v{profile.version}</span>
+                      <span className="text-[10px] text-foreground-dim">v{profile.version}</span>
                     </div>
                     {profile.description && (
-                      <p className="mt-0.5 text-xs text-[#90A1B9]">{profile.description}</p>
+                      <p className="mt-0.5 text-xs text-foreground-dim">{profile.description}</p>
                     )}
                     {/* Access + instance summary */}
                     <div className="mt-1.5 flex items-center gap-3">
@@ -111,15 +111,15 @@ export default function AdminCustomProfiles() {
                         </div>
                       )}
                       {(profile.user_access || []).length > 0 && (
-                        <span className="text-[10px] text-[#90A1B9]">
+                        <span className="text-[10px] text-foreground-dim">
                           + {(profile.user_access || []).length} direct user{(profile.user_access || []).length !== 1 ? 's' : ''}
                         </span>
                       )}
                       {(profile.role_access || []).length === 0 && (profile.user_access || []).length === 0 && (
-                        <span className="text-[10px] text-[#90A1B9]">No access assigned</span>
+                        <span className="text-[10px] text-foreground-dim">No access assigned</span>
                       )}
                       {(profile.instance_count || 0) > 0 && (
-                        <span className="text-[10px] text-[#90A1B9]">
+                        <span className="text-[10px] text-foreground-dim">
                           {profile.instance_count} instance{profile.instance_count !== 1 ? 's' : ''}
                           {(profile.outdated_instance_count || 0) > 0 && (
                             <span className="ml-1 text-amber-600">({profile.outdated_instance_count} outdated)</span>
@@ -133,7 +133,7 @@ export default function AdminCustomProfiles() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setSelectedProfile(profile)}
-                    className="flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-xs font-medium text-[#62748E] transition hover:bg-[#F8FAFC] hover:text-[#0F172B]"
+                    className="flex items-center gap-1.5 rounded-lg border border-divider px-3 py-1.5 text-xs font-medium text-foreground-muted transition hover:bg-surface-alt hover:text-foreground"
                   >
                     <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
@@ -238,18 +238,18 @@ function SharingSlider({ profile, onClose }: { profile: CustomProfile; onClose: 
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed right-0 top-0 z-50 flex h-full w-[400px] flex-col bg-white shadow-xl">
+      <div className="fixed right-0 top-0 z-50 flex h-full w-[400px] flex-col bg-surface shadow-xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-4">
+        <div className="flex items-center justify-between border-b border-divider px-5 py-4">
           <div>
-            <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">
+            <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-foreground">
               Share {app?.name}
             </h3>
-            <p className="mt-0.5 text-xs text-[#90A1B9]">Control who can use this template</p>
+            <p className="mt-0.5 text-xs text-foreground-dim">Control who can use this template</p>
           </div>
           <button
             onClick={onClose}
-            className="rounded p-1 text-[#90A1B9] transition hover:bg-[#F1F5F9] hover:text-[#0F172B]"
+            className="rounded p-1 text-foreground-dim transition hover:bg-canvas hover:text-foreground"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -258,15 +258,15 @@ function SharingSlider({ profile, onClose }: { profile: CustomProfile; onClose: 
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-[#E2E8F0]">
+        <div className="flex border-b border-divider">
           {(['roles', 'users'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`flex-1 py-2.5 text-center text-xs font-medium transition border-b-2 ${
                 tab === t
-                  ? 'border-[#0F172B] text-[#0F172B]'
-                  : 'border-transparent text-[#62748E] hover:text-[#0F172B]'
+                  ? 'border-ink text-foreground'
+                  : 'border-transparent text-foreground-muted hover:text-foreground'
               }`}
             >
               {t === 'roles'
@@ -283,7 +283,7 @@ function SharingSlider({ profile, onClose }: { profile: CustomProfile; onClose: 
               {!showRoleAdd ? (
                 <button
                   onClick={() => setShowRoleAdd(true)}
-                  className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2 text-xs font-medium text-[#62748E] transition hover:border-[#0F172B] hover:text-[#0F172B]"
+                  className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-divider-strong py-2 text-xs font-medium text-foreground-muted transition hover:border-ink hover:text-foreground"
                 >
                   <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -291,10 +291,10 @@ function SharingSlider({ profile, onClose }: { profile: CustomProfile; onClose: 
                   Add Role
                 </button>
               ) : (
-                <div className="mb-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-                  <p className="mb-2 text-xs font-medium text-[#62748E]">Select a role:</p>
+                <div className="mb-3 rounded-lg border border-divider bg-surface-alt p-3">
+                  <p className="mb-2 text-xs font-medium text-foreground-muted">Select a role:</p>
                   {availableRoles.length === 0 ? (
-                    <p className="text-xs text-[#90A1B9]">All roles already have access.</p>
+                    <p className="text-xs text-foreground-dim">All roles already have access.</p>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
                       {availableRoles.map((role) => (
@@ -302,7 +302,7 @@ function SharingSlider({ profile, onClose }: { profile: CustomProfile; onClose: 
                           key={role.id}
                           onClick={() => addRole.mutate(role.id)}
                           disabled={addRole.isPending}
-                          className="rounded-full border border-[#E2E8F0] bg-white px-3 py-1 text-xs font-medium text-[#62748E] transition hover:bg-[#F1F5F9] hover:text-[#0F172B] disabled:opacity-50"
+                          className="rounded-full border border-divider bg-surface px-3 py-1 text-xs font-medium text-foreground-muted transition hover:bg-canvas hover:text-foreground disabled:opacity-50"
                         >
                           <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: role.color || '#90A1B9' }} />
                           {role.name}
@@ -310,26 +310,26 @@ function SharingSlider({ profile, onClose }: { profile: CustomProfile; onClose: 
                       ))}
                     </div>
                   )}
-                  <button onClick={() => setShowRoleAdd(false)} className="mt-2 text-[10px] text-[#90A1B9] hover:text-[#0F172B]">
+                  <button onClick={() => setShowRoleAdd(false)} className="mt-2 text-[10px] text-foreground-dim hover:text-foreground">
                     Cancel
                   </button>
                 </div>
               )}
 
               {(app?.role_access || []).length === 0 ? (
-                <p className="py-6 text-center text-xs text-[#90A1B9]">No roles assigned yet</p>
+                <p className="py-6 text-center text-xs text-foreground-dim">No roles assigned yet</p>
               ) : (
                 <div className="space-y-1.5">
                   {(app?.role_access || []).map((ra) => (
-                    <div key={ra.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] px-3 py-2.5">
+                    <div key={ra.id} className="flex items-center justify-between rounded-lg border border-divider px-3 py-2.5">
                       <div className="flex items-center gap-2.5">
                         <span className="h-3 w-3 rounded-full" style={{ backgroundColor: ra.role?.color || '#90A1B9' }} />
-                        <span className="text-sm font-medium text-[#0F172B]">{ra.role?.name || 'Unknown'}</span>
+                        <span className="text-sm font-medium text-foreground">{ra.role?.name || 'Unknown'}</span>
                       </div>
                       <button
                         onClick={() => removeRole.mutate(ra.role_id)}
                         disabled={removeRole.isPending}
-                        className="rounded p-1 text-[#90A1B9] transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                        className="rounded p-1 text-foreground-dim transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
                       >
                         <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -345,7 +345,7 @@ function SharingSlider({ profile, onClose }: { profile: CustomProfile; onClose: 
               {!showUserAdd ? (
                 <button
                   onClick={() => setShowUserAdd(true)}
-                  className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2 text-xs font-medium text-[#62748E] transition hover:border-[#0F172B] hover:text-[#0F172B]"
+                  className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-divider-strong py-2 text-xs font-medium text-foreground-muted transition hover:border-ink hover:text-foreground"
                 >
                   <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -353,60 +353,60 @@ function SharingSlider({ profile, onClose }: { profile: CustomProfile; onClose: 
                   Add User
                 </button>
               ) : (
-                <div className="mb-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                <div className="mb-3 rounded-lg border border-divider bg-surface-alt p-3">
                   <input
                     value={userSearch}
                     onChange={(e) => setUserSearch(e.target.value)}
                     placeholder="Search by name or email..."
-                    className="mb-2 w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs focus:border-[#0F172B] focus:outline-none"
+                    className="mb-2 w-full rounded-md border border-divider bg-surface px-3 py-1.5 text-xs focus:border-ink focus:outline-none"
                   />
                   <div className="max-h-36 space-y-1 overflow-y-auto">
                     {filteredUsers.length === 0 ? (
-                      <p className="py-2 text-xs text-[#90A1B9]">No users found</p>
+                      <p className="py-2 text-xs text-foreground-dim">No users found</p>
                     ) : (
                       filteredUsers.slice(0, 15).map((user) => (
                         <button
                           key={user.id}
                           onClick={() => addUser.mutate(user.id)}
                           disabled={addUser.isPending}
-                          className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition hover:bg-white disabled:opacity-50"
+                          className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition hover:bg-surface disabled:opacity-50"
                         >
-                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-well text-[10px] font-medium text-foreground-muted">
                             {user.display_name?.[0]?.toUpperCase() || '?'}
                           </div>
                           <div>
-                            <div className="text-xs font-medium text-[#0F172B]">{user.display_name}</div>
-                            <div className="text-[10px] text-[#90A1B9]">{user.email}</div>
+                            <div className="text-xs font-medium text-foreground">{user.display_name}</div>
+                            <div className="text-[10px] text-foreground-dim">{user.email}</div>
                           </div>
                         </button>
                       ))
                     )}
                   </div>
-                  <button onClick={() => { setShowUserAdd(false); setUserSearch(''); }} className="mt-2 text-[10px] text-[#90A1B9] hover:text-[#0F172B]">
+                  <button onClick={() => { setShowUserAdd(false); setUserSearch(''); }} className="mt-2 text-[10px] text-foreground-dim hover:text-foreground">
                     Cancel
                   </button>
                 </div>
               )}
 
               {(app?.user_access || []).length === 0 ? (
-                <p className="py-6 text-center text-xs text-[#90A1B9]">No direct user access yet</p>
+                <p className="py-6 text-center text-xs text-foreground-dim">No direct user access yet</p>
               ) : (
                 <div className="space-y-1.5">
                   {(app?.user_access || []).map((ua) => (
-                    <div key={ua.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] px-3 py-2.5">
+                    <div key={ua.id} className="flex items-center justify-between rounded-lg border border-divider px-3 py-2.5">
                       <div className="flex items-center gap-2.5">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-well text-[10px] font-medium text-foreground-muted">
                           {ua.user?.display_name?.[0]?.toUpperCase() || '?'}
                         </div>
                         <div>
-                          <div className="text-sm font-medium text-[#0F172B]">{ua.user?.display_name || 'Unknown'}</div>
-                          <div className="text-[10px] text-[#90A1B9]">{ua.user?.email || ''}</div>
+                          <div className="text-sm font-medium text-foreground">{ua.user?.display_name || 'Unknown'}</div>
+                          <div className="text-[10px] text-foreground-dim">{ua.user?.email || ''}</div>
                         </div>
                       </div>
                       <button
                         onClick={() => removeUser.mutate(ua.user_id)}
                         disabled={removeUser.isPending}
-                        className="rounded p-1 text-[#90A1B9] transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                        className="rounded p-1 text-foreground-dim transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
                       >
                         <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

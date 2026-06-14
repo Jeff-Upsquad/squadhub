@@ -93,7 +93,7 @@ export default function SquadHireProfilesPanel({ subscriptionId }: { subscriptio
     );
   }
   if (categories.length === 0 || loadingMap) {
-    return <p className="text-xs text-[#90A1B9]">Loading…</p>;
+    return <p className="text-xs text-foreground-dim">Loading…</p>;
   }
 
   const selected = categories.filter((c) => mappingByCategoryId[c.id]);
@@ -109,17 +109,17 @@ export default function SquadHireProfilesPanel({ subscriptionId }: { subscriptio
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`flex w-full items-center justify-between gap-2 rounded-md border bg-white px-3 py-2 text-left text-sm transition ${
+        className={`flex w-full items-center justify-between gap-2 rounded-md border bg-surface px-3 py-2 text-left text-sm transition ${
           open
-            ? 'border-[#0F172B] shadow-sm'
-            : 'border-[#E2E8F0] hover:border-[#CBD5E1]'
+            ? 'border-ink shadow-sm'
+            : 'border-divider hover:border-divider-strong'
         }`}
       >
-        <span className={`truncate ${selected.length === 0 ? 'text-[#90A1B9]' : 'text-[#0F172B]'}`}>
+        <span className={`truncate ${selected.length === 0 ? 'text-foreground-dim' : 'text-foreground'}`}>
           {selectedLabel}
         </span>
         <svg
-          className={`h-4 w-4 shrink-0 text-[#62748E] transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 shrink-0 text-foreground-muted transition-transform ${open ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           strokeWidth={1.6}
@@ -130,7 +130,7 @@ export default function SquadHireProfilesPanel({ subscriptionId }: { subscriptio
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 z-10 mt-1 max-h-72 overflow-y-auto rounded-md border border-[#E2E8F0] bg-white py-1 shadow-lg">
+        <div className="absolute left-0 right-0 z-10 mt-1 max-h-72 overflow-y-auto rounded-md border border-divider bg-surface py-1 shadow-lg">
           {categories.map((cat) => {
             const existing = mappingByCategoryId[cat.id];
             const on = !!existing;
@@ -147,11 +147,11 @@ export default function SquadHireProfilesPanel({ subscriptionId }: { subscriptio
                   if (on && existing) removeMapping.mutate(existing.id);
                   else addMapping.mutate(cat.id);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-[#0F172B] transition hover:bg-[#F8FAFC] disabled:opacity-60"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-foreground transition hover:bg-surface-alt disabled:opacity-60"
               >
                 <span
                   className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                    on ? 'border-[#0F172B] bg-[#0F172B] text-white' : 'border-[#CBD5E1] bg-white'
+                    on ? 'border-ink bg-ink text-white' : 'border-divider-strong bg-surface'
                   }`}
                 >
                   {on && (

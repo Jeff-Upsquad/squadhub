@@ -133,8 +133,8 @@ export default function AdminTaskTypes() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Task Types</h1>
-          <p className="mt-1 text-sm text-[#62748E]">
+          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Task Types</h1>
+          <p className="mt-1 text-sm text-foreground-muted">
             Enable or disable hard-coded types. Create custom types and share them with specific roles or users.
           </p>
         </div>
@@ -164,7 +164,7 @@ export default function AdminTaskTypes() {
         {/* Right: detail pane */}
         <div className="flex-1 min-w-0 space-y-6">
           {!selected && (
-            <div className="rounded-xl border border-dashed border-[#E2E8F0] bg-white p-10 text-center text-sm text-[#90A1B9]">
+            <div className="rounded-xl border border-dashed border-divider bg-surface p-10 text-center text-sm text-foreground-dim">
               Select a task type to view details
             </div>
           )}
@@ -253,23 +253,23 @@ function TypeSection({
   return (
     <div>
       <div className="mb-2 flex items-center justify-between px-1">
-        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">{title}</h3>
+        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-foreground-dim">{title}</h3>
         {onAdd && (
-          <button onClick={onAdd} className="text-xs font-medium text-[#0F172B] hover:underline">
+          <button onClick={onAdd} className="text-xs font-medium text-foreground hover:underline">
             + Add
           </button>
         )}
       </div>
-      <div className="rounded-xl border border-[#E2E8F0] bg-white">
+      <div className="rounded-xl border border-divider bg-surface">
         {items.length === 0 ? (
-          <div className="p-4 text-center text-xs text-[#90A1B9]">{emptyText || 'None'}</div>
+          <div className="p-4 text-center text-xs text-foreground-dim">{emptyText || 'None'}</div>
         ) : (
           <ul className="p-2">
             {items.map((t) => (
               <li key={t.id}>
                 <div
                   className={`flex items-center gap-2 rounded-md px-2 py-2 transition ${
-                    selectedId === t.id ? 'bg-[#F1F5F9]' : 'hover:bg-[#F8FAFC]'
+                    selectedId === t.id ? 'bg-canvas' : 'hover:bg-surface-alt'
                   }`}
                 >
                   <button
@@ -277,7 +277,7 @@ function TypeSection({
                     className="flex flex-1 items-center gap-2 text-left text-sm"
                   >
                     <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />
-                    <span className={`flex-1 truncate font-medium ${t.is_enabled ? 'text-[#0F172B]' : 'text-[#90A1B9]'}`}>
+                    <span className={`flex-1 truncate font-medium ${t.is_enabled ? 'text-foreground' : 'text-foreground-dim'}`}>
                       {t.name}
                     </span>
                     {t.is_default && (
@@ -306,10 +306,10 @@ function Toggle({ value, onChange, size = 'sm' }: { value: boolean; onChange: (v
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); onChange(!value); }}
-      className={`relative ${w} shrink-0 rounded-full transition ${value ? 'bg-emerald-500' : 'bg-[#CBD5E1]'}`}
+      className={`relative ${w} shrink-0 rounded-full transition ${value ? 'bg-emerald-500' : 'bg-well'}`}
       aria-label={value ? 'Enabled' : 'Disabled'}
     >
-      <span className={`absolute top-0.5 ${offset} ${knob} rounded-full bg-white shadow transition`} />
+      <span className={`absolute top-0.5 ${offset} ${knob} rounded-full bg-surface shadow transition`} />
     </button>
   );
 }
@@ -320,50 +320,50 @@ function Toggle({ value, onChange, size = 'sm' }: { value: boolean; onChange: (v
 function SystemTypeDetail({ type, onToggle }: { type: TaskType; onToggle: (v: boolean) => void }) {
   return (
     <>
-      <div className="rounded-xl border border-[#E2E8F0] bg-white p-6">
+      <div className="rounded-xl border border-divider bg-surface p-6">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <div className="mb-2 flex items-center gap-2">
               <span className="h-3 w-3 rounded-full" style={{ backgroundColor: type.color }} />
-              <h3 className="text-base font-semibold text-[#0F172B]">{type.name}</h3>
+              <h3 className="text-base font-semibold text-foreground">{type.name}</h3>
               <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">Hard-coded</span>
               {type.is_default && (
                 <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">Default</span>
               )}
             </div>
-            {type.description && <p className="text-sm text-[#62748E]">{type.description}</p>}
-            <p className="mt-1 font-[family-name:var(--font-mono)] text-[10px] text-[#90A1B9]">{type.key}</p>
+            {type.description && <p className="text-sm text-foreground-muted">{type.description}</p>}
+            <p className="mt-1 font-[family-name:var(--font-mono)] text-[10px] text-foreground-dim">{type.key}</p>
           </div>
-          <div className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2">
-            <span className="text-xs font-medium text-[#0F172B]">{type.is_enabled ? 'Enabled' : 'Disabled'}</span>
+          <div className="flex items-center gap-2 rounded-lg border border-divider bg-surface-alt px-3 py-2">
+            <span className="text-xs font-medium text-foreground">{type.is_enabled ? 'Enabled' : 'Disabled'}</span>
             <Toggle value={type.is_enabled} onChange={onToggle} size="md" />
           </div>
         </div>
-        <p className="text-xs text-[#90A1B9]">
+        <p className="text-xs text-foreground-dim">
           This is a hard-coded type shipped with the app. Name, icon, color, and fields are locked. Only the enable toggle is editable.
         </p>
       </div>
 
-      <div className="rounded-xl border border-[#E2E8F0] bg-white p-6">
-        <h3 className="mb-1 text-sm font-semibold text-[#0F172B]">Built-in Fields</h3>
-        <p className="mb-4 text-xs text-[#62748E]">Locked — part of the hardcoded definition.</p>
+      <div className="rounded-xl border border-divider bg-surface p-6">
+        <h3 className="mb-1 text-sm font-semibold text-foreground">Built-in Fields</h3>
+        <p className="mb-4 text-xs text-foreground-muted">Locked — part of the hardcoded definition.</p>
         {type.fields && type.fields.length > 0 ? (
           <ul className="space-y-2">
             {type.fields.map((f) => (
-              <li key={f.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-[#FAFBFC] px-4 py-2.5 opacity-80">
+              <li key={f.id} className="flex items-center justify-between rounded-lg border border-divider bg-surface-alt px-4 py-2.5 opacity-80">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-[#0F172B]">{f.label}</span>
-                    <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-[#62748E]">{FIELD_TYPE_LABELS[f.field_type]}</span>
+                    <span className="text-sm font-medium text-foreground">{f.label}</span>
+                    <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-foreground-muted">{FIELD_TYPE_LABELS[f.field_type]}</span>
                     {f.is_required && <span className="text-[10px] font-medium text-red-500">Required</span>}
                   </div>
-                  <div className="mt-0.5 font-[family-name:var(--font-mono)] text-[10px] text-[#90A1B9]">{f.key}</div>
+                  <div className="mt-0.5 font-[family-name:var(--font-mono)] text-[10px] text-foreground-dim">{f.key}</div>
                 </div>
               </li>
             ))}
           </ul>
         ) : (
-          <div className="rounded-lg border border-dashed border-[#E2E8F0] py-6 text-center text-xs text-[#90A1B9]">
+          <div className="rounded-lg border border-dashed border-divider py-6 text-center text-xs text-foreground-dim">
             No extra fields — only the standard task fields.
           </div>
         )}
@@ -399,25 +399,25 @@ function CustomTypeForm({
   const dirty = name !== type.name || description !== (type.description || '') || icon !== type.icon || color !== type.color;
 
   return (
-    <div className="rounded-xl border border-[#E2E8F0] bg-white p-6">
+    <div className="rounded-xl border border-divider bg-surface p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-[#0F172B]">Type Details</h3>
+        <h3 className="text-sm font-semibold text-foreground">Type Details</h3>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-1.5">
-            <span className="text-xs font-medium text-[#0F172B]">{type.is_enabled ? 'Enabled' : 'Disabled'}</span>
+          <div className="flex items-center gap-2 rounded-lg border border-divider bg-surface-alt px-3 py-1.5">
+            <span className="text-xs font-medium text-foreground">{type.is_enabled ? 'Enabled' : 'Disabled'}</span>
             <Toggle value={type.is_enabled} onChange={onToggle} />
           </div>
           {!type.is_default && (
             <button
               onClick={onSetDefault}
-              className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-medium text-[#0F172B] hover:bg-[#F8FAFC]"
+              className="rounded-lg border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-alt"
             >
               Set as default
             </button>
           )}
           <button
             onClick={onDelete}
-            className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+            className="rounded-lg border border-red-200 bg-surface px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
           >
             Delete
           </button>
@@ -426,32 +426,32 @@ function CustomTypeForm({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="mb-1 block text-xs font-medium text-[#62748E]">Name</label>
+          <label className="mb-1 block text-xs font-medium text-foreground-muted">Name</label>
           <input value={name} onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none" />
+            className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-[#62748E]">Key</label>
+          <label className="mb-1 block text-xs font-medium text-foreground-muted">Key</label>
           <input value={type.key} disabled
-            className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 font-[family-name:var(--font-mono)] text-sm text-[#90A1B9]" />
+            className="w-full rounded-lg border border-divider bg-surface-alt px-3 py-2 font-[family-name:var(--font-mono)] text-sm text-foreground-dim" />
         </div>
         <div className="col-span-2">
-          <label className="mb-1 block text-xs font-medium text-[#62748E]">Description</label>
+          <label className="mb-1 block text-xs font-medium text-foreground-muted">Description</label>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
-            className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none" />
+            className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-[#62748E]">Icon</label>
+          <label className="mb-1 block text-xs font-medium text-foreground-muted">Icon</label>
           <input value={icon} onChange={(e) => setIcon(e.target.value)} placeholder="lucide icon name"
-            className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none" />
+            className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-[#62748E]">Color</label>
+          <label className="mb-1 block text-xs font-medium text-foreground-muted">Color</label>
           <div className="flex gap-2">
             <input type="color" value={color} onChange={(e) => setColor(e.target.value)}
-              className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-[#E2E8F0]" />
+              className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-divider" />
             <input value={color} onChange={(e) => setColor(e.target.value)}
-              className="flex-1 rounded-lg border border-[#E2E8F0] px-3 py-2 font-[family-name:var(--font-mono)] text-sm focus:border-[#0F172B] focus:outline-none" />
+              className="flex-1 rounded-lg border border-divider px-3 py-2 font-[family-name:var(--font-mono)] text-sm focus:border-ink focus:outline-none" />
           </div>
         </div>
       </div>
@@ -460,7 +460,7 @@ function CustomTypeForm({
         <div className="mt-4 flex justify-end">
           <button
             onClick={() => onSave({ name, description: description || null, icon, color })}
-            className="rounded-lg bg-[#0F172B] px-4 py-2 text-xs font-medium text-white hover:bg-[#1D293D]"
+            className="rounded-lg bg-ink px-4 py-2 text-xs font-medium text-white hover:bg-ink-hover"
           >
             Save changes
           </button>
@@ -482,15 +482,15 @@ function CustomFieldsCard({
   onDeleteField: (fieldId: string, label: string) => void;
 }) {
   return (
-    <div className="rounded-xl border border-[#E2E8F0] bg-white p-6">
+    <div className="rounded-xl border border-divider bg-surface p-6">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-[#0F172B]">Custom Fields</h3>
-          <p className="text-xs text-[#62748E]">Extra fields shown when this type of task is opened.</p>
+          <h3 className="text-sm font-semibold text-foreground">Custom Fields</h3>
+          <p className="text-xs text-foreground-muted">Extra fields shown when this type of task is opened.</p>
         </div>
         <button
           onClick={onAddField}
-          className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-medium text-[#0F172B] hover:bg-[#F8FAFC]"
+          className="rounded-lg border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-alt"
         >
           + Add Field
         </button>
@@ -498,24 +498,24 @@ function CustomFieldsCard({
       {type.fields && type.fields.length > 0 ? (
         <ul className="space-y-2">
           {type.fields.map((f) => (
-            <li key={f.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-[#FAFBFC] px-4 py-2.5">
+            <li key={f.id} className="flex items-center justify-between rounded-lg border border-divider bg-surface-alt px-4 py-2.5">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-[#0F172B]">{f.label}</span>
-                  <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-[#62748E]">{FIELD_TYPE_LABELS[f.field_type]}</span>
+                  <span className="text-sm font-medium text-foreground">{f.label}</span>
+                  <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-foreground-muted">{FIELD_TYPE_LABELS[f.field_type]}</span>
                   {f.is_required && <span className="text-[10px] font-medium text-red-500">Required</span>}
                 </div>
-                <div className="mt-0.5 font-[family-name:var(--font-mono)] text-[10px] text-[#90A1B9]">{f.key}</div>
+                <div className="mt-0.5 font-[family-name:var(--font-mono)] text-[10px] text-foreground-dim">{f.key}</div>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => onEditField(f)} className="text-xs text-[#62748E] hover:text-[#0F172B]">Edit</button>
+                <button onClick={() => onEditField(f)} className="text-xs text-foreground-muted hover:text-foreground">Edit</button>
                 <button onClick={() => onDeleteField(f.id, f.label)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
               </div>
             </li>
           ))}
         </ul>
       ) : (
-        <div className="rounded-lg border border-dashed border-[#E2E8F0] py-8 text-center text-xs text-[#90A1B9]">
+        <div className="rounded-lg border border-dashed border-divider py-8 text-center text-xs text-foreground-dim">
           No custom fields yet
         </div>
       )}
@@ -540,10 +540,10 @@ function AccessCard({
   const hasShares = roleAccess.length + userAccess.length > 0;
 
   return (
-    <div className="rounded-xl border border-[#E2E8F0] bg-white p-6">
+    <div className="rounded-xl border border-divider bg-surface p-6">
       <div className="mb-4">
-        <h3 className="text-sm font-semibold text-[#0F172B]">Access</h3>
-        <p className="text-xs text-[#62748E]">
+        <h3 className="text-sm font-semibold text-foreground">Access</h3>
+        <p className="text-xs text-foreground-muted">
           Who can create tasks with this type. If empty, only admins can use it.
         </p>
       </div>
@@ -551,7 +551,7 @@ function AccessCard({
       <div className="space-y-5">
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-medium text-[#62748E]">Roles</span>
+            <span className="text-xs font-medium text-foreground-muted">Roles</span>
             <RolePicker
               excludeIds={new Set(roleAccess.map((r) => r.role_id))}
               onPick={(id) => onAddRole(id)}
@@ -559,7 +559,7 @@ function AccessCard({
           </div>
           <div className="flex flex-wrap gap-1.5">
             {roleAccess.length === 0 && (
-              <span className="text-xs text-[#90A1B9]">No roles shared</span>
+              <span className="text-xs text-foreground-dim">No roles shared</span>
             )}
             {roleAccess.map((ra) => (
               <Chip
@@ -574,7 +574,7 @@ function AccessCard({
 
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-medium text-[#62748E]">Users</span>
+            <span className="text-xs font-medium text-foreground-muted">Users</span>
             <UserPicker
               excludeIds={new Set(userAccess.map((u) => u.user_id))}
               onPick={(id) => onAddUser(id)}
@@ -582,7 +582,7 @@ function AccessCard({
           </div>
           <div className="flex flex-wrap gap-1.5">
             {userAccess.length === 0 && (
-              <span className="text-xs text-[#90A1B9]">No users shared</span>
+              <span className="text-xs text-foreground-dim">No users shared</span>
             )}
             {userAccess.map((ua) => (
               <Chip
@@ -606,10 +606,10 @@ function AccessCard({
 
 function Chip({ color, label, onRemove }: { color?: string; label: string; onRemove: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E2E8F0] bg-white px-2.5 py-1 text-xs text-[#0F172B]">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-divider bg-surface px-2.5 py-1 text-xs text-foreground">
       {color && <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />}
       <span>{label}</span>
-      <button onClick={onRemove} className="text-[#CAD5E2] hover:text-red-500" aria-label="Remove">×</button>
+      <button onClick={onRemove} className="text-foreground-dim hover:text-red-500" aria-label="Remove">×</button>
     </span>
   );
 }
@@ -631,26 +631,26 @@ function RolePicker({ excludeIds, onPick }: { excludeIds: Set<string>; onPick: (
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="rounded-md border border-[#E2E8F0] bg-white px-2.5 py-1 text-xs font-medium text-[#0F172B] hover:bg-[#F8FAFC]"
+        className="rounded-md border border-divider bg-surface px-2.5 py-1 text-xs font-medium text-foreground hover:bg-surface-alt"
       >
         + Add role
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-60 overflow-hidden rounded-lg border border-[#E2E8F0] bg-white shadow-lg">
+          <div className="absolute right-0 z-20 mt-1 w-60 overflow-hidden rounded-lg border border-divider bg-surface shadow-lg">
             <div className="max-h-64 overflow-y-auto p-1">
               {available.length === 0 && (
-                <div className="px-3 py-2 text-xs text-[#90A1B9]">All roles already added</div>
+                <div className="px-3 py-2 text-xs text-foreground-dim">All roles already added</div>
               )}
               {available.map((r) => (
                 <button
                   key={r.id}
                   onClick={() => { onPick(r.id); setOpen(false); }}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-[#F8FAFC]"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-surface-alt"
                 >
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: r.color }} />
-                  <span className="flex-1 truncate text-[#0F172B]">{r.name}</span>
+                  <span className="flex-1 truncate text-foreground">{r.name}</span>
                 </button>
               ))}
             </div>
@@ -680,37 +680,37 @@ function UserPicker({ excludeIds, onPick }: { excludeIds: Set<string>; onPick: (
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="rounded-md border border-[#E2E8F0] bg-white px-2.5 py-1 text-xs font-medium text-[#0F172B] hover:bg-[#F8FAFC]"
+        className="rounded-md border border-divider bg-surface px-2.5 py-1 text-xs font-medium text-foreground hover:bg-surface-alt"
       >
         + Add user
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-72 overflow-hidden rounded-lg border border-[#E2E8F0] bg-white shadow-lg">
+          <div className="absolute right-0 z-20 mt-1 w-72 overflow-hidden rounded-lg border border-divider bg-surface shadow-lg">
             <input
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search users…"
-              className="w-full border-b border-[#E2E8F0] px-3 py-2 text-xs outline-none"
+              className="w-full border-b border-divider px-3 py-2 text-xs outline-none"
             />
             <div className="max-h-64 overflow-y-auto p-1">
               {available.length === 0 && (
-                <div className="px-3 py-2 text-xs text-[#90A1B9]">{query ? 'No matches' : 'Start typing to search'}</div>
+                <div className="px-3 py-2 text-xs text-foreground-dim">{query ? 'No matches' : 'Start typing to search'}</div>
               )}
               {available.map((u) => (
                 <button
                   key={u.id}
                   onClick={() => { onPick(u.id); setOpen(false); setQuery(''); }}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-[#F8FAFC]"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-surface-alt"
                 >
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#0F172B]">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-well text-[10px] font-medium text-foreground">
                     {(u.display_name || u.email)?.[0]?.toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm text-[#0F172B]">{u.display_name || u.email}</div>
-                    {u.display_name && <div className="truncate text-[10px] text-[#90A1B9]">{u.email}</div>}
+                    <div className="truncate text-sm text-foreground">{u.display_name || u.email}</div>
+                    {u.display_name && <div className="truncate text-[10px] text-foreground-dim">{u.email}</div>}
                   </div>
                 </button>
               ))}
@@ -749,40 +749,40 @@ function TypeCreateModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-        <h3 className="mb-4 text-base font-semibold text-[#0F172B]">Add Custom Task Type</h3>
+      <div className="w-full max-w-md rounded-xl bg-surface p-6 shadow-xl">
+        <h3 className="mb-4 text-base font-semibold text-foreground">Add Custom Task Type</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-[#62748E]">Name</label>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">Name</label>
             <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Legal Review" required
-              className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none" />
+              className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-[#62748E]">Key</label>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">Key</label>
             <input value={key} onChange={(e) => { setKey(e.target.value); setKeyDirty(true); }} placeholder="legal_review" required
-              className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 font-[family-name:var(--font-mono)] text-sm focus:border-[#0F172B] focus:outline-none" />
-            <p className="mt-1 text-[10px] text-[#90A1B9]">Lowercase letters, numbers, and underscores. Cannot be changed later.</p>
+              className="w-full rounded-lg border border-divider px-3 py-2 font-[family-name:var(--font-mono)] text-sm focus:border-ink focus:outline-none" />
+            <p className="mt-1 text-[10px] text-foreground-dim">Lowercase letters, numbers, and underscores. Cannot be changed later.</p>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-[#62748E]">Description</label>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">Description</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
-              className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none" />
+              className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-[#62748E]">Icon</label>
+              <label className="mb-1 block text-xs font-medium text-foreground-muted">Icon</label>
               <input value={icon} onChange={(e) => setIcon(e.target.value)}
-                className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none" />
+                className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-[#62748E]">Color</label>
+              <label className="mb-1 block text-xs font-medium text-foreground-muted">Color</label>
               <input type="color" value={color} onChange={(e) => setColor(e.target.value)}
-                className="h-10 w-full cursor-pointer rounded-lg border border-[#E2E8F0]" />
+                className="h-10 w-full cursor-pointer rounded-lg border border-divider" />
             </div>
           </div>
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[#E2E8F0] py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC]">Cancel</button>
-            <button type="submit" className="flex-1 rounded-lg bg-[#0F172B] py-2 text-sm font-medium text-white hover:bg-[#1D293D]">Create</button>
+            <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-divider py-2 text-sm text-foreground-muted hover:bg-surface-alt">Cancel</button>
+            <button type="submit" className="flex-1 rounded-lg bg-ink py-2 text-sm font-medium text-white hover:bg-ink-hover">Create</button>
           </div>
         </form>
       </div>
@@ -843,26 +843,26 @@ function FieldFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
-        <h3 className="mb-4 text-base font-semibold text-[#0F172B]">{field ? 'Edit Field' : 'Add Custom Field'}</h3>
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-surface p-6 shadow-xl">
+        <h3 className="mb-4 text-base font-semibold text-foreground">{field ? 'Edit Field' : 'Add Custom Field'}</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-[#62748E]">Label</label>
+              <label className="mb-1 block text-xs font-medium text-foreground-muted">Label</label>
               <input autoFocus value={label} onChange={(e) => setLabel(e.target.value)} required
-                className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none" />
+                className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-[#62748E]">Key {field && <span className="text-[10px] text-[#90A1B9]">(read-only)</span>}</label>
+              <label className="mb-1 block text-xs font-medium text-foreground-muted">Key {field && <span className="text-[10px] text-foreground-dim">(read-only)</span>}</label>
               <input value={key} onChange={(e) => { setKey(e.target.value); setKeyDirty(true); }} disabled={!!field} required
-                className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 font-[family-name:var(--font-mono)] text-sm focus:border-[#0F172B] focus:outline-none disabled:bg-[#F8FAFC] disabled:text-[#90A1B9]" />
+                className="w-full rounded-lg border border-divider px-3 py-2 font-[family-name:var(--font-mono)] text-sm focus:border-ink focus:outline-none disabled:bg-surface-alt disabled:text-foreground-dim" />
               {keyError && <p className="mt-1 text-[10px] text-red-500">{keyError}</p>}
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-[#62748E]">Type</label>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">Type</label>
             <select value={fieldType} onChange={(e) => setFieldType(e.target.value as TaskFieldType)}
-              className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none">
+              className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none">
               {(Object.keys(FIELD_TYPE_LABELS) as TaskFieldType[]).map((k) => (
                 <option key={k} value={k}>{FIELD_TYPE_LABELS[k]}</option>
               ))}
@@ -871,18 +871,18 @@ function FieldFormModal({
           {showOptions && (
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <label className="block text-xs font-medium text-[#62748E]">Options</label>
-                <button type="button" onClick={addOption} className="text-xs text-[#0F172B] hover:underline">+ Add option</button>
+                <label className="block text-xs font-medium text-foreground-muted">Options</label>
+                <button type="button" onClick={addOption} className="text-xs text-foreground hover:underline">+ Add option</button>
               </div>
               <div className="space-y-2">
-                {options.length === 0 && <p className="text-xs text-[#90A1B9]">No options yet</p>}
+                {options.length === 0 && <p className="text-xs text-foreground-dim">No options yet</p>}
                 {options.map((o, i) => (
                   <div key={i} className="flex gap-2">
                     <input placeholder="Label" value={o.label}
                       onChange={(e) => updateOption(i, { label: e.target.value, value: o.value || slugify(e.target.value) })}
-                      className="flex-1 rounded-lg border border-[#E2E8F0] px-2 py-1.5 text-xs focus:border-[#0F172B] focus:outline-none" />
+                      className="flex-1 rounded-lg border border-divider px-2 py-1.5 text-xs focus:border-ink focus:outline-none" />
                     <input placeholder="value" value={o.value} onChange={(e) => updateOption(i, { value: e.target.value })}
-                      className="w-28 rounded-lg border border-[#E2E8F0] px-2 py-1.5 font-[family-name:var(--font-mono)] text-xs focus:border-[#0F172B] focus:outline-none" />
+                      className="w-28 rounded-lg border border-divider px-2 py-1.5 font-[family-name:var(--font-mono)] text-xs focus:border-ink focus:outline-none" />
                     <button type="button" onClick={() => removeOption(i)} className="text-xs text-red-400 hover:text-red-600">×</button>
                   </div>
                 ))}
@@ -891,34 +891,34 @@ function FieldFormModal({
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-[#62748E]">Placeholder</label>
+              <label className="mb-1 block text-xs font-medium text-foreground-muted">Placeholder</label>
               <input value={placeholder} onChange={(e) => setPlaceholder(e.target.value)}
-                className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none" />
+                className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-[#62748E]">Help text</label>
+              <label className="mb-1 block text-xs font-medium text-foreground-muted">Help text</label>
               <input value={helpText} onChange={(e) => setHelpText(e.target.value)}
-                className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none" />
+                className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-[#62748E]">Help link URL <span className="text-[10px] text-[#90A1B9]">(opens in new tab next to the field)</span></label>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">Help link URL <span className="text-[10px] text-foreground-dim">(opens in new tab next to the field)</span></label>
             <input value={helpUrl} onChange={(e) => setHelpUrl(e.target.value)} placeholder="/help/social-sizes or https://…"
-              className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none" />
+              className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none" />
           </div>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={isRequired} onChange={(e) => setIsRequired(e.target.checked)} className="rounded border-[#CBD5E1]" />
-            <span className="text-sm text-[#0F172B]">Required field</span>
+            <input type="checkbox" checked={isRequired} onChange={(e) => setIsRequired(e.target.checked)} className="rounded border-divider-strong" />
+            <span className="text-sm text-foreground">Required field</span>
           </label>
           {showOptions && (
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={allowOther} onChange={(e) => setAllowOther(e.target.checked)} className="rounded border-[#CBD5E1]" />
-              <span className="text-sm text-[#0F172B]">Allow &quot;Other&quot; (reveals a free-text input when selected)</span>
+              <input type="checkbox" checked={allowOther} onChange={(e) => setAllowOther(e.target.checked)} className="rounded border-divider-strong" />
+              <span className="text-sm text-foreground">Allow &quot;Other&quot; (reveals a free-text input when selected)</span>
             </label>
           )}
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[#E2E8F0] py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC]">Cancel</button>
-            <button type="submit" disabled={!!keyError} className="flex-1 rounded-lg bg-[#0F172B] py-2 text-sm font-medium text-white hover:bg-[#1D293D] disabled:opacity-40">{field ? 'Save' : 'Add Field'}</button>
+            <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-divider py-2 text-sm text-foreground-muted hover:bg-surface-alt">Cancel</button>
+            <button type="submit" disabled={!!keyError} className="flex-1 rounded-lg bg-ink py-2 text-sm font-medium text-white hover:bg-ink-hover disabled:opacity-40">{field ? 'Save' : 'Add Field'}</button>
           </div>
         </form>
       </div>

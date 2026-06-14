@@ -122,11 +122,11 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
       type="button"
       onClick={onChange}
       className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-        checked ? 'bg-[#2962FF]' : 'bg-[#CAD5E2]'
+        checked ? 'bg-accent' : 'bg-well'
       }`}
     >
       <span
-        className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+        className={`absolute top-0.5 h-4 w-4 rounded-full bg-surface shadow-sm transition-transform ${
           checked ? 'translate-x-4' : 'translate-x-0.5'
         }`}
       />
@@ -158,31 +158,31 @@ function PermissionGroupPanel({
   const windowHours = typeof permissions.time_edit_window_hours === 'number' ? permissions.time_edit_window_hours : 0;
 
   return (
-    <div className="rounded-lg border border-[#E2E8F0] bg-white">
+    <div className="rounded-lg border border-divider bg-surface">
       {/* Group header */}
-      <div className="flex items-center justify-between border-b border-[#E2E8F0] bg-[#F1F5F9] px-4 py-3">
+      <div className="flex items-center justify-between border-b border-divider bg-canvas px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <span className="text-[#62748E]">{group.icon}</span>
-          <h4 className="text-sm font-semibold text-[#0F172B]">{group.title}</h4>
-          <span className="rounded-full bg-[#E2E8F0] px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] font-medium text-[#62748E]">
+          <span className="text-foreground-muted">{group.icon}</span>
+          <h4 className="text-sm font-semibold text-foreground">{group.title}</h4>
+          <span className="rounded-full bg-well px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] font-medium text-foreground-muted">
             {enabledCount}/{keys.length}
           </span>
         </div>
         <button
           type="button"
           onClick={() => (allEnabled ? onDeselectAll(keys) : onSelectAll(keys))}
-          className="font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.08em] text-[#2962FF] transition hover:text-[#1447E6]"
+          className="font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.08em] text-accent transition hover:text-accent-strong"
         >
           {allEnabled ? 'Deselect All' : 'Select All'}
         </button>
       </div>
       {/* Permission rows */}
-      <div className="divide-y divide-[#E2E8F0]">
+      <div className="divide-y divide-divider">
         {group.permissions.map((perm) => (
           <div key={perm.key} className="flex items-center justify-between px-4 py-3">
             <div className="mr-4">
-              <p className="text-sm font-medium text-[#0F172B]">{perm.label}</p>
-              <p className="mt-0.5 text-xs text-[#90A1B9]">{perm.description}</p>
+              <p className="text-sm font-medium text-foreground">{perm.label}</p>
+              <p className="mt-0.5 text-xs text-foreground-dim">{perm.description}</p>
             </div>
             <Toggle checked={!!permissions[perm.key]} onChange={() => onToggle(perm.key)} />
           </div>
@@ -190,8 +190,8 @@ function PermissionGroupPanel({
         {isTimeLogs && (
           <div className="flex items-center justify-between px-4 py-3">
             <div className="mr-4">
-              <p className={`text-sm font-medium ${canEditTime ? 'text-[#0F172B]' : 'text-[#90A1B9]'}`}>Edit Window (hours)</p>
-              <p className="mt-0.5 text-xs text-[#90A1B9]">How long after a session ends it can still be edited. 0 = unlimited.</p>
+              <p className={`text-sm font-medium ${canEditTime ? 'text-foreground' : 'text-foreground-dim'}`}>Edit Window (hours)</p>
+              <p className="mt-0.5 text-xs text-foreground-dim">How long after a session ends it can still be edited. 0 = unlimited.</p>
             </div>
             <input
               type="number"
@@ -203,7 +203,7 @@ function PermissionGroupPanel({
                 const v = Math.max(0, Math.min(720, Number(e.target.value) || 0));
                 onNumberChange?.('time_edit_window_hours', v);
               }}
-              className="w-20 rounded-md border border-[#E2E8F0] px-2 py-1 text-right text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none disabled:bg-[#F1F5F9] disabled:text-[#90A1B9]"
+              className="w-20 rounded-md border border-divider px-2 py-1 text-right text-sm text-foreground focus:border-accent focus:outline-none disabled:bg-canvas disabled:text-foreground-dim"
             />
           </div>
         )}
@@ -347,12 +347,12 @@ export default function AdminRoles() {
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[#0F172B]">Roles</h2>
-          <p className="mt-1 text-sm text-[#62748E]">Manage roles and their permissions for this workspace.</p>
+          <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">Roles</h2>
+          <p className="mt-1 text-sm text-foreground-muted">Manage roles and their permissions for this workspace.</p>
         </div>
         <button
           onClick={openCreate}
-          className="rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1D293D]"
+          className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-white transition hover:bg-ink-hover"
         >
           Create Role
         </button>
@@ -360,24 +360,24 @@ export default function AdminRoles() {
 
       {/* Roles table */}
       {isLoading ? (
-        <p className="text-sm text-[#62748E]">Loading...</p>
+        <p className="text-sm text-foreground-muted">Loading...</p>
       ) : roles.length === 0 ? (
-        <div className="rounded-lg border border-[#E2E8F0] bg-[#F1F5F9] px-6 py-12 text-center">
-          <svg className="mx-auto h-10 w-10 text-[#CAD5E2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="rounded-lg border border-divider bg-canvas px-6 py-12 text-center">
+          <svg className="mx-auto h-10 w-10 text-foreground-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
           </svg>
-          <p className="mt-3 text-sm text-[#62748E]">No roles yet. Create your first role to get started.</p>
+          <p className="mt-3 text-sm text-foreground-muted">No roles yet. Create your first role to get started.</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
+        <div className="overflow-hidden rounded-lg border border-divider bg-surface">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-[#E2E8F0] bg-[#F1F5F9]">
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Role</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Members</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Home View</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Permissions</th>
-                <th className="px-4 py-3 text-right font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Actions</th>
+              <tr className="border-b border-divider bg-canvas">
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Role</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Members</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Home View</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Permissions</th>
+                <th className="px-4 py-3 text-right font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -387,14 +387,14 @@ export default function AdminRoles() {
                   <tr
                     key={role.id}
                     onClick={() => openEdit(role)}
-                    className="cursor-pointer border-b border-[#E2E8F0] transition hover:bg-[#F1F5F9] last:border-b-0"
+                    className="cursor-pointer border-b border-divider transition hover:bg-canvas last:border-b-0"
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: role.color }} />
-                        <span className="text-sm font-medium text-[#0F172B]">{role.name}</span>
+                        <span className="text-sm font-medium text-foreground">{role.name}</span>
                         {role.is_default && (
-                          <span className="rounded-full bg-[#F8FAFC] px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] text-[#62748E]">Default</span>
+                          <span className="rounded-full bg-surface-alt px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] text-foreground-muted">Default</span>
                         )}
                         {role.is_system && (
                           <span className="rounded-full bg-amber-50 px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] text-amber-600">System</span>
@@ -402,21 +402,21 @@ export default function AdminRoles() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-sm text-[#62748E]">{role.member_count}</span>
+                      <span className="text-sm text-foreground-muted">{role.member_count}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex rounded-full bg-[#F8FAFC] px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.08em] text-[#62748E]">
+                      <span className="inline-flex rounded-full bg-surface-alt px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.08em] text-foreground-muted">
                         {role.home_view ?? 'user'}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-[family-name:var(--font-mono)] text-xs text-[#62748E]">
+                        <span className="font-[family-name:var(--font-mono)] text-xs text-foreground-muted">
                           {enabledPerms.length} of {totalPermissions}
                         </span>
-                        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-[#E2E8F0]">
+                        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-well">
                           <div
-                            className="h-full rounded-full bg-[#2962FF] transition-all"
+                            className="h-full rounded-full bg-accent transition-all"
                             style={{ width: `${totalPermissions ? (enabledPerms.length / totalPermissions) * 100 : 0}%` }}
                           />
                         </div>
@@ -426,7 +426,7 @@ export default function AdminRoles() {
                       <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => openEdit(role)}
-                          className="rounded-md border border-[#CAD5E2] bg-transparent px-2.5 py-1 text-xs text-[#62748E] hover:border-[#90A1B9] hover:text-[#0F172B]"
+                          className="rounded-md border border-divider-strong bg-transparent px-2.5 py-1 text-xs text-foreground-muted hover:border-divider-strong hover:text-foreground"
                         >
                           Edit
                         </button>
@@ -456,20 +456,20 @@ export default function AdminRoles() {
           <div className="fixed inset-0 z-40 bg-black/30 transition-opacity" onClick={closePanel} />
 
           {/* Panel */}
-          <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-white shadow-xl">
+          <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-surface shadow-xl">
             {/* Panel header */}
-            <div className="flex items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
+            <div className="flex items-center justify-between border-b border-divider px-6 py-4">
               <div className="flex items-center gap-3">
                 {editingRole && (
                   <span className="inline-block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: formColor }} />
                 )}
-                <h3 className="font-[family-name:var(--font-display)] text-lg font-semibold text-[#0F172B]">
+                <h3 className="font-[family-name:var(--font-display)] text-lg font-semibold text-foreground">
                   {editingRole ? 'Edit Role' : 'Create Role'}
                 </h3>
               </div>
               <button
                 onClick={closePanel}
-                className="rounded-md p-1.5 text-[#90A1B9] transition hover:bg-[#F8FAFC] hover:text-[#0F172B]"
+                className="rounded-md p-1.5 text-foreground-dim transition hover:bg-surface-alt hover:text-foreground"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
@@ -483,7 +483,7 @@ export default function AdminRoles() {
                 <div className="space-y-6">
                   {/* Role name */}
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Role Name</label>
+                    <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Role Name</label>
                     <input
                       type="text"
                       value={formName}
@@ -491,17 +491,17 @@ export default function AdminRoles() {
                       required
                       maxLength={30}
                       disabled={!!editingRole?.is_system}
-                      className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF] disabled:cursor-not-allowed disabled:bg-[#F1F5F9] disabled:text-[#90A1B9]"
+                      className="w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground placeholder-foreground-dim outline-none transition focus:border-accent focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:bg-canvas disabled:text-foreground-dim"
                       placeholder="e.g. Designer, Manager, Viewer"
                     />
                     {editingRole?.is_system && (
-                      <p className="mt-1 text-[11px] text-[#90A1B9]">System role name is locked. Permissions and color can still be edited.</p>
+                      <p className="mt-1 text-[11px] text-foreground-dim">System role name is locked. Permissions and color can still be edited.</p>
                     )}
                   </div>
 
                   {/* Role color */}
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Color</label>
+                    <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Color</label>
                     <div className="flex items-center gap-2">
                       {PRESET_COLORS.map((c) => (
                         <button
@@ -509,7 +509,7 @@ export default function AdminRoles() {
                           type="button"
                           onClick={() => setFormColor(c)}
                           className={`h-7 w-7 rounded-full border-2 transition ${
-                            formColor === c ? 'border-[#0F172B] scale-110' : 'border-transparent hover:border-[#CAD5E2]'
+                            formColor === c ? 'border-ink scale-110' : 'border-transparent hover:border-divider-strong'
                           }`}
                           style={{ backgroundColor: c }}
                         />
@@ -519,7 +519,7 @@ export default function AdminRoles() {
 
                   {/* Home View */}
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Home View</label>
+                    <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Home View</label>
                     <div className="grid grid-cols-3 gap-2">
                       {HOME_VIEW_OPTIONS.map((opt) => (
                         <button
@@ -528,31 +528,31 @@ export default function AdminRoles() {
                           onClick={() => setFormHomeView(opt.value)}
                           className={`rounded-md border px-3 py-2 text-left transition ${
                             formHomeView === opt.value
-                              ? 'border-[#0F172B] bg-[#0F172B] text-white'
-                              : 'border-[#CAD5E2] bg-white text-[#0F172B] hover:border-[#90A1B9]'
+                              ? 'border-ink bg-ink text-white'
+                              : 'border-divider-strong bg-surface text-foreground hover:border-divider-strong'
                           }`}
                         >
                           <div className="text-sm font-medium">{opt.label}</div>
-                          <div className={`text-[11px] ${formHomeView === opt.value ? 'text-white/70' : 'text-[#90A1B9]'}`}>{opt.desc}</div>
+                          <div className={`text-[11px] ${formHomeView === opt.value ? 'text-white/70' : 'text-foreground-dim'}`}>{opt.desc}</div>
                         </button>
                       ))}
                     </div>
-                    <p className="mt-1.5 text-[11px] text-[#90A1B9]">Which home page members of this role see when they log in.</p>
+                    <p className="mt-1.5 text-[11px] text-foreground-dim">Which home page members of this role see when they log in.</p>
                   </div>
 
                   {/* Permission summary */}
-                  <div className="flex items-center justify-between rounded-lg bg-[#F1F5F9] px-4 py-3">
+                  <div className="flex items-center justify-between rounded-lg bg-canvas px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <svg className="h-4 w-4 text-[#2962FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
                       </svg>
-                      <span className="text-sm font-medium text-[#0F172B]">
+                      <span className="text-sm font-medium text-foreground">
                         {enabledPermissions} of {totalPermissions} permissions enabled
                       </span>
                     </div>
-                    <div className="h-2 w-24 overflow-hidden rounded-full bg-[#E2E8F0]">
+                    <div className="h-2 w-24 overflow-hidden rounded-full bg-well">
                       <div
-                        className="h-full rounded-full bg-[#2962FF] transition-all"
+                        className="h-full rounded-full bg-accent transition-all"
                         style={{ width: `${totalPermissions ? (enabledPermissions / totalPermissions) * 100 : 0}%` }}
                       />
                     </div>
@@ -576,7 +576,7 @@ export default function AdminRoles() {
               </div>
 
               {/* Panel footer - sticky */}
-              <div className="border-t border-[#E2E8F0] bg-white px-6 py-4">
+              <div className="border-t border-divider bg-surface px-6 py-4">
                 {formError && (
                   <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{formError}</div>
                 )}
@@ -584,14 +584,14 @@ export default function AdminRoles() {
                   <button
                     type="button"
                     onClick={closePanel}
-                    className="rounded-md border border-[#CAD5E2] px-4 py-2 text-sm text-[#62748E] transition hover:border-[#90A1B9] hover:text-[#0F172B]"
+                    className="rounded-md border border-divider-strong px-4 py-2 text-sm text-foreground-muted transition hover:border-divider-strong hover:text-foreground"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSaving || !formName.trim()}
-                    className="rounded-md bg-[#0F172B] px-5 py-2 text-sm font-medium text-white transition hover:bg-[#1D293D] disabled:opacity-50"
+                    className="rounded-md bg-ink px-5 py-2 text-sm font-medium text-white transition hover:bg-ink-hover disabled:opacity-50"
                   >
                     {isSaving ? 'Saving...' : editingRole ? 'Save Changes' : 'Create Role'}
                   </button>

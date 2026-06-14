@@ -160,13 +160,13 @@ export default function OfficeTimingPanel() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex gap-1 rounded-lg bg-[#F1F5F9] p-1">
+        <div className="flex gap-1 rounded-lg bg-canvas p-1">
           {(['all', 'internal', 'partner', 'partner_employee'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setUserTypeFilter(tab)}
               className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
-                userTypeFilter === tab ? 'bg-white text-[#0F172B] shadow-sm' : 'text-[#62748E] hover:text-[#0F172B]'
+                userTypeFilter === tab ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted hover:text-foreground'
               }`}
             >
               {tab === 'all' ? 'All' : tab === 'internal' ? 'Internal' : tab === 'partner' ? 'Partner' : 'Partner Employee'}
@@ -178,32 +178,32 @@ export default function OfficeTimingPanel() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search name or email"
-          className="w-64 rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
+          className="w-64 rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
         />
       </div>
 
-      <div className="rounded-xl border border-[#E2E8F0] bg-white">
+      <div className="rounded-xl border border-divider bg-surface">
         {isLoading ? (
-          <div className="p-8 text-center text-sm text-[#90A1B9]">Loading…</div>
+          <div className="p-8 text-center text-sm text-foreground-dim">Loading…</div>
         ) : rows.length === 0 ? (
-          <div className="p-8 text-center text-sm text-[#90A1B9]">No eligible users found.</div>
+          <div className="p-8 text-center text-sm text-foreground-dim">No eligible users found.</div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-[#E2E8F0] text-left">
-                <th className="px-5 py-3 text-xs font-medium text-[#62748E]">User</th>
-                <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Type</th>
-                <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Timing</th>
-                <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Status</th>
-                <th className="px-5 py-3 text-xs font-medium text-[#62748E] text-right">Actions</th>
+              <tr className="border-b border-divider text-left">
+                <th className="px-5 py-3 text-xs font-medium text-foreground-muted">User</th>
+                <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Type</th>
+                <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Timing</th>
+                <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Status</th>
+                <th className="px-5 py-3 text-xs font-medium text-foreground-muted text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {rows.map(row => (
-                <tr key={row.user.id} className="border-b border-[#E2E8F0] last:border-0">
+                <tr key={row.user.id} className="border-b border-divider last:border-0">
                   <td className="px-5 py-3">
-                    <div className="text-sm text-[#0F172B]">{row.user.display_name}</div>
-                    <div className="text-xs text-[#90A1B9]">{row.user.email}</div>
+                    <div className="text-sm text-foreground">{row.user.display_name}</div>
+                    <div className="text-xs text-foreground-dim">{row.user.email}</div>
                   </td>
                   <td className="px-5 py-3">
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
@@ -216,22 +216,22 @@ export default function OfficeTimingPanel() {
                        'Internal'}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-sm text-[#62748E]">
-                    {row.timing ? summarizeTiming(row.timing) : <span className="text-[#90A1B9]">— Not configured —</span>}
+                  <td className="px-5 py-3 text-sm text-foreground-muted">
+                    {row.timing ? summarizeTiming(row.timing) : <span className="text-foreground-dim">— Not configured —</span>}
                   </td>
                   <td className="px-5 py-3">
                     {row.timing ? (
                       row.timing.is_active ? (
                         <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">Active</span>
                       ) : (
-                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">Disabled</span>
+                        <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] font-medium text-foreground-muted">Disabled</span>
                       )
-                    ) : <span className="text-xs text-[#90A1B9]">—</span>}
+                    ) : <span className="text-xs text-foreground-dim">—</span>}
                   </td>
                   <td className="px-5 py-3 text-right">
                     <button
                       onClick={() => openDrawer(row)}
-                      className="text-xs text-[#0F172B] hover:underline"
+                      className="text-xs text-foreground hover:underline"
                     >
                       {row.timing ? 'Edit' : 'Configure'}
                     </button>
@@ -246,56 +246,56 @@ export default function OfficeTimingPanel() {
       {editingRow && form && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={closeDrawer}>
           <div
-            className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl"
+            className="w-full max-w-lg rounded-xl bg-surface p-6 shadow-xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="mb-4 flex items-start justify-between">
               <div>
-                <h3 className="text-base font-semibold text-[#0F172B]">{editingRow.user.display_name}</h3>
-                <p className="text-xs text-[#90A1B9]">{editingRow.user.email} · {editingRow.user.user_type}</p>
+                <h3 className="text-base font-semibold text-foreground">{editingRow.user.display_name}</h3>
+                <p className="text-xs text-foreground-dim">{editingRow.user.email} · {editingRow.user.user_type}</p>
               </div>
-              <button onClick={closeDrawer} className="text-[#90A1B9] hover:text-[#0F172B]" aria-label="Close">
+              <button onClick={closeDrawer} className="text-foreground-dim hover:text-foreground" aria-label="Close">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-xs font-medium text-[#62748E]">Label</label>
+                <label className="mb-1 block text-xs font-medium text-foreground-muted">Label</label>
                 <input
                   type="text"
                   value={form.label}
                   onChange={e => setForm({ ...form, label: e.target.value })}
                   maxLength={80}
-                  className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
+                  className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
                   placeholder="e.g. Office Timing, Virtual Office Timing"
                 />
-                <p className="mt-1 text-xs text-[#90A1B9]">User sees this label on their check-in widget.</p>
+                <p className="mt-1 text-xs text-foreground-dim">User sees this label on their check-in widget.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-[#62748E]">From</label>
+                  <label className="mb-1 block text-xs font-medium text-foreground-muted">From</label>
                   <input
                     type="time"
                     value={form.from_time}
                     onChange={e => setForm({ ...form, from_time: e.target.value })}
-                    className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
+                    className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-[#62748E]">To</label>
+                  <label className="mb-1 block text-xs font-medium text-foreground-muted">To</label>
                   <input
                     type="time"
                     value={form.to_time}
                     onChange={e => setForm({ ...form, to_time: e.target.value })}
-                    className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
+                    className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="mb-2 block text-xs font-medium text-[#62748E]">Working days</label>
+                <label className="mb-2 block text-xs font-medium text-foreground-muted">Working days</label>
                 <div className="flex gap-2">
                   {DAY_NAMES.map((name, i) => (
                     <button
@@ -305,7 +305,7 @@ export default function OfficeTimingPanel() {
                       className={`flex h-12 w-12 items-center justify-center rounded-lg border text-xs font-medium transition ${
                         form.working_days.includes(i)
                           ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                          : 'border-[#E2E8F0] bg-white text-[#90A1B9]'
+                          : 'border-divider bg-surface text-foreground-dim'
                       }`}
                     >
                       {name}
@@ -315,7 +315,7 @@ export default function OfficeTimingPanel() {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-medium text-[#62748E]">Max break duration</label>
+                <label className="mb-1 block text-xs font-medium text-foreground-muted">Max break duration</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
@@ -323,9 +323,9 @@ export default function OfficeTimingPanel() {
                     max={720}
                     value={form.max_break_minutes}
                     onChange={e => setForm({ ...form, max_break_minutes: parseInt(e.target.value || '0', 10) })}
-                    className="w-28 rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
+                    className="w-28 rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
                   />
-                  <span className="text-sm text-[#62748E]">minutes / day</span>
+                  <span className="text-sm text-foreground-muted">minutes / day</span>
                 </div>
                 {breakExceedsOffice && (
                   <p className="mt-1 text-xs text-amber-600">Heads up: max break exceeds the configured office window.</p>
@@ -338,17 +338,17 @@ export default function OfficeTimingPanel() {
                     type="checkbox"
                     checked={form.is_active}
                     onChange={e => setForm({ ...form, is_active: e.target.checked })}
-                    className="rounded border-[#CBD5E1]"
+                    className="rounded border-divider-strong"
                   />
-                  <span className="text-sm text-[#0F172B]">Active</span>
+                  <span className="text-sm text-foreground">Active</span>
                 </label>
-                <p className="mt-1 ml-6 text-xs text-[#90A1B9]">When off, the progress bar falls back to the default behaviour and the check-in deadline reverts to the per-user default.</p>
+                <p className="mt-1 ml-6 text-xs text-foreground-dim">When off, the progress bar falls back to the default behaviour and the check-in deadline reverts to the per-user default.</p>
               </div>
 
-              <div className="rounded-lg bg-[#F8FAFC] px-4 py-3">
-                <div className="text-xs text-[#62748E]">Total working hours per day</div>
-                <div className="mt-0.5 text-lg font-semibold text-[#0F172B]">{formatHoursMinutes(derivedMinutes)}</div>
-                <div className="text-[10px] text-[#90A1B9]">(includes break time)</div>
+              <div className="rounded-lg bg-surface-alt px-4 py-3">
+                <div className="text-xs text-foreground-muted">Total working hours per day</div>
+                <div className="mt-0.5 text-lg font-semibold text-foreground">{formatHoursMinutes(derivedMinutes)}</div>
+                <div className="text-[10px] text-foreground-dim">(includes break time)</div>
               </div>
 
               {formError && (
@@ -368,14 +368,14 @@ export default function OfficeTimingPanel() {
                 <div className="flex gap-2">
                   <button
                     onClick={closeDrawer}
-                    className="rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC]"
+                    className="rounded-lg border border-divider px-4 py-2 text-sm text-foreground-muted hover:bg-surface-alt"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSave}
                     disabled={!!formError || saveMutation.isPending}
-                    className="rounded-lg bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:bg-[#1D293D] disabled:opacity-50"
+                    className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover disabled:opacity-50"
                   >
                     {saveMutation.isPending ? 'Saving…' : 'Save'}
                   </button>

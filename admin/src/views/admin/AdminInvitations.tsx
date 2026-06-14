@@ -120,31 +120,31 @@ export default function AdminInvitations() {
 
   return (
     <div>
-      <h2 className="mb-6 font-[family-name:var(--font-display)] text-2xl font-bold text-[#0F172B]">
+      <h2 className="mb-6 font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">
         Invite Users
       </h2>
 
       {/* Invite Form */}
-      <div className="mb-6 rounded-lg border border-[#E2E8F0] bg-white p-5">
-        <h3 className="mb-3 text-sm font-semibold text-[#0F172B]">Send Invitation</h3>
+      <div className="mb-6 rounded-lg border border-divider bg-surface p-5">
+        <h3 className="mb-3 text-sm font-semibold text-foreground">Send Invitation</h3>
         <form onSubmit={handleInvite} className="flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-[200px]">
-            <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Email</label>
+            <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="user@example.com"
-              className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
+              className="w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground placeholder-foreground-dim outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
             />
           </div>
           <div className="min-w-[140px]">
-            <label className="mb-1.5 block text-xs font-medium text-[#62748E]">User Type</label>
+            <label className="mb-1.5 block text-xs font-medium text-foreground-muted">User Type</label>
             <select
               value={userType}
               onChange={(e) => { setUserType(e.target.value as UserType); setClientId(''); }}
-              className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] outline-none focus:border-[#2962FF]"
+              className="w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
             >
               <option value="internal">Internal</option>
               <option value="client">Client</option>
@@ -154,11 +154,11 @@ export default function AdminInvitations() {
             </select>
           </div>
           <div className="min-w-[160px]">
-            <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Role</label>
+            <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Role</label>
             <select
               value={roleId}
               onChange={(e) => setRoleId(e.target.value)}
-              className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] outline-none focus:border-[#2962FF]"
+              className="w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
             >
               <option value="">Default Role</option>
               {roles.map((role) => (
@@ -170,11 +170,11 @@ export default function AdminInvitations() {
           </div>
           {(userType === 'client' || userType === 'client_staff' || userType === 'partner' || userType === 'partner_employee') && (
             <div className="min-w-[160px]">
-              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Client</label>
+              <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Client</label>
               <select
                 value={clientId}
                 onChange={(e) => setClientId(e.target.value)}
-                className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] outline-none focus:border-[#2962FF]"
+                className="w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
               >
                 <option value="">None</option>
                 {clients.map((c) => (
@@ -184,11 +184,11 @@ export default function AdminInvitations() {
             </div>
           )}
           <div className="min-w-[160px]">
-            <label className="mb-1.5 block text-xs font-medium text-[#62748E]">CRM Access</label>
+            <label className="mb-1.5 block text-xs font-medium text-foreground-muted">CRM Access</label>
             <select
               value={crmWorkspaceId}
               onChange={(e) => setCrmWorkspaceId(e.target.value)}
-              className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] outline-none focus:border-[#2962FF]"
+              className="w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
             >
               <option value="">No CRM access</option>
               {crmWorkspaces.map((w) => (
@@ -198,11 +198,11 @@ export default function AdminInvitations() {
           </div>
           {crmWorkspaceId && (
             <div className="min-w-[130px]">
-              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">CRM Role</label>
+              <label className="mb-1.5 block text-xs font-medium text-foreground-muted">CRM Role</label>
               <select
                 value={crmRole}
                 onChange={(e) => setCrmRole(e.target.value as 'admin' | 'member' | 'guest')}
-                className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] outline-none focus:border-[#2962FF]"
+                className="w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
               >
                 <option value="admin">Admin</option>
                 <option value="member">Member</option>
@@ -213,7 +213,7 @@ export default function AdminInvitations() {
           <button
             type="submit"
             disabled={createMutation.isPending}
-            className="rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1D293D] disabled:opacity-50"
+            className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-white transition hover:bg-ink-hover disabled:opacity-50"
           >
             {createMutation.isPending ? 'Sending...' : 'Send Invite'}
           </button>
@@ -231,8 +231,8 @@ export default function AdminInvitations() {
             onClick={() => setFilter(tab)}
             className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
               filter === tab
-                ? 'bg-[#0F172B] text-white'
-                : 'bg-white text-[#62748E] hover:bg-[#F1F5F9]'
+                ? 'bg-ink text-white'
+                : 'bg-surface text-foreground-muted hover:bg-canvas'
             }`}
           >
             {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -242,32 +242,32 @@ export default function AdminInvitations() {
 
       {/* Invitations Table */}
       {isLoading ? (
-        <p className="text-sm text-[#62748E]">Loading...</p>
+        <p className="text-sm text-foreground-muted">Loading...</p>
       ) : invitations.length === 0 ? (
-        <div className="rounded-lg border border-[#E2E8F0] bg-white p-8 text-center">
-          <svg className="mx-auto h-10 w-10 text-[#90A1B9]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+        <div className="rounded-lg border border-divider bg-surface p-8 text-center">
+          <svg className="mx-auto h-10 w-10 text-foreground-dim" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
           </svg>
-          <p className="mt-3 text-sm text-[#62748E]">No invitations found</p>
+          <p className="mt-3 text-sm text-foreground-muted">No invitations found</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
+        <div className="overflow-hidden rounded-lg border border-divider bg-surface">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-[#E2E8F0] bg-[#F1F5F9]">
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Email</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Type</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Role</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Invited By</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Status</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Expires</th>
-                <th className="px-4 py-3 text-right font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Actions</th>
+              <tr className="border-b border-divider bg-canvas">
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Email</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Type</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Role</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Invited By</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Status</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Expires</th>
+                <th className="px-4 py-3 text-right font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Actions</th>
               </tr>
             </thead>
             <tbody>
               {invitations.map((inv) => (
-                <tr key={inv.id} className="border-b border-[#E2E8F0] last:border-b-0">
-                  <td className="px-4 py-3 text-sm text-[#0F172B]">{inv.email}</td>
+                <tr key={inv.id} className="border-b border-divider last:border-b-0">
+                  <td className="px-4 py-3 text-sm text-foreground">{inv.email}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
                       inv.user_type === 'internal' ? 'bg-blue-50 text-blue-600' :
@@ -293,14 +293,14 @@ export default function AdminInvitations() {
                         {inv.role.name}
                       </span>
                     ) : (
-                      <span className="text-xs text-[#90A1B9]">Default</span>
+                      <span className="text-xs text-foreground-dim">Default</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-sm text-[#62748E]">
+                  <td className="px-4 py-3 text-sm text-foreground-muted">
                     {inv.invited_by_user?.display_name || '—'}
                   </td>
                   <td className="px-4 py-3">{getStatusBadge(inv)}</td>
-                  <td className="px-4 py-3 font-[family-name:var(--font-mono)] text-xs text-[#62748E]">
+                  <td className="px-4 py-3 font-[family-name:var(--font-mono)] text-xs text-foreground-muted">
                     {inv.status === 'accepted'
                       ? new Date(inv.accepted_at!).toLocaleDateString()
                       : new Date(inv.expires_at).toLocaleDateString()}

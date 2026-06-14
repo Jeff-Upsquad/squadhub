@@ -77,53 +77,53 @@ export default function ClientUsersSlider({ clientId, clientName, onClose }: Cli
   return (
     <SliderPanel open={!!clientId} onClose={onClose} title={`${clientName} — Users`} width="w-[480px]">
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-xs text-[#64748B]">{users.length} user{users.length !== 1 ? 's' : ''}</p>
+        <p className="text-xs text-foreground-muted">{users.length} user{users.length !== 1 ? 's' : ''}</p>
         <button
           onClick={() => { setShowAddForm(!showAddForm); setFormError(null); }}
-          className="rounded-md bg-[#2962FF] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1E50D8] transition-colors"
+          className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-strong transition-colors"
         >
           {showAddForm ? 'Cancel' : 'Add User'}
         </button>
       </div>
 
       {showAddForm && (
-        <form onSubmit={handleSubmit} className="mb-6 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+        <form onSubmit={handleSubmit} className="mb-6 rounded-lg border border-divider bg-surface-alt p-4">
           <div className="mb-3">
-            <label className="mb-1 block text-xs font-medium text-[#475569]">Full Name</label>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">Full Name</label>
             <input
               type="text"
               value={formData.display_name}
               onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
               placeholder="John Doe"
-              className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+              className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </div>
           <div className="mb-3">
-            <label className="mb-1 block text-xs font-medium text-[#475569]">Email</label>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">Email</label>
             <input
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               placeholder="user@example.com"
-              className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+              className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </div>
           <div className="mb-3">
-            <label className="mb-1 block text-xs font-medium text-[#475569]">Password</label>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">Password</label>
             <input
               type="password"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               placeholder="Min 8 characters"
-              className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+              className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </div>
           <div className="mb-4">
-            <label className="mb-1 block text-xs font-medium text-[#475569]">Role</label>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">Role</label>
             <select
               value={formData.role}
               onChange={(e) => setFormData({ ...formData, role: e.target.value as 'client_admin' | 'staff' })}
-              className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+              className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             >
               <option value="staff">Staff</option>
               <option value="client_admin">Client Admin</option>
@@ -135,7 +135,7 @@ export default function ClientUsersSlider({ clientId, clientName, onClose }: Cli
           <button
             type="submit"
             disabled={createMutation.isPending}
-            className="rounded-md bg-[#2962FF] px-4 py-2 text-xs font-medium text-white hover:bg-[#1E50D8] transition-colors disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-strong transition-colors disabled:opacity-50"
           >
             {createMutation.isPending ? 'Creating...' : 'Create User'}
           </button>
@@ -143,22 +143,22 @@ export default function ClientUsersSlider({ clientId, clientName, onClose }: Cli
       )}
 
       {isLoading ? (
-        <div className="py-8 text-center text-sm text-[#64748B]">Loading users...</div>
+        <div className="py-8 text-center text-sm text-foreground-muted">Loading users...</div>
       ) : users.length === 0 && !showAddForm ? (
-        <div className="rounded-lg border border-dashed border-[#CBD5E1] py-8 text-center text-sm text-[#94A3B8]">
+        <div className="rounded-lg border border-dashed border-divider-strong py-8 text-center text-sm text-foreground-dim">
           No users yet. Click &quot;Add User&quot; to get started.
         </div>
       ) : (
         <div className="space-y-2">
           {users.map((u) => (
-            <div key={u.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5">
+            <div key={u.id} className="flex items-center justify-between rounded-lg border border-divider bg-surface px-3 py-2.5">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#EEF2FF] text-xs font-semibold text-[#2962FF]">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#EEF2FF] text-xs font-semibold text-accent">
                   {(u.user?.display_name || '?')[0].toUpperCase()}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-[#0F172B]">{u.user?.display_name || 'Unknown'}</p>
-                  <p className="text-[10px] text-[#94A3B8]">{u.user?.email}</p>
+                  <p className="text-sm font-medium text-foreground">{u.user?.display_name || 'Unknown'}</p>
+                  <p className="text-[10px] text-foreground-dim">{u.user?.email}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
@@ -166,7 +166,7 @@ export default function ClientUsersSlider({ clientId, clientName, onClose }: Cli
                   value={u.role}
                   onChange={(e) => roleMutation.mutate({ userId: u.id, role: e.target.value })}
                   disabled={roleMutation.isPending}
-                  className="rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-1.5 py-0.5 text-[11px] font-medium text-[#475569] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF] cursor-pointer"
+                  className="rounded-md border border-divider bg-surface-alt px-1.5 py-0.5 text-[11px] font-medium text-foreground-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent cursor-pointer"
                 >
                   <option value="staff">Staff</option>
                   <option value="client_admin">Admin</option>
@@ -192,7 +192,7 @@ export default function ClientUsersSlider({ clientId, clientName, onClose }: Cli
                     if (confirm('Remove this user? Their entries will be preserved.')) removeMutation.mutate(u.id);
                   }}
                   disabled={removeMutation.isPending}
-                  className="rounded-md p-1 text-[#94A3B8] hover:bg-[#FEF2F2] hover:text-[#DC2626] transition-colors"
+                  className="rounded-md p-1 text-foreground-dim hover:bg-[#FEF2F2] hover:text-[#DC2626] transition-colors"
                   title="Remove user"
                 >
                   <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

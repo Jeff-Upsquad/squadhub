@@ -40,17 +40,17 @@ export default function ClientAccessModule() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Client Access</h1>
-        <p className="mt-1 text-sm text-[#62748E]">
+        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Client Access</h1>
+        <p className="mt-1 text-sm text-foreground-muted">
           Share clients with users so they show up under the Clients module. The role you pick comes from the Roles module.
         </p>
       </div>
 
       {isLoading ? (
-        <p className="py-8 text-center text-sm text-[#90A1B9]">Loading…</p>
+        <p className="py-8 text-center text-sm text-foreground-dim">Loading…</p>
       ) : !clients || clients.length === 0 ? (
-        <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-          <p className="text-sm text-[#90A1B9]">No clients yet. Create one in the Clients tab.</p>
+        <div className="rounded-lg border border-divider bg-surface py-12 text-center">
+          <p className="text-sm text-foreground-dim">No clients yet. Create one in the Clients tab.</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -58,15 +58,15 @@ export default function ClientAccessModule() {
             <button
               key={c.id}
               onClick={() => setSelected(c)}
-              className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 text-left transition hover:shadow-sm"
+              className="flex w-full items-center justify-between rounded-lg border border-divider bg-surface px-5 py-4 text-left transition hover:shadow-sm"
             >
               <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#F1F5F9] text-sm font-semibold uppercase text-[#62748E]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-canvas text-sm font-semibold uppercase text-foreground-muted">
                   {c.business_name.slice(0, 2)}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-[#0F172B]">{c.business_name}</span>
+                    <span className="text-sm font-semibold text-foreground">{c.business_name}</span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                         c.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
@@ -76,20 +76,20 @@ export default function ClientAccessModule() {
                     </span>
                   </div>
                   {c.contact_person && (
-                    <p className="mt-0.5 text-xs text-[#90A1B9]">{c.contact_person}</p>
+                    <p className="mt-0.5 text-xs text-foreground-dim">{c.contact_person}</p>
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-3 text-xs text-[#62748E]">
+              <div className="flex items-center gap-3 text-xs text-foreground-muted">
                 {c.user_access_count > 0 ? (
                   <>
                     <span>
                       {c.user_access_count} user{c.user_access_count !== 1 ? 's' : ''}
                     </span>
-                    <span className="text-[#0F172B]">→</span>
+                    <span className="text-foreground">→</span>
                   </>
                 ) : (
-                  <span className="text-[#90A1B9]">No access assigned</span>
+                  <span className="text-foreground-dim">No access assigned</span>
                 )}
               </div>
             </button>
@@ -176,15 +176,15 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed right-0 top-0 z-50 flex h-full w-[480px] flex-col bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-4">
+      <div className="fixed right-0 top-0 z-50 flex h-full w-[480px] flex-col bg-surface shadow-xl">
+        <div className="flex items-center justify-between border-b border-divider px-5 py-4">
           <div>
-            <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">
+            <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-foreground">
               {cur?.business_name}
             </h3>
-            <p className="mt-0.5 text-xs text-[#90A1B9]">Users with access to this client</p>
+            <p className="mt-0.5 text-xs text-foreground-dim">Users with access to this client</p>
           </div>
-          <button onClick={onClose} className="rounded p-1 text-[#90A1B9] hover:bg-[#F1F5F9] hover:text-[#0F172B]">
+          <button onClick={onClose} className="rounded p-1 text-foreground-dim hover:bg-canvas hover:text-foreground">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -195,7 +195,7 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
           {!showAdd ? (
             <button
               onClick={() => setShowAdd(true)}
-              className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2 text-xs font-medium text-[#62748E] transition hover:border-[#0F172B] hover:text-[#0F172B]"
+              className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-divider-strong py-2 text-xs font-medium text-foreground-muted transition hover:border-ink hover:text-foreground"
             >
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -203,33 +203,33 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
               Add User
             </button>
           ) : (
-            <div className="mb-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+            <div className="mb-3 rounded-lg border border-divider bg-surface-alt p-3">
               <input
                 value={userSearch}
                 onChange={(e) => setUserSearch(e.target.value)}
                 placeholder="Search by name or email…"
-                className="mb-2 w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs focus:border-[#0F172B] focus:outline-none"
+                className="mb-2 w-full rounded-md border border-divider bg-surface px-3 py-1.5 text-xs focus:border-ink focus:outline-none"
               />
               <div className="max-h-56 space-y-1 overflow-y-auto">
                 {filteredUsers.length === 0 ? (
-                  <p className="py-2 text-xs text-[#90A1B9]">No users found</p>
+                  <p className="py-2 text-xs text-foreground-dim">No users found</p>
                 ) : (
                   filteredUsers.slice(0, 20).map((user) => {
                     const roleId = defaultRoleForUserType(user.user_type);
                     const role = allRoles.find((r) => r.id === roleId);
                     return (
-                      <div key={user.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-white">
+                      <div key={user.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-surface">
                         <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-well text-[10px] font-medium text-foreground-muted">
                             {user.display_name?.[0]?.toUpperCase() || '?'}
                           </div>
                           <div className="min-w-0">
-                            <div className="truncate text-xs font-medium text-[#0F172B]">{user.display_name}</div>
-                            <div className="truncate text-[10px] text-[#90A1B9]">{user.email}</div>
+                            <div className="truncate text-xs font-medium text-foreground">{user.display_name}</div>
+                            <div className="truncate text-[10px] text-foreground-dim">{user.email}</div>
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-canvas px-2 py-0.5 text-[10px] font-medium text-foreground-muted">
                             {role && (
                               <span
                                 className="inline-block h-1.5 w-1.5 rounded-full"
@@ -241,7 +241,7 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
                           <button
                             disabled={addUser.isPending}
                             onClick={() => addUser.mutate({ user_id: user.id, role_id: roleId })}
-                            className="rounded bg-[#0F172B] px-2 py-1 text-[10px] font-medium text-white hover:bg-[#1E293B] disabled:opacity-50"
+                            className="rounded bg-ink px-2 py-1 text-[10px] font-medium text-white hover:bg-ink-hover disabled:opacity-50"
                           >
                             Add
                           </button>
@@ -251,7 +251,7 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
                   })
                 )}
               </div>
-              <button onClick={() => { setShowAdd(false); setUserSearch(''); }} className="mt-2 text-[10px] text-[#90A1B9] hover:text-[#0F172B]">
+              <button onClick={() => { setShowAdd(false); setUserSearch(''); }} className="mt-2 text-[10px] text-foreground-dim hover:text-foreground">
                 Cancel
               </button>
             </div>
@@ -265,7 +265,7 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
             const total = grouped.reduce((n, s) => n + s.users.length, 0);
 
             if (total === 0) {
-              return <p className="py-6 text-center text-xs text-[#90A1B9]">No users have access yet</p>;
+              return <p className="py-6 text-center text-xs text-foreground-dim">No users have access yet</p>;
             }
 
             return (
@@ -273,30 +273,30 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
                 {grouped.map((section) => (
                   <div key={section.key}>
                     <div className="mb-2 flex items-center gap-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-foreground-dim">
                         {section.label}
                       </p>
-                      <span className="rounded-full bg-[#F1F5F9] px-1.5 py-0.5 text-[10px] font-medium text-[#62748E]">
+                      <span className="rounded-full bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted">
                         {section.users.length}
                       </span>
                     </div>
                     {section.users.length === 0 ? (
-                      <p className="py-2 text-[10px] text-[#90A1B9]">No users</p>
+                      <p className="py-2 text-[10px] text-foreground-dim">No users</p>
                     ) : (
                       <div className="space-y-1.5">
                         {section.users.map((ua) => (
-                          <div key={ua.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] px-3 py-2.5">
+                          <div key={ua.id} className="flex items-center justify-between rounded-lg border border-divider px-3 py-2.5">
                             <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
+                              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-well text-[10px] font-medium text-foreground-muted">
                                 {ua.user?.display_name?.[0]?.toUpperCase() || '?'}
                               </div>
                               <div className="min-w-0">
-                                <div className="truncate text-sm font-medium text-[#0F172B]">{ua.user?.display_name || 'Unknown'}</div>
-                                <div className="truncate text-[10px] text-[#90A1B9]">{ua.user?.email || ''}</div>
+                                <div className="truncate text-sm font-medium text-foreground">{ua.user?.display_name || 'Unknown'}</div>
+                                <div className="truncate text-[10px] text-foreground-dim">{ua.user?.email || ''}</div>
                               </div>
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-canvas px-2 py-0.5 text-[10px] font-medium text-foreground-muted">
                                 {ua.role && (
                                   <span
                                     className="inline-block h-1.5 w-1.5 rounded-full"
@@ -307,7 +307,7 @@ function AccessSlider({ client, onClose }: { client: ClientAccessEntry; onClose:
                               </span>
                               <button
                                 onClick={() => removeUser.mutate(ua.user_id)}
-                                className="rounded p-1 text-[#90A1B9] transition hover:bg-red-50 hover:text-red-500"
+                                className="rounded p-1 text-foreground-dim transition hover:bg-red-50 hover:text-red-500"
                               >
                                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

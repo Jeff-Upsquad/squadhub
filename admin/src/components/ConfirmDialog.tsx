@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 type Variant = 'default' | 'danger' | 'warning';
 
 const VARIANT_STYLES: Record<Variant, string> = {
-  default: 'bg-[#0F172B] text-white hover:opacity-90',
+  default: 'bg-ink text-white hover:opacity-90',
   danger: 'bg-red-600 text-white hover:bg-red-700',
   warning: 'bg-orange-600 text-white hover:bg-orange-700',
 };
@@ -40,17 +40,17 @@ export default function ConfirmDialog({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={isPending ? undefined : onCancel} />
-      <div className="relative w-[420px] rounded-lg bg-white p-5 shadow-xl">
-        <h4 className="text-base font-semibold text-[#0F172B]">{title}</h4>
+      <div className="relative w-[420px] rounded-lg bg-surface p-5 shadow-xl">
+        <h4 className="text-base font-semibold text-foreground">{title}</h4>
         {description && (
-          <p className="mt-2 text-sm text-[#62748E]">{description}</p>
+          <p className="mt-2 text-sm text-foreground-muted">{description}</p>
         )}
         {children}
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onCancel}
             disabled={isPending}
-            className="rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-medium text-[#62748E] hover:bg-[#F8FAFC] disabled:opacity-50"
+            className="rounded-md border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-foreground-muted hover:bg-surface-alt disabled:opacity-50"
           >
             {cancelLabel}
           </button>

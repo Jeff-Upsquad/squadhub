@@ -29,15 +29,15 @@ export default function SliderPanel({ open, onClose, title, children, width = 'w
       {/* Panel slides from right */}
       <div
         ref={panelRef}
-        className={`relative ${width} flex h-full flex-col bg-white shadow-2xl`}
+        className={`relative ${width} flex h-full flex-col bg-surface shadow-2xl`}
         style={{ animation: 'slideInRight 0.2s ease-out' }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-4">
-          <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">{title}</h3>
+        <div className="flex items-center justify-between border-b border-divider px-5 py-4">
+          <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-foreground">{title}</h3>
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-[#90A1B9] transition hover:bg-[#F1F5F9] hover:text-[#0F172B]"
+            className="rounded-md p-1 text-foreground-dim transition hover:bg-canvas hover:text-foreground"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

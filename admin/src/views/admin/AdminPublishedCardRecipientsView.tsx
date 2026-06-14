@@ -597,12 +597,12 @@ export default function AdminPublishedCardRecipientsView({
                 <div className="space-y-3">
                   {selectedRecipients.map((r) => (
                     <div key={`selected-${r.type}-${r.id}`} className="flex items-center gap-4">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-[var(--color-sh-ink)] text-base font-bold ring-1 ring-emerald-200">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface text-[var(--color-sh-ink)] text-base font-bold ring-1 ring-emerald-200">
                         {r.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="truncate text-[15px] font-semibold text-[#0a0a0a]">
+                          <p className="truncate text-[15px] font-semibold text-foreground">
                             {r.name}
                           </p>
                           <span
@@ -615,7 +615,7 @@ export default function AdminPublishedCardRecipientsView({
                           </span>
                         </div>
                         {r.responded_at && (
-                          <p className="mt-0.5 truncate text-xs text-[#737373]">
+                          <p className="mt-0.5 truncate text-xs text-foreground-dim">
                             Responded {formatRelative(r.responded_at)}
                           </p>
                         )}

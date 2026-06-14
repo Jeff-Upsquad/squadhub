@@ -121,18 +121,18 @@ export default function AdminSquadbooksAccess() {
 
   return (
     <div className="mx-auto max-w-4xl p-6">
-      <h1 className="text-lg font-semibold text-[#0F172B]">SquadBooks Access</h1>
-      <p className="mt-1 text-sm text-[#62748E]">
+      <h1 className="text-lg font-semibold text-foreground">SquadBooks Access</h1>
+      <p className="mt-1 text-sm text-foreground-muted">
         Assign who can use SquadBooks in each workspace, their access level, and which modules they
         can open. Users must also be granted the SquadBooks mini-app under Access Control.
       </p>
 
       <div className="mt-4">
-        <label className="block text-xs font-medium text-[#62748E]">Workspace</label>
+        <label className="block text-xs font-medium text-foreground-muted">Workspace</label>
         <select
           value={workspaceId}
           onChange={(e) => setWorkspaceId(e.target.value)}
-          className="mt-1 w-72 rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm"
+          className="mt-1 w-72 rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm"
         >
           {workspaces.map((w) => (
             <option key={w.id} value={w.id}>
@@ -142,14 +142,14 @@ export default function AdminSquadbooksAccess() {
         </select>
       </div>
 
-      <form onSubmit={handleSave} className="mt-5 rounded-lg border border-[#E2E8F0] bg-white p-4">
+      <form onSubmit={handleSave} className="mt-5 rounded-lg border border-divider bg-surface p-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-[#62748E]">User</label>
+            <label className="block text-xs font-medium text-foreground-muted">User</label>
             <select
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm"
             >
               <option value="">Select a user…</option>
               {users.map((u) => (
@@ -160,11 +160,11 @@ export default function AdminSquadbooksAccess() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#62748E]">Access level</label>
+            <label className="block text-xs font-medium text-foreground-muted">Access level</label>
             <select
               value={accessLevel}
               onChange={(e) => setAccessLevel(e.target.value)}
-              className="mt-1 w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm"
             >
               {LEVELS.map((l) => (
                 <option key={l.key} value={l.key}>
@@ -175,7 +175,7 @@ export default function AdminSquadbooksAccess() {
           </div>
         </div>
         <div className="mt-4">
-          <label className="block text-xs font-medium text-[#62748E]">Modules</label>
+          <label className="block text-xs font-medium text-foreground-muted">Modules</label>
           <div className="mt-2 flex flex-wrap gap-2">
             {MODULES.map((m) => (
               <button
@@ -184,8 +184,8 @@ export default function AdminSquadbooksAccess() {
                 onClick={() => toggleModule(m.key)}
                 className={`rounded-md border px-3 py-1.5 text-xs font-medium ${
                   modules.includes(m.key)
-                    ? 'border-[#0F172B] bg-[#0F172B] text-white'
-                    : 'border-[#CAD5E2] bg-white text-[#62748E]'
+                    ? 'border-ink bg-ink text-white'
+                    : 'border-divider-strong bg-surface text-foreground-muted'
                 }`}
               >
                 {m.label}
@@ -199,26 +199,26 @@ export default function AdminSquadbooksAccess() {
         <button
           type="submit"
           disabled={saveMutation.isPending}
-          className="mt-4 rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:bg-[#1D293D] disabled:opacity-50"
+          className="mt-4 rounded-md bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover disabled:opacity-50"
         >
           {editingExisting ? 'Update access' : 'Assign access'}
         </button>
       </form>
 
-      <div className="mt-6 rounded-lg border border-[#E2E8F0] bg-white">
-        <div className="border-b border-[#E2E8F0] px-4 py-3 text-sm font-medium text-[#0F172B]">
+      <div className="mt-6 rounded-lg border border-divider bg-surface">
+        <div className="border-b border-divider px-4 py-3 text-sm font-medium text-foreground">
           Current access
         </div>
         {grantsLoading ? (
-          <div className="px-4 py-6 text-sm text-[#62748E]">Loading…</div>
+          <div className="px-4 py-6 text-sm text-foreground-muted">Loading…</div>
         ) : grants.length === 0 ? (
-          <div className="px-4 py-6 text-sm text-[#62748E]">
+          <div className="px-4 py-6 text-sm text-foreground-muted">
             No one has SquadBooks access in this workspace yet.
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#E2E8F0] text-left text-xs uppercase tracking-wide text-[#90A1B9]">
+              <tr className="border-b border-divider text-left text-xs uppercase tracking-wide text-foreground-dim">
                 <th className="px-4 py-2">User</th>
                 <th className="px-4 py-2">Level</th>
                 <th className="px-4 py-2">Modules</th>
@@ -227,18 +227,18 @@ export default function AdminSquadbooksAccess() {
             </thead>
             <tbody>
               {grants.map((g) => (
-                <tr key={g.id} className="border-b border-[#F1F5F9]">
-                  <td className="px-4 py-2 text-[#0F172B]">{userName(g.userId)}</td>
-                  <td className="px-4 py-2 text-[#62748E]">
+                <tr key={g.id} className="border-b border-divider">
+                  <td className="px-4 py-2 text-foreground">{userName(g.userId)}</td>
+                  <td className="px-4 py-2 text-foreground-muted">
                     {LEVELS.find((l) => l.key === g.accessLevel)?.label || g.accessLevel}
                   </td>
-                  <td className="px-4 py-2 text-[#62748E]">
+                  <td className="px-4 py-2 text-foreground-muted">
                     {g.allowedModules.length ? g.allowedModules.join(', ') : '—'}
                   </td>
                   <td className="px-4 py-2 text-right">
                     <button
                       onClick={() => startEdit(g)}
-                      className="mr-3 text-xs font-medium text-[#0F172B] hover:underline"
+                      className="mr-3 text-xs font-medium text-foreground hover:underline"
                     >
                       Edit
                     </button>

@@ -77,8 +77,8 @@ export default function AdminClientSpaces() {
     <div>
       <div className="mb-4 flex items-start justify-between">
         <div>
-          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Client Spaces</h1>
-          <p className="mt-1 text-sm text-[#62748E]">
+          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Client Spaces</h1>
+          <p className="mt-1 text-sm text-foreground-muted">
             {tab === 'templates'
               ? 'Templates users can instantiate as folders under a client (e.g. Design Space)'
               : 'Spaces created from a template — manage who has access to each one'}
@@ -87,7 +87,7 @@ export default function AdminClientSpaces() {
         {tab === 'templates' && (
           <button
             onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#0F172B] px-3.5 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-[#1E293B]"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-3.5 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-ink-hover"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -98,20 +98,20 @@ export default function AdminClientSpaces() {
       </div>
 
       {/* Tabs */}
-      <div className="mb-4 flex gap-1 border-b border-[#E2E8F0]">
+      <div className="mb-4 flex gap-1 border-b border-divider">
         {(['templates', 'spaces'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`-mb-px border-b-2 px-3 py-2 text-xs font-medium transition ${
               tab === t
-                ? 'border-[#0F172B] text-[#0F172B]'
-                : 'border-transparent text-[#62748E] hover:text-[#0F172B]'
+                ? 'border-ink text-foreground'
+                : 'border-transparent text-foreground-muted hover:text-foreground'
             }`}
           >
             {t === 'templates' ? 'Templates' : 'Active Spaces'}
             {t === 'spaces' && activeSpaces && (
-              <span className="ml-1.5 rounded-full bg-[#F1F5F9] px-1.5 py-0.5 text-[10px] text-[#62748E]">
+              <span className="ml-1.5 rounded-full bg-canvas px-1.5 py-0.5 text-[10px] text-foreground-muted">
                 {activeSpaces.length}
               </span>
             )}
@@ -121,10 +121,10 @@ export default function AdminClientSpaces() {
 
       {tab === 'templates' &&
         (isLoading ? (
-          <p className="py-8 text-center text-sm text-[#90A1B9]">Loading…</p>
+          <p className="py-8 text-center text-sm text-foreground-dim">Loading…</p>
         ) : !templates || templates.length === 0 ? (
-          <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-            <p className="text-sm text-[#90A1B9]">No client-space templates yet.</p>
+          <div className="rounded-lg border border-divider bg-surface py-12 text-center">
+            <p className="text-sm text-foreground-dim">No client-space templates yet.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -141,10 +141,10 @@ export default function AdminClientSpaces() {
 
       {tab === 'spaces' &&
         (loadingSpaces ? (
-          <p className="py-8 text-center text-sm text-[#90A1B9]">Loading…</p>
+          <p className="py-8 text-center text-sm text-foreground-dim">Loading…</p>
         ) : !activeSpaces || activeSpaces.length === 0 ? (
-          <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-            <p className="text-sm text-[#90A1B9]">No active client spaces yet. Share a template with a client to create one.</p>
+          <div className="rounded-lg border border-divider bg-surface py-12 text-center">
+            <p className="text-sm text-foreground-dim">No active client spaces yet. Share a template with a client to create one.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -152,7 +152,7 @@ export default function AdminClientSpaces() {
               <button
                 key={s.id}
                 onClick={() => setActiveSpace(s)}
-                className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 text-left transition hover:shadow-sm"
+                className="flex w-full items-center justify-between rounded-lg border border-divider bg-surface px-5 py-4 text-left transition hover:shadow-sm"
               >
                 <div className="flex items-center gap-4">
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#9333ea]/10 text-[#9333ea]">
@@ -161,17 +161,17 @@ export default function AdminClientSpaces() {
                     </svg>
                   </div>
                   <div>
-                    <div className="text-sm font-semibold text-[#0F172B]">{s.name}</div>
-                    <div className="mt-0.5 text-[11px] text-[#90A1B9]">
+                    <div className="text-sm font-semibold text-foreground">{s.name}</div>
+                    <div className="mt-0.5 text-[11px] text-foreground-dim">
                       {s.client?.business_name || '—'} · {s.template?.name || '—'} · {s.space?.workspace?.name || '—'} / {s.space?.name || '—'}
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-[#62748E]">
+                <div className="flex items-center gap-3 text-xs text-foreground-muted">
                   <span>
                     {s.member_count} member{s.member_count !== 1 ? 's' : ''}
                   </span>
-                  <span className="text-[#0F172B]">→</span>
+                  <span className="text-foreground">→</span>
                 </div>
               </button>
             ))}
@@ -289,17 +289,17 @@ function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: (
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed right-0 top-0 z-50 flex h-full w-[480px] flex-col bg-white shadow-xl">
-        <div className="border-b border-[#E2E8F0] px-5 py-4">
+      <div className="fixed right-0 top-0 z-50 flex h-full w-[480px] flex-col bg-surface shadow-xl">
+        <div className="border-b border-divider px-5 py-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">{space.name}</h3>
-            <button onClick={onClose} className="rounded p-1 text-[#90A1B9] hover:bg-[#F1F5F9] hover:text-[#0F172B]">
+            <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-foreground">{space.name}</h3>
+            <button onClick={onClose} className="rounded p-1 text-foreground-dim hover:bg-canvas hover:text-foreground">
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
-          <p className="mt-1 text-xs text-[#90A1B9]">
+          <p className="mt-1 text-xs text-foreground-dim">
             {space.client?.business_name || '—'} · picks from this client's user pool — grant client access first
           </p>
         </div>
@@ -308,7 +308,7 @@ function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: (
           {!showAdd ? (
             <button
               onClick={() => setShowAdd(true)}
-              className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2 text-xs font-medium text-[#62748E] transition hover:border-[#0F172B] hover:text-[#0F172B]"
+              className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-divider-strong py-2 text-xs font-medium text-foreground-muted transition hover:border-ink hover:text-foreground"
             >
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -316,29 +316,29 @@ function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: (
               Add user
             </button>
           ) : (
-            <div className="mb-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+            <div className="mb-3 rounded-lg border border-divider bg-surface-alt p-3">
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search users with client access…"
-                className="mb-2 w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs focus:border-[#0F172B] focus:outline-none"
+                className="mb-2 w-full rounded-md border border-divider bg-surface px-3 py-1.5 text-xs focus:border-ink focus:outline-none"
               />
               <div className="max-h-56 space-y-1 overflow-y-auto">
                 {candidatePool.length === 0 ? (
-                  <p className="py-2 text-xs text-[#90A1B9]">
+                  <p className="py-2 text-xs text-foreground-dim">
                     No users left to add. Grant access to this client in Client Access first.
                   </p>
                 ) : (
                   candidatePool.slice(0, 20).map((u) => {
                     const level = pendingLevel[u.id] || 'manager';
                     return (
-                      <div key={u.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-white">
+                      <div key={u.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-surface">
                         <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-well text-[10px] font-medium text-foreground-muted">
                             {u.display_name?.[0]?.toUpperCase() || '?'}
                           </div>
                           <div className="min-w-0">
-                            <div className="truncate text-xs font-medium text-[#0F172B]">
+                            <div className="truncate text-xs font-medium text-foreground">
                               {u.display_name}
                               <UserTypeChip userType={u.user_type} />
                               {u.client_role && (
@@ -351,14 +351,14 @@ function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: (
                                 </span>
                               )}
                             </div>
-                            <div className="truncate text-[10px] text-[#90A1B9]">{u.email}</div>
+                            <div className="truncate text-[10px] text-foreground-dim">{u.email}</div>
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
                           <select
                             value={level}
                             onChange={(e) => setPendingLevel((p) => ({ ...p, [u.id]: e.target.value as AccessLevel }))}
-                            className="rounded border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-medium text-[#62748E] focus:border-[#0F172B] focus:outline-none"
+                            className="rounded border border-divider bg-surface px-2 py-1 text-[10px] font-medium text-foreground-muted focus:border-ink focus:outline-none"
                           >
                             {ACCESS_LEVELS.map((l) => (
                               <option key={l.value} value={l.value}>{l.label}</option>
@@ -367,7 +367,7 @@ function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: (
                           <button
                             disabled={addMember.isPending}
                             onClick={() => addMember.mutate({ user_id: u.id, access_level: level })}
-                            className="rounded bg-[#0F172B] px-2 py-1 text-[10px] font-medium text-white hover:bg-[#1E293B] disabled:opacity-50"
+                            className="rounded bg-ink px-2 py-1 text-[10px] font-medium text-white hover:bg-ink-hover disabled:opacity-50"
                           >
                             Add
                           </button>
@@ -377,35 +377,35 @@ function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: (
                   })
                 )}
               </div>
-              <button onClick={() => { setShowAdd(false); setSearch(''); }} className="mt-2 text-[10px] text-[#90A1B9] hover:text-[#0F172B]">
+              <button onClick={() => { setShowAdd(false); setSearch(''); }} className="mt-2 text-[10px] text-foreground-dim hover:text-foreground">
                 Cancel
               </button>
             </div>
           )}
 
           {members.length === 0 ? (
-            <p className="py-6 text-center text-xs text-[#90A1B9]">Nobody added yet.</p>
+            <p className="py-6 text-center text-xs text-foreground-dim">Nobody added yet.</p>
           ) : (
             <div className="space-y-1.5">
               {members.map((m) => (
-                <div key={m.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] px-3 py-2.5">
+                <div key={m.id} className="flex items-center justify-between rounded-lg border border-divider px-3 py-2.5">
                   <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-well text-[10px] font-medium text-foreground-muted">
                       {m.user?.display_name?.[0]?.toUpperCase() || '?'}
                     </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-1 truncate text-sm font-medium text-[#0F172B]">
+                      <div className="flex items-center gap-1 truncate text-sm font-medium text-foreground">
                         <span className="truncate">{m.user?.display_name || 'Unknown'}</span>
                         <UserTypeChip userType={(m.user as any)?.user_type} />
                       </div>
-                      <div className="truncate text-[10px] text-[#90A1B9]">{m.user?.email || ''}</div>
+                      <div className="truncate text-[10px] text-foreground-dim">{m.user?.email || ''}</div>
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <select
                       value={m.access_level}
                       onChange={(e) => updateMember.mutate({ id: m.id, access_level: e.target.value as AccessLevel })}
-                      className="rounded border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-medium text-[#62748E] focus:border-[#0F172B] focus:outline-none"
+                      className="rounded border border-divider bg-surface px-2 py-1 text-[10px] font-medium text-foreground-muted focus:border-ink focus:outline-none"
                     >
                       {ACCESS_LEVELS.map((l) => (
                         <option key={l.value} value={l.value}>{l.label}</option>
@@ -413,7 +413,7 @@ function SpaceMembersSlider({ space, onClose }: { space: ActiveSpace; onClose: (
                     </select>
                     <button
                       onClick={() => removeMember.mutate(m.id)}
-                      className="rounded p-1 text-[#90A1B9] transition hover:bg-red-50 hover:text-red-500"
+                      className="rounded p-1 text-foreground-dim transition hover:bg-red-50 hover:text-red-500"
                     >
                       <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -440,17 +440,17 @@ function TemplateRow({
   onShare: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 transition hover:shadow-sm">
+    <div className="flex items-center justify-between rounded-lg border border-divider bg-surface px-5 py-4 transition hover:shadow-sm">
       <div className="flex items-center gap-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#F1F5F9]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-canvas">
           <svg className="h-5 w-5 text-[#9333ea]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
           </svg>
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-[#0F172B]">{template.name}</span>
-            <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
+            <span className="text-sm font-semibold text-foreground">{template.name}</span>
+            <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] font-medium text-foreground-muted">
               v{template.version}
             </span>
             <button
@@ -466,27 +466,27 @@ function TemplateRow({
             </button>
           </div>
           {template.description && (
-            <p className="mt-0.5 text-xs text-[#90A1B9]">{template.description}</p>
+            <p className="mt-0.5 text-xs text-foreground-dim">{template.description}</p>
           )}
           {template.template?.lists && template.template.lists.length > 0 && (
-            <p className="mt-1 text-[10px] uppercase tracking-[0.08em] text-[#90A1B9]">
+            <p className="mt-1 text-[10px] uppercase tracking-[0.08em] text-foreground-dim">
               Creates: {template.template.lists.map((l) => l.name).join(' · ')}
             </p>
           )}
           <div className="mt-1.5 flex items-center gap-3">
             {template.instance_count != null && template.instance_count > 0 ? (
-              <span className="text-[10px] text-[#90A1B9]">
+              <span className="text-[10px] text-foreground-dim">
                 Shared with {template.instance_count} {template.instance_count === 1 ? 'space' : 'spaces'}
               </span>
             ) : (
-              <span className="text-[10px] text-[#90A1B9]">Not shared yet</span>
+              <span className="text-[10px] text-foreground-dim">Not shared yet</span>
             )}
           </div>
         </div>
       </div>
       <button
         onClick={onShare}
-        className="flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-xs font-medium text-[#62748E] transition hover:bg-[#F8FAFC] hover:text-[#0F172B]"
+        className="flex items-center gap-1.5 rounded-lg border border-divider px-3 py-1.5 text-xs font-medium text-foreground-muted transition hover:bg-surface-alt hover:text-foreground"
       >
         <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
@@ -546,17 +546,17 @@ function SharingSlider({ template, onClose }: { template: ClientSpaceTemplate; o
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed right-0 top-0 z-50 flex h-full w-[440px] flex-col bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-4">
+      <div className="fixed right-0 top-0 z-50 flex h-full w-[440px] flex-col bg-surface shadow-xl">
+        <div className="flex items-center justify-between border-b border-divider px-5 py-4">
           <div>
-            <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">
+            <h3 className="font-[family-name:var(--font-display)] text-base font-semibold text-foreground">
               Share {template.name}
             </h3>
-            <p className="mt-0.5 text-xs text-[#90A1B9]">
+            <p className="mt-0.5 text-xs text-foreground-dim">
               Share this template with a client to create a space under them
             </p>
           </div>
-          <button onClick={onClose} className="rounded p-1 text-[#90A1B9] hover:bg-[#F1F5F9] hover:text-[#0F172B]">
+          <button onClick={onClose} className="rounded p-1 text-foreground-dim hover:bg-canvas hover:text-foreground">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -577,7 +577,7 @@ function SharingSlider({ template, onClose }: { template: ClientSpaceTemplate; o
           ) : (
             <button
               onClick={() => setShowAddForm(true)}
-              className="mb-4 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2 text-xs font-medium text-[#62748E] transition hover:border-[#0F172B] hover:text-[#0F172B]"
+              className="mb-4 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-divider-strong py-2 text-xs font-medium text-foreground-muted transition hover:border-ink hover:text-foreground"
             >
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -586,27 +586,27 @@ function SharingSlider({ template, onClose }: { template: ClientSpaceTemplate; o
             </button>
           )}
 
-          <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">
+          <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-foreground-muted">
             Shared with ({instances.length} {instances.length === 1 ? 'space' : 'spaces'})
           </div>
 
           {isLoading ? (
-            <p className="py-6 text-center text-xs text-[#90A1B9]">Loading…</p>
+            <p className="py-6 text-center text-xs text-foreground-dim">Loading…</p>
           ) : grouped.length === 0 ? (
-            <p className="py-6 text-center text-xs text-[#90A1B9]">Not shared with any clients yet.</p>
+            <p className="py-6 text-center text-xs text-foreground-dim">Not shared with any clients yet.</p>
           ) : (
             <div className="mt-3 space-y-3">
               {grouped.map((g) => (
-                <div key={g.clientId} className="rounded-lg border border-[#E2E8F0]">
-                  <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2">
-                    <div className="text-xs font-semibold text-[#0F172B]">{g.clientName}</div>
+                <div key={g.clientId} className="rounded-lg border border-divider">
+                  <div className="border-b border-divider bg-surface-alt px-3 py-2">
+                    <div className="text-xs font-semibold text-foreground">{g.clientName}</div>
                   </div>
-                  <div className="divide-y divide-[#E2E8F0]">
+                  <div className="divide-y divide-divider">
                     {g.items.map((inst) => (
                       <div key={inst.id} className="flex items-center justify-between px-3 py-2.5">
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium text-[#0F172B]">{inst.name}</div>
-                          <div className="mt-0.5 truncate text-[10px] text-[#90A1B9]">
+                          <div className="truncate text-sm font-medium text-foreground">{inst.name}</div>
+                          <div className="mt-0.5 truncate text-[10px] text-foreground-dim">
                             {inst.space?.workspace?.name || '—'} · {inst.space?.name || '—'}
                           </div>
                         </div>
@@ -617,7 +617,7 @@ function SharingSlider({ template, onClose }: { template: ClientSpaceTemplate; o
                             }
                           }}
                           disabled={deleteInstance.isPending}
-                          className="ml-2 rounded p-1 text-[#90A1B9] transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                          className="ml-2 rounded p-1 text-foreground-dim transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
                           title="Unshare"
                         >
                           <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -677,14 +677,14 @@ function AddInstanceForm({
   });
 
   return (
-    <div className="mb-4 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-      <div className="mb-2 text-xs font-semibold text-[#0F172B]">Share with a client</div>
+    <div className="mb-4 rounded-lg border border-divider bg-surface-alt p-3">
+      <div className="mb-2 text-xs font-semibold text-foreground">Share with a client</div>
 
-      <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Client</label>
+      <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-foreground-muted">Client</label>
       <select
         value={clientId}
         onChange={(e) => setClientId(e.target.value)}
-        className="mb-3 w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-xs outline-none focus:border-[#0F172B]"
+        className="mb-3 w-full rounded-md border border-divider bg-surface px-2 py-1.5 text-xs outline-none focus:border-ink"
       >
         <option value="">Select a client…</option>
         {clients.map((c) => (
@@ -702,7 +702,7 @@ function AddInstanceForm({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded px-2 py-1 text-[10px] text-[#90A1B9] hover:text-[#0F172B]"
+          className="rounded px-2 py-1 text-[10px] text-foreground-dim hover:text-foreground"
         >
           Cancel
         </button>
@@ -710,7 +710,7 @@ function AddInstanceForm({
           type="button"
           onClick={() => createMutation.mutate()}
           disabled={!canSubmit || createMutation.isPending}
-          className="rounded bg-[#0F172B] px-3 py-1 text-[10px] font-medium text-white hover:bg-[#1E293B] disabled:bg-[#CAD5E2]"
+          className="rounded bg-ink px-3 py-1 text-[10px] font-medium text-white hover:bg-ink-hover disabled:bg-well"
         >
           {createMutation.isPending ? 'Sharing…' : 'Share'}
         </button>
@@ -762,51 +762,51 @@ function CreateModal({ onClose }: { onClose: () => void }) {
           setError(null);
           create.mutate();
         }}
-        className="w-full max-w-lg rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-2xl"
+        className="w-full max-w-lg rounded-xl border border-divider bg-surface p-6 shadow-2xl"
       >
-        <h2 className="mb-4 text-lg font-semibold text-[#0F172B]">New Client-Space Template</h2>
+        <h2 className="mb-4 text-lg font-semibold text-foreground">New Client-Space Template</h2>
 
-        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Name</label>
+        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-foreground-muted">Name</label>
         <input
           autoFocus
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Design Space"
-          className="mb-3 w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm outline-none focus:border-[#0F172B]"
+          className="mb-3 w-full rounded-md border border-divider px-3 py-2 text-sm outline-none focus:border-ink"
         />
 
-        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Slug</label>
+        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-foreground-muted">Slug</label>
         <input
           value={slug}
           onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
           placeholder="design-space"
-          className="mb-3 w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm outline-none focus:border-[#0F172B]"
+          className="mb-3 w-full rounded-md border border-divider px-3 py-2 text-sm outline-none focus:border-ink"
         />
 
-        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Description</label>
+        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-foreground-muted">Description</label>
         <input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Short description"
-          className="mb-3 w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm outline-none focus:border-[#0F172B]"
+          className="mb-3 w-full rounded-md border border-divider px-3 py-2 text-sm outline-none focus:border-ink"
         />
 
-        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">Category</label>
+        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-foreground-muted">Category</label>
         <input
           value={category}
           onChange={(e) => setCategory(e.target.value)}
           placeholder="design, video, general…"
-          className="mb-3 w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm outline-none focus:border-[#0F172B]"
+          className="mb-3 w-full rounded-md border border-divider px-3 py-2 text-sm outline-none focus:border-ink"
         />
 
-        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-[#62748E]">
+        <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.1em] text-foreground-muted">
           Lists (one per line, format: "Name | list|board")
         </label>
         <textarea
           value={listsText}
           onChange={(e) => setListsText(e.target.value)}
           rows={5}
-          className="mb-3 w-full rounded-md border border-[#E2E8F0] px-3 py-2 font-mono text-xs outline-none focus:border-[#0F172B]"
+          className="mb-3 w-full rounded-md border border-divider px-3 py-2 font-mono text-xs outline-none focus:border-ink"
         />
 
         {error && (
@@ -814,13 +814,13 @@ function CreateModal({ onClose }: { onClose: () => void }) {
         )}
 
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-md px-4 py-2 text-sm text-[#62748E] hover:bg-[#F1F5F9]">
+          <button type="button" onClick={onClose} className="rounded-md px-4 py-2 text-sm text-foreground-muted hover:bg-canvas">
             Cancel
           </button>
           <button
             type="submit"
             disabled={!slug || !name || create.isPending}
-            className="rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:bg-[#1E293B] disabled:bg-[#CAD5E2]"
+            className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover disabled:bg-well"
           >
             {create.isPending ? 'Creating…' : 'Create'}
           </button>

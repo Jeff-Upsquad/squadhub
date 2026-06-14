@@ -6,7 +6,7 @@ import SliderPanel from './SliderPanel';
 
 const STATUS_BADGE: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700',
-  used: 'bg-slate-100 text-slate-600',
+  used: 'bg-canvas text-foreground-muted',
   expired: 'bg-red-100 text-red-700',
 };
 
@@ -82,20 +82,20 @@ export default function OnboardingLinksModule() {
     <div className="mx-auto max-w-6xl">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Invite Links</h1>
-          <p className="mt-1 text-sm text-[#62748E]">Tokenized 7-day single-use onboarding links with sales attribution.</p>
+          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Invite Links</h1>
+          <p className="mt-1 text-sm text-foreground-muted">Tokenized 7-day single-use onboarding links with sales attribution.</p>
         </div>
         <button
           onClick={openGenerate}
-          className="rounded-md bg-[#2962FF] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E4BD8]"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-strong"
         >
           + Generate Link
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
+      <div className="overflow-hidden rounded-lg border border-divider bg-surface">
         <table className="w-full">
-          <thead className="bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-[#62748E]">
+          <thead className="bg-surface-alt text-left text-xs font-medium uppercase tracking-wide text-foreground-muted">
             <tr>
               <th className="px-4 py-3">Created by</th>
               <th className="px-4 py-3">Primary SP</th>
@@ -107,32 +107,32 @@ export default function OnboardingLinksModule() {
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#E2E8F0] text-sm text-[#0F172B]">
+          <tbody className="divide-y divide-divider text-sm text-foreground">
             {isLoading ? (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-[#62748E]">Loading…</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-foreground-muted">Loading…</td></tr>
             ) : links.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-[#62748E]">No links generated yet.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-foreground-muted">No links generated yet.</td></tr>
             ) : (
               links.map((l) => (
                 <tr key={l.id}>
                   <td className="px-4 py-3">{l.created_by_user?.display_name || '—'}</td>
                   <td className="px-4 py-3">{l.primary_sales_person?.display_name || '—'}</td>
                   <td className="px-4 py-3">{l.secondary_sales_person?.display_name || '—'}</td>
-                  <td className="px-4 py-3 text-[#62748E]">{formatDateTime(l.created_at)}</td>
-                  <td className="px-4 py-3 text-[#62748E]">{formatDateTime(l.expires_at)}</td>
+                  <td className="px-4 py-3 text-foreground-muted">{formatDateTime(l.created_at)}</td>
+                  <td className="px-4 py-3 text-foreground-muted">{formatDateTime(l.expires_at)}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_BADGE[l.status || 'active']}`}>
                       {l.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-[#62748E]">
+                  <td className="px-4 py-3 text-foreground-muted">
                     {l.submission ? (l.submission as any).business_name : '—'}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {l.status === 'active' && l.url && (
                       <button
                         onClick={() => copyUrl(l.id, l.url!)}
-                        className="rounded-md border border-[#E2E8F0] px-3 py-1 text-xs font-medium text-[#0F172B] hover:bg-[#F8FAFC]"
+                        className="rounded-md border border-divider px-3 py-1 text-xs font-medium text-foreground hover:bg-surface-alt"
                       >
                         {copiedId === l.id ? 'Copied!' : 'Copy URL'}
                       </button>
@@ -149,11 +149,11 @@ export default function OnboardingLinksModule() {
         {!justCreated ? (
           <div className="space-y-5">
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Primary Sales Person</label>
+              <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Primary Sales Person</label>
               <select
                 value={primaryId}
                 onChange={(e) => setPrimaryId(e.target.value)}
-                className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+                className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
               >
                 <option value="">Select…</option>
                 {salesPeople.map((p) => (
@@ -162,11 +162,11 @@ export default function OnboardingLinksModule() {
               </select>
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Secondary Sales Person (optional)</label>
+              <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Secondary Sales Person (optional)</label>
               <select
                 value={secondaryId}
                 onChange={(e) => setSecondaryId(e.target.value)}
-                className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+                className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
               >
                 <option value="">None</option>
                 {salesPeople
@@ -176,13 +176,13 @@ export default function OnboardingLinksModule() {
                   ))}
               </select>
             </div>
-            <div className="rounded-md bg-[#F8FAFC] p-3 text-xs text-[#62748E]">
+            <div className="rounded-md bg-surface-alt p-3 text-xs text-foreground-muted">
               Link expires in 7 days and can only be used for one submission.
             </div>
             <button
               onClick={() => createMutation.mutate()}
               disabled={!primaryId || createMutation.isPending}
-              className="w-full rounded-md bg-[#2962FF] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E4BD8] disabled:opacity-50"
+              className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white transition hover:bg-accent-strong disabled:opacity-50"
             >
               {createMutation.isPending ? 'Generating…' : 'Generate'}
             </button>
@@ -190,28 +190,28 @@ export default function OnboardingLinksModule() {
         ) : (
           <div className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Share this URL</label>
+              <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Share this URL</label>
               <div className="flex items-center gap-2">
                 <input
                   readOnly
                   value={justCreated.url || ''}
-                  className="flex-1 rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-sm text-[#0F172B]"
+                  className="flex-1 rounded-md border border-divider bg-surface-alt px-3 py-2 text-sm text-foreground"
                   onFocus={(e) => e.currentTarget.select()}
                 />
                 <button
                   onClick={() => copyUrl(justCreated.id, justCreated.url!)}
-                  className="rounded-md bg-[#2962FF] px-3 py-2 text-sm font-medium text-white hover:bg-[#1E4BD8]"
+                  className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-strong"
                 >
                   {copiedId === justCreated.id ? 'Copied!' : 'Copy'}
                 </button>
               </div>
             </div>
-            <div className="text-xs text-[#62748E]">
+            <div className="text-xs text-foreground-muted">
               Expires {formatDateTime(justCreated.expires_at)} · single-use
             </div>
             <button
               onClick={closeGenerate}
-              className="w-full rounded-md border border-[#E2E8F0] bg-white px-4 py-2.5 text-sm font-medium text-[#0F172B] hover:bg-[#F8FAFC]"
+              className="w-full rounded-md border border-divider bg-surface px-4 py-2.5 text-sm font-medium text-foreground hover:bg-surface-alt"
             >
               Done
             </button>

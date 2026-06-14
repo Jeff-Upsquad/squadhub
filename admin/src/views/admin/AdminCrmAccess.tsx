@@ -127,19 +127,19 @@ export default function AdminCrmAccess() {
   });
 
   const selectClass =
-    'rounded-md border border-[#CAD5E2] bg-white px-2 py-1.5 text-sm text-[#0F172B] outline-none focus:border-[#2962FF]';
+    'rounded-md border border-divider-strong bg-surface px-2 py-1.5 text-sm text-foreground outline-none focus:border-accent';
 
   return (
     <div className="p-6">
-      <h2 className="mb-1 font-[family-name:var(--font-display)] text-2xl font-bold text-[#0F172B]">CRM Access</h2>
-      <p className="mb-6 text-sm text-[#62748E]">
+      <h2 className="mb-1 font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">CRM Access</h2>
+      <p className="mb-6 text-sm text-foreground-muted">
         Add people to Squad CRM and set their role + per-module permission levels. Only people you add appear here.
       </p>
 
       {/* Workspace + enforcement */}
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4 rounded-lg border border-[#E2E8F0] bg-white p-5">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4 rounded-lg border border-divider bg-surface p-5">
         <div className="min-w-[150px]">
-          <label className="mb-1.5 block text-xs font-medium text-[#62748E]">App</label>
+          <label className="mb-1.5 block text-xs font-medium text-foreground-muted">App</label>
           <select
             className={selectClass}
             value={app}
@@ -155,7 +155,7 @@ export default function AdminCrmAccess() {
           </select>
         </div>
         <div className="min-w-[220px]">
-          <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Workspace</label>
+          <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Workspace</label>
           <select
             className={selectClass}
             value={workspaceId}
@@ -175,8 +175,8 @@ export default function AdminCrmAccess() {
 
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <div className="text-sm font-medium text-[#0F172B]">Access enforcement</div>
-            <div className="text-xs text-[#62748E]">
+            <div className="text-sm font-medium text-foreground">Access enforcement</div>
+            <div className="text-xs text-foreground-muted">
               {enforcementEnabled
                 ? 'On — only people added below can use the CRM here.'
                 : 'Off — everyone with workspace membership has full access.'}
@@ -186,12 +186,12 @@ export default function AdminCrmAccess() {
             onClick={() => toggleEnforcement.mutate(!enforcementEnabled)}
             disabled={!workspaceId || toggleEnforcement.isPending}
             className={`relative h-6 w-11 shrink-0 rounded-full transition disabled:opacity-50 ${
-              enforcementEnabled ? 'bg-[#2962FF]' : 'bg-[#CAD5E2]'
+              enforcementEnabled ? 'bg-accent' : 'bg-well'
             }`}
             aria-label="Toggle access enforcement"
           >
             <span
-              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-surface transition ${
                 enforcementEnabled ? 'left-[22px]' : 'left-0.5'
               }`}
             />
@@ -206,10 +206,10 @@ export default function AdminCrmAccess() {
       )}
 
       {/* Access list */}
-      <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-4 py-3">
-          <h3 className="text-sm font-semibold text-[#0F172B]">
-            People with CRM access {members.length > 0 && <span className="text-[#90A1B9]">({members.length})</span>}
+      <div className="overflow-hidden rounded-lg border border-divider bg-surface">
+        <div className="flex items-center justify-between border-b border-divider px-4 py-3">
+          <h3 className="text-sm font-semibold text-foreground">
+            People with CRM access {members.length > 0 && <span className="text-foreground-dim">({members.length})</span>}
           </h3>
           <button
             onClick={() => {
@@ -217,7 +217,7 @@ export default function AdminCrmAccess() {
               setSearch('');
             }}
             disabled={!workspaceId}
-            className="rounded-md bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[#1D293D] disabled:opacity-50"
+            className="rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white transition hover:bg-ink-hover disabled:opacity-50"
           >
             {adding ? 'Close' : '+ Add user'}
           </button>
@@ -225,33 +225,33 @@ export default function AdminCrmAccess() {
 
         {/* Add-user picker */}
         {adding && (
-          <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3">
+          <div className="border-b border-divider bg-surface-alt px-4 py-3">
             <input
               autoFocus
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search workspace members by name or email…"
-              className="mb-3 w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none focus:border-[#2962FF]"
+              className="mb-3 w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground placeholder-foreground-dim outline-none focus:border-accent"
             />
-            <div className="max-h-64 overflow-y-auto rounded-md border border-[#E2E8F0] bg-white">
+            <div className="max-h-64 overflow-y-auto rounded-md border border-divider bg-surface">
               {candidates.length === 0 ? (
-                <p className="px-3 py-4 text-center text-xs text-[#90A1B9]">
+                <p className="px-3 py-4 text-center text-xs text-foreground-dim">
                   {search ? 'No matching members.' : 'All workspace members already have access.'}
                 </p>
               ) : (
                 candidates.map((c) => (
                   <div
                     key={c.id}
-                    className="flex items-center justify-between border-b border-[#F1F5F9] px-3 py-2 last:border-0"
+                    className="flex items-center justify-between border-b border-divider px-3 py-2 last:border-0"
                   >
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-[#0F172B]">{c.display_name || '—'}</div>
-                      <div className="truncate text-xs text-[#62748E]">{c.email || c.id}</div>
+                      <div className="truncate text-sm font-medium text-foreground">{c.display_name || '—'}</div>
+                      <div className="truncate text-xs text-foreground-muted">{c.email || c.id}</div>
                     </div>
                     <button
                       onClick={() => addUser.mutate({ user_id: c.id, role: 'member' })}
                       disabled={addUser.isPending}
-                      className="shrink-0 rounded-md border border-[#CAD5E2] bg-white px-3 py-1 text-xs font-medium text-[#0F172B] transition hover:bg-[#F1F5F9] disabled:opacity-50"
+                      className="shrink-0 rounded-md border border-divider-strong bg-surface px-3 py-1 text-xs font-medium text-foreground transition hover:bg-canvas disabled:opacity-50"
                     >
                       Add
                     </button>
@@ -259,7 +259,7 @@ export default function AdminCrmAccess() {
                 ))
               )}
             </div>
-            <p className="mt-2 text-xs text-[#90A1B9]">
+            <p className="mt-2 text-xs text-foreground-dim">
               Added as Member with no access to any module — open Modules to grant access per module. New people (no
               account yet) are invited from the Invitations screen.
             </p>
@@ -268,16 +268,16 @@ export default function AdminCrmAccess() {
 
         {/* Granted list */}
         {isLoading ? (
-          <p className="px-4 py-8 text-center text-sm text-[#62748E]">Loading…</p>
+          <p className="px-4 py-8 text-center text-sm text-foreground-muted">Loading…</p>
         ) : members.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-[#62748E]">
-            No one has CRM access yet. Click <span className="font-medium text-[#0F172B]">+ Add user</span> to grant
+          <p className="px-4 py-10 text-center text-sm text-foreground-muted">
+            No one has CRM access yet. Click <span className="font-medium text-foreground">+ Add user</span> to grant
             access.
           </p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#E2E8F0] text-left text-xs text-[#62748E]">
+              <tr className="border-b border-divider text-left text-xs text-foreground-muted">
                 <th className="px-4 py-2.5 font-medium">User</th>
                 <th className="px-4 py-2.5 font-medium">CRM role</th>
                 <th className="px-4 py-2.5 font-medium" />
@@ -288,10 +288,10 @@ export default function AdminCrmAccess() {
                 const isOpen = expanded === m.user_id;
                 return (
                   <Fragment key={m.user_id}>
-                    <tr className="border-b border-[#F1F5F9]">
+                    <tr className="border-b border-divider">
                       <td className="px-4 py-2.5">
-                        <div className="font-medium text-[#0F172B]">{m.user?.display_name || '—'}</div>
-                        <div className="text-xs text-[#62748E]">{m.user?.email || m.user_id}</div>
+                        <div className="font-medium text-foreground">{m.user?.display_name || '—'}</div>
+                        <div className="text-xs text-foreground-muted">{m.user?.email || m.user_id}</div>
                       </td>
                       <td className="px-4 py-2.5">
                         <select
@@ -307,7 +307,7 @@ export default function AdminCrmAccess() {
                       <td className="px-4 py-2.5 text-right">
                         <button
                           onClick={() => setExpanded(isOpen ? null : m.user_id)}
-                          className="mr-3 text-xs font-medium text-[#2962FF] hover:underline"
+                          className="mr-3 text-xs font-medium text-accent hover:underline"
                         >
                           {isOpen ? 'Hide modules' : 'Modules'}
                         </button>
@@ -321,7 +321,7 @@ export default function AdminCrmAccess() {
                       </td>
                     </tr>
                     {isOpen && (
-                      <tr className="border-b border-[#F1F5F9] bg-[#F8FAFC]">
+                      <tr className="border-b border-divider bg-surface-alt">
                         <td colSpan={3} className="px-4 py-3">
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                             {modules.map((mod) => {
@@ -329,7 +329,7 @@ export default function AdminCrmAccess() {
                               const roleDefault = ROLE_DEFAULT_LEVEL[m.access.role];
                               return (
                                 <div key={mod.key} className="flex items-center justify-between gap-2">
-                                  <span className="text-xs text-[#62748E]">{mod.label}</span>
+                                  <span className="text-xs text-foreground-muted">{mod.label}</span>
                                   <select
                                     className={selectClass}
                                     value={override ?? 'default'}

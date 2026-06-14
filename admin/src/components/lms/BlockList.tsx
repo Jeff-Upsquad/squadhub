@@ -73,16 +73,16 @@ export default function BlockList({ itemId, lessonId, blocks }: Props) {
   return (
     <div className="space-y-3">
       {blocks.map((block, i) => (
-        <div key={block.id} className="rounded-lg border border-[#E2E8F0] bg-white">
-          <div className="flex items-center justify-between border-b border-[#E2E8F0] px-3 py-2">
+        <div key={block.id} className="rounded-lg border border-divider bg-surface">
+          <div className="flex items-center justify-between border-b border-divider px-3 py-2">
             <div className="flex items-center gap-2">
               <span className="text-[14px]">{BLOCK_ICONS[block.type]}</span>
-              <span className="text-[12px] font-medium text-[#62748E]">{BLOCK_LABELS[block.type]}</span>
+              <span className="text-[12px] font-medium text-foreground-muted">{BLOCK_LABELS[block.type]}</span>
             </div>
             <div className="flex items-center gap-0.5">
-              <button onClick={() => moveBlock(i, -1)} disabled={i === 0} className="rounded p-1 text-[#90A1B9] hover:bg-[#F8FAFC] hover:text-[#0F172B] disabled:opacity-30" title="Move up">↑</button>
-              <button onClick={() => moveBlock(i, 1)} disabled={i === blocks.length - 1} className="rounded p-1 text-[#90A1B9] hover:bg-[#F8FAFC] hover:text-[#0F172B] disabled:opacity-30" title="Move down">↓</button>
-              <button onClick={() => { if (confirm('Delete this block?')) deleteBlock.mutate(block.id); }} className="rounded p-1 text-[#90A1B9] hover:bg-red-50 hover:text-red-600" title="Delete">×</button>
+              <button onClick={() => moveBlock(i, -1)} disabled={i === 0} className="rounded p-1 text-foreground-dim hover:bg-surface-alt hover:text-foreground disabled:opacity-30" title="Move up">↑</button>
+              <button onClick={() => moveBlock(i, 1)} disabled={i === blocks.length - 1} className="rounded p-1 text-foreground-dim hover:bg-surface-alt hover:text-foreground disabled:opacity-30" title="Move down">↓</button>
+              <button onClick={() => { if (confirm('Delete this block?')) deleteBlock.mutate(block.id); }} className="rounded p-1 text-foreground-dim hover:bg-red-50 hover:text-red-600" title="Delete">×</button>
             </div>
           </div>
           <div className="p-3">
@@ -97,28 +97,28 @@ export default function BlockList({ itemId, lessonId, blocks }: Props) {
       ))}
 
       {showPicker ? (
-        <div className="rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-3">
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-[#90A1B9]">Pick a block type</p>
+        <div className="rounded-lg border border-dashed border-divider-strong bg-surface-alt p-3">
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Pick a block type</p>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             {(Object.keys(BLOCK_LABELS) as LmsBlockType[]).map((t) => (
               <button
                 key={t}
                 type="button"
                 onClick={() => addBlock.mutate(t)}
-                className="flex items-center gap-2 rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-left text-sm text-[#0F172B] hover:border-[#0F172B]"
+                className="flex items-center gap-2 rounded-md border border-divider bg-surface px-3 py-2 text-left text-sm text-foreground hover:border-ink"
               >
                 <span>{BLOCK_ICONS[t]}</span>
                 <span>{BLOCK_LABELS[t]}</span>
               </button>
             ))}
           </div>
-          <button type="button" onClick={() => setShowPicker(false)} className="mt-2 text-[12px] text-[#62748E] hover:text-[#0F172B]">Cancel</button>
+          <button type="button" onClick={() => setShowPicker(false)} className="mt-2 text-[12px] text-foreground-muted hover:text-foreground">Cancel</button>
         </div>
       ) : (
         <button
           type="button"
           onClick={() => setShowPicker(true)}
-          className="w-full rounded-md border border-dashed border-[#CBD5E1] bg-white py-2 text-sm text-[#62748E] hover:border-[#0F172B] hover:text-[#0F172B]"
+          className="w-full rounded-md border border-dashed border-divider-strong bg-surface py-2 text-sm text-foreground-muted hover:border-ink hover:text-foreground"
         >
           + Add block
         </button>
@@ -153,7 +153,7 @@ function BlockEditor({ block, itemId, lessonId, onPatch }: {
             current={{ url: block.file_url, name: block.file_name }}
             onUploaded={(f) => onPatch({ file_url: f.url, file_name: f.name, file_size: f.size, mime_type: f.mime_type })}
           />
-          {block.file_url && <img src={block.file_url} alt={block.caption || ''} className="max-h-64 rounded-md border border-[#E2E8F0]" />}
+          {block.file_url && <img src={block.file_url} alt={block.caption || ''} className="max-h-64 rounded-md border border-divider" />}
           <CaptionInput value={block.caption} onChange={(caption) => onPatch({ caption })} />
         </div>
       );
@@ -183,8 +183,8 @@ function BlockEditor({ block, itemId, lessonId, onPatch }: {
             }}
           />
           {block.embed_url && (
-            <div className="rounded-md border border-[#E2E8F0] bg-[#F8FAFC] p-2 text-[12px] text-[#62748E]">
-              Preview: <span className="text-[#0F172B]">{block.embed_provider}</span> — <span className="font-mono">{block.embed_url}</span>
+            <div className="rounded-md border border-divider bg-surface-alt p-2 text-[12px] text-foreground-muted">
+              Preview: <span className="text-foreground">{block.embed_provider}</span> — <span className="font-mono">{block.embed_url}</span>
             </div>
           )}
           <CaptionInput value={block.caption} onChange={(caption) => onPatch({ caption })} />
@@ -235,7 +235,7 @@ function CaptionInput({ value, onChange }: { value: string | null; onChange: (v:
         if (e.target.value !== (value || '')) onChange(e.target.value);
       }}
       placeholder="Caption (optional)"
-      className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-[13px] placeholder-[#90A1B9] focus:border-[#0F172B] focus:outline-none"
+      className="w-full rounded-md border border-divider bg-surface px-3 py-1.5 text-[13px] placeholder-foreground-dim focus:border-ink focus:outline-none"
     />
   );
 }

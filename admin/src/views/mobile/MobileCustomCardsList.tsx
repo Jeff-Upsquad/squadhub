@@ -48,7 +48,7 @@ export default function MobileCustomCardsList() {
 
   if (editingCardId) {
     return (
-      <div className="fixed inset-0 z-50 bg-white overflow-auto">
+      <div className="fixed inset-0 z-50 bg-surface overflow-auto">
         <AdminCardEditor
           cardId={editingCardId}
           onClose={() => {

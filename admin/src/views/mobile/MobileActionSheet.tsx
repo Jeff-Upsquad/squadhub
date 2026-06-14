@@ -32,7 +32,7 @@ export default function MobileActionSheet({
     <div className="fixed inset-0 z-[70] flex items-end justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div
-        className="relative w-full max-w-lg rounded-t-2xl border-t border-x border-[var(--color-sh-warm-border)] bg-white px-5 pb-8 pt-4"
+        className="relative w-full max-w-lg rounded-t-2xl border-t border-x border-[var(--color-sh-warm-border)] bg-surface px-5 pb-8 pt-4"
         style={{ animation: 'slideUp 0.25s ease-out' }}
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[var(--color-sh-ink-faint)]" />

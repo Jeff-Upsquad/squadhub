@@ -36,7 +36,7 @@ export default function MobileLayout({ children }: { children: React.ReactNode }
       className={`${jakarta.variable} ${inter.variable} min-h-dvh sh-surface font-[family-name:var(--font-inter)]`}
     >
       {showTopBar && (
-        <header className="sticky top-0 z-40 flex items-center justify-between border-b border-[var(--color-sh-warm-border)] bg-white px-4 py-3">
+        <header className="sticky top-0 z-40 flex items-center justify-between border-b border-[var(--color-sh-warm-border)] bg-surface px-4 py-3">
           <div className="flex items-center gap-2.5">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-sh-lime)] text-xs font-bold text-[var(--color-sh-ink)] ring-1 ring-[var(--color-sh-ink)]">
               SH

@@ -38,8 +38,8 @@ export default function EntriesModule() {
   return (
     <div>
       <div className="mb-4">
-        <h3 className="text-lg font-semibold text-[#0F172B]">All Entries</h3>
-        <p className="text-sm text-[#64748B]">View cash in/out entries across all clients</p>
+        <h3 className="text-lg font-semibold text-foreground">All Entries</h3>
+        <p className="text-sm text-foreground-muted">View cash in/out entries across all clients</p>
       </div>
 
       {/* Filters */}
@@ -47,7 +47,7 @@ export default function EntriesModule() {
         <select
           value={filters.client_id}
           onChange={(e) => setFilters({ ...filters, client_id: e.target.value, page: 1 })}
-          className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#0F172B]"
+          className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground"
         >
           <option value="">All Clients</option>
           {clients.map((c: any) => (
@@ -57,7 +57,7 @@ export default function EntriesModule() {
         <select
           value={filters.type}
           onChange={(e) => setFilters({ ...filters, type: e.target.value, page: 1 })}
-          className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#0F172B]"
+          className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground"
         >
           <option value="">All Types</option>
           <option value="cash_in">Cash In</option>
@@ -66,7 +66,7 @@ export default function EntriesModule() {
         <select
           value={filters.is_posted}
           onChange={(e) => setFilters({ ...filters, is_posted: e.target.value, page: 1 })}
-          className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#0F172B]"
+          className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground"
         >
           <option value="">All Status</option>
           <option value="false">Unposted</option>
@@ -76,48 +76,48 @@ export default function EntriesModule() {
           type="date"
           value={filters.date_from}
           onChange={(e) => setFilters({ ...filters, date_from: e.target.value, page: 1 })}
-          className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#0F172B]"
+          className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground"
           placeholder="From"
         />
         <input
           type="date"
           value={filters.date_to}
           onChange={(e) => setFilters({ ...filters, date_to: e.target.value, page: 1 })}
-          className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#0F172B]"
+          className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground"
           placeholder="To"
         />
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
+      <div className="overflow-hidden rounded-lg border border-divider bg-surface">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-              <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Date</th>
-              <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Client</th>
-              <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Staff</th>
-              <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Type</th>
-              <th className="px-4 py-2.5 text-right font-medium text-[#64748B]">Amount</th>
-              <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Party</th>
-              <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Mode</th>
-              <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Status</th>
+            <tr className="border-b border-divider bg-surface-alt">
+              <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Date</th>
+              <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Client</th>
+              <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Staff</th>
+              <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Type</th>
+              <th className="px-4 py-2.5 text-right font-medium text-foreground-muted">Amount</th>
+              <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Party</th>
+              <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Mode</th>
+              <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Status</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={8} className="py-12 text-center text-[#94A3B8]">Loading...</td>
+                <td colSpan={8} className="py-12 text-center text-foreground-dim">Loading...</td>
               </tr>
             ) : entries.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-12 text-center text-[#94A3B8]">No entries found</td>
+                <td colSpan={8} className="py-12 text-center text-foreground-dim">No entries found</td>
               </tr>
             ) : (
               entries.map((entry: any) => (
-                <tr key={entry.id} className="border-b border-[#F1F5F9] hover:bg-[#F8FAFC]">
-                  <td className="px-4 py-2.5 text-[#0F172B]">{entry.entry_date}</td>
-                  <td className="px-4 py-2.5 text-[#475569]">{entry.client?.business_name || '-'}</td>
-                  <td className="px-4 py-2.5 text-[#475569]">{entry.user?.display_name || '-'}</td>
+                <tr key={entry.id} className="border-b border-divider hover:bg-surface-alt">
+                  <td className="px-4 py-2.5 text-foreground">{entry.entry_date}</td>
+                  <td className="px-4 py-2.5 text-foreground-muted">{entry.client?.business_name || '-'}</td>
+                  <td className="px-4 py-2.5 text-foreground-muted">{entry.user?.display_name || '-'}</td>
                   <td className="px-4 py-2.5">
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                       entry.entry_type === 'cash_in'
@@ -127,14 +127,14 @@ export default function EntriesModule() {
                       {entry.entry_type === 'cash_in' ? 'Cash In' : 'Cash Out'}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-right font-medium text-[#0F172B]">
+                  <td className="px-4 py-2.5 text-right font-medium text-foreground">
                     {Number(entry.amount).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
                   </td>
-                  <td className="px-4 py-2.5 text-[#475569]">{entry.party_name || '-'}</td>
-                  <td className="px-4 py-2.5 text-[#475569] capitalize">{entry.payment_mode?.replace('_', ' ')}</td>
+                  <td className="px-4 py-2.5 text-foreground-muted">{entry.party_name || '-'}</td>
+                  <td className="px-4 py-2.5 text-foreground-muted capitalize">{entry.payment_mode?.replace('_', ' ')}</td>
                   <td className="px-4 py-2.5">
                     {entry.is_posted ? (
-                      <span className="rounded-full bg-[#EEF2FF] px-2 py-0.5 text-[10px] font-semibold text-[#2962FF]">Posted</span>
+                      <span className="rounded-full bg-[#EEF2FF] px-2 py-0.5 text-[10px] font-semibold text-accent">Posted</span>
                     ) : (
                       <span className="rounded-full bg-[#FEF9C3] px-2 py-0.5 text-[10px] font-semibold text-[#A16207]">Pending</span>
                     )}
@@ -148,20 +148,20 @@ export default function EntriesModule() {
 
       {/* Pagination */}
       {total > 25 && (
-        <div className="mt-3 flex items-center justify-between text-xs text-[#64748B]">
+        <div className="mt-3 flex items-center justify-between text-xs text-foreground-muted">
           <span>Showing {(filters.page - 1) * 25 + 1}-{Math.min(filters.page * 25, total)} of {total}</span>
           <div className="flex gap-1">
             <button
               onClick={() => setFilters({ ...filters, page: filters.page - 1 })}
               disabled={filters.page === 1}
-              className="rounded-md border border-[#E2E8F0] px-3 py-1 disabled:opacity-50"
+              className="rounded-md border border-divider px-3 py-1 disabled:opacity-50"
             >
               Prev
             </button>
             <button
               onClick={() => setFilters({ ...filters, page: filters.page + 1 })}
               disabled={filters.page * 25 >= total}
-              className="rounded-md border border-[#E2E8F0] px-3 py-1 disabled:opacity-50"
+              className="rounded-md border border-divider px-3 py-1 disabled:opacity-50"
             >
               Next
             </button>

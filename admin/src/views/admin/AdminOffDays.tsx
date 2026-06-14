@@ -47,7 +47,7 @@ export default function AdminOffDays() {
 
   return (
     <div>
-      <h2 className="mb-6 font-[family-name:var(--font-display)] text-2xl font-bold text-[#0F172B]">
+      <h2 className="mb-6 font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">
         Off Day Requests
       </h2>
 
@@ -56,7 +56,7 @@ export default function AdminOffDays() {
         <select
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-          className="rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-xs text-[#0F172B] outline-none focus:border-[#2962FF]"
+          className="rounded-md border border-divider-strong bg-surface px-3 py-2 text-xs text-foreground outline-none focus:border-accent"
         >
           <option value="">All Statuses</option>
           <option value="pending">Pending</option>
@@ -67,53 +67,53 @@ export default function AdminOffDays() {
 
       {/* Table */}
       {isLoading ? (
-        <p className="text-sm text-[#62748E]">Loading...</p>
+        <p className="text-sm text-foreground-muted">Loading...</p>
       ) : requests.length === 0 ? (
-        <div className="rounded-lg border border-[#E2E8F0] bg-white p-8 text-center">
-          <svg className="mx-auto h-10 w-10 text-[#90A1B9]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+        <div className="rounded-lg border border-divider bg-surface p-8 text-center">
+          <svg className="mx-auto h-10 w-10 text-foreground-dim" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
           </svg>
-          <p className="mt-3 text-sm text-[#62748E]">No off-day requests found</p>
+          <p className="mt-3 text-sm text-foreground-muted">No off-day requests found</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
+        <div className="overflow-hidden rounded-lg border border-divider bg-surface">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-[#E2E8F0] bg-[#F1F5F9]">
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">User</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Type</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Date(s)</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Reason</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Status</th>
-                <th className="px-4 py-3 text-right font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Actions</th>
+              <tr className="border-b border-divider bg-canvas">
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">User</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Type</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Date(s)</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Reason</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Status</th>
+                <th className="px-4 py-3 text-right font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Actions</th>
               </tr>
             </thead>
             <tbody>
               {requests.map((r: any) => (
-                <tr key={r.id} className="border-b border-[#E2E8F0] last:border-b-0">
+                <tr key={r.id} className="border-b border-divider last:border-b-0">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       {r.user?.avatar_url ? (
                         <img src={r.user.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" />
                       ) : (
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#F1F5F9] text-[10px] font-medium text-[#62748E]">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-canvas text-[10px] font-medium text-foreground-muted">
                           {(r.user?.display_name || '?').charAt(0).toUpperCase()}
                         </div>
                       )}
-                      <span className="text-sm text-[#0F172B]">{r.user?.display_name || 'Unknown'}</span>
+                      <span className="text-sm text-foreground">{r.user?.display_name || 'Unknown'}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
+                    <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] font-medium text-foreground-muted">
                       {TYPE_LABELS[r.request_type] || r.request_type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-[family-name:var(--font-mono)] text-xs text-[#62748E]">
+                  <td className="px-4 py-3 font-[family-name:var(--font-mono)] text-xs text-foreground-muted">
                     {r.request_type === 'long_term'
                       ? `${r.start_date} — ${r.end_date}`
                       : r.date}
                   </td>
-                  <td className="max-w-[200px] truncate px-4 py-3 text-xs text-[#62748E]">
+                  <td className="max-w-[200px] truncate px-4 py-3 text-xs text-foreground-muted">
                     {r.reason || '—'}
                   </td>
                   <td className="px-4 py-3">
@@ -140,7 +140,7 @@ export default function AdminOffDays() {
                         </button>
                       </div>
                     ) : (
-                      <span className="text-xs text-[#90A1B9]">—</span>
+                      <span className="text-xs text-foreground-dim">—</span>
                     )}
                   </td>
                 </tr>
@@ -153,21 +153,21 @@ export default function AdminOffDays() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between">
-          <p className="text-xs text-[#90A1B9]">
+          <p className="text-xs text-foreground-dim">
             Page {page} of {totalPages} ({total} total)
           </p>
           <div className="flex gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#62748E] transition hover:bg-[#F1F5F9] disabled:opacity-40"
+              className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground-muted transition hover:bg-canvas disabled:opacity-40"
             >
               Previous
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#62748E] transition hover:bg-[#F1F5F9] disabled:opacity-40"
+              className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground-muted transition hover:bg-canvas disabled:opacity-40"
             >
               Next
             </button>

@@ -101,7 +101,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   });
 
   if (isLoading || !item) {
-    return <div className="p-8 text-sm text-[#90A1B9]">Loading…</div>;
+    return <div className="p-8 text-sm text-foreground-dim">Loading…</div>;
   }
 
   const activeLesson = item.lessons.find((l) => l.id === activeLessonId) || item.lessons[0];
@@ -115,17 +115,17 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <Link href="/admin/learning" className="mb-2 inline-flex items-center gap-1 text-[12px] text-[#62748E] hover:text-[#0F172B]">
+          <Link href="/admin/learning" className="mb-2 inline-flex items-center gap-1 text-[12px] text-foreground-muted hover:text-foreground">
             ← Learning Library
           </Link>
           <div className="flex items-center gap-2">
             <input
               defaultValue={item.title}
               onBlur={(e) => { if (e.target.value !== item.title) patchItem.mutate({ title: e.target.value }); }}
-              className="min-w-0 flex-1 border-none bg-transparent font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B] outline-none"
+              className="min-w-0 flex-1 border-none bg-transparent font-[family-name:var(--font-display)] text-xl font-bold text-foreground outline-none"
             />
             <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-              item.status === 'published' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'
+              item.status === 'published' ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-foreground-muted'
             }`}>
               {item.status}
             </span>
@@ -137,14 +137,14 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
         <div className="flex items-center gap-2">
           <Link
             href={`/admin/learning/${itemId}/assignments`}
-            className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC]"
+            className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt"
           >
             View roster ({item.assignment_count ?? 0})
           </Link>
           {item.status === 'published' && (
             <button
               onClick={() => resync.mutate()}
-              className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC]"
+              className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt"
               title="Assign to any new users who joined the audience after publish"
             >
               Resync audience
@@ -161,7 +161,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
             <button
               onClick={() => { setPublishBusy(true); publish.mutate(undefined, { onSettled: () => setPublishBusy(false) }); }}
               disabled={publishBusy || publish.isPending}
-              className="rounded-lg bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:bg-[#1D293D] disabled:opacity-50"
+              className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover disabled:opacity-50"
             >
               {publishBusy || publish.isPending ? 'Publishing…' : 'Publish'}
             </button>
@@ -179,14 +179,14 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                 onBlur={(e) => { if (e.target.value !== (item.summary || '')) patchItem.mutate({ summary: e.target.value || null }); }}
                 rows={3}
                 placeholder="One-line description (shown on cards)"
-                className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm placeholder-[#90A1B9] focus:border-[#0F172B] focus:outline-none"
+                className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm placeholder-foreground-dim focus:border-ink focus:outline-none"
               />
             </Field>
             <Field label="Category">
               <select
                 value={item.category_id || ''}
                 onChange={(e) => patchItem.mutate({ category_id: e.target.value || null })}
-                className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
+                className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm focus:border-ink focus:outline-none"
               >
                 <option value="">— None —</option>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -207,7 +207,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                     <img src={item.cover_image_url} alt="" className="mt-2 h-32 w-full rounded-md object-cover" />
                   )}
                 </>
-              ) : <p className="text-[12px] text-[#90A1B9]">Add a lesson first</p>}
+              ) : <p className="text-[12px] text-foreground-dim">Add a lesson first</p>}
             </Field>
           </Section>
 
@@ -223,12 +223,12 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
         {/* Right: lessons + blocks */}
         <main className="min-w-0 space-y-4">
           {isCourse && (
-            <div className="rounded-xl border border-[#E2E8F0] bg-white">
-              <div className="flex items-center justify-between border-b border-[#E2E8F0] px-4 py-2.5">
-                <h3 className="text-[13px] font-semibold text-[#0F172B]">Lessons</h3>
+            <div className="rounded-xl border border-divider bg-surface">
+              <div className="flex items-center justify-between border-b border-divider px-4 py-2.5">
+                <h3 className="text-[13px] font-semibold text-foreground">Lessons</h3>
                 <button
                   onClick={() => addLesson.mutate()}
-                  className="rounded-md border border-[#E2E8F0] bg-white px-2.5 py-1 text-[12px] text-[#62748E] hover:bg-[#F8FAFC]"
+                  className="rounded-md border border-divider bg-surface px-2.5 py-1 text-[12px] text-foreground-muted hover:bg-surface-alt"
                 >
                   + Add lesson
                 </button>
@@ -241,32 +241,32 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                       <button
                         onClick={() => setActiveLessonId(lesson.id)}
                         className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition ${
-                          activeLessonId === lesson.id ? 'bg-[#F1F5F9] text-[#0F172B]' : 'text-[#62748E] hover:bg-[#F8FAFC]'
+                          activeLessonId === lesson.id ? 'bg-canvas text-foreground' : 'text-foreground-muted hover:bg-surface-alt'
                         }`}
                       >
-                        <span className="w-5 text-right font-mono text-[11px] text-[#90A1B9]">{i + 1}.</span>
-                        <span className={`flex-1 truncate font-medium ${inactive ? 'text-[#90A1B9] line-through decoration-[#CAD5E2]' : ''}`}>{lesson.title}</span>
+                        <span className="w-5 text-right font-mono text-[11px] text-foreground-dim">{i + 1}.</span>
+                        <span className={`flex-1 truncate font-medium ${inactive ? 'text-foreground-dim line-through decoration-[#CAD5E2]' : ''}`}>{lesson.title}</span>
                         {inactive && (
-                          <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">Inactive</span>
+                          <span className="shrink-0 rounded-full bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted">Inactive</span>
                         )}
                       </button>
                     </li>
                   );
                 })}
                 {item.lessons.length === 0 && (
-                  <li className="px-3 py-4 text-center text-[12px] text-[#90A1B9]">No lessons yet</li>
+                  <li className="px-3 py-4 text-center text-[12px] text-foreground-dim">No lessons yet</li>
                 )}
               </ul>
             </div>
           )}
 
           {activeLesson && (
-            <div className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+            <div className="rounded-xl border border-divider bg-surface p-4">
               {isCourse && (
                 <div className="mb-4 space-y-3">
                   <div className="flex items-start gap-3">
                     <div className="flex-1">
-                      <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-[#90A1B9]">Lesson name</label>
+                      <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Lesson name</label>
                       <input
                         key={activeLesson.id}
                         defaultValue={activeLesson.title}
@@ -275,7 +275,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                           if (v && v !== activeLesson.title) patchLesson.mutate({ id: activeLesson.id, title: v });
                         }}
                         placeholder="Lesson name"
-                        className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-base font-semibold text-[#0F172B] focus:border-[#0F172B] focus:outline-none"
+                        className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-base font-semibold text-foreground focus:border-ink focus:outline-none"
                       />
                     </div>
                     {item.lessons.length > 1 && (
@@ -289,7 +289,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-[#90A1B9]">Description</label>
+                    <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Description</label>
                     <textarea
                       key={`desc-${activeLesson.id}`}
                       defaultValue={activeLesson.summary || ''}
@@ -300,35 +300,35 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                       }}
                       rows={2}
                       placeholder="Optional — shown to learners under the lesson title"
-                      className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm placeholder-[#90A1B9] focus:border-[#0F172B] focus:outline-none"
+                      className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm placeholder-foreground-dim focus:border-ink focus:outline-none"
                     />
                   </div>
 
-                  <label className="flex cursor-pointer items-center gap-2.5 rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2">
+                  <label className="flex cursor-pointer items-center gap-2.5 rounded-md border border-divider bg-surface-alt px-3 py-2">
                     <input
                       type="checkbox"
                       checked={activeLesson.is_active ?? true}
                       onChange={(e) => patchLesson.mutate({ id: activeLesson.id, is_active: e.target.checked })}
-                      className="h-4 w-4 rounded border-[#CAD5E2] accent-[#0F172B]"
+                      className="h-4 w-4 rounded border-divider-strong accent-[#0F172B]"
                     />
-                    <span className="text-[13px] font-medium text-[#0F172B]">Active</span>
-                    <span className="text-[12px] text-[#90A1B9]">
+                    <span className="text-[13px] font-medium text-foreground">Active</span>
+                    <span className="text-[12px] text-foreground-dim">
                       {(activeLesson.is_active ?? true) ? 'Visible to learners' : 'Hidden from learners — only visible here'}
                     </span>
                   </label>
                 </div>
               )}
               {isCourse && (
-                <div className="mb-4 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC]">
+                <div className="mb-4 rounded-lg border border-divider bg-surface-alt">
                   <button
                     type="button"
                     onClick={() => setShowLessonAudience((v) => !v)}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left"
                   >
-                    <span className="text-[#90A1B9]">{showLessonAudience ? '▾' : '▸'}</span>
-                    <span className="text-[12px] font-medium text-[#0F172B]">Who can see this lesson</span>
+                    <span className="text-foreground-dim">{showLessonAudience ? '▾' : '▸'}</span>
+                    <span className="text-[12px] font-medium text-foreground">Who can see this lesson</span>
                     <span className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                      lessonRestricted ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'
+                      lessonRestricted ? 'bg-amber-50 text-amber-700' : 'bg-canvas text-foreground-muted'
                     }`}>
                       {lessonRestricted
                         ? `Restricted${lessonAudTypes.length ? ` · ${lessonAudTypes.length} type${lessonAudTypes.length > 1 ? 's' : ''}` : ''}${lessonAudUsers.length ? ` · ${lessonAudUsers.length} ${lessonAudUsers.length > 1 ? 'people' : 'person'}` : ''}`
@@ -336,8 +336,8 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                     </span>
                   </button>
                   {showLessonAudience && (
-                    <div className="border-t border-[#E2E8F0] p-3">
-                      <p className="mb-3 text-[11px] leading-snug text-[#90A1B9]">
+                    <div className="border-t border-divider p-3">
+                      <p className="mb-3 text-[11px] leading-snug text-foreground-dim">
                         Leave everything empty to show this lesson to everyone enrolled in the course.
                         Pick user types or specific people to restrict it — everyone else won&apos;t see the lesson at all.
                       </p>
@@ -365,8 +365,8 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-[#E2E8F0] bg-white p-4">
-      <h3 className="mb-3 text-[13px] font-semibold text-[#0F172B]">{title}</h3>
+    <div className="rounded-xl border border-divider bg-surface p-4">
+      <h3 className="mb-3 text-[13px] font-semibold text-foreground">{title}</h3>
       <div className="space-y-4">{children}</div>
     </div>
   );
@@ -375,7 +375,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-[#90A1B9]">{label}</label>
+      <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-dim">{label}</label>
       {children}
     </div>
   );

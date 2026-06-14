@@ -58,7 +58,7 @@ const ACCESS_LABELS: Record<string, string> = {
 const ACCESS_COLORS: Record<string, string> = {
   manager: 'bg-purple-50 text-purple-700',
   member: 'bg-blue-50 text-blue-700',
-  viewer: 'bg-gray-50 text-gray-700',
+  viewer: 'bg-surface-alt text-foreground-muted',
   commenter: 'bg-amber-50 text-amber-700',
 };
 
@@ -68,11 +68,11 @@ function Toggle({ checked, onChange, color }: { checked: boolean; onChange: () =
       type="button"
       onClick={onChange}
       className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-        checked ? (color || 'bg-[#2962FF]') : 'bg-[#CAD5E2]'
+        checked ? (color || 'bg-accent') : 'bg-well'
       }`}
     >
       <span
-        className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+        className={`absolute top-0.5 h-4 w-4 rounded-full bg-surface shadow-sm transition-transform ${
           checked ? 'translate-x-4' : 'translate-x-0.5'
         }`}
       />
@@ -194,19 +194,19 @@ export default function AdminResourceManagement() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[#0F172B]">Resource Management</h1>
-        <p className="mt-1 text-sm text-[#62748E]">Manage spaces, folders, and lists. Control access, status, and locks.</p>
+        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">Resource Management</h1>
+        <p className="mt-1 text-sm text-foreground-muted">Manage spaces, folders, and lists. Control access, status, and locks.</p>
       </div>
 
       {/* Tab bar */}
       <div className="mb-4 flex items-center gap-4 flex-wrap">
-        <div className="flex gap-1 rounded-lg bg-white p-1 border border-[#E2E8F0] w-fit">
+        <div className="flex gap-1 rounded-lg bg-surface p-1 border border-divider w-fit">
           {(['spaces', 'folders', 'lists'] as const).map((t) => (
             <button
               key={t}
               onClick={() => { setActiveTab(t); setPage(1); }}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                activeTab === t ? 'bg-[#0F172B] text-white' : 'text-[#62748E] hover:text-[#0F172B]'
+                activeTab === t ? 'bg-ink text-white' : 'text-foreground-muted hover:text-foreground'
               }`}
             >
               {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -216,7 +216,7 @@ export default function AdminResourceManagement() {
 
         {/* Search */}
         <div className="relative">
-          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#90A1B9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input
@@ -224,7 +224,7 @@ export default function AdminResourceManagement() {
             placeholder="Search..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="rounded-lg border border-[#E2E8F0] bg-white py-1.5 pl-8 pr-3 text-xs text-[#0F172B] placeholder:text-[#90A1B9] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+            className="rounded-lg border border-divider bg-surface py-1.5 pl-8 pr-3 text-xs text-foreground placeholder:text-foreground-dim focus:outline-none focus:ring-1 focus:ring-accent"
           />
         </div>
 
@@ -232,7 +232,7 @@ export default function AdminResourceManagement() {
         <select
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value as any); setPage(1); }}
-          className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs text-[#0F172B] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+          className="rounded-lg border border-divider bg-surface px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
         >
           <option value="all">All Status</option>
           <option value="active">Active</option>
@@ -243,7 +243,7 @@ export default function AdminResourceManagement() {
         <select
           value={lockFilter}
           onChange={(e) => { setLockFilter(e.target.value as any); setPage(1); }}
-          className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs text-[#0F172B] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+          className="rounded-lg border border-divider bg-surface px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
         >
           <option value="all">All Locks</option>
           <option value="true">Locked</option>
@@ -251,39 +251,39 @@ export default function AdminResourceManagement() {
         </select>
 
         {total > 0 && (
-          <span className="text-xs text-[#90A1B9]">{total} result{total !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-foreground-dim">{total} result{total !== 1 ? 's' : ''}</span>
         )}
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-[#E2E8F0] bg-white overflow-hidden">
+      <div className="rounded-xl border border-divider bg-surface overflow-hidden">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#62748E]">Name</th>
+            <tr className="border-b border-divider bg-surface-alt">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-foreground-muted">Name</th>
               {activeTab !== 'spaces' && (
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#62748E]">Parent</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-foreground-muted">Parent</th>
               )}
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#62748E]">Created by</th>
-              <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide text-[#62748E]">Members</th>
-              <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide text-[#62748E]">Active</th>
-              <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide text-[#62748E]">Locked</th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[#62748E]">Actions</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-foreground-muted">Created by</th>
+              <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide text-foreground-muted">Members</th>
+              <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide text-foreground-muted">Active</th>
+              <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wide text-foreground-muted">Locked</th>
+              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-foreground-muted">Actions</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm text-[#90A1B9]">Loading...</td>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-foreground-dim">Loading...</td>
               </tr>
             )}
             {!isLoading && resources.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm text-[#90A1B9]">No resources found</td>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-foreground-dim">No resources found</td>
               </tr>
             )}
             {resources.map((r) => (
-              <tr key={r.id} className="border-b border-[#E2E8F0] last:border-0 hover:bg-[#F8FAFC]">
+              <tr key={r.id} className="border-b border-divider last:border-0 hover:bg-surface-alt">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     {activeTab === 'spaces' && (
@@ -300,11 +300,11 @@ export default function AdminResourceManagement() {
                       </svg>
                     )}
                     {activeTab === 'lists' && (
-                      <svg className="h-4 w-4 text-[#90A1B9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="h-4 w-4 text-foreground-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                       </svg>
                     )}
-                    <span className="text-sm font-medium text-[#0F172B]">{r.name}</span>
+                    <span className="text-sm font-medium text-foreground">{r.name}</span>
                     {r.is_locked && (
                       <svg className="h-3.5 w-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
@@ -316,12 +316,12 @@ export default function AdminResourceManagement() {
                   </div>
                 </td>
                 {activeTab !== 'spaces' && (
-                  <td className="px-4 py-3 text-sm text-[#62748E]">
+                  <td className="px-4 py-3 text-sm text-foreground-muted">
                     {r.folder_name ? `${r.space_name} / ${r.folder_name}` : r.space_name || '—'}
                   </td>
                 )}
-                <td className="px-4 py-3 text-sm text-[#62748E]">{r.created_by_name}</td>
-                <td className="px-4 py-3 text-center text-sm text-[#62748E]">{r.member_count}</td>
+                <td className="px-4 py-3 text-sm text-foreground-muted">{r.created_by_name}</td>
+                <td className="px-4 py-3 text-center text-sm text-foreground-muted">{r.member_count}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-center">
                     <Toggle
@@ -356,7 +356,7 @@ export default function AdminResourceManagement() {
                   <div className="flex justify-end">
                     <button
                       onClick={() => setSelectedResource({ type: resourceTypeSingular, id: r.id, name: r.name })}
-                      className="rounded-md bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1D293D]"
+                      className="rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white hover:bg-ink-hover"
                     >
                       Manage
                     </button>
@@ -371,21 +371,21 @@ export default function AdminResourceManagement() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between">
-          <span className="text-xs text-[#90A1B9]">
+          <span className="text-xs text-foreground-dim">
             Page {page} of {totalPages}
           </span>
           <div className="flex gap-1">
             <button
               disabled={page <= 1}
               onClick={() => setPage(page - 1)}
-              className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs font-medium text-[#62748E] hover:bg-[#F8FAFC] disabled:opacity-40"
+              className="rounded-md border border-divider px-3 py-1.5 text-xs font-medium text-foreground-muted hover:bg-surface-alt disabled:opacity-40"
             >
               Previous
             </button>
             <button
               disabled={page >= totalPages}
               onClick={() => setPage(page + 1)}
-              className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs font-medium text-[#62748E] hover:bg-[#F8FAFC] disabled:opacity-40"
+              className="rounded-md border border-divider px-3 py-1.5 text-xs font-medium text-foreground-muted hover:bg-surface-alt disabled:opacity-40"
             >
               Next
             </button>
@@ -400,16 +400,16 @@ export default function AdminResourceManagement() {
           <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setSelectedResource(null)} />
 
           {/* Panel */}
-          <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white shadow-xl flex flex-col">
+          <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-surface shadow-xl flex flex-col">
             {/* Panel Header */}
-            <div className="flex items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
+            <div className="flex items-center justify-between border-b border-divider px-6 py-4">
               <div>
-                <h2 className="text-lg font-semibold text-[#0F172B]">{selectedResource.name}</h2>
-                <p className="text-xs text-[#62748E]">Manage members and access levels</p>
+                <h2 className="text-lg font-semibold text-foreground">{selectedResource.name}</h2>
+                <p className="text-xs text-foreground-muted">Manage members and access levels</p>
               </div>
               <button
                 onClick={() => setSelectedResource(null)}
-                className="rounded-md p-1 text-[#62748E] hover:bg-[#F1F5F9] hover:text-[#0F172B]"
+                className="rounded-md p-1 text-foreground-muted hover:bg-canvas hover:text-foreground"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -420,8 +420,8 @@ export default function AdminResourceManagement() {
             {/* Panel Content */}
             <div className="flex-1 overflow-y-auto p-6">
               {/* Add Member */}
-              <div className="mb-6 rounded-lg border border-[#E2E8F0] p-4">
-                <h3 className="mb-3 text-sm font-medium text-[#0F172B]">Add Member</h3>
+              <div className="mb-6 rounded-lg border border-divider p-4">
+                <h3 className="mb-3 text-sm font-medium text-foreground">Add Member</h3>
                 <div className="flex flex-col gap-2">
                   <div className="flex gap-2">
                     <input
@@ -429,12 +429,12 @@ export default function AdminResourceManagement() {
                       placeholder="Search users by name or email..."
                       value={addUserSearch}
                       onChange={(e) => setAddUserSearch(e.target.value)}
-                      className="flex-1 rounded-md border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] placeholder:text-[#90A1B9] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+                      className="flex-1 rounded-md border border-divider px-3 py-2 text-sm text-foreground placeholder:text-foreground-dim focus:outline-none focus:ring-1 focus:ring-accent"
                     />
                     <select
                       value={addAccessLevel}
                       onChange={(e) => setAddAccessLevel(e.target.value)}
-                      className="rounded-md border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+                      className="rounded-md border border-divider px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
                     >
                       {Object.entries(ACCESS_LABELS).map(([val, label]) => (
                         <option key={val} value={val}>{label}</option>
@@ -442,7 +442,7 @@ export default function AdminResourceManagement() {
                     </select>
                   </div>
                   {addUserSearch && availableUsers.length > 0 && (
-                    <div className="max-h-40 overflow-y-auto rounded-md border border-[#E2E8F0] bg-white">
+                    <div className="max-h-40 overflow-y-auto rounded-md border border-divider bg-surface">
                       {availableUsers.slice(0, 10).map((u: any) => (
                         <button
                           key={u.id}
@@ -454,47 +454,47 @@ export default function AdminResourceManagement() {
                               access_level: addAccessLevel,
                             });
                           }}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[#F8FAFC]"
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-surface-alt"
                         >
-                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-medium text-[#62748E]">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-well text-[10px] font-medium text-foreground-muted">
                             {u.display_name?.[0]?.toUpperCase() || u.email?.[0]?.toUpperCase()}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium text-[#0F172B]">{u.display_name}</div>
-                            <div className="truncate text-xs text-[#90A1B9]">{u.email}</div>
+                            <div className="truncate text-sm font-medium text-foreground">{u.display_name}</div>
+                            <div className="truncate text-xs text-foreground-dim">{u.email}</div>
                           </div>
                         </button>
                       ))}
                     </div>
                   )}
                   {addUserSearch && availableUsers.length === 0 && (
-                    <p className="text-xs text-[#90A1B9] py-2">No matching users found</p>
+                    <p className="text-xs text-foreground-dim py-2">No matching users found</p>
                   )}
                 </div>
               </div>
 
               {/* Members List */}
-              <h3 className="mb-3 text-sm font-medium text-[#0F172B]">
+              <h3 className="mb-3 text-sm font-medium text-foreground">
                 Current Members ({members.length})
               </h3>
-              {membersLoading && <p className="text-sm text-[#90A1B9]">Loading...</p>}
+              {membersLoading && <p className="text-sm text-foreground-dim">Loading...</p>}
               {!membersLoading && members.length === 0 && (
-                <p className="text-sm text-[#90A1B9]">No members assigned</p>
+                <p className="text-sm text-foreground-dim">No members assigned</p>
               )}
               <div className="space-y-2">
                 {members.map((m) => (
-                  <div key={m.id} className="flex items-center gap-3 rounded-lg border border-[#E2E8F0] p-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#E2E8F0] text-xs font-medium text-[#62748E]">
+                  <div key={m.id} className="flex items-center gap-3 rounded-lg border border-divider p-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-well text-xs font-medium text-foreground-muted">
                       {m.user?.display_name?.[0]?.toUpperCase() || '?'}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium text-[#0F172B]">{m.user?.display_name || 'Unknown'}</div>
-                      <div className="text-xs text-[#90A1B9]">{m.user?.email}</div>
+                      <div className="text-sm font-medium text-foreground">{m.user?.display_name || 'Unknown'}</div>
+                      <div className="text-xs text-foreground-dim">{m.user?.email}</div>
                     </div>
                     <select
                       value={m.access_level}
                       onChange={(e) => updateMember.mutate({ membershipId: m.id, access_level: e.target.value })}
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-medium border-0 focus:outline-none focus:ring-1 focus:ring-[#2962FF] cursor-pointer ${ACCESS_COLORS[m.access_level] || 'bg-gray-50 text-gray-700'}`}
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-medium border-0 focus:outline-none focus:ring-1 focus:ring-accent cursor-pointer ${ACCESS_COLORS[m.access_level] || 'bg-surface-alt text-foreground-muted'}`}
                     >
                       {Object.entries(ACCESS_LABELS).map(([val, label]) => (
                         <option key={val} value={val}>{label}</option>
@@ -506,7 +506,7 @@ export default function AdminResourceManagement() {
                           removeMember.mutate(m.id);
                         }
                       }}
-                      className="rounded p-1 text-[#90A1B9] hover:bg-red-50 hover:text-red-500"
+                      className="rounded p-1 text-foreground-dim hover:bg-red-50 hover:text-red-500"
                     >
                       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

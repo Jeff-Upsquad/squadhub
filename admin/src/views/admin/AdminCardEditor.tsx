@@ -871,7 +871,7 @@ export default function AdminCardEditor({
                         <h3 className="text-sm font-semibold text-[var(--color-sh-ink)]">
                           {tier} pricing
                         </h3>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-[var(--color-sh-ink-muted)]">
+                        <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-medium text-[var(--color-sh-ink-muted)]">
                           1 card on publish
                         </span>
                       </div>
@@ -917,7 +917,7 @@ export default function AdminCardEditor({
                           )}
                         </Field>
                         <Field label="Partner Price (₹/mo)">
-                          <div className="flex h-[40px] items-center rounded-[10px] border border-[var(--color-sh-warm-border)] bg-white px-3 text-sm font-bold text-[var(--color-sh-ink)]">
+                          <div className="flex h-[40px] items-center rounded-[10px] border border-[var(--color-sh-warm-border)] bg-surface px-3 text-sm font-bold text-[var(--color-sh-ink)]">
                             {partnerPrice != null ? `₹${partnerPrice.toLocaleString()}` : '—'}
                           </div>
                           <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">= Proposed − Margin</p>

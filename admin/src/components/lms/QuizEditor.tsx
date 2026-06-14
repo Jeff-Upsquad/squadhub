@@ -75,7 +75,7 @@ export default function QuizEditor({ blockId, questions, itemId }: Props) {
             options: [{ id: 'a', text: '' }, { id: 'b', text: '' }],
             correct_option_id: 'a',
           })}
-          className="w-full rounded-md border border-dashed border-[#CBD5E1] bg-white py-2 text-sm text-[#62748E] hover:border-[#0F172B] hover:text-[#0F172B]"
+          className="w-full rounded-md border border-dashed border-divider-strong bg-surface py-2 text-sm text-foreground-muted hover:border-ink hover:text-foreground"
         >
           + Add question
         </button>
@@ -95,17 +95,17 @@ function QuestionRow({ index, question, onSave, onDelete }: {
 
   if (!editing) {
     return (
-      <div className="rounded-lg border border-[#E2E8F0] bg-white p-3">
+      <div className="rounded-lg border border-divider bg-surface p-3">
         <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-medium text-[#0F172B]">{index + 1}. {question.prompt}</p>
+          <p className="text-sm font-medium text-foreground">{index + 1}. {question.prompt}</p>
           <div className="flex shrink-0 gap-1">
-            <button type="button" onClick={() => { setDraft(question); setEditing(true); }} className="rounded px-2 py-0.5 text-[11px] text-[#62748E] hover:bg-[#F8FAFC]">Edit</button>
+            <button type="button" onClick={() => { setDraft(question); setEditing(true); }} className="rounded px-2 py-0.5 text-[11px] text-foreground-muted hover:bg-surface-alt">Edit</button>
             <button type="button" onClick={onDelete} className="rounded px-2 py-0.5 text-[11px] text-red-600 hover:bg-red-50">Delete</button>
           </div>
         </div>
         <ul className="mt-2 space-y-0.5">
           {question.options.map((opt) => (
-            <li key={opt.id} className={`text-[13px] ${opt.id === question.correct_option_id ? 'font-medium text-emerald-700' : 'text-[#62748E]'}`}>
+            <li key={opt.id} className={`text-[13px] ${opt.id === question.correct_option_id ? 'font-medium text-emerald-700' : 'text-foreground-muted'}`}>
               {opt.id === question.correct_option_id ? '✓ ' : '○ '}{opt.text}
             </li>
           ))}
@@ -140,13 +140,13 @@ function QuestionDraft({ draft, setDraft, onCancel, onSave }: {
 }) {
   const options = draft.options || [];
   return (
-    <div className="space-y-2 rounded-lg border border-[#CBD5E1] bg-[#F8FAFC] p-3">
+    <div className="space-y-2 rounded-lg border border-divider-strong bg-surface-alt p-3">
       <input
         type="text"
         value={draft.prompt || ''}
         onChange={(e) => setDraft({ ...draft, prompt: e.target.value })}
         placeholder="Question prompt"
-        className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
+        className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm focus:border-ink focus:outline-none"
       />
       <div className="space-y-1">
         {options.map((opt: any, i: number) => (
@@ -167,7 +167,7 @@ function QuestionDraft({ draft, setDraft, onCancel, onSave }: {
                 setDraft({ ...draft, options: next });
               }}
               placeholder={`Option ${i + 1}`}
-              className="flex-1 rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-sm focus:border-[#0F172B] focus:outline-none"
+              className="flex-1 rounded-md border border-divider bg-surface px-3 py-1.5 text-sm focus:border-ink focus:outline-none"
             />
             {options.length > 2 && (
               <button
@@ -178,7 +178,7 @@ function QuestionDraft({ draft, setDraft, onCancel, onSave }: {
                   const newCorrect = next.some((o: any) => o.id === correctId) ? correctId : next[0]?.id;
                   setDraft({ ...draft, options: next, correct_option_id: newCorrect });
                 }}
-                className="text-[#90A1B9] hover:text-red-600"
+                className="text-foreground-dim hover:text-red-600"
               >
                 ×
               </button>
@@ -192,7 +192,7 @@ function QuestionDraft({ draft, setDraft, onCancel, onSave }: {
           const nextId = String.fromCharCode(97 + options.length);
           setDraft({ ...draft, options: [...options, { id: nextId, text: '' }] });
         }}
-        className="text-[12px] text-[#62748E] hover:text-[#0F172B]"
+        className="text-[12px] text-foreground-muted hover:text-foreground"
       >
         + Add option
       </button>
@@ -201,11 +201,11 @@ function QuestionDraft({ draft, setDraft, onCancel, onSave }: {
         onChange={(e) => setDraft({ ...draft, explanation: e.target.value })}
         placeholder="Explanation (shown after submit)"
         rows={2}
-        className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
+        className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm focus:border-ink focus:outline-none"
       />
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-[12px] text-[#62748E]">Cancel</button>
-        <button type="button" onClick={onSave} className="rounded-md bg-[#0F172B] px-3 py-1.5 text-[12px] font-medium text-white">Save</button>
+        <button type="button" onClick={onCancel} className="rounded-md border border-divider bg-surface px-3 py-1.5 text-[12px] text-foreground-muted">Cancel</button>
+        <button type="button" onClick={onSave} className="rounded-md bg-ink px-3 py-1.5 text-[12px] font-medium text-white">Save</button>
       </div>
     </div>
   );

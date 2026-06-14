@@ -286,7 +286,7 @@ export default function MobileCardDetail({
     <>
       <div className="fixed inset-0 z-50 flex flex-col sh-surface" style={{ animation: 'slideUp 0.3s ease-out' }}>
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[var(--color-sh-warm-border)] bg-white px-4 py-3">
+        <div className="flex items-center justify-between border-b border-[var(--color-sh-warm-border)] bg-surface px-4 py-3">
           <div className="flex items-center gap-2 min-w-0">
             {viewingSecondaryId ? (
               <button
@@ -554,7 +554,7 @@ export default function MobileCardDetail({
                         <button
                           key={sc.id}
                           onClick={() => setViewingSecondaryId(sc.id)}
-                          className="flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-3 py-2.5 text-left transition-colors hover:bg-white"
+                          className="flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-3 py-2.5 text-left transition-colors hover:bg-surface"
                         >
                           <div className="min-w-0 space-y-0.5">
                             <div className="flex items-center gap-1.5">
@@ -671,7 +671,7 @@ export default function MobileCardDetail({
         </div>
 
         {/* Sticky action bar */}
-        <div className="fixed bottom-0 left-0 right-0 z-[55] border-t border-[var(--color-sh-warm-border)] bg-white px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+        <div className="fixed bottom-0 left-0 right-0 z-[55] border-t border-[var(--color-sh-warm-border)] bg-surface px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           <div className="flex gap-2">
             {isArchived ? (
               <>

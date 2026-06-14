@@ -206,7 +206,7 @@ export default function ClientBriefForm({
         <button
           type="button"
           onClick={onClose}
-          className="-ml-1 mb-3 flex items-center gap-1 text-sm text-[#5C5C5C] transition hover:text-[#222]"
+          className="-ml-1 mb-3 flex items-center gap-1 text-sm text-foreground-muted transition hover:text-foreground"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -215,20 +215,20 @@ export default function ClientBriefForm({
         </button>
 
         <header className="mb-6 text-center sm:mb-8">
-          <h1 className="text-[24px] font-semibold tracking-tight text-[#222] sm:text-[28px]">
+          <h1 className="text-[24px] font-semibold tracking-tight text-foreground sm:text-[28px]">
             New client brief
           </h1>
-          <p className="mt-1.5 text-sm text-[#5C5C5C] sm:text-base">
+          <p className="mt-1.5 text-sm text-foreground-muted sm:text-base">
             {typeMeta.blurb} You&apos;re capturing this on the client&apos;s behalf — it lands in Form Requests.
           </p>
         </header>
 
         {step === 1 && type === 'creative' && (
           <section className="flex flex-col items-center">
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#7A7568]">
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-foreground-muted">
               What do you need?
             </h2>
-            <p className="mb-6 max-w-md text-center text-sm text-[#5C5C5C]">
+            <p className="mb-6 max-w-md text-center text-sm text-foreground-muted">
               Designers create static visuals, Editors craft motion and video, or pick a hybrid who does both.
             </p>
 
@@ -257,10 +257,10 @@ export default function ClientBriefForm({
             <div className="mt-4 w-full max-w-md">
               <div className="connect-role-card">
                 <div className="mb-1.5 flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#FCF487] ring-1 ring-[#0a0a0a]" />
-                  <span className="text-sm font-bold text-[#0a0a0a]">{selectedRole.title}</span>
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#FCF487] ring-1 ring-ink" />
+                  <span className="text-sm font-bold text-foreground">{selectedRole.title}</span>
                 </div>
-                <p className="text-xs leading-relaxed text-[#5C5C5C]">{selectedRole.description}</p>
+                <p className="text-xs leading-relaxed text-foreground-muted">{selectedRole.description}</p>
               </div>
             </div>
 
@@ -278,7 +278,7 @@ export default function ClientBriefForm({
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="-ml-1 mb-2 flex items-center gap-1 text-sm text-[#5C5C5C] hover:text-[#222]"
+                className="-ml-1 mb-2 flex items-center gap-1 text-sm text-foreground-muted hover:text-foreground"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -393,8 +393,8 @@ export default function ClientBriefForm({
             >
               <div className="connect-role-req">
                 <div className="mb-3 flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#FCF487] ring-1 ring-[#0a0a0a]" />
-                  <span className="text-sm font-semibold text-[#0a0a0a]">{requirementLabel}</span>
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#FCF487] ring-1 ring-ink" />
+                  <span className="text-sm font-semibold text-foreground">{requirementLabel}</span>
                 </div>
                 <div className="space-y-3">
                   <Field label="Short note" optional>
@@ -479,10 +479,10 @@ function Section({
   eyebrow, title, hint, children,
 }: { eyebrow: string; title: string; hint: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-[#E8E5DD] bg-white p-5 shadow-sm sm:p-6">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A7568]">{eyebrow}</p>
-      <h2 className="mt-1 text-lg font-semibold text-[#222]">{title}</h2>
-      <p className="mt-1 text-sm text-[#5C5C5C]">{hint}</p>
+    <section className="rounded-2xl border border-sh-warm-border bg-surface p-5 shadow-sm sm:p-6">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground-muted">{eyebrow}</p>
+      <h2 className="mt-1 text-lg font-semibold text-foreground">{title}</h2>
+      <p className="mt-1 text-sm text-foreground-muted">{hint}</p>
       <div className="mt-4 space-y-4">{children}</div>
     </section>
   );
@@ -499,15 +499,15 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium text-[#222]">
+      <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium text-foreground">
         <span>
           {label}
           {required && <span className="text-[#C13515]">*</span>}
         </span>
-        {optional && <span className="text-xs font-normal text-[#9C9486]">(optional)</span>}
+        {optional && <span className="text-xs font-normal text-foreground-muted">(optional)</span>}
       </label>
       {children}
-      {hint && <p className="mt-1.5 text-xs text-[#7A7568]">{hint}</p>}
+      {hint && <p className="mt-1.5 text-xs text-foreground-muted">{hint}</p>}
     </div>
   );
 }
@@ -528,13 +528,13 @@ function WorkingDaysSelector({
 
   return (
     <div>
-      <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
+      <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-foreground">
         <span>Working Days<span className="text-[#C13515]">*</span></span>
       </label>
-      <p className="mb-3 text-xs text-[#7A7568]">
+      <p className="mb-3 text-xs text-foreground-muted">
         Days the talent should be available. Mon–Fri are included by default; add{' '}
-        <span className="font-semibold text-[#3A3A3A]">Sat</span> and/or{' '}
-        <span className="font-semibold text-[#3A3A3A]">Sun</span> if weekend coverage is needed.
+        <span className="font-semibold text-foreground">Sat</span> and/or{' '}
+        <span className="font-semibold text-foreground">Sun</span> if weekend coverage is needed.
       </p>
       <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
         {WORKING_DAYS.map((day) => {
@@ -551,7 +551,7 @@ function WorkingDaysSelector({
             >
               <span>{day.key}</span>
               {day.optional && !isOn && (
-                <span className="mt-0.5 text-[9px] uppercase tracking-widest text-[#9C9486]">opt</span>
+                <span className="mt-0.5 text-[9px] uppercase tracking-widest text-foreground-muted">opt</span>
               )}
               {isOn && (
                 <svg className="absolute right-1 top-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -584,14 +584,14 @@ function ChipField({
 }) {
   return (
     <div>
-      <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
+      <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-foreground">
         <span>
           {label}
           {required && <span className="text-[#C13515]">*</span>}
         </span>
-        {optional && <span className="text-xs font-normal text-[#9C9486]">(optional)</span>}
+        {optional && <span className="text-xs font-normal text-foreground-muted">(optional)</span>}
       </label>
-      <p className="mb-3 text-xs text-[#7A7568]">{hint}</p>
+      <p className="mb-3 text-xs text-foreground-muted">{hint}</p>
       <div className="flex flex-wrap gap-1.5 sm:gap-2">
         {options.map((opt) => {
           const isOn = selected.includes(opt);

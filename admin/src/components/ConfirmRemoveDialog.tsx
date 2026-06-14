@@ -30,13 +30,13 @@ export default function ConfirmRemoveDialog({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={loading ? undefined : onClose} />
-      <div className="relative w-full max-w-sm rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-2xl">
-        <h3 className="text-base font-semibold text-[#0F172B]">{title}</h3>
-        <p className="mt-1 text-sm text-[#62748E]">{description}</p>
+      <div className="relative w-full max-w-sm rounded-xl border border-divider bg-surface p-5 shadow-2xl">
+        <h3 className="text-base font-semibold text-foreground">{title}</h3>
+        <p className="mt-1 text-sm text-foreground-muted">{description}</p>
 
         <div className="mt-4 space-y-1.5">
-          <label className="block text-xs font-medium text-[#62748E]">
-            Type <span className="font-mono font-semibold text-[#0F172B]">{confirmWord}</span> to confirm
+          <label className="block text-xs font-medium text-foreground-muted">
+            Type <span className="font-mono font-semibold text-foreground">{confirmWord}</span> to confirm
           </label>
           <input
             type="text"
@@ -44,7 +44,7 @@ export default function ConfirmRemoveDialog({
             onChange={(e) => setInput(e.target.value)}
             autoFocus
             disabled={loading}
-            className="w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-sm font-mono text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+            className="w-full rounded-md border border-divider bg-surface px-2 py-1.5 text-sm font-mono text-foreground focus:border-accent focus:outline-none"
           />
         </div>
 
@@ -53,7 +53,7 @@ export default function ConfirmRemoveDialog({
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-sm font-medium text-[#0F172B] hover:bg-[#F1F5F9] disabled:opacity-50"
+            className="rounded-md border border-divider px-3 py-1.5 text-sm font-medium text-foreground hover:bg-canvas disabled:opacity-50"
           >
             Cancel
           </button>

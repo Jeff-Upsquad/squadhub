@@ -79,7 +79,7 @@ export default function MobileAssignModal({
   return (
     <div className="fixed inset-0 z-[80] flex flex-col sh-surface">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[var(--color-sh-warm-border)] bg-white px-4 py-3">
+      <div className="flex items-center justify-between border-b border-[var(--color-sh-warm-border)] bg-surface px-4 py-3">
         <h3 className="text-base font-semibold text-[var(--color-sh-ink)]">
           Assign Recipient
         </h3>
@@ -92,7 +92,7 @@ export default function MobileAssignModal({
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-[var(--color-sh-warm-border)] bg-white px-4 py-3">
+      <div className="border-b border-[var(--color-sh-warm-border)] bg-surface px-4 py-3">
         <div className="sh-tab-bar">
           <button
             type="button"
@@ -114,7 +114,7 @@ export default function MobileAssignModal({
       </div>
 
       {/* Search */}
-      <div className="border-b border-[var(--color-sh-warm-border)] bg-white px-4 py-3">
+      <div className="border-b border-[var(--color-sh-warm-border)] bg-surface px-4 py-3">
         <input
           ref={inputRef}
           type="text"
