@@ -57,7 +57,9 @@ router.use(async (req: Request, res: Response, next: NextFunction): Promise<void
 });
 
 const CRM_ROLES = ['admin', 'member', 'guest'] as const;
-const CRM_LEVELS = ['view', 'full', 'admin'] as const;
+// 'none' = explicitly denied: the user has CRM app access but is locked out of
+// this module. SquadCRM's crm-server must treat 'none' as DENY when enforcing.
+const CRM_LEVELS = ['view', 'full', 'admin', 'none'] as const;
 const appSchema = z.string().min(1).default('squadcrm');
 
 // GET /admin/crm-access/modules?app=squadcrm — the module registry (matrix columns).
@@ -307,6 +309,29 @@ router.post('/grant', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    // A newly added user starts with NO access to any module — the admin then
+    // grants specific modules from the list. ignoreDuplicates keeps any
+    // pre-existing per-module overrides intact rather than clobbering them.
+    const { data: mods } = await supabaseAdmin
+      .from('crm_modules')
+      .select('key')
+      .eq('app', body.app)
+      .eq('is_active', true);
+    const seedRows = (mods || []).map((m: { key: string }) => ({
+      user_id: body.user_id,
+      workspace_id: body.workspace_id,
+      app: body.app,
+      module: m.key,
+      level: 'none',
+      granted_by: req.userId,
+    }));
+    if (seedRows.length > 0) {
+      await supabaseAdmin
+        .from('crm_module_access')
+        .upsert(seedRows, { onConflict: 'user_id,workspace_id,app,module', ignoreDuplicates: true });
+    }
+
     res.status(201).json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) {
