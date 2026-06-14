@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 
 const MODULES = [
+  { key: 'home', label: 'Home (Dashboard)' },
   { key: 'sales', label: 'Sales' },
   { key: 'purchases', label: 'Purchases' },
   { key: 'banking', label: 'Banking' },
