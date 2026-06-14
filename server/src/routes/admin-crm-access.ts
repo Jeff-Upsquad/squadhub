@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
@@ -14,6 +14,47 @@ const router = Router();
 
 router.use(requireAuth);
 router.use(requireAdmin);
+
+// Apps other than SquadCRM (e.g. SquadHire) keep their grants in their OWN
+// Supabase, which this server can't reach. For app=squadhire, proxy the whole
+// request to that app's shcrm-server admin API over a shared secret. SquadCRM
+// (shared Supabase) falls through to the local handlers below.
+const SHCRM_ADMIN_API_URL = process.env.SHCRM_ADMIN_API_URL || '';
+const SHCRM_ADMIN_API_SECRET = process.env.SHCRM_ADMIN_API_SECRET || '';
+
+router.use(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const app = (req.query.app as string) || (req.body && (req.body as { app?: string }).app);
+  if (app !== 'squadhire') {
+    next();
+    return;
+  }
+  if (!SHCRM_ADMIN_API_URL || !SHCRM_ADMIN_API_SECRET) {
+    res.status(503).json({ success: false, error: 'SquadHire CRM admin link not configured' });
+    return;
+  }
+  try {
+    const url = new URL(`${SHCRM_ADMIN_API_URL}/admin/crm-access${req.path}`);
+    for (const [k, v] of Object.entries(req.query)) {
+      if (typeof v === 'string') url.searchParams.set(k, v);
+    }
+    const init: RequestInit = {
+      method: req.method,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-crm-access-signature': SHCRM_ADMIN_API_SECRET,
+      },
+    };
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      init.body = JSON.stringify(req.body ?? {});
+    }
+    const upstream = await fetch(url, init);
+    const text = await upstream.text();
+    res.status(upstream.status).type('application/json').send(text);
+  } catch (err) {
+    console.error('SquadHire CRM admin proxy error:', err);
+    res.status(502).json({ success: false, error: 'SquadHire CRM is unreachable' });
+  }
+});
 
 const CRM_ROLES = ['admin', 'member', 'guest'] as const;
 const CRM_LEVELS = ['view', 'full', 'admin'] as const;
