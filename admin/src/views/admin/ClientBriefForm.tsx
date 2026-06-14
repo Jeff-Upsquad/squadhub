@@ -1,17 +1,18 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 import { STATES_BY_COUNTRY_NAME, LANGUAGE_OPTIONS } from './locationLanguageOptions';
 
-// The internal-facing twin of the public /connect brief form — same two-step
-// layout, copy, and cream styling so a salesperson fills out exactly what the
-// client would. Posts to the admin endpoint, which tags the card with
-// source='internal_brief' + created_by. Two brief types from the slider:
-//   'creative'   → Designer / Editor / Designer + Editor   (role step → details)
-//   'accountant' → Accountant                              (straight to details)
+// The internal-facing clone of the public /connect brief form — identical UI,
+// layout, copy, and fields. The salesperson fills out exactly what the client
+// would. Multi-select roles create one internal_brief card per role (mirroring
+// /connect), each tagged source='internal_brief' + created_by via the admin
+// endpoint. The slider picks which brief to open:
+//   'creative'   → Designer / Editor / Designer + Editor   (/connect)
+//   'accountant' → Accountant                              (/connect/accountant)
 export type BriefType = 'creative' | 'accountant';
 
 export const BRIEF_TYPES: { key: BriefType; title: string; blurb: string }[] = [
@@ -27,14 +28,11 @@ export const BRIEF_TYPES: { key: BriefType; title: string; blurb: string }[] = [
   },
 ];
 
-// Mirrors /connect's ROLE_OPTIONS. Single-select here (the admin creates one
-// card), so each maps straight to a canonical service_type label.
-const ROLE_OPTIONS: {
-  slug: string;
-  title: string;
-  service_type: string;
-  description: string;
-}[] = [
+type RoleOption = { slug: string; title: string; service_type: string; description: string };
+
+// Mirrors /connect's ROLE_OPTIONS. Multi-select; each maps to a canonical
+// service_type label, and each selected role becomes its own card.
+const ROLE_OPTIONS: RoleOption[] = [
   {
     slug: 'designer',
     title: 'Designer',
@@ -54,6 +52,13 @@ const ROLE_OPTIONS: {
     description: 'One person who does both — design work and video editing — instead of hiring two separate specialists.',
   },
 ];
+
+const ACCOUNTANT_ROLE: RoleOption = {
+  slug: 'accountant',
+  title: 'Accountant',
+  service_type: 'Accountants',
+  description: 'Bookkeeping, GST, reconciliations, audits, payroll, and financial reporting.',
+};
 
 const COUNTRY_CODES = [
   { code: '+91', flag: '🇮🇳' }, { code: '+1', flag: '🇺🇸' }, { code: '+44', flag: '🇬🇧' },
@@ -79,16 +84,16 @@ type FormData = {
   state_regions: string[];
   languages: string[];
   working_days: string[];
-  requirement_note: string;
-  hours_note: string;
 };
 
 const initialForm: FormData = {
   brand_name: '', business_nature: '', business_note: '',
   contact_name: '', email: '', country_code: '+91', phone: '',
   business_location: '', country_id: '', state_regions: [],
-  languages: [], working_days: DEFAULT_DAYS, requirement_note: '', hours_note: '',
+  languages: [], working_days: DEFAULT_DAYS,
 };
+
+type RoleReq = { note: string; hours: string };
 
 export default function ClientBriefForm({
   type,
@@ -100,11 +105,13 @@ export default function ClientBriefForm({
   onCreated: () => void;
 }) {
   const qc = useQueryClient();
-  // Creative starts on the role step; accountant skips straight to details.
+  // Creative starts on the role step; accountant has a single fixed role.
   const [step, setStep] = useState<1 | 2>(type === 'accountant' ? 2 : 1);
-  const [role, setRole] = useState<string>('designer');
+  const [roles, setRoles] = useState<string[]>([]);
+  const [roleReqs, setRoleReqs] = useState<Record<string, RoleReq>>({});
   const [form, setForm] = useState<FormData>(initialForm);
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const countriesQuery = useQuery({
     queryKey: ['admin-countries'],
@@ -120,11 +127,12 @@ export default function ClientBriefForm({
     () => uniq([...(STATES_BY_COUNTRY_NAME[selectedCountryName] || []), ...form.state_regions]),
     [selectedCountryName, form.state_regions],
   );
+  const languageOptions = useMemo(() => uniq([...LANGUAGE_OPTIONS, ...form.languages]), [form.languages]);
 
-  const typeMeta = BRIEF_TYPES.find((t) => t.key === type)!;
-  const selectedRole = ROLE_OPTIONS.find((r) => r.slug === role)!;
-  const serviceType = type === 'accountant' ? 'Accountants' : selectedRole.service_type;
-  const requirementLabel = type === 'accountant' ? 'Accountant' : selectedRole.title;
+  // Roles whose requirement cards + cards get created. Accountant is the single
+  // fixed role; creative is whatever was ticked on step 1.
+  const selectedRoles: RoleOption[] =
+    type === 'accountant' ? [ACCOUNTANT_ROLE] : ROLE_OPTIONS.filter((r) => roles.includes(r.slug));
 
   function update<K extends keyof FormData>(field: K, value: FormData[K]) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -140,41 +148,17 @@ export default function ClientBriefForm({
       return { ...prev, [field]: Array.from(set) };
     });
   }
+  function toggleRole(slug: string) {
+    setRoles((prev) => (prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]));
+  }
+  function getReq(slug: string): RoleReq {
+    return roleReqs[slug] || { note: '', hours: '' };
+  }
+  function setReq(slug: string, key: keyof RoleReq, value: string) {
+    setRoleReqs((prev) => ({ ...prev, [slug]: { ...getReq(slug), [key]: value } }));
+  }
 
-  const create = useMutation({
-    mutationFn: () =>
-      api
-        .post('/admin/subscription-cards/client-brief', {
-          service_type: serviceType,
-          brand_name: form.brand_name.trim(),
-          business_nature: form.business_nature.trim(),
-          business_note: form.business_note.trim(),
-          contact_name: form.contact_name.trim(),
-          email: form.email.trim(),
-          phone: `${form.country_code} ${form.phone.trim()}`.trim(),
-          business_location: form.business_location.trim() || undefined,
-          country_id: form.country_id || undefined,
-          state_regions: form.state_regions,
-          languages: form.languages,
-          working_days: form.working_days,
-          requirement_note: form.requirement_note.trim() || undefined,
-          hours_note: form.hours_note.trim() || undefined,
-        })
-        .then((r) => r.data),
-    onSuccess: () => {
-      showToast('Client brief created — find it in Form Requests', 'success');
-      qc.invalidateQueries({ queryKey: ['admin-internal-brief-submissions'] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
-      onCreated();
-    },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.error || err.message || 'Failed to create brief';
-      setError(msg);
-      showToast(msg, 'error');
-    },
-  });
-
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     if (!form.contact_name.trim() || !form.email.trim() || !form.phone.trim()) {
@@ -197,7 +181,47 @@ export default function ClientBriefForm({
       setError('Please select at least one working day.');
       return;
     }
-    create.mutate();
+
+    const shared = {
+      brand_name: form.brand_name.trim(),
+      business_nature: form.business_nature.trim(),
+      business_note: form.business_note.trim(),
+      contact_name: form.contact_name.trim(),
+      email: form.email.trim(),
+      phone: `${form.country_code} ${form.phone.trim()}`.trim(),
+      business_location: form.business_location.trim() || undefined,
+      country_id: form.country_id || undefined,
+      state_regions: form.state_regions,
+      languages: form.languages,
+      working_days: form.working_days,
+    };
+
+    setSubmitting(true);
+    try {
+      // One card per selected role — mirrors /connect creating a card per service_type.
+      await Promise.all(
+        selectedRoles.map((r) => {
+          const req = getReq(r.slug);
+          return api.post('/admin/subscription-cards/client-brief', {
+            ...shared,
+            service_type: r.service_type,
+            requirement_note: req.note.trim() || undefined,
+            hours_note: req.hours.trim() || undefined,
+          });
+        }),
+      );
+      const n = selectedRoles.length;
+      showToast(`${n} client brief${n > 1 ? 's' : ''} created — find ${n > 1 ? 'them' : 'it'} in Form Requests`, 'success');
+      qc.invalidateQueries({ queryKey: ['admin-internal-brief-submissions'] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      onCreated();
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err.message || 'Failed to create brief';
+      setError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -216,10 +240,10 @@ export default function ClientBriefForm({
 
         <header className="mb-6 text-center sm:mb-8">
           <h1 className="text-[24px] font-semibold tracking-tight text-[#222] sm:text-[28px]">
-            New client brief
+            Tell us about your brand
           </h1>
           <p className="mt-1.5 text-sm text-[#5C5C5C] sm:text-base">
-            {typeMeta.blurb} You&apos;re capturing this on the client&apos;s behalf — it lands in Form Requests.
+            A few quick details so we can match you with the right talent.
           </p>
         </header>
 
@@ -228,18 +252,24 @@ export default function ClientBriefForm({
             <h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#7A7568]">
               What do you need?
             </h2>
-            <p className="mb-6 max-w-md text-center text-sm text-[#5C5C5C]">
+            <p className="mb-2 max-w-md text-center text-sm text-[#5C5C5C]">
               Designers create static visuals, Editors craft motion and video, or pick a hybrid who does both.
+            </p>
+            <p className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-[#0a0a0a] bg-[#F2FCBC] px-3 py-1 text-xs font-semibold text-[#0a0a0a]">
+              <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              You can pick one or more
             </p>
 
             <div className="mb-2 inline-flex flex-wrap justify-center gap-2">
               {ROLE_OPTIONS.map((opt) => {
-                const on = role === opt.slug;
+                const on = roles.includes(opt.slug);
                 return (
                   <button
                     key={opt.slug}
                     type="button"
-                    onClick={() => setRole(opt.slug)}
+                    onClick={() => toggleRole(opt.slug)}
                     aria-pressed={on}
                     className={`connect-pill ${on ? 'connect-pill-on' : ''}`}
                   >
@@ -254,18 +284,29 @@ export default function ClientBriefForm({
               })}
             </div>
 
-            <div className="mt-4 w-full max-w-md">
-              <div className="connect-role-card">
-                <div className="mb-1.5 flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#FCF487] ring-1 ring-[#0a0a0a]" />
-                  <span className="text-sm font-bold text-[#0a0a0a]">{selectedRole.title}</span>
-                </div>
-                <p className="text-xs leading-relaxed text-[#5C5C5C]">{selectedRole.description}</p>
+            {roles.length === 0 ? (
+              <p className="mt-4 text-sm font-medium text-[#C97744]">Pick at least one to continue.</p>
+            ) : (
+              <div className="mt-4 w-full max-w-md space-y-2">
+                {ROLE_OPTIONS.filter((o) => roles.includes(o.slug)).map((opt) => (
+                  <div key={opt.slug} className="connect-role-card">
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-full bg-[#FCF487] ring-1 ring-[#0a0a0a]" />
+                      <span className="text-sm font-bold text-[#0a0a0a]">{opt.title}</span>
+                    </div>
+                    <p className="text-xs leading-relaxed text-[#5C5C5C]">{opt.description}</p>
+                  </div>
+                ))}
               </div>
-            </div>
+            )}
 
             <div className="mt-6 w-full max-w-md">
-              <button type="button" onClick={() => setStep(2)} className="connect-submit">
+              <button
+                type="button"
+                onClick={() => setStep(2)}
+                disabled={roles.length === 0}
+                className="connect-submit"
+              >
                 Continue
               </button>
             </div>
@@ -274,18 +315,16 @@ export default function ClientBriefForm({
 
         {step === 2 && (
           <form onSubmit={handleSubmit} className="space-y-5 pb-8">
-            {type === 'creative' && (
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="-ml-1 mb-2 flex items-center gap-1 text-sm text-[#5C5C5C] hover:text-[#222]"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-                Change role
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => (type === 'accountant' ? onClose() : setStep(1))}
+              className="-ml-1 mb-2 flex items-center gap-1 text-sm text-[#5C5C5C] hover:text-[#222]"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              Back
+            </button>
 
             {error && (
               <div className="rounded-lg border border-[#E0B7A2] bg-[#FBEFE9] px-4 py-3 text-sm text-[#8B3A1A]">
@@ -295,8 +334,8 @@ export default function ClientBriefForm({
 
             <Section
               eyebrow="Customer"
-              title="Client contact"
-              hint="How we'll reach the client to confirm and schedule the kickoff call."
+              title="Your contact"
+              hint="How we'll reach you to confirm and schedule the kickoff call."
             >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Email" required>
@@ -304,7 +343,7 @@ export default function ClientBriefForm({
                     type="email"
                     value={form.email}
                     onChange={(e) => update('email', e.target.value)}
-                    placeholder="client@company.com"
+                    placeholder="you@company.com"
                     className="connect-input"
                   />
                 </Field>
@@ -345,15 +384,15 @@ export default function ClientBriefForm({
 
             <Section
               eyebrow="Client brief"
-              title="About the brand"
-              hint="Helps talent understand the client's space and pitch ideas that fit."
+              title="About your brand"
+              hint="Helps creators understand your space and pitch ideas that fit."
             >
               <Field label="Brand Name" required>
                 <input
                   type="text"
                   value={form.brand_name}
                   onChange={(e) => update('brand_name', e.target.value)}
-                  placeholder="The client's brand name"
+                  placeholder="Your brand name"
                   className="connect-input"
                 />
               </Field>
@@ -371,7 +410,7 @@ export default function ClientBriefForm({
                   rows={3}
                   value={form.business_note}
                   onChange={(e) => update('business_note', e.target.value)}
-                  placeholder="What they do, who they serve, what makes them different."
+                  placeholder="What you do, who you serve, what makes you different."
                   className="connect-input resize-none"
                 />
               </Field>
@@ -388,43 +427,48 @@ export default function ClientBriefForm({
 
             <Section
               eyebrow="Requirement"
-              title="What the role will work on"
-              hint="A quick note helps us match the right talent. All fields optional."
+              title="What each role will work on"
+              hint="A quick note per role helps us match the right talent. All fields optional."
             >
-              <div className="connect-role-req">
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#FCF487] ring-1 ring-[#0a0a0a]" />
-                  <span className="text-sm font-semibold text-[#0a0a0a]">{requirementLabel}</span>
-                </div>
-                <div className="space-y-3">
-                  <Field label="Short note" optional>
-                    <textarea
-                      rows={2}
-                      value={form.requirement_note}
-                      onChange={(e) => update('requirement_note', e.target.value)}
-                      placeholder="What the client would like this role to work on first."
-                      className="connect-input resize-none"
-                    />
-                  </Field>
-                  <Field label="Hours" optional hint="Daily or weekly — however the client usually thinks about it.">
-                    <input
-                      type="text"
-                      value={form.hours_note}
-                      onChange={(e) => update('hours_note', e.target.value)}
-                      placeholder="e.g. 4 hrs daily or 20 hrs/week"
-                      className="connect-input"
-                    />
-                  </Field>
-                </div>
-              </div>
+              {selectedRoles.map((opt) => {
+                const req = getReq(opt.slug);
+                return (
+                  <div key={opt.slug} className="connect-role-req">
+                    <div className="mb-3 flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-full bg-[#FCF487] ring-1 ring-[#0a0a0a]" />
+                      <span className="text-sm font-semibold text-[#0a0a0a]">{opt.title}</span>
+                    </div>
+                    <div className="space-y-3">
+                      <Field label="Short note" optional>
+                        <textarea
+                          rows={2}
+                          value={req.note}
+                          onChange={(e) => setReq(opt.slug, 'note', e.target.value)}
+                          placeholder="What you'd like this role to work on first."
+                          className="connect-input resize-none"
+                        />
+                      </Field>
+                      <Field label="Hours" optional hint="Daily or weekly — however you usually think about it.">
+                        <input
+                          type="text"
+                          value={req.hours}
+                          onChange={(e) => setReq(opt.slug, 'hours', e.target.value)}
+                          placeholder="e.g. 4 hrs daily or 20 hrs/week"
+                          className="connect-input"
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                );
+              })}
             </Section>
 
             <Section
               eyebrow="Talent preferences"
-              title="Who they'd like to work with"
+              title="Who you'd like to work with"
               hint="Where the talent should be based, what they should speak, and when they should work."
             >
-              <Field label="Country" required hint="India is the default. Pick a different country if the talent should be elsewhere.">
+              <Field label="Country" required hint="India is the default. Pick a different country if your talent should be elsewhere.">
                 <select
                   value={form.country_id}
                   onChange={(e) => changeCountry(e.target.value)}
@@ -451,7 +495,7 @@ export default function ClientBriefForm({
                 label="Languages"
                 hint="Languages the talent should be fluent in. Pick all that apply."
                 required
-                options={uniq([...LANGUAGE_OPTIONS, ...form.languages])}
+                options={languageOptions}
                 selected={form.languages}
                 onToggle={(v) => toggle('languages', v)}
               />
@@ -462,8 +506,8 @@ export default function ClientBriefForm({
             </Section>
 
             <div className="connect-submit-wrap">
-              <button type="submit" disabled={create.isPending} className="connect-submit">
-                {create.isPending ? 'Creating…' : 'Create brief'}
+              <button type="submit" disabled={submitting} className="connect-submit">
+                {submitting ? 'Submitting…' : 'Submit'}
               </button>
             </div>
           </form>
@@ -531,10 +575,13 @@ function WorkingDaysSelector({
       <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
         <span>Working Days<span className="text-[#C13515]">*</span></span>
       </label>
+      <p className="mb-2 text-xs text-[#7A7568]">
+        Days you need the talent to be available — we&apos;ll match people whose schedule fits yours.
+      </p>
       <p className="mb-3 text-xs text-[#7A7568]">
-        Days the talent should be available. Mon–Fri are included by default; add{' '}
+        Mon–Fri are included by default. Add{' '}
         <span className="font-semibold text-[#3A3A3A]">Sat</span> and/or{' '}
-        <span className="font-semibold text-[#3A3A3A]">Sun</span> if weekend coverage is needed.
+        <span className="font-semibold text-[#3A3A3A]">Sun</span> if you need weekend coverage.
       </p>
       <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
         {WORKING_DAYS.map((day) => {
@@ -564,7 +611,7 @@ function WorkingDaysSelector({
       </div>
       {showWeekendWarning && (
         <p className="mt-3 text-xs font-medium text-[#8B3A1A]">
-          Fewer talents accept briefs that require weekend work.
+          Less chance of talent accepting the request if weekends are selected.
         </p>
       )}
     </div>
