@@ -39,6 +39,10 @@ export default function AdminCrmAccess() {
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState('');
   const [app, setApp] = useState<'squadcrm' | 'squadhire'>('squadcrm');
+  // Add-user source: existing workspace members, or — for SquadHire CRM only —
+  // anyone in the SquadHub directory (provisioned into SquadHire on add).
+  const [addSource, setAddSource] = useState<'members' | 'directory'>('members');
+  const [dirRole, setDirRole] = useState<CrmRole>('member');
 
   const { data: wsRes } = useQuery({
     queryKey: ['crm-access-workspaces', app],
@@ -77,9 +81,25 @@ export default function AdminCrmAccess() {
       api
         .get('/admin/crm-access/candidates', { params: { workspace_id: workspaceId, q: search, app } })
         .then((r) => r.data),
-    enabled: !!workspaceId && adding,
+    enabled: !!workspaceId && adding && addSource === 'members',
   });
   const candidates: UserLite[] = candRes?.data || [];
+
+  // SquadHub directory (internal staff). Only relevant for SquadHire CRM, which
+  // keeps its own accounts — picking someone here provisions them into SquadHire.
+  const { data: dirRes, isFetching: dirLoading } = useQuery({
+    queryKey: ['crm-access-directory', search],
+    queryFn: () =>
+      api
+        .get('/admin/users', { params: { search, user_type: 'internal', limit: 20 } })
+        .then((r) => r.data),
+    enabled: adding && addSource === 'directory' && app === 'squadhire',
+  });
+  const directory: UserLite[] = dirRes?.data || [];
+  // Emails already granted, so the directory can show "Added" instead of "Add".
+  const grantedEmails = new Set(
+    members.map((m) => (m.user?.email || '').toLowerCase()).filter(Boolean),
+  );
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['crm-access-users', app, workspaceId] });
@@ -99,6 +119,20 @@ export default function AdminCrmAccess() {
   const addUser = useMutation({
     mutationFn: (v: { user_id: string; role: CrmRole }) =>
       api.post('/admin/crm-access/grant', { user_id: v.user_id, workspace_id: workspaceId, role: v.role, app }),
+    onSuccess: invalidate,
+  });
+
+  // Provision a SquadHub directory person into SquadHire CRM, then grant. The
+  // backend finds-or-creates the SquadHire account by email (idempotent).
+  const provisionUser = useMutation({
+    mutationFn: (v: { email: string; display_name: string | null; role: CrmRole }) =>
+      api.post('/admin/crm-access/provision-and-grant', {
+        email: v.email,
+        display_name: v.display_name ?? undefined,
+        workspace_id: workspaceId,
+        app,
+        role: v.role,
+      }),
     onSuccess: invalidate,
   });
 
@@ -148,6 +182,7 @@ export default function AdminCrmAccess() {
               setPickedWs('');
               setAdding(false);
               setExpanded(null);
+              setAddSource('members');
             }}
           >
             <option value="squadcrm">Squad CRM</option>
@@ -215,6 +250,7 @@ export default function AdminCrmAccess() {
             onClick={() => {
               setAdding((v) => !v);
               setSearch('');
+              setAddSource('members');
             }}
             disabled={!workspaceId}
             className="rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white transition hover:bg-ink-hover disabled:opacity-50"
@@ -226,43 +262,129 @@ export default function AdminCrmAccess() {
         {/* Add-user picker */}
         {adding && (
           <div className="border-b border-divider bg-surface-alt px-4 py-3">
+            {/* Source tabs — the SquadHub directory is SquadHire-CRM only */}
+            {app === 'squadhire' && (
+              <div className="mb-3 flex gap-1 rounded-md border border-divider bg-surface p-1 text-xs">
+                {(
+                  [
+                    ['members', 'SquadHire members'],
+                    ['directory', 'SquadHub directory'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setAddSource(key);
+                      setSearch('');
+                    }}
+                    className={`flex-1 rounded px-3 py-1.5 font-medium transition ${
+                      addSource === key ? 'bg-ink text-white' : 'text-foreground-muted hover:text-foreground'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <input
               autoFocus
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search workspace members by name or email…"
+              placeholder={
+                addSource === 'directory'
+                  ? 'Search SquadHub directory by name or email…'
+                  : 'Search workspace members by name or email…'
+              }
               className="mb-3 w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground placeholder-foreground-dim outline-none focus:border-accent"
             />
-            <div className="max-h-64 overflow-y-auto rounded-md border border-divider bg-surface">
-              {candidates.length === 0 ? (
-                <p className="px-3 py-4 text-center text-xs text-foreground-dim">
-                  {search ? 'No matching members.' : 'All workspace members already have access.'}
+
+            {addSource === 'members' ? (
+              <>
+                <div className="max-h-64 overflow-y-auto rounded-md border border-divider bg-surface">
+                  {candidates.length === 0 ? (
+                    <p className="px-3 py-4 text-center text-xs text-foreground-dim">
+                      {search ? 'No matching members.' : 'All workspace members already have access.'}
+                    </p>
+                  ) : (
+                    candidates.map((c) => (
+                      <div
+                        key={c.id}
+                        className="flex items-center justify-between border-b border-divider px-3 py-2 last:border-0"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-foreground">{c.display_name || '—'}</div>
+                          <div className="truncate text-xs text-foreground-muted">{c.email || c.id}</div>
+                        </div>
+                        <button
+                          onClick={() => addUser.mutate({ user_id: c.id, role: 'member' })}
+                          disabled={addUser.isPending}
+                          className="shrink-0 rounded-md border border-divider-strong bg-surface px-3 py-1 text-xs font-medium text-foreground transition hover:bg-canvas disabled:opacity-50"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-foreground-dim">
+                  Added as Member with no access to any module — open Modules to grant access per module. New people (no
+                  account yet) are invited from the Invitations screen.
                 </p>
-              ) : (
-                candidates.map((c) => (
-                  <div
-                    key={c.id}
-                    className="flex items-center justify-between border-b border-divider px-3 py-2 last:border-0"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-foreground">{c.display_name || '—'}</div>
-                      <div className="truncate text-xs text-foreground-muted">{c.email || c.id}</div>
-                    </div>
-                    <button
-                      onClick={() => addUser.mutate({ user_id: c.id, role: 'member' })}
-                      disabled={addUser.isPending}
-                      className="shrink-0 rounded-md border border-divider-strong bg-surface px-3 py-1 text-xs font-medium text-foreground transition hover:bg-canvas disabled:opacity-50"
-                    >
-                      Add
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-            <p className="mt-2 text-xs text-foreground-dim">
-              Added as Member with no access to any module — open Modules to grant access per module. New people (no
-              account yet) are invited from the Invitations screen.
-            </p>
+              </>
+            ) : (
+              <>
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="text-xs text-foreground-muted">Grant as</span>
+                  <select className={selectClass} value={dirRole} onChange={(e) => setDirRole(e.target.value as CrmRole)}>
+                    <option value="admin">Admin</option>
+                    <option value="member">Member</option>
+                    <option value="guest">Guest</option>
+                  </select>
+                </div>
+                <div className="max-h-64 overflow-y-auto rounded-md border border-divider bg-surface">
+                  {dirLoading ? (
+                    <p className="px-3 py-4 text-center text-xs text-foreground-dim">Searching…</p>
+                  ) : directory.length === 0 ? (
+                    <p className="px-3 py-4 text-center text-xs text-foreground-dim">
+                      {search ? 'No matching people.' : 'Type to search the SquadHub directory.'}
+                    </p>
+                  ) : (
+                    directory.map((c) => {
+                      const already = !!c.email && grantedEmails.has(c.email.toLowerCase());
+                      return (
+                        <div
+                          key={c.id}
+                          className="flex items-center justify-between border-b border-divider px-3 py-2 last:border-0"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-foreground">{c.display_name || '—'}</div>
+                            <div className="truncate text-xs text-foreground-muted">{c.email || c.id}</div>
+                          </div>
+                          {already ? (
+                            <span className="shrink-0 text-xs font-medium text-foreground-dim">Added</span>
+                          ) : (
+                            <button
+                              onClick={() =>
+                                provisionUser.mutate({ email: c.email!, display_name: c.display_name, role: dirRole })
+                              }
+                              disabled={!c.email || provisionUser.isPending}
+                              className="shrink-0 rounded-md border border-divider-strong bg-surface px-3 py-1 text-xs font-medium text-foreground transition hover:bg-canvas disabled:opacity-50"
+                            >
+                              Add
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-foreground-dim">
+                  Provisions a new SquadHire login (separate from their SquadHub login) and emails a set-password invite,
+                  then grants {dirRole} access. Existing SquadHire accounts are reused.
+                </p>
+              </>
+            )}
           </div>
         )}
 
