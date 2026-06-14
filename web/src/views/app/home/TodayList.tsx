@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
 import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
-import { usePMStore } from '../../../stores/pmStore';
+import { usePMStore, type FocusBucket } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
 import { groupTasks, isFutureDay, type GroupBy } from '../../../lib/taskGrouping';
 import DayCalendar from '../day-planner/DayCalendar';
@@ -21,6 +22,7 @@ export default function TodayList() {
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
   const focusedTodayIds = usePMStore((s) => s.focusedTodayIds);
+  const focusBuckets = usePMStore((s) => s.focusBuckets);
 
   const openTask = (id: string) => {
     setActiveDashboardTab(null);
@@ -43,6 +45,12 @@ export default function TodayList() {
     const focusedSet = new Set(focusedTodayIds);
     return unique.filter((t) => focusedSet.has(t.id) && !isFutureDay(t.work_date, tz));
   }, [data, focusedTodayIds, tz]);
+
+  // Split the focus list into the main list plus the manual Evening / Night
+  // triage buckets that render as their own sections below it.
+  const mainTasks = useMemo(() => tasks.filter((t) => !focusBuckets[t.id]), [tasks, focusBuckets]);
+  const eveningTasks = useMemo(() => tasks.filter((t) => focusBuckets[t.id] === 'evening'), [tasks, focusBuckets]);
+  const nightTasks = useMemo(() => tasks.filter((t) => focusBuckets[t.id] === 'night'), [tasks, focusBuckets]);
 
   const groupBy = usePMStore((s) => s.todayListGroupBy);
   const setTodayListGroupBy = usePMStore((s) => s.setTodayListGroupBy);
@@ -70,17 +78,18 @@ export default function TodayList() {
   }, [menuOpen]);
 
   const groups = useMemo(
-    () => (groupBy === 'none' ? [] : groupTasks(tasks, groupBy, tz, fadingTaskIds)),
-    [tasks, groupBy, tz, fadingTaskIds],
+    () => (groupBy === 'none' ? [] : groupTasks(mainTasks, groupBy, tz, fadingTaskIds)),
+    [mainTasks, groupBy, tz, fadingTaskIds],
   );
   const currentLabel = GROUP_OPTIONS.find((o) => o.value === groupBy)?.label ?? 'None';
 
   return (
+    <>
     <div className="hm-card">
       <div className="hm-card-head">
-        <h3>Today</h3>
+        <h3>Focus list</h3>
         {view === 'list' && !isLoading && !isError && (
-          <span className="hm-count">· {tasks.length}</span>
+          <span className="hm-count">· {mainTasks.length}</span>
         )}
         <div className="hm-head-actions">
           {view === 'list' && (
@@ -179,10 +188,10 @@ export default function TodayList() {
             </div>
           )}
 
-          {!isLoading && !isError && tasks.length > 0 && (
+          {!isLoading && !isError && mainTasks.length > 0 && (
             groupBy === 'none' ? (
               <div className="hm-list">
-                {tasks.map((t) => (
+                {mainTasks.map((t) => (
                   <TodayRow key={t.id} task={t} onOpen={openTask} />
                 ))}
               </div>
@@ -202,16 +211,97 @@ export default function TodayList() {
               ))
             )
           )}
+
         </>
       )}
     </div>
+
+      {view === 'list' && !isLoading && !isError && eveningTasks.length > 0 && (
+        <div className="hm-card hm-bucket-card">
+          <div className="hm-card-head">
+            <h3>Evening</h3>
+            <span className="hm-count">· {eveningTasks.length}</span>
+            <span className="hm-bucket-hint">after 3 PM</span>
+          </div>
+          <div className="hm-list">
+            {eveningTasks.map((t) => (
+              <TodayRow key={t.id} task={t} onOpen={openTask} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {view === 'list' && !isLoading && !isError && nightTasks.length > 0 && (
+        <div className="hm-card hm-bucket-card">
+          <div className="hm-card-head">
+            <h3>Night</h3>
+            <span className="hm-count">· {nightTasks.length}</span>
+            <span className="hm-bucket-hint">after 7 PM</span>
+          </div>
+          <div className="hm-list">
+            {nightTasks.map((t) => (
+              <TodayRow key={t.id} task={t} onOpen={openTask} />
+            ))}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
 function TodayRow({ task: t, onOpen }: { task: Task; onOpen: (id: string) => void }) {
   const updateTask = useUpdateTask(null);
+  const setFocusBucket = usePMStore((s) => s.setFocusBucket);
+  const bucket = usePMStore((s) => s.focusBuckets[t.id]);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
+  // Fixed-viewport coordinates for the bucket menu (null = closed). The menu is
+  // portaled to <body> and positioned via getBoundingClientRect so it can't be
+  // clipped by `.hm-card { overflow: hidden }`.
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
+  const bucketRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const openMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (menuPos) { setMenuPos(null); return; }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const MENU_W = 188;
+    const MENU_H = 132;
+    const MARGIN = 6;
+    const flipUp = rect.bottom + MARGIN + MENU_H > window.innerHeight;
+    setMenuPos({
+      left: Math.max(8, rect.right - MENU_W),
+      top: flipUp ? rect.top - MENU_H - MARGIN : rect.bottom + MARGIN,
+    });
+  };
+
+  useEffect(() => {
+    if (!menuPos) return;
+    const onDown = (e: MouseEvent) => {
+      const tgt = e.target as Node;
+      if (bucketRef.current?.contains(tgt) || menuRef.current?.contains(tgt)) return;
+      setMenuPos(null);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuPos(null); };
+    const onScroll = () => setMenuPos(null);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [menuPos]);
+
+  const moveTo = (e: React.MouseEvent, next: FocusBucket | null) => {
+    e.stopPropagation();
+    setFocusBucket(t.id, next);
+    setMenuPos(null);
+  };
 
   const when = formatWhen(t.due_date);
   const assignee = t.assignees?.[0];
@@ -285,6 +375,46 @@ function TodayRow({ task: t, onOpen }: { task: Task; onOpen: (id: string) => voi
         <div className="hm-ava" data-empty="true" title="Unassigned">
           –
         </div>
+      )}
+      <div className="hm-bucket" ref={bucketRef}>
+        <button
+          type="button"
+          className="hm-bucket-btn"
+          data-open={menuPos ? true : undefined}
+          aria-label="Move to later today"
+          aria-haspopup="menu"
+          aria-expanded={!!menuPos}
+          title="Move to later today"
+          onClick={openMenu}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </button>
+      </div>
+      {menuPos && createPortal(
+        <div
+          ref={menuRef}
+          className="hm-bucket-menu"
+          role="menu"
+          style={{ left: menuPos.left, top: menuPos.top }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button type="button" role="menuitem" className="hm-bucket-menu-item" data-active={bucket === 'evening'} onClick={(e) => moveTo(e, 'evening')}>
+            <span>Evening</span>
+            <span className="dim">after 3 PM</span>
+          </button>
+          <button type="button" role="menuitem" className="hm-bucket-menu-item" data-active={bucket === 'night'} onClick={(e) => moveTo(e, 'night')}>
+            <span>Night</span>
+            <span className="dim">after 7 PM</span>
+          </button>
+          {bucket && (
+            <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveTo(e, null)}>
+              <span>Move to Focus list</span>
+            </button>
+          )}
+        </div>,
+        document.body,
       )}
     </div>
   );
