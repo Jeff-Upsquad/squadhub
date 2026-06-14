@@ -108,6 +108,17 @@ export default function AdminSquadbooksAccess() {
     saveMutation.mutate({ orgId: workspaceId, userId, accessLevel, allowedModules: modules });
   };
 
+  // Load an existing grant into the form to edit it (saving overwrites it).
+  const startEdit = (g: AccessRow) => {
+    setUserId(g.userId);
+    setAccessLevel(g.accessLevel);
+    setModules([...g.allowedModules]);
+    setFormError('');
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const editingExisting = !!userId && grants.some((g) => g.userId === userId);
+
   return (
     <div className="mx-auto max-w-4xl p-6">
       <h1 className="text-lg font-semibold text-[#0F172B]">SquadBooks Access</h1>
@@ -190,7 +201,7 @@ export default function AdminSquadbooksAccess() {
           disabled={saveMutation.isPending}
           className="mt-4 rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:bg-[#1D293D] disabled:opacity-50"
         >
-          Assign access
+          {editingExisting ? 'Update access' : 'Assign access'}
         </button>
       </form>
 
@@ -225,6 +236,12 @@ export default function AdminSquadbooksAccess() {
                     {g.allowedModules.length ? g.allowedModules.join(', ') : '—'}
                   </td>
                   <td className="px-4 py-2 text-right">
+                    <button
+                      onClick={() => startEdit(g)}
+                      className="mr-3 text-xs font-medium text-[#0F172B] hover:underline"
+                    >
+                      Edit
+                    </button>
                     <button
                       onClick={() => revokeMutation.mutate(g.userId)}
                       className="text-xs font-medium text-red-600 hover:underline"
