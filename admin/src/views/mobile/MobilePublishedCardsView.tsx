@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
-import { squadhireDeliveryState, type PublishedCard } from '@/views/admin/AdminPublishedCards';
+import { squadhireDeliveryState, ServiceTypeBadge, type PublishedCard } from '@/views/admin/AdminPublishedCards';
 import MobileCardDetail from './MobileCardDetail';
 import MobileRequestsList from './MobileRequestsList';
 import MobileCustomCardsList from './MobileCustomCardsList';
@@ -374,9 +374,12 @@ function PublishedCardRow({
           {business.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
-            {business}{serviceType ? `: ${serviceType}` : ''}
-          </p>
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
+              {business}
+            </p>
+            <ServiceTypeBadge serviceType={serviceType} />
+          </div>
           {(planName || priceLabel) && (
             <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
               {planName}
