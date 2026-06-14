@@ -16,6 +16,7 @@ services:
       - /var/www/cashbook-downloads:/srv/cashbook-downloads:ro
       - /var/www/kia:/srv/kia:ro
       - /var/www/cashbook-web:/srv/cashbook-web:ro
+      - /var/www/rioconnect:/srv/rioconnect:ro
     dns:
       - 1.1.1.1
       - 8.8.8.8
