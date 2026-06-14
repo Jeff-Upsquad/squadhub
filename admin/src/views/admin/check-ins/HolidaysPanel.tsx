@@ -102,13 +102,13 @@ export default function HolidaysPanel() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex gap-1 rounded-lg bg-[#F1F5F9] p-1">
+        <div className="flex gap-1 rounded-lg bg-canvas p-1">
           {(['list', 'calendar', 'working-days'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
-                activeTab === tab ? 'bg-white text-[#0F172B] shadow-sm' : 'text-[#62748E] hover:text-[#0F172B]'
+                activeTab === tab ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted hover:text-foreground'
               }`}
             >
               {tab === 'list' ? 'Holidays' : tab === 'calendar' ? 'Calendar' : 'Working Days'}
@@ -118,7 +118,7 @@ export default function HolidaysPanel() {
         {activeTab === 'list' && (
           <button
             onClick={() => { resetForm(); setShowForm(true); }}
-            className="rounded-lg bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:bg-[#1D293D]"
+            className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover"
           >
             Add Holiday
           </button>
@@ -126,9 +126,9 @@ export default function HolidaysPanel() {
       </div>
 
       {activeTab === 'working-days' && (
-        <div className="rounded-xl border border-[#E2E8F0] bg-white p-6">
-          <h3 className="mb-4 text-sm font-semibold text-[#0F172B]">Default Working Days</h3>
-          <p className="mb-4 text-xs text-[#62748E]">Toggle which days of the week are working days. Check-ins will only be tracked on working days.</p>
+        <div className="rounded-xl border border-divider bg-surface p-6">
+          <h3 className="mb-4 text-sm font-semibold text-foreground">Default Working Days</h3>
+          <p className="mb-4 text-xs text-foreground-muted">Toggle which days of the week are working days. Check-ins will only be tracked on working days.</p>
           <div className="flex gap-3">
             {DAY_NAMES.map((name, i) => (
               <button
@@ -137,7 +137,7 @@ export default function HolidaysPanel() {
                 className={`flex h-14 w-14 flex-col items-center justify-center rounded-lg border transition ${
                   workingDays.includes(i)
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'border-[#E2E8F0] bg-white text-[#90A1B9]'
+                    : 'border-divider bg-surface text-foreground-dim'
                 }`}
               >
                 <span className="text-xs font-medium">{name}</span>
@@ -149,31 +149,31 @@ export default function HolidaysPanel() {
       )}
 
       {activeTab === 'list' && (
-        <div className="rounded-xl border border-[#E2E8F0] bg-white">
+        <div className="rounded-xl border border-divider bg-surface">
           {holidays.length === 0 ? (
-            <div className="p-8 text-center text-sm text-[#90A1B9]">No holidays configured yet</div>
+            <div className="p-8 text-center text-sm text-foreground-dim">No holidays configured yet</div>
           ) : (
             <table className="w-full">
               <thead>
-                <tr className="border-b border-[#E2E8F0] text-left">
-                  <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Name</th>
-                  <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Date</th>
-                  <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Type</th>
-                  <th className="px-5 py-3 text-xs font-medium text-[#62748E] text-right">Actions</th>
+                <tr className="border-b border-divider text-left">
+                  <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Name</th>
+                  <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Date</th>
+                  <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Type</th>
+                  <th className="px-5 py-3 text-xs font-medium text-foreground-muted text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {holidays.map((h) => (
-                  <tr key={h.id} className="border-b border-[#E2E8F0] last:border-0">
-                    <td className="px-5 py-3 text-sm text-[#0F172B]">{h.name}</td>
-                    <td className="px-5 py-3 text-sm text-[#62748E]">
+                  <tr key={h.id} className="border-b border-divider last:border-0">
+                    <td className="px-5 py-3 text-sm text-foreground">{h.name}</td>
+                    <td className="px-5 py-3 text-sm text-foreground-muted">
                       {h.is_recurring
                         ? `${MONTH_NAMES[h.recurring_month!]} ${h.recurring_day} (every year)`
                         : h.date}
                     </td>
                     <td className="px-5 py-3">
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        h.is_recurring ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-600'
+                        h.is_recurring ? 'bg-blue-50 text-blue-600' : 'bg-canvas text-foreground-muted'
                       }`}>
                         {h.is_recurring ? 'Recurring' : 'One-time'}
                       </span>
@@ -181,7 +181,7 @@ export default function HolidaysPanel() {
                     <td className="px-5 py-3 text-right">
                       <button
                         onClick={() => handleEdit(h)}
-                        className="mr-2 text-xs text-[#62748E] hover:text-[#0F172B]"
+                        className="mr-2 text-xs text-foreground-muted hover:text-foreground"
                       >
                         Edit
                       </button>
@@ -206,18 +206,18 @@ export default function HolidaysPanel() {
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h3 className="mb-4 text-base font-semibold text-[#0F172B]">
+          <div className="w-full max-w-md rounded-xl bg-surface p-6 shadow-xl">
+            <h3 className="mb-4 text-base font-semibold text-foreground">
               {editingId ? 'Edit Holiday' : 'Add Holiday'}
             </h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="mb-1 block text-xs font-medium text-[#62748E]">Name</label>
+                <label className="mb-1 block text-xs font-medium text-foreground-muted">Name</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
-                  className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
+                  className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
                   required
                 />
               </div>
@@ -228,20 +228,20 @@ export default function HolidaysPanel() {
                     type="checkbox"
                     checked={formData.is_recurring}
                     onChange={(e) => setFormData((p) => ({ ...p, is_recurring: e.target.checked }))}
-                    className="rounded border-[#CBD5E1]"
+                    className="rounded border-divider-strong"
                   />
-                  <span className="text-sm text-[#0F172B]">Recurring annually</span>
+                  <span className="text-sm text-foreground">Recurring annually</span>
                 </label>
               </div>
 
               {formData.is_recurring ? (
                 <div className="flex gap-3">
                   <div className="flex-1">
-                    <label className="mb-1 block text-xs font-medium text-[#62748E]">Month</label>
+                    <label className="mb-1 block text-xs font-medium text-foreground-muted">Month</label>
                     <select
                       value={formData.recurring_month}
                       onChange={(e) => setFormData((p) => ({ ...p, recurring_month: parseInt(e.target.value) }))}
-                      className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
+                      className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
                     >
                       {MONTH_NAMES.slice(1).map((m, i) => (
                         <option key={i + 1} value={i + 1}>{m}</option>
@@ -249,35 +249,35 @@ export default function HolidaysPanel() {
                     </select>
                   </div>
                   <div className="w-24">
-                    <label className="mb-1 block text-xs font-medium text-[#62748E]">Day</label>
+                    <label className="mb-1 block text-xs font-medium text-foreground-muted">Day</label>
                     <input
                       type="number"
                       min={1}
                       max={31}
                       value={formData.recurring_day}
                       onChange={(e) => setFormData((p) => ({ ...p, recurring_day: parseInt(e.target.value) }))}
-                      className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
+                      className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
                     />
                   </div>
                 </div>
               ) : (
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-[#62748E]">Date</label>
+                  <label className="mb-1 block text-xs font-medium text-foreground-muted">Date</label>
                   <input
                     type="date"
                     value={formData.date}
                     onChange={(e) => setFormData((p) => ({ ...p, date: e.target.value }))}
-                    className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm focus:border-[#0F172B] focus:outline-none"
+                    className="w-full rounded-lg border border-divider px-3 py-2 text-sm focus:border-ink focus:outline-none"
                     required={!formData.is_recurring}
                   />
                 </div>
               )}
 
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={resetForm} className="flex-1 rounded-lg border border-[#E2E8F0] py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC]">
+                <button type="button" onClick={resetForm} className="flex-1 rounded-lg border border-divider py-2 text-sm text-foreground-muted hover:bg-surface-alt">
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 rounded-lg bg-[#0F172B] py-2 text-sm font-medium text-white hover:bg-[#1D293D]">
+                <button type="submit" className="flex-1 rounded-lg bg-ink py-2 text-sm font-medium text-white hover:bg-ink-hover">
                   {editingId ? 'Update' : 'Add'}
                 </button>
               </div>
@@ -313,20 +313,20 @@ function CalendarTab({ holidays, workingDays }: { holidays: Holiday[]; workingDa
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
   return (
-    <div className="rounded-xl border border-[#E2E8F0] bg-white p-6">
+    <div className="rounded-xl border border-divider bg-surface p-6">
       <div className="mb-4 flex items-center justify-between">
-        <button onClick={() => { if (month === 0) { setMonth(11); setYear(year - 1); } else setMonth(month - 1); }} className="rounded p-1 hover:bg-[#F1F5F9]">
+        <button onClick={() => { if (month === 0) { setMonth(11); setYear(year - 1); } else setMonth(month - 1); }} className="rounded p-1 hover:bg-canvas">
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
         </button>
-        <h4 className="text-sm font-semibold text-[#0F172B]">{MONTH_NAMES[month + 1]} {year}</h4>
-        <button onClick={() => { if (month === 11) { setMonth(0); setYear(year + 1); } else setMonth(month + 1); }} className="rounded p-1 hover:bg-[#F1F5F9]">
+        <h4 className="text-sm font-semibold text-foreground">{MONTH_NAMES[month + 1]} {year}</h4>
+        <button onClick={() => { if (month === 11) { setMonth(0); setYear(year + 1); } else setMonth(month + 1); }} className="rounded p-1 hover:bg-canvas">
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
         </button>
       </div>
 
       <div className="grid grid-cols-7 gap-1">
         {DAY_NAMES.map((d) => (
-          <div key={d} className="py-1 text-center text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">{d}</div>
+          <div key={d} className="py-1 text-center text-[10px] font-medium uppercase tracking-wider text-foreground-dim">{d}</div>
         ))}
         {cells.map((day, i) => {
           if (day === null) return <div key={`pad-${i}`} />;
@@ -350,7 +350,7 @@ function CalendarTab({ holidays, workingDays }: { holidays: Holiday[]; workingDa
                 isHoliday
                   ? 'bg-red-100 text-red-600'
                   : isNonWorking
-                  ? 'bg-gray-100 text-gray-400'
+                  ? 'bg-canvas text-foreground-dim'
                   : 'bg-emerald-50 text-emerald-700'
               }`}
               title={isHoliday ? holidayName : isNonWorking ? 'Non-working day' : 'Working day'}
@@ -364,15 +364,15 @@ function CalendarTab({ holidays, workingDays }: { holidays: Holiday[]; workingDa
       <div className="mt-4 flex items-center justify-center gap-4">
         <div className="flex items-center gap-1.5">
           <div className="h-3 w-3 rounded-sm bg-emerald-50 border border-emerald-200" />
-          <span className="text-[10px] text-[#90A1B9]">Working</span>
+          <span className="text-[10px] text-foreground-dim">Working</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 rounded-sm bg-gray-100" />
-          <span className="text-[10px] text-[#90A1B9]">Non-working</span>
+          <div className="h-3 w-3 rounded-sm bg-canvas" />
+          <span className="text-[10px] text-foreground-dim">Non-working</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="h-3 w-3 rounded-sm bg-red-100" />
-          <span className="text-[10px] text-[#90A1B9]">Holiday</span>
+          <span className="text-[10px] text-foreground-dim">Holiday</span>
         </div>
       </div>
     </div>

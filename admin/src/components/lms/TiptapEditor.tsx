@@ -41,22 +41,22 @@ export default function TiptapEditor({ value, onChange, placeholder = 'Write som
   if (!editor) return null;
 
   return (
-    <div className="rounded-lg border border-[#E2E8F0] bg-white">
-      <div className="flex flex-wrap items-center gap-1 border-b border-[#E2E8F0] px-2 py-1.5">
+    <div className="rounded-lg border border-divider bg-surface">
+      <div className="flex flex-wrap items-center gap-1 border-b border-divider px-2 py-1.5">
         <ToolbarButton active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} label="B" className="font-bold" />
         <ToolbarButton active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} label="I" className="italic" />
         <ToolbarButton active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()} label="S" className="line-through" />
         <ToolbarButton active={editor.isActive('code')} onClick={() => editor.chain().focus().toggleCode().run()} label="</>" className="font-mono text-[11px]" />
-        <div className="mx-1 h-4 w-px bg-[#E2E8F0]" />
+        <div className="mx-1 h-4 w-px bg-well" />
         <ToolbarButton active={editor.isActive('heading', { level: 1 })} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} label="H1" />
         <ToolbarButton active={editor.isActive('heading', { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} label="H2" />
         <ToolbarButton active={editor.isActive('heading', { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} label="H3" />
-        <div className="mx-1 h-4 w-px bg-[#E2E8F0]" />
+        <div className="mx-1 h-4 w-px bg-well" />
         <ToolbarButton active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()} label="•" />
         <ToolbarButton active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()} label="1." />
         <ToolbarButton active={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()} label="❝" />
         <ToolbarButton active={editor.isActive('codeBlock')} onClick={() => editor.chain().focus().toggleCodeBlock().run()} label="{…}" className="font-mono text-[10px]" />
-        <div className="mx-1 h-4 w-px bg-[#E2E8F0]" />
+        <div className="mx-1 h-4 w-px bg-well" />
         <ToolbarButton
           active={editor.isActive('link')}
           onClick={() => {
@@ -102,7 +102,7 @@ function ToolbarButton({ label, active, onClick, className = '' }: { label: stri
     <button
       type="button"
       onClick={onClick}
-      className={`rounded px-2 py-1 text-[12px] transition ${active ? 'bg-[#F1F5F9] text-[#0F172B]' : 'text-[#62748E] hover:bg-[#F8FAFC]'} ${className}`}
+      className={`rounded px-2 py-1 text-[12px] transition ${active ? 'bg-canvas text-foreground' : 'text-foreground-muted hover:bg-surface-alt'} ${className}`}
     >
       {label}
     </button>

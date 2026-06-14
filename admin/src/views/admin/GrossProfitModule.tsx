@@ -64,10 +64,10 @@ function formatPct(pct: number): string {
 }
 
 function tierBadge(tier: string | undefined): string {
-  if (tier === 'Junior') return 'bg-[#F1F5F9] text-[#475569]';
+  if (tier === 'Junior') return 'bg-canvas text-foreground-muted';
   if (tier === 'Pro') return 'bg-[#EEF2FF] text-[#4338CA]';
   if (tier === 'Elite' || tier === 'Top Talents') return 'bg-[#FEF3C7] text-[#A16207]';
-  return 'bg-[#F1F5F9] text-[#64748B]';
+  return 'bg-canvas text-foreground-muted';
 }
 
 export default function GrossProfitModule() {
@@ -116,10 +116,10 @@ export default function GrossProfitModule() {
     <div>
       {/* Header */}
       <div className="mb-5">
-        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[#0F172B]">
+        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">
           Gross Profit
         </h1>
-        <p className="mt-1 text-sm text-[#64748B]">
+        <p className="mt-1 text-sm text-foreground-muted">
           Monthly revenue, partner cost, and profit per client based on active subscription pricing.
         </p>
       </div>
@@ -130,31 +130,31 @@ export default function GrossProfitModule() {
           {summary.map((s) => (
             <div
               key={s.currency}
-              className="rounded-lg border border-[#E2E8F0] bg-white p-4"
+              className="rounded-lg border border-divider bg-surface p-4"
             >
               <div className="mb-3 flex items-center justify-between">
-                <span className="font-[family-name:var(--font-mono)] rounded-md bg-[#EEF2FF] px-2 py-0.5 text-[11px] font-semibold text-[#2962FF]">
+                <span className="font-[family-name:var(--font-mono)] rounded-md bg-[#EEF2FF] px-2 py-0.5 text-[11px] font-semibold text-accent">
                   {s.currency}
                 </span>
-                <span className="text-xs text-[#64748B]">
+                <span className="text-xs text-foreground-muted">
                   {s.client_count} client{s.client_count === 1 ? '' : 's'}
                 </span>
               </div>
               <div className="grid grid-cols-4 gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-wider text-[#90A1B9]">Revenue</p>
-                  <p className="mt-0.5 text-base font-semibold text-[#0F172B]">
+                  <p className="text-[11px] uppercase tracking-wider text-foreground-dim">Revenue</p>
+                  <p className="mt-0.5 text-base font-semibold text-foreground">
                     {formatMoney(s.revenue, s.currency)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[11px] uppercase tracking-wider text-[#90A1B9]">Partner Cost</p>
-                  <p className="mt-0.5 text-base font-semibold text-[#0F172B]">
+                  <p className="text-[11px] uppercase tracking-wider text-foreground-dim">Partner Cost</p>
+                  <p className="mt-0.5 text-base font-semibold text-foreground">
                     {formatMoney(s.partner_cost, s.currency)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[11px] uppercase tracking-wider text-[#90A1B9]">Gross Profit</p>
+                  <p className="text-[11px] uppercase tracking-wider text-foreground-dim">Gross Profit</p>
                   <p
                     className={`mt-0.5 text-base font-semibold ${
                       s.gross_profit >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'
@@ -164,8 +164,8 @@ export default function GrossProfitModule() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-[11px] uppercase tracking-wider text-[#90A1B9]">Margin</p>
-                  <p className="mt-0.5 text-base font-semibold text-[#0F172B]">
+                  <p className="text-[11px] uppercase tracking-wider text-foreground-dim">Margin</p>
+                  <p className="mt-0.5 text-base font-semibold text-foreground">
                     {formatPct(s.margin_pct)}
                   </p>
                 </div>
@@ -180,7 +180,7 @@ export default function GrossProfitModule() {
         <select
           value={filters.country_id}
           onChange={(e) => setFilters({ ...filters, country_id: e.target.value })}
-          className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#0F172B]"
+          className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground"
         >
           <option value="">All Countries</option>
           {countries
@@ -194,13 +194,13 @@ export default function GrossProfitModule() {
         <select
           value={filters.subscription_slug}
           onChange={(e) => setFilters({ ...filters, subscription_slug: e.target.value })}
-          className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#0F172B]"
+          className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground"
         >
           <option value="">All Subscriptions</option>
           <option value="designer">Designer</option>
           <option value="video_editor">Video Editor</option>
         </select>
-        <label className="flex items-center gap-1.5 rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs text-[#0F172B] cursor-pointer">
+        <label className="flex items-center gap-1.5 rounded-md border border-divider bg-surface px-3 py-1.5 text-xs text-foreground cursor-pointer">
           <input
             type="checkbox"
             checked={filters.include_paused}
@@ -227,29 +227,29 @@ export default function GrossProfitModule() {
       {/* Body: table + optional drill-in */}
       <div className="flex gap-4">
         {/* Clients table */}
-        <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
+        <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-divider bg-surface">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Client</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Country</th>
-                <th className="px-4 py-2.5 text-right font-medium text-[#64748B]">Subs</th>
-                <th className="px-4 py-2.5 text-right font-medium text-[#64748B]">Revenue</th>
-                <th className="px-4 py-2.5 text-right font-medium text-[#64748B]">Partner Cost</th>
-                <th className="px-4 py-2.5 text-right font-medium text-[#64748B]">Gross Profit</th>
-                <th className="px-4 py-2.5 text-right font-medium text-[#64748B]">Margin</th>
+              <tr className="border-b border-divider bg-surface-alt">
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Client</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Country</th>
+                <th className="px-4 py-2.5 text-right font-medium text-foreground-muted">Subs</th>
+                <th className="px-4 py-2.5 text-right font-medium text-foreground-muted">Revenue</th>
+                <th className="px-4 py-2.5 text-right font-medium text-foreground-muted">Partner Cost</th>
+                <th className="px-4 py-2.5 text-right font-medium text-foreground-muted">Gross Profit</th>
+                <th className="px-4 py-2.5 text-right font-medium text-foreground-muted">Margin</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#94A3B8]">
+                  <td colSpan={7} className="py-12 text-center text-foreground-dim">
                     Loading...
                   </td>
                 </tr>
               ) : clients.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#94A3B8]">
+                  <td colSpan={7} className="py-12 text-center text-foreground-dim">
                     No clients with active subscriptions match these filters.
                   </td>
                 </tr>
@@ -264,11 +264,11 @@ export default function GrossProfitModule() {
                     <tr
                       key={c.id}
                       onClick={() => setSelectedClientId(isSelected ? null : c.id)}
-                      className={`cursor-pointer border-b border-[#F1F5F9] hover:bg-[#F8FAFC] ${
+                      className={`cursor-pointer border-b border-divider hover:bg-surface-alt ${
                         isSelected ? 'bg-[#EEF2FF]' : ''
                       }`}
                     >
-                      <td className="px-4 py-2.5 text-[#0F172B]">
+                      <td className="px-4 py-2.5 text-foreground">
                         <div className="flex items-center gap-2">
                           {c.has_missing_pricing && (
                             <span
@@ -279,15 +279,15 @@ export default function GrossProfitModule() {
                           <span className="font-medium">{c.business_name}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-2.5 text-[#475569]">
+                      <td className="px-4 py-2.5 text-foreground-muted">
                         {c.country.name || '—'}{' '}
-                        <span className="text-[#94A3B8]">({c.country.currency || '—'})</span>
+                        <span className="text-foreground-dim">({c.country.currency || '—'})</span>
                       </td>
-                      <td className="px-4 py-2.5 text-right text-[#475569]">{subsLabel}</td>
-                      <td className="px-4 py-2.5 text-right text-[#0F172B]">
+                      <td className="px-4 py-2.5 text-right text-foreground-muted">{subsLabel}</td>
+                      <td className="px-4 py-2.5 text-right text-foreground">
                         {formatMoney(c.monthly_revenue, c.country.currency)}
                       </td>
-                      <td className="px-4 py-2.5 text-right text-[#0F172B]">
+                      <td className="px-4 py-2.5 text-right text-foreground">
                         {formatMoney(c.monthly_partner_cost, c.country.currency)}
                       </td>
                       <td
@@ -297,7 +297,7 @@ export default function GrossProfitModule() {
                       >
                         {formatMoney(c.gross_profit, c.country.currency)}
                       </td>
-                      <td className="px-4 py-2.5 text-right text-[#475569]">
+                      <td className="px-4 py-2.5 text-right text-foreground-muted">
                         {formatPct(c.margin_pct)}
                       </td>
                     </tr>
@@ -310,22 +310,22 @@ export default function GrossProfitModule() {
 
         {/* Drill-in panel */}
         {selectedClient && (
-          <aside className="w-[420px] shrink-0 overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
-            <div className="flex items-start justify-between border-b border-[#E2E8F0] px-4 py-3">
+          <aside className="w-[420px] shrink-0 overflow-hidden rounded-lg border border-divider bg-surface">
+            <div className="flex items-start justify-between border-b border-divider px-4 py-3">
               <div className="min-w-0">
-                <h3 className="truncate text-sm font-semibold text-[#0F172B]">
+                <h3 className="truncate text-sm font-semibold text-foreground">
                   {selectedClient.business_name}
                 </h3>
-                <p className="text-xs text-[#64748B]">
+                <p className="text-xs text-foreground-muted">
                   {selectedClient.country.name || '—'}{' '}
-                  <span className="text-[#94A3B8]">
+                  <span className="text-foreground-dim">
                     ({selectedClient.country.currency || '—'})
                   </span>
                 </p>
               </div>
               <button
                 onClick={() => setSelectedClientId(null)}
-                className="rounded-md p-1 text-[#94A3B8] hover:bg-[#F1F5F9] hover:text-[#0F172B]"
+                className="rounded-md p-1 text-foreground-dim hover:bg-canvas hover:text-foreground"
                 aria-label="Close drill-in"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -335,23 +335,23 @@ export default function GrossProfitModule() {
             </div>
 
             {/* Per-subscription breakdown */}
-            <div className="border-b border-[#E2E8F0] px-4 py-3">
-              <h4 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-[#90A1B9]">
+            <div className="border-b border-divider px-4 py-3">
+              <h4 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-foreground-dim">
                 Subscriptions ({selectedClient.subscriptions.length})
               </h4>
               <div className="space-y-2">
                 {selectedClient.subscriptions.map((s) => (
                   <div
                     key={s.client_subscription_id}
-                    className="rounded-md border border-[#E2E8F0] bg-[#F8FAFC] p-3"
+                    className="rounded-md border border-divider bg-surface-alt p-3"
                   >
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-[#0F172B]">
+                        <p className="truncate text-sm font-medium text-foreground">
                           {s.subscription?.name || 'Unknown'}
                         </p>
                         <div className="mt-1 flex items-center gap-1.5">
-                          <span className="rounded-md bg-white px-1.5 py-0.5 text-[10px] font-medium text-[#475569] ring-1 ring-[#E2E8F0]">
+                          <span className="rounded-md bg-surface px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted ring-1 ring-divider">
                             {s.plan?.plan || '—'}
                           </span>
                           <span
@@ -371,10 +371,10 @@ export default function GrossProfitModule() {
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs">
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider text-[#90A1B9]">
+                        <p className="text-[10px] uppercase tracking-wider text-foreground-dim">
                           Customer
                         </p>
-                        <p className="mt-0.5 font-medium text-[#0F172B]">
+                        <p className="mt-0.5 font-medium text-foreground">
                           {s.missing_customer_price ? (
                             <span className="text-amber-600">missing</span>
                           ) : (
@@ -383,10 +383,10 @@ export default function GrossProfitModule() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider text-[#90A1B9]">
+                        <p className="text-[10px] uppercase tracking-wider text-foreground-dim">
                           Partner
                         </p>
-                        <p className="mt-0.5 font-medium text-[#0F172B]">
+                        <p className="mt-0.5 font-medium text-foreground">
                           {s.missing_partner_price ? (
                             <span className="text-amber-600">missing</span>
                           ) : (
@@ -395,7 +395,7 @@ export default function GrossProfitModule() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider text-[#90A1B9]">
+                        <p className="text-[10px] uppercase tracking-wider text-foreground-dim">
                           Profit
                         </p>
                         <p
@@ -414,26 +414,26 @@ export default function GrossProfitModule() {
 
             {/* Assigned partners */}
             <div className="px-4 py-3">
-              <h4 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-[#90A1B9]">
+              <h4 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-foreground-dim">
                 Assigned Partners ({assignedPartners.length})
               </h4>
               {assignedPartners.length === 0 ? (
-                <p className="text-xs text-[#94A3B8]">No partners assigned to this client.</p>
+                <p className="text-xs text-foreground-dim">No partners assigned to this client.</p>
               ) : (
                 <ul className="space-y-1.5">
                   {assignedPartners.map((a) => (
                     <li
                       key={a.id}
-                      className="flex items-center justify-between gap-2 rounded-md bg-[#F8FAFC] px-3 py-2"
+                      className="flex items-center justify-between gap-2 rounded-md bg-surface-alt px-3 py-2"
                     >
                       <div className="min-w-0">
-                        <p className="truncate text-xs font-medium text-[#0F172B]">
+                        <p className="truncate text-xs font-medium text-foreground">
                           {a.user.display_name || a.user.email}
                         </p>
-                        <p className="truncate text-[11px] text-[#64748B]">{a.user.email}</p>
+                        <p className="truncate text-[11px] text-foreground-muted">{a.user.email}</p>
                       </div>
                       {a.role && (
-                        <span className="shrink-0 rounded-md bg-white px-2 py-0.5 text-[10px] font-medium text-[#475569] ring-1 ring-[#E2E8F0]">
+                        <span className="shrink-0 rounded-md bg-surface px-2 py-0.5 text-[10px] font-medium text-foreground-muted ring-1 ring-divider">
                           {a.role}
                         </span>
                       )}

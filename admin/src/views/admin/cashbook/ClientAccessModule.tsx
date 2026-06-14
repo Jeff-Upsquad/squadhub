@@ -83,28 +83,28 @@ export default function ClientAccessModule() {
   };
 
   if (isLoading) {
-    return <div className="flex items-center justify-center py-12 text-sm text-[#64748B]">Loading client access...</div>;
+    return <div className="flex items-center justify-center py-12 text-sm text-foreground-muted">Loading client access...</div>;
   }
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-[#0F172B]">Client Access</h3>
-          <p className="text-sm text-[#64748B]">Manage which clients have access to Cash Book</p>
+          <h3 className="text-lg font-semibold text-foreground">Client Access</h3>
+          <p className="text-sm text-foreground-muted">Manage which clients have access to Cash Book</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="rounded-md bg-[#2962FF] px-4 py-2 text-xs font-medium text-white hover:bg-[#1E50D8] transition-colors"
+          className="rounded-md bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-strong transition-colors"
         >
           {showForm ? 'Cancel' : 'Add Client'}
         </button>
       </div>
 
       {showForm && (
-        <div className="mb-6 rounded-lg border border-[#E2E8F0] bg-white p-4">
+        <div className="mb-6 rounded-lg border border-divider bg-surface p-4">
           <div className="mb-4" ref={dropdownRef}>
-            <label className="mb-1 block text-xs font-medium text-[#475569]">Select Client</label>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">Select Client</label>
             <div className="relative">
               <input
                 type="text"
@@ -116,13 +116,13 @@ export default function ClientAccessModule() {
                 }}
                 onFocus={() => setDropdownOpen(true)}
                 placeholder="Search clients..."
-                className="w-full rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+                className="w-full rounded-md border border-divider bg-surface-alt px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               />
               {selectedClientId && (
                 <button
                   type="button"
                   onClick={() => { setSelectedClientId(''); setSearchQuery(''); }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#64748B]"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-foreground-dim hover:text-foreground-muted"
                 >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
@@ -130,7 +130,7 @@ export default function ClientAccessModule() {
                 </button>
               )}
               {dropdownOpen && (
-                <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-[#E2E8F0] bg-white shadow-lg">
+                <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-divider bg-surface shadow-lg">
                   {availableClients
                     .filter((c) => {
                       const q = searchQuery.toLowerCase();
@@ -145,13 +145,13 @@ export default function ClientAccessModule() {
                           setSearchQuery(`${c.business_name} (${c.contact_person})`);
                           setDropdownOpen(false);
                         }}
-                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-[#F1F5F9] transition-colors ${
+                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-canvas transition-colors ${
                           selectedClientId === c.id ? 'bg-[#EEF2FF]' : ''
                         }`}
                       >
                         <div>
-                          <span className="font-medium text-[#0F172B]">{c.business_name}</span>
-                          <span className="ml-1 text-[#94A3B8]">({c.contact_person})</span>
+                          <span className="font-medium text-foreground">{c.business_name}</span>
+                          <span className="ml-1 text-foreground-dim">({c.contact_person})</span>
                         </div>
                         {c.status !== 'active' && (
                           <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
@@ -166,7 +166,7 @@ export default function ClientAccessModule() {
                     const q = searchQuery.toLowerCase();
                     return !q || c.business_name.toLowerCase().includes(q) || c.contact_person.toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
                   }).length === 0 && (
-                    <div className="px-3 py-3 text-center text-xs text-[#94A3B8]">No clients found</div>
+                    <div className="px-3 py-3 text-center text-xs text-foreground-dim">No clients found</div>
                   )}
                 </div>
               )}
@@ -176,7 +176,7 @@ export default function ClientAccessModule() {
           <button
             onClick={handleAdd}
             disabled={!selectedClientId || addMutation.isPending}
-            className="rounded-md bg-[#2962FF] px-4 py-2 text-xs font-medium text-white hover:bg-[#1E50D8] transition-colors disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-strong transition-colors disabled:opacity-50"
           >
             {addMutation.isPending ? 'Adding...' : 'Add Client'}
           </button>
@@ -187,26 +187,26 @@ export default function ClientAccessModule() {
       )}
 
       {accessRecords.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[#CBD5E1] py-12 text-center text-sm text-[#94A3B8]">
+        <div className="rounded-lg border border-dashed border-divider-strong py-12 text-center text-sm text-foreground-dim">
           No clients added yet. Click &quot;Add Client&quot; to get started.
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
+        <div className="overflow-hidden rounded-lg border border-divider bg-surface">
           <div className="divide-y divide-[#F1F5F9]">
             {accessRecords.map((record) => (
               <div key={record.id} className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#EEF2FF] text-xs font-semibold text-[#2962FF]">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#EEF2FF] text-xs font-semibold text-accent">
                     {(record.client?.business_name || '?')[0].toUpperCase()}
                   </div>
                   <div>
                     <button
                       onClick={() => setSelectedClient({ id: record.client_id, name: record.client?.business_name || 'Unknown' })}
-                      className="text-sm font-medium text-[#2962FF] hover:underline text-left"
+                      className="text-sm font-medium text-accent hover:underline text-left"
                     >
                       {record.client?.business_name || 'Unknown Client'}
                     </button>
-                    <p className="text-[10px] text-[#94A3B8]">{record.client?.contact_person} &middot; {record.client?.email}</p>
+                    <p className="text-[10px] text-foreground-dim">{record.client?.contact_person} &middot; {record.client?.email}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -235,7 +235,7 @@ export default function ClientAccessModule() {
                       if (confirm('Remove this client from Cash Book?')) removeMutation.mutate(record.id);
                     }}
                     disabled={removeMutation.isPending}
-                    className="rounded-md p-1 text-[#94A3B8] hover:bg-[#FEF2F2] hover:text-[#DC2626] transition-colors"
+                    className="rounded-md p-1 text-foreground-dim hover:bg-[#FEF2F2] hover:text-[#DC2626] transition-colors"
                     title="Remove access"
                   >
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

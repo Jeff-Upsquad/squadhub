@@ -91,7 +91,7 @@ export default function Overview() {
   const totalPages = Math.max(1, Math.ceil(sortedLeaderboard.length / PAGE_SIZE));
 
   if (isLoading || !data) {
-    return <div className="rounded-xl border border-[#E2E8F0] bg-white p-12 text-center text-sm text-[#90A1B9]">Loading overview…</div>;
+    return <div className="rounded-xl border border-divider bg-surface p-12 text-center text-sm text-foreground-dim">Loading overview…</div>;
   }
 
   const { today } = data;
@@ -106,11 +106,11 @@ export default function Overview() {
   return (
     <div className="space-y-6">
       {/* Today's status */}
-      <section className="rounded-xl border border-[#E2E8F0] bg-white p-5">
+      <section className="rounded-xl border border-divider bg-surface p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-[#0F172B]">Today · {todayDateLabel}</h2>
-            <p className="mt-0.5 text-xs text-[#90A1B9]">
+            <h2 className="text-base font-semibold text-foreground">Today · {todayDateLabel}</h2>
+            <p className="mt-0.5 text-xs text-foreground-dim">
               {today.holidayName
                 ? `Holiday: ${today.holidayName}`
                 : today.isWorkingDay
@@ -120,8 +120,8 @@ export default function Overview() {
           </div>
           {today.isWorkingDay && (
             <div className="text-right">
-              <div className="text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Attendance</div>
-              <div className="text-2xl font-bold text-[#0F172B]">
+              <div className="text-[10px] font-medium uppercase tracking-wider text-foreground-dim">Attendance</div>
+              <div className="text-2xl font-bold text-foreground">
                 {Math.round(today.attendanceRate * 100)}%
               </div>
             </div>
@@ -137,44 +137,44 @@ export default function Overview() {
               <StatTile label="Missed" value={today.missed} accent="red" />
             </div>
 
-            <div className="mt-5 overflow-hidden rounded-lg border border-[#E2E8F0]">
+            <div className="mt-5 overflow-hidden rounded-lg border border-divider">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-left">
-                    <th className="px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">User</th>
-                    <th className="px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Role</th>
-                    <th className="px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Status</th>
-                    <th className="px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Submitted</th>
-                    <th className="px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Deadline</th>
+                  <tr className="border-b border-divider bg-surface-alt text-left">
+                    <th className="px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-foreground-dim">User</th>
+                    <th className="px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-foreground-dim">Role</th>
+                    <th className="px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-foreground-dim">Status</th>
+                    <th className="px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-foreground-dim">Submitted</th>
+                    <th className="px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-foreground-dim">Deadline</th>
                   </tr>
                 </thead>
                 <tbody>
                   {today.checkins.map((c) => {
                     const badge = STATUS_BADGES[c.status] ?? STATUS_BADGES.no_checkin;
                     return (
-                      <tr key={c.user_id} className="border-b border-[#E2E8F0] last:border-0">
+                      <tr key={c.user_id} className="border-b border-divider last:border-0">
                         <td className="px-4 py-2.5">
-                          <div className="text-sm text-[#0F172B]">{c.display_name}</div>
-                          <div className="text-[11px] text-[#90A1B9]">{c.email}</div>
+                          <div className="text-sm text-foreground">{c.display_name}</div>
+                          <div className="text-[11px] text-foreground-dim">{c.email}</div>
                         </td>
-                        <td className="px-4 py-2.5 text-xs text-[#62748E]">{c.role || '—'}</td>
+                        <td className="px-4 py-2.5 text-xs text-foreground-muted">{c.role || '—'}</td>
                         <td className="px-4 py-2.5">
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.className}`}>
                             {badge.label}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 text-xs text-[#62748E]">
+                        <td className="px-4 py-2.5 text-xs text-foreground-muted">
                           {c.submitted_at
                             ? new Date(c.submitted_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
                             : '—'}
                         </td>
-                        <td className="px-4 py-2.5 text-xs text-[#62748E]">{c.deadline_time}</td>
+                        <td className="px-4 py-2.5 text-xs text-foreground-muted">{c.deadline_time}</td>
                       </tr>
                     );
                   })}
                   {today.checkins.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-6 text-center text-sm text-[#90A1B9]">
+                      <td colSpan={5} className="px-4 py-6 text-center text-sm text-foreground-dim">
                         No eligible users found.
                       </td>
                     </tr>
@@ -184,7 +184,7 @@ export default function Overview() {
             </div>
           </>
         ) : (
-          <div className="rounded-lg bg-[#F8FAFC] px-4 py-6 text-center text-sm text-[#62748E]">
+          <div className="rounded-lg bg-surface-alt px-4 py-6 text-center text-sm text-foreground-muted">
             {today.holidayName
               ? `${today.holidayName} — check-ins are not tracked today.`
               : 'Today is a non-working day — check-ins are not tracked.'}
@@ -193,19 +193,19 @@ export default function Overview() {
       </section>
 
       {/* Trend */}
-      <section className="rounded-xl border border-[#E2E8F0] bg-white p-5">
+      <section className="rounded-xl border border-divider bg-surface p-5">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-base font-semibold text-[#0F172B]">Trend</h2>
-            <p className="mt-0.5 text-xs text-[#90A1B9]">Last {data.windowDays} days · working days only</p>
+            <h2 className="text-base font-semibold text-foreground">Trend</h2>
+            <p className="mt-0.5 text-xs text-foreground-dim">Last {data.windowDays} days · working days only</p>
           </div>
-          <div className="flex gap-1 rounded-lg bg-[#F1F5F9] p-1">
+          <div className="flex gap-1 rounded-lg bg-canvas p-1">
             {[7, 30, 90].map((d) => (
               <button
                 key={d}
                 onClick={() => { setDays(d); setPage(1); }}
                 className={`rounded-md px-3 py-1 text-xs font-medium transition ${
-                  days === d ? 'bg-white text-[#0F172B] shadow-sm' : 'text-[#62748E]'
+                  days === d ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted'
                 }`}
               >
                 {d}d
@@ -214,7 +214,7 @@ export default function Overview() {
           </div>
         </div>
         <TrendChart trend={data.trend} />
-        <div className="mt-3 flex items-center justify-center gap-4 text-[10px] text-[#90A1B9]">
+        <div className="mt-3 flex items-center justify-center gap-4 text-[10px] text-foreground-dim">
           <LegendDot color="bg-emerald-400" label="On Time" />
           <LegendDot color="bg-yellow-400" label="Late" />
           <LegendDot color="bg-red-400" label="Missed" />
@@ -222,13 +222,13 @@ export default function Overview() {
       </section>
 
       {/* Leaderboard */}
-      <section className="rounded-xl border border-[#E2E8F0] bg-white">
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-3">
+      <section className="rounded-xl border border-divider bg-surface">
+        <div className="flex items-center justify-between border-b border-divider px-5 py-3">
           <div>
-            <h2 className="text-base font-semibold text-[#0F172B]">Per-user attendance</h2>
-            <p className="mt-0.5 text-xs text-[#90A1B9]">Last {data.windowDays} working days</p>
+            <h2 className="text-base font-semibold text-foreground">Per-user attendance</h2>
+            <p className="mt-0.5 text-xs text-foreground-dim">Last {data.windowDays} working days</p>
           </div>
-          <div className="flex gap-1 rounded-lg bg-[#F1F5F9] p-1">
+          <div className="flex gap-1 rounded-lg bg-canvas p-1">
             <SortPill active={sortKey === 'attendance'} onClick={() => { setSortKey('attendance'); setPage(1); }}>Attendance</SortPill>
             <SortPill active={sortKey === 'late'} onClick={() => { setSortKey('late'); setPage(1); }}>Late</SortPill>
             <SortPill active={sortKey === 'missed'} onClick={() => { setSortKey('missed'); setPage(1); }}>Missed</SortPill>
@@ -236,25 +236,25 @@ export default function Overview() {
         </div>
         <table className="w-full">
           <thead>
-            <tr className="border-b border-[#E2E8F0] text-left">
-              <th className="px-5 py-3 text-xs font-medium text-[#62748E]">User</th>
-              <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Role</th>
-              <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Working Days</th>
-              <th className="px-5 py-3 text-xs font-medium text-[#62748E]">On Time</th>
-              <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Late</th>
-              <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Missed</th>
-              <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Attendance</th>
+            <tr className="border-b border-divider text-left">
+              <th className="px-5 py-3 text-xs font-medium text-foreground-muted">User</th>
+              <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Role</th>
+              <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Working Days</th>
+              <th className="px-5 py-3 text-xs font-medium text-foreground-muted">On Time</th>
+              <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Late</th>
+              <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Missed</th>
+              <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Attendance</th>
             </tr>
           </thead>
           <tbody>
             {pagedLeaderboard.map((row) => (
-              <tr key={row.user_id} className="border-b border-[#E2E8F0] last:border-0">
+              <tr key={row.user_id} className="border-b border-divider last:border-0">
                 <td className="px-5 py-3">
-                  <div className="text-sm text-[#0F172B]">{row.display_name}</div>
-                  <div className="text-[11px] text-[#90A1B9]">{row.email}</div>
+                  <div className="text-sm text-foreground">{row.display_name}</div>
+                  <div className="text-[11px] text-foreground-dim">{row.email}</div>
                 </td>
-                <td className="px-5 py-3 text-xs text-[#62748E]">{row.role || '—'}</td>
-                <td className="px-5 py-3 text-sm text-[#62748E]">{row.working_days}</td>
+                <td className="px-5 py-3 text-xs text-foreground-muted">{row.role || '—'}</td>
+                <td className="px-5 py-3 text-sm text-foreground-muted">{row.working_days}</td>
                 <td className="px-5 py-3 text-sm text-emerald-600">{row.on_time}</td>
                 <td className="px-5 py-3 text-sm text-yellow-600">{row.late}</td>
                 <td className="px-5 py-3 text-sm text-red-500">{row.missed}</td>
@@ -265,7 +265,7 @@ export default function Overview() {
             ))}
             {pagedLeaderboard.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-8 text-center text-sm text-[#90A1B9]">
+                <td colSpan={7} className="px-5 py-8 text-center text-sm text-foreground-dim">
                   No users found.
                 </td>
               </tr>
@@ -273,21 +273,21 @@ export default function Overview() {
           </tbody>
         </table>
         {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-[#E2E8F0] px-5 py-3">
-            <p className="text-xs text-[#90A1B9]">{sortedLeaderboard.length} users</p>
+          <div className="flex items-center justify-between border-t border-divider px-5 py-3">
+            <p className="text-xs text-foreground-dim">{sortedLeaderboard.length} users</p>
             <div className="flex gap-1">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="rounded border border-[#E2E8F0] px-2 py-1 text-xs disabled:opacity-30"
+                className="rounded border border-divider px-2 py-1 text-xs disabled:opacity-30"
               >
                 Prev
               </button>
-              <span className="px-2 py-1 text-xs text-[#62748E]">{page} / {totalPages}</span>
+              <span className="px-2 py-1 text-xs text-foreground-muted">{page} / {totalPages}</span>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="rounded border border-[#E2E8F0] px-2 py-1 text-xs disabled:opacity-30"
+                className="rounded border border-divider px-2 py-1 text-xs disabled:opacity-30"
               >
                 Next
               </button>
@@ -307,8 +307,8 @@ function StatTile({ label, value, accent }: { label: string; value: number; acce
     red: 'text-red-500',
   };
   return (
-    <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3">
-      <div className="text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">{label}</div>
+    <div className="rounded-lg border border-divider bg-surface-alt px-4 py-3">
+      <div className="text-[10px] font-medium uppercase tracking-wider text-foreground-dim">{label}</div>
       <div className={`mt-0.5 text-2xl font-bold ${color[accent]}`}>{value}</div>
     </div>
   );
@@ -328,7 +328,7 @@ function SortPill({ active, onClick, children }: { active: boolean; onClick: () 
     <button
       onClick={onClick}
       className={`rounded-md px-3 py-1 text-xs font-medium transition ${
-        active ? 'bg-white text-[#0F172B] shadow-sm' : 'text-[#62748E]'
+        active ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted'
       }`}
     >
       {children}
@@ -341,10 +341,10 @@ function AttendanceBar({ rate }: { rate: number }) {
   const color = pct >= 90 ? 'bg-emerald-400' : pct >= 70 ? 'bg-yellow-400' : 'bg-red-400';
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#F1F5F9]">
+      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-canvas">
         <div className={`h-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs font-medium text-[#0F172B]">{pct}%</span>
+      <span className="text-xs font-medium text-foreground">{pct}%</span>
     </div>
   );
 }
@@ -352,7 +352,7 @@ function AttendanceBar({ rate }: { rate: number }) {
 function TrendChart({ trend }: { trend: TrendDay[] }) {
   const workingTrend = trend.filter((d) => d.isWorkingDay);
   if (workingTrend.length === 0) {
-    return <div className="py-8 text-center text-xs text-[#90A1B9]">No working days in this window.</div>;
+    return <div className="py-8 text-center text-xs text-foreground-dim">No working days in this window.</div>;
   }
 
   const max = Math.max(1, ...workingTrend.map((d) => d.onTime + d.late + d.missed));

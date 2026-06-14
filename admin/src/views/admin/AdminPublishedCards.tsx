@@ -592,7 +592,7 @@ export default function AdminPublishedCards() {
         onClose={() => setShowBriefSlider(false)}
         title="New client brief"
       >
-        <p className="mb-4 text-sm text-[#64748B]">
+        <p className="mb-4 text-sm text-foreground-muted">
           Pick a brief type. You&apos;ll fill out the client brief form, and it lands in Form Requests.
         </p>
         <div className="space-y-3">
@@ -601,13 +601,13 @@ export default function AdminPublishedCards() {
               key={t.key}
               type="button"
               onClick={() => { setShowBriefSlider(false); setBriefType(t.key); }}
-              className="flex w-full items-center justify-between rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 text-left transition hover:border-[#0F172B] hover:shadow-sm"
+              className="flex w-full items-center justify-between rounded-xl border border-divider bg-surface px-4 py-3 text-left transition hover:border-ink hover:shadow-sm"
             >
               <span>
-                <span className="block text-sm font-semibold text-[#0F172B]">{t.title}</span>
-                <span className="mt-0.5 block text-xs text-[#64748B]">{t.blurb}</span>
+                <span className="block text-sm font-semibold text-foreground">{t.title}</span>
+                <span className="mt-0.5 block text-xs text-foreground-muted">{t.blurb}</span>
               </span>
-              <span className="text-lg text-[#94A3B8]">→</span>
+              <span className="text-lg text-foreground-dim">→</span>
             </button>
           ))}
         </div>

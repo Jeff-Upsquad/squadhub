@@ -25,28 +25,28 @@ export default function DeadlinesPanel() {
   const settingsMap = new Map<string, string>(userSettings.map((s: any) => [s.user_id, s.deadline_time]));
 
   return (
-    <div className="rounded-xl border border-[#E2E8F0] bg-white">
+    <div className="rounded-xl border border-divider bg-surface">
       <table className="w-full">
         <thead>
-          <tr className="border-b border-[#E2E8F0] text-left">
-            <th className="px-5 py-3 text-xs font-medium text-[#62748E]">User</th>
-            <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Email</th>
-            <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Deadline (IST)</th>
-            <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Role</th>
+          <tr className="border-b border-divider text-left">
+            <th className="px-5 py-3 text-xs font-medium text-foreground-muted">User</th>
+            <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Email</th>
+            <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Deadline (IST)</th>
+            <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Role</th>
           </tr>
         </thead>
         <tbody>
           {users.map((u: any) => {
             const deadline = settingsMap.get(u.id) || '10:00';
             return (
-              <tr key={u.id} className="border-b border-[#E2E8F0] last:border-0">
-                <td className="px-5 py-3 text-sm text-[#0F172B]">{u.display_name}</td>
-                <td className="px-5 py-3 text-sm text-[#62748E]">{u.email}</td>
+              <tr key={u.id} className="border-b border-divider last:border-0">
+                <td className="px-5 py-3 text-sm text-foreground">{u.display_name}</td>
+                <td className="px-5 py-3 text-sm text-foreground-muted">{u.email}</td>
                 <td className="px-5 py-3">
                   <input
                     type="time"
                     defaultValue={deadline}
-                    className="rounded border border-[#E2E8F0] px-2 py-1 text-sm"
+                    className="rounded border border-divider px-2 py-1 text-sm"
                     onBlur={(e) => {
                       if (e.target.value !== deadline) {
                         updateDeadlineMutation.mutate({ userId: u.id, deadline_time: e.target.value });
@@ -54,7 +54,7 @@ export default function DeadlinesPanel() {
                     }}
                   />
                 </td>
-                <td className="px-5 py-3 text-xs text-[#90A1B9]">
+                <td className="px-5 py-3 text-xs text-foreground-dim">
                   {u.custom_role?.name || 'No role'}
                 </td>
               </tr>

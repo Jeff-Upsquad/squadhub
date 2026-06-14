@@ -96,19 +96,19 @@ export default function PartnerAccessModule() {
   };
 
   if (isLoading) {
-    return <div className="flex items-center justify-center py-12 text-sm text-[#64748B]">Loading partner access...</div>;
+    return <div className="flex items-center justify-center py-12 text-sm text-foreground-muted">Loading partner access...</div>;
   }
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-[#0F172B]">Partner Access</h3>
-          <p className="text-sm text-[#64748B]">Manage which partners can view client Cash Book data</p>
+          <h3 className="text-lg font-semibold text-foreground">Partner Access</h3>
+          <p className="text-sm text-foreground-muted">Manage which partners can view client Cash Book data</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="rounded-md bg-[#2962FF] px-4 py-2 text-xs font-medium text-white hover:bg-[#1E50D8] transition-colors"
+          className="rounded-md bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-strong transition-colors"
         >
           {showForm ? 'Cancel' : 'Add Partner Access'}
         </button>
@@ -116,13 +116,13 @@ export default function PartnerAccessModule() {
 
       {/* Add form */}
       {showForm && (
-        <div className="mb-6 rounded-lg border border-[#E2E8F0] bg-white p-4">
+        <div className="mb-6 rounded-lg border border-divider bg-surface p-4">
           <div className="mb-4">
-            <label className="mb-1 block text-xs font-medium text-[#475569]">Select Partner</label>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">Select Partner</label>
             <select
               value={selectedPartnerId}
               onChange={(e) => setSelectedPartnerId(e.target.value)}
-              className="w-full rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+              className="w-full rounded-md border border-divider bg-surface-alt px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             >
               <option value="">Choose a partner...</option>
               {partners.map((p) => (
@@ -134,12 +134,12 @@ export default function PartnerAccessModule() {
           </div>
 
           <div className="mb-4">
-            <label className="mb-1 block text-xs font-medium text-[#475569]">
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">
               Select Clients ({selectedClientIds.length} selected)
             </label>
-            <div className="max-h-48 overflow-y-auto rounded-md border border-[#E2E8F0] bg-[#F8FAFC]">
+            <div className="max-h-48 overflow-y-auto rounded-md border border-divider bg-surface-alt">
               {clients.length === 0 ? (
-                <p className="p-3 text-xs text-[#94A3B8]">No clients available</p>
+                <p className="p-3 text-xs text-foreground-dim">No clients available</p>
               ) : (
                 clients.map((client) => (
                   <label
@@ -150,9 +150,9 @@ export default function PartnerAccessModule() {
                       type="checkbox"
                       checked={selectedClientIds.includes(client.id)}
                       onChange={() => handleToggleClient(client.id)}
-                      className="h-3.5 w-3.5 rounded border-[#CBD5E1] text-[#2962FF] focus:ring-[#2962FF]"
+                      className="h-3.5 w-3.5 rounded border-divider-strong text-accent focus:ring-accent"
                     />
-                    <span className="text-[#0F172B]">{client.business_name}</span>
+                    <span className="text-foreground">{client.business_name}</span>
                   </label>
                 ))
               )}
@@ -162,7 +162,7 @@ export default function PartnerAccessModule() {
           <button
             onClick={handleGrant}
             disabled={!selectedPartnerId || selectedClientIds.length === 0 || grantMutation.isPending}
-            className="rounded-md bg-[#2962FF] px-4 py-2 text-xs font-medium text-white hover:bg-[#1E50D8] transition-colors disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-strong transition-colors disabled:opacity-50"
           >
             {grantMutation.isPending ? 'Granting...' : 'Grant Access'}
           </button>
@@ -174,7 +174,7 @@ export default function PartnerAccessModule() {
 
       {/* Access records grouped by partner */}
       {partnerGroups.size === 0 ? (
-        <div className="rounded-lg border border-dashed border-[#CBD5E1] py-12 text-center text-sm text-[#94A3B8]">
+        <div className="rounded-lg border border-dashed border-divider-strong py-12 text-center text-sm text-foreground-dim">
           No partner access configured yet. Click &quot;Add Partner Access&quot; to get started.
         </div>
       ) : (
@@ -184,17 +184,17 @@ export default function PartnerAccessModule() {
             const partnerEmail = records[0]?.user?.email || '';
 
             return (
-              <div key={partnerId} className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
-                <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3">
+              <div key={partnerId} className="overflow-hidden rounded-lg border border-divider bg-surface">
+                <div className="border-b border-divider bg-surface-alt px-4 py-3">
                   <div className="flex items-center gap-2">
                     <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#EDE9FE] text-xs font-semibold text-[#7C3AED]">
                       {partnerName[0]?.toUpperCase() || '?'}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-[#0F172B]">{partnerName}</p>
-                      <p className="text-[10px] text-[#94A3B8]">{partnerEmail}</p>
+                      <p className="text-sm font-medium text-foreground">{partnerName}</p>
+                      <p className="text-[10px] text-foreground-dim">{partnerEmail}</p>
                     </div>
-                    <span className="ml-auto rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-semibold text-[#64748B]">
+                    <span className="ml-auto rounded-full bg-canvas px-2 py-0.5 text-[10px] font-semibold text-foreground-muted">
                       {records.length} client{records.length !== 1 ? 's' : ''}
                     </span>
                   </div>
@@ -204,7 +204,7 @@ export default function PartnerAccessModule() {
                   {records.map((record) => (
                     <div key={record.id} className="flex items-center justify-between px-4 py-2.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-[#0F172B]">{record.client?.business_name || 'Unknown Client'}</span>
+                        <span className="text-sm text-foreground">{record.client?.business_name || 'Unknown Client'}</span>
                         {!record.is_enabled && (
                           <span className="rounded-full bg-[#FEF2F2] px-2 py-0.5 text-[10px] font-semibold text-[#DC2626]">
                             Disabled
@@ -233,7 +233,7 @@ export default function PartnerAccessModule() {
                             if (confirm('Remove this access?')) revokeMutation.mutate(record.id);
                           }}
                           disabled={revokeMutation.isPending}
-                          className="rounded-md p-1 text-[#94A3B8] hover:bg-[#FEF2F2] hover:text-[#DC2626] transition-colors"
+                          className="rounded-md p-1 text-foreground-dim hover:bg-[#FEF2F2] hover:text-[#DC2626] transition-colors"
                           title="Remove access"
                         >
                           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

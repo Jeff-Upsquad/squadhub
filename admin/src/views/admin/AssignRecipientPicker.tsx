@@ -112,7 +112,7 @@ export default function AssignRecipientPicker({
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative flex h-[560px] w-[520px] max-w-[95vw] flex-col overflow-hidden rounded-[16px] border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] shadow-2xl">
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-[var(--color-sh-warm-border)] bg-white px-5 py-4">
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--color-sh-warm-border)] bg-surface px-5 py-4">
           <div className="space-y-1.5 min-w-0">
             <span className="sh-eyebrow">
               <span className="sh-eyebrow-dot" />
@@ -132,7 +132,7 @@ export default function AssignRecipientPicker({
         </div>
 
         {/* Search */}
-        <div className="border-b border-[var(--color-sh-warm-border)] bg-white px-5 py-3">
+        <div className="border-b border-[var(--color-sh-warm-border)] bg-surface px-5 py-3">
           <div className="relative">
             <svg
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-sh-ink-faint)]"

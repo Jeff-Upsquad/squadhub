@@ -43,12 +43,12 @@ export default function SquadChatGroupsModule() {
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[#0F172B]">Groups</h1>
-          <p className="mt-1 text-sm text-[#62748E]">WhatsApp-style group chats used by Squad Chat apps.</p>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">Groups</h1>
+          <p className="mt-1 text-sm text-foreground-muted">WhatsApp-style group chats used by Squad Chat apps.</p>
         </div>
         <button
           onClick={() => setCreating(true)}
-          className="rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1D293D]"
+          className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-white transition hover:bg-ink-hover"
         >
           + New group
         </button>
@@ -61,8 +61,8 @@ export default function SquadChatGroupsModule() {
             onClick={() => setScopeFilter(s)}
             className={`rounded-full px-3 py-1 text-xs font-medium transition ${
               scopeFilter === s
-                ? 'bg-[#0F172B] text-white'
-                : 'bg-white text-[#62748E] border border-[#E2E8F0] hover:text-[#0F172B]'
+                ? 'bg-ink text-white'
+                : 'bg-surface text-foreground-muted border border-divider hover:text-foreground'
             }`}
           >
             {s === 'all' ? 'All apps' : s === 'clients' ? 'Clients app' : 'Team app'}
@@ -70,14 +70,14 @@ export default function SquadChatGroupsModule() {
         ))}
       </div>
 
-      <div className="rounded-xl border border-[#E2E8F0] bg-white overflow-hidden">
+      <div className="rounded-xl border border-divider bg-surface overflow-hidden">
         {isLoading ? (
-          <div className="p-8 text-center text-sm text-[#62748E]">Loading…</div>
+          <div className="p-8 text-center text-sm text-foreground-muted">Loading…</div>
         ) : filtered.length === 0 ? (
-          <div className="p-8 text-center text-sm text-[#62748E]">No groups yet.</div>
+          <div className="p-8 text-center text-sm text-foreground-muted">No groups yet.</div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[#62748E]">
+            <thead className="border-b border-divider bg-surface-alt text-foreground-muted">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Name</th>
                 <th className="px-4 py-3 text-left font-medium">App</th>
@@ -88,10 +88,10 @@ export default function SquadChatGroupsModule() {
             </thead>
             <tbody>
               {filtered.map((g) => (
-                <tr key={g.id} className="border-b border-[#F1F5F9] last:border-0 hover:bg-[#F8FAFC]">
+                <tr key={g.id} className="border-b border-divider last:border-0 hover:bg-surface-alt">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-[#0F172B]">{g.name}</div>
-                    {g.description && <div className="text-xs text-[#62748E]">{g.description}</div>}
+                    <div className="font-medium text-foreground">{g.name}</div>
+                    {g.description && <div className="text-xs text-foreground-muted">{g.description}</div>}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
@@ -100,10 +100,10 @@ export default function SquadChatGroupsModule() {
                       {g.app_scope === 'clients' ? 'Clients' : 'Team'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-[#62748E]">{g.member_count}</td>
+                  <td className="px-4 py-3 text-foreground-muted">{g.member_count}</td>
                   <td className="px-4 py-3">
                     {g.archived_at ? (
-                      <span className="text-xs text-[#62748E]">Archived</span>
+                      <span className="text-xs text-foreground-muted">Archived</span>
                     ) : (
                       <span className="text-xs text-emerald-600">Active</span>
                     )}
@@ -111,7 +111,7 @@ export default function SquadChatGroupsModule() {
                   <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => setEditingGroupId(g.id)}
-                      className="text-xs font-medium text-[#2962FF] hover:underline"
+                      className="text-xs font-medium text-accent hover:underline"
                     >
                       Manage
                     </button>
@@ -203,15 +203,15 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
 
   return (
     <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-4">
+      <div className="bg-surface rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-divider px-5 py-4">
           <h2 className="text-lg font-semibold">New group</h2>
-          <button onClick={onClose} className="text-[#62748E] hover:text-[#0F172B]">✕</button>
+          <button onClick={onClose} className="text-foreground-muted hover:text-foreground">✕</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div>
-            <label className="block text-xs font-medium uppercase tracking-wider text-[#62748E] mb-1">App</label>
+            <label className="block text-xs font-medium uppercase tracking-wider text-foreground-muted mb-1">App</label>
             <div className="flex gap-2">
               {(['clients', 'team'] as const).map((s) => (
                 <button
@@ -219,8 +219,8 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
                   onClick={() => { setScope(s); setSelectedMembers(new Set()); setGroupAdmins(new Set()); }}
                   className={`flex-1 rounded-md border px-3 py-2 text-sm transition ${
                     scope === s
-                      ? 'border-[#0F172B] bg-[#0F172B] text-white'
-                      : 'border-[#E2E8F0] bg-white text-[#62748E] hover:text-[#0F172B]'
+                      ? 'border-ink bg-ink text-white'
+                      : 'border-divider bg-surface text-foreground-muted hover:text-foreground'
                   }`}
                 >
                   {s === 'clients' ? 'Clients app' : 'Team app'}
@@ -230,43 +230,43 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
           </div>
 
           <div>
-            <label className="block text-xs font-medium uppercase tracking-wider text-[#62748E] mb-1">Name</label>
+            <label className="block text-xs font-medium uppercase tracking-wider text-foreground-muted mb-1">Name</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Acme Co. Account Team"
-              className="w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm"
+              className="w-full rounded-md border border-divider px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium uppercase tracking-wider text-[#62748E] mb-1">Description</label>
+            <label className="block text-xs font-medium uppercase tracking-wider text-foreground-muted mb-1">Description</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
-              className="w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm"
+              className="w-full rounded-md border border-divider px-3 py-2 text-sm"
             />
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium uppercase tracking-wider text-[#62748E]">
+              <label className="text-xs font-medium uppercase tracking-wider text-foreground-muted">
                 Members · {selectedMembers.size} selected
               </label>
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search…"
-                className="rounded-md border border-[#E2E8F0] px-2 py-1 text-xs w-40"
+                className="rounded-md border border-divider px-2 py-1 text-xs w-40"
               />
             </div>
-            <div className="border border-[#E2E8F0] rounded-md max-h-72 overflow-y-auto divide-y divide-[#F1F5F9]">
+            <div className="border border-divider rounded-md max-h-72 overflow-y-auto divide-y divide-[#F1F5F9]">
               {filteredUsers.map((u) => {
                 const picked = selectedMembers.has(u.id);
                 return (
                   <div
                     key={u.id}
-                    className="flex items-center gap-3 px-3 py-2 hover:bg-[#F8FAFC]"
+                    className="flex items-center gap-3 px-3 py-2 hover:bg-surface-alt"
                   >
                     <input
                       type="checkbox"
@@ -275,9 +275,9 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
                     />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{u.display_name}</div>
-                      <div className="text-[11px] text-[#62748E]">{u.email} · {u.is_admin ? 'Admin' : u.user_type}</div>
+                      <div className="text-[11px] text-foreground-muted">{u.email} · {u.is_admin ? 'Admin' : u.user_type}</div>
                     </div>
-                    <label className="flex items-center gap-1 text-[11px] text-[#62748E]">
+                    <label className="flex items-center gap-1 text-[11px] text-foreground-muted">
                       <input
                         type="checkbox"
                         checked={groupAdmins.has(u.id)}
@@ -290,20 +290,20 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
                 );
               })}
               {filteredUsers.length === 0 && (
-                <div className="px-3 py-6 text-center text-sm text-[#62748E]">No users match.</div>
+                <div className="px-3 py-6 text-center text-sm text-foreground-muted">No users match.</div>
               )}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-[#E2E8F0] px-5 py-3">
-          <button onClick={onClose} className="rounded-md px-3 py-2 text-sm text-[#62748E] hover:bg-[#F1F5F9]">
+        <div className="flex items-center justify-end gap-2 border-t border-divider px-5 py-3">
+          <button onClick={onClose} className="rounded-md px-3 py-2 text-sm text-foreground-muted hover:bg-canvas">
             Cancel
           </button>
           <button
             onClick={() => create.mutate()}
             disabled={!name.trim() || create.isPending}
-            className="rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:bg-[#1D293D] disabled:opacity-50"
+            className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover disabled:opacity-50"
           >
             {create.isPending ? 'Creating…' : 'Create group'}
           </button>
@@ -374,26 +374,26 @@ function EditGroupDialog({ groupId, onClose, onChanged }: { groupId: string; onC
 
   return (
     <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-4">
+      <div className="bg-surface rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-divider px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold">{group.name}</h2>
-            <div className="text-xs text-[#62748E]">{group.app_scope === 'clients' ? 'Clients app' : 'Team app'} · {members.length} members</div>
+            <div className="text-xs text-foreground-muted">{group.app_scope === 'clients' ? 'Clients app' : 'Team app'} · {members.length} members</div>
           </div>
-          <button onClick={onClose} className="text-[#62748E] hover:text-[#0F172B]">✕</button>
+          <button onClick={onClose} className="text-foreground-muted hover:text-foreground">✕</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
           <div>
-            <h3 className="text-xs font-medium uppercase tracking-wider text-[#62748E] mb-2">Current members</h3>
-            <div className="border border-[#E2E8F0] rounded-md divide-y divide-[#F1F5F9]">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-foreground-muted mb-2">Current members</h3>
+            <div className="border border-divider rounded-md divide-y divide-[#F1F5F9]">
               {members.map((m: { id: string; user_id: string; is_group_admin: boolean; user: UserRow }) => (
                 <div key={m.id} className="flex items-center gap-3 px-3 py-2">
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">{m.user.display_name}</div>
-                    <div className="text-[11px] text-[#62748E]">{m.user.email} · {m.user.is_admin ? 'Admin' : m.user.user_type}</div>
+                    <div className="text-[11px] text-foreground-muted">{m.user.email} · {m.user.is_admin ? 'Admin' : m.user.user_type}</div>
                   </div>
-                  <label className="flex items-center gap-1 text-[11px] text-[#62748E]">
+                  <label className="flex items-center gap-1 text-[11px] text-foreground-muted">
                     <input
                       type="checkbox"
                       checked={m.is_group_admin}
@@ -413,20 +413,20 @@ function EditGroupDialog({ groupId, onClose, onChanged }: { groupId: string; onC
           </div>
 
           <div>
-            <h3 className="text-xs font-medium uppercase tracking-wider text-[#62748E] mb-2">Add members</h3>
-            <div className="border border-[#E2E8F0] rounded-md divide-y divide-[#F1F5F9] max-h-64 overflow-y-auto">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-foreground-muted mb-2">Add members</h3>
+            <div className="border border-divider rounded-md divide-y divide-[#F1F5F9] max-h-64 overflow-y-auto">
               {addable.length === 0 ? (
-                <div className="px-3 py-6 text-center text-sm text-[#62748E]">No eligible users to add.</div>
+                <div className="px-3 py-6 text-center text-sm text-foreground-muted">No eligible users to add.</div>
               ) : (
                 addable.map((u) => (
                   <div key={u.id} className="flex items-center gap-3 px-3 py-2">
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{u.display_name}</div>
-                      <div className="text-[11px] text-[#62748E]">{u.email}</div>
+                      <div className="text-[11px] text-foreground-muted">{u.email}</div>
                     </div>
                     <button
                       onClick={() => addMember.mutate(u.id)}
-                      className="text-xs font-medium text-[#2962FF] hover:underline"
+                      className="text-xs font-medium text-accent hover:underline"
                     >
                       Add
                     </button>

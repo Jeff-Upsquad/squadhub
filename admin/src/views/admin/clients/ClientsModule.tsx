@@ -274,12 +274,12 @@ export default function ClientsModule() {
     <div>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Clients</h1>
-          <p className="mt-1 text-sm text-[#62748E]">Manage active clients and their subscriptions</p>
+          <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Clients</h1>
+          <p className="mt-1 text-sm text-foreground-muted">Manage active clients and their subscriptions</p>
         </div>
         <button
           onClick={openCreate}
-          className="rounded-lg bg-[#0F172B] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E293B]"
+          className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white transition hover:bg-ink-hover"
         >
           + New Client
         </button>
@@ -291,19 +291,19 @@ export default function ClientsModule() {
           placeholder="Search clients..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full max-w-sm rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+          className="w-full max-w-sm rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground placeholder-foreground-dim focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         />
       </div>
 
       {isLoading ? (
-        <p className="py-8 text-center text-sm text-[#90A1B9]">Loading...</p>
+        <p className="py-8 text-center text-sm text-foreground-dim">Loading...</p>
       ) : filtered.length === 0 ? (
-        <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-          <p className="text-sm text-[#90A1B9]">{search ? 'No matching clients.' : 'No clients yet. Click + New Client to add one, or share the onboarding link.'}</p>
+        <div className="rounded-lg border border-divider bg-surface py-12 text-center">
+          <p className="text-sm text-foreground-dim">{search ? 'No matching clients.' : 'No clients yet. Click + New Client to add one, or share the onboarding link.'}</p>
         </div>
       ) : (
         <div>
-          <div className="mb-4 flex gap-1 border-b border-[#E2E8F0]">
+          <div className="mb-4 flex gap-1 border-b border-divider">
             {sections.map((section) => {
               const isActive = statusTab === section.key;
               return (
@@ -312,13 +312,13 @@ export default function ClientsModule() {
                   onClick={() => setStatusTab(section.key)}
                   className={`flex items-center gap-2 border-b-2 px-3 py-2 text-sm transition ${
                     isActive
-                      ? 'border-[#2962FF] text-[#0F172B] font-medium'
-                      : 'border-transparent text-[#62748E] hover:text-[#0F172B]'
+                      ? 'border-accent text-foreground font-medium'
+                      : 'border-transparent text-foreground-muted hover:text-foreground'
                   }`}
                 >
                   <span>{section.label}</span>
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                    isActive ? 'bg-[#2962FF] text-white' : 'bg-[#F1F5F9] text-[#62748E]'
+                    isActive ? 'bg-accent text-white' : 'bg-canvas text-foreground-muted'
                   }`}>
                     {section.clients.length}
                   </span>
@@ -327,7 +327,7 @@ export default function ClientsModule() {
             })}
           </div>
           {activeSection.clients.length === 0 ? (
-            <p className="py-8 text-center text-sm text-[#90A1B9]">No {activeSection.label.toLowerCase()} clients.</p>
+            <p className="py-8 text-center text-sm text-foreground-dim">No {activeSection.label.toLowerCase()} clients.</p>
           ) : (
             <div className="space-y-2">
               {activeSection.clients.map((client) => {
@@ -336,17 +336,17 @@ export default function ClientsModule() {
                       <button
                         key={client.id}
                         onClick={() => openClient(client)}
-                        className={`flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 text-left transition hover:shadow-sm ${
+                        className={`flex w-full items-center justify-between rounded-lg border border-divider bg-surface px-5 py-4 text-left transition hover:shadow-sm ${
                           client.status === 'cancelled' ? 'opacity-50' : ''
                         }`}
                       >
                         <div className="flex items-center gap-4">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600 text-sm font-semibold">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-canvas text-foreground-muted text-sm font-semibold">
                             {client.business_name.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-[#0F172B]">{client.business_name}</p>
-                            <p className="mt-0.5 text-xs text-[#62748E]">{client.contact_person}</p>
+                            <p className="text-sm font-medium text-foreground">{client.business_name}</p>
+                            <p className="mt-0.5 text-xs text-foreground-muted">{client.contact_person}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -358,7 +358,7 @@ export default function ClientsModule() {
                           <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
                             {countryName}
                           </span>
-                          <span className="text-xs text-[#90A1B9]">
+                          <span className="text-xs text-foreground-dim">
                             {client.subscriptions?.filter((s) => s.status === 'active').length || 0} active subs
                           </span>
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[client.status]}`}>
@@ -407,9 +407,9 @@ export default function ClientsModule() {
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Client Info</h4>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Client Info</h4>
                 {!editing && (
-                  <button onClick={startEdit} className="text-xs text-[#2962FF] hover:underline">Edit</button>
+                  <button onClick={startEdit} className="text-xs text-accent hover:underline">Edit</button>
                 )}
               </div>
 
@@ -432,20 +432,20 @@ export default function ClientsModule() {
                   <FormField label="Contact Number" value={editForm.contact_number} onChange={(v) => setEditForm({ ...editForm, contact_number: v })} required />
                   <FormField label="Email" value={editForm.email} onChange={(v) => setEditForm({ ...editForm, email: v })} type="email" required />
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-[#62748E]">Business Address</label>
+                    <label className="mb-1 block text-xs font-medium text-foreground-muted">Business Address</label>
                     <textarea
                       value={editForm.business_address}
                       onChange={(e) => setEditForm({ ...editForm, business_address: e.target.value })}
                       required
                       rows={2}
-                      className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+                      className="w-full rounded-lg border border-divider px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                     />
                   </div>
                   <div className="flex gap-2 pt-2">
-                    <button type="submit" disabled={updateClientMutation.isPending} className="rounded-lg bg-[#0F172B] px-4 py-2 text-sm font-medium text-white hover:bg-[#1E293B] disabled:opacity-50">
+                    <button type="submit" disabled={updateClientMutation.isPending} className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover disabled:opacity-50">
                       {updateClientMutation.isPending ? 'Saving...' : 'Save Changes'}
                     </button>
-                    <button type="button" onClick={() => setEditing(false)} className="rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm text-[#62748E] hover:bg-[#F1F5F9]">Cancel</button>
+                    <button type="button" onClick={() => setEditing(false)} className="rounded-lg border border-divider px-4 py-2 text-sm text-foreground-muted hover:bg-canvas">Cancel</button>
                   </div>
                 </form>
               ) : (
@@ -464,16 +464,16 @@ export default function ClientsModule() {
 
             {/* Sales Attribution */}
             <div className="space-y-3">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Sales Attribution</h4>
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Sales Attribution</h4>
               <div>
-                <label className="mb-1 block text-xs text-[#62748E]">Primary Sales Person</label>
+                <label className="mb-1 block text-xs text-foreground-muted">Primary Sales Person</label>
                 <select
                   value={selectedClient.primary_sales_person_id || ''}
                   onChange={(e) => updateSpMutation.mutate({
                     id: selectedClient.id,
                     payload: { primary_sales_person_id: e.target.value || null },
                   })}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+                  className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
                 >
                   <option value="">— Not assigned —</option>
                   {salesPeople.map((p) => (
@@ -482,14 +482,14 @@ export default function ClientsModule() {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[#62748E]">Secondary Sales Person</label>
+                <label className="mb-1 block text-xs text-foreground-muted">Secondary Sales Person</label>
                 <select
                   value={selectedClient.secondary_sales_person_id || ''}
                   onChange={(e) => updateSpMutation.mutate({
                     id: selectedClient.id,
                     payload: { secondary_sales_person_id: e.target.value || null },
                   })}
-                  className="w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+                  className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
                 >
                   <option value="">— None —</option>
                   {salesPeople
@@ -504,20 +504,20 @@ export default function ClientsModule() {
             {/* Subscriptions */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Subscriptions</h4>
-                <label className="flex cursor-pointer items-center gap-2 text-xs text-[#62748E]">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Subscriptions</h4>
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground-muted">
                   <input
                     type="checkbox"
                     checked={showArchivedSubs}
                     onChange={(e) => setShowArchivedSubs(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-[#E2E8F0] text-[#2962FF] focus:ring-[#2962FF]"
+                    className="h-3.5 w-3.5 rounded border-divider text-accent focus:ring-accent"
                   />
                   Show archived
                 </label>
               </div>
 
               {(!selectedClient.subscriptions || selectedClient.subscriptions.length === 0) ? (
-                <p className="py-4 text-center text-xs text-[#90A1B9]">
+                <p className="py-4 text-center text-xs text-foreground-dim">
                   {showArchivedSubs ? 'No subscriptions yet.' : 'No subscriptions assigned yet.'}
                 </p>
               ) : (
@@ -525,17 +525,17 @@ export default function ClientsModule() {
                   {groupedSubs.map(([subName, subs]) => {
                     const isOpen = expandedGroups.has(subName);
                     return (
-                      <div key={subName} className="rounded-lg border border-[#E2E8F0] bg-white overflow-hidden">
+                      <div key={subName} className="rounded-lg border border-divider bg-surface overflow-hidden">
                         <button
                           type="button"
                           onClick={() => toggleGroup(subName)}
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#F8FAFC] transition"
+                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-surface-alt transition"
                         >
-                          <span className="text-sm font-medium text-[#0F172B]">{subName}</span>
+                          <span className="text-sm font-medium text-foreground">{subName}</span>
                           <span className="flex items-center gap-2">
-                            <span className="text-xs text-[#90A1B9]">{subs.length} plan{subs.length !== 1 ? 's' : ''}</span>
+                            <span className="text-xs text-foreground-dim">{subs.length} plan{subs.length !== 1 ? 's' : ''}</span>
                             <svg
-                              className={`h-3.5 w-3.5 text-[#90A1B9] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                              className={`h-3.5 w-3.5 text-foreground-dim transition-transform ${isOpen ? 'rotate-180' : ''}`}
                               fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
                             >
                               <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -543,7 +543,7 @@ export default function ClientsModule() {
                           </span>
                         </button>
                         {isOpen && (
-                          <div className="border-t border-[#F1F5F9] divide-y divide-[#F1F5F9]">
+                          <div className="border-t border-divider divide-y divide-[#F1F5F9]">
                             {subs.map((cs) => {
                               const priceRow = cs.plan?.pricing?.find((p) => p.country_id === selectedClient.country_id);
                               const sym = selectedClientCountry?.currency === 'USD' ? '$' : '\u20B9';
@@ -564,10 +564,10 @@ export default function ClientsModule() {
                                 <div key={cs.id} className={`px-4 py-3 ${cs.status === 'cancelled' || isArchived ? 'opacity-50' : ''}`}>
                                   <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0 flex-1">
-                                      <p className="text-sm text-[#0F172B]">
+                                      <p className="text-sm text-foreground">
                                         {cs.plan?.plan || '—'} · {cs.plan?.tier || '—'}
                                       </p>
-                                      <p className="mt-0.5 text-xs text-[#90A1B9]">
+                                      <p className="mt-0.5 text-xs text-foreground-dim">
                                         {hoursLabel}{hoursLabel && priceLabel ? ' · ' : ''}{priceLabel}
                                       </p>
                                     </div>
@@ -576,7 +576,7 @@ export default function ClientsModule() {
                                         <button
                                           type="button"
                                           onClick={() => setViewingCard(cs.card!)}
-                                          className="rounded bg-[#2962FF] px-2 py-1 text-[10px] font-medium text-white hover:bg-[#1E4FCC]"
+                                          className="rounded bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-strong"
                                         >
                                           View Card
                                         </button>
@@ -585,13 +585,13 @@ export default function ClientsModule() {
                                           href="/admin/published-cards"
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="rounded bg-[#E8EFFF] px-2 py-1 text-[10px] font-medium text-[#2962FF] hover:bg-[#D6E4FF]"
+                                          className="rounded bg-[#E8EFFF] px-2 py-1 text-[10px] font-medium text-accent hover:bg-[#D6E4FF]"
                                         >
                                           Published Cards
                                         </a>
                                       )}
                                       {isArchived && (
-                                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">Archived</span>
+                                        <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] font-medium text-foreground-muted">Archived</span>
                                       )}
                                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[cs.status]}`}>
                                         {cs.status}
@@ -617,7 +617,7 @@ export default function ClientsModule() {
                                     {isArchived ? (
                                       <button onClick={() => unarchiveSubMutation.mutate({ clientId: selectedClient.id, csId: cs.id })} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Unarchive</button>
                                     ) : (
-                                      <button onClick={() => archiveSubMutation.mutate({ clientId: selectedClient.id, csId: cs.id })} className="rounded bg-[#F1F5F9] px-2 py-1 text-[10px] font-medium text-[#62748E] hover:bg-[#E2E8F0]">Archive</button>
+                                      <button onClick={() => archiveSubMutation.mutate({ clientId: selectedClient.id, csId: cs.id })} className="rounded bg-canvas px-2 py-1 text-[10px] font-medium text-foreground-muted hover:bg-well">Archive</button>
                                     )}
                                   </div>
                                 </div>
@@ -635,20 +635,20 @@ export default function ClientsModule() {
             {/* Linked cards not matched to any subscription */}
             {selectedClient && (selectedClient as any).linkedCards?.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Other Cards</h4>
-                <div className="divide-y divide-[#F1F5F9] rounded-lg border border-[#E2E8F0] bg-white">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Other Cards</h4>
+                <div className="divide-y divide-[#F1F5F9] rounded-lg border border-divider bg-surface">
                   {(selectedClient as any).linkedCards.map((lc: any) => (
                     <div key={lc.id} className="flex items-center justify-between px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-[#0F172B]">Card</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${lc.state === 'assigned' ? 'bg-[#D1FAE5] text-[#065F46]' : lc.state === 'published' ? 'bg-[#DCFCE7] text-[#15803D]' : 'bg-[#F1F5F9] text-[#475569]'}`}>
+                        <span className="text-sm text-foreground">Card</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${lc.state === 'assigned' ? 'bg-[#D1FAE5] text-[#065F46]' : lc.state === 'published' ? 'bg-[#DCFCE7] text-[#15803D]' : 'bg-canvas text-foreground-muted'}`}>
                           {lc.state}
                         </span>
                       </div>
                       <button
                         type="button"
                         onClick={() => setViewingCard(lc)}
-                        className="rounded bg-[#2962FF] px-2 py-1 text-[10px] font-medium text-white hover:bg-[#1E4FCC]"
+                        className="rounded bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-strong"
                       >
                         View Card
                       </button>
@@ -662,11 +662,11 @@ export default function ClientsModule() {
             {viewingCard && selectedClient && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Card Detail</h4>
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Card Detail</h4>
                   <button
                     type="button"
                     onClick={() => setViewingCard(null)}
-                    className="text-xs text-[#2962FF] hover:underline"
+                    className="text-xs text-accent hover:underline"
                   >
                     Back to subscriptions
                   </button>
@@ -682,7 +682,7 @@ export default function ClientsModule() {
       <SliderPanel open={createOpen} onClose={closeCreate} title="Create Client" width="w-[560px]">
         <form onSubmit={submitCreate} className="space-y-6">
           <div className="space-y-3">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Business Details</h4>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Business Details</h4>
             <FormField label="Business Name" value={createForm.business_name} onChange={(v) => setCreateForm({ ...createForm, business_name: v })} required />
             <CountryField
               countries={activeCountries}
@@ -694,33 +694,33 @@ export default function ClientsModule() {
             <FormField label="Contact Number" value={createForm.contact_number} onChange={(v) => setCreateForm({ ...createForm, contact_number: v })} required />
             <FormField label="Email" value={createForm.email} onChange={(v) => setCreateForm({ ...createForm, email: v })} type="email" required />
             <div>
-              <label className="mb-1 block text-xs font-medium text-[#62748E]">Business Address *</label>
+              <label className="mb-1 block text-xs font-medium text-foreground-muted">Business Address *</label>
               <textarea
                 value={createForm.business_address}
                 onChange={(e) => setCreateForm({ ...createForm, business_address: e.target.value })}
                 required
                 rows={2}
-                className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+                className="w-full rounded-lg border border-divider px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-[#62748E]">GST Registered *</label>
+              <label className="mb-1 block text-xs font-medium text-foreground-muted">GST Registered *</label>
               <div className="flex gap-4">
-                <label className="flex items-center gap-2 text-sm text-[#0F172B]">
+                <label className="flex items-center gap-2 text-sm text-foreground">
                   <input
                     type="radio"
                     checked={createForm.gst_registered === true}
                     onChange={() => setCreateForm({ ...createForm, gst_registered: true })}
-                    className="text-[#2962FF] focus:ring-[#2962FF]"
+                    className="text-accent focus:ring-accent"
                   />
                   Yes
                 </label>
-                <label className="flex items-center gap-2 text-sm text-[#0F172B]">
+                <label className="flex items-center gap-2 text-sm text-foreground">
                   <input
                     type="radio"
                     checked={createForm.gst_registered === false}
                     onChange={() => setCreateForm({ ...createForm, gst_registered: false, gst_number: '' })}
-                    className="text-[#2962FF] focus:ring-[#2962FF]"
+                    className="text-accent focus:ring-accent"
                   />
                   No
                 </label>
@@ -733,7 +733,7 @@ export default function ClientsModule() {
           </div>
 
           <div>
-            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-foreground-dim">
               Assign Plans {createSelectedCountry ? `(${createSelectedCountry.currency} pricing for ${createSelectedCountry.name})` : ''} *
             </h4>
             <PlanPicker
@@ -759,7 +759,7 @@ export default function ClientsModule() {
             <button
               type="button"
               onClick={closeCreate}
-              className="rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-medium text-[#62748E] transition hover:bg-[#F1F5F9]"
+              className="rounded-lg border border-divider px-4 py-2.5 text-sm font-medium text-foreground-muted transition hover:bg-canvas"
             >
               Cancel
             </button>
@@ -772,9 +772,9 @@ export default function ClientsModule() {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between border-b border-[#F1F5F9] pb-2">
-      <span className="text-xs text-[#90A1B9]">{label}</span>
-      <span className="text-sm text-[#0F172B] text-right max-w-[280px]">{value}</span>
+    <div className="flex justify-between border-b border-divider pb-2">
+      <span className="text-xs text-foreground-dim">{label}</span>
+      <span className="text-sm text-foreground text-right max-w-[280px]">{value}</span>
     </div>
   );
 }
@@ -784,13 +784,13 @@ function FormField({ label, value, onChange, type = 'text', required = false }: 
 }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-[#62748E]">{label}{required ? ' *' : ''}</label>
+      <label className="mb-1 block text-xs font-medium text-foreground-muted">{label}{required ? ' *' : ''}</label>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
-        className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+        className="w-full rounded-lg border border-divider px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
       />
     </div>
   );
@@ -811,8 +811,8 @@ function CardDetailView({ cardId }: { cardId: string }) {
   });
   const card: any = (res?.data || []).find((c: any) => c.id === cardId) || null;
 
-  if (isLoading) return <p className="py-4 text-center text-xs text-[#90A1B9]">Loading card…</p>;
-  if (!card) return <p className="py-4 text-center text-xs text-[#90A1B9]">Card not found.</p>;
+  if (isLoading) return <p className="py-4 text-center text-xs text-foreground-dim">Loading card…</p>;
+  if (!card) return <p className="py-4 text-center text-xs text-foreground-dim">Card not found.</p>;
 
   const meta = STATE_STYLE[card.state] || { bg: '#F1F5F9', color: '#475569', label: card.state };
   const business = card.submission?.business_name || card.brand_name || card.customer_company || '—';
@@ -822,11 +822,11 @@ function CardDetailView({ cardId }: { cardId: string }) {
     : '—';
 
   return (
-    <div className="rounded-lg border border-[#E2E8F0] bg-white p-4 space-y-3">
+    <div className="rounded-lg border border-divider bg-surface p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-[#0F172B]">{business}</p>
-          <p className="mt-0.5 text-xs text-[#62748E]">{subName}{subName !== '—' && planTier !== '—' ? ' · ' : ''}{planTier}</p>
+          <p className="text-sm font-medium text-foreground">{business}</p>
+          <p className="mt-0.5 text-xs text-foreground-muted">{subName}{subName !== '—' && planTier !== '—' ? ' · ' : ''}{planTier}</p>
         </div>
         <span
           className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
@@ -835,7 +835,7 @@ function CardDetailView({ cardId }: { cardId: string }) {
           {meta.label}
         </span>
       </div>
-      <div className="flex flex-wrap gap-2 text-xs text-[#62748E]">
+      <div className="flex flex-wrap gap-2 text-xs text-foreground-muted">
         {card.working_days?.length > 0 && (
           <span>Working days: {card.working_days.join(', ')}</span>
         )}
@@ -850,14 +850,14 @@ function CardDetailView({ cardId }: { cardId: string }) {
         )}
       </div>
       {card.notes && (
-        <p className="text-xs text-[#62748E]">{card.notes}</p>
+        <p className="text-xs text-foreground-muted">{card.notes}</p>
       )}
       <div className="flex gap-2 pt-1">
         <a
           href={`/admin/published-cards?card=${card.id}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="rounded bg-[#2962FF] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1E4FCC]"
+          className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-strong"
         >
           Open full view
         </a>
@@ -875,12 +875,12 @@ function CountryField({
 }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-[#62748E]">Country *</label>
+      <label className="mb-1 block text-xs font-medium text-foreground-muted">Country *</label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required
-        className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+        className="w-full rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
       >
         <option value="">Select a country…</option>
         {countries.map((c) => (

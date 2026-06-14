@@ -93,15 +93,15 @@ export default function ReviewQueueModule() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-[#0F172B]">Review Queue</h3>
-          <p className="text-sm text-[#64748B]">Review and mark entries as &quot;Posted to Books&quot;</p>
+          <h3 className="text-lg font-semibold text-foreground">Review Queue</h3>
+          <p className="text-sm text-foreground-muted">Review and mark entries as &quot;Posted to Books&quot;</p>
         </div>
         <div className="flex gap-2">
           {activeTab === 'entries' && selectedEntries.size > 0 && (
             <button
               onClick={() => postEntriesMutation.mutate(Array.from(selectedEntries))}
               disabled={postEntriesMutation.isPending}
-              className="rounded-md bg-[#2962FF] px-4 py-1.5 text-xs font-medium text-white hover:bg-[#1E50D8] disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent-strong disabled:opacity-50"
             >
               Mark {selectedEntries.size} as Posted
             </button>
@@ -110,7 +110,7 @@ export default function ReviewQueueModule() {
             <button
               onClick={() => postChecksMutation.mutate(Array.from(selectedChecks))}
               disabled={postChecksMutation.isPending}
-              className="rounded-md bg-[#2962FF] px-4 py-1.5 text-xs font-medium text-white hover:bg-[#1E50D8] disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent-strong disabled:opacity-50"
             >
               Mark {selectedChecks.size} as Posted
             </button>
@@ -119,11 +119,11 @@ export default function ReviewQueueModule() {
       </div>
 
       {/* Tab toggle */}
-      <div className="mb-4 flex gap-1 rounded-lg bg-[#F1F5F9] p-1">
+      <div className="mb-4 flex gap-1 rounded-lg bg-canvas p-1">
         <button
           onClick={() => setActiveTab('entries')}
           className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-            activeTab === 'entries' ? 'bg-white text-[#0F172B] shadow-sm' : 'text-[#64748B]'
+            activeTab === 'entries' ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted'
           }`}
         >
           Cash Entries ({entries.length})
@@ -131,7 +131,7 @@ export default function ReviewQueueModule() {
         <button
           onClick={() => setActiveTab('checks')}
           className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-            activeTab === 'checks' ? 'bg-white text-[#0F172B] shadow-sm' : 'text-[#64748B]'
+            activeTab === 'checks' ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted'
           }`}
         >
           Check Entries ({checks.length})
@@ -140,51 +140,51 @@ export default function ReviewQueueModule() {
 
       {/* Entries table */}
       {activeTab === 'entries' && (
-        <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
+        <div className="overflow-hidden rounded-lg border border-divider bg-surface">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
+              <tr className="border-b border-divider bg-surface-alt">
                 <th className="px-4 py-2.5 text-left">
                   <input
                     type="checkbox"
                     checked={entries.length > 0 && selectedEntries.size === entries.length}
                     onChange={selectAllEntries}
-                    className="rounded border-[#CBD5E1]"
+                    className="rounded border-divider-strong"
                   />
                 </th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Date</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Client</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Staff</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Type</th>
-                <th className="px-4 py-2.5 text-right font-medium text-[#64748B]">Amount</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Party</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Description</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Photo</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Date</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Client</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Staff</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Type</th>
+                <th className="px-4 py-2.5 text-right font-medium text-foreground-muted">Amount</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Party</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Description</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Photo</th>
               </tr>
             </thead>
             <tbody>
               {entriesLoading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-[#94A3B8]">Loading...</td>
+                  <td colSpan={9} className="py-12 text-center text-foreground-dim">Loading...</td>
                 </tr>
               ) : entries.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-[#94A3B8]">All entries have been posted!</td>
+                  <td colSpan={9} className="py-12 text-center text-foreground-dim">All entries have been posted!</td>
                 </tr>
               ) : (
                 entries.map((entry: any) => (
-                  <tr key={entry.id} className={`border-b border-[#F1F5F9] ${selectedEntries.has(entry.id) ? 'bg-[#EEF2FF]' : 'hover:bg-[#F8FAFC]'}`}>
+                  <tr key={entry.id} className={`border-b border-divider ${selectedEntries.has(entry.id) ? 'bg-[#EEF2FF]' : 'hover:bg-surface-alt'}`}>
                     <td className="px-4 py-2.5">
                       <input
                         type="checkbox"
                         checked={selectedEntries.has(entry.id)}
                         onChange={() => toggleEntry(entry.id)}
-                        className="rounded border-[#CBD5E1]"
+                        className="rounded border-divider-strong"
                       />
                     </td>
-                    <td className="px-4 py-2.5 text-[#0F172B]">{entry.entry_date}</td>
-                    <td className="px-4 py-2.5 text-[#475569]">{entry.client?.business_name || '-'}</td>
-                    <td className="px-4 py-2.5 text-[#475569]">{entry.user?.display_name || '-'}</td>
+                    <td className="px-4 py-2.5 text-foreground">{entry.entry_date}</td>
+                    <td className="px-4 py-2.5 text-foreground-muted">{entry.client?.business_name || '-'}</td>
+                    <td className="px-4 py-2.5 text-foreground-muted">{entry.user?.display_name || '-'}</td>
                     <td className="px-4 py-2.5">
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                         entry.entry_type === 'cash_in' ? 'bg-[#DCFCE7] text-[#16A34A]' : 'bg-[#FEF2F2] text-[#DC2626]'
@@ -192,22 +192,22 @@ export default function ReviewQueueModule() {
                         {entry.entry_type === 'cash_in' ? 'In' : 'Out'}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-right font-medium text-[#0F172B]">
+                    <td className="px-4 py-2.5 text-right font-medium text-foreground">
                       {Number(entry.amount).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
                     </td>
-                    <td className="px-4 py-2.5 text-[#475569]">{entry.party_name || '-'}</td>
-                    <td className="max-w-[150px] truncate px-4 py-2.5 text-[#475569]">{entry.description || '-'}</td>
+                    <td className="px-4 py-2.5 text-foreground-muted">{entry.party_name || '-'}</td>
+                    <td className="max-w-[150px] truncate px-4 py-2.5 text-foreground-muted">{entry.description || '-'}</td>
                     <td className="px-4 py-2.5">
                       {entry.photo_key ? (
                         <button
                           type="button"
                           onClick={() => openSignedPhoto(entry.photo_key)}
-                          className="text-[#2962FF] underline"
+                          className="text-accent underline"
                         >
                           View
                         </button>
                       ) : (
-                        <span className="text-[#CBD5E1]">-</span>
+                        <span className="text-foreground-dim">-</span>
                       )}
                     </td>
                   </tr>
@@ -220,62 +220,62 @@ export default function ReviewQueueModule() {
 
       {/* Checks table */}
       {activeTab === 'checks' && (
-        <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
+        <div className="overflow-hidden rounded-lg border border-divider bg-surface">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
+              <tr className="border-b border-divider bg-surface-alt">
                 <th className="px-4 py-2.5 text-left">
                   <input
                     type="checkbox"
                     checked={checks.length > 0 && selectedChecks.size === checks.length}
                     onChange={selectAllChecks}
-                    className="rounded border-[#CBD5E1]"
+                    className="rounded border-divider-strong"
                   />
                 </th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Date</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Client</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Type</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Check #</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Bank</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Party</th>
-                <th className="px-4 py-2.5 text-right font-medium text-[#64748B]">Amount</th>
-                <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Status</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Date</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Client</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Type</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Check #</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Bank</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Party</th>
+                <th className="px-4 py-2.5 text-right font-medium text-foreground-muted">Amount</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Status</th>
               </tr>
             </thead>
             <tbody>
               {checksLoading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-[#94A3B8]">Loading...</td>
+                  <td colSpan={9} className="py-12 text-center text-foreground-dim">Loading...</td>
                 </tr>
               ) : checks.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-[#94A3B8]">All checks have been posted!</td>
+                  <td colSpan={9} className="py-12 text-center text-foreground-dim">All checks have been posted!</td>
                 </tr>
               ) : (
                 checks.map((check: any) => (
-                  <tr key={check.id} className={`border-b border-[#F1F5F9] ${selectedChecks.has(check.id) ? 'bg-[#EEF2FF]' : 'hover:bg-[#F8FAFC]'}`}>
+                  <tr key={check.id} className={`border-b border-divider ${selectedChecks.has(check.id) ? 'bg-[#EEF2FF]' : 'hover:bg-surface-alt'}`}>
                     <td className="px-4 py-2.5">
                       <input
                         type="checkbox"
                         checked={selectedChecks.has(check.id)}
                         onChange={() => toggleCheck(check.id)}
-                        className="rounded border-[#CBD5E1]"
+                        className="rounded border-divider-strong"
                       />
                     </td>
-                    <td className="px-4 py-2.5 text-[#0F172B]">{check.check_date}</td>
-                    <td className="px-4 py-2.5 text-[#475569]">{check.client?.business_name || '-'}</td>
-                    <td className="px-4 py-2.5 capitalize text-[#475569]">{check.check_type}</td>
-                    <td className="px-4 py-2.5 font-mono text-[#0F172B]">{check.check_number}</td>
-                    <td className="px-4 py-2.5 text-[#475569]">{check.bank_name}</td>
-                    <td className="px-4 py-2.5 text-[#475569]">{check.party_name}</td>
-                    <td className="px-4 py-2.5 text-right font-medium text-[#0F172B]">
+                    <td className="px-4 py-2.5 text-foreground">{check.check_date}</td>
+                    <td className="px-4 py-2.5 text-foreground-muted">{check.client?.business_name || '-'}</td>
+                    <td className="px-4 py-2.5 capitalize text-foreground-muted">{check.check_type}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{check.check_number}</td>
+                    <td className="px-4 py-2.5 text-foreground-muted">{check.bank_name}</td>
+                    <td className="px-4 py-2.5 text-foreground-muted">{check.party_name}</td>
+                    <td className="px-4 py-2.5 text-right font-medium text-foreground">
                       {Number(check.amount).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
                     </td>
                     <td className="px-4 py-2.5 capitalize">
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                         check.status === 'cleared' ? 'bg-[#DCFCE7] text-[#16A34A]' :
                         check.status === 'bounced' ? 'bg-[#FEF2F2] text-[#DC2626]' :
-                        check.status === 'deposited' ? 'bg-[#DBEAFE] text-[#1D4ED8]' :
+                        check.status === 'deposited' ? 'bg-[#DBEAFE] text-accent-strong' :
                         'bg-[#FEF9C3] text-[#A16207]'
                       }`}>
                         {check.status}

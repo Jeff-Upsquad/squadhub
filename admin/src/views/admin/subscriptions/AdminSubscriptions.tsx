@@ -20,7 +20,7 @@ import type {
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
 const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Elite', 'Top Talents'];
 const TIER_COLOR: Record<SubscriptionTier, string> = {
-  Junior: 'bg-slate-100 text-slate-600',
+  Junior: 'bg-canvas text-foreground-muted',
   Pro: 'bg-indigo-100 text-indigo-700',
   Elite: 'bg-yellow-100 text-yellow-700',
   'Top Talents': 'bg-yellow-100 text-yellow-700',
@@ -64,13 +64,13 @@ export default function AdminSubscriptions() {
   return (
     <div className="-m-6 flex h-[calc(100vh)] overflow-hidden">
       {/* Inner sidebar */}
-      <div className="flex w-56 shrink-0 flex-col border-r border-[#E2E8F0] bg-white">
-        <div className="border-b border-[#E2E8F0] px-4 py-3">
+      <div className="flex w-56 shrink-0 flex-col border-r border-divider bg-surface">
+        <div className="border-b border-divider px-4 py-3">
           <div className="flex items-center gap-2">
-            <svg className="h-5 w-5 text-[#2962FF]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+            <svg className="h-5 w-5 text-accent" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 7.5a1.5 1.5 0 011.5-1.5h13.5a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-9zM8 10h8M8 14h5" />
             </svg>
-            <h2 className="font-[family-name:var(--font-display)] text-sm font-bold text-[#0F172B]">Subscriptions</h2>
+            <h2 className="font-[family-name:var(--font-display)] text-sm font-bold text-foreground">Subscriptions</h2>
           </div>
         </div>
 
@@ -79,8 +79,8 @@ export default function AdminSubscriptions() {
             onClick={() => setSelected({ type: 'countries' })}
             className={`flex items-center justify-between rounded-md px-3 py-2 text-left text-[13px] transition-colors ${
               selected?.type === 'countries'
-                ? 'bg-[#EEF2FF] font-semibold text-[#2962FF]'
-                : 'text-[#475569] hover:bg-[#F8FAFC]'
+                ? 'bg-[#EEF2FF] font-semibold text-accent'
+                : 'text-foreground-muted hover:bg-surface-alt'
             }`}
           >
             <span className="flex items-center gap-2">
@@ -89,27 +89,27 @@ export default function AdminSubscriptions() {
               </svg>
               Countries
             </span>
-            <span className="rounded-full bg-[#F1F5F9] px-1.5 py-0.5 text-[10px] font-semibold text-[#64748B]">{countries.length}</span>
+            <span className="rounded-full bg-canvas px-1.5 py-0.5 text-[10px] font-semibold text-foreground-muted">{countries.length}</span>
           </button>
 
-          <div className="my-1 border-t border-[#F1F5F9]" />
+          <div className="my-1 border-t border-divider" />
 
           {isLoading ? (
-            <p className="px-3 py-2 text-xs text-[#90A1B9]">Loading...</p>
+            <p className="px-3 py-2 text-xs text-foreground-dim">Loading...</p>
           ) : subs.map((s) => (
             <button
               key={s.id}
               onClick={() => setSelected({ type: 'subscription', id: s.id })}
               className={`flex items-center justify-between rounded-md px-3 py-2 text-left text-[13px] transition-colors ${
                 selected?.type === 'subscription' && selected.id === s.id
-                  ? 'bg-[#EEF2FF] font-semibold text-[#2962FF]'
-                  : 'text-[#475569] hover:bg-[#F8FAFC]'
+                  ? 'bg-[#EEF2FF] font-semibold text-accent'
+                  : 'text-foreground-muted hover:bg-surface-alt'
               }`}
             >
               <span>{s.name}</span>
               <span
                 className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                  s.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                  s.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-canvas text-foreground-muted'
                 }`}
               >
                 {s.is_active ? 'Active' : 'Inactive'}
@@ -118,19 +118,19 @@ export default function AdminSubscriptions() {
           ))}
         </nav>
 
-        <div className="mt-auto border-t border-[#E2E8F0] p-3">
-          <p className="text-[10px] text-[#90A1B9]">Catalog is fixed. Admin toggles plans / tiers / prices per country.</p>
+        <div className="mt-auto border-t border-divider p-3">
+          <p className="text-[10px] text-foreground-dim">Catalog is fixed. Admin toggles plans / tiers / prices per country.</p>
         </div>
       </div>
 
       {/* Main content */}
-      <div className="flex-1 overflow-auto bg-[#F8FAFC] p-6">
+      <div className="flex-1 overflow-auto bg-surface-alt p-6">
         {selected?.type === 'countries' ? (
           <CountriesManager countries={countries} />
         ) : activeSub ? (
           <SubscriptionDetail key={activeSub.id} subscription={activeSub} countries={countries} />
         ) : (
-          <p className="text-sm text-[#90A1B9]">Loading catalog...</p>
+          <p className="text-sm text-foreground-dim">Loading catalog...</p>
         )}
       </div>
     </div>
@@ -175,11 +175,11 @@ function CountriesManager({ countries }: { countries: Country[] }) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Countries</h1>
-        <p className="mt-1 text-sm text-[#62748E]">Country catalog for plan pricing. India is billed in INR; everywhere else in USD.</p>
+        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Countries</h1>
+        <p className="mt-1 text-sm text-foreground-muted">Country catalog for plan pricing. India is billed in INR; everywhere else in USD.</p>
       </div>
 
-      <div className="rounded-lg border border-[#E2E8F0] bg-white">
+      <div className="rounded-lg border border-divider bg-surface">
         <div className="divide-y divide-[#F1F5F9]">
           {countries.map((c) => (
             <CountryRow
@@ -196,18 +196,18 @@ function CountriesManager({ countries }: { countries: Country[] }) {
             />
           ))}
         </div>
-        <div className="flex items-center gap-2 border-t border-[#F1F5F9] p-3">
+        <div className="flex items-center gap-2 border-t border-divider p-3">
           <input
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="New country name"
-            className="flex-1 rounded-md border border-[#E2E8F0] px-3 py-1.5 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+            className="flex-1 rounded-md border border-divider px-3 py-1.5 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
           <select
             value={newCurrency}
             onChange={(e) => setNewCurrency(e.target.value as CurrencyCode)}
-            className="rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+            className="rounded-md border border-divider bg-surface px-2 py-1.5 text-sm text-foreground focus:border-accent focus:outline-none"
           >
             <option value="USD">USD</option>
             <option value="INR">INR</option>
@@ -215,7 +215,7 @@ function CountriesManager({ countries }: { countries: Country[] }) {
           <button
             onClick={() => newName.trim() && createCountry.mutate({ name: newName.trim(), currency: newCurrency })}
             disabled={!newName.trim() || createCountry.isPending}
-            className="rounded-md bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1E293B] disabled:opacity-50"
+            className="rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white hover:bg-ink-hover disabled:opacity-50"
           >
             Add
           </button>
@@ -247,35 +247,35 @@ function CountryRow({
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="flex-1 rounded-md border border-[#E2E8F0] px-2 py-1 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+            className="flex-1 rounded-md border border-divider px-2 py-1 text-sm text-foreground focus:border-accent focus:outline-none"
           />
           <button
             onClick={() => { onRename(name.trim() || country.name); setEditing(false); }}
-            className="rounded-md bg-[#0F172B] px-2 py-1 text-xs text-white hover:bg-[#1E293B]"
+            className="rounded-md bg-ink px-2 py-1 text-xs text-white hover:bg-ink-hover"
           >
             Save
           </button>
           <button
             onClick={() => { setName(country.name); setEditing(false); }}
-            className="rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#62748E] hover:bg-[#F1F5F9]"
+            className="rounded-md border border-divider px-2 py-1 text-xs text-foreground-muted hover:bg-canvas"
           >
             Cancel
           </button>
         </>
       ) : (
         <>
-          <span className="flex-1 text-sm text-[#0F172B]">{country.name}</span>
+          <span className="flex-1 text-sm text-foreground">{country.name}</span>
           <select
             value={country.currency}
             onChange={(e) => onChangeCurrency(e.target.value as CurrencyCode)}
-            className="rounded-md border border-[#E2E8F0] bg-white px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+            className="rounded-md border border-divider bg-surface px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none"
           >
             <option value="USD">USD</option>
             <option value="INR">INR</option>
           </select>
           <button
             onClick={() => setEditing(true)}
-            className="rounded-md p-1 text-[#90A1B9] hover:bg-[#F1F5F9] hover:text-[#0F172B]"
+            className="rounded-md p-1 text-foreground-dim hover:bg-canvas hover:text-foreground"
             aria-label="Rename"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
@@ -285,14 +285,14 @@ function CountryRow({
           <button
             onClick={onToggleActive}
             className={`rounded-md px-2 py-1 text-[10px] font-medium ${
-              country.is_active ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              country.is_active ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-canvas text-foreground-muted hover:bg-well'
             }`}
           >
             {country.is_active ? 'Active' : 'Inactive'}
           </button>
           <button
             onClick={onDelete}
-            className="rounded-md p-1 text-[#90A1B9] hover:bg-red-50 hover:text-red-500"
+            className="rounded-md p-1 text-foreground-dim hover:bg-red-50 hover:text-red-500"
             aria-label="Delete"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
@@ -345,13 +345,13 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">{subscription.name}</h1>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${subscription.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+            <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">{subscription.name}</h1>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${subscription.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-canvas text-foreground-muted'}`}>
               {subscription.is_active ? 'Active' : 'Inactive'}
             </span>
           </div>
           {subscription.description && (
-            <p className="mt-1 text-sm text-[#62748E]">{subscription.description}</p>
+            <p className="mt-1 text-sm text-foreground-muted">{subscription.description}</p>
           )}
         </div>
         <button
@@ -359,8 +359,8 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
           disabled={toggleActive.isPending}
           className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50 ${
             subscription.is_active
-              ? 'border border-[#E2E8F0] bg-white text-[#0F172B] hover:bg-[#F1F5F9]'
-              : 'bg-[#0F172B] text-white hover:bg-[#1E293B]'
+              ? 'border border-divider bg-surface text-foreground hover:bg-canvas'
+              : 'bg-ink text-white hover:bg-ink-hover'
           }`}
         >
           {subscription.is_active ? 'Mark Inactive' : 'Mark Active'}
@@ -370,8 +370,8 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
       {/* SquadHire Profiles — top, compact dropdown */}
       <section className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div>
-          <h2 className="font-[family-name:var(--font-display)] text-sm font-semibold text-[#0F172B]">SquadHire Profiles</h2>
-          <p className="text-[11px] text-[#62748E]">Pre-fills new subscription cards. Sales can override per card.</p>
+          <h2 className="font-[family-name:var(--font-display)] text-sm font-semibold text-foreground">SquadHire Profiles</h2>
+          <p className="text-[11px] text-foreground-muted">Pre-fills new subscription cards. Sales can override per card.</p>
         </div>
         <div className="ml-auto min-w-[260px]">
           <SquadHireProfilesPanel subscriptionId={subscription.id} />
@@ -381,13 +381,13 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
       {/* Plans, grouped by tier */}
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">Plans</h2>
+          <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-foreground">Plans</h2>
           <div className="flex items-center gap-2">
-            <label className="text-xs text-[#62748E]">Pricing for</label>
+            <label className="text-xs text-foreground-muted">Pricing for</label>
             <select
               value={selectedCountryId}
               onChange={(e) => setSelectedCountryId(e.target.value)}
-              className="rounded-md border border-[#E2E8F0] bg-white px-2 py-1 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+              className="rounded-md border border-divider bg-surface px-2 py-1 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             >
               {activeCountries.length === 0 && <option value="">No active countries</option>}
               {activeCountries.map((c) => (
@@ -401,11 +401,11 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
             <div key={tier}>
               <div className="mb-2 flex items-center gap-2">
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${TIER_COLOR[tier]}`}>{tier}</span>
-                <span className="text-[11px] text-[#90A1B9]">{plansByTier[tier].length} plan{plansByTier[tier].length === 1 ? '' : 's'}</span>
+                <span className="text-[11px] text-foreground-dim">{plansByTier[tier].length} plan{plansByTier[tier].length === 1 ? '' : 's'}</span>
               </div>
               <div className="space-y-2">
                 {plansByTier[tier].length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-[#CBD5E1] bg-white px-4 py-3 text-xs text-[#90A1B9]">
+                  <p className="rounded-lg border border-dashed border-divider-strong bg-surface px-4 py-3 text-xs text-foreground-dim">
                     No plans at {tier} tier yet. Run migration 027 to seed them.
                   </p>
                 ) : plansByTier[tier].map((p) => (
@@ -425,7 +425,7 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
 
       {/* Deliverable Types */}
       <section>
-        <h2 className="mb-3 font-[family-name:var(--font-display)] text-base font-semibold text-[#0F172B]">Deliverable Types</h2>
+        <h2 className="mb-3 font-[family-name:var(--font-display)] text-base font-semibold text-foreground">Deliverable Types</h2>
         <DeliverableTypesEditor subscriptionId={subscription.id} types={subscription.deliverable_types || []} />
       </section>
     </div>
@@ -460,11 +460,11 @@ function PlanRow({
     : null;
 
   return (
-    <div className={`rounded-lg border border-[#E2E8F0] bg-white ${plan.is_active ? '' : 'opacity-60'}`}>
+    <div className={`rounded-lg border border-divider bg-surface ${plan.is_active ? '' : 'opacity-60'}`}>
       <div className="flex items-center gap-3 px-4 py-3">
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="flex h-6 w-6 items-center justify-center rounded text-[#90A1B9] hover:bg-[#F1F5F9]"
+          className="flex h-6 w-6 items-center justify-center rounded text-foreground-dim hover:bg-canvas"
           aria-label="Toggle plan"
         >
           <svg className={`h-3 w-3 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -472,7 +472,7 @@ function PlanRow({
           </svg>
         </button>
 
-        <div className="w-24 text-sm font-medium text-[#0F172B]">{plan.plan}</div>
+        <div className="w-24 text-sm font-medium text-foreground">{plan.plan}</div>
 
         <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${TIER_COLOR[plan.tier] || TIER_COLOR.Junior}`}>
           {plan.tier || 'Junior'}
@@ -485,13 +485,13 @@ function PlanRow({
         />
 
         <div className="ml-auto flex items-center gap-3">
-          <span className="text-xs text-[#90A1B9]">{delivs.length} deliverable{delivs.length === 1 ? '' : 's'}</span>
+          <span className="text-xs text-foreground-dim">{delivs.length} deliverable{delivs.length === 1 ? '' : 's'}</span>
           <button
             onClick={() => updatePlan.mutate({ is_active: !plan.is_active })}
             className={`rounded-md px-3 py-1 text-xs font-medium ${
               plan.is_active
                 ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                : 'bg-canvas text-foreground-muted hover:bg-well'
             }`}
           >
             {plan.is_active ? 'Active' : 'Inactive'}
@@ -500,8 +500,8 @@ function PlanRow({
       </div>
 
       {expanded && (
-        <div className="space-y-2 border-t border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#90A1B9]">Default deliverables</p>
+        <div className="space-y-2 border-t border-divider bg-surface-alt px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground-dim">Default deliverables</p>
           <PlanDeliverablesEditor
             subscriptionId={subscriptionId}
             planId={plan.id}
@@ -596,8 +596,8 @@ function PricingAndMarginInput({
   return (
     <div className="flex items-center gap-3">
       <div className="flex items-center gap-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">Min</span>
-        <span className="text-[11px] text-[#90A1B9]">{currencySymbol(country?.currency)}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground-dim">Min</span>
+        <span className="text-[11px] text-foreground-dim">{currencySymbol(country?.currency)}</span>
         <input
           type="number"
           min={0}
@@ -606,14 +606,14 @@ function PricingAndMarginInput({
           onBlur={commitPrice}
           placeholder="—"
           disabled={!country}
-          className="w-20 rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none disabled:cursor-not-allowed disabled:bg-[#F8FAFC]"
+          className="w-20 rounded-md border border-divider px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:bg-surface-alt"
         />
-        <span className="text-[10px] text-[#CBD5E1]">/ mo</span>
+        <span className="text-[10px] text-foreground-dim">/ mo</span>
       </div>
 
       <div className="flex flex-col items-start gap-0.5">
         <div className="flex items-center gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">Margin</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground-dim">Margin</span>
           <input
             type="number"
             min={0}
@@ -622,7 +622,7 @@ function PricingAndMarginInput({
             onBlur={() => commitMargin()}
             placeholder="0"
             disabled={!country}
-            className="w-16 rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none disabled:cursor-not-allowed disabled:bg-[#F8FAFC]"
+            className="w-16 rounded-md border border-divider px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:bg-surface-alt"
           />
         </div>
         <div className="flex items-center gap-1 pl-[3.25rem]">
@@ -634,11 +634,11 @@ function PricingAndMarginInput({
               commitMargin('fixed');
             }}
             disabled={!country}
-            className={`text-[10px] font-medium ${marginType === 'fixed' ? 'text-[#0F172B]' : 'text-[#90A1B9]'} hover:underline disabled:cursor-not-allowed disabled:opacity-50`}
+            className={`text-[10px] font-medium ${marginType === 'fixed' ? 'text-foreground' : 'text-foreground-dim'} hover:underline disabled:cursor-not-allowed disabled:opacity-50`}
           >
             flat ({currencySymbol(country?.currency)})
           </button>
-          <span className="text-[10px] text-[#CBD5E1]">|</span>
+          <span className="text-[10px] text-foreground-dim">|</span>
           <button
             type="button"
             onClick={() => {
@@ -647,7 +647,7 @@ function PricingAndMarginInput({
               commitMargin('percent');
             }}
             disabled={!country}
-            className={`text-[10px] font-medium ${marginType === 'percent' ? 'text-[#0F172B]' : 'text-[#90A1B9]'} hover:underline disabled:cursor-not-allowed disabled:opacity-50`}
+            className={`text-[10px] font-medium ${marginType === 'percent' ? 'text-foreground' : 'text-foreground-dim'} hover:underline disabled:cursor-not-allowed disabled:opacity-50`}
           >
             percent (%)
           </button>
@@ -723,7 +723,7 @@ function PlanDeliverablesEditor({
   return (
     <div className="space-y-2">
       {deliverables.length === 0 && !adding && (
-        <p className="text-xs text-[#90A1B9]">No default deliverables configured.</p>
+        <p className="text-xs text-foreground-dim">No default deliverables configured.</p>
       )}
 
       {deliverables.map((d) => (
@@ -737,13 +737,13 @@ function PlanDeliverablesEditor({
       ))}
 
       {adding ? (
-        <div className="space-y-2 rounded-md border border-dashed border-[#CBD5E1] bg-white p-3">
+        <div className="space-y-2 rounded-md border border-dashed border-divider-strong bg-surface p-3">
           <div className="flex items-center gap-4">
-            <label className="flex items-center gap-1.5 text-xs text-[#475569]">
+            <label className="flex items-center gap-1.5 text-xs text-foreground-muted">
               <input type="radio" checked={kind === 'hours'} onChange={() => setKind('hours')} />
               Hours
             </label>
-            <label className="flex items-center gap-1.5 text-xs text-[#475569]">
+            <label className="flex items-center gap-1.5 text-xs text-foreground-muted">
               <input type="radio" checked={kind === 'item'} onChange={() => setKind('item')} />
               Item
             </label>
@@ -751,23 +751,23 @@ function PlanDeliverablesEditor({
               <select
                 value={typeId}
                 onChange={(e) => setTypeId(e.target.value)}
-                className="rounded-md border border-[#E2E8F0] px-2 py-1 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+                className="rounded-md border border-divider px-2 py-1 text-sm text-foreground focus:border-accent focus:outline-none"
               >
                 <option value="">Select type…</option>
                 {deliverableTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             )}
           </div>
-          <div className="flex items-center gap-2 text-xs text-[#475569]">
+          <div className="flex items-center gap-2 text-xs text-foreground-muted">
             <NumInput label="/ day" value={perDay} onChange={setPerDay} />
             <NumInput label="/ week" value={perWeek} onChange={setPerWeek} />
             <NumInput label="/ month" value={perMonth} onChange={setPerMonth} />
           </div>
           <div className="flex gap-2">
-            <button onClick={submitAdd} disabled={createDeliverable.isPending} className="rounded-md bg-[#0F172B] px-3 py-1 text-xs font-medium text-white hover:bg-[#1E293B] disabled:opacity-50">
+            <button onClick={submitAdd} disabled={createDeliverable.isPending} className="rounded-md bg-ink px-3 py-1 text-xs font-medium text-white hover:bg-ink-hover disabled:opacity-50">
               Add
             </button>
-            <button onClick={resetForm} className="rounded-md border border-[#E2E8F0] px-3 py-1 text-xs text-[#62748E] hover:bg-[#F1F5F9]">
+            <button onClick={resetForm} className="rounded-md border border-divider px-3 py-1 text-xs text-foreground-muted hover:bg-canvas">
               Cancel
             </button>
           </div>
@@ -775,7 +775,7 @@ function PlanDeliverablesEditor({
       ) : (
         <button
           onClick={() => setAdding(true)}
-          className="rounded-md border border-dashed border-[#CBD5E1] px-3 py-1.5 text-xs text-[#62748E] hover:bg-white hover:text-[#0F172B]"
+          className="rounded-md border border-dashed border-divider-strong px-3 py-1.5 text-xs text-foreground-muted hover:bg-surface hover:text-foreground"
         >
           + Add deliverable
         </button>
@@ -815,18 +815,18 @@ function DeliverableEditableRow({
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-md bg-white px-3 py-2">
+    <div className="flex items-center gap-3 rounded-md bg-surface px-3 py-2">
       <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
         deliverable.kind === 'hours' ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'
       }`}>
         {deliverable.kind === 'hours' ? 'Hours' : 'Item'}
       </span>
-      <span className="text-sm text-[#0F172B]">{typeName}</span>
+      <span className="text-sm text-foreground">{typeName}</span>
       <div className="ml-auto flex items-center gap-2">
         <NumInput label="/d" value={perDay} onChange={setPerDay} onBlur={save} compact />
         <NumInput label="/w" value={perWeek} onChange={setPerWeek} onBlur={save} compact />
         <NumInput label="/m" value={perMonth} onChange={setPerMonth} onBlur={save} compact />
-        <button onClick={onDelete} className="rounded-md p-1 text-[#90A1B9] hover:bg-red-50 hover:text-red-500">
+        <button onClick={onDelete} className="rounded-md p-1 text-foreground-dim hover:bg-red-50 hover:text-red-500">
           <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
@@ -854,9 +854,9 @@ function NumInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
-        className={`rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none ${compact ? 'w-14' : 'w-20'}`}
+        className={`rounded-md border border-divider px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none ${compact ? 'w-14' : 'w-20'}`}
       />
-      <span className="text-[11px] text-[#90A1B9]">{label}</span>
+      <span className="text-[11px] text-foreground-dim">{label}</span>
     </div>
   );
 }
@@ -891,7 +891,7 @@ function DeliverableTypesEditor({
   const sorted = [...types].sort((a, b) => a.sort_order - b.sort_order);
 
   return (
-    <div className="rounded-lg border border-[#E2E8F0] bg-white">
+    <div className="rounded-lg border border-divider bg-surface">
       <div className="divide-y divide-[#F1F5F9]">
         {sorted.map((t) => (
           <TypeRow
@@ -902,18 +902,18 @@ function DeliverableTypesEditor({
           />
         ))}
       </div>
-      <div className="flex items-center gap-2 border-t border-[#F1F5F9] p-3">
+      <div className="flex items-center gap-2 border-t border-divider p-3">
         <input
           type="text"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           placeholder="New deliverable type name"
-          className="flex-1 rounded-md border border-[#E2E8F0] px-3 py-1.5 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+          className="flex-1 rounded-md border border-divider px-3 py-1.5 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         />
         <button
           onClick={() => newName.trim() && createType.mutate(newName.trim())}
           disabled={!newName.trim() || createType.isPending}
-          className="rounded-md bg-[#0F172B] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1E293B] disabled:opacity-50"
+          className="rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white hover:bg-ink-hover disabled:opacity-50"
         >
           Add
         </button>
@@ -942,27 +942,27 @@ function TypeRow({
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="flex-1 rounded-md border border-[#E2E8F0] px-2 py-1 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+            className="flex-1 rounded-md border border-divider px-2 py-1 text-sm text-foreground focus:border-accent focus:outline-none"
           />
           <button
             onClick={() => { onRename(name.trim() || type.name); setEditing(false); }}
-            className="rounded-md bg-[#0F172B] px-2 py-1 text-xs text-white hover:bg-[#1E293B]"
+            className="rounded-md bg-ink px-2 py-1 text-xs text-white hover:bg-ink-hover"
           >
             Save
           </button>
           <button
             onClick={() => { setName(type.name); setEditing(false); }}
-            className="rounded-md border border-[#E2E8F0] px-2 py-1 text-xs text-[#62748E] hover:bg-[#F1F5F9]"
+            className="rounded-md border border-divider px-2 py-1 text-xs text-foreground-muted hover:bg-canvas"
           >
             Cancel
           </button>
         </>
       ) : (
         <>
-          <span className="flex-1 text-sm text-[#0F172B]">{type.name}</span>
+          <span className="flex-1 text-sm text-foreground">{type.name}</span>
           <button
             onClick={() => setEditing(true)}
-            className="rounded-md p-1 text-[#90A1B9] hover:bg-[#F1F5F9] hover:text-[#0F172B]"
+            className="rounded-md p-1 text-foreground-dim hover:bg-canvas hover:text-foreground"
             aria-label="Rename"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
@@ -972,7 +972,7 @@ function TypeRow({
           <button
             onClick={onToggleActive}
             className={`rounded-md px-2 py-1 text-[10px] font-medium ${
-              type.is_active ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              type.is_active ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-canvas text-foreground-muted hover:bg-well'
             }`}
           >
             {type.is_active ? 'Active' : 'Inactive'}

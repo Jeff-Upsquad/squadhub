@@ -50,13 +50,13 @@ export default function HistoryPanel() {
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-[#E2E8F0] bg-white p-4">
+      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-divider bg-surface p-4">
         <div>
-          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">User</label>
+          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-foreground-dim">User</label>
           <select
             value={filters.user_id}
             onChange={(e) => setFilters((p) => ({ ...p, user_id: e.target.value, page: 1 }))}
-            className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-sm"
+            className="rounded-lg border border-divider px-3 py-1.5 text-sm"
           >
             <option value="">All Users</option>
             {users.map((u: any) => (
@@ -65,11 +65,11 @@ export default function HistoryPanel() {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Role</label>
+          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-foreground-dim">Role</label>
           <select
             value={filters.role_id}
             onChange={(e) => setFilters((p) => ({ ...p, role_id: e.target.value, page: 1 }))}
-            className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-sm"
+            className="rounded-lg border border-divider px-3 py-1.5 text-sm"
           >
             <option value="">All Roles</option>
             {roles.map((r: any) => (
@@ -78,11 +78,11 @@ export default function HistoryPanel() {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Status</label>
+          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-foreground-dim">Status</label>
           <select
             value={filters.status}
             onChange={(e) => setFilters((p) => ({ ...p, status: e.target.value, page: 1 }))}
-            className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-sm"
+            className="rounded-lg border border-divider px-3 py-1.5 text-sm"
           >
             <option value="">All Statuses</option>
             <option value="on_time">On Time</option>
@@ -91,71 +91,71 @@ export default function HistoryPanel() {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Start Date</label>
+          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-foreground-dim">Start Date</label>
           <input
             type="date"
             value={filters.start_date}
             onChange={(e) => setFilters((p) => ({ ...p, start_date: e.target.value, page: 1 }))}
-            className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-sm"
+            className="rounded-lg border border-divider px-3 py-1.5 text-sm"
           />
         </div>
         <div>
-          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">End Date</label>
+          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-foreground-dim">End Date</label>
           <input
             type="date"
             value={filters.end_date}
             onChange={(e) => setFilters((p) => ({ ...p, end_date: e.target.value, page: 1 }))}
-            className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-sm"
+            className="rounded-lg border border-divider px-3 py-1.5 text-sm"
           />
         </div>
         <button
           onClick={() => setFilters({ user_id: '', role_id: '', status: '', start_date: '', end_date: '', page: 1 })}
-          className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#62748E] hover:bg-[#F8FAFC]"
+          className="rounded-lg border border-divider px-3 py-1.5 text-xs text-foreground-muted hover:bg-surface-alt"
         >
           Clear
         </button>
       </div>
 
-      <div className="rounded-xl border border-[#E2E8F0] bg-white">
+      <div className="rounded-xl border border-divider bg-surface">
         {isLoading ? (
-          <div className="p-8 text-center text-sm text-[#90A1B9]">Loading...</div>
+          <div className="p-8 text-center text-sm text-foreground-dim">Loading...</div>
         ) : records.length === 0 ? (
-          <div className="p-8 text-center text-sm text-[#90A1B9]">No check-in records found</div>
+          <div className="p-8 text-center text-sm text-foreground-dim">No check-in records found</div>
         ) : (
           <>
             <table className="w-full">
               <thead>
-                <tr className="border-b border-[#E2E8F0] text-left">
-                  <th className="px-5 py-3 text-xs font-medium text-[#62748E]">User</th>
-                  <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Date</th>
-                  <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Status</th>
-                  <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Submitted At</th>
-                  <th className="px-5 py-3 text-xs font-medium text-[#62748E]">Items</th>
+                <tr className="border-b border-divider text-left">
+                  <th className="px-5 py-3 text-xs font-medium text-foreground-muted">User</th>
+                  <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Date</th>
+                  <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Status</th>
+                  <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Submitted At</th>
+                  <th className="px-5 py-3 text-xs font-medium text-foreground-muted">Items</th>
                 </tr>
               </thead>
               <tbody>
                 {records.map((r: any) => {
-                  const badge = STATUS_BADGES[r.status] || { label: r.status, className: 'bg-gray-100 text-gray-600' };
+                  const badge = STATUS_BADGES[r.status] || { label: r.status, className: 'bg-canvas text-foreground-muted' };
                   return (
-                    <tr key={r.id} className="border-b border-[#E2E8F0] last:border-0">
+                    <tr key={r.id} className="border-b border-divider last:border-0">
                       <td className="px-5 py-3">
                         <div>
-                          <p className="text-sm font-medium text-[#0F172B]">{r.users?.display_name || 'Unknown'}</p>
-                          <p className="text-xs text-[#90A1B9]">{r.users?.email}</p>
+                          <p className="text-sm font-medium text-foreground">{r.users?.display_name || 'Unknown'}</p>
+                          <p className="text-xs text-foreground-dim">{r.users?.email}</p>
                         </div>
                       </td>
-                      <td className="px-5 py-3 text-sm text-[#62748E]">{r.date}</td>
+                      <td className="px-5 py-3 text-sm text-foreground-muted">{r.date}</td>
                       <td className="px-5 py-3">
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.className}`}>
                           {badge.label}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-sm text-[#62748E]">
+                      <td className="px-5 py-3 text-sm text-foreground-muted">
                         {r.submitted_at
                           ? new Date(r.submitted_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
                           : '-'}
                       </td>
-                      <td className="px-5 py-3 text-sm text-[#90A1B9]">
+                      <td className="px-5 py-3 text-sm text-foreground-dim">
                         {Array.isArray(r.completed_items) ? r.completed_items.length : 0} items
                       </td>
                     </tr>
@@ -165,21 +165,21 @@ export default function HistoryPanel() {
             </table>
 
             {totalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-[#E2E8F0] px-5 py-3">
-                <p className="text-xs text-[#90A1B9]">{total} records total</p>
+              <div className="flex items-center justify-between border-t border-divider px-5 py-3">
+                <p className="text-xs text-foreground-dim">{total} records total</p>
                 <div className="flex gap-1">
                   <button
                     onClick={() => setFilters((p) => ({ ...p, page: Math.max(1, p.page - 1) }))}
                     disabled={filters.page === 1}
-                    className="rounded border border-[#E2E8F0] px-2 py-1 text-xs disabled:opacity-30"
+                    className="rounded border border-divider px-2 py-1 text-xs disabled:opacity-30"
                   >
                     Prev
                   </button>
-                  <span className="px-2 py-1 text-xs text-[#62748E]">{filters.page} / {totalPages}</span>
+                  <span className="px-2 py-1 text-xs text-foreground-muted">{filters.page} / {totalPages}</span>
                   <button
                     onClick={() => setFilters((p) => ({ ...p, page: Math.min(totalPages, p.page + 1) }))}
                     disabled={filters.page >= totalPages}
-                    className="rounded border border-[#E2E8F0] px-2 py-1 text-xs disabled:opacity-30"
+                    className="rounded border border-divider px-2 py-1 text-xs disabled:opacity-30"
                   >
                     Next
                   </button>

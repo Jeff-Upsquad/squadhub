@@ -2,6 +2,13 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "Competent Curran Admin",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/competent-curran-f5d0a6/admin' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3201"],
+      "port": 3201,
+      "autoPort": true
+    },
+    {
       "name": "Sad McLaren Web",
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/sad-mclaren-594ded/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3078"],

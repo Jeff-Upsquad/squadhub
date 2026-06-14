@@ -25,7 +25,7 @@ function Avatar({
     return <img src={url} alt={name || email || ''} className={`shrink-0 rounded-full object-cover ${className}`} />;
   }
   return (
-    <div className={`flex shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] font-medium text-[#0F172B] ${className}`}>
+    <div className={`flex shrink-0 items-center justify-center rounded-full bg-well font-medium text-foreground ${className}`}>
       {initialOf(name || email)}
     </div>
   );
@@ -52,27 +52,27 @@ function UserPicker({ excludeIds, onPick }: { excludeIds: Set<string>; onPick: (
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="rounded-md border border-[#CAD5E2] bg-white px-2.5 py-1 text-xs font-medium text-[#0F172B] transition hover:bg-[#F8FAFC]"
+        className="rounded-md border border-divider-strong bg-surface px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-surface-alt"
       >
         + Add member
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-72 overflow-hidden rounded-lg border border-[#E2E8F0] bg-white shadow-lg">
+          <div className="absolute right-0 z-20 mt-1 w-72 overflow-hidden rounded-lg border border-divider bg-surface shadow-lg">
             <input
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search internal team…"
-              className="w-full border-b border-[#E2E8F0] px-3 py-2 text-xs outline-none"
+              className="w-full border-b border-divider px-3 py-2 text-xs outline-none"
             />
             <div className="max-h-64 overflow-y-auto p-1">
               {isFetching && available.length === 0 && (
-                <div className="px-3 py-2 text-xs text-[#90A1B9]">Searching…</div>
+                <div className="px-3 py-2 text-xs text-foreground-dim">Searching…</div>
               )}
               {!isFetching && available.length === 0 && (
-                <div className="px-3 py-2 text-xs text-[#90A1B9]">
+                <div className="px-3 py-2 text-xs text-foreground-dim">
                   {query ? 'No matching internal users' : 'No internal users available'}
                 </div>
               )}
@@ -81,12 +81,12 @@ function UserPicker({ excludeIds, onPick }: { excludeIds: Set<string>; onPick: (
                   key={u.id}
                   type="button"
                   onClick={() => { onPick(u.id); setOpen(false); setQuery(''); }}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-[#F8FAFC]"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-surface-alt"
                 >
                   <Avatar name={u.display_name} email={u.email} url={u.avatar_url} className="h-6 w-6 text-[10px]" />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm text-[#0F172B]">{u.display_name || u.email}</div>
-                    {u.display_name && <div className="truncate text-[10px] text-[#90A1B9]">{u.email}</div>}
+                    <div className="truncate text-sm text-foreground">{u.display_name || u.email}</div>
+                    {u.display_name && <div className="truncate text-[10px] text-foreground-dim">{u.email}</div>}
                   </div>
                 </button>
               ))}
@@ -227,12 +227,12 @@ export default function AdminDepartments() {
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[#0F172B]">Departments</h2>
-          <p className="mt-1 text-sm text-[#62748E]">Organize your internal team into departments and assign members.</p>
+          <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">Departments</h2>
+          <p className="mt-1 text-sm text-foreground-muted">Organize your internal team into departments and assign members.</p>
         </div>
         <button
           onClick={openCreate}
-          className="rounded-md bg-[#0F172B] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1D293D]"
+          className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-white transition hover:bg-ink-hover"
         >
           Create Department
         </button>
@@ -240,22 +240,22 @@ export default function AdminDepartments() {
 
       {/* Table */}
       {isLoading ? (
-        <p className="text-sm text-[#62748E]">Loading...</p>
+        <p className="text-sm text-foreground-muted">Loading...</p>
       ) : departments.length === 0 ? (
-        <div className="rounded-lg border border-[#E2E8F0] bg-[#F1F5F9] px-6 py-12 text-center">
-          <svg className="mx-auto h-10 w-10 text-[#CAD5E2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="rounded-lg border border-divider bg-canvas px-6 py-12 text-center">
+          <svg className="mx-auto h-10 w-10 text-foreground-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a3 3 0 10-2.83-4M5 9a3 3 0 102.83-4" />
           </svg>
-          <p className="mt-3 text-sm text-[#62748E]">No departments yet. Create your first department to get started.</p>
+          <p className="mt-3 text-sm text-foreground-muted">No departments yet. Create your first department to get started.</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
+        <div className="overflow-hidden rounded-lg border border-divider bg-surface">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-[#E2E8F0] bg-[#F1F5F9]">
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Department</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Members</th>
-                <th className="px-4 py-3 text-right font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Actions</th>
+              <tr className="border-b border-divider bg-canvas">
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Department</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Members</th>
+                <th className="px-4 py-3 text-right font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -265,14 +265,14 @@ export default function AdminDepartments() {
                   <tr
                     key={d.id}
                     onClick={() => openEdit(d)}
-                    className="cursor-pointer border-b border-[#E2E8F0] transition hover:bg-[#F1F5F9] last:border-b-0"
+                    className="cursor-pointer border-b border-divider transition hover:bg-canvas last:border-b-0"
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <span className="inline-block h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: d.color }} />
                         <div className="min-w-0">
-                          <div className="text-sm font-medium text-[#0F172B]">{d.name}</div>
-                          {d.description && <div className="max-w-md truncate text-xs text-[#90A1B9]">{d.description}</div>}
+                          <div className="text-sm font-medium text-foreground">{d.name}</div>
+                          {d.description && <div className="max-w-md truncate text-xs text-foreground-dim">{d.description}</div>}
                         </div>
                       </div>
                     </td>
@@ -290,13 +290,13 @@ export default function AdminDepartments() {
                               />
                             ))}
                             {members.length > 4 && (
-                              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#F1F5F9] text-[10px] text-[#62748E] ring-2 ring-white">
+                              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-canvas text-[10px] text-foreground-muted ring-2 ring-white">
                                 +{members.length - 4}
                               </div>
                             )}
                           </div>
                         )}
-                        <span className="text-sm text-[#62748E]">
+                        <span className="text-sm text-foreground-muted">
                           {members.length === 0 ? 'No members' : `${members.length} member${members.length === 1 ? '' : 's'}`}
                         </span>
                       </div>
@@ -305,7 +305,7 @@ export default function AdminDepartments() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={(e) => { e.stopPropagation(); openEdit(d); }}
-                          className="rounded-md border border-[#CAD5E2] bg-transparent px-2.5 py-1 text-xs text-[#62748E] hover:border-[#90A1B9] hover:text-[#0F172B]"
+                          className="rounded-md border border-divider-strong bg-transparent px-2.5 py-1 text-xs text-foreground-muted hover:border-divider-strong hover:text-foreground"
                         >
                           Edit
                         </button>
@@ -330,18 +330,18 @@ export default function AdminDepartments() {
       {panelOpen && (
         <>
           <div className="fixed inset-0 z-40 bg-black/30 transition-opacity" onClick={closePanel} />
-          <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-white shadow-xl">
+          <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-surface shadow-xl">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
+            <div className="flex items-center justify-between border-b border-divider px-6 py-4">
               <div className="flex items-center gap-3">
                 <span className="inline-block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: formColor }} />
-                <h3 className="font-[family-name:var(--font-display)] text-lg font-semibold text-[#0F172B]">
+                <h3 className="font-[family-name:var(--font-display)] text-lg font-semibold text-foreground">
                   {editingId ? 'Edit Department' : 'Create Department'}
                 </h3>
               </div>
               <button
                 onClick={closePanel}
-                className="rounded-md p-1.5 text-[#90A1B9] transition hover:bg-[#F8FAFC] hover:text-[#0F172B]"
+                className="rounded-md p-1.5 text-foreground-dim transition hover:bg-surface-alt hover:text-foreground"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
@@ -354,34 +354,34 @@ export default function AdminDepartments() {
               <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
                 {/* Name */}
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Department Name</label>
+                  <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Department Name</label>
                   <input
                     type="text"
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
                     required
                     maxLength={100}
-                    className="w-full rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
+                    className="w-full rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground placeholder-foreground-dim outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
                     placeholder="e.g. Sales, HR, Recruiting"
                   />
                 </div>
 
                 {/* Description */}
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Description <span className="text-[#90A1B9]">(optional)</span></label>
+                  <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Description <span className="text-foreground-dim">(optional)</span></label>
                   <textarea
                     value={formDescription}
                     onChange={(e) => setFormDescription(e.target.value)}
                     maxLength={500}
                     rows={2}
-                    className="w-full resize-none rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF]"
+                    className="w-full resize-none rounded-md border border-divider-strong bg-surface px-3 py-2 text-sm text-foreground placeholder-foreground-dim outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
                     placeholder="What this department is responsible for"
                   />
                 </div>
 
                 {/* Color */}
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Color</label>
+                  <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Color</label>
                   <div className="flex items-center gap-2">
                     {PRESET_COLORS.map((c) => (
                       <button
@@ -389,7 +389,7 @@ export default function AdminDepartments() {
                         type="button"
                         onClick={() => setFormColor(c)}
                         className={`h-7 w-7 rounded-full border-2 transition ${
-                          formColor === c ? 'scale-110 border-[#0F172B]' : 'border-transparent hover:border-[#CAD5E2]'
+                          formColor === c ? 'scale-110 border-ink' : 'border-transparent hover:border-divider-strong'
                         }`}
                         style={{ backgroundColor: c }}
                       />
@@ -398,13 +398,13 @@ export default function AdminDepartments() {
                 </div>
 
                 {/* Members */}
-                <div className="border-t border-[#E2E8F0] pt-5">
+                <div className="border-t border-divider pt-5">
                   {editingId && editingDept ? (
                     <>
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div>
-                          <h4 className="text-sm font-semibold text-[#0F172B]">Members</h4>
-                          <p className="text-xs text-[#90A1B9]">Internal team members assigned to this department.</p>
+                          <h4 className="text-sm font-semibold text-foreground">Members</h4>
+                          <p className="text-xs text-foreground-dim">Internal team members assigned to this department.</p>
                         </div>
                         <UserPicker
                           excludeIds={memberIds}
@@ -413,23 +413,23 @@ export default function AdminDepartments() {
                       </div>
                       <div className="space-y-1.5">
                         {(editingDept.members || []).length === 0 ? (
-                          <p className="rounded-lg bg-[#F1F5F9] px-3 py-3 text-xs text-[#90A1B9]">
+                          <p className="rounded-lg bg-canvas px-3 py-3 text-xs text-foreground-dim">
                             No members yet. Use “Add member” to assign internal users.
                           </p>
                         ) : (
                           (editingDept.members || []).map((m) => (
                             <div
                               key={m.id}
-                              className="flex items-center justify-between rounded-lg border border-[#E2E8F0] px-3 py-2"
+                              className="flex items-center justify-between rounded-lg border border-divider px-3 py-2"
                             >
                               <div className="flex min-w-0 items-center gap-2.5">
                                 <Avatar name={m.user?.display_name} email={m.user?.email} url={m.user?.avatar_url} className="h-8 w-8 text-xs" />
                                 <div className="min-w-0">
-                                  <div className="truncate text-sm font-medium text-[#0F172B]">
+                                  <div className="truncate text-sm font-medium text-foreground">
                                     {m.user?.display_name || m.user?.email || m.user_id.slice(0, 8)}
                                   </div>
                                   {m.user?.display_name && m.user?.email && (
-                                    <div className="truncate text-[11px] text-[#90A1B9]">{m.user.email}</div>
+                                    <div className="truncate text-[11px] text-foreground-dim">{m.user.email}</div>
                                   )}
                                 </div>
                               </div>
@@ -437,7 +437,7 @@ export default function AdminDepartments() {
                                 type="button"
                                 onClick={() => removeMemberMutation.mutate({ departmentId: editingDept.id, userId: m.user_id })}
                                 disabled={removeMemberMutation.isPending}
-                                className="rounded-md px-2 py-1 text-xs text-[#90A1B9] transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                                className="rounded-md px-2 py-1 text-xs text-foreground-dim transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                               >
                                 Remove
                               </button>
@@ -447,7 +447,7 @@ export default function AdminDepartments() {
                       </div>
                     </>
                   ) : (
-                    <p className="rounded-lg bg-[#F1F5F9] px-3 py-3 text-xs text-[#62748E]">
+                    <p className="rounded-lg bg-canvas px-3 py-3 text-xs text-foreground-muted">
                       Create the department first — you can assign members right after.
                     </p>
                   )}
@@ -455,7 +455,7 @@ export default function AdminDepartments() {
               </div>
 
               {/* Footer */}
-              <div className="border-t border-[#E2E8F0] bg-white px-6 py-4">
+              <div className="border-t border-divider bg-surface px-6 py-4">
                 {formError && (
                   <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{formError}</div>
                 )}
@@ -463,14 +463,14 @@ export default function AdminDepartments() {
                   <button
                     type="button"
                     onClick={closePanel}
-                    className="rounded-md border border-[#CAD5E2] px-4 py-2 text-sm text-[#62748E] transition hover:border-[#90A1B9] hover:text-[#0F172B]"
+                    className="rounded-md border border-divider-strong px-4 py-2 text-sm text-foreground-muted transition hover:border-divider-strong hover:text-foreground"
                   >
                     {editingId ? 'Done' : 'Cancel'}
                   </button>
                   <button
                     type="submit"
                     disabled={isSaving || !formName.trim()}
-                    className="rounded-md bg-[#0F172B] px-5 py-2 text-sm font-medium text-white transition hover:bg-[#1D293D] disabled:opacity-50"
+                    className="rounded-md bg-ink px-5 py-2 text-sm font-medium text-white transition hover:bg-ink-hover disabled:opacity-50"
                   >
                     {isSaving ? 'Saving...' : editingId ? 'Save Changes' : 'Create Department'}
                   </button>

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '../stores/authStore';
+import ThemeToggle from '../components/ThemeToggle';
 
 const MAIN_APP_URL = process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'production' ? '/' : 'http://localhost:3000');
 
@@ -13,7 +14,7 @@ function NavLink({ href, end, children }: { href: string; end?: boolean; childre
     <Link
       href={href}
       className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition ${
-        isActive ? 'bg-[#F8FAFC] text-[#0F172B] font-medium' : 'text-[#62748E] hover:bg-[#F8FAFC] hover:text-[#0F172B]'
+        isActive ? 'bg-surface-alt text-foreground font-medium' : 'text-foreground-muted hover:bg-surface-alt hover:text-foreground'
       }`}
     >
       {children}
@@ -25,16 +26,16 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
   const logout = useAuthStore((s) => s.logout);
 
   return (
-    <div className="flex min-h-screen bg-white text-[#0F172B]">
+    <div className="flex min-h-screen bg-surface text-foreground">
       {/* Sidebar */}
-      <aside className="flex w-56 flex-col border-r border-[#E2E8F0] bg-white">
-        <div className="flex flex-col gap-1 border-b border-[#E2E8F0] px-5 py-4">
+      <aside className="flex w-56 flex-col border-r border-divider bg-surface">
+        <div className="flex flex-col gap-1 border-b border-divider px-5 py-4">
           <div className="flex items-center gap-2">
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-[#0F172B] text-[10px] font-bold text-white">SH</span>
-            <h1 className="font-[family-name:var(--font-display)] text-lg font-bold text-[#0F172B]">SquadHub</h1>
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-ink text-[10px] font-bold text-white">SH</span>
+            <h1 className="font-[family-name:var(--font-display)] text-lg font-bold text-foreground">SquadHub</h1>
             <span className="font-[family-name:var(--font-mono)] rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-600">Admin</span>
           </div>
-          <p className="pl-8 text-[11px] text-[#62748E]">Powered by UpSquad</p>
+          <p className="pl-8 text-[11px] text-foreground-muted">Powered by UpSquad</p>
         </div>
         <nav className="flex-1 p-3 space-y-0.5">
           <NavLink href="/admin" end>
@@ -129,8 +130,8 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
             Gross Profit
           </NavLink>
 
-          <div className="!mt-4 border-t border-[#E2E8F0] pt-3">
-            <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Mini Apps</p>
+          <div className="!mt-4 border-t border-divider pt-3">
+            <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-foreground-dim">Mini Apps</p>
             <NavLink href="/admin/clients">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -181,8 +182,8 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
             </NavLink>
           </div>
 
-          <div className="!mt-4 border-t border-[#E2E8F0] pt-3">
-            <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Learning</p>
+          <div className="!mt-4 border-t border-divider pt-3">
+            <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-foreground-dim">Learning</p>
             <NavLink href="/admin/learning">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -197,8 +198,8 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
             </NavLink>
           </div>
 
-          <div className="!mt-4 border-t border-[#E2E8F0] pt-3">
-            <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Project Management</p>
+          <div className="!mt-4 border-t border-divider pt-3">
+            <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-foreground-dim">Project Management</p>
             <NavLink href="/admin/task-types">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -207,8 +208,8 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
             </NavLink>
           </div>
 
-          <div className="!mt-4 border-t border-[#E2E8F0] pt-3">
-            <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Check-In</p>
+          <div className="!mt-4 border-t border-divider pt-3">
+            <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-foreground-dim">Check-In</p>
             <NavLink href="/admin/check-ins">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -223,8 +224,8 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
             </NavLink>
           </div>
 
-          <div className="!mt-4 border-t border-[#E2E8F0] pt-3">
-            <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-[#90A1B9]">Design</p>
+          <div className="!mt-4 border-t border-divider pt-3">
+            <p className="mb-1 px-3 text-[10px] font-medium uppercase tracking-wider text-foreground-dim">Design</p>
             <NavLink href="/admin/design-library">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.098 19.902a3.75 3.75 0 005.304 0l6.401-6.402M6.75 21A3.75 3.75 0 013 17.25V4.125C3 3.504 3.504 3 4.125 3h5.25c.621 0 1.125.504 1.125 1.125v4.072M6.75 21a3.75 3.75 0 003.75-3.75V8.197M6.75 21h13.125c.621 0 1.125-.504 1.125-1.125v-5.25c0-.621-.504-1.125-1.125-1.125h-4.072M10.5 8.197l2.88-2.88c.438-.439 1.15-.439 1.59 0l3.712 3.713c.44.44.44 1.152 0 1.59l-2.879 2.88M6.75 17.25h.008v.008H6.75v-.008z" />
@@ -233,7 +234,7 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
             </NavLink>
           </div>
 
-          <div className="!mt-4 border-t border-[#E2E8F0] pt-3">
+          <div className="!mt-4 border-t border-divider pt-3">
             <NavLink href="/admin/workspace-admin">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -243,10 +244,13 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
             </NavLink>
           </div>
         </nav>
-        <div className="border-t border-[#E2E8F0] p-3 space-y-0.5">
+        <div className="border-t border-divider p-3 space-y-0.5">
+          <div className="px-1 pb-2">
+            <ThemeToggle />
+          </div>
           <a
             href={MAIN_APP_URL}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC] hover:text-[#0F172B]"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt hover:text-foreground"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -255,7 +259,7 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
           </a>
           <button
             onClick={() => logout()}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC] hover:text-[#0F172B]"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt hover:text-foreground"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -266,7 +270,7 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
       </aside>
 
       {/* Content area */}
-      <main className="flex-1 overflow-y-auto bg-[#F1F5F9] p-6">
+      <main className="flex-1 overflow-y-auto bg-canvas p-6">
         {children}
       </main>
     </div>

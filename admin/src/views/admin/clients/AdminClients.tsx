@@ -43,13 +43,13 @@ export default function AdminClients() {
   return (
     <div className="-m-6 flex h-[calc(100vh)] overflow-hidden">
       {/* Mini-app sidebar */}
-      <div className="flex w-56 shrink-0 flex-col border-r border-[#E2E8F0] bg-white">
-        <div className="border-b border-[#E2E8F0] px-4 py-3">
+      <div className="flex w-56 shrink-0 flex-col border-r border-divider bg-surface">
+        <div className="border-b border-divider px-4 py-3">
           <div className="flex items-center gap-2">
-            <svg className="h-5 w-5 text-[#2962FF]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+            <svg className="h-5 w-5 text-accent" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
             </svg>
-            <h2 className="font-[family-name:var(--font-display)] text-sm font-bold text-[#0F172B]">Clients</h2>
+            <h2 className="font-[family-name:var(--font-display)] text-sm font-bold text-foreground">Clients</h2>
           </div>
         </div>
         <nav className="flex-1 p-2 space-y-0.5">
@@ -59,8 +59,8 @@ export default function AdminClients() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-sm transition ${
                 activeTab === tab.id
-                  ? 'bg-[#F8FAFC] text-[#0F172B] font-medium'
-                  : 'text-[#62748E] hover:bg-[#F8FAFC] hover:text-[#0F172B]'
+                  ? 'bg-surface-alt text-foreground font-medium'
+                  : 'text-foreground-muted hover:bg-surface-alt hover:text-foreground'
               }`}
             >
               <span>{tab.label}</span>
@@ -68,7 +68,7 @@ export default function AdminClients() {
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                   tab.id === 'new-clients' && tab.count > 0
                     ? 'bg-blue-100 text-blue-700'
-                    : 'bg-[#F1F5F9] text-[#62748E]'
+                    : 'bg-canvas text-foreground-muted'
                 }`}>
                   {tab.count}
                 </span>
@@ -79,7 +79,7 @@ export default function AdminClients() {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 overflow-y-auto bg-[#F1F5F9] p-6">
+      <div className="flex-1 overflow-y-auto bg-canvas p-6">
         {activeTab === 'new-clients' && <NewClientsModule />}
         {activeTab === 'clients' && <ClientsModule />}
         {activeTab === 'invite-links' && <OnboardingLinksModule />}

@@ -37,7 +37,7 @@ export default function ChecksModule() {
 
   const statusColors: Record<string, string> = {
     received: 'bg-[#FEF9C3] text-[#A16207]',
-    deposited: 'bg-[#DBEAFE] text-[#1D4ED8]',
+    deposited: 'bg-[#DBEAFE] text-accent-strong',
     cleared: 'bg-[#DCFCE7] text-[#16A34A]',
     bounced: 'bg-[#FEF2F2] text-[#DC2626]',
   };
@@ -45,8 +45,8 @@ export default function ChecksModule() {
   return (
     <div>
       <div className="mb-4">
-        <h3 className="text-lg font-semibold text-[#0F172B]">Check Entries</h3>
-        <p className="text-sm text-[#64748B]">View check collections and deposits across all clients</p>
+        <h3 className="text-lg font-semibold text-foreground">Check Entries</h3>
+        <p className="text-sm text-foreground-muted">View check collections and deposits across all clients</p>
       </div>
 
       {/* Filters */}
@@ -54,7 +54,7 @@ export default function ChecksModule() {
         <select
           value={filters.client_id}
           onChange={(e) => setFilters({ ...filters, client_id: e.target.value, page: 1 })}
-          className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#0F172B]"
+          className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground"
         >
           <option value="">All Clients</option>
           {clients.map((c: any) => (
@@ -64,7 +64,7 @@ export default function ChecksModule() {
         <select
           value={filters.check_type}
           onChange={(e) => setFilters({ ...filters, check_type: e.target.value, page: 1 })}
-          className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#0F172B]"
+          className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground"
         >
           <option value="">All Types</option>
           <option value="collection">Collection</option>
@@ -73,7 +73,7 @@ export default function ChecksModule() {
         <select
           value={filters.status}
           onChange={(e) => setFilters({ ...filters, status: e.target.value, page: 1 })}
-          className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#0F172B]"
+          className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground"
         >
           <option value="">All Status</option>
           <option value="received">Received</option>
@@ -85,50 +85,50 @@ export default function ChecksModule() {
           type="date"
           value={filters.date_from}
           onChange={(e) => setFilters({ ...filters, date_from: e.target.value, page: 1 })}
-          className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#0F172B]"
+          className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground"
         />
         <input
           type="date"
           value={filters.date_to}
           onChange={(e) => setFilters({ ...filters, date_to: e.target.value, page: 1 })}
-          className="rounded-md border border-[#E2E8F0] px-3 py-1.5 text-xs text-[#0F172B]"
+          className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground"
         />
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
+      <div className="overflow-hidden rounded-lg border border-divider bg-surface">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-              <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Date</th>
-              <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Client</th>
-              <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Type</th>
-              <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Check #</th>
-              <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Bank</th>
-              <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Party</th>
-              <th className="px-4 py-2.5 text-right font-medium text-[#64748B]">Amount</th>
-              <th className="px-4 py-2.5 text-left font-medium text-[#64748B]">Status</th>
+            <tr className="border-b border-divider bg-surface-alt">
+              <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Date</th>
+              <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Client</th>
+              <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Type</th>
+              <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Check #</th>
+              <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Bank</th>
+              <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Party</th>
+              <th className="px-4 py-2.5 text-right font-medium text-foreground-muted">Amount</th>
+              <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Status</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={8} className="py-12 text-center text-[#94A3B8]">Loading...</td>
+                <td colSpan={8} className="py-12 text-center text-foreground-dim">Loading...</td>
               </tr>
             ) : checks.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-12 text-center text-[#94A3B8]">No check entries found</td>
+                <td colSpan={8} className="py-12 text-center text-foreground-dim">No check entries found</td>
               </tr>
             ) : (
               checks.map((check: any) => (
-                <tr key={check.id} className="border-b border-[#F1F5F9] hover:bg-[#F8FAFC]">
-                  <td className="px-4 py-2.5 text-[#0F172B]">{check.check_date}</td>
-                  <td className="px-4 py-2.5 text-[#475569]">{check.client?.business_name || '-'}</td>
-                  <td className="px-4 py-2.5 capitalize text-[#475569]">{check.check_type}</td>
-                  <td className="px-4 py-2.5 font-mono text-[#0F172B]">{check.check_number}</td>
-                  <td className="px-4 py-2.5 text-[#475569]">{check.bank_name}</td>
-                  <td className="px-4 py-2.5 text-[#475569]">{check.party_name}</td>
-                  <td className="px-4 py-2.5 text-right font-medium text-[#0F172B]">
+                <tr key={check.id} className="border-b border-divider hover:bg-surface-alt">
+                  <td className="px-4 py-2.5 text-foreground">{check.check_date}</td>
+                  <td className="px-4 py-2.5 text-foreground-muted">{check.client?.business_name || '-'}</td>
+                  <td className="px-4 py-2.5 capitalize text-foreground-muted">{check.check_type}</td>
+                  <td className="px-4 py-2.5 font-mono text-foreground">{check.check_number}</td>
+                  <td className="px-4 py-2.5 text-foreground-muted">{check.bank_name}</td>
+                  <td className="px-4 py-2.5 text-foreground-muted">{check.party_name}</td>
+                  <td className="px-4 py-2.5 text-right font-medium text-foreground">
                     {Number(check.amount).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
                   </td>
                   <td className="px-4 py-2.5">
@@ -144,20 +144,20 @@ export default function ChecksModule() {
       </div>
 
       {total > 25 && (
-        <div className="mt-3 flex items-center justify-between text-xs text-[#64748B]">
+        <div className="mt-3 flex items-center justify-between text-xs text-foreground-muted">
           <span>Showing {(filters.page - 1) * 25 + 1}-{Math.min(filters.page * 25, total)} of {total}</span>
           <div className="flex gap-1">
             <button
               onClick={() => setFilters({ ...filters, page: filters.page - 1 })}
               disabled={filters.page === 1}
-              className="rounded-md border border-[#E2E8F0] px-3 py-1 disabled:opacity-50"
+              className="rounded-md border border-divider px-3 py-1 disabled:opacity-50"
             >
               Prev
             </button>
             <button
               onClick={() => setFilters({ ...filters, page: filters.page + 1 })}
               disabled={filters.page * 25 >= total}
-              className="rounded-md border border-[#E2E8F0] px-3 py-1 disabled:opacity-50"
+              className="rounded-md border border-divider px-3 py-1 disabled:opacity-50"
             >
               Next
             </button>

@@ -38,38 +38,38 @@ export default function AdminLeadCardsSection({ submissionId }: Props) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Cards</h4>
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Cards</h4>
         {cards.length > 0 && (
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+          <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] font-medium text-foreground-muted">
             {cards.length}
           </span>
         )}
       </div>
 
       {isLoading ? (
-        <p className="py-3 text-center text-xs text-[#90A1B9]">Loading…</p>
+        <p className="py-3 text-center text-xs text-foreground-dim">Loading…</p>
       ) : cards.length === 0 ? (
-        <p className="py-3 text-center text-xs text-[#90A1B9]">No published cards yet.</p>
+        <p className="py-3 text-center text-xs text-foreground-dim">No published cards yet.</p>
       ) : (
-        <ul className="divide-y divide-[#F1F5F9] rounded-lg border border-[#E2E8F0] bg-white">
+        <ul className="divide-y divide-[#F1F5F9] rounded-lg border border-divider bg-surface">
           {cards.map((card) => (
             <li key={card.id}>
               <a
                 href={`/admin/published-cards?card=${card.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-start justify-between gap-3 px-3 py-2.5 text-sm hover:bg-[#F8FAFC] transition"
+                className="flex items-start justify-between gap-3 px-3 py-2.5 text-sm hover:bg-surface-alt transition"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <p className="font-medium text-[#0F172B]">
+                    <p className="font-medium text-foreground">
                       {card.submission_subscription?.subscription?.name
                         || card.plan_name
                         || card.service_type
                         || 'Card'}
                     </p>
                     {card.submission_subscription?.plan && (
-                      <p className="text-xs text-[#62748E]">
+                      <p className="text-xs text-foreground-muted">
                         {card.submission_subscription.plan.plan} · {card.submission_subscription.plan.tier}
                       </p>
                     )}
@@ -95,12 +95,12 @@ export default function AdminLeadCardsSection({ submissionId }: Props) {
                       </span>
                     )}
                     {card.published_at && (
-                      <span className="text-[11px] text-[#90A1B9]">{formatPublishedAt(card.published_at)}</span>
+                      <span className="text-[11px] text-foreground-dim">{formatPublishedAt(card.published_at)}</span>
                     )}
                   </div>
                 </div>
                 <svg
-                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#CBD5E1]"
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground-dim"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth={2}

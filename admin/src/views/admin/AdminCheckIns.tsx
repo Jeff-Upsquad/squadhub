@@ -45,17 +45,17 @@ function AdminCheckInsInner() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Daily Check-Ins</h1>
-        <p className="mt-1 text-sm text-[#62748E]">Attendance overview, history, checklists, deadlines, virtual office timing, and holidays — all in one place.</p>
+        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Daily Check-Ins</h1>
+        <p className="mt-1 text-sm text-foreground-muted">Attendance overview, history, checklists, deadlines, virtual office timing, and holidays — all in one place.</p>
       </div>
 
-      <div className="mb-5 flex gap-1 overflow-x-auto rounded-lg bg-[#F1F5F9] p-1">
+      <div className="mb-5 flex gap-1 overflow-x-auto rounded-lg bg-canvas p-1">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`rounded-md px-4 py-1.5 text-sm font-medium whitespace-nowrap transition ${
-              activeTab === t.id ? 'bg-white text-[#0F172B] shadow-sm' : 'text-[#62748E] hover:text-[#0F172B]'
+              activeTab === t.id ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted hover:text-foreground'
             }`}
           >
             {t.label}
@@ -76,7 +76,7 @@ function AdminCheckInsInner() {
 export default function AdminCheckIns() {
   // Suspense boundary required by Next.js 15 for useSearchParams
   return (
-    <Suspense fallback={<div className="rounded-xl border border-[#E2E8F0] bg-white p-12 text-center text-sm text-[#90A1B9]">Loading…</div>}>
+    <Suspense fallback={<div className="rounded-xl border border-divider bg-surface p-12 text-center text-sm text-foreground-dim">Loading…</div>}>
       <AdminCheckInsInner />
     </Suspense>
   );

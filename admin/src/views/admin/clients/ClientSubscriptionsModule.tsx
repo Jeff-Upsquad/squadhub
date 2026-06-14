@@ -20,7 +20,7 @@ import SliderPanel from './SliderPanel';
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
 const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Elite', 'Top Talents'];
 const TIER_COLOR: Record<SubscriptionTier, string> = {
-  Junior: 'bg-slate-100 text-slate-600',
+  Junior: 'bg-canvas text-foreground-muted',
   Pro: 'bg-indigo-100 text-indigo-700',
   Elite: 'bg-yellow-100 text-yellow-700',
   'Top Talents': 'bg-yellow-100 text-yellow-700',
@@ -63,11 +63,11 @@ export default function ClientSubscriptionsModule() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-[#0F172B]">Client Subscriptions</h1>
-        <p className="mt-1 text-sm text-[#62748E]">Assign subscriptions and manage deliverables per client</p>
+        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Client Subscriptions</h1>
+        <p className="mt-1 text-sm text-foreground-muted">Assign subscriptions and manage deliverables per client</p>
       </div>
 
-      <div className="mb-4 flex items-center gap-2 border-b border-[#E2E8F0]">
+      <div className="mb-4 flex items-center gap-2 border-b border-divider">
         {([
           { id: 'active' as const, label: 'Active Clients', count: activeCount },
           { id: 'inactive' as const, label: 'Inactive Clients', count: inactiveCount },
@@ -77,12 +77,12 @@ export default function ClientSubscriptionsModule() {
             onClick={() => setInnerTab(t.id)}
             className={`relative border-b-2 px-4 py-2 text-sm font-medium transition ${
               innerTab === t.id
-                ? 'border-[#2962FF] text-[#0F172B]'
-                : 'border-transparent text-[#62748E] hover:text-[#0F172B]'
+                ? 'border-accent text-foreground'
+                : 'border-transparent text-foreground-muted hover:text-foreground'
             }`}
           >
             {t.label}
-            <span className="ml-2 rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] text-[#62748E]">{t.count}</span>
+            <span className="ml-2 rounded-full bg-canvas px-2 py-0.5 text-[10px] text-foreground-muted">{t.count}</span>
           </button>
         ))}
       </div>
@@ -93,15 +93,15 @@ export default function ClientSubscriptionsModule() {
           placeholder="Search clients..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full max-w-sm rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172B] placeholder-[#90A1B9] focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
+          className="w-full max-w-sm rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground placeholder-foreground-dim focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         />
       </div>
 
       {isLoading ? (
-        <p className="py-8 text-center text-sm text-[#90A1B9]">Loading...</p>
+        <p className="py-8 text-center text-sm text-foreground-dim">Loading...</p>
       ) : filtered.length === 0 ? (
-        <div className="rounded-lg border border-[#E2E8F0] bg-white py-12 text-center">
-          <p className="text-sm text-[#90A1B9]">No clients in this view.</p>
+        <div className="rounded-lg border border-divider bg-surface py-12 text-center">
+          <p className="text-sm text-foreground-dim">No clients in this view.</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -146,22 +146,22 @@ function ClientRow({
   return (
     <button
       onClick={onOpen}
-      className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-5 py-4 text-left transition hover:shadow-sm"
+      className="flex w-full items-center justify-between rounded-lg border border-divider bg-surface px-5 py-4 text-left transition hover:shadow-sm"
     >
       <div className="flex items-center gap-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-canvas text-sm font-semibold text-foreground-muted">
           {client.business_name.charAt(0).toUpperCase()}
         </div>
         <div>
-          <p className="text-sm font-medium text-[#0F172B]">{client.business_name}</p>
-          <p className="mt-0.5 text-xs text-[#62748E]">{client.contact_person}</p>
+          <p className="text-sm font-medium text-foreground">{client.business_name}</p>
+          <p className="mt-0.5 text-xs text-foreground-muted">{client.contact_person}</p>
         </div>
       </div>
       <div className="flex items-center gap-3">
         <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
           {country?.name || '—'}
         </span>
-        <span className="text-xs text-[#90A1B9]">
+        <span className="text-xs text-foreground-dim">
           {activeSubs}/{totalSubs} active
         </span>
         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${
@@ -221,7 +221,7 @@ function ClientSubscriptionsDetail({
 
   const [addOpen, setAddOpen] = useState(false);
 
-  if (!client) return <p className="text-sm text-[#90A1B9]">Loading...</p>;
+  if (!client) return <p className="text-sm text-foreground-dim">Loading...</p>;
 
   const country = client.country || countries.find((c) => c.id === client.country_id) || null;
   const assignedSubscriptionIds = new Set((client.subscriptions || []).map((cs) => cs.subscription_id));
@@ -259,16 +259,16 @@ function ClientSubscriptionsDetail({
             )}
           </div>
         </div>
-        <p className="text-xs text-[#62748E]">{client.contact_person} · {client.email}</p>
+        <p className="text-xs text-foreground-muted">{client.contact_person} · {client.email}</p>
       </div>
 
       {/* Subscriptions */}
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Subscriptions</h4>
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Subscriptions</h4>
           <button
             onClick={() => setAddOpen((v) => !v)}
-            className="text-xs text-[#2962FF] hover:underline"
+            className="text-xs text-accent hover:underline"
           >
             {addOpen ? 'Close' : '+ Add Subscription'}
           </button>
@@ -289,7 +289,7 @@ function ClientSubscriptionsDetail({
         )}
 
         {(!client.subscriptions || client.subscriptions.length === 0) ? (
-          <p className="py-4 text-center text-xs text-[#90A1B9]">No subscriptions assigned yet.</p>
+          <p className="py-4 text-center text-xs text-foreground-dim">No subscriptions assigned yet.</p>
         ) : (
           <div className="space-y-3">
             {(client.subscriptions || []).map((cs) => (
@@ -371,18 +371,18 @@ function ClientSubscriptionCard({
   const linkedFolderName = linkStatusRes?.data?.linked_folder_name ?? null;
 
   return (
-    <div className={`rounded-lg border border-[#E2E8F0] bg-white p-4 ${cs.status === 'cancelled' ? 'opacity-60' : ''}`}>
+    <div className={`rounded-lg border border-divider bg-surface p-4 ${cs.status === 'cancelled' ? 'opacity-60' : ''}`}>
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium text-[#0F172B]">{subscription?.name || 'Unknown'}</p>
+          <p className="text-sm font-medium text-foreground">{subscription?.name || 'Unknown'}</p>
           <div className="mt-1 flex items-center gap-2">
-            <span className="text-xs text-[#90A1B9]">{cs.plan?.plan || '—'}</span>
+            <span className="text-xs text-foreground-dim">{cs.plan?.plan || '—'}</span>
             {cs.plan?.tier && (
               <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${TIER_COLOR[cs.plan.tier]}`}>
                 {cs.plan.tier}
               </span>
             )}
-            <span className="text-xs text-[#90A1B9]">· {priceLabel}</span>
+            <span className="text-xs text-foreground-dim">· {priceLabel}</span>
           </div>
           {linkedFolderName && (
             <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
@@ -397,11 +397,11 @@ function ClientSubscriptionCard({
           {card?.card_code && (
             <button
               onClick={() => copyCode(card.card_code!)}
-              className="group relative flex items-center gap-1 rounded-md border border-[#E2E8F0] bg-white px-2 py-1 text-[10px] font-mono text-[#62748E] hover:bg-[#F8FAFC]"
+              className="group relative flex items-center gap-1 rounded-md border border-divider bg-surface px-2 py-1 text-[10px] font-mono text-foreground-muted hover:bg-surface-alt"
               title="Copy card code"
             >
               {card.card_code}
-              <svg className="h-3 w-3 text-[#90A1B9] group-hover:text-[#0F172B]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <svg className="h-3 w-3 text-foreground-dim group-hover:text-foreground" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
               </svg>
             </button>
@@ -432,10 +432,10 @@ function ClientSubscriptionCard({
         {cs.status === 'cancelled' && (
           <button onClick={() => statusMutation.mutate('active')} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Reactivate</button>
         )}
-        <button onClick={() => resetMutation.mutate()} className="rounded bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-200" disabled={resetMutation.isPending}>
+        <button onClick={() => resetMutation.mutate()} className="rounded bg-canvas px-2 py-1 text-[10px] font-medium text-foreground-muted hover:bg-well" disabled={resetMutation.isPending}>
           {resetMutation.isPending ? 'Resetting…' : 'Reset to plan'}
         </button>
-        <button onClick={() => removeMutation.mutate()} className="rounded bg-[#F1F5F9] px-2 py-1 text-[10px] font-medium text-[#62748E] hover:bg-[#E2E8F0]">Remove</button>
+        <button onClick={() => removeMutation.mutate()} className="rounded bg-canvas px-2 py-1 text-[10px] font-medium text-foreground-muted hover:bg-well">Remove</button>
           {linkedFolderName && (
             <button onClick={() => unlinkMutation.mutate()} className="rounded bg-rose-50 px-2 py-1 text-[10px] font-medium text-rose-700 hover:bg-rose-100" disabled={unlinkMutation.isPending}>
               {unlinkMutation.isPending ? 'Unlinking…' : 'Unlink'}
@@ -443,8 +443,8 @@ function ClientSubscriptionCard({
           )}
         </div>
 
-      <div className="mt-3 border-t border-[#F1F5F9] pt-3">
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#90A1B9]">Deliverables</p>
+      <div className="mt-3 border-t border-divider pt-3">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-foreground-dim">Deliverables</p>
         <ClientDeliverablesEditor
           clientId={clientId}
           csId={cs.id}
@@ -512,7 +512,7 @@ function ClientDeliverablesEditor({
   return (
     <div className="space-y-2">
       {deliverables.length === 0 && !adding && (
-        <p className="text-xs text-[#90A1B9]">No deliverables. Click +Add or Reset to plan.</p>
+        <p className="text-xs text-foreground-dim">No deliverables. Click +Add or Reset to plan.</p>
       )}
 
       {deliverables.map((d) => (
@@ -526,13 +526,13 @@ function ClientDeliverablesEditor({
       ))}
 
       {adding ? (
-        <div className="space-y-2 rounded-md border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-3">
+        <div className="space-y-2 rounded-md border border-dashed border-divider-strong bg-surface-alt p-3">
           <div className="flex items-center gap-4">
-            <label className="flex items-center gap-1.5 text-xs text-[#475569]">
+            <label className="flex items-center gap-1.5 text-xs text-foreground-muted">
               <input type="radio" checked={kind === 'hours'} onChange={() => setKind('hours')} />
               Hours
             </label>
-            <label className="flex items-center gap-1.5 text-xs text-[#475569]">
+            <label className="flex items-center gap-1.5 text-xs text-foreground-muted">
               <input type="radio" checked={kind === 'item'} onChange={() => setKind('item')} />
               Item
             </label>
@@ -540,7 +540,7 @@ function ClientDeliverablesEditor({
               <select
                 value={typeId}
                 onChange={(e) => setTypeId(e.target.value)}
-                className="rounded-md border border-[#E2E8F0] px-2 py-1 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+                className="rounded-md border border-divider px-2 py-1 text-sm text-foreground focus:border-accent focus:outline-none"
               >
                 <option value="">Select type…</option>
                 {deliverableTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -553,10 +553,10 @@ function ClientDeliverablesEditor({
             <NumInline label="/m" value={perMonth} onChange={setPerMonth} />
           </div>
           <div className="flex gap-2">
-            <button onClick={submitAdd} disabled={create.isPending} className="rounded-md bg-[#0F172B] px-3 py-1 text-xs font-medium text-white hover:bg-[#1E293B] disabled:opacity-50">
+            <button onClick={submitAdd} disabled={create.isPending} className="rounded-md bg-ink px-3 py-1 text-xs font-medium text-white hover:bg-ink-hover disabled:opacity-50">
               Add
             </button>
-            <button onClick={resetForm} className="rounded-md border border-[#E2E8F0] px-3 py-1 text-xs text-[#62748E] hover:bg-[#F1F5F9]">
+            <button onClick={resetForm} className="rounded-md border border-divider px-3 py-1 text-xs text-foreground-muted hover:bg-canvas">
               Cancel
             </button>
           </div>
@@ -564,7 +564,7 @@ function ClientDeliverablesEditor({
       ) : (
         <button
           onClick={() => setAdding(true)}
-          className="rounded-md border border-dashed border-[#CBD5E1] px-3 py-1.5 text-xs text-[#62748E] hover:bg-[#F8FAFC] hover:text-[#0F172B]"
+          className="rounded-md border border-dashed border-divider-strong px-3 py-1.5 text-xs text-foreground-muted hover:bg-surface-alt hover:text-foreground"
         >
           + Add deliverable
         </button>
@@ -608,13 +608,13 @@ function DeliverableInlineRow({
   }
 
   return (
-    <div className={`flex items-center gap-2 rounded-md bg-[#F8FAFC] px-3 py-1.5 ${isActive ? '' : 'opacity-50'}`}>
+    <div className={`flex items-center gap-2 rounded-md bg-surface-alt px-3 py-1.5 ${isActive ? '' : 'opacity-50'}`}>
       <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
         deliverable.kind === 'hours' ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'
       }`}>
         {deliverable.kind === 'hours' ? 'Hours' : 'Item'}
       </span>
-      <span className="text-xs text-[#0F172B]">{typeName}</span>
+      <span className="text-xs text-foreground">{typeName}</span>
       {!isLinked && (
         <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700">Custom</span>
       )}
@@ -637,13 +637,13 @@ function DeliverableInlineRow({
           className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
             isActive
               ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              : 'bg-canvas text-foreground-muted hover:bg-well'
           }`}
         >
           {isActive ? 'Active' : 'Inactive'}
         </button>
         {!isLinked && (
-          <button onClick={onDelete} className="rounded-md p-1 text-[#90A1B9] hover:bg-red-50 hover:text-red-500" aria-label="Delete custom deliverable">
+          <button onClick={onDelete} className="rounded-md p-1 text-foreground-dim hover:bg-red-50 hover:text-red-500" aria-label="Delete custom deliverable">
             <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
@@ -657,10 +657,10 @@ function DeliverableInlineRow({
 function ReadOnlyValue({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center gap-1">
-      <span className="min-w-[2.5rem] rounded-md border border-transparent bg-white px-2 py-0.5 text-right text-xs text-[#475569]">
+      <span className="min-w-[2.5rem] rounded-md border border-transparent bg-surface px-2 py-0.5 text-right text-xs text-foreground-muted">
         {value}
       </span>
-      <span className="text-[10px] text-[#90A1B9]">{label}</span>
+      <span className="text-[10px] text-foreground-dim">{label}</span>
     </div>
   );
 }
@@ -679,9 +679,9 @@ function NumInline({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
-        className={`rounded-md border border-[#E2E8F0] px-2 py-0.5 text-xs text-[#0F172B] focus:border-[#2962FF] focus:outline-none ${compact ? 'w-12' : 'w-16'}`}
+        className={`rounded-md border border-divider px-2 py-0.5 text-xs text-foreground focus:border-accent focus:outline-none ${compact ? 'w-12' : 'w-16'}`}
       />
-      <span className="text-[10px] text-[#90A1B9]">{label}</span>
+      <span className="text-[10px] text-foreground-dim">{label}</span>
     </div>
   );
 }
@@ -722,13 +722,13 @@ function AddSubscriptionInline({
   const locale = country?.currency === 'USD' ? 'en-US' : 'en-IN';
 
   return (
-    <div className="mb-3 space-y-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+    <div className="mb-3 space-y-2 rounded-lg border border-divider bg-surface-alt p-3">
       <div>
-        <label className="mb-1 block text-xs font-medium text-[#62748E]">Subscription</label>
+        <label className="mb-1 block text-xs font-medium text-foreground-muted">Subscription</label>
         <select
           value={subscriptionId}
           onChange={(e) => { setSubscriptionId(e.target.value); setPlanId(''); }}
-          className="w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+          className="w-full rounded-md border border-divider bg-surface px-2 py-1.5 text-sm text-foreground focus:border-accent focus:outline-none"
         >
           <option value="">Select subscription…</option>
           {available.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -738,18 +738,18 @@ function AddSubscriptionInline({
 
       {selectedSub && (
         <div>
-          <label className="mb-1 block text-xs font-medium text-[#62748E]">
+          <label className="mb-1 block text-xs font-medium text-foreground-muted">
             Plan {country ? `(${country.currency} for ${country.name})` : ''}
           </label>
           {availablePlans.length === 0 ? (
-            <p className="rounded-md bg-white px-2 py-1.5 text-xs text-[#90A1B9]">
+            <p className="rounded-md bg-surface px-2 py-1.5 text-xs text-foreground-dim">
               No plans priced for {country?.name || 'this country'} yet.
             </p>
           ) : (
             <select
               value={planId}
               onChange={(e) => setPlanId(e.target.value)}
-              className="w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+              className="w-full rounded-md border border-divider bg-surface px-2 py-1.5 text-sm text-foreground focus:border-accent focus:outline-none"
             >
               <option value="">Select plan…</option>
               {TIERS.map((tier) => {
@@ -776,11 +776,11 @@ function AddSubscriptionInline({
       <button
         onClick={() => planId && addMutation.mutate(planId)}
         disabled={!planId || addMutation.isPending}
-        className="w-full rounded-md bg-[#0F172B] px-3 py-2 text-xs font-medium text-white hover:bg-[#1E293B] disabled:opacity-50"
+        className="w-full rounded-md bg-ink px-3 py-2 text-xs font-medium text-white hover:bg-ink-hover disabled:opacity-50"
       >
         {addMutation.isPending ? 'Adding...' : 'Add subscription'}
       </button>
-      <p className="text-[10px] text-[#90A1B9]">Plan defaults will be copied as editable deliverables.</p>
+      <p className="text-[10px] text-foreground-dim">Plan defaults will be copied as editable deliverables.</p>
     </div>
   );
 }

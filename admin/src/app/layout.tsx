@@ -29,7 +29,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${jakarta.variable} ${inter.variable}`}>
+    <html lang="en" className={`${jakarta.variable} ${inter.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Anti-flicker: apply the .dark class before first paint */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('squadhub-admin-theme');var p=t?JSON.parse(t):null;var pref=p&&p.state&&p.state.theme?p.state.theme:'auto';var dark=pref==='dark'||(pref==='auto'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(dark)document.documentElement.classList.add('dark');}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body suppressHydrationWarning>
         <Providers>{children}</Providers>
         <ToastContainer />

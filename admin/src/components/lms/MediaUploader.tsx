@@ -74,12 +74,12 @@ export default function MediaUploader({ itemId, lessonId, fileCategory, accept, 
         }}
       />
       {current?.url ? (
-        <div className="flex items-center gap-2 rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm">
-          <span className="flex-1 truncate text-[#0F172B]">{current.name || current.url.split('/').pop()}</span>
+        <div className="flex items-center gap-2 rounded-md border border-divider bg-surface px-3 py-2 text-sm">
+          <span className="flex-1 truncate text-foreground">{current.name || current.url.split('/').pop()}</span>
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="rounded border border-[#E2E8F0] px-2 py-1 text-[12px] text-[#62748E] hover:bg-[#F8FAFC]"
+            className="rounded border border-divider px-2 py-1 text-[12px] text-foreground-muted hover:bg-surface-alt"
           >
             Replace
           </button>
@@ -88,7 +88,7 @@ export default function MediaUploader({ itemId, lessonId, fileCategory, accept, 
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-[#CBD5E1] bg-[#F8FAFC] px-4 py-6 text-sm text-[#62748E] hover:border-[#0F172B] hover:text-[#0F172B]"
+          className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-divider-strong bg-surface-alt px-4 py-6 text-sm text-foreground-muted hover:border-ink hover:text-foreground"
           disabled={progress !== null}
         >
           {progress !== null ? `Uploading… ${progress}%` : `Click to upload ${fileCategory}`}

@@ -63,35 +63,35 @@ export default function AdminApprovals() {
 
   return (
     <div>
-      <h2 className="mb-6 font-[family-name:var(--font-display)] text-2xl font-bold text-[#0F172B]">User Approvals</h2>
+      <h2 className="mb-6 font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">User Approvals</h2>
 
       {isLoading ? (
-        <p className="text-sm text-[#62748E]">Loading...</p>
+        <p className="text-sm text-foreground-muted">Loading...</p>
       ) : pendingUsers.length === 0 ? (
-        <div className="rounded-lg border border-[#E2E8F0] bg-white p-8 text-center">
-          <svg className="mx-auto h-10 w-10 text-[#90A1B9]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+        <div className="rounded-lg border border-divider bg-surface p-8 text-center">
+          <svg className="mx-auto h-10 w-10 text-foreground-dim" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p className="mt-3 text-sm text-[#62748E]">No pending approvals</p>
+          <p className="mt-3 text-sm text-foreground-muted">No pending approvals</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-[#E2E8F0] bg-white">
+        <div className="overflow-hidden rounded-lg border border-divider bg-surface">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-[#E2E8F0] bg-[#F1F5F9]">
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Name</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Email</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Signed Up</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Role</th>
-                <th className="px-4 py-3 text-right font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-[#62748E]">Actions</th>
+              <tr className="border-b border-divider bg-canvas">
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Name</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Email</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Signed Up</th>
+                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Role</th>
+                <th className="px-4 py-3 text-right font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Actions</th>
               </tr>
             </thead>
             <tbody>
               {pendingUsers.map((user) => (
-                <tr key={user.id} className="border-b border-[#E2E8F0] last:border-b-0">
-                  <td className="px-4 py-3 text-sm text-[#0F172B]">{user.display_name}</td>
-                  <td className="px-4 py-3 text-sm text-[#62748E]">{user.email}</td>
-                  <td className="px-4 py-3 font-[family-name:var(--font-mono)] text-xs text-[#62748E]">
+                <tr key={user.id} className="border-b border-divider last:border-b-0">
+                  <td className="px-4 py-3 text-sm text-foreground">{user.display_name}</td>
+                  <td className="px-4 py-3 text-sm text-foreground-muted">{user.email}</td>
+                  <td className="px-4 py-3 font-[family-name:var(--font-mono)] text-xs text-foreground-muted">
                     {new Date(user.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
@@ -100,7 +100,7 @@ export default function AdminApprovals() {
                       onChange={(e) =>
                         setSelectedRoles((prev) => ({ ...prev, [user.id]: e.target.value }))
                       }
-                      className="rounded-md border border-[#CAD5E2] bg-white px-2 py-1.5 text-xs text-[#0F172B] outline-none focus:border-[#2962FF]"
+                      className="rounded-md border border-divider-strong bg-surface px-2 py-1.5 text-xs text-foreground outline-none focus:border-accent"
                     >
                       {roles.map((role) => (
                         <option key={role.id} value={role.id}>

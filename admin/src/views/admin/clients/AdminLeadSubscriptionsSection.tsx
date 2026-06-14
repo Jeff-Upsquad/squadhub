@@ -55,12 +55,12 @@ export default function AdminLeadSubscriptionsSection({ submissionId, country, c
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Selected Subscriptions</h4>
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Selected Subscriptions</h4>
         {!disabled && (
           <button
             type="button"
             onClick={() => setAddOpen((v) => !v)}
-            className="text-xs font-medium text-[#2962FF] hover:underline"
+            className="text-xs font-medium text-accent hover:underline"
           >
             {addOpen ? 'Close' : '+ Add subscription'}
           </button>
@@ -68,12 +68,12 @@ export default function AdminLeadSubscriptionsSection({ submissionId, country, c
       </div>
 
       <div>
-        <label className="mb-1 block text-xs font-medium text-[#62748E]">Billing Country</label>
+        <label className="mb-1 block text-xs font-medium text-foreground-muted">Billing Country</label>
         <select
           value={country?.id || ''}
           onChange={(e) => countryMutation.mutate(e.target.value)}
           disabled={disabled || countryMutation.isPending}
-          className="w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-sm text-[#0F172B] disabled:opacity-60"
+          className="w-full rounded-md border border-divider bg-surface px-2 py-1.5 text-sm text-foreground disabled:opacity-60"
         >
           {!country && <option value="">Select a country</option>}
           {countries.map((c) => (
@@ -95,11 +95,11 @@ export default function AdminLeadSubscriptionsSection({ submissionId, country, c
       )}
 
       {selected.length === 0 ? (
-        <p className="py-3 text-center text-xs text-[#90A1B9]">
+        <p className="py-3 text-center text-xs text-foreground-dim">
           {disabled ? 'No subscriptions selected.' : 'No subscriptions selected yet.'}
         </p>
       ) : (
-        <ul className="divide-y divide-[#F1F5F9] rounded-lg border border-[#E2E8F0] bg-white">
+        <ul className="divide-y divide-[#F1F5F9] rounded-lg border border-divider bg-surface">
           {selected.map((row) => (
             <SelectedSubscriptionRow
               key={row.id}
@@ -150,14 +150,14 @@ function SelectedSubscriptionRow({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <p className="font-medium text-[#0F172B]">{row.subscription?.name || '—'}</p>
-            <p className="text-xs text-[#62748E]">
+            <p className="font-medium text-foreground">{row.subscription?.name || '—'}</p>
+            <p className="text-xs text-foreground-muted">
               {plan ? `${plan.plan} · ${plan.tier}` : '—'}
             </p>
             {priceLabel ? (
-              <p className="text-xs font-medium text-[#0F172B]">{priceLabel}</p>
+              <p className="text-xs font-medium text-foreground">{priceLabel}</p>
             ) : (
-              <p className="text-xs text-[#90A1B9]">
+              <p className="text-xs text-foreground-dim">
                 — no price set{countryName ? ` for ${countryName}` : ''}
               </p>
             )}
@@ -192,9 +192,9 @@ function DeliverableChip({ deliverable }: { deliverable: SubscriptionPlanDeliver
     ? 'bg-indigo-100 text-indigo-700'
     : 'bg-purple-100 text-purple-700';
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-md bg-[#F1F5F9] px-2 py-0.5 text-[11px] text-[#0F172B]">
+    <span className="inline-flex items-center gap-1.5 rounded-md bg-canvas px-2 py-0.5 text-[11px] text-foreground">
       <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${badgeClass}`}>{label}</span>
-      <span className="text-[#62748E]">
+      <span className="text-foreground-muted">
         {formatDeliverableCadence(
           deliverable.per_day,
           deliverable.per_week,
@@ -245,13 +245,13 @@ function AddSubscriptionInline({
   }, [selectedSub, country]);
 
   return (
-    <div className="space-y-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+    <div className="space-y-2 rounded-lg border border-divider bg-surface-alt p-3">
       <div>
-        <label className="mb-1 block text-xs font-medium text-[#62748E]">Subscription</label>
+        <label className="mb-1 block text-xs font-medium text-foreground-muted">Subscription</label>
         <select
           value={subscriptionId}
           onChange={(e) => { setSubscriptionId(e.target.value); setPlanId(''); }}
-          className="w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-sm text-[#0F172B]"
+          className="w-full rounded-md border border-divider bg-surface px-2 py-1.5 text-sm text-foreground"
         >
           <option value="">Select subscription…</option>
           {activeSubs.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -261,20 +261,20 @@ function AddSubscriptionInline({
 
       {selectedSub && (
         <div>
-          <label className="mb-1 block text-xs font-medium text-[#62748E]">
+          <label className="mb-1 block text-xs font-medium text-foreground-muted">
             Plan {country ? `(${country.currency} for ${country.name})` : ''}
           </label>
           {!country ? (
-            <p className="rounded-md bg-white px-2 py-1.5 text-xs text-[#90A1B9]">Lead has no country.</p>
+            <p className="rounded-md bg-surface px-2 py-1.5 text-xs text-foreground-dim">Lead has no country.</p>
           ) : sortedPlans.length === 0 ? (
-            <p className="rounded-md bg-white px-2 py-1.5 text-xs text-[#90A1B9]">
+            <p className="rounded-md bg-surface px-2 py-1.5 text-xs text-foreground-dim">
               No plans priced for {country.name}.
             </p>
           ) : (
             <select
               value={planId}
               onChange={(e) => setPlanId(e.target.value)}
-              className="w-full rounded-md border border-[#E2E8F0] bg-white px-2 py-1.5 text-sm text-[#0F172B]"
+              className="w-full rounded-md border border-divider bg-surface px-2 py-1.5 text-sm text-foreground"
             >
               <option value="">Select plan…</option>
               {TIERS.map((tier) => {
@@ -303,7 +303,7 @@ function AddSubscriptionInline({
         type="button"
         onClick={() => planId && addMutation.mutate({ subscription_id: subscriptionId, plan_id: planId })}
         disabled={!planId || addMutation.isPending}
-        className="w-full rounded-md bg-[#0F172B] px-3 py-2 text-xs font-medium text-white hover:bg-[#1E293B] disabled:opacity-50"
+        className="w-full rounded-md bg-ink px-3 py-2 text-xs font-medium text-white hover:bg-ink-hover disabled:opacity-50"
       >
         {addMutation.isPending ? 'Adding…' : 'Add subscription'}
       </button>
