@@ -18,6 +18,8 @@ tauri-plugin-autostart = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-store = "2"
 tauri-plugin-global-shortcut = "2"
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2" }
+cocoa = "0.26"
 objc = "0.2"
 block = "0.1"
 open = "5"
