@@ -447,11 +447,13 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
       supabaseAdmin
         .from('subscription_card_recipients')
         .select('partner_id, status, responded_at, assigned_manually, selected_at, selected_by, passed_over_at')
-        .eq('card_id', cardId),
+        .eq('card_id', cardId)
+        .is('archived_at', null),
       supabaseAdmin
         .from('subscription_card_external_recipients')
         .select('external_user_id, talent_name, email, status, responded_at, assigned_manually, selected_at, selected_by, passed_over_at, notified_at')
-        .eq('card_id', cardId),
+        .eq('card_id', cardId)
+        .is('archived_at', null),
     ]);
 
     const partnerIds = Array.from(new Set((partnerRows || []).map((r: any) => r.partner_id)));

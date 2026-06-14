@@ -86,6 +86,7 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
         .update({ selected_at: now, selected_by: adminId, passed_over_at: null })
         .eq('card_id', cardId)
         .eq('status', 'accepted')
+        .is('archived_at', null)
         .in('partner_id', partner_ids);
 
       // Pass over non-selected accepted partners
@@ -94,6 +95,7 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
         .update({ passed_over_at: now })
         .eq('card_id', cardId)
         .eq('status', 'accepted')
+        .is('archived_at', null)
         .is('selected_at', null)
         .is('passed_over_at', null);
     }
@@ -106,6 +108,7 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
         .update({ selected_at: now, selected_by: adminId, passed_over_at: null })
         .eq('card_id', cardId)
         .eq('status', 'accepted')
+        .is('archived_at', null)
         .in('external_user_id', talent_ids);
 
       // Pass over non-selected accepted talents
@@ -114,6 +117,7 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
         .update({ passed_over_at: now })
         .eq('card_id', cardId)
         .eq('status', 'accepted')
+        .is('archived_at', null)
         .is('selected_at', null)
         .is('passed_over_at', null);
     }
@@ -125,6 +129,7 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
         .update({ passed_over_at: now })
         .eq('card_id', cardId)
         .eq('status', 'accepted')
+        .is('archived_at', null)
         .is('selected_at', null)
         .is('passed_over_at', null);
     }
@@ -134,6 +139,7 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
         .update({ passed_over_at: now })
         .eq('card_id', cardId)
         .eq('status', 'accepted')
+        .is('archived_at', null)
         .is('selected_at', null)
         .is('passed_over_at', null);
     }
@@ -189,31 +195,9 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
   }
 });
 
-// Clear any selection/assignment on a card and reopen it to `published`.
-// Resets both recipient tables (selected_at / selected_by / passed_over_at) and
-// the card's finalize fields + SquadHire activation-notify residue. Shared by
-// undo-selection (Unassign) and reopen-for-new-talents.
-async function resetCardSelection(cardId: string): Promise<void> {
-  await supabaseAdmin
-    .from('subscription_card_recipients')
-    .update({ selected_at: null, selected_by: null, passed_over_at: null })
-    .eq('card_id', cardId)
-    .not('selected_at', 'is', null);
-  await supabaseAdmin
-    .from('subscription_card_recipients')
-    .update({ passed_over_at: null })
-    .eq('card_id', cardId)
-    .not('passed_over_at', 'is', null);
-  await supabaseAdmin
-    .from('subscription_card_external_recipients')
-    .update({ selected_at: null, selected_by: null, passed_over_at: null })
-    .eq('card_id', cardId)
-    .not('selected_at', 'is', null);
-  await supabaseAdmin
-    .from('subscription_card_external_recipients')
-    .update({ passed_over_at: null })
-    .eq('card_id', cardId)
-    .not('passed_over_at', 'is', null);
+// Reset a card back to `published` and close its active assignment term.
+// (Recipient rows are handled separately by the caller.)
+async function resetCardAndCloseTerms(cardId: string): Promise<void> {
   await supabaseAdmin
     .from('subscription_cards')
     .update({
@@ -235,6 +219,38 @@ async function resetCardSelection(cardId: string): Promise<void> {
     .update({ unassigned_date: endIso, work_end_date: endIso.slice(0, 10), status: 'ended', updated_at: endIso })
     .eq('card_id', cardId)
     .eq('status', 'active');
+}
+
+// Clear the CURRENT round's selection on a card and reopen it to `published`,
+// keeping the (current, non-archived) recipients so they can be re-selected.
+// Used by undo-selection (Unassign).
+async function resetCardSelection(cardId: string): Promise<void> {
+  await supabaseAdmin
+    .from('subscription_card_recipients')
+    .update({ selected_at: null, selected_by: null, passed_over_at: null })
+    .eq('card_id', cardId)
+    .is('archived_at', null)
+    .not('selected_at', 'is', null);
+  await supabaseAdmin
+    .from('subscription_card_recipients')
+    .update({ passed_over_at: null })
+    .eq('card_id', cardId)
+    .is('archived_at', null)
+    .not('passed_over_at', 'is', null);
+  await supabaseAdmin
+    .from('subscription_card_external_recipients')
+    .update({ selected_at: null, selected_by: null, passed_over_at: null })
+    .eq('card_id', cardId)
+    .is('archived_at', null)
+    .not('selected_at', 'is', null);
+  await supabaseAdmin
+    .from('subscription_card_external_recipients')
+    .update({ passed_over_at: null })
+    .eq('card_id', cardId)
+    .is('archived_at', null)
+    .not('passed_over_at', 'is', null);
+
+  await resetCardAndCloseTerms(cardId);
 }
 
 // ============================================================
@@ -307,6 +323,7 @@ router.post('/subscription-cards/:id/finalize-selection', async (req: Request, r
       .from('subscription_card_external_recipients')
       .select('external_user_id, selected_at')
       .eq('card_id', cardId)
+      .is('archived_at', null)
       .not('selected_at', 'is', null)
       .order('selected_at', { ascending: false })
       .limit(1);
@@ -322,6 +339,7 @@ router.post('/subscription-cards/:id/finalize-selection', async (req: Request, r
         .from('subscription_card_recipients')
         .select('partner_id, selected_at')
         .eq('card_id', cardId)
+        .is('archived_at', null)
         .not('selected_at', 'is', null)
         .order('selected_at', { ascending: false })
         .limit(1);
@@ -401,11 +419,10 @@ router.post('/subscription-cards/:id/finalize-selection', async (req: Request, r
 // ============================================================
 // POST /admin/subscription-cards/:id/reopen-for-new-talents
 //
-// Unassign the current talent AND reopen the card to a fresh pool. Resets the
-// selection/assignment and notifies SquadHire to clear its side; for broadcast
-// cards, re-delivers the card so SquadHire re-broadcasts to matching talents.
-// Manual cards are just reopened (admin re-queues talents, then broadcast-pending).
-// Mirrors the SquadHire-side "Reopen for new talents".
+// Reopen the card to a fresh round: ARCHIVE the current round's recipients
+// (kept for history, hidden from the current view), reset the card to
+// `published`, and notify SquadHire to clear its selection. Does NOT broadcast —
+// the admin triggers that separately via /broadcast.
 // ============================================================
 router.post('/subscription-cards/:id/reopen-for-new-talents', async (req: Request, res: Response) => {
   try {
@@ -413,7 +430,7 @@ router.post('/subscription-cards/:id/reopen-for-new-talents', async (req: Reques
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, distribution')
+      .select('id, state')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
@@ -423,25 +440,70 @@ router.post('/subscription-cards/:id/reopen-for-new-talents', async (req: Reques
       return;
     }
 
-    await resetCardSelection(cardId);
+    // Archive the current round's recipients (kept for history; dropped from the
+    // current view via the archived_at IS NULL filter on the list + selection).
+    const archivedAt = new Date().toISOString();
+    await supabaseAdmin
+      .from('subscription_card_recipients')
+      .update({ archived_at: archivedAt })
+      .eq('card_id', cardId)
+      .is('archived_at', null);
+    await supabaseAdmin
+      .from('subscription_card_external_recipients')
+      .update({ archived_at: archivedAt })
+      .eq('card_id', cardId)
+      .is('archived_at', null);
 
+    await resetCardAndCloseTerms(cardId);
+
+    // Clear the talent's selection on SquadHire (drops the card from My Clients).
     notifySquadhireOfSelectionUndo(cardId).catch((err) => {
       console.error('[reopen] notify squadhire selection-undo failed', err);
     });
 
-    // Broadcast cards: re-deliver so SquadHire re-broadcasts to a fresh pool.
-    let rebroadcast = false;
-    if (card.distribution === 'broadcast') {
-      const payload = await buildSquadhirePayloadForCard(cardId);
-      if (payload) {
-        await deliverCardToSquadhire(cardId, payload);
-        rebroadcast = true;
-      }
-    }
-
-    res.json({ success: true, rebroadcast });
+    res.json({ success: true });
   } catch (err: any) {
     console.error('Reopen for new talents error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/broadcast
+//
+// Broadcast a published card to a fresh pool of talents by re-delivering it to
+// SquadHire so it (re-)broadcasts to matching talents.
+//
+// NOTE: the full "wipe & re-ask everyone" fresh round is completed by the
+// SquadHire-side fresh-broadcast handler (next stage); until that lands, this
+// re-delivers the card (SquadHire adds newly-matching talents).
+// ============================================================
+router.post('/subscription-cards/:id/broadcast', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    const { data: card, error: cardErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
+    if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
+    if (card.state !== 'published') {
+      res.status(409).json({ success: false, error: 'Card must be published to broadcast' });
+      return;
+    }
+
+    let delivered = false;
+    const payload = await buildSquadhirePayloadForCard(cardId);
+    if (payload) {
+      await deliverCardToSquadhire(cardId, payload);
+      delivered = true;
+    }
+
+    res.json({ success: true, delivered });
+  } catch (err: any) {
+    console.error('Broadcast error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });

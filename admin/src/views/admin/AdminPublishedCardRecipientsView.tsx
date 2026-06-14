@@ -235,21 +235,30 @@ export default function AdminPublishedCardRecipientsView({
   const reopenMutation = useMutation({
     mutationFn: () =>
       api.post(`/admin/subscription-cards/${card.id}/reopen-for-new-talents`),
-    onSuccess: (res: any) => {
+    onSuccess: () => {
       setCheckedIds(new Set());
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
-      showToast(
-        res?.data?.rebroadcast
-          ? 'Card reopened and re-broadcast to new talents.'
-          : 'Card reopened. Re-invite talents as needed.',
-        'success',
-      );
+      showToast('Reopened — previous round archived. Use Broadcast to invite a fresh pool.', 'success');
     },
     onError: (err: any) => {
       showToast(err?.response?.data?.error || err.message || 'Failed to reopen card', 'error');
+    },
+  });
+
+  const broadcastToTalentsMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${card.id}/broadcast`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      showToast('Broadcast sent — matching talents are being invited.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to broadcast', 'error');
     },
   });
 
@@ -518,6 +527,17 @@ export default function AdminPublishedCardRecipientsView({
                     {markReviewedMutation.isPending ? 'Marking…' : 'Mark as Reviewed'}
                   </button>
                 )}
+                {bucket === 'active' && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Broadcast this card to matching talents?')) broadcastToTalentsMutation.mutate();
+                    }}
+                    disabled={broadcastToTalentsMutation.isPending}
+                    className="sh-btn-primary"
+                  >
+                    {broadcastToTalentsMutation.isPending ? 'Broadcasting…' : 'Broadcast to talents'}
+                  </button>
+                )}
               </div>
               <h1 className="sh-display text-2xl sm:text-3xl truncate">{title}</h1>
               {card.published_at && (
@@ -634,7 +654,7 @@ export default function AdminPublishedCardRecipientsView({
                     </button>
                     <button
                       onClick={() => {
-                        if (window.confirm('Reopen this card to new talents?\n\nThis unassigns the current talent and ends the live subscription on SquadHire. Matching talents will be re-invited.')) reopenMutation.mutate();
+                        if (window.confirm('Reopen this card?\n\nThis archives the current responses, unassigns the talent (ends their live subscription on SquadHire), and reopens the card. You can then Broadcast to a fresh pool.')) reopenMutation.mutate();
                       }}
                       disabled={undoMutation.isPending || reopenMutation.isPending}
                       className="sh-btn-ghost"
