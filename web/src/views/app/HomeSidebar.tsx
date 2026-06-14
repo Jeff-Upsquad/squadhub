@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { Channel, SubscriptionCardRecipient } from '@squadhub/shared';
 import type { HomeView } from '../../layouts/MainLayout';
-import api from '../../services/api';
+import api, { getFreshAccessToken } from '../../services/api';
 import { useFavorites, useRemoveFavorite } from '../../hooks/useFavorites';
 import { useSharedWithMe } from '../../hooks/useSharedWithMe';
 import { useHasPermission } from '../../hooks/usePermissions';
@@ -17,6 +17,12 @@ import { useIsClient, useIsPartner } from '../../hooks/useUserType';
 import { useDms } from '../../hooks/useDms';
 import NewDmModal from './chat/NewDmModal';
 import DmListItem from './chat/DmListItem';
+
+// SquadBooks is a sibling app (own subdomain + DB). Launch = link-out with an
+// SSO handoff token, mirroring how Squad Clips hands off its session.
+const SQUADBOOKS_URL =
+  process.env.NEXT_PUBLIC_SQUADBOOKS_URL ||
+  (process.env.NODE_ENV === 'production' ? 'https://books.squadhub.in' : 'http://localhost:3300');
 
 // ---- Props ----
 interface HomeSidebarProps {
@@ -233,6 +239,7 @@ export default function HomeSidebar({
   const hasSalesLeads = useHasMiniApp('sales-leads');
   const hasCashBook = useHasMiniApp('cash-book');
   const hasSquadClips = useHasMiniApp('squad-clips');
+  const hasSquadBooks = useHasMiniApp('squadbooks');
   const { data: inboxUnreadCount } = useUnreadCount();
 
   const [expandedSections, setExpandedSections] = useState({
@@ -505,6 +512,28 @@ export default function HomeSidebar({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
               </svg>
               Squad Clips
+            </button>
+          )}
+
+          {hasSquadBooks && (
+            <button
+              onClick={async () => {
+                const token = await getFreshAccessToken();
+                if (!token || !currentWorkspace) return;
+                const url = `${SQUADBOOKS_URL}/sso#t=${encodeURIComponent(token)}&w=${encodeURIComponent(
+                  currentWorkspace.id,
+                )}&wn=${encodeURIComponent(currentWorkspace.name)}`;
+                window.open(url, '_blank', 'noopener');
+              }}
+              className="flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
+            >
+              <svg className="h-[14px] w-[14px] shrink-0 text-[var(--sh-ink-3)]" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+              SquadBooks
+              <svg className="ml-auto h-3 w-3 shrink-0 text-[var(--sh-ink-4)]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
             </button>
           )}
 
