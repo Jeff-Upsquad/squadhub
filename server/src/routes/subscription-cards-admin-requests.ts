@@ -47,6 +47,51 @@ function normalizeTiers(raw: string): string[] {
 }
 
 // ============================================================
+// Per-card shareable pre-fill links (see migration 108).
+// Only form-request DRAFT cards can be shared; the client opens the link,
+// confirms the pre-filled brief, and the SAME card is updated (handled by
+// the public endpoints in leads-public.ts).
+// ============================================================
+const FORM_REQUEST_SOURCES = ['shared_form', 'landing_page_form', 'request'];
+
+function buildCardShareUrl(token: string): string {
+  const base =
+    process.env.WEB_APP_URL ||
+    (process.env.NODE_ENV === 'production' ? 'https://squadhub.in' : 'http://localhost:3000');
+  return `${base.replace(/\/$/, '')}/card/${token}`;
+}
+
+function deriveShareLinkStatus(link: {
+  completed_at: string | null;
+  revoked_at: string | null;
+  expires_at: string;
+}): 'active' | 'expired' | 'completed' | 'revoked' {
+  if (link.completed_at) return 'completed';
+  if (link.revoked_at) return 'revoked';
+  if (new Date(link.expires_at).getTime() < Date.now()) return 'expired';
+  return 'active';
+}
+
+// Loads a card and asserts it's a shareable form-request draft. Returns the
+// card on success, or an { error } tuple the caller maps to an HTTP status.
+async function loadFormRequestDraft(cardId: string): Promise<
+  | { card: { id: string; state: string; source: string } }
+  | { error: 404 | 409; msg: string }
+> {
+  const { data: card } = await supabaseAdmin
+    .from('subscription_cards')
+    .select('id, state, source')
+    .eq('id', cardId)
+    .maybeSingle();
+  if (!card) return { error: 404, msg: 'Card not found' };
+  if (card.state !== 'draft') return { error: 409, msg: 'Only draft cards can be shared' };
+  if (!FORM_REQUEST_SOURCES.includes(card.source)) {
+    return { error: 409, msg: 'Only form-request cards can be shared' };
+  }
+  return { card: card as any };
+}
+
+// ============================================================
 // GET /admin/subscription-requests — proxy list from upsquad
 // ============================================================
 router.get('/subscription-requests', async (req: Request, res: Response) => {
@@ -753,6 +798,131 @@ router.delete('/subscription-cards/:id', async (req: Request, res: Response) => 
     res.json({ success: true });
   } catch (err: any) {
     console.error('Delete request/custom card error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/share-link — generate (or regenerate)
+// a 24h client pre-fill link for a form-request draft card. Regenerating
+// revokes any currently-active link first (one live link per card).
+// ============================================================
+router.post('/subscription-cards/:id/share-link', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const guard = await loadFormRequestDraft(cardId);
+    if ('error' in guard) {
+      res.status(guard.error).json({ success: false, error: guard.msg });
+      return;
+    }
+
+    // Revoke the existing active link so the partial unique index
+    // (uniq_card_share_link_active) admits the new row, and any previously
+    // shared URL stops working.
+    await supabaseAdmin
+      .from('subscription_card_share_links')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('card_id', cardId)
+      .is('revoked_at', null)
+      .is('completed_at', null);
+
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await supabaseAdmin
+      .from('subscription_card_share_links')
+      .insert({ card_id: cardId, created_by: req.userId!, expires_at: expiresAt })
+      .select('*')
+      .single();
+
+    if (error || !data) {
+      res.status(500).json({ success: false, error: error?.message || 'Failed to generate link' });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        token: data.id,
+        url: buildCardShareUrl(data.id),
+        expires_at: data.expires_at,
+        completed_at: data.completed_at,
+        revoked_at: data.revoked_at,
+        status: deriveShareLinkStatus(data),
+      },
+    });
+  } catch (err: any) {
+    console.error('Generate card share link error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// GET /admin/subscription-cards/:id/share-link — the newest link for a card
+// (any status), or null. Used by the admin modal to show current state.
+// ============================================================
+router.get('/subscription-cards/:id/share-link', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const { data } = await supabaseAdmin
+      .from('subscription_card_share_links')
+      .select('*')
+      .eq('card_id', cardId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!data) {
+      res.json({ success: true, data: null });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        token: data.id,
+        url: buildCardShareUrl(data.id),
+        expires_at: data.expires_at,
+        completed_at: data.completed_at,
+        revoked_at: data.revoked_at,
+        status: deriveShareLinkStatus(data),
+      },
+    });
+  } catch (err: any) {
+    console.error('Get card share link error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/share-link/revoke — stop sharing
+// without generating a replacement (revokes the active link, if any).
+// ============================================================
+router.post('/subscription-cards/:id/share-link/revoke', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const { data } = await supabaseAdmin
+      .from('subscription_card_share_links')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('card_id', cardId)
+      .is('revoked_at', null)
+      .is('completed_at', null)
+      .select('*')
+      .maybeSingle();
+
+    res.json({
+      success: true,
+      data: data
+        ? {
+            token: data.id,
+            url: buildCardShareUrl(data.id),
+            expires_at: data.expires_at,
+            completed_at: data.completed_at,
+            revoked_at: data.revoked_at,
+            status: deriveShareLinkStatus(data),
+          }
+        : null,
+    });
+  } catch (err: any) {
+    console.error('Revoke card share link error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });

@@ -1381,6 +1381,49 @@ export interface SubscriptionCard {
 }
 
 /**
+ * Per-card client pre-fill share link (24h, single-use). A salesperson
+ * generates a tokenised link for a form-request DRAFT card; the client opens
+ * it unauthenticated, confirms the pre-filled brief + their contact, and the
+ * SAME card is updated on submit. Backed by `subscription_card_share_links`.
+ */
+export type CardShareLinkStatus = 'active' | 'expired' | 'completed' | 'revoked';
+
+export interface CardShareLink {
+  token: string; // = subscription_card_share_links.id (the UUID token)
+  url: string; // absolute public URL — /card/:token
+  expires_at: string;
+  completed_at?: string | null;
+  revoked_at?: string | null;
+  status: CardShareLinkStatus;
+}
+
+/** Safe, client-visible pre-fill payload returned by GET /leads/card-link/:token. */
+export interface CardSharePrefill {
+  brand_name: string | null;
+  business_nature: string | null;
+  business_note: string | null; // card.notes
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  business_location: string | null;
+  service_type: string | null; // display label, read-only (role is immutable)
+  working_days: string[];
+  languages: string[];
+  country_id: string | null;
+  state_regions: string[];
+  requirement_note: string | null;
+  hours_note: string | null;
+}
+
+export interface CardShareLinkValidation {
+  valid: boolean;
+  expired: boolean;
+  completed: boolean;
+  expires_at?: string;
+  prefill?: CardSharePrefill;
+}
+
+/**
  * A SquadHire category as seen by the SquadHub admin UI. Served by
  * /admin/integrations/squadhire/categories (a signed read-through to
  * Profiles). `id` is a UUID from Profiles' DB — never used as a FK here.
