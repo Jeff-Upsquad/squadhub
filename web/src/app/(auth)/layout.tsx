@@ -18,7 +18,12 @@ export default function AuthLayout({
   useEffect(() => {
     if (!hydrated) return;
     if (isAuthenticated) {
-      router.push('/app');
+      // Honor a safe internal ?redirect= (e.g. the SquadBooks launch bridge),
+      // otherwise land in the app. Only same-origin relative paths are allowed.
+      let dest = '/app';
+      const r = new URLSearchParams(window.location.search).get('redirect');
+      if (r && r.startsWith('/') && !r.startsWith('//')) dest = r;
+      router.push(dest);
     }
   }, [hydrated, isAuthenticated, router]);
 
