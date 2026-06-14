@@ -111,7 +111,9 @@ router.patch('/workspace-config', async (req: Request, res: Response) => {
 });
 
 // GET /admin/crm-access/users?workspace_id=…&app=squadcrm
-// Workspace members enriched with their CRM grant + per-module overrides.
+// ONLY the users who have been granted CRM access (the access list), enriched
+// with their role + per-module overrides. Empty until people are added — this
+// is an invite/grant list, NOT the full workspace roster.
 router.get('/users', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspace_id as string | undefined;
@@ -121,32 +123,27 @@ router.get('/users', async (req: Request, res: Response) => {
       return;
     }
 
-    const { data: members, error } = await supabaseAdmin
-      .from('workspace_members')
-      .select('user_id, role')
-      .eq('workspace_id', workspaceId);
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
-      return;
-    }
-
-    const userIds = Array.from(new Set((members || []).map((m: any) => m.user_id)));
-    const usersMap: Record<string, any> = {};
-    if (userIds.length > 0) {
-      const { data: users } = await supabaseAdmin
-        .from('users')
-        .select('id, display_name, email, avatar_url, user_type')
-        .in('id', userIds);
-      (users || []).forEach((u: any) => { usersMap[u.id] = u; });
-    }
-
-    const { data: grants } = await supabaseAdmin
+    const { data: grants, error } = await supabaseAdmin
       .from('crm_app_access')
       .select('user_id, role, enabled')
       .eq('workspace_id', workspaceId)
       .eq('app', app);
-    const grantMap: Record<string, any> = {};
-    (grants || []).forEach((g: any) => { grantMap[g.user_id] = g; });
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    if (!grants || grants.length === 0) {
+      res.json({ success: true, data: { workspace_id: workspaceId, app, members: [] } });
+      return;
+    }
+
+    const userIds = Array.from(new Set(grants.map((g: any) => g.user_id)));
+    const usersMap: Record<string, any> = {};
+    const { data: users } = await supabaseAdmin
+      .from('users')
+      .select('id, display_name, email, avatar_url, user_type')
+      .in('id', userIds);
+    (users || []).forEach((u: any) => { usersMap[u.id] = u; });
 
     const { data: overrides } = await supabaseAdmin
       .from('crm_module_access')
@@ -158,19 +155,71 @@ router.get('/users', async (req: Request, res: Response) => {
       (overrideMap[o.user_id] = overrideMap[o.user_id] || {})[o.module] = o.level;
     });
 
-    const membersOut = (members || []).map((m: any) => ({
-      user_id: m.user_id,
-      membership_role: m.role,
-      user: usersMap[m.user_id] || null,
-      access: grantMap[m.user_id]
-        ? { role: grantMap[m.user_id].role, enabled: grantMap[m.user_id].enabled }
-        : null,
-      module_levels: overrideMap[m.user_id] || {},
+    const membersOut = grants.map((g: any) => ({
+      user_id: g.user_id,
+      user: usersMap[g.user_id] || null,
+      access: { role: g.role, enabled: g.enabled },
+      module_levels: overrideMap[g.user_id] || {},
     }));
 
     res.json({ success: true, data: { workspace_id: workspaceId, app, members: membersOut } });
   } catch (err) {
     console.error('CRM access list users error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /admin/crm-access/candidates?workspace_id=…&app=squadcrm&q=…
+// Workspace members NOT yet granted CRM access — the pool for "Add user".
+router.get('/candidates', async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspace_id as string | undefined;
+    const app = (req.query.app as string) || 'squadcrm';
+    const q = ((req.query.q as string) || '').trim().toLowerCase();
+    if (!workspaceId) {
+      res.status(400).json({ success: false, error: 'workspace_id required' });
+      return;
+    }
+
+    const { data: members } = await supabaseAdmin
+      .from('workspace_members')
+      .select('user_id')
+      .eq('workspace_id', workspaceId);
+    const memberIds = Array.from(new Set((members || []).map((m: any) => m.user_id)));
+    if (memberIds.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const { data: grants } = await supabaseAdmin
+      .from('crm_app_access')
+      .select('user_id')
+      .eq('workspace_id', workspaceId)
+      .eq('app', app);
+    const granted = new Set((grants || []).map((g: any) => g.user_id));
+    const candidateIds = memberIds.filter((id) => !granted.has(id));
+    if (candidateIds.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const { data: users } = await supabaseAdmin
+      .from('users')
+      .select('id, display_name, email, avatar_url, user_type')
+      .in('id', candidateIds);
+
+    let out = (users || []) as any[];
+    if (q) {
+      out = out.filter(
+        (u: any) =>
+          (u.display_name || '').toLowerCase().includes(q) ||
+          (u.email || '').toLowerCase().includes(q),
+      );
+    }
+    out.sort((a: any, b: any) => (a.display_name || '').localeCompare(b.display_name || ''));
+    res.json({ success: true, data: out });
+  } catch (err) {
+    console.error('CRM access list candidates error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
@@ -341,6 +390,43 @@ router.put('/module-level', async (req: Request, res: Response) => {
       return;
     }
     console.error('CRM access set module-level error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /admin/crm-access/grant — remove a user from the CRM access list
+// (deletes the grant + any per-module overrides).
+const deleteGrantSchema = z.object({
+  user_id: z.string().uuid(),
+  workspace_id: z.string().uuid(),
+  app: appSchema,
+});
+router.delete('/grant', async (req: Request, res: Response) => {
+  try {
+    const body = deleteGrantSchema.parse(req.body);
+    await supabaseAdmin
+      .from('crm_module_access')
+      .delete()
+      .eq('user_id', body.user_id)
+      .eq('workspace_id', body.workspace_id)
+      .eq('app', body.app);
+    const { error } = await supabaseAdmin
+      .from('crm_app_access')
+      .delete()
+      .eq('user_id', body.user_id)
+      .eq('workspace_id', body.workspace_id)
+      .eq('app', body.app);
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('CRM access delete grant error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
