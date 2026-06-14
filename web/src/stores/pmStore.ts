@@ -8,6 +8,10 @@ export type ViewMode = 'list' | 'board';
 export type DashboardTab = 'today' | 'overdue' | 'tomorrow' | 'all';
 export type ListGroupBy = Extract<GroupBy, 'status' | 'none' | 'work_date' | 'due_date' | 'priority'>;
 export type TodayListView = 'list' | 'calendar';
+// Manual "later today" triage buckets for the Home Focus list. A starred task
+// can be moved into Evening (after 3 PM) or Night (after 7 PM); these are labels
+// only — no clock-driven behavior. Mirrors the focusedTodayIds persistence.
+export type FocusBucket = 'evening' | 'night';
 
 interface TimerState {
   taskId: string;
@@ -49,6 +53,7 @@ interface PMState {
   filtersByScope: Record<string, TaskFilterState>;
   focusedTodayIds: string[];
   focusedTodayDate: string;
+  focusBuckets: Record<string, FocusBucket>;
   groupByScope: Record<string, GroupBy>;
   sortByScope: Record<string, SortBy>;
   focusTodayScope: Record<string, boolean>;
@@ -91,6 +96,7 @@ interface PMState {
   setTodayListView: (value: TodayListView) => void;
   setLastView: (section: string, homeView: string) => void;
   toggleFocusToday: (taskId: string) => void;
+  setFocusBucket: (taskId: string, bucket: FocusBucket | null) => void;
   isFocusedToday: (taskId: string) => boolean;
   resetFocusTodayIfStale: () => void;
   _hydrateFromServer: (prefs: Record<string, unknown>) => void;
@@ -134,6 +140,7 @@ export const usePMStore = create<PMState>()(
       filtersByScope: {},
       focusedTodayIds: [],
       focusedTodayDate: todayKey(),
+      focusBuckets: {},
       groupByScope: {},
       sortByScope: {},
       focusTodayScope: {},
@@ -253,12 +260,30 @@ export const usePMStore = create<PMState>()(
       resetFocusTodayIfStale: () => {},
       toggleFocusToday: (taskId) => {
         set((state) => {
-          const next = state.focusedTodayIds.includes(taskId)
+          const removing = state.focusedTodayIds.includes(taskId);
+          const next = removing
             ? state.focusedTodayIds.filter((id) => id !== taskId)
             : [...state.focusedTodayIds, taskId];
+          // Unstarring a task drops it from the Focus list entirely, so clear
+          // any Evening/Night bucket it had — otherwise a stale entry lingers.
+          let focusBuckets = state.focusBuckets;
+          if (removing && focusBuckets[taskId]) {
+            const fb = { ...focusBuckets };
+            delete fb[taskId];
+            focusBuckets = fb;
+          }
           // focusedTodayDate is no longer used for gating; keep it as a
           // "last changed" marker on the persisted payload.
-          return { focusedTodayIds: next, focusedTodayDate: todayKey() };
+          return { focusedTodayIds: next, focusedTodayDate: todayKey(), focusBuckets };
+        });
+        triggerSave();
+      },
+      setFocusBucket: (taskId, bucket) => {
+        set((state) => {
+          const next = { ...state.focusBuckets };
+          if (bucket === null) delete next[taskId];
+          else next[taskId] = bucket;
+          return { focusBuckets: next };
         });
         triggerSave();
       },
@@ -283,6 +308,9 @@ export const usePMStore = create<PMState>()(
         if (typeof prefs.focusedTodayDate === 'string') {
           patch.focusedTodayDate = prefs.focusedTodayDate as string;
         }
+        if (prefs.focusBuckets && typeof prefs.focusBuckets === 'object') {
+          patch.focusBuckets = prefs.focusBuckets as Record<string, FocusBucket>;
+        }
         if (Object.keys(patch).length > 0) set(patch);
       },
       _getServerPayload: () => {
@@ -298,9 +326,10 @@ export const usePMStore = create<PMState>()(
           todayListView: s.todayListView,
           focusedTodayIds: s.focusedTodayIds,
           focusedTodayDate: s.focusedTodayDate,
+          focusBuckets: s.focusBuckets,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, newTasksOpen: false, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, newTasksOpen: false, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',
@@ -319,6 +348,7 @@ export const usePMStore = create<PMState>()(
         filtersByScope: state.filtersByScope,
         focusedTodayIds: state.focusedTodayIds,
         focusedTodayDate: state.focusedTodayDate,
+        focusBuckets: state.focusBuckets,
         groupByScope: state.groupByScope,
         sortByScope: state.sortByScope,
         focusTodayScope: state.focusTodayScope,

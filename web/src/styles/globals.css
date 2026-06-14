@@ -5867,10 +5867,24 @@ ol.sqc-list {
 .hm-home .hm-ava { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 9px; font-weight: 600; color: #fff; flex: none; }
 .hm-home .hm-ava[data-empty="true"] { background: var(--sh-hair-2); color: var(--sh-ink-4); }
 
+/* Evening / Night triage control on Focus list rows */
+.hm-home .hm-task .hm-bucket { position: relative; flex: none; display: flex; align-items: center; }
+.hm-home .hm-task .hm-bucket-btn { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: none; border-radius: 6px; background: transparent; color: var(--sh-ink-4); cursor: pointer; opacity: 0; transition: opacity 0.13s ease, background 0.13s ease, color 0.13s ease; }
+.hm-home .hm-task:hover .hm-bucket-btn,
+.hm-home .hm-task .hm-bucket-btn[data-open] { opacity: 1; }
+.hm-home .hm-task .hm-bucket-btn:hover { background: var(--sh-hair); color: var(--sh-ink); }
+/* Bucket menu is portaled to <body>, so these are NOT scoped under .hm-home */
+.hm-bucket-menu { position: fixed; z-index: 50; min-width: 188px; background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 10px; box-shadow: 0 10px 28px rgba(10, 10, 10, 0.12); padding: 4px; }
+.hm-bucket-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 6px 10px; border-radius: 7px; border: none; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 450; color: color-mix(in srgb, var(--sh-ink) 65%, transparent); text-align: left; cursor: pointer; }
+.hm-bucket-menu-item:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
+.hm-bucket-menu-item[data-active="true"] { color: var(--sh-ink); font-weight: 600; }
+.hm-bucket-menu-item .dim { font-size: 11px; font-weight: 450; color: var(--sh-ink-4); }
+
 /* Group headers */
 .hm-home .hm-group + .hm-group { border-top: 1px solid var(--sh-hair-3); margin-top: 6px; }
 .hm-home .hm-group-head { padding: 12px 18px 2px; font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); display: flex; align-items: center; gap: 6px; }
 .hm-home .hm-group-head .count { color: color-mix(in srgb, var(--sh-ink) 40%, transparent); }
+.hm-home .hm-card-head .hm-bucket-hint { font-size: 11px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 38%, transparent); }
 
 /* Loading / error / empty */
 .hm-home .hm-skel { height: 34px; border-radius: 8px; margin: 5px 0; background: var(--sh-hair-3); animation: hm-pulse 1.5s ease-in-out infinite; }
