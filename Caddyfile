@@ -7,32 +7,131 @@ admin.squadhub.in {
 }
 
 api.squadhub.in {
+	handle /downloads/* {
+		root * /srv/cashbook-downloads
+		uri strip_prefix /downloads
+
+		@apk path *.apk
+		header @apk Content-Type application/vnd.android.package-archive
+		header @apk Content-Disposition "attachment; filename=cashbook-latest.apk"
+
+		file_server {
+			index index.html
+		}
+	}
 	reverse_proxy server:4000
+}
+
+upsquadconnect.com, www.upsquadconnect.com {
+	reverse_proxy host.docker.internal:3100
+}
+
+squadhire.upsquadconnect.com {
+	reverse_proxy host.docker.internal:8080
+}
+
+attendanceapp.upsquadconnect.com {
+	handle /api/* {
+		reverse_proxy host.docker.internal:3001
+	}
+	handle {
+		encode gzip
+		root * /srv/attendanceapp
+		@html path *.html /
+		header @html Cache-Control "no-cache, no-store, must-revalidate"
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+invite.upsquadconnect.com {
+	reverse_proxy host.docker.internal:3456
+}
+
+kia.upsquadconnect.com {
+	encode gzip
+	root * /srv/kia
+	file_server
+	@apk path *.apk
+	header @apk Content-Type application/vnd.android.package-archive
+	header @apk Content-Disposition "attachment; filename=KIA.apk"
+	@html path *.html /
+	header @html Cache-Control "no-cache, no-store, must-revalidate"
+	try_files {path} /index.html
+}
+
+instasnap.duckdns.org {
+	reverse_proxy host.docker.internal:8000
+}
+
+cashbook.squadhub.in {
+	encode gzip
+	root * /srv/cashbook-web
+	@html path *.html /
+	header @html Cache-Control "no-cache, no-store, must-revalidate"
+	try_files {path} {path}.html /index.html
+	file_server
+}
+
+app.kia.upsquadconnect.com {
+	encode zstd gzip
+	root * /srv/kia/app
+	@html path *.html /
+	header @html Cache-Control "no-cache, no-store, must-revalidate"
+	try_files {path} /index.html
+	file_server
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+	}
+}
+
+crm.squadhub.in {
+	reverse_proxy crm-web:3100
+}
+
+crm-api.squadhub.in {
+	reverse_proxy crm-server:4100
+}
+# Append to SquadHub's /root/squadhub/Caddyfile (alongside the existing
+# crm.squadhub.in / crm-api.squadhub.in blocks for the original Squad CRM),
+# then reload Caddy:
+#   docker exec squadhub-caddy caddy reload --config /etc/caddy/Caddyfile
+#
+# Adds two new subdomains for the SquadHire CRM instance. The original
+# Squad CRM containers (crm-server / crm-web) are unaffected.
+#
+# If you'd prefer a different domain (e.g. crm.squadhire.com), replace the
+# host names below — the container hostnames (shcrm-web, shcrm-server) stay
+# the same since they're docker network identifiers.
+
+shcrm.squadhub.in {
+	reverse_proxy shcrm-web:3100
+}
+
+shcrm-api.squadhub.in {
+	reverse_proxy shcrm-server:4100
+}
+
+www.rioconnect.in {
+	redir https://rioconnect.in{uri} permanent
+}
+
+rioconnect.in {
+	encode zstd gzip
+	root * /srv/rioconnect
+	@html path *.html /
+	header @html Cache-Control "no-cache, no-store, must-revalidate"
+	@static path /assets/* *.css *.js
+	header @static Cache-Control "public, max-age=604800"
+	try_files {path} /index.html
+	file_server
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+	}
 }
 
 books.squadhub.in {
 	reverse_proxy squadbooks:3000
-}
-
-upsquadconnect.com, www.upsquadconnect.com {
-	handle /api/* {
-		reverse_proxy host.docker.internal:5000
-	}
-
-	handle /uploads/* {
-		root * /srv/profiles/backend
-		file_server
-	}
-
-	handle /admin/* {
-		root * /srv/profiles/admin/dist
-		try_files {path} /admin/index.html
-		file_server
-	}
-
-	handle {
-		root * /srv/profiles/frontend/dist
-		try_files {path} /index.html
-		file_server
-	}
 }
