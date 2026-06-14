@@ -345,18 +345,6 @@ export default function AdminPublishedCards() {
     }
   }, [pathname, router, searchParams]);
 
-  // Filling out a new client brief replaces the page content (keeping the admin
-  // sidebar), mirroring how AdminCardEditor opens from the requests queue.
-  if (briefType) {
-    return (
-      <ClientBriefForm
-        type={briefType}
-        onClose={() => setBriefType(null)}
-        onCreated={() => { setBriefType(null); switchTab('requests'); }}
-      />
-    );
-  }
-
   return (
     <div className="flex h-full flex-col sh-surface">
       {!showDetailView && (
@@ -625,6 +613,14 @@ export default function AdminPublishedCards() {
         </div>
       </SliderPanel>
 
+      {/* The full /connect-style brief form opens as a standalone overlay. */}
+      {briefType && (
+        <ClientBriefForm
+          type={briefType}
+          onClose={() => setBriefType(null)}
+          onCreated={() => { setBriefType(null); switchTab('requests'); }}
+        />
+      )}
     </div>
   );
 }
