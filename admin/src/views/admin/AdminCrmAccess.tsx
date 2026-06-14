@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 
 type CrmRole = 'admin' | 'member' | 'guest';
-type CrmLevel = 'view' | 'full' | 'admin';
+type CrmLevel = 'view' | 'full' | 'admin' | 'none';
 
 interface Workspace {
   id: string;
@@ -30,7 +30,7 @@ interface GrantedRow {
 }
 
 const ROLE_DEFAULT_LEVEL: Record<CrmRole, CrmLevel> = { admin: 'admin', member: 'full', guest: 'view' };
-const LEVEL_LABEL: Record<CrmLevel, string> = { view: 'View only', full: 'Full access', admin: 'Admin' };
+const LEVEL_LABEL: Record<CrmLevel, string> = { view: 'View only', full: 'Full access', admin: 'Admin', none: 'No access' };
 
 export default function AdminCrmAccess() {
   const qc = useQueryClient();
@@ -260,8 +260,8 @@ export default function AdminCrmAccess() {
               )}
             </div>
             <p className="mt-2 text-xs text-[#90A1B9]">
-              Added as Member — change role or module levels in the list below. New people (no account yet) are invited
-              from the Invitations screen.
+              Added as Member with no access to any module — open Modules to grant access per module. New people (no
+              account yet) are invited from the Invitations screen.
             </p>
           </div>
         )}
@@ -342,6 +342,7 @@ export default function AdminCrmAccess() {
                                     }
                                   >
                                     <option value="default">Default ({LEVEL_LABEL[roleDefault]})</option>
+                                    <option value="none">No access</option>
                                     <option value="view">View only</option>
                                     <option value="full">Full access</option>
                                     <option value="admin">Admin</option>

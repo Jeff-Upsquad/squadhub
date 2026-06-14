@@ -80,7 +80,7 @@ const createSchema = z.object({
       app: z.string().min(1).default('squadcrm'),
       workspace_id: z.string().uuid(),
       role: z.enum(['admin', 'member', 'guest']),
-      modules: z.record(z.enum(['view', 'full', 'admin'])).optional(),
+      modules: z.record(z.enum(['view', 'full', 'admin', 'none'])).optional(),
     })
     .optional(),
 });
