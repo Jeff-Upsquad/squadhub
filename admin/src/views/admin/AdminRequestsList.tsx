@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import AdminCardEditor from './AdminCardEditor';
+import ShareCardLinkModal from './ShareCardLinkModal';
 
 interface SubscriptionRequest {
   id: number | string;
@@ -32,6 +33,7 @@ export default function AdminRequestsList() {
   const [subTab, setSubTab] = useState<RequestSubTab>('active');
   const [search, setSearch] = useState<string>('');
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [shareCardId, setShareCardId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   // Server returns all statuses; sub-tabs filter client-side so counts stay
@@ -197,6 +199,10 @@ export default function AdminRequestsList() {
 
   return (
     <div className="flex flex-1 flex-col">
+      {shareCardId && (
+        <ShareCardLinkModal cardId={shareCardId} onClose={() => setShareCardId(null)} />
+      )}
+
       {/* Sub-tabs */}
       <div className="px-6 pb-3">
         <div className="overflow-x-auto">
@@ -281,6 +287,9 @@ export default function AdminRequestsList() {
                     createCardMutation.mutate(req.id);
                   }
                 }}
+                onShare={() => {
+                  if (req.card_id) setShareCardId(req.card_id);
+                }}
                 isPending={createCardMutation.isPending}
               />
             ))}
@@ -294,10 +303,12 @@ export default function AdminRequestsList() {
 function RequestRow({
   request,
   onAction,
+  onShare,
   isPending,
 }: {
   request: SubscriptionRequest;
   onAction: () => void;
+  onShare: () => void;
   isPending: boolean;
 }) {
   const hasCard = !!request.card_id;
@@ -393,6 +404,15 @@ function RequestRow({
         >
           {request.status}
         </span>
+        {request.card_id && (request.status === 'pending' || request.status === 'in_review') && (
+          <button
+            onClick={onShare}
+            className="sh-btn-ghost sh-btn-ghost-sm"
+            title="Generate a 24-hour link the client can open to confirm this brief"
+          >
+            Share link
+          </button>
+        )}
         {isFormSubmission ? (
           <button
             onClick={onAction}

@@ -16,6 +16,19 @@ const SLUG_TO_SERVICE_TYPE: Record<string, string> = {
 
 const VALID_DAYS = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
 
+// Reverse of SLUG_TO_SERVICE_TYPE — the card stores a display label, but
+// client_submission_brands.service_type stores the slug vocabulary.
+const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
+  Designers: 'designer',
+  Editors: 'video_editor',
+  'Designer plus Editor': 'designer_video_editor',
+  Accountants: 'accountant',
+};
+
+// Card sources that surface in the admin "Form Requests" queue and can be
+// shared with a client pre-fill link (mirrors subscription-cards-admin-requests).
+const FORM_REQUEST_SOURCES = ['shared_form', 'landing_page_form', 'request'];
+
 // ---------------------------------------------------------------------------
 // In-process IP rate-limiter (no Redis). 10 req/min/IP shared across all
 // public lead endpoints. Resets on server restart — adequate for the
@@ -156,6 +169,88 @@ async function fetchBrandsWithRegions(submissionId: string) {
     ...b,
     target_regions: regionsByBrand[b.id] || [],
   }));
+}
+
+// Find-or-create the brand row for (leadId, brand_name) and return its id.
+// Resolution is by (submission_id, lower(brand_name)) — the same key
+// /leads/landing uses — which keeps sibling cards safe: renaming the brand
+// resolves to a different/new row, so the original brand (and the other cards
+// that still point at it) is left untouched. On UPDATE we preserve the
+// brand's service_type/source (a single card can't know the brand's full
+// multi-role slug). Returns null on write failure so callers can treat the
+// lead/brand link as best-effort.
+async function upsertBrandForLead(
+  leadId: string,
+  fields: {
+    brand_name: string;
+    business_nature: string | null;
+    business_note: string | null;
+    target_languages: string[];
+    working_days: string[];
+    business_location: string | null;
+    service_type_label: string | null; // card display label → slug on insert
+  },
+  countryId: string | null,
+  stateRegions: string[],
+): Promise<string | null> {
+  const { data: existing } = await supabaseAdmin
+    .from('client_submission_brands')
+    .select('id')
+    .eq('submission_id', leadId)
+    .ilike('brand_name', fields.brand_name)
+    .maybeSingle();
+
+  let brandId: string;
+  if (existing?.id) {
+    brandId = existing.id as string;
+    const { error } = await supabaseAdmin
+      .from('client_submission_brands')
+      .update({
+        brand_name: fields.brand_name,
+        business_nature: fields.business_nature,
+        business_note: fields.business_note,
+        target_languages: fields.target_languages,
+        working_days: fields.working_days,
+        country_id: countryId,
+        business_location: fields.business_location,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', brandId);
+    if (error) return null;
+    await supabaseAdmin
+      .from('client_submission_brand_regions')
+      .delete()
+      .eq('brand_id', brandId);
+  } else {
+    const { data: created, error } = await supabaseAdmin
+      .from('client_submission_brands')
+      .insert({
+        submission_id: leadId,
+        brand_name: fields.brand_name,
+        business_nature: fields.business_nature,
+        business_note: fields.business_note,
+        service_type: fields.service_type_label
+          ? SERVICE_TYPE_TO_SLUG[fields.service_type_label] ?? null
+          : null,
+        target_languages: fields.target_languages,
+        working_days: fields.working_days,
+        country_id: countryId,
+        target_tiers: [],
+        business_location: fields.business_location,
+        source: 'shared_form',
+      })
+      .select('id')
+      .single();
+    if (error || !created) return null;
+    brandId = (created as any).id;
+  }
+
+  if (countryId && stateRegions.length > 0) {
+    await supabaseAdmin
+      .from('client_submission_brand_regions')
+      .insert(stateRegions.map((region) => ({ brand_id: brandId, country_id: countryId, region })));
+  }
+  return brandId;
 }
 
 // ---------------------------------------------------------------------------
@@ -468,6 +563,298 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
       return;
     }
     console.error('Landing page submission error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Per-card client pre-fill share links (see migration 108 +
+// subscription-cards-admin-requests.ts for the admin generate/revoke side).
+// The token (= subscription_card_share_links.id) identifies ONE form-request
+// draft card. GET returns the card's safe pre-fill payload; POST updates the
+// SAME card with the client's confirmed details. Unauthenticated, rate-limited.
+// ---------------------------------------------------------------------------
+
+// GET /leads/card-link/:token — validate the link + return the pre-fill brief.
+router.get('/card-link/:token', ipRateLimit, async (req: Request, res: Response) => {
+  try {
+    const parsed = z.string().uuid().safeParse(req.params.token);
+    if (!parsed.success) {
+      res.json({ success: true, data: { valid: false, expired: false, completed: false } });
+      return;
+    }
+
+    const { data: link } = await supabaseAdmin
+      .from('subscription_card_share_links')
+      .select('*')
+      .eq('id', parsed.data)
+      .maybeSingle();
+    if (!link || link.revoked_at) {
+      res.json({ success: true, data: { valid: false, expired: false, completed: false } });
+      return;
+    }
+
+    const completed = !!link.completed_at;
+    const expired = new Date(link.expires_at).getTime() < Date.now();
+    if (completed || expired) {
+      res.json({
+        success: true,
+        data: { valid: false, expired, completed, expires_at: link.expires_at },
+      });
+      return;
+    }
+
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select(
+        'id, state, source, brand_name, business_nature, notes, customer_name, customer_email, customer_phone, customer_location, service_type, working_days, target_languages, requirement_note, hours_note',
+      )
+      .eq('id', link.card_id)
+      .maybeSingle();
+
+    // Defensive: the card may have been published or deleted after the link
+    // was generated. Treat as invalid rather than leaking a stale brief.
+    if (!card || card.state !== 'draft' || !FORM_REQUEST_SOURCES.includes(card.source)) {
+      res.json({ success: true, data: { valid: false, expired: false, completed: false } });
+      return;
+    }
+
+    const { data: tc } = await supabaseAdmin
+      .from('subscription_card_target_countries')
+      .select('country_id')
+      .eq('card_id', card.id)
+      .limit(1)
+      .maybeSingle();
+    const countryId: string | null = (tc as any)?.country_id ?? null;
+    let stateRegions: string[] = [];
+    if (countryId) {
+      const { data: tr } = await supabaseAdmin
+        .from('subscription_card_target_regions')
+        .select('region')
+        .eq('card_id', card.id)
+        .eq('country_id', countryId);
+      stateRegions = (tr || []).map((r: any) => r.region);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        valid: true,
+        expired: false,
+        completed: false,
+        expires_at: link.expires_at,
+        // Safe allow-list only — no pricing/tiers/squadhire/publish targets or
+        // salesperson identity. The client only ever sees their own brief.
+        prefill: {
+          brand_name: card.brand_name,
+          business_nature: card.business_nature,
+          business_note: card.notes,
+          contact_name: card.customer_name,
+          email: card.customer_email,
+          phone: card.customer_phone,
+          business_location: card.customer_location,
+          service_type: card.service_type,
+          working_days: card.working_days || [],
+          languages: card.target_languages || [],
+          country_id: countryId,
+          state_regions: stateRegions,
+          requirement_note: card.requirement_note,
+          hours_note: card.hours_note,
+        },
+      },
+    });
+  } catch (err) {
+    console.error('Validate card share link error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Client-writable fields. NOTE: service_type is intentionally absent — the
+// role the card is for is immutable (a card is one of possibly-many siblings,
+// each pinned to a role). Pricing/tiers/targeting recipients are never exposed.
+const cardSubmitSchema = z.object({
+  brand_name: z.string().trim().min(1).max(200),
+  business_nature: z.string().trim().min(1).max(200),
+  business_note: z.string().trim().min(1).max(2000),
+  contact_name: z.string().trim().min(1).max(200),
+  email: z.string().trim().email().max(200),
+  phone: z.string().trim().min(4).max(30),
+  business_location: z.string().trim().max(500).optional().or(z.literal('')),
+  country_id: z.string().uuid(),
+  state_regions: z.array(z.string().trim().min(1).max(100)).max(60).default([]),
+  languages: z.array(z.string().trim().min(1).max(60)).min(1).max(20),
+  working_days: z
+    .array(z.string().trim())
+    .min(1)
+    .max(7)
+    .refine((arr) => arr.every((d) => VALID_DAYS.has(d)), {
+      message: 'working_days must be Mon..Sun',
+    }),
+  requirement_note: z.string().trim().max(2000).optional().or(z.literal('')),
+  hours_note: z.string().trim().max(200).optional().or(z.literal('')),
+});
+
+// POST /leads/card-link/:token/submit — update the SAME card; mark link used.
+router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: Response) => {
+  try {
+    const parsedToken = z.string().uuid().safeParse(req.params.token);
+    if (!parsedToken.success) {
+      res.status(400).json({ success: false, error: 'This link is invalid.' });
+      return;
+    }
+    const token = parsedToken.data;
+
+    const { data: link } = await supabaseAdmin
+      .from('subscription_card_share_links')
+      .select('*')
+      .eq('id', token)
+      .maybeSingle();
+    if (!link || link.revoked_at) {
+      res.status(400).json({ success: false, error: 'This link is invalid.' });
+      return;
+    }
+    if (link.completed_at) {
+      res.status(400).json({ success: false, error: 'This link has already been used.' });
+      return;
+    }
+    if (new Date(link.expires_at).getTime() < Date.now()) {
+      res.status(400).json({ success: false, error: 'This link has expired.' });
+      return;
+    }
+
+    const body = cardSubmitSchema.parse(req.body);
+
+    // Re-assert the card is still an editable form-request draft (defends
+    // against a publish/delete that happened after the link was generated).
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, source, service_type')
+      .eq('id', link.card_id)
+      .maybeSingle();
+    if (!card || !FORM_REQUEST_SOURCES.includes(card.source)) {
+      res.status(400).json({ success: false, error: 'This link is invalid.' });
+      return;
+    }
+    if (card.state !== 'draft') {
+      res
+        .status(409)
+        .json({ success: false, error: 'This request is no longer open for editing.' });
+      return;
+    }
+
+    // Validate the country (soft — fall back to the submitted id; admin can fix).
+    const { data: countryRow } = await supabaseAdmin
+      .from('countries')
+      .select('id')
+      .eq('id', body.country_id)
+      .maybeSingle();
+    const countryId: string | null = (countryRow as any)?.id ?? null;
+
+    // 1. UPDATE the SAME card. service_type/pricing/tiers/state are NOT touched.
+    const { error: updErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .update({
+        customer_name: body.contact_name,
+        customer_email: body.email,
+        customer_phone: body.phone,
+        customer_location: body.business_location || null,
+        brand_name: body.brand_name,
+        business_nature: body.business_nature,
+        notes: body.business_note,
+        requirement_note: body.requirement_note || null,
+        hours_note: body.hours_note || null,
+        working_days: body.working_days,
+        target_languages: body.languages,
+      })
+      .eq('id', card.id);
+    if (updErr) {
+      console.error('Card share submit update error:', updErr);
+      res.status(500).json({ success: false, error: 'Failed to submit. Please try again.' });
+      return;
+    }
+
+    // 2. Replace card target country + regions (mirror the /targets handler).
+    await supabaseAdmin.from('subscription_card_target_countries').delete().eq('card_id', card.id);
+    await supabaseAdmin.from('subscription_card_target_regions').delete().eq('card_id', card.id);
+    if (countryId) {
+      await supabaseAdmin
+        .from('subscription_card_target_countries')
+        .insert({ card_id: card.id, country_id: countryId });
+      if (body.state_regions.length > 0) {
+        await supabaseAdmin
+          .from('subscription_card_target_regions')
+          .insert(
+            body.state_regions.map((region) => ({
+              card_id: card.id,
+              country_id: countryId,
+              region,
+            })),
+          );
+      }
+    }
+
+    // 3. Link/refresh the lead + brand (best-effort) so the client shows up in
+    //    admin > Clients > New Clients and /leads/lookup autofill stays fresh.
+    //    A failure here must NOT fail the card update — that's the contract.
+    try {
+      let submission = await findSubmissionByContact(body.email, body.phone);
+      if (!submission) {
+        const fallbackCountry = countryId || body.country_id;
+        const { data: created } = await supabaseAdmin
+          .from('client_submissions')
+          .insert({
+            business_name: body.brand_name,
+            contact_person: body.contact_name,
+            contact_number: body.phone,
+            email: body.email,
+            country_id: fallbackCountry,
+            status: 'new',
+          })
+          .select('*')
+          .single();
+        submission = created;
+      }
+      if (submission) {
+        const brandId = await upsertBrandForLead(
+          submission.id,
+          {
+            brand_name: body.brand_name,
+            business_nature: body.business_nature,
+            business_note: body.business_note,
+            target_languages: body.languages,
+            working_days: body.working_days,
+            business_location: body.business_location || null,
+            service_type_label: card.service_type ?? null,
+          },
+          countryId,
+          body.state_regions,
+        );
+        if (brandId) {
+          await supabaseAdmin
+            .from('subscription_cards')
+            .update({ brand_id: brandId })
+            .eq('id', card.id);
+        }
+      }
+    } catch (linkErr) {
+      console.error('Card share submit lead/brand link error (non-fatal):', linkErr);
+    }
+
+    // 4. Mark the link used (single-use). Idempotent guard on completed_at.
+    await supabaseAdmin
+      .from('subscription_card_share_links')
+      .update({ completed_at: new Date().toISOString() })
+      .eq('id', token)
+      .is('completed_at', null);
+
+    // Don't return card ids from a public endpoint.
+    res.json({ success: true });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Card share submit error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

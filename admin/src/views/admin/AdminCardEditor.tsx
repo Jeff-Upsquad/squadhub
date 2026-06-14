@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { STATES_BY_COUNTRY_NAME, LANGUAGE_OPTIONS } from './locationLanguageOptions';
+import ShareCardLinkModal from './ShareCardLinkModal';
 
 // Map the upsquad-style service_type label to the subscriptions catalog slug.
 const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
@@ -489,6 +490,8 @@ export default function AdminCardEditor({
     setDeliverables((prev) => prev.filter((d) => d.id !== id));
   };
 
+  const [showShareModal, setShowShareModal] = useState(false);
+
   const isDraft = card?.state === 'draft';
 
   // Publish gate: every selected tier must have a non-zero proposed price
@@ -538,6 +541,15 @@ export default function AdminCardEditor({
         <div className="flex items-center gap-2">
           {isDraft && (
             <>
+              {['shared_form', 'landing_page_form', 'request'].includes(card.source) && (
+                <button
+                  onClick={() => setShowShareModal(true)}
+                  className="sh-btn-ghost"
+                  title="Generate a 24-hour link the client can open to confirm this brief"
+                >
+                  Generate shareable link
+                </button>
+              )}
               <button
                 onClick={() => {
                   if (window.confirm('Archive this draft card? It will move to the Archive tab where you can republish or delete it later.')) {
@@ -574,6 +586,10 @@ export default function AdminCardEditor({
           )}
         </div>
       </div>
+
+      {showShareModal && (
+        <ShareCardLinkModal cardId={card.id} onClose={() => setShowShareModal(false)} />
+      )}
 
       {/* Form */}
       <div className="flex-1 overflow-y-auto px-6 pb-10">
