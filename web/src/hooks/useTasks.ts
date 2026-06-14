@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import api from '../services/api';
-import type { Task, SpaceStatus, TaskComment, TaskMetadata, TaskRecurrence } from '@squadhub/shared';
+import type { Task, SpaceStatus, TaskComment, TaskMetadata, TaskRecurrence, Space, List } from '@squadhub/shared';
 import { getTaskStatusCategory } from '@squadhub/shared';
 import { showToastCard } from '../components/Toast';
 import { usePMStore } from '../stores/pmStore';
@@ -78,6 +78,25 @@ export function useMyTasks() {
       return res.data.data;
     },
     staleTime: 30_000,
+  });
+}
+
+export type PersonalSpace = { space: Space; list: List };
+
+/**
+ * The caller's private personal space + its default list (get-or-create on the
+ * server). Backs the "My Tasks" view and the desktop quick-add. Only the owner
+ * can see it; it's hidden from the normal Spaces sidebar. Rarely changes, so a
+ * long staleTime keeps it cached across navigation.
+ */
+export function usePersonalList() {
+  return useQuery<PersonalSpace>({
+    queryKey: ['personal-space'],
+    queryFn: async () => {
+      const res = await api.get('/pm/personal');
+      return res.data.data;
+    },
+    staleTime: 5 * 60_000,
   });
 }
 

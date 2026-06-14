@@ -37,6 +37,7 @@ router.get('/spaces', async (req: Request, res: Response) => {
         .select('*, space_statuses(*)')
         .eq('workspace_id', workspaceId)
         .is('deleted_at', null)
+        .neq('kind', 'personal') // personal spaces are private per-user; surfaced via My Tasks only
         .order('position');
 
       if (error) {
@@ -62,6 +63,7 @@ router.get('/spaces', async (req: Request, res: Response) => {
       .eq('workspace_id', workspaceId)
       .is('deleted_at', null)
       .eq('status', 'active')
+      .neq('kind', 'personal') // exclude the user's own personal space
       .eq('created_by', req.userId!);
 
     const createdIds = (createdSpaces || []).map((s: any) => s.id);
@@ -78,6 +80,7 @@ router.get('/spaces', async (req: Request, res: Response) => {
       .eq('workspace_id', workspaceId)
       .is('deleted_at', null)
       .eq('status', 'active')
+      .neq('kind', 'personal') // safety net: personal space may be in allIds via its manager membership row
       .in('id', allIds)
       .order('position');
 

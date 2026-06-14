@@ -248,6 +248,8 @@ export interface Space {
   updated_at: string;
   position: number;
   client_id?: string | null;
+  /** 'personal' = a private per-user space backing the My Tasks view, hidden from the normal Spaces sidebar. */
+  kind?: 'normal' | 'personal';
   my_access_level?: AccessLevel;
   // Joined
   statuses?: SpaceStatus[];
