@@ -45,6 +45,29 @@ export interface WorkspaceMember {
   secondary_roles?: Role[];
 }
 
+// ---- Departments (internal-team org structure) ----
+export interface DepartmentMember {
+  id: string;
+  department_id: string;
+  user_id: string;
+  created_at: string;
+  // Joined on list/assign endpoints.
+  user?: Pick<User, 'id' | 'display_name' | 'email' | 'avatar_url'>;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;
+  position: number;
+  created_at: string;
+  updated_at?: string;
+  // Joined on the list endpoint.
+  members?: DepartmentMember[];
+  member_count?: number;
+}
+
 // ---- Channels ----
 export interface Channel {
   id: string;
