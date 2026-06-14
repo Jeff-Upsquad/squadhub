@@ -1,6 +1,6 @@
 {
   "name": "@squadhub/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "SquadHub desktop companion — native notifications relay",
   "type": "module",
@@ -15,7 +15,9 @@
     "@tauri-apps/plugin-autostart": "^2.0.0",
     "@tauri-apps/plugin-notification": "^2.0.0",
     "@tauri-apps/plugin-shell": "^2.0.0",
+    "@tauri-apps/plugin-process": "^2.0.0",
     "@tauri-apps/plugin-store": "^2.0.0",
+    "@tauri-apps/plugin-updater": "^2.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "socket.io-client": "^4.8.1",
