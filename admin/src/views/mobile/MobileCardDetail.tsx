@@ -818,7 +818,7 @@ export default function MobileCardDetail({
         open={undoSheetOpen}
         onClose={() => setUndoSheetOpen(false)}
         title="Unassign or reopen?"
-        description="Unassign clears the selected talent and reopens the card. Reopen also re-invites a fresh pool of matching talents. Either ends the live subscription on SquadHire."
+        description="Unassign clears the selected talent and reopens the card, keeping the current responders. Reopen archives the current round and clears the responses for a fresh start — then use Broadcast to invite a new pool. Either ends the live subscription on SquadHire."
         actions={[
           {
             label: undoSelection.isPending ? 'Unassigning…' : 'Unassign',

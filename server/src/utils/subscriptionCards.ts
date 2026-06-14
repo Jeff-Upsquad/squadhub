@@ -33,11 +33,13 @@ export async function hydrateCard(card: any, parentCardId?: string): Promise<any
     supabaseAdmin
       .from('subscription_card_recipients')
       .select('status')
-      .eq('card_id', card.id),
+      .eq('card_id', card.id)
+      .is('archived_at', null),
     supabaseAdmin
       .from('subscription_card_external_recipients')
       .select('status')
-      .eq('card_id', card.id),
+      .eq('card_id', card.id)
+      .is('archived_at', null),
   ]);
 
   const partners = { pending: 0, accepted: 0, rejected: 0 };

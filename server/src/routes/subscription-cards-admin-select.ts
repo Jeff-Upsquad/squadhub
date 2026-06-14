@@ -7,8 +7,7 @@ import {
   notifySquadhireOfSelection,
   notifySquadhireOfSelectionUndo,
   notifySquadhireOfActivation,
-  buildSquadhirePayloadForCard,
-  deliverCardToSquadhire,
+  notifySquadhireOfFreshBroadcast,
 } from '../utils/squadhireWebhook';
 import { stageSubscriptionsFromAssignedCards } from '../utils/submissionPipeline';
 import crypto from 'crypto';
@@ -494,14 +493,13 @@ router.post('/subscription-cards/:id/broadcast', async (req: Request, res: Respo
       return;
     }
 
-    let delivered = false;
-    const payload = await buildSquadhirePayloadForCard(cardId);
-    if (payload) {
-      await deliverCardToSquadhire(cardId, payload);
-      delivered = true;
-    }
+    // Fresh round: tell SquadHire to wipe the prior round and re-fan-out to the
+    // full matching pool (a fresh ask to everyone). Fire-and-forget.
+    notifySquadhireOfFreshBroadcast(cardId).catch((err) => {
+      console.error('[broadcast] notify squadhire fresh-broadcast failed', err);
+    });
 
-    res.json({ success: true, delivered });
+    res.json({ success: true });
   } catch (err: any) {
     console.error('Broadcast error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });

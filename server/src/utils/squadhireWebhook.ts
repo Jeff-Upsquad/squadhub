@@ -1559,6 +1559,49 @@ export async function notifySquadhireOfSelectionUndo(
   }
 }
 
+// Tell SquadHire to do a FRESH broadcast: wipe the prior round's recipients and
+// re-fan-out to the full matching pool. Fired by the admin's "Broadcast to
+// talents" after a reopen. Fire-and-forget.
+export async function notifySquadhireOfFreshBroadcast(
+  cardId: string,
+): Promise<void> {
+  const baseUrl = config.squadhireWebhookUrl;
+  if (!baseUrl || !config.squadhireWebhookSecret) {
+    console.warn('[squadhire-webhook] fresh-broadcast skipped: not configured');
+    return;
+  }
+
+  const url = baseUrl.endsWith('/')
+    ? `${baseUrl}fresh-broadcast`
+    : `${baseUrl}/fresh-broadcast`;
+  const body = {
+    type: 'card_fresh_broadcast',
+    card_id: cardId,
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.warn(`[squadhire-webhook] fresh-broadcast http_${res.status}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[squadhire-webhook] fresh-broadcast failed', msg);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ------------------------------------------------------------
 // Public: outbound notification when a card is recalled. The
 // archived-status re-delivery already hides the card from talent
