@@ -48,6 +48,7 @@ const NON_STAGED_SOURCES = new Set([
   'custom',
   'shared_form',
   'landing_page_form',
+  'internal_brief',
 ]);
 
 export interface SquadhireCardPayload {

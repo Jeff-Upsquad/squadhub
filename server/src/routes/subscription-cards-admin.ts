@@ -63,7 +63,8 @@ router.get('/', async (req: Request, res: Response) => {
       sourceParam === 'custom' ||
       sourceParam === 'submission' ||
       sourceParam === 'shared_form' ||
-      sourceParam === 'landing_page_form'
+      sourceParam === 'landing_page_form' ||
+      sourceParam === 'internal_brief'
     ) {
       query = query.eq('source', sourceParam);
     }
@@ -158,27 +159,33 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Hydrate the related rows in batches (one query per relation, not N+1).
     const stagedIds = list.map((c: any) => c.submission_subscription_id).filter(Boolean);
-    const publisherIds = Array.from(
-      new Set(list.map((c: any) => c.published_by).filter(Boolean)),
+    // Users referenced by cards: who published, who filled out the brief
+    // (created_by), and who verified a client-submitted brief (verified_by).
+    const userIds = Array.from(
+      new Set(
+        list
+          .flatMap((c: any) => [c.published_by, c.created_by, c.verified_by])
+          .filter(Boolean),
+      ),
     );
 
-    const [{ data: stagedRows }, { data: publishers }] = await Promise.all([
+    const [{ data: stagedRows }, { data: cardUsers }] = await Promise.all([
       supabaseAdmin
         .from('client_submission_subscriptions')
         .select('*')
         .in('id', stagedIds.length ? stagedIds : ['00000000-0000-0000-0000-000000000000']),
-      publisherIds.length
+      userIds.length
         ? supabaseAdmin
             .from('users')
             .select('id, display_name, email')
-            .in('id', publisherIds)
+            .in('id', userIds)
         : Promise.resolve({ data: [] as any[] }),
     ]);
 
     const stagedById: Record<string, any> = {};
     (stagedRows || []).forEach((r: any) => { stagedById[r.id] = r; });
-    const publisherById: Record<string, any> = {};
-    (publishers || []).forEach((u: any) => { publisherById[u.id] = u; });
+    const userById: Record<string, any> = {};
+    (cardUsers || []).forEach((u: any) => { userById[u.id] = u; });
 
     const submissionIds = Array.from(
       new Set((stagedRows || []).map((r: any) => r.submission_id).filter(Boolean)),
@@ -245,7 +252,7 @@ router.get('/', async (req: Request, res: Response) => {
     const slugsToLookup = new Set<string>();
     for (const c of list) {
       if (c.submission_subscription_id) continue;
-      if (c.source !== 'request' && c.source !== 'custom' && c.source !== 'shared_form' && c.source !== 'landing_page_form') continue;
+      if (c.source !== 'request' && c.source !== 'custom' && c.source !== 'shared_form' && c.source !== 'landing_page_form' && c.source !== 'internal_brief') continue;
       const slug = SERVICE_TYPE_TO_SLUG[c.service_type ?? ''];
       const canonicalPlan = PLAN_NAME_TO_CANONICAL[String(c.plan_name ?? '').toLowerCase()];
       const tier = Array.isArray(c.target_tiers) ? c.target_tiers[0] : null;
@@ -336,7 +343,9 @@ router.get('/', async (req: Request, res: Response) => {
       const country = submission ? countryById[submission.country_id] || null : null;
       const plan = staged ? planById[staged.plan_id] || null : null;
       const subscription = staged ? subById[staged.subscription_id] || null : null;
-      const publisher = card.published_by ? publisherById[card.published_by] || null : null;
+      const publisher = card.published_by ? userById[card.published_by] || null : null;
+      const creator = card.created_by ? userById[card.created_by] || null : null;
+      const verifier = card.verified_by ? userById[card.verified_by] || null : null;
 
       // Frozen plan-side data wins over live reads. Populated at publish
       // time and cleared on recall — see utils/cardPlanSnapshot.ts.
@@ -398,6 +407,12 @@ router.get('/', async (req: Request, res: Response) => {
           : null,
         published_by_user: publisher
           ? { id: publisher.id, display_name: publisher.display_name, email: publisher.email }
+          : null,
+        created_by_user: creator
+          ? { id: creator.id, display_name: creator.display_name, email: creator.email }
+          : null,
+        verified_by_user: verifier
+          ? { id: verifier.id, display_name: verifier.display_name, email: verifier.email }
           : null,
         plan_default_deliverables: planDefaults,
       };
