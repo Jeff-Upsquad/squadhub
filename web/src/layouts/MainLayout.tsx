@@ -242,8 +242,16 @@ export default function MainLayout() {
   const activeDesignFolderId = usePMStore((s) => s.activeDesignFolderId);
   const userType = useUserType();
   const isPartner = useIsPartner();
-  const [activeSection, setActiveSection] = useState<ActiveSection>('home');
-  const [homeView, setHomeView] = useState<HomeView>('hub');
+  // Restore the last view from the persisted PM store (MainLayout only mounts
+  // after pmStore hydration — see useHasHydrated — so getState() is the saved
+  // value, not the default). This keeps a full-page refresh on the view the
+  // user was on instead of bouncing to My Home / a stale list.
+  const [activeSection, setActiveSection] = useState<ActiveSection>(
+    () => (usePMStore.getState().lastActiveSection as ActiveSection) || 'home',
+  );
+  const [homeView, setHomeView] = useState<HomeView>(
+    () => (usePMStore.getState().lastHomeView as HomeView) || 'hub',
+  );
   // Live presence set for the chat header dot (hooks can't run inside the
   // header IIFE below, so subscribe here).
   const onlineUserIds = usePresenceStore((s) => s.onlineUserIds);
@@ -324,7 +332,10 @@ export default function MainLayout() {
   // effects below must not fight the exact view being restored (e.g. forcing
   // 'tasks' when the snapshot being applied is the inbox with a list still
   // selected). Cleared by an effect declared after the nav-history wiring.
-  const navRestoringRef = useRef(false);
+  // Initialized true so the same effects also stand down on the very first
+  // mount — otherwise a persisted activeListId (etc.) would auto-switch to
+  // 'tasks' and clobber the homeView we just restored from the PM store.
+  const navRestoringRef = useRef(true);
 
   // Auto-switch to tasks view when a list is selected
   useEffect(() => {
@@ -349,6 +360,12 @@ export default function MainLayout() {
     if (navRestoringRef.current) return;
     if (activeDesignFolderId) { setHomeView('tasks'); setMobileDrawerOpen(false); }
   }, [activeDesignFolderId]);
+
+  // Persist the current view so a full-page refresh restores it (paired with
+  // the lazy initial state above and the first-mount guard on navRestoringRef).
+  useEffect(() => {
+    usePMStore.getState().setLastView(activeSection, homeView);
+  }, [activeSection, homeView]);
 
   // Fetch workspaces
   const { data: workspacesRes, isLoading: workspacesLoading } = useQuery({
