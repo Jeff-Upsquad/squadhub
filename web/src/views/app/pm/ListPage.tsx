@@ -24,10 +24,14 @@ const SORT_ICON = (
   </svg>
 );
 
-export default function ListPage() {
+export default function ListPage({
+  listId: propListId,
+  spaceId: propSpaceId,
+  embedded = false,
+}: { listId?: string; spaceId?: string; embedded?: boolean } = {}) {
   const {
-    activeSpaceId,
-    activeListId,
+    activeSpaceId: storeSpaceId,
+    activeListId: storeListId,
     viewMode,
     setViewMode,
     setActiveTask,
@@ -41,6 +45,11 @@ export default function ListPage() {
     setScopeFilters,
     clearScopeFilters,
   } = usePMStore();
+  // When rendered embedded (the private My Tasks view), the target list/space is
+  // passed as props and overrides global nav state, so opening it doesn't disturb
+  // the sidebar/breadcrumb. Falls back to the store for normal list navigation.
+  const activeSpaceId = propSpaceId ?? storeSpaceId;
+  const activeListId = propListId ?? storeListId;
   const [showSettings, setShowSettings] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -128,7 +137,8 @@ export default function ListPage() {
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Row 1: Breadcrumb + global actions */}
       <div className="lv-breadcrumb-row">
-        {/* Left: breadcrumb */}
+        {/* Left: breadcrumb (hidden when embedded — the host view renders its own header) */}
+        {!embedded ? (
         <div className="lv-breadcrumb">
           {spaceData?.name && activeSpaceId && (
             <>
@@ -158,6 +168,7 @@ export default function ListPage() {
           )}
           <span className="lv-bc-current">{listData?.name || 'List'}</span>
         </div>
+        ) : <div />}
 
         {/* Right: actions */}
         <div className="flex items-center gap-2">

@@ -365,20 +365,20 @@ export default function HomeSidebar({
             active={homeView === 'routines'}
             onClick={() => onChangeView('routines')}
           />
+          {/* My Tasks — the user's private personal workspace. Available to all users. */}
+          <NavItem
+            icon={
+              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="9" />
+                <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+              </svg>
+            }
+            label="My Tasks"
+            active={homeView === 'my-tasks'}
+            onClick={() => onChangeView('my-tasks')}
+          />
           {canSeeDogfoodNav && (
             <>
-              <NavItem
-                icon={
-                  <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="m8.5 12.5 2.5 2.5 4.5-5" />
-                  </svg>
-                }
-                label="My Tasks"
-                active={homeView === 'my-tasks'}
-                count={14}
-                onClick={() => onChangeView('my-tasks')}
-              />
               <NavItem
                 icon={
                   <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
