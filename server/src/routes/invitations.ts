@@ -74,6 +74,15 @@ const createSchema = z.object({
   role_id: z.string().uuid().optional(),
   user_type: z.enum(['internal', 'client', 'client_staff', 'partner', 'partner_employee']).optional().default('internal'),
   client_id: z.string().uuid().optional(),
+  // Optional CRM access to provision on signup/accept (see auth.ts).
+  crm_access: z
+    .object({
+      app: z.string().min(1).default('squadcrm'),
+      workspace_id: z.string().uuid(),
+      role: z.enum(['admin', 'member', 'guest']),
+      modules: z.record(z.enum(['view', 'full', 'admin'])).optional(),
+    })
+    .optional(),
 });
 
 router.post('/', async (req: Request, res: Response) => {
@@ -142,6 +151,7 @@ router.post('/', async (req: Request, res: Response) => {
         expires_at: expiresAt,
         user_type: body.user_type,
         client_id: body.client_id || null,
+        crm_access: body.crm_access || null,
       })
       .select('*')
       .single();

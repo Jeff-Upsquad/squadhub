@@ -44,7 +44,7 @@ router.post('/register', async (req: Request, res: Response) => {
     // Check if this email has a pending, non-expired invitation
     const { data: invitation } = await supabaseAdmin
       .from('invitations')
-      .select('id, role_id, user_type, client_id, expires_at, invited_by')
+      .select('id, role_id, user_type, client_id, expires_at, invited_by, crm_access')
       .eq('email', body.email)
       .eq('status', 'pending')
       .maybeSingle();
@@ -94,6 +94,43 @@ router.post('/register', async (req: Request, res: Response) => {
           role: 'member',
           role_id: roleId,
         });
+      }
+
+      // Apply CRM access from the invitation (set in the admin CRM-access UI).
+      if (invitation.crm_access) {
+        const crm = invitation.crm_access as {
+          app?: string;
+          workspace_id?: string;
+          role?: string;
+          modules?: Record<string, string>;
+        };
+        if (crm.workspace_id && crm.role) {
+          const crmApp = crm.app || 'squadcrm';
+          await supabaseAdmin.from('crm_app_access').upsert(
+            {
+              user_id: authData.user.id,
+              workspace_id: crm.workspace_id,
+              app: crmApp,
+              role: crm.role,
+              enabled: true,
+              granted_by: invitation.invited_by,
+            },
+            { onConflict: 'user_id,workspace_id,app' },
+          );
+          const moduleRows = Object.entries(crm.modules || {}).map(([module, level]) => ({
+            user_id: authData.user.id,
+            workspace_id: crm.workspace_id,
+            app: crmApp,
+            module,
+            level,
+            granted_by: invitation.invited_by,
+          }));
+          if (moduleRows.length > 0) {
+            await supabaseAdmin
+              .from('crm_module_access')
+              .upsert(moduleRows, { onConflict: 'user_id,workspace_id,app,module' });
+          }
+        }
       }
 
       // If invitation links to a client, create the partner-client assignment
