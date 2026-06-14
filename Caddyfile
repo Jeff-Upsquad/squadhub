@@ -10,6 +10,10 @@ api.squadhub.in {
 	reverse_proxy server:4000
 }
 
+books.squadhub.in {
+	reverse_proxy squadbooks:3000
+}
+
 upsquadconnect.com, www.upsquadconnect.com {
 	handle /api/* {
 		reverse_proxy host.docker.internal:5000

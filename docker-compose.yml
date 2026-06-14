@@ -88,6 +88,21 @@ services:
     networks:
       - squadhub
 
+  squadbooks:
+    # Build from the SquadBooks repo first:  docker build -t squadbooks:latest .
+    image: squadbooks:latest
+    container_name: squadbooks
+    restart: unless-stopped
+    expose:
+      - "3000"
+    env_file:
+      - ./squadbooks.env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    networks:
+      - squadhub
+
 volumes:
   caddy_data:
   caddy_config:

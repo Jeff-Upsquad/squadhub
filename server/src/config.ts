@@ -29,6 +29,10 @@ export const config = {
   cashbookUrl: process.env.CASHBOOK_URL || 'https://cashbook.squadhub.in',
   desktopUrl: process.env.DESKTOP_URL || 'tauri://localhost',
 
+  // SquadBooks integration (sibling app at books.squadhub.in, its own Supabase project).
+  squadbooksUrl: process.env.SQUADBOOKS_URL || 'https://books.squadhub.in',
+  squadbooksAdminApiKey: process.env.SQUADBOOKS_ADMIN_API_KEY || '',
+
   // Cash Book App Versioning
   cashbookMinVersion: process.env.CASHBOOK_MIN_VERSION || '1.0.0',
   cashbookDownloadUrl: process.env.CASHBOOK_DOWNLOAD_URL || '',
