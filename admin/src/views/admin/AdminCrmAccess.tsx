@@ -38,49 +38,52 @@ export default function AdminCrmAccess() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState('');
+  const [app, setApp] = useState<'squadcrm' | 'squadhire'>('squadcrm');
 
   const { data: wsRes } = useQuery({
-    queryKey: ['crm-access-workspaces'],
-    queryFn: () => api.get('/admin/crm-access/workspaces').then((r) => r.data),
+    queryKey: ['crm-access-workspaces', app],
+    queryFn: () => api.get('/admin/crm-access/workspaces', { params: { app } }).then((r) => r.data),
   });
   const workspaces: Workspace[] = wsRes?.data || [];
   const workspaceId = pickedWs || workspaces[0]?.id || '';
 
   const { data: modulesRes } = useQuery({
-    queryKey: ['crm-access-modules'],
-    queryFn: () => api.get('/admin/crm-access/modules').then((r) => r.data),
+    queryKey: ['crm-access-modules', app],
+    queryFn: () => api.get('/admin/crm-access/modules', { params: { app } }).then((r) => r.data),
   });
   const modules: CrmModule[] = modulesRes?.data || [];
 
   const { data: cfgRes } = useQuery({
-    queryKey: ['crm-access-config', workspaceId],
+    queryKey: ['crm-access-config', app, workspaceId],
     queryFn: () =>
-      api.get('/admin/crm-access/workspace-config', { params: { workspace_id: workspaceId } }).then((r) => r.data),
+      api
+        .get('/admin/crm-access/workspace-config', { params: { workspace_id: workspaceId, app } })
+        .then((r) => r.data),
     enabled: !!workspaceId,
   });
   const enforcementEnabled: boolean = cfgRes?.data?.access_enforcement_enabled ?? false;
 
   const { data: usersRes, isLoading } = useQuery({
-    queryKey: ['crm-access-users', workspaceId],
+    queryKey: ['crm-access-users', app, workspaceId],
     queryFn: () =>
-      api.get('/admin/crm-access/users', { params: { workspace_id: workspaceId } }).then((r) => r.data),
+      api.get('/admin/crm-access/users', { params: { workspace_id: workspaceId, app } }).then((r) => r.data),
     enabled: !!workspaceId,
   });
   const members: GrantedRow[] = usersRes?.data?.members || [];
 
   const { data: candRes } = useQuery({
-    queryKey: ['crm-access-candidates', workspaceId, search],
+    queryKey: ['crm-access-candidates', app, workspaceId, search],
     queryFn: () =>
       api
-        .get('/admin/crm-access/candidates', { params: { workspace_id: workspaceId, q: search } })
+        .get('/admin/crm-access/candidates', { params: { workspace_id: workspaceId, q: search, app } })
         .then((r) => r.data),
     enabled: !!workspaceId && adding,
   });
   const candidates: UserLite[] = candRes?.data || [];
 
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['crm-access-users', workspaceId] });
-    qc.invalidateQueries({ queryKey: ['crm-access-candidates', workspaceId] });
+    qc.invalidateQueries({ queryKey: ['crm-access-users', app, workspaceId] });
+    qc.invalidateQueries({ queryKey: ['crm-access-candidates', app, workspaceId] });
   };
 
   const toggleEnforcement = useMutation({
@@ -88,25 +91,26 @@ export default function AdminCrmAccess() {
       api.patch('/admin/crm-access/workspace-config', {
         workspace_id: workspaceId,
         access_enforcement_enabled: enabled,
+        app,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['crm-access-config', workspaceId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['crm-access-config', app, workspaceId] }),
   });
 
   const addUser = useMutation({
     mutationFn: (v: { user_id: string; role: CrmRole }) =>
-      api.post('/admin/crm-access/grant', { user_id: v.user_id, workspace_id: workspaceId, role: v.role }),
+      api.post('/admin/crm-access/grant', { user_id: v.user_id, workspace_id: workspaceId, role: v.role, app }),
     onSuccess: invalidate,
   });
 
   const setRole = useMutation({
     mutationFn: (v: { user_id: string; role: CrmRole }) =>
-      api.patch('/admin/crm-access/grant', { user_id: v.user_id, workspace_id: workspaceId, role: v.role }),
+      api.patch('/admin/crm-access/grant', { user_id: v.user_id, workspace_id: workspaceId, role: v.role, app }),
     onSuccess: invalidate,
   });
 
   const removeUser = useMutation({
     mutationFn: (user_id: string) =>
-      api.delete('/admin/crm-access/grant', { data: { user_id, workspace_id: workspaceId } }),
+      api.delete('/admin/crm-access/grant', { data: { user_id, workspace_id: workspaceId, app } }),
     onSuccess: invalidate,
   });
 
@@ -117,6 +121,7 @@ export default function AdminCrmAccess() {
         workspace_id: workspaceId,
         module: v.module,
         level: v.level,
+        app,
       }),
     onSuccess: invalidate,
   });
@@ -133,6 +138,22 @@ export default function AdminCrmAccess() {
 
       {/* Workspace + enforcement */}
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4 rounded-lg border border-[#E2E8F0] bg-white p-5">
+        <div className="min-w-[150px]">
+          <label className="mb-1.5 block text-xs font-medium text-[#62748E]">App</label>
+          <select
+            className={selectClass}
+            value={app}
+            onChange={(e) => {
+              setApp(e.target.value as 'squadcrm' | 'squadhire');
+              setPickedWs('');
+              setAdding(false);
+              setExpanded(null);
+            }}
+          >
+            <option value="squadcrm">Squad CRM</option>
+            <option value="squadhire">SquadHire CRM</option>
+          </select>
+        </div>
         <div className="min-w-[220px]">
           <label className="mb-1.5 block text-xs font-medium text-[#62748E]">Workspace</label>
           <select
