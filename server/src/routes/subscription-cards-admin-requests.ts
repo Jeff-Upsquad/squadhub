@@ -52,7 +52,7 @@ function normalizeTiers(raw: string): string[] {
 // confirms the pre-filled brief, and the SAME card is updated (handled by
 // the public endpoints in leads-public.ts).
 // ============================================================
-const FORM_REQUEST_SOURCES = ['shared_form', 'landing_page_form', 'request'];
+const FORM_REQUEST_SOURCES = ['shared_form', 'landing_page_form', 'request', 'internal_brief'];
 
 function buildCardShareUrl(token: string): string {
   const base =
@@ -364,6 +364,146 @@ router.post('/subscription-cards/custom', async (req: Request, res: Response) =>
 });
 
 // ============================================================
+// POST /admin/subscription-cards/client-brief — an internal user fills out a
+// client brief form on the client's behalf. Lands in Form Requests as an
+// 'internal_brief' draft; created_by records who filled it. They can then send
+// a 24h share link for the client to review & approve.
+// ============================================================
+const clientBriefSchema = z.object({
+  service_type: z.string().min(1),
+  brand_name: z.string().optional(),
+  business_nature: z.string().optional(),
+  business_note: z.string().optional(),
+  contact_name: z.string().optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+  business_location: z.string().optional(),
+  country_id: z.string().uuid().optional(),
+  state_regions: z.array(z.string()).optional().default([]),
+  languages: z.array(z.string()).optional().default([]),
+  working_days: z.array(z.string()).optional().default([]),
+  requirement_note: z.string().optional(),
+  hours_note: z.string().optional(),
+});
+
+router.post('/subscription-cards/client-brief', async (req: Request, res: Response) => {
+  try {
+    const parsed = clientBriefSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.errors[0].message });
+      return;
+    }
+    const body = parsed.data;
+
+    // Soft-validate the country (drop it rather than failing the FK insert).
+    let countryId: string | null = null;
+    if (body.country_id) {
+      const { data: countryRow } = await supabaseAdmin
+        .from('countries')
+        .select('id')
+        .eq('id', body.country_id)
+        .maybeSingle();
+      countryId = (countryRow as any)?.id ?? null;
+    }
+
+    const { data: card, error } = await supabaseAdmin
+      .from('subscription_cards')
+      .insert({
+        source: 'internal_brief',
+        state: 'draft',
+        markup: 0,
+        created_by: req.userId!,
+        service_type: body.service_type,
+        brand_name: body.brand_name || null,
+        business_nature: body.business_nature || null,
+        notes: body.business_note || null,
+        requirement_note: body.requirement_note || null,
+        hours_note: body.hours_note || null,
+        working_days: body.working_days || [],
+        target_languages: body.languages || [],
+        customer_name: body.contact_name || null,
+        customer_company: body.brand_name || null,
+        customer_email: body.email || null,
+        customer_phone: body.phone || null,
+        customer_location: body.business_location || null,
+        publish_targets: ['partner', 'talent'],
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    // Target country + regions (mirror the share-link submit handler).
+    if (countryId) {
+      await supabaseAdmin
+        .from('subscription_card_target_countries')
+        .insert({ card_id: card.id, country_id: countryId });
+      if (body.state_regions.length > 0) {
+        await supabaseAdmin
+          .from('subscription_card_target_regions')
+          .insert(
+            body.state_regions.map((region) => ({
+              card_id: card.id,
+              country_id: countryId,
+              region,
+            })),
+          );
+      }
+    }
+
+    const hydrated = await hydrateCard(card);
+    res.json({ success: true, data: hydrated });
+  } catch (err: any) {
+    console.error('Create client brief error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/verify — an internal user verifies a brief
+// the client submitted directly (shared_form / landing_page_form). Stamps
+// verified_by / verified_at so the queue can show "Verified by …".
+// ============================================================
+router.post('/subscription-cards/:id/verify', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id;
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, source')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    if (card.source !== 'shared_form' && card.source !== 'landing_page_form') {
+      res.status(409).json({ success: false, error: 'Only client-submitted briefs can be verified' });
+      return;
+    }
+
+    const { data: updated, error } = await supabaseAdmin
+      .from('subscription_cards')
+      .update({ verified_by: req.userId!, verified_at: new Date().toISOString() })
+      .eq('id', cardId)
+      .select('*')
+      .single();
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const hydrated = await hydrateCard(updated);
+    res.json({ success: true, data: hydrated });
+  } catch (err: any) {
+    console.error('Verify client brief error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
 // PATCH /admin/subscription-cards/:id/edit — update draft request/custom card
 // ============================================================
 const editCardSchema = z.object({
@@ -434,7 +574,8 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
       card.source !== 'request' &&
       card.source !== 'custom' &&
       card.source !== 'shared_form' &&
-      card.source !== 'landing_page_form'
+      card.source !== 'landing_page_form' &&
+      card.source !== 'internal_brief'
     ) {
       res.status(409).json({ success: false, error: 'This card source cannot be edited here' });
       return;

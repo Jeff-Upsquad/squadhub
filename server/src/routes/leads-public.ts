@@ -27,7 +27,7 @@ const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
 
 // Card sources that surface in the admin "Form Requests" queue and can be
 // shared with a client pre-fill link (mirrors subscription-cards-admin-requests).
-const FORM_REQUEST_SOURCES = ['shared_form', 'landing_page_form', 'request'];
+const FORM_REQUEST_SOURCES = ['shared_form', 'landing_page_form', 'request', 'internal_brief'];
 
 // ---------------------------------------------------------------------------
 // In-process IP rate-limiter (no Redis). 10 req/min/IP shared across all
@@ -765,6 +765,9 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
         hours_note: body.hours_note || null,
         working_days: body.working_days,
         target_languages: body.languages,
+        // The client reviewed the brief via the share link and submitted it —
+        // surfaces as "Client approved" on the Form Requests queue.
+        client_approved_at: new Date().toISOString(),
       })
       .eq('id', card.id);
     if (updErr) {

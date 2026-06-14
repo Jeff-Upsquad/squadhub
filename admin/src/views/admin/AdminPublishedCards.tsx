@@ -8,6 +8,8 @@ import AdminPublishedCardRecipientsPanel from './AdminPublishedCardRecipientsPan
 import AdminPublishedCardRecipientsView from './AdminPublishedCardRecipientsView';
 import AdminRequestsList from './AdminRequestsList';
 import AdminCustomCardsList from './AdminCustomCardsList';
+import SliderPanel from './clients/SliderPanel';
+import ClientBriefForm, { BRIEF_TYPES, type BriefType } from './ClientBriefForm';
 
 export type PublishedCard = {
   id: string;
@@ -207,6 +209,8 @@ export default function AdminPublishedCards() {
   const [search, setSearch] = useState<string>('');
   const [groupBy, setGroupBy] = useState<GroupBy>('status');
   const [showPanel, setShowPanel] = useState(false);
+  const [showBriefSlider, setShowBriefSlider] = useState(false);
+  const [briefType, setBriefType] = useState<BriefType | null>(null);
 
   // Card detail view is driven by a URL query param (?card=<id>) so the
   // browser back button collapses the detail back to the list rather than
@@ -273,10 +277,19 @@ export default function AdminPublishedCards() {
         .get('/admin/subscription-cards', { params: { source: 'landing_page_form', state: 'draft' } })
         .then((r) => r.data),
   });
+  // Internal client briefs (Workflow 1) also land in the Form Requests queue.
+  const { data: pendingBriefRes } = useQuery({
+    queryKey: ['admin-internal-brief-submissions', ''],
+    queryFn: () =>
+      api
+        .get('/admin/subscription-cards', { params: { source: 'internal_brief', state: 'draft' } })
+        .then((r) => r.data),
+  });
   const pendingRequestCount =
     (pendingReqsRes?.data || []).length +
     (pendingSharedRes?.data || []).length +
-    (pendingLandingRes?.data || []).length;
+    (pendingLandingRes?.data || []).length +
+    (pendingBriefRes?.data || []).length;
 
   const bucketed = useMemo(() => {
     const out: Record<Bucket, PublishedCard[]> = { active: [], selected: [], assigned: [], cancelled: [] };
@@ -362,6 +375,13 @@ export default function AdminPublishedCards() {
                       : 'All subscription cards published across the org.'}
               </p>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowBriefSlider(true)}
+              className="sh-btn-primary sh-btn-primary-sm mt-5"
+            >
+              + Create client brief form
+            </button>
           </div>
 
           {/* Primary tabs */}
@@ -563,6 +583,41 @@ export default function AdminPublishedCards() {
           card={selectedCard}
           title={publishedCardTitle(selectedCard)}
           onClose={() => setShowPanel(false)}
+        />
+      )}
+
+      {/* Create client brief form → pick a type → fill out the brief form. */}
+      <SliderPanel
+        open={showBriefSlider}
+        onClose={() => setShowBriefSlider(false)}
+        title="New client brief"
+      >
+        <p className="mb-4 text-sm text-[#64748B]">
+          Pick a brief type. You&apos;ll fill out the client brief form, and it lands in Form Requests.
+        </p>
+        <div className="space-y-3">
+          {BRIEF_TYPES.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => { setShowBriefSlider(false); setBriefType(t.key); }}
+              className="flex w-full items-center justify-between rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 text-left transition hover:border-[#0F172B] hover:shadow-sm"
+            >
+              <span>
+                <span className="block text-sm font-semibold text-[#0F172B]">{t.title}</span>
+                <span className="mt-0.5 block text-xs text-[#64748B]">{t.blurb}</span>
+              </span>
+              <span className="text-lg text-[#94A3B8]">→</span>
+            </button>
+          ))}
+        </div>
+      </SliderPanel>
+
+      {briefType && (
+        <ClientBriefForm
+          type={briefType}
+          onClose={() => setBriefType(null)}
+          onCreated={() => { setBriefType(null); switchTab('requests'); }}
         />
       )}
     </div>

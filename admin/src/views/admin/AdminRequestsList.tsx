@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
+import { showToast } from '@/components/Toast';
 import AdminCardEditor from './AdminCardEditor';
 import ShareCardLinkModal from './ShareCardLinkModal';
 
@@ -24,7 +25,14 @@ interface SubscriptionRequest {
   //   'request'           → upsquad subscription request, shown without badge
   //   'shared_form'       → /connect submission, badge "Shared Form"
   //   'landing_page_form' → embedded marketing-page form, badge "Landing Page"
-  source?: 'request' | 'shared_form' | 'landing_page_form';
+  //   'internal_brief'    → brief an internal user filled out, badge "Client Brief"
+  source?: 'request' | 'shared_form' | 'landing_page_form' | 'internal_brief';
+  // Provenance from the card serializer: who filled an internal brief, who
+  // verified a client submission, and the approve / verify timestamps.
+  created_by_user?: { id: string; display_name: string | null; email: string | null } | null;
+  verified_by_user?: { id: string; display_name: string | null; email: string | null } | null;
+  client_approved_at?: string | null;
+  verified_at?: string | null;
 }
 
 type RequestSubTab = 'active' | 'published' | 'declined';
@@ -55,7 +63,10 @@ export default function AdminRequestsList() {
   // the Active sub-tab; published/assigned/closed cards drive Published and
   // Declined. Two queries per source — drafts and non-drafts — because the
   // server endpoint excludes drafts unless explicitly asked.
-  function adaptCardToRequest(c: any, source: 'shared_form' | 'landing_page_form'): SubscriptionRequest {
+  function adaptCardToRequest(
+    c: any,
+    source: 'shared_form' | 'landing_page_form' | 'internal_brief',
+  ): SubscriptionRequest {
     let status: SubscriptionRequest['status'] = 'pending';
     if (c.state === 'published' || c.state === 'assigned') status = 'published';
     else if (c.state === 'closed') status = 'cancelled';
@@ -74,6 +85,10 @@ export default function AdminRequestsList() {
       created_at: c.created_at || new Date().toISOString(),
       card_id: c.id,
       source,
+      created_by_user: c.created_by_user || null,
+      verified_by_user: c.verified_by_user || null,
+      client_approved_at: c.client_approved_at || null,
+      verified_at: c.verified_at || null,
     };
   }
 
@@ -111,6 +126,24 @@ export default function AdminRequestsList() {
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
   });
+  // Internal client briefs (Workflow 1) — drafts feed Active, non-drafts feed
+  // Published / Declined, same as the form-submission sources.
+  const { data: briefRes, isLoading: briefLoading } = useQuery({
+    queryKey: ['admin-internal-brief-submissions', search],
+    queryFn: () => {
+      const params: Record<string, string> = { source: 'internal_brief', state: 'draft' };
+      if (search.trim()) params.search = search.trim();
+      return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
+    },
+  });
+  const { data: briefPublishedRes, isLoading: briefPublishedLoading } = useQuery({
+    queryKey: ['admin-internal-brief-submissions', 'published', search],
+    queryFn: () => {
+      const params: Record<string, string> = { source: 'internal_brief' };
+      if (search.trim()) params.search = search.trim();
+      return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
+    },
+  });
   const sharedFormRequests: SubscriptionRequest[] = [
     ...(sharedRes?.data || []).map((c: any) => adaptCardToRequest(c, 'shared_form')),
     ...(sharedPublishedRes?.data || []).map((c: any) => adaptCardToRequest(c, 'shared_form')),
@@ -120,10 +153,16 @@ export default function AdminRequestsList() {
     ...(lpPublishedRes?.data || []).map((c: any) => adaptCardToRequest(c, 'landing_page_form')),
   ];
 
+  const internalBriefRequests: SubscriptionRequest[] = [
+    ...(briefRes?.data || []).map((c: any) => adaptCardToRequest(c, 'internal_brief')),
+    ...(briefPublishedRes?.data || []).map((c: any) => adaptCardToRequest(c, 'internal_brief')),
+  ];
+
   const allRequests: SubscriptionRequest[] = [
     ...upsquadRequests,
     ...sharedFormRequests,
     ...landingPageRequests,
+    ...internalBriefRequests,
   ];
 
   // Archived cards stay in the Archive tab — hide their originating
@@ -182,6 +221,19 @@ export default function AdminRequestsList() {
     },
   });
 
+  // Workflow 2: an internal user verifies a brief the client submitted directly.
+  const verifyMutation = useMutation({
+    mutationFn: (cardId: string) =>
+      api.post(`/admin/subscription-cards/${cardId}/verify`).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-shared-form-submissions'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-landing-page-submissions'] });
+      showToast('Brief verified', 'success');
+    },
+    onError: (err: any) =>
+      showToast(err?.response?.data?.error || err.message || 'Failed to verify', 'error'),
+  });
+
   if (editingCardId) {
     return (
       <AdminCardEditor
@@ -202,6 +254,15 @@ export default function AdminRequestsList() {
       {shareCardId && (
         <ShareCardLinkModal cardId={shareCardId} onClose={() => setShareCardId(null)} />
       )}
+
+      {/* Who filled out the form — surfaced per row below. */}
+      <div className="px-6 pt-5 pb-1">
+        <p className="text-xs text-[var(--color-sh-ink-muted)]">
+          Each request shows{' '}
+          <span className="font-semibold text-[var(--color-sh-ink)]">who filled it out</span>{' '}
+          — a brief your team created, or one the client submitted directly.
+        </p>
+      </div>
 
       {/* Sub-tabs */}
       <div className="px-6 pb-3">
@@ -260,7 +321,7 @@ export default function AdminRequestsList() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 pb-8">
-        {isLoading || sharedLoading || lpLoading || sharedPublishedLoading || lpPublishedLoading ? (
+        {isLoading || sharedLoading || lpLoading || sharedPublishedLoading || lpPublishedLoading || briefLoading || briefPublishedLoading ? (
           <div className="sh-card py-16 text-center">
             <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading…</p>
           </div>
@@ -290,7 +351,11 @@ export default function AdminRequestsList() {
                 onShare={() => {
                   if (req.card_id) setShareCardId(req.card_id);
                 }}
+                onVerify={() => {
+                  if (req.card_id) verifyMutation.mutate(String(req.card_id));
+                }}
                 isPending={createCardMutation.isPending}
+                isVerifying={verifyMutation.isPending}
               />
             ))}
           </div>
@@ -304,12 +369,16 @@ function RequestRow({
   request,
   onAction,
   onShare,
+  onVerify,
   isPending,
+  isVerifying,
 }: {
   request: SubscriptionRequest;
   onAction: () => void;
   onShare: () => void;
+  onVerify: () => void;
   isPending: boolean;
+  isVerifying: boolean;
 }) {
   const hasCard = !!request.card_id;
   // Form submissions (shared_form / landing_page_form) come in with a draft
@@ -374,6 +443,14 @@ function RequestRow({
                 Landing Page
               </span>
             )}
+            {request.source === 'internal_brief' && (
+              <span
+                className="shrink-0 rounded bg-[#EDE9FE] px-1.5 py-0.5 text-[10px] font-medium text-[#5B21B6] ring-1 ring-[#DDD6FE]"
+                title="A client brief an internal user filled out"
+              >
+                Client Brief
+              </span>
+            )}
           </p>
           {(planName || priceLabel) && (
             <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
@@ -385,11 +462,19 @@ function RequestRow({
           <p className="mt-0.5 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
             {dateLabel}
           </p>
-          {(request.name || request.email) && (
+          {request.source === 'internal_brief' ? (
+            <p className="truncate text-[11px] font-medium text-[var(--color-sh-ink-muted)]">
+              Filled out by {request.created_by_user?.display_name || request.created_by_user?.email || 'a team member'}
+            </p>
+          ) : isFormSubmission ? (
+            <p className="truncate text-[11px] font-medium text-[var(--color-sh-ink-muted)]">
+              Submitted by the client{request.name ? ` · ${request.name}` : ''}
+            </p>
+          ) : (request.name || request.email) ? (
             <p className="truncate text-[11px] text-[var(--color-sh-ink-faint)]">
               by {request.name || request.email}
             </p>
-          )}
+          ) : null}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
@@ -404,6 +489,34 @@ function RequestRow({
         >
           {request.status}
         </span>
+        {request.source === 'internal_brief' && request.client_approved_at && (
+          <span
+            className="sh-status-pill"
+            style={{ backgroundColor: '#10B98122', color: '#0F7A4F' }}
+            title="The client reviewed and submitted this brief via the share link"
+          >
+            ✓ Client approved
+          </span>
+        )}
+        {isFormSubmission && request.verified_at && (
+          <span
+            className="sh-status-pill"
+            style={{ backgroundColor: '#06B6D422', color: '#0E7490' }}
+            title={`Verified by ${request.verified_by_user?.display_name || request.verified_by_user?.email || 'a team member'}`}
+          >
+            ✓ Verified by {request.verified_by_user?.display_name || request.verified_by_user?.email || 'team'}
+          </span>
+        )}
+        {isFormSubmission && !request.verified_at && (
+          <button
+            onClick={onVerify}
+            disabled={isVerifying}
+            className="sh-btn-ghost sh-btn-ghost-sm"
+            title="Mark this client-submitted brief as verified"
+          >
+            {isVerifying ? 'Verifying…' : 'Verify'}
+          </button>
+        )}
         {request.card_id && (request.status === 'pending' || request.status === 'in_review') && (
           <button
             onClick={onShare}

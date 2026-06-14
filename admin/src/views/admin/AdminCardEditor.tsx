@@ -530,7 +530,7 @@ export default function AdminCardEditor({
             Back
           </button>
           <h1 className="sh-display text-2xl sm:text-3xl">
-            {card.source === 'request' ? 'Card from Request' : 'Custom Card'}
+            {card.source === 'request' ? 'Card from Request' : card.source === 'internal_brief' ? 'Client Brief' : 'Custom Card'}
             {card.subscription_request_id && (
               <span className="ml-2 text-base font-normal text-[var(--color-sh-ink-muted)]">
                 (Request #{card.subscription_request_id})
@@ -541,7 +541,7 @@ export default function AdminCardEditor({
         <div className="flex items-center gap-2">
           {isDraft && (
             <>
-              {['shared_form', 'landing_page_form', 'request'].includes(card.source) && (
+              {['shared_form', 'landing_page_form', 'request', 'internal_brief'].includes(card.source) && (
                 <button
                   onClick={() => setShowShareModal(true)}
                   className="sh-btn-ghost"
