@@ -103,6 +103,36 @@ export function squadhireDeliveryState(card: PublishedCard): 'skipped' | 'pendin
   return 'pending';
 }
 
+/**
+ * Service-type badge. Distinguishes which client-brief form a published card
+ * came from — the designer/editor brief (`/connect`) vs the accountant brief
+ * (`/connect/accountant`) — by the card's `service_type`. Values are the four
+ * canonical display labels the rest of the system keys off (see
+ * SLUG_TO_SERVICE_TYPE in server leads-public.ts). Unknown values still render
+ * as a neutral pill so nothing silently disappears.
+ */
+const SERVICE_TYPE_BADGES: Record<string, { label: string; bg: string; color: string }> = {
+  Designers: { label: 'Designer', bg: '#FCE7F3', color: '#9D174D' },
+  Editors: { label: 'Editor', bg: '#CCFBF1', color: '#115E59' },
+  'Designer plus Editor': { label: 'Designer + Editor', bg: '#EDE9FE', color: '#5B21B6' },
+  Accountants: { label: 'Accountant', bg: '#DBEAFE', color: '#1E40AF' },
+};
+
+export function ServiceTypeBadge({ serviceType }: { serviceType?: string | null }) {
+  if (!serviceType) return null;
+  const badge =
+    SERVICE_TYPE_BADGES[serviceType] ?? { label: serviceType, bg: '#EEF2F6', color: '#475569' };
+  return (
+    <span
+      className="sh-status-pill shrink-0"
+      style={{ backgroundColor: badge.bg, color: badge.color }}
+      title={`From the ${badge.label} client brief`}
+    >
+      {badge.label}
+    </span>
+  );
+}
+
 type SalesPerson = { id: string; display_name: string | null; email: string | null };
 
 function formatPublishedAt(iso: string | null): string {
@@ -608,9 +638,12 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
           {business.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
-            {business}{serviceType ? `: ${serviceType}` : ''}
-          </p>
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
+              {business}
+            </p>
+            <ServiceTypeBadge serviceType={serviceType} />
+          </div>
           {(planName || priceLabel) && (
             <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
               {planName}
