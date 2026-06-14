@@ -21,10 +21,7 @@ fn apply_quick_add_shortcut(app: &tauri::AppHandle, accelerator: &str) -> Result
     let _ = gs.unregister_all();
     gs.on_shortcut(accelerator, |app, _shortcut, event| {
         if event.state() == ShortcutState::Pressed {
-            if let Some(window) = app.get_webview_window("quickadd") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            show_quick_add(app);
         }
     })
     .map_err(|e| e.to_string())
@@ -43,6 +40,43 @@ fn set_quick_add_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<
     Ok(())
 }
 
+/// Show + key the spotlight quick-add panel. It's a non-activating NSPanel
+/// (converted at setup) so ⌘⇧T can summon it OVER another app's full-screen Space
+/// and take keyboard focus WITHOUT activating our app — a plain NSWindow can't
+/// become key over another app's full-screen Space, which is why earlier attempts
+/// with collectionBehavior/level alone didn't show.
+fn show_quick_add(app: &tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_nspanel::ManagerExt;
+        if let Ok(panel) = app.get_webview_panel("quickadd") {
+            panel.show();
+            panel.make_key_and_order_front(None);
+            qa_log("showed quick-add panel");
+            return;
+        }
+        qa_log("quick-add panel not registered; falling back to window show");
+    }
+    if let Some(window) = app.get_webview_window("quickadd") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// Tiny append-only debug log (mirrors notif.rs) so we can confirm the overlay
+/// path actually ran: `tail -f /tmp/sh-quickadd.log`.
+#[cfg(target_os = "macos")]
+fn qa_log(msg: &str) {
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/sh-quickadd.log")
+    {
+        let _ = writeln!(f, "{msg}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -52,6 +86,7 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_nspanel::init())
         .invoke_handler(tauri::generate_handler![notif::send_notification, set_quick_add_shortcut])
         .setup(|app| {
             // Set up UNUserNotificationCenter delegate for click handling
@@ -67,10 +102,7 @@ pub fn run() {
                 .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quick_add" => {
-                        if let Some(window) = app.get_webview_window("quickadd") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+                        show_quick_add(app);
                     }
                     "settings" => {
                         if let Some(window) = app.get_webview_window("main") {
@@ -104,6 +136,33 @@ pub fn run() {
                 if let Err(e) = apply_quick_add_shortcut(app.handle(), &accel) {
                     eprintln!("Quick-add shortcut '{accel}' failed to register ({e}); using default");
                     let _ = apply_quick_add_shortcut(app.handle(), DEFAULT_QUICK_ADD_SHORTCUT);
+                }
+            }
+
+            // Convert the quick-add window into a non-activating NSPanel so ⌘⇧T can
+            // summon it over another app's full-screen Space and take key focus
+            // without activating our app (which would switch Spaces).
+            #[cfg(target_os = "macos")]
+            {
+                use cocoa::appkit::NSWindowCollectionBehavior;
+                use tauri_nspanel::WebviewWindowExt;
+                if let Some(window) = app.get_webview_window("quickadd") {
+                    match window.to_panel() {
+                        Ok(panel) => {
+                            // NSWindowStyleMaskNonActivatingPanel (1<<7): take key
+                            // focus without activating the app (no Space switch).
+                            panel.set_style_mask(1 << 7);
+                            panel.set_collection_behaviour(
+                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+                                    | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                                    | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary,
+                            );
+                            // NSMainMenuWindowLevel + 1: above full-screen content.
+                            panel.set_level(25);
+                            qa_log("converted quick-add window to NSPanel");
+                        }
+                        Err(e) => qa_log(&format!("to_panel() failed: {e:?}")),
+                    }
                 }
             }
 
