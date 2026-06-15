@@ -6155,6 +6155,19 @@ ol.sqc-list {
    to back (negative z) would otherwise render its toolbar BELOW the interaction
    pane, where the pane swallows every click. */
 .wb-flow .react-flow__node-toolbar { z-index: 1000 !important; }
+/* Render connector lines (and their labels) above element fills. React Flow
+   paints the whole edges layer beneath the nodes layer by DOM order, so a shape
+   placed over a connection — e.g. a backdrop/group rectangle behind a flow —
+   would otherwise hide the line. The edges layer is pointer-transparent except
+   on the line itself, so lifting it doesn't block clicking the elements below. */
+.wb-flow .react-flow__edges,
+.wb-flow .react-flow__edgelabel-renderer { z-index: 1; }
+/* Contain per-node z-indexes inside the nodes layer. Without this the layer is
+   z-index:auto, so a node's own z-index escapes into the viewport's stacking
+   context and competes with (and beats, by DOM order) the lifted edges layer —
+   leaving the line hidden again. Isolating keeps the whole nodes layer below
+   the edges layer regardless of any node's z. */
+.wb-flow .react-flow__nodes { isolation: isolate; }
 .wb-flow .react-flow__attribution { display: none; }
 .wb-flow .react-flow__controls {
   border-radius: 10px;
