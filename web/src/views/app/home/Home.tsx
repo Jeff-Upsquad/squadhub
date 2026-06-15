@@ -1,6 +1,7 @@
 import HomeHero from './HomeHero';
 import TodayList from './TodayList';
 import DashboardStatRow from './DashboardStatRow';
+import SecondaryCardRow from './SecondaryCardRow';
 
 // The single home view shown to every non-client user (internal staff and
 // partners alike). Clients/client-staff get ClientDashboard instead — see
@@ -11,6 +12,7 @@ export default function Home({ onOpenInbox }: { onOpenInbox: () => void }) {
       <div className="hm-wrap">
         <HomeHero roleLabel="Home" />
         <DashboardStatRow onOpenInbox={onOpenInbox} />
+        <SecondaryCardRow />
         <TodayList />
       </div>
     </div>

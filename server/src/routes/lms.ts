@@ -79,6 +79,56 @@ router.get('/my-items', async (req: Request, res: Response) => {
 });
 
 // ------------------------------------------------------------
+// GET /lms/my-due — the current user's non-completed assignments whose
+// due_date is today or overdue (in the caller's timezone). Powers the Home
+// "Courses" secondary card. Day-bucketing mirrors /pm/tasks/my.
+// ------------------------------------------------------------
+router.get('/my-due', async (req: Request, res: Response) => {
+  try {
+    const tz = (req.query.tz as string) || 'Asia/Kolkata';
+
+    const { data, error } = await supabaseAdmin
+      .from('lms_assignments')
+      .select(`
+        id, status, progress_percent, assigned_at, started_at, completed_at, due_date,
+        item:lms_items(
+          id, kind, title, slug, summary, cover_image_url, status, published_at,
+          category:lms_categories(id, name, slug, color)
+        )
+      `)
+      .eq('user_id', req.userId!)
+      .neq('status', 'completed')
+      .not('due_date', 'is', null)
+      .order('due_date', { ascending: true });
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    // Same day-key approach as /pm/tasks/my: format the timestamp into the
+    // caller's timezone before comparing, so users east of UTC don't lose a day.
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    });
+    const todayStr = fmt.format(new Date());
+
+    const due = (data || []).filter((a: any) => {
+      // Hide assignments whose course was unpublished/archived.
+      if (!a.item || a.item.status !== 'published') return false;
+      if (!a.due_date) return false;
+      const dueStr = fmt.format(new Date(a.due_date));
+      return dueStr <= todayStr; // today or overdue
+    });
+
+    res.json({ success: true, data: due });
+  } catch (err) {
+    console.error('List due LMS items error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ------------------------------------------------------------
 // GET /lms/categories — for filter chips in the UI
 // ------------------------------------------------------------
 router.get('/categories', async (_req: Request, res: Response) => {
