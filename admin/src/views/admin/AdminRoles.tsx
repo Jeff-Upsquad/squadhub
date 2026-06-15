@@ -1,16 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { Role, RolePermissions, RoleHomeView } from '@squadhub/shared';
-
-const HOME_VIEW_OPTIONS: { value: RoleHomeView; label: string; desc: string }[] = [
-  { value: 'member', label: 'Member', desc: 'Internal teammates' },
-  { value: 'user', label: 'User', desc: 'Client organizations' },
-  { value: 'guest', label: 'Guest', desc: 'Partners & freelancers' },
-  { value: 'designer', label: 'Designer', desc: 'Design-focused freelancers' },
-  { value: 'video_editor', label: 'Video Editor', desc: 'Video & post-production freelancers' },
-  { value: 'accountant', label: 'Accountant', desc: 'Finance & accounting contributors' },
-];
+import type { Role, RolePermissions } from '@squadhub/shared';
 
 interface RoleWithCount extends Role {
   member_count: number;
@@ -222,7 +213,6 @@ export default function AdminRoles() {
   // Form state
   const [formName, setFormName] = useState('');
   const [formColor, setFormColor] = useState('#22c55e');
-  const [formHomeView, setFormHomeView] = useState<RoleHomeView>('user');
   const [formPermissions, setFormPermissions] = useState<RolePermissions>({ ...DEFAULT_PERMISSIONS });
 
   const { data: rolesRes, isLoading } = useQuery({
@@ -238,7 +228,7 @@ export default function AdminRoles() {
   };
 
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; color: string; permissions: RolePermissions; home_view: RoleHomeView }) =>
+    mutationFn: (data: { name: string; color: string; permissions: RolePermissions }) =>
       api.post('/admin/roles', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-roles'] });
@@ -248,7 +238,7 @@ export default function AdminRoles() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, ...data }: { id: string; name: string; color: string; permissions: RolePermissions; home_view: RoleHomeView }) =>
+    mutationFn: ({ id, ...data }: { id: string; name: string; color: string; permissions: RolePermissions }) =>
       api.put(`/admin/roles/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-roles'] });
@@ -276,7 +266,6 @@ export default function AdminRoles() {
     setEditingRole(null);
     setFormName('');
     setFormColor('#22c55e');
-    setFormHomeView('user');
     setFormPermissions({ ...DEFAULT_PERMISSIONS });
     setFormError('');
     setShowPanel(true);
@@ -286,7 +275,6 @@ export default function AdminRoles() {
     setEditingRole(role);
     setFormName(role.name);
     setFormColor(role.color);
-    setFormHomeView(role.home_view ?? 'user');
     setFormPermissions({ ...DEFAULT_PERMISSIONS, ...role.permissions });
     setFormError('');
     setShowPanel(true);
@@ -301,7 +289,7 @@ export default function AdminRoles() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
-    const payload = { name: formName, color: formColor, permissions: formPermissions, home_view: formHomeView };
+    const payload = { name: formName, color: formColor, permissions: formPermissions };
     if (editingRole) {
       updateMutation.mutate({ id: editingRole.id, ...payload });
     } else {
@@ -375,7 +363,6 @@ export default function AdminRoles() {
               <tr className="border-b border-divider bg-canvas">
                 <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Role</th>
                 <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Members</th>
-                <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Home View</th>
                 <th className="px-4 py-3 text-left font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Permissions</th>
                 <th className="px-4 py-3 text-right font-[family-name:var(--font-mono)] text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-muted">Actions</th>
               </tr>
@@ -403,11 +390,6 @@ export default function AdminRoles() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-sm text-foreground-muted">{role.member_count}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex rounded-full bg-surface-alt px-2 py-0.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-[0.08em] text-foreground-muted">
-                        {role.home_view ?? 'user'}
-                      </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -515,29 +497,6 @@ export default function AdminRoles() {
                         />
                       ))}
                     </div>
-                  </div>
-
-                  {/* Home View */}
-                  <div>
-                    <label className="mb-1.5 block text-xs font-medium text-foreground-muted">Home View</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {HOME_VIEW_OPTIONS.map((opt) => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => setFormHomeView(opt.value)}
-                          className={`rounded-md border px-3 py-2 text-left transition ${
-                            formHomeView === opt.value
-                              ? 'border-ink bg-ink text-white'
-                              : 'border-divider-strong bg-surface text-foreground hover:border-divider-strong'
-                          }`}
-                        >
-                          <div className="text-sm font-medium">{opt.label}</div>
-                          <div className={`text-[11px] ${formHomeView === opt.value ? 'text-white/70' : 'text-foreground-dim'}`}>{opt.desc}</div>
-                        </button>
-                      ))}
-                    </div>
-                    <p className="mt-1.5 text-[11px] text-foreground-dim">Which home page members of this role see when they log in.</p>
                   </div>
 
                   {/* Permission summary */}
