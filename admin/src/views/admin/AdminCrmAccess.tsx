@@ -1,6 +1,8 @@
 import { useState, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import { showToast } from '../../components/Toast';
 
 type CrmRole = 'admin' | 'member' | 'guest';
 type CrmLevel = 'view' | 'full' | 'admin' | 'none';
@@ -43,6 +45,12 @@ export default function AdminCrmAccess() {
   // anyone in the SquadHub directory (provisioned into SquadHire on add).
   const [addSource, setAddSource] = useState<'members' | 'directory'>('members');
   const [dirRole, setDirRole] = useState<CrmRole>('member');
+  // Password reset (SquadHire CRM only — proxied to shcrm-server). resetTarget
+  // drives the confirm dialog; resetResult holds the one-time temp password to
+  // relay to the user.
+  const [resetTarget, setResetTarget] = useState<GrantedRow | null>(null);
+  const [resetResult, setResetResult] = useState<{ email: string; temp_password: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const { data: wsRes } = useQuery({
     queryKey: ['crm-access-workspaces', app],
@@ -160,6 +168,24 @@ export default function AdminCrmAccess() {
         app,
       }),
     onSuccess: invalidate,
+  });
+
+  // Reset a user's CRM password. SquadHire-only: the request is proxied to
+  // shcrm-server, which sets a temp password and forces a change on next login,
+  // returning the temp password for the admin to relay.
+  const resetPassword = useMutation({
+    mutationFn: (email: string) =>
+      api.post('/admin/crm-access/reset-password', { email, app }).then((r) => r.data),
+    onSuccess: (res, email) => {
+      setResetTarget(null);
+      const temp = res?.data?.temp_password as string | undefined;
+      if (temp) setResetResult({ email, temp_password: temp });
+      else showToast('Password reset, but no temporary password was returned.', 'error');
+    },
+    onError: (err: any) => {
+      setResetTarget(null);
+      showToast(err?.response?.data?.error || err.message || 'Failed to reset password', 'error');
+    },
   });
 
   const selectClass =
@@ -435,6 +461,14 @@ export default function AdminCrmAccess() {
                         >
                           {isOpen ? 'Hide modules' : 'Modules'}
                         </button>
+                        {app === 'squadhire' && m.user?.email && (
+                          <button
+                            onClick={() => setResetTarget(m)}
+                            className="mr-3 text-xs font-medium text-foreground-muted hover:text-foreground hover:underline"
+                          >
+                            Reset password
+                          </button>
+                        )}
                         <button
                           onClick={() => removeUser.mutate(m.user_id)}
                           disabled={removeUser.isPending}
@@ -485,6 +519,79 @@ export default function AdminCrmAccess() {
           </table>
         )}
       </div>
+
+      {/* Confirm password reset */}
+      <ConfirmDialog
+        open={!!resetTarget}
+        title="Reset password?"
+        description={
+          resetTarget
+            ? `This sets a temporary password for ${
+                resetTarget.user?.email || 'this user'
+              } and forces them to choose a new one on their next login. Their current password stops working immediately.`
+            : ''
+        }
+        confirmLabel="Reset password"
+        variant="warning"
+        isPending={resetPassword.isPending}
+        pendingLabel="Resetting…"
+        onCancel={() => setResetTarget(null)}
+        onConfirm={() => {
+          if (resetTarget?.user?.email) resetPassword.mutate(resetTarget.user.email);
+        }}
+      />
+
+      {/* One-time temporary password — shown once, must be relayed to the user */}
+      {resetResult && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => {
+              setResetResult(null);
+              setCopied(false);
+            }}
+          />
+          <div className="relative w-[440px] rounded-lg bg-surface p-5 shadow-xl">
+            <h4 className="text-base font-semibold text-foreground">Temporary password set</h4>
+            <p className="mt-2 text-sm text-foreground-muted">
+              Share this one-time password with{' '}
+              <span className="font-medium text-foreground">{resetResult.email}</span>. They&apos;ll
+              be required to set a new password the next time they sign in. It won&apos;t be shown
+              again.
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                readOnly
+                value={resetResult.temp_password}
+                onFocus={(e) => e.currentTarget.select()}
+                className="min-w-0 flex-1 rounded-md border border-divider-strong bg-canvas px-3 py-2 font-mono text-sm text-foreground"
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(resetResult.temp_password);
+                  setCopied(true);
+                  showToast('Password copied', 'success');
+                  setTimeout(() => setCopied(false), 1500);
+                }}
+                className="shrink-0 rounded-md bg-ink px-3 py-2 text-xs font-medium text-white transition hover:bg-ink-hover"
+              >
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => {
+                  setResetResult(null);
+                  setCopied(false);
+                }}
+                className="rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white transition hover:bg-ink-hover"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
