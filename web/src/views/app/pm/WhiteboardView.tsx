@@ -303,7 +303,7 @@ function EditBar({ id, data, type, visible }: { id: string; data: WhiteboardNode
   const triggerColor = noFill ? 'transparent' : (data.color || (type === 'shape' ? 'var(--surface)' : STICKY_COLORS[0]));
   useEffect(() => { if (!visible) { setColorOpen(false); setShapeOpen(false); } }, [visible]);
   return (
-    <NodeToolbar isVisible={visible} position={Position.Top} offset={14} className="wb-ebar nodrag nowheel">
+    <NodeToolbar isVisible={visible} position={Position.Top} offset={22} className="wb-ebar nodrag nowheel">
       {type !== 'text' && (
         <>
           <div className="wb-color-wrap">
@@ -385,7 +385,7 @@ function StickyNode({ id, data, selected }: NodeProps<WBNode>) {
       <NodeResizer minWidth={120} minHeight={96} isVisible={!!selected && canEdit} color="var(--sh-ink-3)" />
       <NodeHandles />
       <EditBar id={id} data={data} type="sticky" visible={!!selected && canEdit} />
-      <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />
+      {!selected && <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />}
       <NodeChrome id={id} data={data} />
       <EditableText id={id} data={data} placeholder="Type a note…" className="wb-sticky-text" />
     </div>
@@ -399,7 +399,7 @@ function TextNode({ id, data, selected }: NodeProps<WBNode>) {
     <div className="wb-textnode" onMouseMove={canEdit ? onMouseMove : undefined} onMouseLeave={onMouseLeave}>
       <NodeHandles />
       <EditBar id={id} data={data} type="text" visible={!!selected && canEdit} />
-      <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />
+      {!selected && <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />}
       <NodeChrome id={id} data={data} />
       <EditableText id={id} data={data} placeholder="Text" className="wb-textnode-text" />
     </div>
@@ -418,7 +418,7 @@ function ShapeNode({ id, data, selected }: NodeProps<WBNode>) {
       </svg>
       <NodeHandles />
       <EditBar id={id} data={data} type="shape" visible={!!selected && canEdit} />
-      <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />
+      {!selected && <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />}
       <NodeChrome id={id} data={data} />
       <EditableText id={id} data={data} placeholder="" className="wb-shape-text" />
     </div>
