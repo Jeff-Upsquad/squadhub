@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import "@xyflow/react/dist/style.css";
 
 /* Class-based dark mode — .dark on <html> */
 @variant dark (&:where(.dark, .dark *));
@@ -6134,3 +6135,277 @@ ol.sqc-list {
   .nt-overlay, .nt-row { transition: none; }
   .nt-skel { animation: none; }
 }
+
+/* ── Whiteboard view (FigJam-style React Flow canvas) ───────────────────── */
+.wb-flow {
+  background: var(--surface-alt);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+.wb-flow .react-flow__attribution { display: none; }
+.wb-flow .react-flow__controls {
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+}
+.wb-flow .react-flow__controls-button {
+  background: var(--surface);
+  border-bottom: 1px solid var(--sh-hair);
+  color: var(--sh-ink-2);
+}
+.wb-flow .react-flow__controls-button:hover { background: var(--sh-hair-3); }
+.wb-flow .react-flow__controls-button svg { fill: currentColor; }
+.wb-flow .react-flow__edge-path { stroke: var(--sh-ink-4); stroke-width: 1.6; }
+.wb-flow .react-flow__edge.selected .react-flow__edge-path { stroke: var(--sh-ink-2); }
+.wb-flow .react-flow__node.selected .wb-sticky,
+.wb-flow .react-flow__node.selected .wb-textnode,
+.wb-flow .react-flow__node.selected .wb-shape {
+  outline: 2px solid var(--sh-ink);
+  outline-offset: 2px;
+}
+
+/* Edge anchor handles — invisible + non-interactive; they only give the
+   duplicate-arrows' connecting edges a point to attach to. */
+.wb-handle {
+  width: 7px; height: 7px;
+  border: 0; background: transparent;
+  opacity: 0; pointer-events: none;
+}
+
+/* FigJam-style directional duplicate arrow — a single arrow on the cursor-
+   nearest side (JS-controlled; rendered only when active). */
+.wb-arrow {
+  position: absolute;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: #fff;
+  border: 2px solid var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0;
+  pointer-events: auto;
+  z-index: 6;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+.wb-arrow svg { width: 13px; height: 13px; }
+.wb-arrow:hover { background: #2563eb; }
+.wb-arrow--t { top: -30px; left: 50%; transform: translateX(-50%); }
+.wb-arrow--b { bottom: -30px; left: 50%; transform: translateX(-50%); }
+.wb-arrow--l { left: -30px; top: 50%; transform: translateY(-50%); }
+.wb-arrow--r { right: -30px; top: 50%; transform: translateY(-50%); }
+.wb-arrow--t svg { transform: rotate(-90deg); }
+.wb-arrow--b svg { transform: rotate(90deg); }
+.wb-arrow--l svg { transform: rotate(180deg); }
+
+/* Colour popover (Fill / Transparent / No fill + swatch grid) */
+.wb-color-wrap { position: relative; display: inline-flex; }
+.wb-color-trigger[data-nofill="true"] {
+  background:
+    linear-gradient(45deg, transparent 44%, #ef4444 44%, #ef4444 56%, transparent 56%),
+    var(--surface) !important;
+  border-color: var(--sh-hair-2);
+}
+.wb-color-pop {
+  position: absolute;
+  bottom: calc(100% + 8px); left: 0;
+  width: 248px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--sh-hair);
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.22);
+  z-index: 20;
+}
+.wb-color-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.wb-color-tabs button {
+  flex: 1; height: 26px; border: none; border-radius: 7px;
+  background: var(--sh-hair-3); color: var(--sh-ink-2);
+  font-size: 11.5px; font-weight: 600; cursor: pointer;
+}
+.wb-color-tabs button[data-active="true"] { background: var(--sh-ink); color: var(--surface); }
+.wb-color-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; }
+.wb-color-cell {
+  width: 100%; aspect-ratio: 1; border-radius: 50%;
+  border: 1.5px solid rgba(0,0,0,0.12); cursor: pointer; padding: 0;
+}
+.wb-color-cell[data-active="true"] { outline: 2px solid var(--sh-ink); outline-offset: 1px; }
+.wb-color-custom { position: relative; overflow: hidden; background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red); }
+.wb-color-custom input { position: absolute; inset: -4px; opacity: 0; cursor: pointer; }
+
+/* Floating edit bar (React Flow NodeToolbar) shown above a selected element. */
+.wb-ebar {
+  display: flex; align-items: center; gap: 3px;
+  padding: 5px 7px;
+  background: var(--surface);
+  border: 1px solid var(--sh-hair);
+  border-radius: 11px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.16);
+}
+.wb-ebar-swatches { display: flex; align-items: center; gap: 3px; }
+.wb-ebar-swatch { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid transparent; cursor: pointer; padding: 0; }
+.wb-ebar-swatch[data-active="true"] { border-color: var(--sh-ink); }
+.wb-ebar-sep { width: 1px; height: 18px; background: var(--sh-hair); margin: 0 2px; }
+.wb-ebar-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  min-width: 24px; height: 24px; padding: 0 6px;
+  border: none; background: transparent; border-radius: 6px;
+  color: var(--sh-ink-2); font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.wb-ebar-btn:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
+.wb-ebar-btn[data-active="true"] { background: var(--sh-ink); color: var(--surface); }
+.wb-ebar-size { font-size: 11px; }
+.wb-ebar-text { padding: 0 8px; }
+.wb-ebar-convert { color: #2563eb; }
+.wb-ebar-convert:hover { background: rgba(37,99,235,0.12); color: #2563eb; }
+
+/* Completed task element: strike + dim the text. */
+.wb-done { text-decoration: line-through; opacity: 0.55; }
+
+/* Node chrome: convert-to-task checkbox + linked-task pill */
+.wb-chrome {
+  position: absolute;
+  top: 6px; left: 8px; right: 8px;
+  display: flex; align-items: center; gap: 6px;
+  z-index: 2;
+}
+.wb-check {
+  width: 15px; height: 15px;
+  cursor: pointer;
+  accent-color: var(--sh-ink);
+  flex-shrink: 0;
+}
+.wb-check:disabled { cursor: default; }
+.wb-task-pill {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.08);
+  color: var(--sq-gray-900, #111827);
+  font-size: 10.5px; font-weight: 700;
+  border: none; cursor: pointer;
+  line-height: 1.4;
+}
+.wb-task-pill:hover { background: rgba(0,0,0,0.16); }
+
+/* Editable text shared bits */
+.wb-text-view { white-space: pre-wrap; word-break: break-word; cursor: text; width: 100%; }
+.wb-text-empty { color: rgba(0,0,0,0.35); }
+.wb-text-edit {
+  width: 100%; height: 100%;
+  border: none; background: transparent; resize: none; outline: none;
+  font: inherit; color: inherit; padding: 0;
+}
+
+/* Sticky note */
+.wb-sticky {
+  position: relative;
+  width: 100%; height: 100%;
+  box-sizing: border-box;
+  padding: 26px 12px 12px;
+  border-radius: 4px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.14);
+  color: #1a1a1a;
+  display: flex;
+}
+.wb-sticky-text { font-size: 13.5px; line-height: 1.4; font-weight: 500; flex: 1; }
+
+/* Free text */
+.wb-textnode {
+  position: relative;
+  min-width: 120px;
+  padding: 24px 6px 4px;
+  color: var(--sh-ink);
+}
+.wb-textnode-text { font-size: 16px; font-weight: 600; }
+.wb-textnode .wb-task-pill { color: var(--sh-ink); background: var(--sh-hair-3); }
+
+/* Shape */
+.wb-shape {
+  position: relative;
+  width: 100%; height: 100%;
+  box-sizing: border-box;
+  color: var(--sh-ink);
+  display: flex; align-items: center; justify-content: center;
+}
+/* The shape outline itself is drawn by an SVG that stretches to the node box. */
+.wb-shape-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.wb-shape-text { position: relative; z-index: 1; font-size: 13px; font-weight: 500; text-align: center; padding: 8px; max-width: 100%; }
+.wb-shape .wb-task-pill { color: var(--sh-ink); background: var(--sh-hair-3); }
+
+/* Shape picker popover (used by the toolbar and the edit bar) */
+.wb-shape-pop {
+  position: absolute;
+  top: calc(100% + 8px); left: 0;
+  width: 268px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--sh-hair);
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.22);
+  z-index: 30;
+}
+.wb-shape-search {
+  width: 100%; height: 30px;
+  margin-bottom: 8px; padding: 0 10px;
+  border: 1px solid var(--sh-hair); border-radius: 8px;
+  background: var(--surface-alt); color: var(--sh-ink);
+  font-size: 12.5px; outline: none;
+}
+.wb-shape-search:focus { border-color: var(--sh-accent); }
+.wb-shape-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; max-height: 210px; overflow-y: auto; }
+.wb-shape-cell {
+  aspect-ratio: 1; padding: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--sh-hair-3);
+  border: 1.5px solid transparent; border-radius: 8px;
+  color: var(--sh-ink-2); cursor: pointer;
+}
+.wb-shape-cell:hover { background: var(--sh-hair-2); color: var(--sh-ink); }
+.wb-shape-cell[data-active="true"] { border-color: var(--sh-ink); color: var(--sh-ink); }
+.wb-shape-cell svg { width: 100%; height: 100%; display: block; }
+
+/* Floating toolbar */
+.wb-toolbar {
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--sh-hair);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.wb-tool {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: none; background: transparent;
+  font-size: 12.5px; font-weight: 600; color: var(--sh-ink-2);
+  cursor: pointer;
+}
+.wb-tool:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
+.wb-tool-swatch { width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.15); }
+.wb-tool-ic { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; font-size: 12px; }
+.wb-tool-sep { width: 1px; height: 20px; background: var(--sh-hair); margin: 0 2px; }
+.wb-swatches { display: flex; align-items: center; gap: 3px; }
+.wb-swatch {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1.5px solid transparent; cursor: pointer; padding: 0;
+}
+.wb-swatch[data-active="true"] { border-color: var(--sh-ink); }
+
+/* Full-screen toggle (top-right) */
+.wb-fs-panel { margin: 0; }
+.wb-fs-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 11px;
+  background: var(--surface);
+  border: 1px solid var(--sh-hair);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  font-size: 12.5px; font-weight: 600; color: var(--sh-ink-2);
+  cursor: pointer;
+}
+.wb-fs-btn:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
+/* When the canvas is the fullscreen element it must paint its own background
+   (the surrounding app chrome is gone). */
+.lv-canvas:fullscreen { background: var(--surface-alt); }
+.lv-canvas:-webkit-full-screen { background: var(--surface-alt); }

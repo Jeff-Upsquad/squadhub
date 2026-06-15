@@ -15,7 +15,7 @@ const createSchema = z.object({
   space_id: z.string().uuid(),
   folder_id: z.string().uuid().optional(),
   name: z.string().min(1).max(100),
-  default_view: z.enum(['list', 'board']).optional(),
+  default_view: z.enum(['list', 'board', 'whiteboard']).optional(),
   profile_id: z.string().uuid().optional(),
 });
 
