@@ -4,7 +4,7 @@ import type { GroupBy, SortBy } from '../lib/taskGrouping';
 import type { TaskFilterState } from '../lib/filters';
 import { isFilterEmpty } from '../lib/filters';
 
-export type ViewMode = 'list' | 'board';
+export type ViewMode = 'list' | 'board' | 'whiteboard';
 export type DashboardTab = 'today' | 'overdue' | 'tomorrow' | 'all';
 export type ListGroupBy = Extract<GroupBy, 'status' | 'none' | 'work_date' | 'due_date' | 'priority'>;
 export type TodayListView = 'list' | 'calendar';

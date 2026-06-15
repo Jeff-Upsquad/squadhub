@@ -160,7 +160,7 @@ export interface ResourceMembership {
 // ---- Project Management ----
 export type TaskPriority = 'emergency' | 'urgent' | 'high' | 'normal' | 'low' | 'none';
 export type StatusCategory = 'todo' | 'active' | 'done' | 'closed';
-export type ListView = 'list' | 'board';
+export type ListView = 'list' | 'board' | 'whiteboard';
 export type ResourceStatus = 'active' | 'inactive';
 
 // ---- Task status catalog (for task_type = 'task') ----
@@ -335,6 +335,58 @@ export interface List {
   // Joined
   task_count?: number;
   profile?: CustomProfile;
+}
+
+// ---- Whiteboard (FigJam-style list view) ----
+// A list's whiteboard is persisted as a single app-owned JSONB blob
+// (list_whiteboards.data). The shape is owned by the whiteboard view; the
+// server stores it opaquely and does not validate the contents.
+export type WhiteboardNodeType = 'sticky' | 'text' | 'shape';
+export type WhiteboardShape =
+  | 'rect' | 'roundRect' | 'ellipse' | 'diamond'
+  | 'triangle' | 'triangleDown' | 'parallelogram'
+  | 'pentagon' | 'hexagon' | 'chevron' | 'cylinder';
+
+export interface WhiteboardNodeData {
+  text: string;
+  color?: string;
+  shape?: WhiteboardShape;
+  // Text formatting set from the element's floating edit bar.
+  bold?: boolean;
+  fontSize?: 'sm' | 'md' | 'lg';
+  align?: 'left' | 'center' | 'right';
+  // Set once the element is converted to a task from its edit bar. taskId links
+  // the element to a real task; taskNumber mirrors tasks.display_number for the
+  // "#N" badge; done mirrors the task's completion (toggled by the element's
+  // checkbox). All cleared on "Unlink" (the task itself is NOT deleted).
+  taskId?: string | null;
+  taskNumber?: number | null;
+  done?: boolean;
+  [key: string]: unknown;
+}
+
+export interface WhiteboardNode {
+  id: string;
+  type: WhiteboardNodeType;
+  position: { x: number; y: number };
+  width?: number | null;
+  height?: number | null;
+  data: WhiteboardNodeData;
+}
+
+export interface WhiteboardEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+  label?: string;
+}
+
+export interface WhiteboardData {
+  nodes: WhiteboardNode[];
+  edges: WhiteboardEdge[];
+  viewport?: { x: number; y: number; zoom: number };
 }
 
 export interface TaskMetadata {

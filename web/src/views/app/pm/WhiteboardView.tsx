@@ -1,0 +1,730 @@
+'use client';
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ReactFlow,
+  ReactFlowProvider,
+  Background,
+  BackgroundVariant,
+  Controls,
+  Panel,
+  Handle,
+  Position,
+  ConnectionMode,
+  MarkerType,
+  NodeResizer,
+  NodeToolbar,
+  addEdge,
+  useNodesState,
+  useEdgesState,
+  useReactFlow,
+  type Node,
+  type Edge,
+  type NodeProps,
+} from '@xyflow/react';
+import type { SpaceStatus, WhiteboardData, WhiteboardNode, WhiteboardEdge, WhiteboardNodeData, WhiteboardNodeType, WhiteboardShape } from '@squadhub/shared';
+import { useWhiteboard, useWhiteboardAutosave } from '../../../hooks/useWhiteboard';
+import { useCreateTask, useUpdateTask } from '../../../hooks/useTasks';
+import { usePMStore } from '../../../stores/pmStore';
+
+type WBNode = Node<WhiteboardNodeData>;
+type WBEdge = Edge;
+
+// Sticky note palette (text stays dark on all of these).
+const STICKY_COLORS = ['#FFE082', '#FFAB91', '#A5D6A7', '#90CAF9', '#CE93D8', '#F48FB1'];
+// Fuller fill palette for the colour popover (two rows: vivid + pastel).
+const FILL_COLORS = [
+  '#1f2937', '#6b7280', '#ef4444', '#f97316', '#f59e0b', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899',
+  '#ffffff', '#d1d5db', '#fecaca', '#fed7aa', '#fde68a', '#bbf7d0', '#99f6e4', '#bfdbfe', '#ddd6fe', '#fbcfe8',
+];
+const NO_FILL = 'transparent';
+const FONT_PX: Record<NonNullable<WhiteboardNodeData['fontSize']>, number> = { sm: 12, md: 15, lg: 21 };
+
+// Initial sizes for resizable node types (text auto-sizes to its content).
+const DEFAULT_SIZE: Partial<Record<WhiteboardNodeType, { width: number; height: number }>> = {
+  sticky: { width: 188, height: 152 },
+  shape: { width: 176, height: 120 },
+};
+
+const OPPOSITE: Record<string, string> = { t: 'b', b: 't', l: 'r', r: 'l' };
+const HANDLE_ID: Record<string, string> = {
+  [Position.Top]: 't', [Position.Right]: 'r', [Position.Bottom]: 'b', [Position.Left]: 'l',
+};
+
+// Available shapes for the shape picker. Each is drawn as an SVG inside the
+// node's bounding box (viewBox 0 0 100 100, preserveAspectRatio="none"), so it
+// stretches to whatever size the element is resized to.
+const SHAPES: { key: WhiteboardShape; label: string }[] = [
+  { key: 'rect', label: 'Rectangle' },
+  { key: 'roundRect', label: 'Rounded rectangle' },
+  { key: 'ellipse', label: 'Ellipse' },
+  { key: 'diamond', label: 'Diamond' },
+  { key: 'triangle', label: 'Triangle' },
+  { key: 'triangleDown', label: 'Triangle down' },
+  { key: 'parallelogram', label: 'Parallelogram' },
+  { key: 'pentagon', label: 'Pentagon' },
+  { key: 'hexagon', label: 'Hexagon' },
+  { key: 'chevron', label: 'Chevron arrow' },
+  { key: 'cylinder', label: 'Cylinder' },
+];
+
+// The SVG geometry for a shape. `fill`/`stroke` go through `style` so CSS
+// variables resolve; the non-scaling stroke keeps a uniform outline regardless
+// of the (non-uniform) scaling.
+function ShapeGeom({ shape, fill = 'none', stroke = 'currentColor' }: { shape?: string; fill?: string; stroke?: string }) {
+  const s: React.CSSProperties = { fill, stroke, strokeWidth: 1.6, vectorEffect: 'non-scaling-stroke', strokeLinejoin: 'round' };
+  switch (shape) {
+    case 'ellipse': return <ellipse cx="50" cy="50" rx="48" ry="48" style={s} />;
+    case 'roundRect': return <rect x="2" y="2" width="96" height="96" rx="14" style={s} />;
+    case 'diamond': return <polygon points="50,2 98,50 50,98 2,50" style={s} />;
+    case 'triangle': return <polygon points="50,3 97,97 3,97" style={s} />;
+    case 'triangleDown': return <polygon points="3,3 97,3 50,97" style={s} />;
+    case 'parallelogram': return <polygon points="24,3 97,3 76,97 3,97" style={s} />;
+    case 'pentagon': return <polygon points="50,2 98,40 80,97 20,97 2,40" style={s} />;
+    case 'hexagon': return <polygon points="28,3 72,3 97,50 72,97 28,97 3,50" style={s} />;
+    case 'chevron': return <polygon points="3,3 72,3 97,50 72,97 3,97 28,50" style={s} />;
+    case 'cylinder': return <path d="M2,14 a48,12 0 0 1 96,0 v72 a48,12 0 0 1 -96,0 z M2,14 a48,12 0 0 0 96,0" style={s} />;
+    case 'rect':
+    default: return <rect x="2" y="2" width="96" height="96" style={s} />;
+  }
+}
+
+// FigJam-style shape picker — search box + grid. Used by the toolbar (add a
+// shape) and the edit bar (change a selected shape's type).
+function ShapePicker({ current, onPick }: { current?: string; onPick: (key: WhiteboardShape) => void }) {
+  const [q, setQ] = useState('');
+  const list = SHAPES.filter((s) => s.label.toLowerCase().includes(q.trim().toLowerCase()));
+  return (
+    <div className="wb-shape-pop nodrag nowheel">
+      <input className="wb-shape-search" placeholder="Search for a shape" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+      <div className="wb-shape-grid">
+        {list.map((s) => (
+          <button key={s.key} type="button" className="wb-shape-cell" data-active={current === s.key} title={s.label} onClick={() => onPick(s.key)}>
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none"><ShapeGeom shape={s.key} /></svg>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface WhiteboardCtx {
+  canEdit: boolean;
+  editingId: string | null;
+  startEditing: (id: string) => void;
+  stopEditing: () => void;
+  updateNodeText: (id: string, text: string) => void;
+  setNodeData: (id: string, patch: Partial<WhiteboardNodeData>) => void;
+  convertToTask: (id: string) => void;
+  unlinkTask: (id: string) => void;
+  openTask: (taskId: string) => void;
+  toggleDone: (id: string) => void;
+  duplicateNode: (nodeId: string, position: Position) => void;
+}
+const WBContext = createContext<WhiteboardCtx | null>(null);
+const useWB = () => {
+  const ctx = useContext(WBContext);
+  if (!ctx) throw new Error('WhiteboardContext missing');
+  return ctx;
+};
+
+// Tracks which edge of an element the cursor is nearest, so we can show a single
+// duplicate arrow on that side (FigJam-style). A short hide delay + the arrow's
+// own onMouseEnter let the cursor cross the small gap to the arrow without it
+// vanishing.
+function useNearestSide() {
+  const [side, setSide] = useState<Position | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelHide = useCallback(() => {
+    if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
+  }, []);
+  const onMouseMove = useCallback((e: React.MouseEvent) => {
+    cancelHide();
+    const r = e.currentTarget.getBoundingClientRect();
+    const dt = e.clientY - r.top, dr = r.right - e.clientX, db = r.bottom - e.clientY, dl = e.clientX - r.left;
+    const m = Math.min(dt, dr, db, dl);
+    setSide(m === dt ? Position.Top : m === dr ? Position.Right : m === db ? Position.Bottom : Position.Left);
+  }, [cancelHide]);
+  const onMouseLeave = useCallback(() => {
+    cancelHide();
+    hideTimer.current = setTimeout(() => setSide(null), 160);
+  }, [cancelHide]);
+  return { side, onMouseMove, onMouseLeave, cancelHide };
+}
+
+// ── Inline text-formatting style derived from the element's data ────────────
+function textStyle(data: WhiteboardNodeData): React.CSSProperties {
+  return {
+    fontWeight: data.bold ? 700 : undefined,
+    fontSize: data.fontSize ? FONT_PX[data.fontSize] : undefined,
+    textAlign: data.align,
+  };
+}
+
+// ── Task chrome — ONLY rendered after an element is converted to a task ─────
+// A checkbox (toggles the task's done state) plus a pill that opens the task.
+function NodeChrome({ id, data }: { id: string; data: WhiteboardNodeData }) {
+  const { canEdit, openTask, toggleDone } = useWB();
+  if (!data.taskId) return null;
+  return (
+    <div className="wb-chrome nodrag">
+      <input
+        type="checkbox"
+        className="wb-check"
+        checked={!!data.done}
+        disabled={!canEdit}
+        title={data.done ? 'Mark not done' : 'Mark done'}
+        onChange={() => canEdit && toggleDone(id)}
+      />
+      <button
+        type="button"
+        className="wb-task-pill nodrag"
+        title="Open task"
+        onClick={() => data.taskId && openTask(data.taskId)}
+      >
+        {data.taskNumber != null ? `#${data.taskNumber}` : 'Task'}
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M7 17L17 7M17 7H8M17 7v9" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+// Editable text region. Editing is driven by the whiteboard's `editingId`
+// (set by React Flow's onNodeDoubleClick — a native onDoubleClick here is
+// unreliable because the drag layer preventDefaults mousedown, which suppresses
+// the browser's dblclick event). Commits on blur.
+function EditableText({ id, data, placeholder, className }: { id: string; data: WhiteboardNodeData; placeholder: string; className: string }) {
+  const { canEdit, updateNodeText, editingId, startEditing, stopEditing } = useWB();
+  const editing = editingId === id;
+  const [draft, setDraft] = useState(data.text);
+  const style = textStyle(data);
+
+  useEffect(() => { if (!editing) setDraft(data.text); }, [data.text, editing]);
+
+  if (editing) {
+    return (
+      <textarea
+        autoFocus
+        style={style}
+        className={`${className} wb-text-edit nodrag nowheel`}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => { updateNodeText(id, draft); stopEditing(); }}
+        onKeyDown={(e) => { if (e.key === 'Escape') (e.target as HTMLTextAreaElement).blur(); }}
+      />
+    );
+  }
+  return (
+    <div
+      style={style}
+      className={`${className} wb-text-view ${!data.text ? 'wb-text-empty' : ''} ${data.done ? 'wb-done' : ''}`}
+      onDoubleClick={() => canEdit && startEditing(id)}
+    >
+      {data.text || placeholder}
+    </div>
+  );
+}
+
+// Four edge handles, kept invisible — they only serve as anchor points for the
+// arrows that join an element to its duplicate (see CSS .wb-handle).
+function NodeHandles() {
+  // A source AND a target handle at each side (same id per side), so a
+  // duplicate's edge can anchor its source end on one node's side and its
+  // target end on the other's. CSS (.wb-handle) keeps them invisible and
+  // pointer-events:none, so the user can't drag a connection from them.
+  const side = (position: Position, id: string) => (
+    <>
+      <Handle id={id} type="source" position={position} className="wb-handle" />
+      <Handle id={id} type="target" position={position} className="wb-handle" />
+    </>
+  );
+  return (
+    <>
+      {side(Position.Top, 't')}
+      {side(Position.Right, 'r')}
+      {side(Position.Bottom, 'b')}
+      {side(Position.Left, 'l')}
+    </>
+  );
+}
+
+// FigJam-style directional arrow — a SINGLE arrow on the side of the element
+// nearest the cursor. Clicking it duplicates the element to that side.
+const ARROW_CLS: Record<string, string> = {
+  [Position.Top]: 'wb-arrow--t', [Position.Right]: 'wb-arrow--r',
+  [Position.Bottom]: 'wb-arrow--b', [Position.Left]: 'wb-arrow--l',
+};
+function DuplicateArrows({ nodeId, side, onArrowEnter }: { nodeId: string; side: Position | null; onArrowEnter: () => void }) {
+  const { canEdit, duplicateNode } = useWB();
+  if (!canEdit || !side) return null;
+  return (
+    <button
+      type="button"
+      className={`wb-arrow ${ARROW_CLS[side]} nodrag`}
+      title="Duplicate this way"
+      onMouseEnter={onArrowEnter}
+      onClick={(e) => { e.stopPropagation(); duplicateNode(nodeId, side); }}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 12h14M13 6l6 6-6 6" />
+      </svg>
+    </button>
+  );
+}
+
+// Floating edit bar shown above a selected element. Colour, text formatting,
+// and the convert-to-task action all live here.
+function EditBar({ id, data, type, visible }: { id: string; data: WhiteboardNodeData; type: WhiteboardNodeType; visible: boolean }) {
+  const { setNodeData, convertToTask, unlinkTask, openTask } = useWB();
+  const [colorOpen, setColorOpen] = useState(false);
+  const [shapeOpen, setShapeOpen] = useState(false);
+  const size = data.fontSize || 'md';
+  const noFill = data.color === NO_FILL;
+  const triggerColor = noFill ? 'transparent' : (data.color || (type === 'shape' ? 'var(--surface)' : STICKY_COLORS[0]));
+  useEffect(() => { if (!visible) { setColorOpen(false); setShapeOpen(false); } }, [visible]);
+  return (
+    <NodeToolbar isVisible={visible} position={Position.Top} offset={14} className="wb-ebar nodrag nowheel">
+      {type !== 'text' && (
+        <>
+          <div className="wb-color-wrap">
+            <button type="button" className="wb-ebar-btn wb-color-btn" title="Fill" onClick={() => setColorOpen((o) => !o)}>
+              <span className="wb-ebar-swatch wb-color-trigger" data-nofill={noFill} style={{ background: triggerColor }} />
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+            </button>
+            {colorOpen && (
+              <div className="wb-color-pop">
+                <div className="wb-color-tabs">
+                  <button type="button" data-active={!noFill} onClick={() => setNodeData(id, { color: data.color && !noFill ? data.color : FILL_COLORS[0] })}>Fill</button>
+                  <button type="button" data-active={noFill} onClick={() => setNodeData(id, { color: NO_FILL })}>Transparent</button>
+                  <button type="button" data-active={noFill} onClick={() => setNodeData(id, { color: NO_FILL })}>No fill</button>
+                </div>
+                <div className="wb-color-grid">
+                  {FILL_COLORS.map((c) => (
+                    <button key={c} type="button" className="wb-color-cell" data-active={data.color === c} style={{ background: c }} onClick={() => setNodeData(id, { color: c })} aria-label={c} />
+                  ))}
+                  <label className="wb-color-cell wb-color-custom" title="Custom colour">
+                    <input type="color" value={typeof data.color === 'string' && data.color.startsWith('#') ? data.color : '#ffffff'} onChange={(e) => setNodeData(id, { color: e.target.value })} />
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+          <span className="wb-ebar-sep" />
+        </>
+      )}
+      {type === 'shape' && (
+        <>
+          <div className="wb-color-wrap">
+            <button type="button" className="wb-ebar-btn" title="Shape" onClick={() => setShapeOpen((o) => !o)}>
+              <svg width="14" height="14" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ display: 'block' }}><ShapeGeom shape={data.shape || 'rect'} stroke="currentColor" /></svg>
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+            </button>
+            {shapeOpen && (
+              <ShapePicker current={data.shape || 'rect'} onPick={(k) => { setNodeData(id, { shape: k }); setShapeOpen(false); }} />
+            )}
+          </div>
+          <span className="wb-ebar-sep" />
+        </>
+      )}
+      <button type="button" className="wb-ebar-btn" data-active={!!data.bold} title="Bold" onClick={() => setNodeData(id, { bold: !data.bold })}>
+        <b>B</b>
+      </button>
+      {(['sm', 'md', 'lg'] as const).map((s) => (
+        <button key={s} type="button" className="wb-ebar-btn wb-ebar-size" data-active={size === s} title={`${s === 'sm' ? 'Small' : s === 'md' ? 'Medium' : 'Large'} text`} onClick={() => setNodeData(id, { fontSize: s })}>
+          {s === 'sm' ? 'S' : s === 'md' ? 'M' : 'L'}
+        </button>
+      ))}
+      <span className="wb-ebar-sep" />
+      <button type="button" className="wb-ebar-btn" data-active={(data.align || 'left') === 'left'} title="Align left" onClick={() => setNodeData(id, { align: 'left' })}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h13" /></svg>
+      </button>
+      <button type="button" className="wb-ebar-btn" data-active={data.align === 'center'} title="Align centre" onClick={() => setNodeData(id, { align: 'center' })}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M7 12h10M5 18h14" /></svg>
+      </button>
+      <span className="wb-ebar-sep" />
+      {data.taskId ? (
+        <>
+          <button type="button" className="wb-ebar-btn wb-ebar-text" title="Open task" onClick={() => data.taskId && openTask(data.taskId)}>Open task</button>
+          <button type="button" className="wb-ebar-btn wb-ebar-text" title="Unlink task" onClick={() => unlinkTask(id)}>Unlink</button>
+        </>
+      ) : (
+        <button type="button" className="wb-ebar-btn wb-ebar-text wb-ebar-convert" title="Convert this element to a task" onClick={() => convertToTask(id)}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+          Convert to task
+        </button>
+      )}
+    </NodeToolbar>
+  );
+}
+
+function StickyNode({ id, data, selected }: NodeProps<WBNode>) {
+  const { canEdit } = useWB();
+  const { side, onMouseMove, onMouseLeave, cancelHide } = useNearestSide();
+  return (
+    <div className="wb-sticky" style={{ background: data.color || STICKY_COLORS[0] }} onMouseMove={canEdit ? onMouseMove : undefined} onMouseLeave={onMouseLeave}>
+      <NodeResizer minWidth={120} minHeight={96} isVisible={!!selected && canEdit} color="var(--sh-ink-3)" />
+      <NodeHandles />
+      <EditBar id={id} data={data} type="sticky" visible={!!selected && canEdit} />
+      <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />
+      <NodeChrome id={id} data={data} />
+      <EditableText id={id} data={data} placeholder="Type a note…" className="wb-sticky-text" />
+    </div>
+  );
+}
+
+function TextNode({ id, data, selected }: NodeProps<WBNode>) {
+  const { canEdit } = useWB();
+  const { side, onMouseMove, onMouseLeave, cancelHide } = useNearestSide();
+  return (
+    <div className="wb-textnode" onMouseMove={canEdit ? onMouseMove : undefined} onMouseLeave={onMouseLeave}>
+      <NodeHandles />
+      <EditBar id={id} data={data} type="text" visible={!!selected && canEdit} />
+      <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />
+      <NodeChrome id={id} data={data} />
+      <EditableText id={id} data={data} placeholder="Text" className="wb-textnode-text" />
+    </div>
+  );
+}
+
+function ShapeNode({ id, data, selected }: NodeProps<WBNode>) {
+  const { canEdit } = useWB();
+  const { side, onMouseMove, onMouseLeave, cancelHide } = useNearestSide();
+  const fill = data.color === NO_FILL ? 'none' : (data.color || 'var(--surface)');
+  return (
+    <div className="wb-shape" onMouseMove={canEdit ? onMouseMove : undefined} onMouseLeave={onMouseLeave}>
+      <NodeResizer minWidth={80} minHeight={60} isVisible={!!selected && canEdit} color="var(--sh-ink-3)" />
+      <svg className="wb-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <ShapeGeom shape={data.shape || 'rect'} fill={fill} stroke="var(--sh-ink-3)" />
+      </svg>
+      <NodeHandles />
+      <EditBar id={id} data={data} type="shape" visible={!!selected && canEdit} />
+      <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />
+      <NodeChrome id={id} data={data} />
+      <EditableText id={id} data={data} placeholder="" className="wb-shape-text" />
+    </div>
+  );
+}
+
+const nodeTypes = { sticky: StickyNode, text: TextNode, shape: ShapeNode };
+
+// ── Serialization (strip React Flow runtime fields before persisting) ───────
+function serialize(nodes: WBNode[], edges: WBEdge[], viewport?: WhiteboardData['viewport']): WhiteboardData {
+  const sNodes: WhiteboardNode[] = nodes.map((n) => ({
+    id: n.id,
+    type: (n.type as WhiteboardNodeType) || 'sticky',
+    position: n.position,
+    width: n.width ?? n.measured?.width ?? null,
+    height: n.height ?? n.measured?.height ?? null,
+    data: {
+      text: n.data.text ?? '',
+      color: n.data.color,
+      shape: n.data.shape,
+      bold: n.data.bold,
+      fontSize: n.data.fontSize,
+      align: n.data.align,
+      taskId: n.data.taskId ?? null,
+      taskNumber: n.data.taskNumber ?? null,
+      done: n.data.done,
+    },
+  }));
+  const sEdges: WhiteboardEdge[] = edges.map((e) => ({
+    id: e.id,
+    source: e.source,
+    target: e.target,
+    sourceHandle: e.sourceHandle ?? null,
+    targetHandle: e.targetHandle ?? null,
+    label: typeof e.label === 'string' ? e.label : undefined,
+  }));
+  return { nodes: sNodes, edges: sEdges, viewport };
+}
+
+const defaultEdgeOptions = {
+  type: 'default' as const,
+  markerEnd: { type: MarkerType.ArrowClosed },
+};
+
+// ── Canvas (mounted once per list; seeded from the loaded blob) ─────────────
+function Canvas({
+  listId,
+  initial,
+  statuses,
+  canEdit,
+}: {
+  listId: string;
+  initial: WhiteboardData;
+  statuses: SpaceStatus[];
+  canEdit: boolean;
+}) {
+  const rf = useReactFlow();
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [nodes, setNodes, onNodesChange] = useNodesState<WBNode>(
+    (initial.nodes ?? []).map((n) => {
+      const d = DEFAULT_SIZE[n.type];
+      const sized = d ? { width: n.width ?? d.width, height: n.height ?? d.height } : {};
+      return { id: n.id, type: n.type, position: n.position, ...sized, data: { ...n.data } };
+    }),
+  );
+  const [edges, setEdges, onEdgesChange] = useEdgesState<WBEdge>(
+    (initial.edges ?? []).map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle ?? undefined, targetHandle: e.targetHandle ?? undefined, label: e.label })),
+  );
+  const { save } = useWhiteboardAutosave(listId);
+  const createTask = useCreateTask(listId);
+  const updateTask = useUpdateTask(listId);
+  const [newColor, setNewColor] = useState(STICKY_COLORS[0]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const startEditing = useCallback((id: string) => setEditingId(id), []);
+  const stopEditing = useCallback(() => setEditingId(null), []);
+  const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
+
+  // Manual double-click detection: two clicks on the same node within 350ms.
+  // More reliable than the native dblclick event, which React Flow's drag layer
+  // can suppress (it preventDefaults mousedown) — single-click selection always
+  // fires onNodeClick, so we derive the double-click from that.
+  const lastClick = useRef<{ id: string; t: number }>({ id: '', t: 0 });
+  const onNodeClick = useCallback((e: React.MouseEvent, node: Node) => {
+    if (!canEdit) return;
+    const last = lastClick.current;
+    if (last.id === node.id && e.timeStamp - last.t < 350) {
+      setEditingId(node.id);
+      lastClick.current = { id: '', t: 0 };
+    } else {
+      lastClick.current = { id: node.id, t: e.timeStamp };
+    }
+  }, [canEdit]);
+
+  // Skip the very first autosave (it would just write back the loaded state).
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    save(serialize(nodes, edges, rf.getViewport()));
+  }, [nodes, edges, save, rf]);
+
+  const updateNodeText = useCallback((id: string, text: string) => {
+    const node = rf.getNode(id) as WBNode | undefined;
+    setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, text } } : n)));
+    // If this element is linked to a task, keep the task's title in sync with
+    // the element's text (the element text IS the task name).
+    if (node?.data.taskId) {
+      updateTask.mutate({ id: node.data.taskId, title: text.trim() || 'Untitled task' });
+    }
+  }, [rf, setNodes, updateTask]);
+
+  const setNodeData = useCallback((id: string, patch: Partial<WhiteboardNodeData>) => {
+    setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)));
+  }, [setNodes]);
+
+  const convertToTask = useCallback((id: string) => {
+    const node = rf.getNode(id) as WBNode | undefined;
+    const title = (node?.data.text || '').trim() || 'Untitled task';
+    createTask.mutate(
+      { title, status: statuses[0]?.name },
+      { onSuccess: (task: { id: string; display_number?: number | null }) => setNodeData(id, { taskId: task.id, taskNumber: task.display_number ?? null, done: false }) },
+    );
+  }, [rf, createTask, statuses, setNodeData]);
+
+  const unlinkTask = useCallback((id: string) => setNodeData(id, { taskId: null, taskNumber: null, done: false }), [setNodeData]);
+  const openTask = useCallback((taskId: string) => usePMStore.getState().setActiveTask(taskId), []);
+
+  // Checkbox on a task element marks the linked task complete / not-done. The
+  // status field takes the literal category string 'done'/'todo' (same as the
+  // list view's row checkbox — see TaskRow), not a space-status name.
+  const toggleDone = useCallback((id: string) => {
+    const node = rf.getNode(id) as WBNode | undefined;
+    const taskId = node?.data.taskId;
+    if (!taskId) return;
+    const done = !node?.data.done;
+    setNodeData(id, { done });
+    updateTask.mutate({ id: taskId, status: done ? 'done' : 'todo' });
+  }, [rf, setNodeData, updateTask]);
+
+  // Duplicate a node to one side: clone its content + formatting + size, offset
+  // in `position`'s direction, joined by an arrow. The task link is NOT copied —
+  // the duplicate is an independent, plain element.
+  const duplicateNode = useCallback((nodeId: string, position: Position) => {
+    if (!canEdit) return;
+    const src = rf.getNode(nodeId) as WBNode | undefined;
+    if (!src) return;
+    const type = (src.type as WhiteboardNodeType) || 'sticky';
+    const w = src.width ?? src.measured?.width ?? DEFAULT_SIZE[type]?.width ?? 180;
+    const h = src.height ?? src.measured?.height ?? DEFAULT_SIZE[type]?.height ?? 120;
+    const GAP = 64;
+    const pos = { x: src.position.x, y: src.position.y };
+    switch (position) {
+      case Position.Left: pos.x -= w + GAP; break;
+      case Position.Top: pos.y -= h + GAP; break;
+      case Position.Bottom: pos.y += h + GAP; break;
+      default: pos.x += w + GAP; // Right + fallback
+    }
+    const id = crypto.randomUUID();
+    const s = src.data;
+    const data: WhiteboardNodeData = {
+      text: s.text || '', color: s.color, shape: s.shape, bold: s.bold, fontSize: s.fontSize, align: s.align,
+      taskId: null, taskNumber: null, done: false,
+    };
+    const sized = DEFAULT_SIZE[type] ? { width: w, height: h } : {};
+    setNodes((nds) => [...nds, { id, type, position: pos, ...sized, data }]);
+    const srcHandle = HANDLE_ID[position];
+    const edge: WBEdge = {
+      id: crypto.randomUUID(),
+      source: nodeId,
+      target: id,
+      sourceHandle: srcHandle,
+      targetHandle: OPPOSITE[srcHandle],
+      markerEnd: { type: MarkerType.ArrowClosed },
+    };
+    setEdges((eds) => addEdge(edge, eds));
+  }, [canEdit, rf, setNodes, setEdges]);
+
+  const ctx = useMemo<WhiteboardCtx>(
+    () => ({ canEdit, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, unlinkTask, openTask, toggleDone, duplicateNode }),
+    [canEdit, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, unlinkTask, openTask, toggleDone, duplicateNode],
+  );
+
+  // Place new nodes at the centre of the current viewport.
+  const centerPosition = useCallback(() => {
+    const rect = wrapperRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return rf.screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+  }, [rf]);
+
+  const addNode = useCallback((type: WhiteboardNodeType, extra: Partial<WhiteboardNodeData> = {}) => {
+    const id = crypto.randomUUID();
+    const data: WhiteboardNodeData = { text: '', taskId: null, taskNumber: null, ...extra };
+    if (type === 'sticky') data.color = newColor;
+    const base = centerPosition();
+    const d = DEFAULT_SIZE[type];
+    setNodes((nds) => {
+      const o = (nds.length % 6) * 28;
+      return [...nds, { id, type, position: { x: base.x + o, y: base.y + o }, ...(d ? { width: d.width, height: d.height } : {}), data }];
+    });
+  }, [setNodes, centerPosition, newColor]);
+
+  // Full screen — request on the canvas wrapper so the board fills the display.
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(document.fullscreenElement === wrapperRef.current);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    else wrapperRef.current?.requestFullscreen?.().catch(() => {});
+  }, []);
+
+  return (
+    <WBContext.Provider value={ctx}>
+      <div ref={wrapperRef} className="lv-canvas relative flex flex-1 overflow-hidden">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeClick={onNodeClick}
+          onNodeDoubleClick={(_, node) => { if (canEdit) startEditing(node.id); }}
+          onMoveEnd={() => { if (!firstRun.current) save(serialize(nodes, edges, rf.getViewport())); }}
+          nodeTypes={nodeTypes}
+          connectionMode={ConnectionMode.Loose}
+          zoomOnDoubleClick={false}
+          defaultEdgeOptions={defaultEdgeOptions}
+          defaultViewport={initial.viewport}
+          fitView={!initial.viewport && (initial.nodes?.length ?? 0) > 0}
+          nodesDraggable={canEdit}
+          nodesConnectable={canEdit}
+          elementsSelectable={canEdit}
+          deleteKeyCode={canEdit ? ['Backspace', 'Delete'] : null}
+          proOptions={{ hideAttribution: true }}
+          className="wb-flow"
+        >
+          <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
+          <Controls showInteractive={false} />
+
+          <Panel position="top-right" className="wb-fs-panel">
+            <button
+              type="button"
+              className="wb-fs-btn"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit full screen' : 'Full screen'}
+            >
+              {isFullscreen ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 9H4m5 0V4m0 5L3 3m12 6h5m-5 0V4m0 5l6-6M9 15H4m5 0v5m0-5l-6 6m12-6h5m-5 0v5m0-5l6 6" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3m13-5v3a2 2 0 01-2 2h-3" />
+                </svg>
+              )}
+              {isFullscreen ? 'Exit' : 'Fullscreen'}
+            </button>
+          </Panel>
+
+          {canEdit && (
+            <Panel position="top-left" className="wb-toolbar">
+              <button type="button" className="wb-tool" onClick={() => addNode('sticky')} title="Add sticky note">
+                <span className="wb-tool-swatch" style={{ background: newColor }} />
+                Sticky
+              </button>
+              <button type="button" className="wb-tool" onClick={() => addNode('text')} title="Add text">
+                <span className="wb-tool-ic" style={{ fontWeight: 800 }}>T</span>
+                Text
+              </button>
+              <div className="wb-color-wrap">
+                <button type="button" className="wb-tool" onClick={() => setShapeMenuOpen((o) => !o)} title="Add shape">
+                  <span className="wb-tool-ic" style={{ border: '1.5px solid currentColor', width: 13, height: 11, borderRadius: 2 }} />
+                  Shape
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: -1 }}><path d="M6 9l6 6 6-6" /></svg>
+                </button>
+                {shapeMenuOpen && (
+                  <ShapePicker onPick={(k) => { addNode('shape', { shape: k }); setShapeMenuOpen(false); }} />
+                )}
+              </div>
+              <span className="wb-tool-sep" />
+              <div className="wb-swatches">
+                {STICKY_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className="wb-swatch"
+                    data-active={newColor === c}
+                    style={{ background: c }}
+                    onClick={() => setNewColor(c)}
+                    title="Sticky color for new notes"
+                    aria-label={`Sticky color ${c}`}
+                  />
+                ))}
+              </div>
+            </Panel>
+          )}
+        </ReactFlow>
+      </div>
+    </WBContext.Provider>
+  );
+}
+
+export default function WhiteboardView({
+  listId,
+  statuses,
+  canEdit = true,
+}: {
+  listId: string;
+  statuses: SpaceStatus[];
+  canEdit?: boolean;
+}) {
+  const { data: wb, isLoading } = useWhiteboard(listId);
+
+  if (isLoading || !wb) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <p className="text-sm text-[color:var(--sh-ink-3)]">Loading whiteboard…</p>
+      </div>
+    );
+  }
+
+  return (
+    <ReactFlowProvider>
+      <Canvas key={listId} listId={listId} initial={wb} statuses={statuses} canEdit={canEdit} />
+    </ReactFlowProvider>
+  );
+}

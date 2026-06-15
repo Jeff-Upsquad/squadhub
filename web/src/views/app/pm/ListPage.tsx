@@ -8,6 +8,7 @@ import { canAtLeast } from '../../../lib/access';
 import type { SpaceStatus, AccessLevel } from '@squadhub/shared';
 import ListView from './ListView';
 import BoardView from './BoardView';
+import WhiteboardView from './WhiteboardView';
 import SettingsSlider from '../../../components/SettingsSlider';
 import ManageMembersModal from './ManageMembersModal';
 import TaskCreatePanel from './TaskCreatePanel';
@@ -232,6 +233,17 @@ export default function ListPage({
           Board
         </button>
         <button
+          onClick={() => setViewMode('whiteboard')}
+          className="lv-tab hidden md:inline-flex"
+          data-active={effectiveViewMode === 'whiteboard'}
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v11a1 1 0 01-1 1h-5l-3 3-3-3H5a1 1 0 01-1-1V5z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 9h8M8 12.5h5" />
+          </svg>
+          Whiteboard
+        </button>
+        <button
           className="lv-tab"
           data-active={false}
           disabled
@@ -328,13 +340,19 @@ export default function ListPage({
             sortBy={sortBy}
             focusToday={focusToday}
           />
-        ) : (
+        ) : effectiveViewMode === 'board' ? (
           <BoardView
             listId={activeListId}
             statuses={statuses}
             filters={filters}
             listName={listData?.name || ''}
             searchQuery={searchQuery}
+            canEdit={canEdit}
+          />
+        ) : (
+          <WhiteboardView
+            listId={activeListId}
+            statuses={statuses}
             canEdit={canEdit}
           />
         )}
