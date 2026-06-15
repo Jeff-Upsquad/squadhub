@@ -371,8 +371,11 @@ export interface WhiteboardNode {
   position: { x: number; y: number };
   width?: number | null;
   height?: number | null;
+  zIndex?: number | null;
   data: WhiteboardNodeData;
 }
+
+export type WhiteboardLineType = 'straight' | 'bezier' | 'smoothstep';
 
 export interface WhiteboardEdge {
   id: string;
@@ -381,6 +384,10 @@ export interface WhiteboardEdge {
   sourceHandle?: string | null;
   targetHandle?: string | null;
   label?: string;
+  type?: string;
+  // Line appearance set from the edge toolbar. arrowStart/arrowEnd toggle the
+  // arrowheads; lineType picks straight / curved / elbow routing.
+  data?: { lineType?: WhiteboardLineType; arrowStart?: boolean; arrowEnd?: boolean };
 }
 
 export interface WhiteboardData {

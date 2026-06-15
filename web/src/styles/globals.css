@@ -6260,6 +6260,29 @@ ol.sqc-list {
 /* Completed task element: strike + dim the text. */
 .wb-done { text-decoration: line-through; opacity: 0.55; }
 
+/* Edge (line) toolbar — reuses .wb-ebar styling, positioned at the edge midpoint. */
+.wb-edge-bar { z-index: 10; }
+.wb-flow .react-flow__edge.selected .react-flow__edge-path { stroke: var(--sh-ink) !important; }
+
+/* Edge centre label (double-click the line to add/edit). */
+.wb-edge-label {
+  background: var(--surface);
+  border: 1px solid var(--sh-hair);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px; font-weight: 600; color: var(--sh-ink-2);
+  white-space: nowrap; cursor: text;
+}
+.wb-edge-input {
+  width: 90px; text-align: center;
+  background: var(--surface);
+  border: 1.5px solid var(--sh-accent, #3b82f6);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 12px; font-weight: 600; color: var(--sh-ink);
+  outline: none;
+}
+
 /* Node chrome: convert-to-task checkbox + linked-task pill */
 .wb-chrome {
   position: absolute;
