@@ -130,6 +130,7 @@ interface WhiteboardCtx {
   setEdgeLineType: (id: string, lineType: WhiteboardLineType) => void;
   cycleEdgeArrows: (id: string) => void;
   deleteEdge: (id: string) => void;
+  setEdgeWaypoint: (id: string, waypoint: { x: number; y: number } | null) => void;
   editingEdgeId: string | null;
   startEditingEdge: (id: string) => void;
   setEdgeLabel: (id: string, label: string) => void;
@@ -436,15 +437,35 @@ const edgeMarkers = (d?: { arrowStart?: boolean; arrowEnd?: boolean }) => ({
 // carries an optional centre label (double-click to edit), and shows a toolbar
 // (line style, arrowheads, delete) when selected.
 function WBEdgeComponent({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerStart, markerEnd, selected, data, label }: EdgeProps) {
-  const { canEdit, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, stopEditing, setEdgeLabel } = useWB();
+  const { canEdit, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, stopEditing, setEdgeLabel, setEdgeWaypoint } = useWB();
+  const rf = useReactFlow();
   const editing = editingEdgeId === id;
   const labelText = typeof label === 'string' ? label : '';
   const lineType = (data?.lineType as WhiteboardLineType) || 'smoothstep';
+  const wp = (data?.waypoint as { x: number; y: number } | null | undefined) || null;
   const args = { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition };
-  const [path, labelX, labelY] =
-    lineType === 'straight' ? getStraightPath({ sourceX, sourceY, targetX, targetY })
-    : lineType === 'bezier' ? getBezierPath(args)
-    : getSmoothStepPath(args);
+  let path: string, labelX: number, labelY: number;
+  if (wp) {
+    // Quadratic bezier passing through the dragged waypoint at its midpoint.
+    const cx = 2 * wp.x - 0.5 * (sourceX + targetX);
+    const cy = 2 * wp.y - 0.5 * (sourceY + targetY);
+    path = `M ${sourceX},${sourceY} Q ${cx},${cy} ${targetX},${targetY}`;
+    labelX = wp.x; labelY = wp.y;
+  } else {
+    [path, labelX, labelY] =
+      lineType === 'straight' ? getStraightPath({ sourceX, sourceY, targetX, targetY })
+      : lineType === 'bezier' ? getBezierPath(args)
+      : getSmoothStepPath(args);
+  }
+  // Drag the midpoint to bend the line (sets a waypoint in flow coords).
+  const onBendDown = (e: React.PointerEvent) => {
+    if (!canEdit) return;
+    e.stopPropagation();
+    const move = (ev: PointerEvent) => setEdgeWaypoint(id, rf.screenToFlowPosition({ x: ev.clientX, y: ev.clientY }));
+    const upH = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', upH); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', upH);
+  };
   const styleBtn = (lt: WhiteboardLineType, title: string, d: string) => (
     <button type="button" className="wb-ebar-btn" data-active={lineType === lt} title={title} onClick={() => setEdgeLineType(id, lt)}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
@@ -467,13 +488,26 @@ function WBEdgeComponent({ id, sourceX, sourceY, targetX, targetY, sourcePositio
             />
           ) : (
             <div
-              className="wb-edge-label nodrag"
+              className="wb-edge-label nodrag nopan"
               style={{ position: 'absolute', transform: `translate(-50%,-50%) translate(${labelX}px,${labelY}px)`, pointerEvents: 'all' }}
+              onPointerDown={onBendDown}
               onDoubleClick={() => canEdit && startEditingEdge(id)}
             >
               {labelText}
             </div>
           )}
+        </EdgeLabelRenderer>
+      )}
+      {/* Bend handle (no label): drag to reshape the line, double-click to reset. */}
+      {selected && canEdit && !editing && !labelText && (
+        <EdgeLabelRenderer>
+          <div
+            className="wb-edge-bend nodrag nopan"
+            title="Drag to bend · double-click to reset"
+            style={{ position: 'absolute', transform: `translate(-50%,-50%) translate(${labelX}px,${labelY}px)`, pointerEvents: 'all' }}
+            onPointerDown={onBendDown}
+            onDoubleClick={() => setEdgeWaypoint(id, null)}
+          />
         </EdgeLabelRenderer>
       )}
       {selected && canEdit && (
@@ -530,6 +564,7 @@ function serialize(nodes: WBNode[], edges: WBEdge[], viewport?: WhiteboardData['
       lineType: ((e.data?.lineType as WhiteboardLineType) ?? 'smoothstep'),
       arrowStart: !!e.data?.arrowStart,
       arrowEnd: e.data?.arrowEnd !== false,
+      waypoint: (e.data?.waypoint as { x: number; y: number } | null) ?? null,
     },
     label: typeof e.label === 'string' ? e.label : undefined,
   }));
@@ -722,9 +757,14 @@ function Canvas({
       const targetEl = el?.closest('.react-flow__node') as HTMLElement | null;
       const targetId = targetEl?.getAttribute('data-id');
       if (!targetId || targetId === sourceId) return;
+      // Attach to the side of the target nearest where the line was dropped.
+      const tr = targetEl!.getBoundingClientRect();
+      const dt = ev.clientY - tr.top, dr = tr.right - ev.clientX, db = tr.bottom - ev.clientY, dl = ev.clientX - tr.left;
+      const tm = Math.min(dt, dr, db, dl);
+      const th = tm === dt ? 't' : tm === dr ? 'r' : tm === db ? 'b' : 'l';
       const sh = HANDLE_ID[side];
       const data = { lineType: 'smoothstep' as WhiteboardLineType, arrowStart: false, arrowEnd: true };
-      setEdges((eds) => addEdge({ id: crypto.randomUUID(), source: sourceId, target: targetId, sourceHandle: sh, targetHandle: OPPOSITE[sh], type: 'wb', data, ...edgeMarkers(data) }, eds));
+      setEdges((eds) => addEdge({ id: crypto.randomUUID(), source: sourceId, target: targetId, sourceHandle: sh, targetHandle: th, type: 'wb', data, ...edgeMarkers(data) }, eds));
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -749,6 +789,9 @@ function Canvas({
   const deleteEdge = useCallback((id: string) => setEdges((eds) => eds.filter((e) => e.id !== id)), [setEdges]);
   const setEdgeLabel = useCallback((id: string, label: string) => {
     setEdges((eds) => eds.map((e) => (e.id === id ? { ...e, label: label.trim() || undefined } : e)));
+  }, [setEdges]);
+  const setEdgeWaypoint = useCallback((id: string, waypoint: { x: number; y: number } | null) => {
+    setEdges((eds) => eds.map((e) => (e.id === id ? { ...e, data: { ...e.data, waypoint } } : e)));
   }, [setEdges]);
 
   // Keyboard layering for the selected element(s):
@@ -837,8 +880,8 @@ function Canvas({
   }, [canEdit, undo, redo]);
 
   const ctx = useMemo<WhiteboardCtx>(
-    () => ({ canEdit, startConnectDrag, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, unlinkTask, openTask, toggleDone, duplicateNode, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, setEdgeLabel }),
-    [canEdit, startConnectDrag, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, unlinkTask, openTask, toggleDone, duplicateNode, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, setEdgeLabel],
+    () => ({ canEdit, startConnectDrag, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, unlinkTask, openTask, toggleDone, duplicateNode, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, setEdgeLabel, setEdgeWaypoint }),
+    [canEdit, startConnectDrag, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, unlinkTask, openTask, toggleDone, duplicateNode, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, setEdgeLabel, setEdgeWaypoint],
   );
 
   // Place new nodes at the centre of the current viewport.
