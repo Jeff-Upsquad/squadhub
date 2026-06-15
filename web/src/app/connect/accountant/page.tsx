@@ -125,16 +125,11 @@ const COUNTRY_CODES = [
   { code: '+86', flag: '🇨🇳' },
 ];
 
-// Step-1 pills are accountant specialties. They all roll up to the single
-// 'accountant' subscription/service_type, so any selection produces exactly
-// one card; the chosen specialties are folded into that card's note on submit.
-type RoleSlug =
-  | 'bookkeeping'
-  | 'gst_tds'
-  | 'payroll'
-  | 'reporting'
-  | 'tax'
-  | 'audit';
+// Step 1 offers a single option — Accountant — which maps to the one
+// 'accountant' subscription/service_type and produces exactly one card. Kept
+// as an array (pre-selected below) so the multi-pick scaffolding still works
+// if more accountant types are added later.
+type RoleSlug = 'accountant';
 type ServiceType = 'accountant';
 
 const ROLE_OPTIONS: {
@@ -143,34 +138,9 @@ const ROLE_OPTIONS: {
   description: string;
 }[] = [
   {
-    slug: 'bookkeeping',
-    title: 'Bookkeeping',
-    description: 'Day-to-day books — recording transactions, reconciliations, and keeping your accounts up to date.',
-  },
-  {
-    slug: 'gst_tds',
-    title: 'GST & TDS',
-    description: 'Indirect tax & withholding — GST returns, TDS deductions, and statutory filings before each deadline.',
-  },
-  {
-    slug: 'payroll',
-    title: 'Payroll',
-    description: 'Salary processing — payslips, PF/ESI, and monthly payroll runs for your team.',
-  },
-  {
-    slug: 'reporting',
-    title: 'Financial reporting',
-    description: 'MIS & statements — monthly reports, P&L, balance sheet, and numbers you can act on.',
-  },
-  {
-    slug: 'tax',
-    title: 'Income tax',
-    description: 'Direct tax — income tax computation, advance tax, and annual return filing.',
-  },
-  {
-    slug: 'audit',
-    title: 'Audit support',
-    description: 'Audit readiness — schedules, documentation, and support through statutory or internal audits.',
+    slug: 'accountant',
+    title: 'Accountant',
+    description: 'Accounting talent for your books — bookkeeping, GST & TDS, payroll, financial reporting, income tax, and audit support.',
   },
 ];
 
@@ -245,7 +215,9 @@ const initialSubscription: Subscription = {
 
 export default function AccountantConnectPage() {
   const [step, setStep] = useState<1 | 2>(1);
-  const [roles, setRoles] = useState<RoleSlug[]>([]);
+  // Pre-selected: Accountant is the only option, so the user can continue
+  // straight away (they can still deselect it on Step 1 if they back out).
+  const [roles, setRoles] = useState<RoleSlug[]>(['accountant']);
   const [form, setForm] = useState<FormData>(initialForm);
   const [subscription, setSubscription] = useState<Subscription>(initialSubscription);
   const [comparePlanOpen, setComparePlanOpen] = useState(false);
@@ -440,19 +412,10 @@ export default function AccountantConnectPage() {
       return;
     }
 
-    // All chosen accountant specialties roll up into the single 'accountant'
-    // card. Summarise the picked specialties + the engagement note into that
-    // one card's requirement note, and attach the build-your-own-subscription
-    // choices (tiers / plan / budget) so the admin sees the full picture.
-    const titleOf = (slug: RoleSlug) =>
-      ROLE_OPTIONS.find((o) => o.slug === slug)?.title ?? slug;
-    const noteLines: string[] = [];
-    if (roles.length > 0) {
-      noteLines.push(`Services needed: ${roles.map(titleOf).join(', ')}`);
-    }
-    const subNote = subscription.note.trim();
-    if (subNote) noteLines.push(subNote);
-    const combinedNote = noteLines.join('\n\n');
+    // Single 'accountant' card. The engagement note becomes its requirement
+    // note, and the build-your-own-subscription choices (tiers / plan / budget)
+    // are attached so the admin sees the full picture.
+    const combinedNote = subscription.note.trim();
 
     const budgetNum = subscription.budget.trim()
       ? Math.round(Number(subscription.budget))
@@ -545,16 +508,10 @@ export default function AccountantConnectPage() {
         {step === 1 && (
           <section className="flex flex-col items-center">
             <h2 className="mb-2 text-xs font-semibold tracking-[0.12em] text-[#7A7568] uppercase">
-              What do you need help with?
+              What do you need?
             </h2>
-            <p className="mb-2 max-w-md text-center text-sm text-[#5C5C5C]">
-              Pick the accounting work you need — bookkeeping, GST &amp; TDS, payroll, reporting, tax, or audit support.
-            </p>
-            <p className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-[#0a0a0a] bg-[#F2FCBC] px-3 py-1 text-xs font-semibold text-[#0a0a0a]">
-              <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-              You can pick one or more
+            <p className="mb-6 max-w-md text-center text-sm text-[#5C5C5C]">
+              A vetted accountant for your books — bookkeeping, GST &amp; TDS, payroll, reporting, tax, and audit support, all in one.
             </p>
 
             <div className="mb-2 inline-flex flex-wrap justify-center gap-2">
@@ -752,15 +709,6 @@ export default function AccountantConnectPage() {
                   <span className="h-3.5 w-3.5 rounded-full bg-[#FCF487] ring-1 ring-[#0a0a0a]" />
                   <span className="text-lg font-bold tracking-tight text-[#0a0a0a]">Accountant</span>
                 </div>
-                {roles.length > 0 && (
-                  <p className="mb-4 text-xs text-[#7A7568]">
-                    Covering{' '}
-                    <span className="font-semibold text-[#3A3A3A]">
-                      {ROLE_OPTIONS.filter((o) => roles.includes(o.slug)).map((o) => o.title).join(', ')}
-                    </span>
-                    .
-                  </p>
-                )}
                 <div className="space-y-4">
                   <div>
                     <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
