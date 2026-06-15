@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
@@ -69,6 +69,65 @@ const COUNTRY_CODES = [
 const DEFAULT_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
 
+// Build-your-own-subscription workflow (mirrors upsquadconnect.com/pricing):
+// experience level(s) → plan → budget. Display labels are plural; stored
+// values match subscription_cards.target_tiers' CHECK (Junior/Pro/Top Talents).
+const EXPERIENCE_LEVELS: { label: string; value: string }[] = [
+  { label: 'Juniors', value: 'Junior' },
+  { label: 'Pros', value: 'Pro' },
+  { label: 'Top Talents', value: 'Top Talents' },
+];
+
+// Plans differ by availability (Mon–Fri) — the same five bands seeded for
+// every subscription/tier (subscription_plans). Stored as plan_name on the
+// card. Numeric hours drive the compact picker; the pct/capacity/perDay/
+// perWeek/bestFor labels drive the full "Compare plans" modal (mirrors the
+// pricing-page comparison table).
+const PLAN_OPTIONS: {
+  name: string;
+  dailyHours: number;
+  weeklyHours: number;
+  monthlyHours: number;
+  pct: string;
+  capacity: string;
+  perDay: string;
+  perWeek: string;
+  bestFor: string;
+  tagline: string;
+  recommended?: boolean;
+}[] = [
+  { name: 'Starter', dailyHours: 1, weeklyHours: 5, monthlyHours: 20, pct: '10%', capacity: 'Light-touch creative support', perDay: '~1 hour per day', perWeek: '~5 hours per week', bestFor: 'Small brands & startups', tagline: 'For brands that are starting out.' },
+  { name: 'Basic', dailyHours: 2, weeklyHours: 10, monthlyHours: 40, pct: '25%', capacity: 'Quarter of a full-time employee', perDay: '2–3 hours per day', perWeek: '10 hours per week', bestFor: 'Active brands', tagline: 'Our standard and most affordable plan.' },
+  { name: 'Plus', dailyHours: 4, weeklyHours: 20, monthlyHours: 80, pct: '50%', capacity: 'Half employee capacity', perDay: '4–5 hours per day', perWeek: '20 hours per week', bestFor: 'High-volume teams & agencies', tagline: 'Get your tasks completed faster with elevated priority.', recommended: true },
+  { name: 'Pro', dailyHours: 6, weeklyHours: 30, monthlyHours: 120, pct: '80%', capacity: 'Nearly full-time employee', perDay: '6–7 hours per day', perWeek: '30 hours per week', bestFor: 'Growing businesses', tagline: 'Highest speed and fastest response time.' },
+  { name: 'Personal', dailyHours: 8, weeklyHours: 40, monthlyHours: 160, pct: '100%', capacity: 'Dedicated full-time equivalent', perDay: '~8 hours per day', perWeek: '~40 hours per week', bestFor: 'Founders & creators wanting close collaboration', tagline: 'Your own personal designer, like an in-house partner.' },
+];
+
+const AVAILABILITY_INFO = 'Availability shows the number of hours your selected talent will be available on a per-day and per-week basis.';
+
+// The "Access to Our Platform" cell — identical across all plans.
+const ACCESS_CELL = (
+  <span className="text-[12px] leading-snug text-[#3A3A3A]">
+    <span className="font-semibold text-[#0a0a0a]">One user:</span> free access
+    <br />
+    <span className="font-semibold text-[#0a0a0a]">Additional user:</span> ₹500 per month
+  </span>
+);
+
+// Feature rows for the "Compare plans" modal, in PLAN_OPTIONS order. Booleans
+// render as ✓ / ✕; strings/nodes render as-is. `info` adds an ⓘ tooltip on the
+// row label. Copy mirrors upsquadconnect.com/pricing verbatim. (Availability +
+// Best For rows are derived from PLAN_OPTIONS.)
+const PLAN_FEATURES: { label: string; values: React.ReactNode[]; info?: string }[] = [
+  { label: 'Unlimited work requests', values: [true, true, true, true, true], info: 'Unlimited work request means you can place as many design or video edit requests with us. We will deliver them one by one based on your applicable plan.' },
+  { label: 'Squad Manager', values: [true, true, true, true, true], info: 'You will also be given a resource called Squad Manager, who will help you manage all the works. Coordinate works with designers and editors, and ensure delivery on time.' },
+  { label: 'Urgent Works', values: [false, false, true, true, true], info: 'For starter, basic, and plus plan. We do not entertain urgent work meaning placing request today and expecting delivery today itself. If our designers or editors are available, we will try to accommodate it, but it is not guaranteed.' },
+  { label: 'Access to Our Platform', values: [ACCESS_CELL, ACCESS_CELL, ACCESS_CELL, ACCESS_CELL, ACCESS_CELL], info: 'We use our own platform called SquadHub to manage all the work. You will be able to view the work submitted, progress, chat, and interact with the designers and editors through this.' },
+  { label: 'Meetings', values: ['By request', 'By request', 'By request', 'By request', 'Instant call + meeting access'], info: 'If you want to take a meeting with the designers or editors, you need to schedule it. Instant meetings are not available. Instant meeting is only available in personal plan.' },
+  { label: 'Live Collaboration', values: ['No', 'No', 'No', 'No', 'Yes — screen share & live edits'] },
+  { label: 'Shared Resource', values: ['Shared', 'Shared', 'Shared', 'Shared (High Priority)', 'Personal (exclusive)'] },
+];
+
 type Country = { id: string; name: string };
 
 type FormData = {
@@ -93,7 +152,8 @@ const initialForm: FormData = {
   languages: [], working_days: DEFAULT_DAYS,
 };
 
-type RoleReq = { note: string; hours: string };
+type RoleReq = { note: string; tiers: string[]; plan: string; budget: string };
+const EMPTY_REQ: RoleReq = { note: '', tiers: [], plan: '', budget: '' };
 
 export default function ClientBriefForm({
   type,
@@ -109,6 +169,8 @@ export default function ClientBriefForm({
   const [step, setStep] = useState<1 | 2>(type === 'accountant' ? 2 : 1);
   const [roles, setRoles] = useState<string[]>([]);
   const [roleReqs, setRoleReqs] = useState<Record<string, RoleReq>>({});
+  // Slug of the role whose "Compare plans" modal is open (null = closed).
+  const [comparePlanRole, setComparePlanRole] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(initialForm);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -128,6 +190,8 @@ export default function ClientBriefForm({
     [selectedCountryName, form.state_regions],
   );
   const languageOptions = useMemo(() => uniq([...LANGUAGE_OPTIONS, ...form.languages]), [form.languages]);
+  // ₹ for India (default), $ for the other countries we serve.
+  const currencySymbol = selectedCountryName && selectedCountryName !== 'India' ? '$' : '₹';
 
   // Roles whose requirement cards + cards get created. Accountant is the single
   // fixed role; creative is whatever was ticked on step 1.
@@ -152,10 +216,19 @@ export default function ClientBriefForm({
     setRoles((prev) => (prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]));
   }
   function getReq(slug: string): RoleReq {
-    return roleReqs[slug] || { note: '', hours: '' };
+    return roleReqs[slug] || EMPTY_REQ;
   }
-  function setReq(slug: string, key: keyof RoleReq, value: string) {
-    setRoleReqs((prev) => ({ ...prev, [slug]: { ...getReq(slug), [key]: value } }));
+  function setReq(slug: string, key: 'note' | 'plan' | 'budget', value: string) {
+    setRoleReqs((prev) => ({ ...prev, [slug]: { ...(prev[slug] || EMPTY_REQ), [key]: value } }));
+  }
+  function toggleReqTier(slug: string, value: string) {
+    setRoleReqs((prev) => {
+      const cur = prev[slug] || EMPTY_REQ;
+      const tiers = cur.tiers.includes(value)
+        ? cur.tiers.filter((t) => t !== value)
+        : [...cur.tiers, value];
+      return { ...prev, [slug]: { ...cur, tiers } };
+    });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -202,11 +275,15 @@ export default function ClientBriefForm({
       await Promise.all(
         selectedRoles.map((r) => {
           const req = getReq(r.slug);
+          const budgetNum = req.budget.trim() ? Math.round(Number(req.budget)) : NaN;
           return api.post('/admin/subscription-cards/client-brief', {
             ...shared,
             service_type: r.service_type,
             requirement_note: req.note.trim() || undefined,
-            hours_note: req.hours.trim() || undefined,
+            target_tiers: req.tiers.length ? req.tiers : undefined,
+            plan_name: req.plan || undefined,
+            proposed_price:
+              Number.isFinite(budgetNum) && budgetNum >= 0 ? budgetNum : undefined,
           });
         }),
       );
@@ -426,35 +503,141 @@ export default function ClientBriefForm({
             </Section>
 
             <Section
-              eyebrow="Requirement"
-              title="What each role will work on"
-              hint="A quick note per role helps us match the right talent. All fields optional."
+              eyebrow="Subscription"
+              title="Experience level & plan"
+              hint="Pick the talent experience and a weekly plan per role, add a short note, and name a monthly budget. All optional — we can finalize on the call."
             >
               {selectedRoles.map((opt) => {
                 const req = getReq(opt.slug);
                 return (
-                  <div key={opt.slug} className="connect-role-req">
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full bg-[#FCF487] ring-1 ring-ink" />
-                      <span className="text-sm font-semibold text-foreground">{opt.title}</span>
+                  <div key={opt.slug} className="connect-role-req overflow-hidden">
+                    <div className="-mx-4 -mt-3.5 mb-4 flex items-center gap-2.5 border-b border-[#E0DCCE] bg-[#F2FCBC] px-4 py-3">
+                      <span className="h-3.5 w-3.5 rounded-full bg-[#FCF487] ring-1 ring-ink" />
+                      <span className="text-lg font-bold tracking-tight text-foreground">{opt.title}</span>
                     </div>
-                    <div className="space-y-3">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-foreground">
+                          <span>Experience level(s)</span>
+                          <span className="text-xs font-normal text-foreground-muted">(optional)</span>
+                        </label>
+                        <p className="mb-3 text-xs text-foreground-muted">
+                          Select one or more — we&apos;ll match talent across all chosen levels.
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                          {EXPERIENCE_LEVELS.map((lvl) => {
+                            const on = req.tiers.includes(lvl.value);
+                            return (
+                              <button
+                                key={lvl.value}
+                                type="button"
+                                onClick={() => toggleReqTier(opt.slug, lvl.value)}
+                                aria-pressed={on}
+                                className={`connect-chip ${on ? 'connect-chip-on' : ''}`}
+                              >
+                                {on ? `✓ ${lvl.label}` : lvl.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <label className="flex items-baseline gap-2 text-sm font-medium text-foreground">
+                            <span>Plan</span>
+                            <span className="text-xs font-normal text-foreground-muted">(optional)</span>
+                          </label>
+                          {req.tiers.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setComparePlanRole(opt.slug)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-[#0a0a0a] bg-[#F2FCBC] px-3 py-1.5 text-xs font-bold text-[#0a0a0a] shadow-[2px_2px_0_0_#0a0a0a] transition hover:bg-[#FCF487] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0_0_#0a0a0a]"
+                            >
+                              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <rect x="3" y="4" width="18" height="16" rx="1.5" />
+                                <path d="M9 4v16M15 4v16" />
+                              </svg>
+                              Compare all plans
+                            </button>
+                          )}
+                        </div>
+                        <p className="mb-3 text-xs text-foreground-muted">
+                          Plans differ by availability — how much of a creative partner you get each week.
+                        </p>
+                        {req.tiers.length === 0 ? (
+                          <p className="text-sm font-medium text-[#C97744]">
+                            Pick an experience level to see plan options.
+                          </p>
+                        ) : (
+                          <div className="overflow-hidden rounded-xl border border-[#D9D5C7]">
+                            <table className="w-full border-collapse text-left text-sm">
+                              <thead>
+                                <tr className="bg-[#F4F1E8] text-[11px] font-semibold uppercase tracking-wide text-[#7A7568]">
+                                  <th className="px-2 py-2 sm:px-3">Plan</th>
+                                  <th className="px-2 py-2 text-right sm:px-3">Day</th>
+                                  <th className="px-2 py-2 text-right sm:px-3">Week</th>
+                                  <th className="px-2 py-2 text-right sm:px-3">Month</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {PLAN_OPTIONS.map((p) => {
+                                  const on = req.plan === p.name;
+                                  return (
+                                    <tr
+                                      key={p.name}
+                                      role="button"
+                                      aria-pressed={on}
+                                      onClick={() => setReq(opt.slug, 'plan', on ? '' : p.name)}
+                                      className={`cursor-pointer border-t border-[#E8E5DD] transition ${on ? 'bg-[#F2FCBC]' : 'bg-white hover:bg-[#FBFAF6]'}`}
+                                    >
+                                      <td className="px-2 py-2.5 font-semibold text-[#0a0a0a] sm:px-3">
+                                        <span className="flex items-center gap-2">
+                                          <span className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5]'}`}>
+                                            {on && (
+                                              <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                              </svg>
+                                            )}
+                                          </span>
+                                          {p.name}
+                                        </span>
+                                      </td>
+                                      <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.dailyHours} hr{p.dailyHours > 1 ? 's' : ''}</td>
+                                      <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.weeklyHours} hrs</td>
+                                      <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.monthlyHours} hrs</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+
+                      <Field
+                        label="Monthly budget"
+                        optional
+                        hint={`Your target monthly spend in ${currencySymbol}.`}
+                      >
+                        <input
+                          type="number"
+                          min="0"
+                          inputMode="numeric"
+                          value={req.budget}
+                          onChange={(e) => setReq(opt.slug, 'budget', e.target.value)}
+                          placeholder={`e.g. ${currencySymbol}25000`}
+                          className="connect-input"
+                        />
+                      </Field>
+
                       <Field label="Short note" optional>
                         <textarea
                           rows={2}
                           value={req.note}
                           onChange={(e) => setReq(opt.slug, 'note', e.target.value)}
-                          placeholder="What you'd like this role to work on first."
+                          placeholder="Explain the kind of work you're looking to get done."
                           className="connect-input resize-none"
-                        />
-                      </Field>
-                      <Field label="Hours" optional hint="Daily or weekly — however you usually think about it.">
-                        <input
-                          type="text"
-                          value={req.hours}
-                          onChange={(e) => setReq(opt.slug, 'hours', e.target.value)}
-                          placeholder="e.g. 4 hrs daily or 20 hrs/week"
-                          className="connect-input"
                         />
                       </Field>
                     </div>
@@ -514,7 +697,180 @@ export default function ClientBriefForm({
         )}
       </div>
 
+      {comparePlanRole && (() => {
+        const role = selectedRoles.find((r) => r.slug === comparePlanRole);
+        if (!role) return null;
+        return (
+          <PlanCompareModal
+            roleTitle={role.title}
+            selectedPlan={getReq(role.slug).plan}
+            onSelect={(name) => setReq(role.slug, 'plan', name)}
+            onClose={() => setComparePlanRole(null)}
+          />
+        );
+      })()}
+
       <style jsx global>{globalStyles}</style>
+    </div>
+  );
+}
+
+// Small ⓘ with a hover/focus tooltip, used on comparison-table row labels.
+function InfoTip({ text }: { text: string }) {
+  return (
+    <span className="group/info relative ml-1 inline-flex align-middle">
+      <button
+        type="button"
+        aria-label={text}
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#C9C4B5] text-[10px] font-bold leading-none text-[#7A7568] transition hover:border-[#0a0a0a] hover:text-[#0a0a0a]"
+      >
+        i
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-0 top-full z-30 mt-2 w-52 whitespace-normal rounded-lg bg-[#0a0a0a] px-3 py-2 text-left text-[11px] font-normal normal-case leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/info:opacity-100 group-focus-within/info:opacity-100"
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+
+// Full plan comparison (mirrors the pricing page table) shown in a modal.
+// Selecting a plan here sets the same plan_name the compact picker uses.
+function PlanCompareModal({
+  roleTitle, selectedPlan, onSelect, onClose,
+}: {
+  roleTitle: string;
+  selectedPlan: string;
+  onSelect: (name: string) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  // Plan-column cell styling: lime border for the recommended plan, soft tint
+  // for the currently-selected plan.
+  const colCls = (p: (typeof PLAN_OPTIONS)[number], extra = '') =>
+    `${p.recommended ? 'border-x-2 border-[#C6F24E]' : ''} ${selectedPlan === p.name ? 'bg-[#FCFBE8]' : 'bg-white'} ${extra}`;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-6"
+      onClick={onClose}
+    >
+      <div
+        className="relative flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border-2 border-[#0a0a0a] bg-white shadow-[6px_6px_0_0_rgba(10,10,10,0.18)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-[#E8E5DD] px-5 py-3.5">
+          <div>
+            <h3 className="text-base font-bold text-[#0a0a0a]">Compare plans</h3>
+            <p className="text-xs text-[#7A7568]">{roleTitle} · pick the weekly availability that fits</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-2xl leading-none text-[#5C5C5C] transition hover:bg-[#F4F1E8] hover:text-[#0a0a0a]"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="overflow-auto">
+          <table className="w-full min-w-[820px] border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className="sticky left-0 z-20 bg-white px-4 py-4" />
+                {PLAN_OPTIONS.map((p) => (
+                  <th key={p.name} className={colCls(p, `px-4 pb-4 pt-5 text-center align-top ${p.recommended ? 'border-t-2' : ''}`)}>
+                    {p.recommended && (
+                      <span className="mb-2 inline-block rounded-full border border-[#0a0a0a] bg-[#C6F24E] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0a0a0a]">
+                        Most popular
+                      </span>
+                    )}
+                    <div className="text-base font-extrabold text-[#0a0a0a]">{p.name}</div>
+                    <p className="mx-auto mt-1 max-w-[150px] text-[11px] font-normal leading-snug text-[#7A7568]">{p.tagline}</p>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-t border-[#EFECE3]">
+                <td className="sticky left-0 z-20 bg-white px-4 py-4 align-top font-semibold text-[#3A3A3A] hover:z-40">
+                  <span className="inline-flex items-center whitespace-nowrap">Availability<InfoTip text={AVAILABILITY_INFO} /></span>
+                </td>
+                {PLAN_OPTIONS.map((p) => (
+                  <td key={p.name} className={colCls(p, 'px-4 py-4 text-center align-top')}>
+                    <div className="text-2xl font-extrabold leading-none text-[#0a0a0a]">{p.pct}</div>
+                    <div className="mt-1.5 text-[11px] leading-tight text-[#7A7568]">{p.capacity}</div>
+                    <div className="mt-1.5 text-[11px] text-[#3A3A3A]">{p.perDay}</div>
+                    <div className="text-[11px] italic text-[#7A7568]">{p.perWeek}</div>
+                  </td>
+                ))}
+              </tr>
+              {PLAN_FEATURES.map((row) => (
+                <tr key={row.label} className="border-t border-[#EFECE3]">
+                  <td className="sticky left-0 z-20 bg-white px-4 py-3 font-medium text-[#3A3A3A] hover:z-40">
+                    <span className="inline-flex items-center">{row.label}{row.info && <InfoTip text={row.info} />}</span>
+                  </td>
+                  {row.values.map((v, i) => (
+                    <td key={i} className={colCls(PLAN_OPTIONS[i], 'px-4 py-3 text-center align-middle')}>
+                      {typeof v === 'boolean' ? (
+                        v ? (
+                          <svg className="mx-auto h-4 w-4 text-[#1FA85A]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <svg className="mx-auto h-4 w-4 text-[#D1573B]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        )
+                      ) : typeof v === 'string' ? (
+                        <span className="text-[12px] leading-tight text-[#3A3A3A]">{v}</span>
+                      ) : (
+                        v
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              <tr className="border-t border-[#EFECE3]">
+                <td className="sticky left-0 z-20 bg-white px-4 py-3 font-medium text-[#3A3A3A]">Best For</td>
+                {PLAN_OPTIONS.map((p) => (
+                  <td key={p.name} className={colCls(p, 'px-4 py-3 text-center align-middle')}>
+                    <span className="text-[12px] leading-tight text-[#3A3A3A]">{p.bestFor}</span>
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-[#EFECE3]">
+                <td className="sticky left-0 z-20 bg-white px-4 py-4" />
+                {PLAN_OPTIONS.map((p) => {
+                  const on = selectedPlan === p.name;
+                  return (
+                    <td key={p.name} className={colCls(p, `px-3 py-4 text-center ${p.recommended ? 'border-b-2' : ''}`)}>
+                      <button
+                        type="button"
+                        onClick={() => onSelect(p.name)}
+                        aria-pressed={on}
+                        className={`w-full rounded-lg border-2 border-[#0a0a0a] px-2 py-2 text-xs font-bold text-[#0a0a0a] shadow-[2px_2px_0_0_#0a0a0a] transition active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0_0_#0a0a0a] ${on ? 'bg-[#C6F24E]' : 'bg-white hover:bg-[#F2FCBC]'}`}
+                      >
+                        {on ? 'Selected ✓' : 'Select Plan'}
+                      </button>
+                    </td>
+                  );
+                })}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

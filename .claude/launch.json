@@ -2,6 +2,13 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "Infallible Lumiere Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/infallible-lumiere-fd9eac/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3116"],
+      "port": 3116,
+      "autoPort": true
+    },
+    {
       "name": "Competent Curran Admin",
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/competent-curran-f5d0a6/admin' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3201"],

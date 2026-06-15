@@ -343,6 +343,15 @@ const submissionSchema = z.object({
       z.object({
         note: z.string().trim().max(2000).optional(),
         hours: z.string().trim().max(200).optional(),
+        // Build-your-own-subscription: experience level(s), weekly plan, and
+        // the client's stated monthly budget. tiers are enum-guarded so they
+        // can't trip the subscription_cards.target_tiers CHECK.
+        tiers: z
+          .array(z.enum(['Junior', 'Pro', 'Elite', 'Top Talents', 'Custom']))
+          .max(5)
+          .optional(),
+        plan: z.string().trim().max(50).optional(),
+        budget: z.number().int().nonnegative().optional(),
       }),
     )
     .optional()
@@ -511,7 +520,9 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
           state: 'draft',
           markup: 0,
           service_type: SLUG_TO_SERVICE_TYPE[slug],
-          target_tiers: [],
+          target_tiers: roleReq?.tiers || [],
+          plan_name: roleReq?.plan || null,
+          proposed_price: roleReq?.budget ?? null,
           working_days: body.working_days,
           customer_name: body.contact_name,
           customer_email: body.email,
