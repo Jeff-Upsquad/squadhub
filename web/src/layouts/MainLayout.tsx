@@ -7,7 +7,7 @@ import { useWorkspaceStore, type ChatKind } from '../stores/workspaceStore';
 import { useAuthStore } from '../stores/authStore';
 import { usePMStore } from '../stores/pmStore';
 import { loadViewPreferences } from '../stores/viewPreferencesSync';
-import type { Workspace, Channel, RoleHomeView } from '@squadhub/shared';
+import type { Workspace, Channel } from '@squadhub/shared';
 import { connectSocket, disconnectSocket } from '../services/socket';
 import { usePresenceStore } from '../stores/presenceStore';
 import ChatPanel from '../views/app/chat/ChatPanel';
@@ -30,18 +30,12 @@ import ThemeToggle from '../components/ThemeToggle';
 import ActiveTimer from '../components/ActiveTimer';
 import TimeSheetPanel from '../components/TimeSheetPanel';
 import ClientDashboard from '../views/app/client/ClientDashboard';
-import PartnerDashboard from '../views/app/partner/PartnerDashboard';
 import PartnerCashBook from '../views/app/partner/PartnerCashBook';
 import PartnerOpportunities from '../views/app/partner/PartnerOpportunities';
 import ClientCashBook from '../views/app/client/ClientCashBook';
 import ClientPublishedCards from '../views/app/client/ClientPublishedCards';
 import ClientDesignDashboard from '../views/app/pm/client-design/ClientDesignDashboard';
-import MemberHome from '../views/app/home/MemberHome';
-import UserHome from '../views/app/home/UserHome';
-import GuestHome from '../views/app/home/GuestHome';
-import DesignerHome from '../views/app/home/DesignerHome';
-import VideoEditorHome from '../views/app/home/VideoEditorHome';
-import AccountantHome from '../views/app/home/AccountantHome';
+import Home from '../views/app/home/Home';
 import GlobalTaskDetailPanel from '../views/app/home/GlobalTaskDetailPanel';
 import GlobalTaskPeekPanel from '../views/app/home/GlobalTaskPeekPanel';
 import EmergencyBanner from '../views/app/pm/EmergencyBanner';
@@ -78,23 +72,6 @@ type NavSnapshot = {
   spacePageId: string | null;
   designFolderId: string | null;
 };
-
-// ---- Role Home lookup ----
-// Picks which Home component to render based on the role's home_view.
-// Each key ↔ a RoleHomeView value from shared/src/index.ts.
-const HOME_BY_VIEW: Record<RoleHomeView, React.ComponentType<{ onOpenInbox: () => void }>> = {
-  member: MemberHome,
-  user: UserHome,
-  guest: GuestHome,
-  designer: DesignerHome,
-  video_editor: VideoEditorHome,
-  accountant: AccountantHome,
-};
-
-// Role-specific homes override the user_type dashboards (Partner/Client).
-// The "vanilla" home_view values (member/user/guest) are the user_type defaults
-// and defer to PartnerDashboard / ClientDashboard as before.
-const ROLE_SPECIFIC_HOMES: RoleHomeView[] = ['designer', 'video_editor', 'accountant'];
 
 // ---- Rail icons (stroke-1.6, 18x18) ----
 const ICON = {
@@ -230,8 +207,6 @@ function RailBtn({
 
 export default function MainLayout() {
   const { currentWorkspace, activeChannelId, activeChannelKind, dmConversations, setWorkspace, setChannels, setActiveChannel } = useWorkspaceStore();
-  const myHomeView: RoleHomeView = currentWorkspace?.my_home_view ?? 'user';
-  const useRoleHome = ROLE_SPECIFIC_HOMES.includes(myHomeView);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const pmReset = usePMStore((s) => s.reset);
@@ -373,13 +348,13 @@ export default function MainLayout() {
     queryFn: () => api.get('/workspaces').then((r) => r.data),
   });
 
-  const workspaces: (Workspace & { my_role?: string; my_home_view?: RoleHomeView })[] = useMemo(() => workspacesRes?.data || [], [workspacesRes]);
+  const workspaces: (Workspace & { my_role?: string })[] = useMemo(() => workspacesRes?.data || [], [workspacesRes]);
 
   // Auto-select first workspace on first load, and re-sync whenever the
-  // React Query refetch surfaces a changed my_role / my_home_view for the
-  // active workspace (e.g. an admin edited the role mid-session). Without
-  // this, the Zustand store freezes on its initial value and users have to
-  // hard-refresh to pick up role changes.
+  // React Query refetch surfaces a changed my_role for the active workspace
+  // (e.g. an admin edited the role mid-session). Without this, the Zustand
+  // store freezes on its initial value and users have to hard-refresh to
+  // pick up role changes.
   useEffect(() => {
     if (workspaces.length === 0) return;
     const next = currentWorkspace
@@ -388,7 +363,6 @@ export default function MainLayout() {
     if (
       !currentWorkspace ||
       currentWorkspace.id !== next.id ||
-      currentWorkspace.my_home_view !== next.my_home_view ||
       currentWorkspace.my_role !== next.my_role
     ) {
       setWorkspace(next);
@@ -944,10 +918,8 @@ export default function MainLayout() {
             <SalesLeadsPage />
           ) : homeView === 'clips' ? (
             <ClipsView />
-          ) : homeView === 'hub' && !useRoleHome && (userType === 'client' || userType === 'client_staff') ? (
+          ) : homeView === 'hub' && (userType === 'client' || userType === 'client_staff') ? (
             <ClientDashboard />
-          ) : homeView === 'hub' && !useRoleHome && isPartner ? (
-            <PartnerDashboard />
           ) : homeView === 'cashbook' && isPartner ? (
             <PartnerCashBook />
           ) : homeView === 'cashbook' && (userType === 'client' || userType === 'client_staff') ? (
@@ -957,10 +929,7 @@ export default function MainLayout() {
           ) : homeView === 'opportunities' && isPartner ? (
             <PartnerOpportunities />
           ) : (
-            (() => {
-              const HomeComponent = HOME_BY_VIEW[myHomeView] ?? UserHome;
-              return <HomeComponent onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} />;
-            })()
+            <Home onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} />
           )
         )}
       </div>

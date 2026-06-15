@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import type { Workspace, Channel, DmConversation, RoleHomeView } from '@squadhub/shared';
+import type { Workspace, Channel, DmConversation } from '@squadhub/shared';
 
-type WorkspaceWithMembership = Workspace & { my_role?: string; my_home_view?: RoleHomeView };
+type WorkspaceWithMembership = Workspace & { my_role?: string };
 
 export type ChatKind = 'channel' | 'dm';
 
