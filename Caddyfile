@@ -135,3 +135,7 @@ rioconnect.in {
 books.squadhub.in {
 	reverse_proxy squadbooks:3000
 }
+
+clips.squadhub.in {
+	reverse_proxy host.docker.internal:3200
+}
