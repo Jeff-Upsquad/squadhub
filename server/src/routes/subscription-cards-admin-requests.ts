@@ -384,6 +384,15 @@ const clientBriefSchema = z.object({
   working_days: z.array(z.string()).optional().default([]),
   requirement_note: z.string().optional(),
   hours_note: z.string().optional(),
+  // Build-your-own-subscription: experience level(s), weekly plan, and the
+  // client's stated monthly budget. Enum-guarded so target_tiers can't trip
+  // the subscription_cards CHECK constraint.
+  target_tiers: z
+    .array(z.enum(['Junior', 'Pro', 'Elite', 'Top Talents', 'Custom']))
+    .optional()
+    .default([]),
+  plan_name: z.string().optional(),
+  proposed_price: z.number().int().nonnegative().optional(),
 });
 
 router.post('/subscription-cards/client-brief', async (req: Request, res: Response) => {
@@ -419,6 +428,9 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
         notes: body.business_note || null,
         requirement_note: body.requirement_note || null,
         hours_note: body.hours_note || null,
+        target_tiers: body.target_tiers || [],
+        plan_name: body.plan_name || null,
+        proposed_price: body.proposed_price ?? null,
         working_days: body.working_days || [],
         target_languages: body.languages || [],
         customer_name: body.contact_name || null,
