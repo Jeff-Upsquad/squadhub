@@ -53,6 +53,65 @@ const LANGUAGES = [
   'Arabic', 'Spanish', 'French', 'German', 'Mandarin',
 ];
 
+// Build-your-own-subscription workflow (mirrors /connect and the pricing page):
+// experience level(s) → plan → budget. Display labels are plural; stored
+// values match subscription_cards.target_tiers' CHECK (Junior/Pro/Top Talents).
+const EXPERIENCE_LEVELS: { label: string; value: string }[] = [
+  { label: 'Juniors', value: 'Junior' },
+  { label: 'Pros', value: 'Pro' },
+  { label: 'Top Talents', value: 'Top Talents' },
+];
+
+// Plans differ by availability (Mon–Fri) — the same five bands seeded for
+// every subscription/tier. Stored as plan_name on the card. Numeric hours
+// drive the compact picker; the pct/capacity/perDay/perWeek/bestFor labels
+// drive the full "Compare plans" modal (mirrors the pricing-page table).
+// Copy is tuned for accountants here (the /connect form uses creative copy).
+const PLAN_OPTIONS: {
+  name: string;
+  dailyHours: number;
+  weeklyHours: number;
+  monthlyHours: number;
+  pct: string;
+  capacity: string;
+  perDay: string;
+  perWeek: string;
+  bestFor: string;
+  tagline: string;
+  recommended?: boolean;
+}[] = [
+  { name: 'Starter', dailyHours: 1, weeklyHours: 5, monthlyHours: 20, pct: '10%', capacity: 'Light-touch finance support', perDay: '~1 hour per day', perWeek: '~5 hours per week', bestFor: 'Small businesses & startups', tagline: 'For businesses that are just getting started.' },
+  { name: 'Basic', dailyHours: 2, weeklyHours: 10, monthlyHours: 40, pct: '25%', capacity: 'Quarter of a full-time accountant', perDay: '2–3 hours per day', perWeek: '10 hours per week', bestFor: 'Active businesses', tagline: 'Our standard and most affordable plan.' },
+  { name: 'Plus', dailyHours: 4, weeklyHours: 20, monthlyHours: 80, pct: '50%', capacity: 'Half a full-time accountant', perDay: '4–5 hours per day', perWeek: '20 hours per week', bestFor: 'High-volume teams & firms', tagline: 'Get your books done faster with elevated priority.', recommended: true },
+  { name: 'Pro', dailyHours: 6, weeklyHours: 30, monthlyHours: 120, pct: '80%', capacity: 'Nearly a full-time accountant', perDay: '6–7 hours per day', perWeek: '30 hours per week', bestFor: 'Growing businesses', tagline: 'Highest throughput and fastest response time.' },
+  { name: 'Personal', dailyHours: 8, weeklyHours: 40, monthlyHours: 160, pct: '100%', capacity: 'Dedicated full-time equivalent', perDay: '~8 hours per day', perWeek: '~40 hours per week', bestFor: 'Founders wanting close collaboration', tagline: 'Your own personal accountant, like an in-house finance partner.' },
+];
+
+const AVAILABILITY_INFO = 'Availability shows the number of hours your selected accountant will be available on a per-day and per-week basis.';
+
+// The "Access to Our Platform" cell — identical across all plans.
+const ACCESS_CELL = (
+  <span className="text-[12px] leading-snug text-[#3A3A3A]">
+    <span className="font-semibold text-[#0a0a0a]">One user:</span> free access
+    <br />
+    <span className="font-semibold text-[#0a0a0a]">Additional user:</span> ₹500 per month
+  </span>
+);
+
+// Feature rows for the "Compare plans" modal, in PLAN_OPTIONS order. Booleans
+// render as ✓ / ✕; strings/nodes render as-is. `info` adds an ⓘ tooltip on the
+// row label. Copy mirrors the pricing-page table, tuned for accountants.
+// (Availability + Best For rows are derived from PLAN_OPTIONS.)
+const PLAN_FEATURES: { label: string; values: React.ReactNode[]; info?: string }[] = [
+  { label: 'Unlimited work requests', values: [true, true, true, true, true], info: 'Unlimited work request means you can place as many accounting tasks with us as you like. We will deliver them one by one based on your applicable plan.' },
+  { label: 'Squad Manager', values: [true, true, true, true, true], info: 'You will also be given a resource called Squad Manager, who will help you manage all the work. Coordinate works with the accountants, and ensure delivery on time.' },
+  { label: 'Urgent Works', values: [false, false, true, true, true], info: 'For starter, basic, and plus plan. We do not entertain urgent work meaning placing a request today and expecting delivery today itself. If our accountants are available, we will try to accommodate it, but it is not guaranteed.' },
+  { label: 'Access to Our Platform', values: [ACCESS_CELL, ACCESS_CELL, ACCESS_CELL, ACCESS_CELL, ACCESS_CELL], info: 'We use our own platform called SquadHub to manage all the work. You will be able to view the work submitted, progress, chat, and interact with the accountants through this.' },
+  { label: 'Meetings', values: ['By request', 'By request', 'By request', 'By request', 'Instant call + meeting access'], info: 'If you want to take a meeting with the accountants, you need to schedule it. Instant meetings are not available. Instant meeting is only available in personal plan.' },
+  { label: 'Live Collaboration', values: ['No', 'No', 'No', 'No', 'Yes — screen share & live review'] },
+  { label: 'Shared Resource', values: ['Shared', 'Shared', 'Shared', 'Shared (High Priority)', 'Personal (exclusive)'] },
+];
+
 const COUNTRY_CODES = [
   { code: '+91', flag: '🇮🇳' },
   { code: '+1', flag: '🇺🇸' },
@@ -66,11 +125,6 @@ const COUNTRY_CODES = [
   { code: '+86', flag: '🇨🇳' },
 ];
 
-// Multi-select roles. Mirrors upsquadconnect.com's three service-type pills
-// (Designers / Editors / Designer plus Editor). At submit time, any
-// combination collapses to a single canonical service_type — picking
-// "Designer plus Editor" OR picking both Designer + Editor both map to
-// the hybrid service_type.
 // Step-1 pills are accountant specialties. They all roll up to the single
 // 'accountant' subscription/service_type, so any selection produces exactly
 // one card; the chosen specialties are folded into that card's note on submit.
@@ -119,10 +173,6 @@ const ROLE_OPTIONS: {
     description: 'Audit readiness — schedules, documentation, and support through statutory or internal audits.',
   },
 ];
-
-function rolesToServiceType(roles: RoleSlug[]): ServiceType | null {
-  return roles.length > 0 ? 'accountant' : null;
-}
 
 // Every accountant specialty maps to the one 'accountant' subscription, so a
 // selection of any size yields a single card. The picked specialties are
@@ -176,26 +226,29 @@ const initialForm: FormData = {
   working_days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
 };
 
-// Per-role requirement details, captured in the "Requirement" section on
-// Step 2. One sub-row per role ticked in Step 1. Both fields optional —
-// kept here as strings (not narrowed to selected roles) so toggling a
-// role off and back on preserves what the user already typed.
-type RoleRequirement = { note: string; hours: string };
-const emptyRoleRequirements: Record<RoleSlug, RoleRequirement> = {
-  bookkeeping: { note: '', hours: '' },
-  gst_tds: { note: '', hours: '' },
-  payroll: { note: '', hours: '' },
-  reporting: { note: '', hours: '' },
-  tax: { note: '', hours: '' },
-  audit: { note: '', hours: '' },
+// Build-your-own-subscription details for the single accountant card. Unlike
+// /connect (one block per role/card), every accountant specialty collapses
+// into one card, so we capture experience level(s), plan, budget, and a note
+// once for the whole engagement. All optional; empties are dropped on submit.
+type Subscription = {
+  tiers: string[];
+  plan: string;
+  budget: string;
+  note: string;
+};
+const initialSubscription: Subscription = {
+  tiers: [],
+  plan: '',
+  budget: '',
+  note: '',
 };
 
 export default function AccountantConnectPage() {
   const [step, setStep] = useState<1 | 2>(1);
   const [roles, setRoles] = useState<RoleSlug[]>([]);
   const [form, setForm] = useState<FormData>(initialForm);
-  const [roleRequirements, setRoleRequirements] =
-    useState<Record<RoleSlug, RoleRequirement>>(emptyRoleRequirements);
+  const [subscription, setSubscription] = useState<Subscription>(initialSubscription);
+  const [comparePlanOpen, setComparePlanOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
@@ -268,10 +321,10 @@ export default function AccountantConnectPage() {
             brand_name: brand?.brand_name || prev.brand_name,
             business_nature: brand?.business_nature || prev.business_nature,
             business_note: brand?.business_note || prev.business_note,
-            // Per-role requirement details live on subscription_cards now,
-            // not on the brand. They're tied to Step 1 (which we don't
-            // autofill either), so we leave the Requirement section empty
-            // on rehydration — same rationale as the role pills below.
+            // Per-card subscription details (tiers/plan/budget/note) live on
+            // subscription_cards now, not on the brand. They're tied to Step 1
+            // (which we don't autofill either), so we leave the Subscription
+            // section empty on rehydration — same rationale as the role pills.
             business_location: brand?.business_location || prev.business_location,
             country_id: brand?.country_id || prev.country_id,
             state_regions: brand?.target_regions?.length ? brand.target_regions : prev.state_regions,
@@ -279,11 +332,10 @@ export default function AccountantConnectPage() {
             working_days: brand?.working_days?.length ? brand.working_days : prev.working_days,
           }));
 
-          // Step 1 (role pills) is intentionally NOT autofilled. The brand row
-          // stores a single collapsed service_type slug, so rehydrating from
-          // it would silently overwrite multi-pick selections (Designer +
-          // Editor) with the combo. Make the user pick roles fresh every
-          // submission instead.
+          // Step 1 (specialty pills) is intentionally NOT autofilled. The brand
+          // row stores a single collapsed service_type slug, so rehydrating
+          // from it can't reconstruct the specialty multi-pick. Make the user
+          // pick specialties fresh every submission instead.
 
           prefilledBrandRef.current = brand?.brand_name || null;
           return true;
@@ -297,6 +349,8 @@ export default function AccountantConnectPage() {
 
   const selectedCountryName = countries.find((c) => c.id === form.country_id)?.name || '';
   const stateOptions = STATES_BY_COUNTRY_NAME[selectedCountryName] || [];
+  // ₹ for India (default), $ for the other countries we serve.
+  const currencySymbol = selectedCountryName && selectedCountryName !== 'India' ? '$' : '₹';
 
   function update<K extends keyof FormData>(field: K, value: FormData[K]) {
     setForm((prev) => {
@@ -347,14 +401,16 @@ export default function AccountantConnectPage() {
     );
   }
 
-  function updateRoleReq(
-    slug: RoleSlug,
-    field: keyof RoleRequirement,
-    value: string,
-  ) {
-    setRoleRequirements((prev) => ({
+  function updateSub(field: 'plan' | 'budget' | 'note', value: string) {
+    setSubscription((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function toggleSubTier(value: string) {
+    setSubscription((prev) => ({
       ...prev,
-      [slug]: { ...prev[slug], [field]: value },
+      tiers: prev.tiers.includes(value)
+        ? prev.tiers.filter((t) => t !== value)
+        : [...prev.tiers, value],
     }));
   }
 
@@ -385,32 +441,38 @@ export default function AccountantConnectPage() {
     }
 
     // All chosen accountant specialties roll up into the single 'accountant'
-    // card. Summarise the picked specialties + any per-specialty notes/hours
-    // into that one card's requirement note so the admin sees the full picture.
+    // card. Summarise the picked specialties + the engagement note into that
+    // one card's requirement note, and attach the build-your-own-subscription
+    // choices (tiers / plan / budget) so the admin sees the full picture.
     const titleOf = (slug: RoleSlug) =>
       ROLE_OPTIONS.find((o) => o.slug === slug)?.title ?? slug;
     const noteLines: string[] = [];
     if (roles.length > 0) {
       noteLines.push(`Services needed: ${roles.map(titleOf).join(', ')}`);
     }
-    for (const r of roles) {
-      const note = roleRequirements[r].note.trim();
-      if (note) noteLines.push(`${titleOf(r)} — ${note}`);
-    }
-    const hoursVals = roles
-      .map((r) => roleRequirements[r].hours.trim())
-      .filter(Boolean);
-    const combinedNote = noteLines.join('\n');
-    const combinedHours = hoursVals.join(' · ');
-    const roleReqsPayload: Record<string, { note?: string; hours?: string }> =
-      combinedNote || combinedHours
-        ? {
-            accountant: {
-              ...(combinedNote ? { note: combinedNote } : {}),
-              ...(combinedHours ? { hours: combinedHours } : {}),
-            },
-          }
-        : {};
+    const subNote = subscription.note.trim();
+    if (subNote) noteLines.push(subNote);
+    const combinedNote = noteLines.join('\n\n');
+
+    const budgetNum = subscription.budget.trim()
+      ? Math.round(Number(subscription.budget))
+      : NaN;
+    const budget =
+      Number.isFinite(budgetNum) && budgetNum >= 0 ? budgetNum : undefined;
+
+    const accountantReq: {
+      note?: string;
+      tiers?: string[];
+      plan?: string;
+      budget?: number;
+    } = {
+      ...(combinedNote ? { note: combinedNote } : {}),
+      ...(subscription.tiers.length ? { tiers: subscription.tiers } : {}),
+      ...(subscription.plan ? { plan: subscription.plan } : {}),
+      ...(budget !== undefined ? { budget } : {}),
+    };
+    const roleReqsPayload: Record<string, typeof accountantReq> =
+      Object.keys(accountantReq).length > 0 ? { accountant: accountantReq } : {};
 
     setSubmitting(true);
     try {
@@ -632,7 +694,7 @@ export default function AccountantConnectPage() {
             <Section
               eyebrow="Client brief"
               title="About your brand"
-              hint="Helps creators understand your space and pitch ideas that fit."
+              hint="Helps your accountant understand your business and the books they'll be working with."
             >
               <Field label="Brand Name" required>
                 <input
@@ -675,44 +737,157 @@ export default function AccountantConnectPage() {
               </Field>
             </Section>
 
-            {/* Section: Requirement — one mini-card per role ticked on Step 1.
-                Both fields optional. Empties are filtered out on submit, so
-                a role with no detail simply doesn't get a role_requirements
-                entry (and the resulting subscription_card stays with NULL
-                requirement_note + hours_note). */}
+            {/* Section: Subscription — build-your-own-plan for the accountant,
+                mirroring /connect and the pricing page (experience level →
+                plan → budget). Every specialty rolls up to one accountant
+                card, so this is captured once. All optional; empties are
+                dropped on submit. */}
             <Section
-              eyebrow="Requirement"
-              title="What each service should cover"
-              hint="A quick note per service helps us match the right accountant. All fields optional."
+              eyebrow="Subscription"
+              title="Experience level & plan"
+              hint="Pick the accountant experience and a weekly plan, add a short note, and name a monthly budget. All optional — we can finalize on the call."
             >
-              {ROLE_OPTIONS.filter((o) => roles.includes(o.slug)).map((opt) => (
-                <div key={opt.slug} className="connect-role-req">
-                  <div className="mb-3 flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-[#FCF487] ring-1 ring-[#0a0a0a]" />
-                    <span className="text-sm font-semibold text-[#0a0a0a]">{opt.title}</span>
-                  </div>
-                  <div className="space-y-3">
-                    <Field label="Short note" optional>
-                      <textarea
-                        rows={2}
-                        value={roleRequirements[opt.slug].note}
-                        onChange={(e) => updateRoleReq(opt.slug, 'note', e.target.value)}
-                        placeholder="What you'd like this service to cover first."
-                        className="connect-input resize-none"
-                      />
-                    </Field>
-                    <Field label="Hours" optional hint="Daily or weekly — however you usually think about it.">
-                      <input
-                        type="text"
-                        value={roleRequirements[opt.slug].hours}
-                        onChange={(e) => updateRoleReq(opt.slug, 'hours', e.target.value)}
-                        placeholder="e.g. 4 hrs daily or 20 hrs/week"
-                        className="connect-input"
-                      />
-                    </Field>
-                  </div>
+              <div className="connect-role-req overflow-hidden">
+                <div className="-mx-4 -mt-3.5 mb-4 flex items-center gap-2.5 border-b border-[#E0DCCE] bg-[#F2FCBC] px-4 py-3">
+                  <span className="h-3.5 w-3.5 rounded-full bg-[#FCF487] ring-1 ring-[#0a0a0a]" />
+                  <span className="text-lg font-bold tracking-tight text-[#0a0a0a]">Accountant</span>
                 </div>
-              ))}
+                {roles.length > 0 && (
+                  <p className="mb-4 text-xs text-[#7A7568]">
+                    Covering{' '}
+                    <span className="font-semibold text-[#3A3A3A]">
+                      {ROLE_OPTIONS.filter((o) => roles.includes(o.slug)).map((o) => o.title).join(', ')}
+                    </span>
+                    .
+                  </p>
+                )}
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
+                      <span>Experience level(s)</span>
+                      <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+                    </label>
+                    <p className="mb-3 text-xs text-[#7A7568]">
+                      Select one or more — we&apos;ll match accountants across all chosen levels.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                      {EXPERIENCE_LEVELS.map((lvl) => {
+                        const on = subscription.tiers.includes(lvl.value);
+                        return (
+                          <button
+                            key={lvl.value}
+                            type="button"
+                            onClick={() => toggleSubTier(lvl.value)}
+                            aria-pressed={on}
+                            className={`connect-chip ${on ? 'connect-chip-on' : ''}`}
+                          >
+                            {on ? `✓ ${lvl.label}` : lvl.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <label className="flex items-baseline gap-2 text-sm font-medium text-[#222]">
+                        <span>Plan</span>
+                        <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+                      </label>
+                      {subscription.tiers.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setComparePlanOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border-2 border-[#0a0a0a] bg-[#F2FCBC] px-3 py-1.5 text-xs font-bold text-[#0a0a0a] shadow-[2px_2px_0_0_#0a0a0a] transition hover:bg-[#FCF487] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0_0_#0a0a0a]"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <rect x="3" y="4" width="18" height="16" rx="1.5" />
+                            <path d="M9 4v16M15 4v16" />
+                          </svg>
+                          Compare all plans
+                        </button>
+                      )}
+                    </div>
+                    <p className="mb-3 text-xs text-[#7A7568]">
+                      Plans differ by availability — how much of an accountant you get each week.
+                    </p>
+                    {subscription.tiers.length === 0 ? (
+                      <p className="text-sm font-medium text-[#C97744]">
+                        Pick an experience level to see plan options.
+                      </p>
+                    ) : (
+                      <div className="overflow-hidden rounded-xl border border-[#D9D5C7]">
+                        <table className="w-full border-collapse text-left text-sm">
+                          <thead>
+                            <tr className="bg-[#F4F1E8] text-[11px] font-semibold uppercase tracking-wide text-[#7A7568]">
+                              <th className="px-2 py-2 sm:px-3">Plan</th>
+                              <th className="px-2 py-2 text-right sm:px-3">Day</th>
+                              <th className="px-2 py-2 text-right sm:px-3">Week</th>
+                              <th className="px-2 py-2 text-right sm:px-3">Month</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {PLAN_OPTIONS.map((p) => {
+                              const on = subscription.plan === p.name;
+                              return (
+                                <tr
+                                  key={p.name}
+                                  role="button"
+                                  aria-pressed={on}
+                                  onClick={() => updateSub('plan', on ? '' : p.name)}
+                                  className={`cursor-pointer border-t border-[#E8E5DD] transition ${on ? 'bg-[#F2FCBC]' : 'bg-white hover:bg-[#FBFAF6]'}`}
+                                >
+                                  <td className="px-2 py-2.5 font-semibold text-[#0a0a0a] sm:px-3">
+                                    <span className="flex items-center gap-2">
+                                      <span className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5]'}`}>
+                                        {on && (
+                                          <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                          </svg>
+                                        )}
+                                      </span>
+                                      {p.name}
+                                    </span>
+                                  </td>
+                                  <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.dailyHours} hr{p.dailyHours > 1 ? 's' : ''}</td>
+                                  <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.weeklyHours} hrs</td>
+                                  <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.monthlyHours} hrs</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  <Field
+                    label="Monthly budget"
+                    optional
+                    hint={`Your target monthly spend in ${currencySymbol}.`}
+                  >
+                    <input
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      value={subscription.budget}
+                      onChange={(e) => updateSub('budget', e.target.value)}
+                      placeholder={`e.g. ${currencySymbol}25000`}
+                      className="connect-input"
+                    />
+                  </Field>
+
+                  <Field label="Short note" optional>
+                    <textarea
+                      rows={2}
+                      value={subscription.note}
+                      onChange={(e) => updateSub('note', e.target.value)}
+                      placeholder="Explain the kind of accounting work you're looking to get done."
+                      className="connect-input resize-none"
+                    />
+                  </Field>
+                </div>
+              </div>
             </Section>
 
             {/* Section: Accountant preferences */}
@@ -773,7 +948,176 @@ export default function AccountantConnectPage() {
         )}
       </div>
 
+      {comparePlanOpen && (
+        <PlanCompareModal
+          roleTitle="Accountant"
+          selectedPlan={subscription.plan}
+          onSelect={(name) => updateSub('plan', name)}
+          onClose={() => setComparePlanOpen(false)}
+        />
+      )}
+
       <style jsx global>{globalStyles}</style>
+    </div>
+  );
+}
+
+// Small ⓘ with a hover/focus tooltip, used on comparison-table row labels.
+function InfoTip({ text }: { text: string }) {
+  return (
+    <span className="group/info relative ml-1 inline-flex align-middle">
+      <button
+        type="button"
+        aria-label={text}
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#C9C4B5] text-[10px] font-bold leading-none text-[#7A7568] transition hover:border-[#0a0a0a] hover:text-[#0a0a0a]"
+      >
+        i
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-0 top-full z-30 mt-2 w-52 whitespace-normal rounded-lg bg-[#0a0a0a] px-3 py-2 text-left text-[11px] font-normal normal-case leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/info:opacity-100 group-focus-within/info:opacity-100"
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+
+// Full plan comparison (mirrors the pricing page table) shown in a modal.
+// Selecting a plan here sets the same plan_name the compact picker uses.
+function PlanCompareModal({
+  roleTitle, selectedPlan, onSelect, onClose,
+}: {
+  roleTitle: string;
+  selectedPlan: string;
+  onSelect: (name: string) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  // Plan-column cell styling: lime border for the recommended plan, soft tint
+  // for the currently-selected plan.
+  const colCls = (p: (typeof PLAN_OPTIONS)[number], extra = '') =>
+    `${p.recommended ? 'border-x-2 border-[#C6F24E]' : ''} ${selectedPlan === p.name ? 'bg-[#FCFBE8]' : 'bg-white'} ${extra}`;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-6"
+      onClick={onClose}
+    >
+      <div
+        className="relative flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border-2 border-[#0a0a0a] bg-white shadow-[6px_6px_0_0_rgba(10,10,10,0.18)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-[#E8E5DD] px-5 py-3.5">
+          <div>
+            <h3 className="text-base font-bold text-[#0a0a0a]">Compare plans</h3>
+            <p className="text-xs text-[#7A7568]">{roleTitle} · pick the weekly availability that fits</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-2xl leading-none text-[#5C5C5C] transition hover:bg-[#F4F1E8] hover:text-[#0a0a0a]"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="overflow-auto">
+          <table className="w-full min-w-[820px] border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className="sticky left-0 z-20 bg-white px-4 py-4" />
+                {PLAN_OPTIONS.map((p) => (
+                  <th key={p.name} className={colCls(p, `px-4 pb-4 pt-5 text-center align-top ${p.recommended ? 'border-t-2' : ''}`)}>
+                    {p.recommended && (
+                      <span className="mb-2 inline-block rounded-full border border-[#0a0a0a] bg-[#C6F24E] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0a0a0a]">
+                        Most popular
+                      </span>
+                    )}
+                    <div className="text-base font-extrabold text-[#0a0a0a]">{p.name}</div>
+                    <p className="mx-auto mt-1 max-w-[150px] text-[11px] font-normal leading-snug text-[#7A7568]">{p.tagline}</p>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-t border-[#EFECE3]">
+                <td className="sticky left-0 z-20 bg-white px-4 py-4 align-top font-semibold text-[#3A3A3A] hover:z-40">
+                  <span className="inline-flex items-center whitespace-nowrap">Availability<InfoTip text={AVAILABILITY_INFO} /></span>
+                </td>
+                {PLAN_OPTIONS.map((p) => (
+                  <td key={p.name} className={colCls(p, 'px-4 py-4 text-center align-top')}>
+                    <div className="text-2xl font-extrabold leading-none text-[#0a0a0a]">{p.pct}</div>
+                    <div className="mt-1.5 text-[11px] leading-tight text-[#7A7568]">{p.capacity}</div>
+                    <div className="mt-1.5 text-[11px] text-[#3A3A3A]">{p.perDay}</div>
+                    <div className="text-[11px] italic text-[#7A7568]">{p.perWeek}</div>
+                  </td>
+                ))}
+              </tr>
+              {PLAN_FEATURES.map((row) => (
+                <tr key={row.label} className="border-t border-[#EFECE3]">
+                  <td className="sticky left-0 z-20 bg-white px-4 py-3 font-medium text-[#3A3A3A] hover:z-40">
+                    <span className="inline-flex items-center">{row.label}{row.info && <InfoTip text={row.info} />}</span>
+                  </td>
+                  {row.values.map((v, i) => (
+                    <td key={i} className={colCls(PLAN_OPTIONS[i], 'px-4 py-3 text-center align-middle')}>
+                      {typeof v === 'boolean' ? (
+                        v ? (
+                          <svg className="mx-auto h-4 w-4 text-[#1FA85A]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <svg className="mx-auto h-4 w-4 text-[#D1573B]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        )
+                      ) : typeof v === 'string' ? (
+                        <span className="text-[12px] leading-tight text-[#3A3A3A]">{v}</span>
+                      ) : (
+                        v
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              <tr className="border-t border-[#EFECE3]">
+                <td className="sticky left-0 z-20 bg-white px-4 py-3 font-medium text-[#3A3A3A]">Best For</td>
+                {PLAN_OPTIONS.map((p) => (
+                  <td key={p.name} className={colCls(p, 'px-4 py-3 text-center align-middle')}>
+                    <span className="text-[12px] leading-tight text-[#3A3A3A]">{p.bestFor}</span>
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-[#EFECE3]">
+                <td className="sticky left-0 z-20 bg-white px-4 py-4" />
+                {PLAN_OPTIONS.map((p) => {
+                  const on = selectedPlan === p.name;
+                  return (
+                    <td key={p.name} className={colCls(p, `px-3 py-4 text-center ${p.recommended ? 'border-b-2' : ''}`)}>
+                      <button
+                        type="button"
+                        onClick={() => onSelect(p.name)}
+                        aria-pressed={on}
+                        className={`w-full rounded-lg border-2 border-[#0a0a0a] px-2 py-2 text-xs font-bold text-[#0a0a0a] shadow-[2px_2px_0_0_#0a0a0a] transition active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0_0_#0a0a0a] ${on ? 'bg-[#C6F24E]' : 'bg-white hover:bg-[#F2FCBC]'}`}
+                      >
+                        {on ? 'Selected ✓' : 'Select Plan'}
+                      </button>
+                    </td>
+                  );
+                })}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1077,10 +1421,9 @@ const globalStyles = `
   box-shadow: 3px 3px 0 0 #0a0a0a;
 }
 
-/* Per-role row inside the Requirement section. Lighter than the Step 1
-   role card — it's a sub-block inside an existing Section, not its own
-   highlighted card. Vertical gap between rows is handled by the parent
-   Section's space-y-4. */
+/* The single subscription block on Step 2. Lighter than the Step 1 specialty
+   card — it's a sub-block inside an existing Section, not its own highlighted
+   card. */
 .connect-role-req {
   background: #FBFAF6;
   border: 1px solid #E8E5DD;
@@ -1088,7 +1431,8 @@ const globalStyles = `
   padding: 14px 16px;
 }
 
-/* Selected chips (states, languages) — brand lime soft fill, ink ring */
+/* Selected chips (states, languages, experience levels) — brand lime soft
+   fill, ink ring */
 .connect-chip {
   min-height: 36px;
   padding: 6px 14px;
