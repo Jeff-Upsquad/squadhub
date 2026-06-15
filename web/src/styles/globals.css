@@ -6141,6 +6141,15 @@ ol.sqc-list {
   background: var(--surface-alt);
   font-family: 'Inter', system-ui, sans-serif;
 }
+/* Cursor: a normal select/click arrow by default; the closed-hand "grabbing"
+   cursor appears only while actively panning the canvas or dragging an element.
+   React Flow otherwise defaults the pane AND every node to an open-grab hand,
+   which made the whole board (and the area around the toolbar) feel like the
+   pan tool instead of a click tool. */
+.wb-flow .react-flow__pane { cursor: default; }
+.wb-flow .react-flow__pane.dragging { cursor: grabbing; }
+.wb-flow .react-flow__node { cursor: default; }
+.wb-flow .react-flow__node.dragging { cursor: grabbing; }
 .wb-flow .react-flow__attribution { display: none; }
 .wb-flow .react-flow__controls {
   border-radius: 10px;
