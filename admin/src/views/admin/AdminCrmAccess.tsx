@@ -85,13 +85,15 @@ export default function AdminCrmAccess() {
   });
   const candidates: UserLite[] = candRes?.data || [];
 
-  // SquadHub directory (internal staff). Only relevant for SquadHire CRM, which
-  // keeps its own accounts — picking someone here provisions them into SquadHire.
+  // SquadHub directory — everyone in SquadHub regardless of user_type (internal
+  // staff, partners, partner employees, clients). Only relevant for SquadHire
+  // CRM, which keeps its own accounts — picking someone here provisions them
+  // into SquadHire.
   const { data: dirRes, isFetching: dirLoading } = useQuery({
     queryKey: ['crm-access-directory', search],
     queryFn: () =>
       api
-        .get('/admin/users', { params: { search, user_type: 'internal', limit: 20 } })
+        .get('/admin/users', { params: { search, limit: 50 } })
         .then((r) => r.data),
     enabled: adding && addSource === 'directory' && app === 'squadhire',
   });
