@@ -1826,6 +1826,9 @@ export interface LmsAssignment {
   assigned_at: string;
   started_at: string | null;
   completed_at: string | null;
+  // Optional deadline (migration 111). Drives the Home "Courses" secondary
+  // card, which surfaces non-completed assignments due today or overdue.
+  due_date: string | null;
   // Joined
   item?: LmsItem;
   user?: User;
@@ -1852,6 +1855,30 @@ export interface LmsQuizAttempt {
 export interface LmsAudienceInput {
   user_types: UserType[];
   user_ids: string[];
+}
+
+// ============================================================
+// Meetings (migration 112)
+//
+// A lightweight meeting record. Drives the Home "Meetings" secondary card,
+// which surfaces the current user's scheduled meetings (as creator or
+// attendee) whose scheduled_at is today or overdue. A meeting drops off the
+// card once it is marked done or cancelled.
+// ============================================================
+
+export type MeetingStatus = 'scheduled' | 'done' | 'cancelled';
+
+export interface Meeting {
+  id: string;
+  title: string;
+  scheduled_at: string;        // TIMESTAMPTZ
+  duration_min: number;
+  location: string | null;
+  status: MeetingStatus;
+  attendee_ids: string[];
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ============================================================

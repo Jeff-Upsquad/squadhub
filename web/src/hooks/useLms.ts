@@ -14,6 +14,22 @@ export function useMyLearning() {
   });
 }
 
+// Non-completed assignments whose due_date is today or overdue (server-filtered
+// in the caller's timezone). Powers the Home "Courses" secondary card.
+export function useDueCourses(enabled = true) {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  return useQuery<MyLearningEntry[]>({
+    queryKey: ['lms-due', tz],
+    queryFn: async () => {
+      const res = await api.get(`/lms/my-due?tz=${encodeURIComponent(tz)}`);
+      return res.data.data;
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    enabled,
+  });
+}
+
 export function useLmsCategories() {
   return useQuery<LmsCategory[]>({
     queryKey: ['lms-categories'],

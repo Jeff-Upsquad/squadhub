@@ -5834,6 +5834,22 @@ ol.sqc-list {
 .hm-home .hm-stat .go { position: absolute; top: 11px; right: 12px; color: color-mix(in srgb, var(--sh-ink) 45%, transparent); opacity: 0; transition: opacity 0.15s ease; }
 .hm-home .hm-stat:hover .go { opacity: 1; }
 
+/* ── Secondary "type" cards (Routines / Courses / Meetings) ──
+   Unlike the primary strip (a fixed, joined surface), these are a variable
+   1–N set, so each is its own bordered tile in a wrapping flex row. The count
+   of cards depends on what has items, so a single tile mustn't stretch full
+   width — flex-basis + max-width keeps tiles a sensible size. */
+.hm-home .hm-stats-secondary { display: flex; flex-wrap: wrap; gap: 8px; background: transparent; border: none; border-radius: 0; box-shadow: none; overflow: visible; margin-top: -6px; margin-bottom: 22px; animation: hm-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.09s both; }
+/* Compact inline chips: icon + label + count on one row, sized to content so
+   there's no empty card space. */
+.hm-home .hm-stats-secondary .hm-stat { flex: 0 0 auto; max-width: none; display: flex; align-items: center; gap: 9px; padding: 7px 12px; background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 10px; box-shadow: 0 1px 2px rgba(10, 10, 10, 0.02); }
+.hm-home .hm-stats-secondary .hm-stat + .hm-stat { border-left: 1px solid var(--sh-hair); }
+.hm-home .hm-stats-secondary .hm-stat .lbl { font-size: 9.5px; gap: 6px; }
+.hm-home .hm-stats-secondary .hm-stat .lbl svg { width: 12px; height: 12px; }
+.hm-home .hm-stats-secondary .hm-stat .val { font-size: 15px; margin-top: 0; line-height: 1; }
+.hm-home .hm-stats-secondary .hm-stat .go { display: none; }
+.hm-home .hm-stats-secondary .hm-stat::after { display: none; }
+
 /* ── Today card ── */
 .hm-home .hm-card { background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 14px; overflow: hidden; box-shadow: 0 1px 2px rgba(10, 10, 10, 0.02), 0 10px 28px rgba(10, 10, 10, 0.03); margin-bottom: 28px; animation: hm-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both; }
 .hm-home .hm-card-head { display: flex; align-items: center; gap: 9px; padding: 12px 18px; border-bottom: 1px solid var(--sh-hair-3); }
@@ -5979,9 +5995,35 @@ ol.sqc-list {
 .hm-home .hmp-task .open-ind { color: var(--sh-ink-4); opacity: 0; transform: translateX(-3px); transition: opacity 0.13s ease, transform 0.2s ease; }
 .hm-home .hmp-task:hover .open-ind { opacity: 1; transform: none; }
 .hm-home .hmp-task[data-fading="true"] { opacity: 0; transform: translateX(200px); pointer-events: none; max-height: 0; min-height: 0; padding-block: 0; overflow: hidden; }
+/* Leading marker for non-completable secondary rows (e.g. courses) */
+.hm-home .hmp-task .sc-dot { width: 7px; height: 7px; border-radius: 50%; background: color-mix(in srgb, var(--sh-ink) 30%, transparent); justify-self: center; }
 
-/* Group heads pin while their section scrolls */
-.hm-home .hmp-scroll .hm-group-head { position: sticky; top: 0; z-index: 1; background: var(--surface); padding: 10px 18px 6px; }
+/* Group heads pin while their section scrolls — rendered as clear section
+   dividers (tinted bar + hairlines + right-aligned count) so grouped items in
+   the slide-in panels read as distinct sections, not one running list. */
+.hm-home .hmp-scroll .hm-group-head {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px;
+  background: color-mix(in srgb, var(--sh-ink) 7%, var(--surface));
+  border-top: 1px solid var(--sh-hair);
+  border-bottom: 1px solid var(--sh-hair);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.07em;
+  color: color-mix(in srgb, var(--sh-ink) 80%, transparent);
+}
+.hm-home .hmp-scroll .hm-group:first-child .hm-group-head { border-top: none; }
+.hm-home .hmp-scroll .hm-group + .hm-group { border-top: none; margin-top: 16px; }
+.hm-home .hmp-scroll .hm-group-head .count {
+  margin-left: auto;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--sh-ink) 55%, transparent);
+}
+/* Hairline between rows so individual grouped items read as distinct lines */
+.hm-home .hmp-list .hmp-task:not(:last-child) {
+  border-bottom: 1px solid color-mix(in srgb, var(--sh-ink) 7%, transparent);
+  border-radius: 0;
+}
+.hm-home .hmp-list .hmp-task:hover { border-radius: 8px; }
 
 @media (prefers-reduced-motion: reduce) {
   .hm-home .hmp-task { animation: none; transition: background 120ms ease, opacity 1ms; }

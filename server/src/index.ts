@@ -93,6 +93,7 @@ import subscriptionSquadhireProfilesAdminRoutes from './routes/subscription-squa
 import profileAccessRoutes from './routes/profile-access';
 import profileAccessAdminRoutes from './routes/profile-access-admin';
 import viewPreferencesRoutes from './routes/view-preferences';
+import meetingsRoutes from './routes/meetings';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimerCron } from './cron/timer-cron';
 import { startScheduledMessagesSweeper } from './cron/scheduled-messages-cron';
@@ -198,6 +199,7 @@ app.use('/push', partnerPushRoutes);
 app.use('/partner-app', partnerAppRoutes);
 app.use('/lms', lmsRoutes);
 app.use('/admin/lms', lmsAdminRoutes);
+app.use('/meetings', meetingsRoutes);
 
 // Squad Chat
 app.use('/chat/app', chatAppRoutes);
@@ -239,18 +241,25 @@ server.listen(config.port, () => {
   console.log(`SquadHub server running on http://localhost:${config.port}`);
   console.log(`Environment: ${config.nodeEnv}`);
 
-  // Start cron jobs
-  startCheckInCron();
-  startTimerCron();
-  startScheduledMessagesSweeper(io);
-  startRoutineCron();
+  // Start cron jobs. Gated by DISABLE_CRONS so a secondary/local instance run
+  // against the shared database (e.g. a worktree dev server) doesn't
+  // double-fire sweeps that send messages, notifications, or spawn routines.
+  // Unset in production → crons run as before.
+  if (process.env.DISABLE_CRONS === 'true') {
+    console.log('Cron jobs disabled (DISABLE_CRONS=true)');
+  } else {
+    startCheckInCron();
+    startTimerCron();
+    startScheduledMessagesSweeper(io);
+    startRoutineCron();
 
-  // Outbound SquadHire webhook retry sweeper. No-ops when SQUADHIRE_WEBHOOK_URL
-  // is unset, so dev environments without SquadHire configured are unaffected.
-  startSquadhireSyncSweeper();
-  startManualAssignmentSweeper();
-  startSelectionNotifySweeper();
-  startActivationNotifySweeper();
-  startTalentAcceptedNotifySweeper();
-  startProfileAccessGrantsSyncSweeper();
+    // Outbound SquadHire webhook retry sweeper. No-ops when SQUADHIRE_WEBHOOK_URL
+    // is unset, so dev environments without SquadHire configured are unaffected.
+    startSquadhireSyncSweeper();
+    startManualAssignmentSweeper();
+    startSelectionNotifySweeper();
+    startActivationNotifySweeper();
+    startTalentAcceptedNotifySweeper();
+    startProfileAccessGrantsSyncSweeper();
+  }
 });
