@@ -386,8 +386,9 @@ export interface WhiteboardEdge {
   label?: string;
   type?: string;
   // Line appearance set from the edge toolbar. arrowStart/arrowEnd toggle the
-  // arrowheads; lineType picks straight / curved / elbow routing.
-  data?: { lineType?: WhiteboardLineType; arrowStart?: boolean; arrowEnd?: boolean };
+  // arrowheads; lineType picks straight / curved / elbow routing; waypoint (flow
+  // coords) is a dragged midpoint that bends the line through that point.
+  data?: { lineType?: WhiteboardLineType; arrowStart?: boolean; arrowEnd?: boolean; waypoint?: { x: number; y: number } | null };
 }
 
 export interface WhiteboardData {
