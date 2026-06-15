@@ -14,6 +14,11 @@ import {
   MarkerType,
   NodeResizer,
   NodeToolbar,
+  BaseEdge,
+  EdgeLabelRenderer,
+  getStraightPath,
+  getBezierPath,
+  getSmoothStepPath,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -21,8 +26,9 @@ import {
   type Node,
   type Edge,
   type NodeProps,
+  type EdgeProps,
 } from '@xyflow/react';
-import type { SpaceStatus, WhiteboardData, WhiteboardNode, WhiteboardEdge, WhiteboardNodeData, WhiteboardNodeType, WhiteboardShape } from '@squadhub/shared';
+import type { SpaceStatus, WhiteboardData, WhiteboardNode, WhiteboardEdge, WhiteboardNodeData, WhiteboardNodeType, WhiteboardShape, WhiteboardLineType } from '@squadhub/shared';
 import { useWhiteboard, useWhiteboardAutosave } from '../../../hooks/useWhiteboard';
 import { useCreateTask, useUpdateTask } from '../../../hooks/useTasks';
 import { usePMStore } from '../../../stores/pmStore';
@@ -110,6 +116,7 @@ function ShapePicker({ current, onPick }: { current?: string; onPick: (key: Whit
 
 interface WhiteboardCtx {
   canEdit: boolean;
+  startConnectDrag: (sourceId: string, side: Position, e: React.PointerEvent) => void;
   editingId: string | null;
   startEditing: (id: string) => void;
   stopEditing: () => void;
@@ -120,6 +127,12 @@ interface WhiteboardCtx {
   openTask: (taskId: string) => void;
   toggleDone: (id: string) => void;
   duplicateNode: (nodeId: string, position: Position) => void;
+  setEdgeLineType: (id: string, lineType: WhiteboardLineType) => void;
+  cycleEdgeArrows: (id: string) => void;
+  deleteEdge: (id: string) => void;
+  editingEdgeId: string | null;
+  startEditingEdge: (id: string) => void;
+  setEdgeLabel: (id: string, label: string) => void;
 }
 const WBContext = createContext<WhiteboardCtx | null>(null);
 const useWB = () => {
@@ -251,23 +264,27 @@ function NodeHandles() {
 }
 
 // FigJam-style directional arrow — a SINGLE arrow on the side of the element
-// nearest the cursor. Clicking it duplicates the element to that side.
+// nearest the cursor. It's a real connection handle: CLICK it to duplicate the
+// element that way (handled in onConnectEnd), or DRAG it onto another element to
+// connect them (onConnect). Its id is prefixed `arrow-` so onConnect can remap
+// it to the persistent edge-anchor handle on that side.
 const ARROW_CLS: Record<string, string> = {
   [Position.Top]: 'wb-arrow--t', [Position.Right]: 'wb-arrow--r',
   [Position.Bottom]: 'wb-arrow--b', [Position.Left]: 'wb-arrow--l',
 };
 function DuplicateArrows({ nodeId, side, onArrowEnter }: { nodeId: string; side: Position | null; onArrowEnter: () => void }) {
-  const { canEdit, duplicateNode } = useWB();
+  const { canEdit, duplicateNode, startConnectDrag } = useWB();
   if (!canEdit || !side) return null;
   return (
     <button
       type="button"
-      className={`wb-arrow ${ARROW_CLS[side]} nodrag`}
-      title="Duplicate this way"
+      className={`wb-arrow ${ARROW_CLS[side]} nodrag nopan`}
+      title="Drag to connect · click to duplicate"
       onMouseEnter={onArrowEnter}
+      onPointerDown={(e) => startConnectDrag(nodeId, side, e)}
       onClick={(e) => { e.stopPropagation(); duplicateNode(nodeId, side); }}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ pointerEvents: 'none' }}>
         <path d="M5 12h14M13 6l6 6-6 6" />
       </svg>
     </button>
@@ -409,6 +426,78 @@ function ShapeNode({ id, data, selected }: NodeProps<WBNode>) {
 
 const nodeTypes = { sticky: StickyNode, text: TextNode, shape: ShapeNode };
 
+const ARROW = { type: MarkerType.ArrowClosed } as const;
+const edgeMarkers = (d?: { arrowStart?: boolean; arrowEnd?: boolean }) => ({
+  markerStart: d?.arrowStart ? ARROW : undefined,
+  markerEnd: d?.arrowEnd !== false ? ARROW : undefined,
+});
+
+// Custom connector: routes per data.lineType (straight / curved / elbow),
+// carries an optional centre label (double-click to edit), and shows a toolbar
+// (line style, arrowheads, delete) when selected.
+function WBEdgeComponent({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerStart, markerEnd, selected, data, label }: EdgeProps) {
+  const { canEdit, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, stopEditing, setEdgeLabel } = useWB();
+  const editing = editingEdgeId === id;
+  const labelText = typeof label === 'string' ? label : '';
+  const lineType = (data?.lineType as WhiteboardLineType) || 'smoothstep';
+  const args = { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition };
+  const [path, labelX, labelY] =
+    lineType === 'straight' ? getStraightPath({ sourceX, sourceY, targetX, targetY })
+    : lineType === 'bezier' ? getBezierPath(args)
+    : getSmoothStepPath(args);
+  const styleBtn = (lt: WhiteboardLineType, title: string, d: string) => (
+    <button type="button" className="wb-ebar-btn" data-active={lineType === lt} title={title} onClick={() => setEdgeLineType(id, lt)}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
+    </button>
+  );
+  return (
+    <>
+      <BaseEdge id={id} path={path} markerStart={markerStart} markerEnd={markerEnd} style={{ stroke: 'var(--sh-ink-3)', strokeWidth: 1.6 }} />
+      {/* Centre label — double-click the line to add/edit it. */}
+      {(editing || labelText) && (
+        <EdgeLabelRenderer>
+          {editing ? (
+            <input
+              autoFocus
+              defaultValue={labelText}
+              className="wb-edge-input nodrag nopan nowheel"
+              style={{ position: 'absolute', transform: `translate(-50%,-50%) translate(${labelX}px,${labelY}px)`, pointerEvents: 'all' }}
+              onBlur={(e) => { setEdgeLabel(id, e.target.value); stopEditing(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur(); }}
+            />
+          ) : (
+            <div
+              className="wb-edge-label nodrag"
+              style={{ position: 'absolute', transform: `translate(-50%,-50%) translate(${labelX}px,${labelY}px)`, pointerEvents: 'all' }}
+              onDoubleClick={() => canEdit && startEditingEdge(id)}
+            >
+              {labelText}
+            </div>
+          )}
+        </EdgeLabelRenderer>
+      )}
+      {selected && canEdit && (
+        <EdgeLabelRenderer>
+          <div className="wb-ebar wb-edge-bar nodrag nopan" style={{ position: 'absolute', transform: `translate(-50%,-50%) translate(${labelX}px,${labelY - 38}px)`, pointerEvents: 'all' }}>
+            {styleBtn('straight', 'Straight', 'M4 12h16')}
+            {styleBtn('bezier', 'Curved', 'M4 18 C 10 18, 14 6, 20 6')}
+            {styleBtn('smoothstep', 'Elbow', 'M4 6h8v12h8')}
+            <span className="wb-ebar-sep" />
+            <button type="button" className="wb-ebar-btn" title="Arrowheads" onClick={() => cycleEdgeArrows(id)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h15M14 7l5 5-5 5" /></svg>
+            </button>
+            <span className="wb-ebar-sep" />
+            <button type="button" className="wb-ebar-btn" title="Delete line" onClick={() => deleteEdge(id)}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+            </button>
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+}
+const edgeTypes = { wb: WBEdgeComponent };
+
 // ── Serialization (strip React Flow runtime fields before persisting) ───────
 function serialize(nodes: WBNode[], edges: WBEdge[], viewport?: WhiteboardData['viewport']): WhiteboardData {
   const sNodes: WhiteboardNode[] = nodes.map((n) => ({
@@ -417,6 +506,7 @@ function serialize(nodes: WBNode[], edges: WBEdge[], viewport?: WhiteboardData['
     position: n.position,
     width: n.width ?? n.measured?.width ?? null,
     height: n.height ?? n.measured?.height ?? null,
+    zIndex: n.zIndex ?? null,
     data: {
       text: n.data.text ?? '',
       color: n.data.color,
@@ -435,15 +525,39 @@ function serialize(nodes: WBNode[], edges: WBEdge[], viewport?: WhiteboardData['
     target: e.target,
     sourceHandle: e.sourceHandle ?? null,
     targetHandle: e.targetHandle ?? null,
+    type: e.type,
+    data: {
+      lineType: ((e.data?.lineType as WhiteboardLineType) ?? 'smoothstep'),
+      arrowStart: !!e.data?.arrowStart,
+      arrowEnd: e.data?.arrowEnd !== false,
+    },
     label: typeof e.label === 'string' ? e.label : undefined,
   }));
   return { nodes: sNodes, edges: sEdges, viewport };
 }
 
 const defaultEdgeOptions = {
-  type: 'default' as const,
+  type: 'wb' as const,
   markerEnd: { type: MarkerType.ArrowClosed },
 };
+
+// Map persisted WhiteboardData → React Flow nodes/edges. Shared by the initial
+// seed and by undo/redo restore.
+function toRFNodes(data: WhiteboardData): WBNode[] {
+  return (data.nodes ?? []).map((n) => {
+    const d = DEFAULT_SIZE[n.type];
+    const sized = d ? { width: n.width ?? d.width, height: n.height ?? d.height } : {};
+    return { id: n.id, type: n.type, position: n.position, ...sized, zIndex: n.zIndex ?? undefined, data: { ...n.data } };
+  });
+}
+function toRFEdges(data: WhiteboardData): WBEdge[] {
+  return (data.edges ?? []).map((e) => ({
+    id: e.id, source: e.source, target: e.target,
+    sourceHandle: e.sourceHandle ?? undefined, targetHandle: e.targetHandle ?? undefined,
+    type: 'wb', data: e.data ?? { lineType: 'smoothstep', arrowEnd: true },
+    ...edgeMarkers(e.data), label: e.label,
+  }));
+}
 
 // ── Canvas (mounted once per list; seeded from the loaded blob) ─────────────
 function Canvas({
@@ -459,24 +573,19 @@ function Canvas({
 }) {
   const rf = useReactFlow();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const [nodes, setNodes, onNodesChange] = useNodesState<WBNode>(
-    (initial.nodes ?? []).map((n) => {
-      const d = DEFAULT_SIZE[n.type];
-      const sized = d ? { width: n.width ?? d.width, height: n.height ?? d.height } : {};
-      return { id: n.id, type: n.type, position: n.position, ...sized, data: { ...n.data } };
-    }),
-  );
-  const [edges, setEdges, onEdgesChange] = useEdgesState<WBEdge>(
-    (initial.edges ?? []).map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle ?? undefined, targetHandle: e.targetHandle ?? undefined, label: e.label })),
-  );
+  const [nodes, setNodes, onNodesChange] = useNodesState<WBNode>(toRFNodes(initial));
+  const [edges, setEdges, onEdgesChange] = useEdgesState<WBEdge>(toRFEdges(initial));
   const { save } = useWhiteboardAutosave(listId);
   const createTask = useCreateTask(listId);
   const updateTask = useUpdateTask(listId);
   const [newColor, setNewColor] = useState(STICKY_COLORS[0]);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const startEditing = useCallback((id: string) => setEditingId(id), []);
-  const stopEditing = useCallback(() => setEditingId(null), []);
+  const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
+  const startEditing = useCallback((id: string) => { setEditingId(id); setEditingEdgeId(null); }, []);
+  const startEditingEdge = useCallback((id: string) => { setEditingEdgeId(id); setEditingId(null); }, []);
+  const stopEditing = useCallback(() => { setEditingId(null); setEditingEdgeId(null); }, []);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
+  const [connectLine, setConnectLine] = useState<{ sx: number; sy: number; x: number; y: number } | null>(null);
 
   // Manual double-click detection: two clicks on the same node within 350ms.
   // More reliable than the native dblclick event, which React Flow's drag layer
@@ -542,8 +651,14 @@ function Canvas({
   // Duplicate a node to one side: clone its content + formatting + size, offset
   // in `position`'s direction, joined by an arrow. The task link is NOT copied —
   // the duplicate is an independent, plain element.
+  // A clicked arrow can fire BOTH onClick and onConnectEnd; dedupe within 150ms
+  // so a single click only duplicates once.
+  const lastDup = useRef(0);
   const duplicateNode = useCallback((nodeId: string, position: Position) => {
     if (!canEdit) return;
+    const now = performance.now();
+    if (now - lastDup.current < 150) return;
+    lastDup.current = now;
     const src = rf.getNode(nodeId) as WBNode | undefined;
     if (!src) return;
     const type = (src.type as WhiteboardNodeType) || 'sticky';
@@ -559,27 +674,171 @@ function Canvas({
     }
     const id = crypto.randomUUID();
     const s = src.data;
+    // The duplicate keeps the source's look (type/shape/colour/formatting/size)
+    // but starts with EMPTY text — it's a fresh element to fill in, not a copy.
     const data: WhiteboardNodeData = {
-      text: s.text || '', color: s.color, shape: s.shape, bold: s.bold, fontSize: s.fontSize, align: s.align,
+      text: '', color: s.color, shape: s.shape, bold: s.bold, fontSize: s.fontSize, align: s.align,
       taskId: null, taskNumber: null, done: false,
     };
     const sized = DEFAULT_SIZE[type] ? { width: w, height: h } : {};
     setNodes((nds) => [...nds, { id, type, position: pos, ...sized, data }]);
     const srcHandle = HANDLE_ID[position];
+    const edgeData = { lineType: 'smoothstep' as WhiteboardLineType, arrowStart: false, arrowEnd: true };
     const edge: WBEdge = {
       id: crypto.randomUUID(),
       source: nodeId,
       target: id,
       sourceHandle: srcHandle,
       targetHandle: OPPOSITE[srcHandle],
-      markerEnd: { type: MarkerType.ArrowClosed },
+      type: 'wb',
+      data: edgeData,
+      ...edgeMarkers(edgeData),
     };
     setEdges((eds) => addEdge(edge, eds));
   }, [canEdit, rf, setNodes, setEdges]);
 
+  // Drag an arrow onto another element to connect them. We drive this ourselves
+  // (rather than React Flow's connection system, whose drop-target hit-testing
+  // was unreliable here): on pointer-down we track the drag; on release we
+  // hit-test the element under the cursor and, if it's a node, add an edge.
+  // A pure click (no drag) falls through to the arrow's onClick → duplicate.
+  const startConnectDrag = useCallback((sourceId: string, side: Position, e: React.PointerEvent) => {
+    if (!canEdit) return;
+    e.stopPropagation();
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const sx = r.x + r.width / 2, sy = r.y + r.height / 2;
+    const startX = e.clientX, startY = e.clientY;
+    let dragging = false;
+    const move = (ev: PointerEvent) => {
+      if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) > 5) dragging = true;
+      if (dragging) setConnectLine({ sx, sy, x: ev.clientX, y: ev.clientY });
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setConnectLine(null);
+      if (!dragging) return; // no drag → it's a click → onClick duplicates
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+      const targetEl = el?.closest('.react-flow__node') as HTMLElement | null;
+      const targetId = targetEl?.getAttribute('data-id');
+      if (!targetId || targetId === sourceId) return;
+      const sh = HANDLE_ID[side];
+      const data = { lineType: 'smoothstep' as WhiteboardLineType, arrowStart: false, arrowEnd: true };
+      setEdges((eds) => addEdge({ id: crypto.randomUUID(), source: sourceId, target: targetId, sourceHandle: sh, targetHandle: OPPOSITE[sh], type: 'wb', data, ...edgeMarkers(data) }, eds));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }, [canEdit, setEdges]);
+
+  // ── Edge (line) toolbar actions ──
+  const setEdgeLineType = useCallback((id: string, lineType: WhiteboardLineType) => {
+    setEdges((eds) => eds.map((e) => (e.id === id ? { ...e, data: { ...e.data, lineType } } : e)));
+  }, [setEdges]);
+  const cycleEdgeArrows = useCallback((id: string) => {
+    setEdges((eds) => eds.map((e) => {
+      if (e.id !== id) return e;
+      const start = !!e.data?.arrowStart, end = e.data?.arrowEnd !== false;
+      // cycle: end-only → both → none → end-only
+      const next = (end && !start) ? { arrowStart: true, arrowEnd: true }
+        : (end && start) ? { arrowStart: false, arrowEnd: false }
+        : { arrowStart: false, arrowEnd: true };
+      const data = { ...e.data, ...next };
+      return { ...e, data, ...edgeMarkers(data) };
+    }));
+  }, [setEdges]);
+  const deleteEdge = useCallback((id: string) => setEdges((eds) => eds.filter((e) => e.id !== id)), [setEdges]);
+  const setEdgeLabel = useCallback((id: string, label: string) => {
+    setEdges((eds) => eds.map((e) => (e.id === id ? { ...e, label: label.trim() || undefined } : e)));
+  }, [setEdges]);
+
+  // Keyboard layering for the selected element(s):
+  //   ]  (or ⌘/Ctrl+])  → bring to front
+  //   [  (or ⌘/Ctrl+[)  → send to back
+  useEffect(() => {
+    if (!canEdit) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '[' && e.key !== ']') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      const all = rf.getNodes();
+      if (!all.some((n) => n.selected)) return;
+      e.preventDefault();
+      const zs = all.map((n) => n.zIndex ?? 0);
+      const target = e.key === ']' ? Math.max(0, ...zs) + 1 : Math.min(0, ...zs) - 1;
+      setNodes((nds) => nds.map((n) => (n.selected ? { ...n, zIndex: target } : n)));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [canEdit, rf, setNodes]);
+
+  // Manual double-click on a line → edit its label (mirrors the node approach).
+  const lastEdgeClick = useRef<{ id: string; t: number }>({ id: '', t: 0 });
+  const onEdgeClick = useCallback((e: React.MouseEvent, edge: Edge) => {
+    if (!canEdit) return;
+    const last = lastEdgeClick.current;
+    if (last.id === edge.id && e.timeStamp - last.t < 350) { setEditingEdgeId(edge.id); lastEdgeClick.current = { id: '', t: 0 }; }
+    else lastEdgeClick.current = { id: edge.id, t: e.timeStamp };
+  }, [canEdit]);
+
+  // ── Undo / redo (⌘/Ctrl+Z, ⌘/Ctrl+Shift+Z or ⌘/Ctrl+Y) ──
+  // Snapshots are coarse: a debounced recorder groups rapid changes (e.g. a
+  // drag) into one history entry. Restores replay a snapshot back into RF.
+  const history = useRef<{ past: WhiteboardData[]; future: WhiteboardData[]; last: WhiteboardData }>({ past: [], future: [], last: initial });
+  const restoring = useRef(false);
+  const histTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (restoring.current) { restoring.current = false; return; }
+    if (histTimer.current) clearTimeout(histTimer.current);
+    histTimer.current = setTimeout(() => {
+      const snap = serialize(nodes, edges);
+      const h = history.current;
+      const key = (d: WhiteboardData) => JSON.stringify({ n: d.nodes, e: d.edges });
+      if (key(h.last) === key(snap)) return;
+      h.past.push(h.last);
+      if (h.past.length > 60) h.past.shift();
+      h.last = snap;
+      h.future = [];
+    }, 350);
+  }, [nodes, edges]);
+  const undo = useCallback(() => {
+    const h = history.current;
+    if (!h.past.length) return;
+    if (histTimer.current) clearTimeout(histTimer.current);
+    h.future.push(serialize(rf.getNodes() as WBNode[], rf.getEdges() as WBEdge[]));
+    const prev = h.past.pop()!;
+    h.last = prev;
+    restoring.current = true;
+    setNodes(toRFNodes(prev));
+    setEdges(toRFEdges(prev));
+  }, [rf, setNodes, setEdges]);
+  const redo = useCallback(() => {
+    const h = history.current;
+    if (!h.future.length) return;
+    if (histTimer.current) clearTimeout(histTimer.current);
+    h.past.push(serialize(rf.getNodes() as WBNode[], rf.getEdges() as WBEdge[]));
+    const next = h.future.pop()!;
+    h.last = next;
+    restoring.current = true;
+    setNodes(toRFNodes(next));
+    setEdges(toRFEdges(next));
+  }, [rf, setNodes, setEdges]);
+  useEffect(() => {
+    if (!canEdit) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [canEdit, undo, redo]);
+
   const ctx = useMemo<WhiteboardCtx>(
-    () => ({ canEdit, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, unlinkTask, openTask, toggleDone, duplicateNode }),
-    [canEdit, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, unlinkTask, openTask, toggleDone, duplicateNode],
+    () => ({ canEdit, startConnectDrag, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, unlinkTask, openTask, toggleDone, duplicateNode, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, setEdgeLabel }),
+    [canEdit, startConnectDrag, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, unlinkTask, openTask, toggleDone, duplicateNode, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, setEdgeLabel],
   );
 
   // Place new nodes at the centre of the current viewport.
@@ -623,9 +882,14 @@ function Canvas({
           onEdgesChange={onEdgesChange}
           onNodeClick={onNodeClick}
           onNodeDoubleClick={(_, node) => { if (canEdit) startEditing(node.id); }}
+          onEdgeClick={onEdgeClick}
+          onEdgeDoubleClick={(_, edge) => { if (canEdit) startEditingEdge(edge.id); }}
           onMoveEnd={() => { if (!firstRun.current) save(serialize(nodes, edges, rf.getViewport())); }}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           connectionMode={ConnectionMode.Loose}
+          elevateNodesOnSelect={false}
+          panOnScroll
           zoomOnDoubleClick={false}
           defaultEdgeOptions={defaultEdgeOptions}
           defaultViewport={initial.viewport}
@@ -698,6 +962,11 @@ function Canvas({
             </Panel>
           )}
         </ReactFlow>
+        {connectLine && (
+          <svg className="wb-connect-line" style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 9999 }}>
+            <line x1={connectLine.sx} y1={connectLine.sy} x2={connectLine.x} y2={connectLine.y} stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 4" />
+          </svg>
+        )}
       </div>
     </WBContext.Provider>
   );
