@@ -96,6 +96,37 @@ router.post('/register', async (req: Request, res: Response) => {
         });
       }
 
+      // Share the daily check-in mini app by default, picking the variant that
+      // matches the user's type. Teammates app for internal users and partner
+      // employees; partners app for partner users. Clients and client staff
+      // don't get a default check-in app.
+      const defaultMiniAppSlug =
+        userType === 'internal' || userType === 'partner_employee'
+          ? 'daily-checkin'
+          : userType === 'partner'
+            ? 'daily-checkin-partners'
+            : null;
+
+      if (defaultMiniAppSlug) {
+        const { data: miniApp } = await supabaseAdmin
+          .from('mini_apps')
+          .select('id')
+          .eq('slug', defaultMiniAppSlug)
+          .maybeSingle();
+
+        if (miniApp) {
+          const { error: shareError } = await supabaseAdmin
+            .from('mini_app_user_access')
+            .upsert(
+              { mini_app_id: miniApp.id, user_id: authData.user.id },
+              { onConflict: 'mini_app_id,user_id', ignoreDuplicates: true },
+            );
+          if (shareError) {
+            console.error('Failed to share default daily check-in mini app:', shareError);
+          }
+        }
+      }
+
       // Apply CRM access from the invitation (set in the admin CRM-access UI).
       if (invitation.crm_access) {
         const crm = invitation.crm_access as {
