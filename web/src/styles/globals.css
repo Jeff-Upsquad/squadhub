@@ -6150,6 +6150,11 @@ ol.sqc-list {
 .wb-flow .react-flow__pane.dragging { cursor: grabbing; }
 .wb-flow .react-flow__node { cursor: default; }
 .wb-flow .react-flow__node.dragging { cursor: grabbing; }
+/* Keep a selected element's floating toolbar above the canvas and every node.
+   React Flow sets the toolbar's z-index from its node's z, so an element sent
+   to back (negative z) would otherwise render its toolbar BELOW the interaction
+   pane, where the pane swallows every click. */
+.wb-flow .react-flow__node-toolbar { z-index: 1000 !important; }
 .wb-flow .react-flow__attribution { display: none; }
 .wb-flow .react-flow__controls {
   border-radius: 10px;

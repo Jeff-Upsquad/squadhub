@@ -808,7 +808,16 @@ function Canvas({
       e.preventDefault();
       const zs = all.map((n) => n.zIndex ?? 0);
       const target = e.key === ']' ? Math.max(0, ...zs) + 1 : Math.min(0, ...zs) - 1;
-      setNodes((nds) => nds.map((n) => (n.selected ? { ...n, zIndex: target } : n)));
+      setNodes((nds) => {
+        let next = nds.map((n) => (n.selected ? { ...n, zIndex: target } : n));
+        // Never let a z-index go negative: a node (and its toolbar) at z < 0
+        // renders behind React Flow's interaction pane and stops being clickable.
+        // When "send to back" would dip below 0, shift the whole stack up so the
+        // lowest sits at 0 — relative order is preserved.
+        const minZ = Math.min(0, ...next.map((n) => n.zIndex ?? 0));
+        if (minZ < 0) next = next.map((n) => ({ ...n, zIndex: (n.zIndex ?? 0) - minZ }));
+        return next;
+      });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
