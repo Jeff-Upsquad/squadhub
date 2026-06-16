@@ -94,6 +94,23 @@ function expiryLabel(iso?: string): string {
 
 const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
 
+// Mirrors the /connect brief form's subscription section. Display labels are
+// plural; stored values match subscription_cards.target_tiers' CHECK.
+const EXPERIENCE_LEVELS: { label: string; value: string }[] = [
+  { label: 'Juniors', value: 'Junior' },
+  { label: 'Pros', value: 'Pro' },
+  { label: 'Top Talents', value: 'Top Talents' },
+];
+
+// Same five availability bands as /connect; stored as plan_name on the card.
+const PLAN_OPTIONS: { name: string; dailyHours: number; weeklyHours: number; monthlyHours: number }[] = [
+  { name: 'Starter', dailyHours: 1, weeklyHours: 5, monthlyHours: 20 },
+  { name: 'Basic', dailyHours: 2, weeklyHours: 10, monthlyHours: 40 },
+  { name: 'Plus', dailyHours: 4, weeklyHours: 20, monthlyHours: 80 },
+  { name: 'Pro', dailyHours: 6, weeklyHours: 30, monthlyHours: 120 },
+  { name: 'Personal', dailyHours: 8, weeklyHours: 40, monthlyHours: 160 },
+];
+
 type Prefill = {
   brand_name: string | null;
   business_nature: string | null;
@@ -109,6 +126,9 @@ type Prefill = {
   state_regions: string[];
   requirement_note: string | null;
   hours_note: string | null;
+  plan_name: string | null;
+  tiers: string[];
+  budget: number | null;
 };
 
 type LinkMeta = {
@@ -134,6 +154,9 @@ type FormData = {
   working_days: string[];
   requirement_note: string;
   hours_note: string;
+  tiers: string[];
+  plan: string;
+  budget: string;
 };
 
 const DEFAULT_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
@@ -153,6 +176,9 @@ const emptyForm: FormData = {
   working_days: [],
   requirement_note: '',
   hours_note: '',
+  tiers: [],
+  plan: '',
+  budget: '',
 };
 
 export default function CardShareTokenPage() {
@@ -196,6 +222,9 @@ export default function CardShareTokenPage() {
               working_days: pf.working_days?.length ? pf.working_days : DEFAULT_DAYS,
               requirement_note: pf.requirement_note || '',
               hours_note: pf.hours_note || '',
+              tiers: pf.tiers || [],
+              plan: pf.plan_name || '',
+              budget: pf.budget != null ? String(pf.budget) : '',
             });
           }
         } else {
@@ -234,7 +263,7 @@ export default function CardShareTokenPage() {
     setForm((prev) => ({ ...prev, country_id: newId, state_regions: [] }));
   }
 
-  function toggle(field: 'state_regions' | 'languages' | 'working_days', value: string) {
+  function toggle(field: 'state_regions' | 'languages' | 'working_days' | 'tiers', value: string) {
     setForm((prev) => {
       const set = new Set(prev[field]);
       if (set.has(value)) set.delete(value);
@@ -275,6 +304,9 @@ export default function CardShareTokenPage() {
           working_days: form.working_days,
           requirement_note: form.requirement_note.trim() || undefined,
           hours_note: form.hours_note.trim() || undefined,
+          tiers: form.tiers,
+          plan: form.plan || undefined,
+          budget: form.budget.trim() && Number(form.budget) > 0 ? Math.round(Number(form.budget)) : undefined,
         }),
       });
       const data = await res.json();
@@ -465,6 +497,102 @@ export default function CardShareTokenPage() {
                 value={form.hours_note}
                 onChange={(e) => update('hours_note', e.target.value)}
                 placeholder="e.g. ~4 hours/day, full-time"
+                className="connect-input"
+              />
+            </Field>
+          </Section>
+
+          <Section
+            eyebrow="Subscription"
+            title="Experience level & plan"
+            hint="Confirm the talent experience, weekly plan, and a monthly budget. All optional — we can finalize on the call."
+          >
+            <div>
+              <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
+                <span>Experience level(s)</span>
+                <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+              </label>
+              <p className="mb-3 text-xs text-[#7A7568]">
+                Select one or more — we&apos;ll match talent across all chosen levels.
+              </p>
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                {EXPERIENCE_LEVELS.map((lvl) => {
+                  const on = form.tiers.includes(lvl.value);
+                  return (
+                    <button
+                      key={lvl.value}
+                      type="button"
+                      onClick={() => toggle('tiers', lvl.value)}
+                      aria-pressed={on}
+                      className={`connect-chip ${on ? 'connect-chip-on' : ''}`}
+                    >
+                      {on ? `✓ ${lvl.label}` : lvl.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
+                <span>Plan</span>
+                <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+              </label>
+              <p className="mb-3 text-xs text-[#7A7568]">
+                Plans differ by availability — how much of a creative partner you get each week.
+              </p>
+              <div className="overflow-hidden rounded-xl border border-[#D9D5C7]">
+                <table className="w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="bg-[#F4F1E8] text-[11px] font-semibold uppercase tracking-wide text-[#7A7568]">
+                      <th className="px-2 py-2 sm:px-3">Plan</th>
+                      <th className="px-2 py-2 text-right sm:px-3">Day</th>
+                      <th className="px-2 py-2 text-right sm:px-3">Week</th>
+                      <th className="px-2 py-2 text-right sm:px-3">Month</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {PLAN_OPTIONS.map((p) => {
+                      const on = form.plan === p.name;
+                      return (
+                        <tr
+                          key={p.name}
+                          role="button"
+                          aria-pressed={on}
+                          onClick={() => update('plan', on ? '' : p.name)}
+                          className={`cursor-pointer border-t border-[#E8E5DD] transition ${on ? 'bg-[#F2FCBC]' : 'bg-white hover:bg-[#FBFAF6]'}`}
+                        >
+                          <td className="px-2 py-2.5 font-semibold text-[#0a0a0a] sm:px-3">
+                            <span className="flex items-center gap-2">
+                              <span className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5]'}`}>
+                                {on && (
+                                  <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </span>
+                              {p.name}
+                            </span>
+                          </td>
+                          <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.dailyHours} hr{p.dailyHours > 1 ? 's' : ''}</td>
+                          <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.weeklyHours} hrs</td>
+                          <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.monthlyHours} hrs</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <Field label="Monthly budget" optional hint="Your target monthly spend in ₹.">
+              <input
+                type="number"
+                min="0"
+                inputMode="numeric"
+                value={form.budget}
+                onChange={(e) => update('budget', e.target.value)}
+                placeholder="e.g. ₹25000"
                 className="connect-input"
               />
             </Field>
