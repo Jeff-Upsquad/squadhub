@@ -32,25 +32,42 @@ export async function hydrateCard(card: any, parentCardId?: string): Promise<any
       .eq('card_id', targetingId),
     supabaseAdmin
       .from('subscription_card_recipients')
-      .select('status')
+      .select('status, broadcast_at')
       .eq('card_id', card.id)
       .is('archived_at', null),
     supabaseAdmin
       .from('subscription_card_external_recipients')
-      .select('status')
+      .select('status, notified_at')
       .eq('card_id', card.id)
       .is('archived_at', null),
   ]);
 
   const partners = { pending: 0, accepted: 0, rejected: 0 };
+  let partnersStaged = 0;
   (partnerRecipients || []).forEach((r: any) => {
     if (r.status in partners) (partners as any)[r.status]++;
+    if (r.status === 'pending' && !r.broadcast_at) partnersStaged++;
   });
 
   const talents = { accepted: 0, rejected: 0 };
+  let talentsQueued = 0;
   (talentRecipients || []).forEach((r: any) => {
     if (r.status in talents) (talents as any)[r.status]++;
+    if (!r.notified_at) talentsQueued++;
   });
+
+  // "Needs broadcast" — a published card still holding recipients that haven't
+  // been sent: staged partners (broadcast_at NULL), queued hand-picked talents
+  // (notified_at NULL), or a broadcast-mode card with talent targeting that was
+  // never delivered to SquadHire (publish now defers delivery to Broadcast).
+  const isLivePublished = card.state === 'published' && !card.archived_at;
+  const broadcastTalentPending =
+    card.distribution === 'broadcast' &&
+    Array.isArray(card.publish_targets) && card.publish_targets.includes('talent') &&
+    Array.isArray(card.squadhire_category_ids) && card.squadhire_category_ids.length > 0 &&
+    !card.squadhire_synced_at;
+  const needs_broadcast =
+    isLivePublished && (partnersStaged > 0 || talentsQueued > 0 || broadcastTalentPending);
 
   return {
     ...card,
@@ -59,7 +76,11 @@ export async function hydrateCard(card: any, parentCardId?: string): Promise<any
       country_id: r.country_id,
       region: r.region,
     })),
-    recipient_counts: { partners, talents },
+    recipient_counts: {
+      partners: { ...partners, staged: partnersStaged },
+      talents: { ...talents, queued: talentsQueued },
+    },
+    needs_broadcast,
   };
 }
 
@@ -118,7 +139,11 @@ export async function getOrCreateDraftCard(submissionSubscriptionId: string) {
  * stored function. To keep this migration-free we run the match manually in JS
  * using supabaseAdmin queries. Rows are inserted with ON CONFLICT DO NOTHING.
  */
-export async function matchPartnersForCard(cardId: string, targetingCardId?: string): Promise<string[]> {
+export async function matchPartnersForCard(
+  cardId: string,
+  opts: { targetingCardId?: string; staged?: boolean } = {},
+): Promise<string[]> {
+  const { targetingCardId, staged = false } = opts;
   const srcId = targetingCardId ?? cardId;
   const { data: cardRow, error: cardErr } = await supabaseAdmin
     .from('subscription_cards')
@@ -188,7 +213,16 @@ export async function matchPartnersForCard(cardId: string, targetingCardId?: str
     .map((u: any) => u.id);
 
   if (matchingIds.length > 0) {
-    const rows = matchingIds.map((pid) => ({ card_id: cardId, partner_id: pid }));
+    // Staged matches land with broadcast_at = NULL — matched but invisible to
+    // the partner until the "Broadcast" action releases them. Immediate matches
+    // (sales publish, manual→broadcast upgrade) stamp broadcast_at now so they
+    // surface in the partner opportunities feed right away.
+    const broadcastAt = staged ? null : new Date().toISOString();
+    const rows = matchingIds.map((pid) => ({
+      card_id: cardId,
+      partner_id: pid,
+      broadcast_at: broadcastAt,
+    }));
     const { error: insErr } = await supabaseAdmin
       .from('subscription_card_recipients')
       .upsert(rows, { onConflict: 'card_id,partner_id', ignoreDuplicates: true });

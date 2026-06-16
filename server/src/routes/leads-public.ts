@@ -517,7 +517,9 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
         .from('subscription_cards')
         .insert({
           source: 'shared_form',
-          state: 'draft',
+          // Lands in the New Deals queue as 'new'. An admin reviews it, fills in
+          // the rest, and "Save Draft" promotes new → draft before publishing.
+          state: 'new',
           markup: 0,
           service_type: SLUG_TO_SERVICE_TYPE[slug],
           target_tiers: roleReq?.tiers || [],

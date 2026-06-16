@@ -34,6 +34,9 @@ router.get('/', async (req: Request, res: Response) => {
       .from('subscription_card_recipients')
       .select('*')
       .eq('partner_id', req.userId!)
+      // Staged matches (broadcast_at IS NULL) are matched-but-not-yet-sent — they
+      // stay invisible to the partner until the admin clicks "Broadcast".
+      .not('broadcast_at', 'is', null)
       .order('created_at', { ascending: false });
     if (statusFilter) recipientsQuery = recipientsQuery.eq('status', statusFilter);
 
@@ -256,6 +259,11 @@ async function respond(
       return;
     }
     if (!existing) {
+      res.status(404).json({ success: false, error: 'Opportunity not found' });
+      return;
+    }
+    // Staged-but-not-broadcast rows aren't real opportunities yet.
+    if (!existing.broadcast_at) {
       res.status(404).json({ success: false, error: 'Opportunity not found' });
       return;
     }

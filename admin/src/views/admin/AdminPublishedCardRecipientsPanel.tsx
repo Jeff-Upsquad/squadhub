@@ -350,6 +350,35 @@ function CardPanelContent({
     },
   });
 
+  // The unified "Broadcast" action — sends the staged recipient list. Releases
+  // staged partners and delivers to talents: all matching for a Published card,
+  // only the hand-picked queued ones for a Soft-published card.
+  const broadcastNow = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${activeCardId}/broadcast-now`),
+    onSuccess: (res: any) => {
+      const d = res?.data ?? {};
+      const parts: string[] = [];
+      if (typeof d.partners_released === 'number' && d.partners_released > 0) {
+        parts.push(`${d.partners_released} partner${d.partners_released === 1 ? '' : 's'}`);
+      }
+      if (d.talents?.mode === 'manual' && typeof d.talents.notified === 'number') {
+        parts.push(`${d.talents.notified} talent${d.talents.notified === 1 ? '' : 's'}`);
+      } else if (d.talents?.mode === 'broadcast') {
+        parts.push('matching talents on SquadHire');
+      }
+      showToast(parts.length ? `Broadcast sent — ${parts.join(' + ')} notified.` : 'Broadcast sent.', 'success');
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      clearConfirm();
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to broadcast', 'error');
+      clearConfirm();
+    },
+  });
+
   const hasSelection = activeCard.selected_recipient_type != null;
 
   const { data: countriesRes } = useQuery({
@@ -387,6 +416,18 @@ function CardPanelContent({
         {activeCard.state === 'published' && !activeCard.archived_at && (
           <div className="flex flex-wrap items-center gap-2 px-5 py-3">
             <button
+              onClick={() => setConfirmAction({ kind: 'broadcastNow' })}
+              disabled={broadcastNow.isPending}
+              className="sh-btn-primary sh-btn-primary-sm"
+              title={
+                activeCard.distribution === 'manual'
+                  ? 'Send the card to the talents/partners you hand-picked'
+                  : 'Release the matched list — send to all matching partners and talents'
+              }
+            >
+              {broadcastNow.isPending ? 'Broadcasting…' : 'Broadcast'}
+            </button>
+            <button
               onClick={() => setConfirmAction({ kind: 'recall' })}
               disabled={recallCard.isPending}
               className="sh-btn-warning"
@@ -404,9 +445,10 @@ function CardPanelContent({
               <button
                 onClick={() => setConfirmAction({ kind: 'broadcast' })}
                 disabled={broadcastCard.isPending}
-                className="sh-btn-primary sh-btn-primary-sm"
+                className="sh-btn-ghost sh-btn-ghost-sm"
+                title="Override soft-publish: switch to broadcast and auto-match everyone that fits the targeting"
               >
-                {broadcastCard.isPending ? 'Broadcasting…' : 'Broadcast to all'}
+                {broadcastCard.isPending ? 'Switching…' : 'Send to all matching'}
               </button>
             )}
           </div>
@@ -630,6 +672,7 @@ function CardPanelContent({
           republish: republishCard.isPending,
           deletePermanent: deleteCard.isPending,
           broadcast: broadcastCard.isPending,
+          broadcastNow: broadcastNow.isPending,
         }}
         onConfirm={(action) => {
           switch (action.kind) {
@@ -645,6 +688,7 @@ function CardPanelContent({
             case 'republish': republishCard.mutate(); break;
             case 'deletePermanent': deleteCard.mutate(); break;
             case 'broadcast': broadcastCard.mutate(); break;
+            case 'broadcastNow': broadcastNow.mutate(); break;
           }
         }}
       />
@@ -664,7 +708,8 @@ type ConfirmAction =
   | { kind: 'archive' }
   | { kind: 'republish' }
   | { kind: 'deletePermanent' }
-  | { kind: 'broadcast' };
+  | { kind: 'broadcast' }
+  | { kind: 'broadcastNow' };
 
 function ConfirmActionDialog({
   confirmAction,
@@ -773,8 +818,15 @@ function ConfirmActionDialog({
       variant: 'danger',
     },
     broadcast: {
-      title: 'Broadcast this card?',
-      description: 'This will broadcast the card to all matching partners and talents based on the targeting criteria.',
+      title: 'Send to everyone matching?',
+      description: 'Overrides soft-publish: switches the card to broadcast and auto-matches every partner and talent that fits the targeting criteria.',
+      confirmLabel: 'Send to all',
+      pendingLabel: 'Switching…',
+      variant: 'default',
+    },
+    broadcastNow: {
+      title: 'Broadcast now?',
+      description: 'Sends the card to its staged recipients — releasing matched partners and notifying talents. Soft-published cards send only the recipients you hand-picked.',
       confirmLabel: 'Broadcast',
       pendingLabel: 'Broadcasting…',
       variant: 'default',

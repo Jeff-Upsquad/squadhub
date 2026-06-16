@@ -419,7 +419,10 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
       .from('subscription_cards')
       .insert({
         source: 'internal_brief',
-        state: 'draft',
+        // Lands in the New Deals queue as 'new'. The admin fills in the rest of
+        // the details and "Save Draft" promotes new → draft, which unlocks the
+        // shareable client link (link generation is draft-gated).
+        state: 'new',
         markup: 0,
         created_by: req.userId!,
         service_type: body.service_type,
@@ -578,8 +581,8 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
       res.status(404).json({ success: false, error: 'Card not found' });
       return;
     }
-    if (card.state !== 'draft') {
-      res.status(409).json({ success: false, error: 'Only draft cards can be edited' });
+    if (card.state !== 'draft' && card.state !== 'new') {
+      res.status(409).json({ success: false, error: 'Only new or draft cards can be edited' });
       return;
     }
     if (
@@ -615,6 +618,10 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
     if (body.customer_location !== undefined) updates.customer_location = body.customer_location;
     if (body.service_type !== undefined) updates.service_type = body.service_type;
     if (body.plan_name !== undefined) updates.plan_name = body.plan_name;
+
+    // "Save Draft" on a New Deal promotes it: new → draft. This is the gate
+    // that unlocks the shareable client link (link generation is draft-only).
+    if (card.state === 'new') updates.state = 'draft';
 
     if (Object.keys(updates).length === 0) {
       res.status(400).json({ success: false, error: 'No fields to update' });
@@ -670,8 +677,8 @@ router.put('/subscription-cards/:id/targets', async (req: Request, res: Response
       res.status(404).json({ success: false, error: 'Card not found' });
       return;
     }
-    if (card.state !== 'draft') {
-      res.status(409).json({ success: false, error: 'Only draft cards can be targeted' });
+    if (card.state !== 'draft' && card.state !== 'new') {
+      res.status(409).json({ success: false, error: 'Only new or draft cards can be targeted' });
       return;
     }
 
@@ -812,24 +819,14 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       return;
     }
 
-    // Partner matching per card (each card has target_tiers=[oneTier], so
-    // matchPartnersForCard naturally routes only that tier's partners).
+    // Publish builds the staged recipient list but SENDS NOTHING. The separate
+    // "Broadcast" action releases partners (broadcast_at) and delivers to
+    // SquadHire. Broadcast mode auto-matches every qualifying partner into the
+    // staged list (broadcast_at = NULL, invisible until broadcast); soft-publish
+    // (manual) starts empty and the admin hand-picks recipients.
     if (publishTargets.includes('partner') && distribution === 'broadcast') {
       for (const cid of cardIds) {
-        await matchPartnersForCard(cid);
-      }
-    }
-
-    // SquadHire delivery per card (only on broadcast — manual publishes
-    // sync lazily on first manual talent assignment). Fire-and-forget so
-    // a slow webhook doesn't block the publish response.
-    if (publishTargets.includes('talent') && distribution === 'broadcast') {
-      for (const cid of cardIds) {
-        buildSquadhirePayloadForCard(cid)
-          .then((payload) => payload && deliverCardToSquadhire(cid, payload))
-          .catch((err) =>
-            console.error('[publish-request-card] squadhire delivery error', err),
-          );
+        await matchPartnersForCard(cid, { staged: true });
       }
     }
 
@@ -896,6 +893,15 @@ router.post('/subscription-cards/:id/broadcast', async (req: Request, res: Respo
 
     if (publishTargets.includes('partner')) {
       await matchPartnersForCard(cardId);
+      // Release any partners hand-picked while soft-published that are still
+      // staged (broadcast_at IS NULL), so the manual→broadcast upgrade surfaces
+      // everyone rather than leaving the earlier hand-picks hidden.
+      await supabaseAdmin
+        .from('subscription_card_recipients')
+        .update({ broadcast_at: new Date().toISOString() })
+        .eq('card_id', cardId)
+        .is('broadcast_at', null)
+        .is('archived_at', null);
     }
 
     if (publishTargets.includes('talent')) {

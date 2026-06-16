@@ -52,7 +52,7 @@ router.post('/subscription-cards/:id/assign-partner', async (req: Request, res: 
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state')
+      .select('id, state, distribution')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) {
@@ -90,6 +90,10 @@ router.post('/subscription-cards/:id/assign-partner', async (req: Request, res: 
           partner_id,
           status: 'pending',
           assigned_manually: true,
+          // Soft-published (manual) cards queue hand-picks until the admin clicks
+          // Broadcast (broadcast_at = NULL). On a broadcast card the partner is
+          // released immediately, matching the talent assign-talent behavior.
+          broadcast_at: card.distribution === 'manual' ? null : new Date().toISOString(),
         },
         { onConflict: 'card_id,partner_id', ignoreDuplicates: true },
       );

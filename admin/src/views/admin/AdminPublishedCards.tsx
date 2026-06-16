@@ -85,9 +85,12 @@ export type PublishedCard = {
     } | null;
   } | null;
   recipient_counts?: {
-    partners: { pending: number; accepted: number; rejected: number };
-    talents: { accepted: number; rejected: number };
+    partners: { pending: number; accepted: number; rejected: number; staged?: number };
+    talents: { accepted: number; rejected: number; queued?: number };
   };
+  // Published card still holding recipients that haven't been sent — drives the
+  // "Needs broadcast" badge prompting the admin to open it and click Broadcast.
+  needs_broadcast?: boolean;
   published_by_user?: { id: string; display_name: string | null; email: string | null } | null;
 };
 
@@ -267,22 +270,22 @@ export default function AdminPublishedCards() {
     queryKey: ['admin-shared-form-submissions', ''],
     queryFn: () =>
       api
-        .get('/admin/subscription-cards', { params: { source: 'shared_form', state: 'draft' } })
+        .get('/admin/subscription-cards', { params: { source: 'shared_form', state: 'new,draft' } })
         .then((r) => r.data),
   });
   const { data: pendingLandingRes } = useQuery({
     queryKey: ['admin-landing-page-submissions', ''],
     queryFn: () =>
       api
-        .get('/admin/subscription-cards', { params: { source: 'landing_page_form', state: 'draft' } })
+        .get('/admin/subscription-cards', { params: { source: 'landing_page_form', state: 'new,draft' } })
         .then((r) => r.data),
   });
-  // Internal client briefs (Workflow 1) also land in the Form Requests queue.
+  // Internal client briefs (Workflow 1) also land in the New Deals queue.
   const { data: pendingBriefRes } = useQuery({
     queryKey: ['admin-internal-brief-submissions', ''],
     queryFn: () =>
       api
-        .get('/admin/subscription-cards', { params: { source: 'internal_brief', state: 'draft' } })
+        .get('/admin/subscription-cards', { params: { source: 'internal_brief', state: 'new,draft' } })
         .then((r) => r.data),
   });
   const pendingRequestCount =
@@ -363,13 +366,13 @@ export default function AdminPublishedCards() {
                       : `${cards.length} published card${cards.length === 1 ? '' : 's'}`}
               </span>
               <h1 className="sh-display text-3xl sm:text-4xl">
-                {activeTab === 'archive' ? 'Archived Cards' : activeTab === 'requests' ? 'Form Requests' : activeTab === 'custom' ? 'Custom Cards' : 'Published Cards'}
+                {activeTab === 'archive' ? 'Archived Cards' : activeTab === 'requests' ? 'New Deals' : activeTab === 'custom' ? 'Custom Cards' : 'Published Cards'}
               </h1>
               <p className="text-sm text-[var(--color-sh-ink-muted)] max-w-xl">
                 {activeTab === 'archive'
                   ? 'Hidden from talent feeds and the default Published list. Republish or delete from here.'
                   : activeTab === 'requests'
-                    ? 'Inbound subscription requests from the pricing page.'
+                    ? 'Incoming briefs and drafts. Fill in the details, save as a draft, then publish.'
                     : activeTab === 'custom'
                       ? 'Cards created from scratch by admins (not from a request or submission).'
                       : 'All subscription cards published across the org.'}
@@ -387,7 +390,7 @@ export default function AdminPublishedCards() {
           {/* Primary tabs */}
           <div className="overflow-x-auto">
             <div className="sh-tab-bar">
-              {([['published', 'Published'], ['requests', 'Form Requests'], ['custom', 'Custom'], ['archive', 'Archive']] as const).map(([key, label]) => (
+              {([['published', 'Published'], ['requests', 'New Deals'], ['custom', 'Custom'], ['archive', 'Archive']] as const).map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
@@ -593,7 +596,7 @@ export default function AdminPublishedCards() {
         title="New client brief"
       >
         <p className="mb-4 text-sm text-foreground-muted">
-          Pick a brief type. You&apos;ll fill out the client brief form, and it lands in Form Requests.
+          Pick a brief type. You&apos;ll fill out the client brief form, and it lands in New Deals.
         </p>
         <div className="space-y-3">
           {BRIEF_TYPES.map((t) => (
@@ -820,6 +823,15 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
         {card.card_code && !card.linked_folder_id && card.state === 'assigned' && (
           <span className="sh-status-pill" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
             Not linked
+          </span>
+        )}
+        {card.needs_broadcast && (
+          <span
+            className="sh-status-pill"
+            style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}
+            title="This card is published but its recipients haven't been sent yet. Open it and click Broadcast to notify them."
+          >
+            Needs broadcast
           </span>
         )}
         <CountChip label="Partners" accepted={partners.accepted} rejected={partners.rejected} pending={partners.pending} />

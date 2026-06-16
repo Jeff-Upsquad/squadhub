@@ -19,6 +19,9 @@ interface SubscriptionRequest {
   company: string;
   phone: string;
   status: string;
+  // Raw card state — distinguishes a freshly-submitted brief ('new') from one
+  // the admin has saved ('draft'). Both map to status 'pending' (Active sub-tab).
+  state?: string;
   created_at: string;
   card_id: string | null;
   // Source tag — drives the badge + button label.
@@ -82,6 +85,7 @@ export default function AdminRequestsList() {
       company: c.brand_name || c.customer_company || '',
       phone: c.customer_phone || '',
       status,
+      state: c.state,
       created_at: c.created_at || new Date().toISOString(),
       card_id: c.id,
       source,
@@ -95,7 +99,7 @@ export default function AdminRequestsList() {
   const { data: sharedRes, isLoading: sharedLoading } = useQuery({
     queryKey: ['admin-shared-form-submissions', search],
     queryFn: () => {
-      const params: Record<string, string> = { source: 'shared_form', state: 'draft' };
+      const params: Record<string, string> = { source: 'shared_form', state: 'new,draft' };
       if (search.trim()) params.search = search.trim();
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
@@ -103,7 +107,7 @@ export default function AdminRequestsList() {
   const { data: lpRes, isLoading: lpLoading } = useQuery({
     queryKey: ['admin-landing-page-submissions', search],
     queryFn: () => {
-      const params: Record<string, string> = { source: 'landing_page_form', state: 'draft' };
+      const params: Record<string, string> = { source: 'landing_page_form', state: 'new,draft' };
       if (search.trim()) params.search = search.trim();
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
@@ -131,7 +135,7 @@ export default function AdminRequestsList() {
   const { data: briefRes, isLoading: briefLoading } = useQuery({
     queryKey: ['admin-internal-brief-submissions', search],
     queryFn: () => {
-      const params: Record<string, string> = { source: 'internal_brief', state: 'draft' };
+      const params: Record<string, string> = { source: 'internal_brief', state: 'new,draft' };
       if (search.trim()) params.search = search.trim();
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
@@ -483,12 +487,30 @@ function RequestRow({
             {request.working_days.split(',').length}d/wk
           </span>
         )}
-        <span
-          className="sh-status-pill"
-          style={{ backgroundColor: `${color}1F`, color }}
-        >
-          {request.status}
-        </span>
+        {request.state === 'new' || request.state === 'draft' ? (
+          <span
+            className="sh-status-pill"
+            style={
+              request.state === 'new'
+                ? { backgroundColor: '#F59E0B22', color: '#B45309' }
+                : { backgroundColor: '#6366F122', color: '#4338CA' }
+            }
+            title={
+              request.state === 'new'
+                ? 'Newly submitted — open it, fill in the details, then Save Draft'
+                : 'Saved as a draft — share the client link or publish'
+            }
+          >
+            {request.state === 'new' ? 'New' : 'Draft'}
+          </span>
+        ) : (
+          <span
+            className="sh-status-pill"
+            style={{ backgroundColor: `${color}1F`, color }}
+          >
+            {request.status}
+          </span>
+        )}
         {request.source === 'internal_brief' && request.client_approved_at && (
           <span
             className="sh-status-pill"
@@ -517,15 +539,17 @@ function RequestRow({
             {isVerifying ? 'Verifying…' : 'Verify'}
           </button>
         )}
-        {request.card_id && (request.status === 'pending' || request.status === 'in_review') && (
-          <button
-            onClick={onShare}
-            className="sh-btn-ghost sh-btn-ghost-sm"
-            title="Generate a 24-hour link the client can open to confirm this brief"
-          >
-            Share link
-          </button>
-        )}
+        {request.card_id &&
+          (request.status === 'pending' || request.status === 'in_review') &&
+          request.state !== 'new' && (
+            <button
+              onClick={onShare}
+              className="sh-btn-ghost sh-btn-ghost-sm"
+              title="Generate a 24-hour link the client can open to confirm this brief"
+            >
+              Share link
+            </button>
+          )}
         {isFormSubmission ? (
           <button
             onClick={onAction}
