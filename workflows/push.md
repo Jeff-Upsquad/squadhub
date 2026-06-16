@@ -19,6 +19,7 @@ When the user says "push".
 6. Run `git commit -m "<generated message>"` using a HEREDOC for formatting.
 7. Run `git push origin main`.
 8. Report the commit hash and push result to the user.
+9. If this push was followed by a deploy (i.e. **PD**), hand off for testing per [test-handoff.md](test-handoff.md) — a plain-language summary of what shipped and how to test it.
 
 ## Edge Cases
 

@@ -63,6 +63,9 @@ The script:
 - Check `docker compose ps` on the VPS — all containers should be healthy.
 - Visit the app and confirm the change works.
 
+### 6. Hand off for testing
+After a successful deploy, give the user a plain-language summary of what shipped and how to test it. Follow [test-handoff.md](test-handoff.md). Do this automatically — don't wait to be asked.
+
 ## Edge Cases
 - **Push rejected (remote ahead):** `git pull --rebase origin main`, then retry push.
 - **Deploy fails mid-build:** Run `bash tools/deploy.sh` again — it picks up from the current git state.
