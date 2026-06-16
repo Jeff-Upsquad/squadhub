@@ -50,11 +50,19 @@ router.get('/', async (req: Request, res: Response) => {
       query = query.is('archived_at', null);
     }
 
-    if (stateParam === 'published' || stateParam === 'assigned' || stateParam === 'closed' || stateParam === 'draft') {
-      query = query.eq('state', stateParam);
+    // `state` accepts a single value or a comma-separated list (e.g.
+    // 'new,draft' for the New Deals queue). Unknown values are dropped.
+    const VALID_STATES = ['new', 'draft', 'published', 'assigned', 'closed'];
+    const requestedStates = stateParam
+      ? stateParam.split(',').map((s) => s.trim()).filter((s) => VALID_STATES.includes(s))
+      : [];
+    if (requestedStates.length === 1) {
+      query = query.eq('state', requestedStates[0]);
+    } else if (requestedStates.length > 1) {
+      query = query.in('state', requestedStates);
     } else if (showArchived) {
-      // Archive view shows every state, including drafts.
-      query = query.in('state', ['draft', 'published', 'assigned', 'closed']);
+      // Archive view shows every state, including new/draft.
+      query = query.in('state', ['new', 'draft', 'published', 'assigned', 'closed']);
     } else {
       query = query.in('state', ['published', 'assigned', 'closed']);
     }
@@ -721,6 +729,170 @@ router.post('/:id/broadcast-pending', async (req: Request, res: Response) => {
 });
 
 // ============================================================
+// Release queued (notified_at IS NULL) hand-picked talents to SquadHire for a
+// soft-published (manual) card. Self-contained, soft-failing variant used by
+// the unified /broadcast-now action: an empty queue is a no-op (notified: 0),
+// not an error, because the admin may be broadcasting partners only.
+// ============================================================
+async function releaseQueuedTalentsSoft(
+  cardId: string,
+): Promise<{ notified: number; failed: number; failures: { talent_id: string; error: string }[]; sync_error?: string }> {
+  const { data: queued } = await supabaseAdmin
+    .from('subscription_card_external_recipients')
+    .select('id, external_user_id')
+    .eq('card_id', cardId)
+    .is('notified_at', null);
+  if (!queued || queued.length === 0) {
+    return { notified: 0, failed: 0, failures: [] };
+  }
+
+  const { data: card } = await supabaseAdmin
+    .from('subscription_cards')
+    .select('squadhire_category_ids')
+    .eq('id', cardId)
+    .maybeSingle();
+  const categoryIds = Array.isArray(card?.squadhire_category_ids)
+    ? (card!.squadhire_category_ids as string[])
+    : [];
+  const failAll = (error: string, sync_error: string) => ({
+    notified: 0,
+    failed: queued.length,
+    failures: queued.map((q) => ({ talent_id: q.external_user_id as string, error })),
+    sync_error,
+  });
+  if (categoryIds.length === 0) {
+    return failAll('no_squadhire_categories', 'Card has no SquadHire categories. Add categories before broadcasting.');
+  }
+
+  // Re-deliver the card payload first (idempotent on external_id) so the
+  // per-row notify can't 404 if SquadHire's mirror has drifted.
+  const payload = await buildSquadhirePayloadForCard(cardId);
+  if (payload) await deliverCardToSquadhire(cardId, payload);
+  const { data: recheck } = await supabaseAdmin
+    .from('subscription_cards')
+    .select('squadhire_synced_at')
+    .eq('id', cardId)
+    .maybeSingle();
+  if (!recheck?.squadhire_synced_at) {
+    return failAll('squadhire_sync_failed', 'Card could not be synced to SquadHire. Try again in a few minutes.');
+  }
+
+  const successfulIds: string[] = [];
+  const failures: { talent_id: string; error: string }[] = [];
+  for (const row of queued) {
+    const outcome = await notifySquadhireOfManualAssignment(
+      cardId,
+      row.external_user_id as string,
+      row.id as string,
+    );
+    if (outcome.delivered) successfulIds.push(row.id as string);
+    else failures.push({ talent_id: row.external_user_id as string, error: outcome.error || 'unknown_error' });
+  }
+  if (successfulIds.length > 0) {
+    await supabaseAdmin
+      .from('subscription_card_external_recipients')
+      .update({ notified_at: new Date().toISOString() })
+      .in('id', successfulIds);
+  }
+  return { notified: successfulIds.length, failed: failures.length, failures };
+}
+
+// ============================================================
+// POST /admin/subscription-cards/:id/broadcast-now
+// The unified "Broadcast" action for the New Deal pipeline. Publishing only
+// builds a staged recipient list; THIS sends it:
+//   • Partners — release every staged row (broadcast_at = now) so it surfaces
+//     in the partner opportunities feed.
+//   • Talents —
+//       broadcast mode: deliver the card to SquadHire, which matches + notifies
+//         every qualifying talent.
+//       manual (soft-publish): notify only the hand-picked queued talents,
+//         leaving non-selected talents untouched.
+// ============================================================
+router.post('/:id/broadcast-now', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, distribution, publish_targets')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    if (card.state !== 'published') {
+      res.status(409).json({ success: false, error: 'Only published cards can be broadcast' });
+      return;
+    }
+
+    const publishTargets: string[] = card.publish_targets || ['partner', 'talent'];
+
+    // 1. Release staged partners in the current round.
+    let partnersReleased = 0;
+    if (publishTargets.includes('partner')) {
+      const { data: released, error: relErr } = await supabaseAdmin
+        .from('subscription_card_recipients')
+        .update({ broadcast_at: new Date().toISOString() })
+        .eq('card_id', cardId)
+        .is('broadcast_at', null)
+        .is('archived_at', null)
+        .select('id');
+      if (relErr) {
+        res.status(500).json({ success: false, error: relErr.message });
+        return;
+      }
+      partnersReleased = released?.length ?? 0;
+    }
+
+    // 2. Talents.
+    let talents:
+      | { mode: 'broadcast'; synced: boolean }
+      | { mode: 'manual'; notified: number; failed: number; failures: { talent_id: string; error: string }[]; sync_error?: string }
+      | null = null;
+
+    if (publishTargets.includes('talent')) {
+      if (card.distribution === 'broadcast') {
+        const payload = await buildSquadhirePayloadForCard(cardId);
+        if (payload) await deliverCardToSquadhire(cardId, payload);
+        const { data: recheck } = await supabaseAdmin
+          .from('subscription_cards')
+          .select('squadhire_synced_at')
+          .eq('id', cardId)
+          .maybeSingle();
+        const synced = !!recheck?.squadhire_synced_at;
+        talents = { mode: 'broadcast', synced };
+        if (!synced) {
+          res.status(503).json({
+            success: false,
+            partners_released: partnersReleased,
+            error: 'Partners released, but the card could not be synced to SquadHire. Retry in a few minutes.',
+          });
+          return;
+        }
+      } else {
+        talents = { mode: 'manual', ...(await releaseQueuedTalentsSoft(cardId)) };
+        if (talents.notified === 0 && talents.failed > 0) {
+          res.status(502).json({
+            success: false,
+            partners_released: partnersReleased,
+            talents,
+            error: talents.sync_error || 'Broadcast to SquadHire failed for all queued talents.',
+          });
+          return;
+        }
+      }
+    }
+
+    res.json({ success: true, partners_released: partnersReleased, talents });
+  } catch (err: any) {
+    console.error('Admin broadcast-now error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
 // GET /admin/subscription-cards/:id/secondary-cards
 // List secondary cards for a primary card, hydrated with recipient counts.
 // ============================================================
@@ -818,7 +990,7 @@ router.post('/:id/secondary-cards', async (req: Request, res: Response) => {
     }
 
     if (body.distribution === 'broadcast') {
-      await matchPartnersForCard(secondary.id, parentId);
+      await matchPartnersForCard(secondary.id, { targetingCardId: parentId });
     }
 
     buildSquadhirePayloadForCard(secondary.id)

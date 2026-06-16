@@ -288,7 +288,7 @@ export default function ClientBriefForm({
         }),
       );
       const n = selectedRoles.length;
-      showToast(`${n} client brief${n > 1 ? 's' : ''} created — find ${n > 1 ? 'them' : 'it'} in Form Requests`, 'success');
+      showToast(`${n} client brief${n > 1 ? 's' : ''} created — find ${n > 1 ? 'them' : 'it'} in New Deals`, 'success');
       qc.invalidateQueries({ queryKey: ['admin-internal-brief-submissions'] });
       qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
       onCreated();

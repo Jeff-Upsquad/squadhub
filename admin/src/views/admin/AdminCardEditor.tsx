@@ -118,10 +118,10 @@ export default function AdminCardEditor({
     queryKey: ['admin-card-editor', cardId],
     queryFn: async () => {
       // Look in non-archived first, then archived — covers cards in any
-      // state (draft / published / closed) and any archive bucket so the
-      // editor doesn't 404 on cards moved to Archive.
+      // state (new / draft / published / closed) and any archive bucket so the
+      // editor doesn't 404 on a New Deal or a card moved to Archive.
       for (const archived of ['false', 'true'] as const) {
-        for (const state of ['draft', 'published', 'closed']) {
+        for (const state of ['new', 'draft', 'published', 'closed']) {
           const params: Record<string, string> = { state };
           if (archived === 'true') params.archived = 'true';
           const r = await api.get('/admin/subscription-cards', { params });
@@ -514,6 +514,10 @@ export default function AdminCardEditor({
   const [showShareModal, setShowShareModal] = useState(false);
 
   const isDraft = card?.state === 'draft';
+  // A freshly-submitted New Deal. Editable like a draft, but the shareable link
+  // and Publish actions stay hidden until "Save Draft" promotes it (new → draft).
+  const isNew = card?.state === 'new';
+  const isEditable = isDraft || isNew;
 
   // Publish gate: every selected tier must have a non-zero proposed price
   // (single-tier and multi-tier both — fan-out throws on missing entries).
@@ -560,9 +564,10 @@ export default function AdminCardEditor({
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          {isDraft && (
+          {isEditable && (
             <>
-              {['shared_form', 'landing_page_form', 'request', 'internal_brief'].includes(card.source) && (
+              {/* Shareable client link only appears once it's a saved draft. */}
+              {isDraft && ['shared_form', 'landing_page_form', 'request', 'internal_brief'].includes(card.source) && (
                 <button
                   onClick={() => setShowShareModal(true)}
                   className="sh-btn-ghost"
@@ -573,7 +578,7 @@ export default function AdminCardEditor({
               )}
               <button
                 onClick={() => {
-                  if (window.confirm('Archive this draft card? It will move to the Archive tab where you can republish or delete it later.')) {
+                  if (window.confirm('Archive this card? It will move to the Archive tab where you can republish or delete it later.')) {
                     archiveMutation.mutate();
                   }
                 }}
@@ -585,24 +590,35 @@ export default function AdminCardEditor({
               <button
                 onClick={handleSave}
                 disabled={saveMutation.isPending}
-                className="sh-btn-ghost"
-              >
-                {saveMutation.isPending ? 'Saving…' : 'Save Draft'}
-              </button>
-              <button
-                onClick={() => publishMutation.mutate()}
-                disabled={publishMutation.isPending || !canPublish}
-                title={
-                  !canPublish
-                    ? tiers.length === 0
-                      ? 'Select at least one tier with a price'
-                      : 'Every selected tier needs a proposed price'
-                    : undefined
-                }
                 className="sh-btn-primary sh-btn-primary-sm"
+                title={isNew ? 'Save the details and move this New Deal to Draft (unlocks the share link + Publish)' : undefined}
               >
-                {publishMutation.isPending ? 'Publishing…' : 'Publish'}
+                {saveMutation.isPending ? 'Saving…' : isNew ? 'Save Draft' : 'Save Draft'}
               </button>
+              {/* Publish / Soft publish only once the draft is finalized. The
+                  distribution toggle in Publish Settings decides which one. */}
+              {isDraft && (
+                <button
+                  onClick={() => publishMutation.mutate()}
+                  disabled={publishMutation.isPending || !canPublish}
+                  title={
+                    !canPublish
+                      ? tiers.length === 0
+                        ? 'Select at least one tier with a price'
+                        : 'Every selected tier needs a proposed price'
+                      : distribution === 'manual'
+                        ? 'Soft publish — build the list, then hand-pick recipients before broadcasting'
+                        : 'Publish — auto-match all qualifying partners into a staged list, then broadcast'
+                  }
+                  className="sh-btn-primary sh-btn-primary-sm"
+                >
+                  {publishMutation.isPending
+                    ? 'Publishing…'
+                    : distribution === 'manual'
+                      ? 'Soft publish'
+                      : 'Publish'}
+                </button>
+              )}
             </>
           )}
         </div>
@@ -625,7 +641,7 @@ export default function AdminCardEditor({
                     <PillCheckbox
                       key={target}
                       active={active}
-                      disabled={!isDraft}
+                      disabled={!isEditable}
                       onClick={() =>
                         setPublishTargets(active
                           ? publishTargets.filter((t) => t !== target)
@@ -645,9 +661,9 @@ export default function AdminCardEditor({
                     <PillCheckbox
                       key={mode}
                       active={active}
-                      disabled={!isDraft}
+                      disabled={!isEditable}
                       onClick={() => setDistribution(mode)}
-                      label={mode === 'broadcast' ? 'Broadcast (all matching users)' : 'Publish (share manually)'}
+                      label={mode === 'broadcast' ? 'Publish (auto-match all)' : 'Soft publish (hand-pick)'}
                     />
                   );
                 })}
@@ -662,7 +678,7 @@ export default function AdminCardEditor({
                 <select
                   value={serviceType}
                   onChange={(e) => setServiceType(e.target.value)}
-                  disabled={!isDraft}
+                  disabled={!isEditable}
                   className="sh-input"
                 >
                   <option value="">Select…</option>
@@ -673,7 +689,7 @@ export default function AdminCardEditor({
                 <select
                   value={planName}
                   onChange={(e) => setPlanName(e.target.value)}
-                  disabled={!isDraft}
+                  disabled={!isEditable}
                   className="sh-input"
                 >
                   <option value="">Select…</option>
@@ -689,7 +705,7 @@ export default function AdminCardEditor({
                     <PillCheckbox
                       key={tier}
                       active={active}
-                      disabled={!isDraft}
+                      disabled={!isEditable}
                       onClick={() => toggleTier(tier)}
                       label={tier}
                     />
@@ -710,7 +726,7 @@ export default function AdminCardEditor({
                     <PillCheckbox
                       key={day}
                       active={active}
-                      disabled={!isDraft}
+                      disabled={!isEditable}
                       onClick={() =>
                         setWorkingDays(active ? workingDays.filter((d) => d !== day) : [...workingDays, day])
                       }
@@ -817,13 +833,13 @@ export default function AdminCardEditor({
                           value={d.name}
                           onChange={(e) => updateDeliverable(d.id, 'name', e.target.value)}
                           placeholder="Name"
-                          disabled={!isDraft}
+                          disabled={!isEditable}
                           className="sh-input col-span-2"
                         />
                         <select
                           value={d.kind}
                           onChange={(e) => updateDeliverable(d.id, 'kind', e.target.value)}
-                          disabled={!isDraft}
+                          disabled={!isEditable}
                           className="sh-input"
                         >
                           <option value="item">Item</option>
@@ -834,11 +850,11 @@ export default function AdminCardEditor({
                           value={d.per_month || ''}
                           onChange={(e) => updateDeliverable(d.id, 'per_month', parseInt(e.target.value) || 0)}
                           placeholder="/mo"
-                          disabled={!isDraft}
+                          disabled={!isEditable}
                           className="sh-input"
                         />
                       </div>
-                      {isDraft && (
+                      {isEditable && (
                         <button
                           onClick={() => removeDeliverable(d.id)}
                           className="mt-2 text-base text-red-500 hover:text-red-700"
@@ -849,7 +865,7 @@ export default function AdminCardEditor({
                       )}
                     </div>
                   ))}
-                  {isDraft && (
+                  {isEditable && (
                     <button
                       onClick={addDeliverable}
                       className="rounded-xl border border-dashed border-[var(--color-sh-warm-border)] px-4 py-2.5 text-sm font-semibold text-[var(--color-sh-ink-muted)] hover:border-[var(--color-sh-ink)] hover:text-[var(--color-sh-ink)] transition"
@@ -904,7 +920,7 @@ export default function AdminCardEditor({
                             onChange={(e) =>
                               updateTierPricing(tier, 'proposedPrice', parseInt(e.target.value) || 0)
                             }
-                            disabled={!isDraft}
+                            disabled={!isEditable}
                             className="sh-input"
                           />
                           {showOriginal && (
@@ -926,7 +942,7 @@ export default function AdminCardEditor({
                             onChange={(e) =>
                               updateTierPricing(tier, 'markup', parseInt(e.target.value) || 0)
                             }
-                            disabled={!isDraft}
+                            disabled={!isEditable}
                             className="sh-input"
                           />
                           {catalogPricingRow && (
@@ -962,7 +978,7 @@ export default function AdminCardEditor({
                   // Drop any region rows tied to a different country
                   setTargetRegions((prev) => prev.filter((r) => r.country_id === id));
                 }}
-                disabled={!isDraft}
+                disabled={!isEditable}
                 className="sh-input"
               >
                 <option value="">No country preference</option>
@@ -991,7 +1007,7 @@ export default function AdminCardEditor({
                         <PillCheckbox
                           key={state}
                           active={active}
-                          disabled={!isDraft}
+                          disabled={!isEditable}
                           onClick={() => {
                             setTargetRegions((prev) => {
                               if (active) return prev.filter((r) => r.region !== state);
@@ -1014,7 +1030,7 @@ export default function AdminCardEditor({
                     <PillCheckbox
                       key={lang}
                       active={active}
-                      disabled={!isDraft}
+                      disabled={!isEditable}
                       onClick={() => {
                         setTargetLanguages((prev) =>
                           active ? prev.filter((l) => l !== lang) : [...prev, lang],
@@ -1043,7 +1059,7 @@ export default function AdminCardEditor({
                       <PillCheckbox
                         key={cat.id}
                         active={active}
-                        disabled={!isDraft}
+                        disabled={!isEditable}
                         onClick={() => {
                           setSquadhireCategoryIds((prev) =>
                             active ? prev.filter((id) => id !== cat.id) : [...prev, cat.id],
@@ -1064,23 +1080,23 @@ export default function AdminCardEditor({
                 <input
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  disabled={!isDraft}
+                  disabled={!isEditable}
                   className="sh-input"
                 />
               </Field>
-              <Field label="Email" onEditClick={isDraft ? () => setEmailEditable(true) : undefined} editActive={emailEditable}>
+              <Field label="Email" onEditClick={isEditable ? () => setEmailEditable(true) : undefined} editActive={emailEditable}>
                 <input
                   value={customerEmail}
                   onChange={(e) => setCustomerEmail(e.target.value)}
-                  disabled={!isDraft || !emailEditable}
+                  disabled={!isEditable || !emailEditable}
                   className="sh-input"
                 />
               </Field>
-              <Field label="Phone" onEditClick={isDraft ? () => setPhoneEditable(true) : undefined} editActive={phoneEditable}>
+              <Field label="Phone" onEditClick={isEditable ? () => setPhoneEditable(true) : undefined} editActive={phoneEditable}>
                 <input
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
-                  disabled={!isDraft || !phoneEditable}
+                  disabled={!isEditable || !phoneEditable}
                   className="sh-input"
                 />
               </Field>
@@ -1089,7 +1105,7 @@ export default function AdminCardEditor({
                   <input
                     value={customerLocation}
                     onChange={(e) => setCustomerLocation(e.target.value)}
-                    disabled={!isDraft}
+                    disabled={!isEditable}
                     placeholder="e.g. Bangalore, India"
                     className="sh-input"
                   />
@@ -1105,7 +1121,7 @@ export default function AdminCardEditor({
                 <input
                   value={brandName}
                   onChange={(e) => setBrandName(e.target.value)}
-                  disabled={!isDraft}
+                  disabled={!isEditable}
                   className="sh-input"
                 />
               </Field>
@@ -1113,7 +1129,7 @@ export default function AdminCardEditor({
                 <textarea
                   value={businessNature}
                   onChange={(e) => setBusinessNature(e.target.value)}
-                  disabled={!isDraft}
+                  disabled={!isEditable}
                   rows={2}
                   placeholder="e.g. D2C apparel, B2B SaaS, education…"
                   className="sh-input resize-none"
@@ -1123,7 +1139,7 @@ export default function AdminCardEditor({
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  disabled={!isDraft}
+                  disabled={!isEditable}
                   rows={3}
                   placeholder="A few lines so the talent has context before they start."
                   className="sh-input resize-none"
@@ -1133,7 +1149,7 @@ export default function AdminCardEditor({
                 <textarea
                   value={requirementNote}
                   onChange={(e) => setRequirementNote(e.target.value)}
-                  disabled={!isDraft}
+                  disabled={!isEditable}
                   rows={3}
                   placeholder="What you'd like the talent to work on first — deliverables, references, brand guidelines."
                   className="sh-input resize-none"
@@ -1144,7 +1160,7 @@ export default function AdminCardEditor({
                   type="text"
                   value={hoursNote}
                   onChange={(e) => setHoursNote(e.target.value)}
-                  disabled={!isDraft}
+                  disabled={!isEditable}
                   placeholder="e.g. 4 hrs daily or 20 hrs/week"
                   className="sh-input"
                 />
