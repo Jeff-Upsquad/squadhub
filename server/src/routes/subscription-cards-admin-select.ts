@@ -8,6 +8,8 @@ import {
   notifySquadhireOfSelectionUndo,
   notifySquadhireOfActivation,
   notifySquadhireOfFreshBroadcast,
+  buildSquadhirePayloadForCard,
+  deliverCardToSquadhire,
 } from '../utils/squadhireWebhook';
 import { stageSubscriptionsFromAssignedCards } from '../utils/submissionPipeline';
 import crypto from 'crypto';
@@ -483,7 +485,7 @@ router.post('/subscription-cards/:id/rebroadcast', async (req: Request, res: Res
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state')
+      .select('id, state, squadhire_synced_at')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
@@ -493,11 +495,24 @@ router.post('/subscription-cards/:id/rebroadcast', async (req: Request, res: Res
       return;
     }
 
-    // Fresh round: tell SquadHire to wipe the prior round and re-fan-out to the
-    // full matching pool (a fresh ask to everyone). Fire-and-forget.
-    notifySquadhireOfFreshBroadcast(cardId).catch((err) => {
-      console.error('[broadcast] notify squadhire fresh-broadcast failed', err);
-    });
+    if (!card.squadhire_synced_at) {
+      // First broadcast. Under the New Deal lifecycle, publish no longer
+      // auto-delivers to SquadHire (the sweeper is gated to wait for this
+      // action), so the card isn't there yet — deliver it now. The ingest
+      // matches talents on first arrival, so this IS the broadcast. A fresh
+      // re-fan-out would no-op on a card SquadHire doesn't have yet.
+      // Fire-and-forget: the sync sweeper retries if this attempt fails
+      // (attempts > 0 after the try, so the gate lets it through).
+      buildSquadhirePayloadForCard(cardId)
+        .then((payload) => payload && deliverCardToSquadhire(cardId, payload))
+        .catch((err) => console.error('[broadcast] squadhire first-delivery failed', err));
+    } else {
+      // Already on SquadHire (re-broadcast / fresh round after a reopen): wipe
+      // the prior round and re-fan-out to the full matching pool. Fire-and-forget.
+      notifySquadhireOfFreshBroadcast(cardId).catch((err) => {
+        console.error('[broadcast] notify squadhire fresh-broadcast failed', err);
+      });
+    }
 
     res.json({ success: true });
   } catch (err: any) {

@@ -854,7 +854,7 @@ export function startSquadhireSyncSweeper(): NodeJS.Timeout {
       // deliveries are retried here too.
       const { data: cards, error } = await supabaseAdmin
         .from('subscription_cards')
-        .select('id')
+        .select('id, state, squadhire_sync_attempts, recalled_at, archived_at')
         .eq('distribution', 'broadcast')
         .not('squadhire_category_ids', 'eq', '{}')
         .is('squadhire_synced_at', null)
@@ -868,7 +868,30 @@ export function startSquadhireSyncSweeper(): NodeJS.Timeout {
       }
       if (!cards || cards.length === 0) return;
 
-      for (const card of cards as { id: string }[]) {
+      // Gate: a card published in broadcast mode SENDS NOTHING until the admin
+      // clicks "Broadcast to talents" — publishing only stages partners. So skip
+      // cards that are merely published-and-awaiting-broadcast: state='published'
+      // with zero delivery attempts and no recall/archive stamp. That shape can
+      // only be a never-broadcast card. Everything else — a broadcast whose
+      // inline delivery failed (attempts > 0), or a recalled/archived/closed
+      // card needing a status re-sync — still gets (re)delivered here.
+      const deliverable = (cards as Array<{
+        id: string;
+        state: string;
+        squadhire_sync_attempts: number | null;
+        recalled_at: string | null;
+        archived_at: string | null;
+      }>).filter((c) => {
+        const awaitingBroadcast =
+          c.state === 'published' &&
+          (c.squadhire_sync_attempts ?? 0) === 0 &&
+          !c.recalled_at &&
+          !c.archived_at;
+        return !awaitingBroadcast;
+      });
+      if (deliverable.length === 0) return;
+
+      for (const card of deliverable) {
         const payload = await buildSquadhirePayloadForCard(card.id);
         if (!payload) continue;
         const outcome = await postOnce(payload);

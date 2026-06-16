@@ -341,6 +341,22 @@ export default function AdminPublishedCards() {
     [cards, selectedCardId],
   );
 
+  // The per-tier sibling cards of the opened brief (tier-ordered), so the detail
+  // view can show a tab per tier. Empty for single-tier / ungrouped cards.
+  const selectedGroupCards = useMemo(() => {
+    if (!selectedCard?.brief_group_id) return [] as PublishedCard[];
+    return cards
+      .filter((c) => c.brief_group_id === selectedCard.brief_group_id)
+      .sort((a, b) => tierRankOf(a) - tierRankOf(b));
+  }, [cards, selectedCard]);
+
+  // Switch the active tier inside the opened card. Uses replace (not push) so
+  // the back button still returns to the list, not the previously-viewed tier.
+  const selectTierCard = useCallback(
+    (id: string) => { router.replace(`${pathname}?card=${id}`); },
+    [router, pathname],
+  );
+
   const showDetailView = (activeTab === 'published' || activeTab === 'archive') && !!selectedCard;
 
   // When switching primary tabs, drop any stale ?card= so the detail view
@@ -503,10 +519,14 @@ export default function AdminPublishedCards() {
 
       {(activeTab === 'published' || activeTab === 'archive') && selectedCard ? (
         <AdminPublishedCardRecipientsView
+          key={selectedCard.id}
           card={selectedCard}
           title={publishedCardTitle(selectedCard)}
           onBack={() => { setSelectedCardId(null); setShowPanel(false); }}
           onOpenPanel={() => setShowPanel(true)}
+          tierTabs={selectedGroupCards.length > 1 ? (
+            <DetailTierTabs cards={selectedGroupCards} activeId={selectedCard.id} onSelect={selectTierCard} />
+          ) : undefined}
         />
       ) : activeTab === 'published' ? (
         <div className="flex-1 overflow-y-auto px-6 pb-8">
@@ -963,97 +983,122 @@ function CardList({ items, onOpen, canShowCancelled, canShowArchived }: {
 // One card, one tab per tier. The summary row mirrors a normal PublishedCardRow
 // but reflects the active tier; the tab bar switches which tier's card is
 // summarised, and clicking the summary opens that tier card's recipients.
-function GroupedPublishedCard({ cards, onOpen, canShowCancelled, canShowArchived }: {
+// A multi-tier brief in the list — ONE summary card. The per-tier tabs live in
+// the opened detail view (see DetailTierTabs), not here. Counts aggregate across
+// the group; opening it loads the group's first tier (the detail view then lets
+// the admin switch tiers and see each tier's matched talents).
+function GroupedPublishedCard({ cards, onOpen }: {
   cards: PublishedCard[];
   onOpen: (id: string) => void;
   canShowCancelled: boolean;
   canShowArchived?: boolean;
 }) {
-  const [activeId, setActiveId] = useState<string>(cards[0]?.id);
-  const active = cards.find((c) => c.id === activeId) ?? cards[0];
-
-  const business = active.submission?.business_name || active.brand_name || 'Unknown';
-  const serviceType = active.service_type || '';
-  const planName =
-    active.submission_subscription?.subscription?.name || active.plan_name || '';
-  const publisher = active.published_by_user;
+  const rep = cards[0];
+  const business = rep.submission?.business_name || rep.brand_name || 'Unknown';
+  const serviceType = rep.service_type || '';
+  const planName = rep.submission_subscription?.subscription?.name || rep.plan_name || '';
+  const tierList = cards.map((c) => tierOf(c)).filter(Boolean).join(', ');
+  const subtitle = [planName, tierList].filter(Boolean).join(' · ');
+  const publisher = rep.published_by_user;
   const publisherLabel = publisher
     ? publisher.display_name || publisher.email || publisher.id.slice(0, 8)
     : null;
+  const anyNeedsBroadcast = cards.some((c) => c.needs_broadcast);
+  const agg = cards.reduce(
+    (acc, c) => {
+      const p = c.recipient_counts?.partners;
+      const t = c.recipient_counts?.talents;
+      acc.pa += p?.accepted ?? 0; acc.pr += p?.rejected ?? 0; acc.pp += p?.pending ?? 0;
+      acc.ta += t?.accepted ?? 0; acc.tr += t?.rejected ?? 0;
+      return acc;
+    },
+    { pa: 0, pr: 0, pp: 0, ta: 0, tr: 0 },
+  );
 
   return (
-    <div className="sh-card overflow-hidden p-0">
-      <button
-        onClick={() => onOpen(active.id)}
-        className="sh-card-interactive flex w-full items-center justify-between px-5 py-4 text-left"
-      >
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
-            {business.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
-                {business}
-              </p>
-              <ServiceTypeBadge serviceType={serviceType} />
-              <span
-                className="sh-status-pill shrink-0"
-                style={{ backgroundColor: '#E0E7FF', color: '#3730A3' }}
-                title="One brief published across multiple tiers. Each tab is that tier's own card."
-              >
-                {cards.length} tiers
-              </span>
-            </div>
-            {planName && (
-              <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
-                {planName}
-              </p>
-            )}
-            {active.published_at && (
-              <p className="mt-0.5 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
-                {formatPublishedAt(active.published_at)}
-              </p>
-            )}
-            {publisherLabel && (
-              <p className="truncate text-[11px] text-[var(--color-sh-ink-faint)]">
-                by {publisherLabel}
-              </p>
-            )}
-          </div>
+    <button
+      onClick={() => onOpen(rep.id)}
+      className="sh-card sh-card-interactive flex w-full items-center justify-between px-5 py-4 text-left"
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
+          {business.charAt(0).toUpperCase()}
         </div>
-        <CardStatusAndCounts
-          card={active}
-          showCancelledTag={canShowCancelled && active.state === 'closed'}
-          showArchivedTag={!!canShowArchived && !!active.archived_at}
-        />
-      </button>
-
-      <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-5 py-2.5">
-        <span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-faint)]">
-          Tiers
-        </span>
-        {cards.map((c) => {
-          const isActive = c.id === active.id;
-          const price = priceLabelForCard(c);
-          return (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setActiveId(c.id)}
-              data-active={isActive}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                isActive
-                  ? 'border-transparent bg-[var(--color-sh-ink)] text-white'
-                  : 'border-[var(--color-sh-warm-border)] bg-surface text-[var(--color-sh-ink-muted)] hover:text-[var(--color-sh-ink)]'
-              }`}
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">{business}</p>
+            <ServiceTypeBadge serviceType={serviceType} />
+            <span
+              className="sh-status-pill shrink-0"
+              style={{ backgroundColor: '#E0E7FF', color: '#3730A3' }}
+              title="One brief published across multiple tiers — open it to see each tier and its matched talents."
             >
-              {tierOf(c) || '—'}
-              {price ? <span className={isActive ? 'opacity-80' : 'opacity-70'}> · {price}</span> : null}
-            </button>
-          );
-        })}
+              {cards.length} tiers
+            </span>
+          </div>
+          {subtitle && (
+            <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">{subtitle}</p>
+          )}
+          {rep.published_at && (
+            <p className="mt-0.5 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
+              {formatPublishedAt(rep.published_at)}
+            </p>
+          )}
+          {publisherLabel && (
+            <p className="truncate text-[11px] text-[var(--color-sh-ink-faint)]">by {publisherLabel}</p>
+          )}
+        </div>
       </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {anyNeedsBroadcast && (
+          <span
+            className="sh-status-pill"
+            style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}
+            title="One or more tiers are published but their recipients haven't been sent yet. Open the card and broadcast each tier."
+          >
+            Needs broadcast
+          </span>
+        )}
+        <CountChip label="Partners" accepted={agg.pa} rejected={agg.pr} pending={agg.pp} />
+        <CountChip label="Talents" accepted={agg.ta} rejected={agg.tr} />
+      </div>
+    </button>
+  );
+}
+
+// The per-tier tab control rendered inside the opened card (detail view). Each
+// tab is a tier sibling; selecting it swaps the active card so the recipients
+// below are that tier's matched talents.
+function DetailTierTabs({ cards, activeId, onSelect }: {
+  cards: PublishedCard[];
+  activeId: string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      <span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-faint)]">
+        Tiers
+      </span>
+      {cards.map((c) => {
+        const isActive = c.id === activeId;
+        const price = priceLabelForCard(c);
+        return (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => onSelect(c.id)}
+            data-active={isActive}
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+              isActive
+                ? 'border-transparent bg-[var(--color-sh-ink)] text-white'
+                : 'border-[var(--color-sh-warm-border)] bg-surface text-[var(--color-sh-ink-muted)] hover:text-[var(--color-sh-ink)]'
+            }`}
+          >
+            {tierOf(c) || '—'}
+            {price ? <span className={isActive ? 'opacity-80' : 'opacity-70'}> · {price}</span> : null}
+          </button>
+        );
+      })}
     </div>
   );
 }
