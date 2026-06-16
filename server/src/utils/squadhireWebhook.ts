@@ -97,6 +97,11 @@ export interface SquadhireCardPayload {
   // secondaries from the published-cards list — only the primary surfaces.
   // Always sent so SquadHire can flip the flag both ways without ambiguity.
   is_secondary: boolean;
+  // Shared id across the per-tier sibling cards SquadHub fanned out from one
+  // multi-tier brief. SquadHire's business dashboard collapses cards with the
+  // same group_id into a single card with a tab per tier. NULL on single-tier
+  // / legacy cards. Always sent so SquadHire can group (or ungroup) cleanly.
+  group_id: string | null;
 }
 
 interface AttemptOutcome {
@@ -120,7 +125,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, distribution, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, recalled_at, archived_at, source, proposed_price, markup, customer_company, customer_email, service_type, plan_name, plan_snapshot',
+      'id, state, distribution, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, source, proposed_price, markup, customer_company, customer_email, service_type, plan_name, plan_snapshot',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -719,6 +724,7 @@ export async function buildSquadhirePayloadForCard(
     status,
     distribution,
     is_secondary: card.parent_card_id != null,
+    group_id: ((card as any).brief_group_id as string | null) ?? null,
     ...(businessEmail ? { business_email: businessEmail } : {}),
     ...(businessPhone ? { business_phone: businessPhone } : {}),
     ...(businessContactName ? { business_contact_name: businessContactName } : {}),

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '../supabase';
 import { buildPlanSnapshotForCard } from './cardPlanSnapshot';
 
@@ -233,11 +234,12 @@ export async function matchPartnersForCard(
 }
 
 /**
- * Fan a multi-tier draft card out to N independent published cards, one per
- * selected tier. Children are NOT linked via parent_card_id — they're fully
- * independent so SquadHire surfaces all of them on the business dashboard
- * (the webhook hides cards with `is_secondary=true`) and so closing one
- * tier doesn't cascade to its siblings.
+ * Fan a multi-tier draft card out to N published cards, one per selected
+ * tier. The siblings are NOT linked via parent_card_id — each keeps its own
+ * independent state machine so closing/assigning one tier doesn't cascade to
+ * its siblings. They ARE, however, tagged with a shared `brief_group_id` so
+ * the admin Published view (and, via the webhook, SquadHire) can collapse the
+ * tier siblings back into a single card with per-tier tabs.
  *
  * Returns ALL resulting card ids, original first. Caller fans out
  * matchPartnersForCard + SquadHire delivery per id.
@@ -310,6 +312,10 @@ export async function fanOutTierCards(
     }
   }
 
+  // One shared id across every tier sibling so the admin Published view and
+  // SquadHire can group them into a single card with per-tier tabs.
+  const groupId = randomUUID();
+
   // Repurpose the original row as the first tier's card.
   const firstTier = targetTiers[0];
   const firstEntry = tierPricing[firstTier];
@@ -332,6 +338,7 @@ export async function fanOutTierCards(
       markup: firstEntry.markup ?? 0,
       tier_pricing: {},
       plan_snapshot: originalSnapshot,
+      brief_group_id: groupId,
     })
     .eq('id', originalCardId)
     .eq('state', 'draft');
@@ -388,6 +395,7 @@ export async function fanOutTierCards(
       proposed_price: entry.proposed_price ?? null,
       markup: entry.markup ?? 0,
       tier_pricing: {},
+      brief_group_id: groupId,
     };
     for (const field of COPY_FIELDS) {
       const val = (original as any)[field];

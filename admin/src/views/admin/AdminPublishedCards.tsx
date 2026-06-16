@@ -42,6 +42,10 @@ export type PublishedCard = {
   selected_recipient_id?: string | null;
   parent_card_id?: string | null;
   secondary_card_count?: number;
+  // Shared across the per-tier sibling cards fanned out from one multi-tier
+  // brief. The list view collapses cards with the same brief_group_id into a
+  // single card with one tab per tier. NULL on single-tier / legacy cards.
+  brief_group_id?: string | null;
   recalled_at?: string | null;
   cancelled_at?: string | null;
   archived_at?: string | null;
@@ -516,16 +520,7 @@ export default function AdminPublishedCards() {
             </div>
           ) : stateFilter !== 'all' ? (
             // Single-state view: flat list, no group headers.
-            <div className="space-y-2">
-              {filteredCards.map((card) => (
-                <PublishedCardRow
-                  key={card.id}
-                  card={card}
-                  onOpen={() => setSelectedCardId(card.id)}
-                  showCancelledTag={card.state === 'closed'}
-                />
-              ))}
-            </div>
+            <CardList items={filteredCards} onOpen={setSelectedCardId} canShowCancelled />
           ) : (
             <div className="space-y-7">
               {groupBy === 'status' ? (
@@ -649,19 +644,24 @@ function CardGroup({
           {label} · {items.length}
         </span>
       </div>
-      <div className="space-y-2">
-        {items.map((card) => (
-          <PublishedCardRow
-            key={card.id}
-            card={card}
-            onOpen={() => onOpen(card.id)}
-            showCancelledTag={showCancelledTag && card.state === 'closed'}
-            showArchivedTag={!!showArchivedTag && !!card.archived_at}
-          />
-        ))}
-      </div>
+      <CardList
+        items={items}
+        onOpen={onOpen}
+        canShowCancelled={showCancelledTag}
+        canShowArchived={showArchivedTag}
+      />
     </div>
   );
+}
+
+// Customer-facing monthly price for a card. Staged cards carry it on the
+// plan's pricing row; non-staged (brief/request/custom) cards carry it as
+// proposed_price written at publish (per tier, post fan-out).
+function priceLabelForCard(card: PublishedCard): string {
+  const planPrice = card.submission_subscription?.plan?.pricing?.[0];
+  const priceCurrency = planPrice?.country?.currency || '₹';
+  const priceValue = planPrice?.price ?? card.proposed_price ?? null;
+  return priceValue ? `${priceCurrency}${Number(priceValue).toLocaleString()}/mo` : '';
 }
 
 function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: { card: PublishedCard; onOpen: () => void; showCancelledTag: boolean; showArchivedTag?: boolean }) {
@@ -673,19 +673,11 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
     || (card.submission_subscription?.plan
         ? `${card.submission_subscription.plan.plan} · ${card.submission_subscription.plan.tier}`
         : '');
-  const planPrice = card.submission_subscription?.plan?.pricing?.[0];
-  const priceCurrency = planPrice?.country?.currency || '₹';
-  const priceValue = planPrice?.price ?? card.proposed_price ?? null;
-  const priceLabel = priceValue
-    ? `${priceCurrency}${Number(priceValue).toLocaleString()}/mo`
-    : '';
-  const partners = card.recipient_counts?.partners ?? { pending: 0, accepted: 0, rejected: 0 };
-  const talents = card.recipient_counts?.talents ?? { accepted: 0, rejected: 0 };
+  const priceLabel = priceLabelForCard(card);
   const publisher = card.published_by_user;
   const publisherLabel = publisher
     ? publisher.display_name || publisher.email || publisher.id.slice(0, 8)
     : null;
-  const deliveryState = squadhireDeliveryState(card);
 
   return (
     <button
@@ -722,6 +714,18 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
           )}
         </div>
       </div>
+      <CardStatusAndCounts card={card} showCancelledTag={showCancelledTag} showArchivedTag={showArchivedTag} />
+    </button>
+  );
+}
+
+// The right-hand cluster of status pills + accept/reject count chips. Shared
+// between the flat PublishedCardRow and the active tier of a grouped card.
+function CardStatusAndCounts({ card, showCancelledTag, showArchivedTag }: { card: PublishedCard; showCancelledTag: boolean; showArchivedTag?: boolean }) {
+  const partners = card.recipient_counts?.partners ?? { pending: 0, accepted: 0, rejected: 0 };
+  const talents = card.recipient_counts?.talents ?? { accepted: 0, rejected: 0 };
+  const deliveryState = squadhireDeliveryState(card);
+  return (
       <div className="flex shrink-0 items-center gap-1.5">
         {showArchivedTag && (
           <span
@@ -837,7 +841,6 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
         <CountChip label="Partners" accepted={partners.accepted} rejected={partners.rejected} pending={partners.pending} />
         <CountChip label="Talents" accepted={talents.accepted} rejected={talents.rejected} />
       </div>
-    </button>
   );
 }
 
@@ -863,5 +866,194 @@ function CountChip({
       <span className="text-red-600 font-semibold">{rejected}✗</span>
       {pending != null && <span className="text-amber-700 font-semibold">{pending}⌛</span>}
     </span>
+  );
+}
+
+// ── Per-tier card grouping ───────────────────────────────────────────────
+// A multi-tier brief fans out into one published card per tier, all sharing a
+// brief_group_id. The list collapses those siblings into a single card with
+// one tab per tier so the admin sees "one card, N tiers" instead of N rows.
+
+const TIER_RANK: Record<string, number> = {
+  junior: 0,
+  pro: 1,
+  elite: 2,
+  'top talents': 2,
+};
+
+function tierOf(card: PublishedCard): string | null {
+  return Array.isArray(card.target_tiers) && card.target_tiers.length > 0
+    ? card.target_tiers[0]
+    : null;
+}
+
+function tierRankOf(card: PublishedCard): number {
+  const t = (tierOf(card) || '').toLowerCase();
+  return TIER_RANK[t] ?? 99;
+}
+
+type CardListEntry =
+  | { kind: 'single'; card: PublishedCard }
+  | { kind: 'group'; groupId: string; cards: PublishedCard[] };
+
+// Collapse cards sharing a brief_group_id into one group entry, preserving
+// first-appearance order. A group with only one sibling present in this list
+// (e.g. the other tiers fell into a different status bucket) degrades to a
+// normal single row.
+function buildCardListEntries(items: PublishedCard[]): CardListEntry[] {
+  const entries: CardListEntry[] = [];
+  const groupBuckets = new Map<string, PublishedCard[]>();
+
+  for (const card of items) {
+    const gid = card.brief_group_id || null;
+    if (!gid) {
+      entries.push({ kind: 'single', card });
+      continue;
+    }
+    let bucket = groupBuckets.get(gid);
+    if (!bucket) {
+      bucket = [];
+      groupBuckets.set(gid, bucket);
+      entries.push({ kind: 'group', groupId: gid, cards: bucket });
+    }
+    bucket.push(card);
+  }
+
+  return entries.map((e) => {
+    if (e.kind !== 'group') return e;
+    const cards = [...e.cards].sort((a, b) => tierRankOf(a) - tierRankOf(b));
+    return cards.length === 1
+      ? { kind: 'single' as const, card: cards[0] }
+      : { kind: 'group' as const, groupId: e.groupId, cards };
+  });
+}
+
+function CardList({ items, onOpen, canShowCancelled, canShowArchived }: {
+  items: PublishedCard[];
+  onOpen: (id: string) => void;
+  canShowCancelled: boolean;
+  canShowArchived?: boolean;
+}) {
+  const entries = useMemo(() => buildCardListEntries(items), [items]);
+  return (
+    <div className="space-y-2">
+      {entries.map((e) =>
+        e.kind === 'single' ? (
+          <PublishedCardRow
+            key={e.card.id}
+            card={e.card}
+            onOpen={() => onOpen(e.card.id)}
+            showCancelledTag={canShowCancelled && e.card.state === 'closed'}
+            showArchivedTag={!!canShowArchived && !!e.card.archived_at}
+          />
+        ) : (
+          <GroupedPublishedCard
+            key={e.groupId}
+            cards={e.cards}
+            onOpen={onOpen}
+            canShowCancelled={canShowCancelled}
+            canShowArchived={canShowArchived}
+          />
+        ),
+      )}
+    </div>
+  );
+}
+
+// One card, one tab per tier. The summary row mirrors a normal PublishedCardRow
+// but reflects the active tier; the tab bar switches which tier's card is
+// summarised, and clicking the summary opens that tier card's recipients.
+function GroupedPublishedCard({ cards, onOpen, canShowCancelled, canShowArchived }: {
+  cards: PublishedCard[];
+  onOpen: (id: string) => void;
+  canShowCancelled: boolean;
+  canShowArchived?: boolean;
+}) {
+  const [activeId, setActiveId] = useState<string>(cards[0]?.id);
+  const active = cards.find((c) => c.id === activeId) ?? cards[0];
+
+  const business = active.submission?.business_name || active.brand_name || 'Unknown';
+  const serviceType = active.service_type || '';
+  const planName =
+    active.submission_subscription?.subscription?.name || active.plan_name || '';
+  const publisher = active.published_by_user;
+  const publisherLabel = publisher
+    ? publisher.display_name || publisher.email || publisher.id.slice(0, 8)
+    : null;
+
+  return (
+    <div className="sh-card overflow-hidden p-0">
+      <button
+        onClick={() => onOpen(active.id)}
+        className="sh-card-interactive flex w-full items-center justify-between px-5 py-4 text-left"
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
+            {business.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
+                {business}
+              </p>
+              <ServiceTypeBadge serviceType={serviceType} />
+              <span
+                className="sh-status-pill shrink-0"
+                style={{ backgroundColor: '#E0E7FF', color: '#3730A3' }}
+                title="One brief published across multiple tiers. Each tab is that tier's own card."
+              >
+                {cards.length} tiers
+              </span>
+            </div>
+            {planName && (
+              <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
+                {planName}
+              </p>
+            )}
+            {active.published_at && (
+              <p className="mt-0.5 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
+                {formatPublishedAt(active.published_at)}
+              </p>
+            )}
+            {publisherLabel && (
+              <p className="truncate text-[11px] text-[var(--color-sh-ink-faint)]">
+                by {publisherLabel}
+              </p>
+            )}
+          </div>
+        </div>
+        <CardStatusAndCounts
+          card={active}
+          showCancelledTag={canShowCancelled && active.state === 'closed'}
+          showArchivedTag={!!canShowArchived && !!active.archived_at}
+        />
+      </button>
+
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-5 py-2.5">
+        <span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-faint)]">
+          Tiers
+        </span>
+        {cards.map((c) => {
+          const isActive = c.id === active.id;
+          const price = priceLabelForCard(c);
+          return (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setActiveId(c.id)}
+              data-active={isActive}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                isActive
+                  ? 'border-transparent bg-[var(--color-sh-ink)] text-white'
+                  : 'border-[var(--color-sh-warm-border)] bg-surface text-[var(--color-sh-ink-muted)] hover:text-[var(--color-sh-ink)]'
+              }`}
+            >
+              {tierOf(c) || '—'}
+              {price ? <span className={isActive ? 'opacity-80' : 'opacity-70'}> · {price}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
