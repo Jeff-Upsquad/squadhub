@@ -466,7 +466,9 @@ export default function ConnectPage() {
       const tiers = entry.tiers;
       const plan = entry.plan;
       const budgetNum = entry.budget.trim() ? Math.round(Number(entry.budget)) : NaN;
-      const budget = Number.isFinite(budgetNum) && budgetNum >= 0 ? budgetNum : undefined;
+      // > 0, not >= 0: a budget of 0 means "not stated" and must not be sent —
+      // the server's proposed_price column rejects non-positive values.
+      const budget = Number.isFinite(budgetNum) && budgetNum > 0 ? budgetNum : undefined;
       if (note || tiers.length || plan || budget !== undefined) {
         roleReqsPayload[roleToServiceTypeSlug(r)] = {
           ...(note ? { note } : {}),

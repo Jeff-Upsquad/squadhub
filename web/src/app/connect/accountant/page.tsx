@@ -420,8 +420,10 @@ export default function AccountantConnectPage() {
     const budgetNum = subscription.budget.trim()
       ? Math.round(Number(subscription.budget))
       : NaN;
+    // > 0, not >= 0: a budget of 0 means "not stated" and must not be sent —
+    // the server's proposed_price column rejects non-positive values.
     const budget =
-      Number.isFinite(budgetNum) && budgetNum >= 0 ? budgetNum : undefined;
+      Number.isFinite(budgetNum) && budgetNum > 0 ? budgetNum : undefined;
 
     const accountantReq: {
       note?: string;

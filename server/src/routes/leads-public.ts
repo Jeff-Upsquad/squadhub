@@ -522,7 +522,10 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
           service_type: SLUG_TO_SERVICE_TYPE[slug],
           target_tiers: roleReq?.tiers || [],
           plan_name: roleReq?.plan || null,
-          proposed_price: roleReq?.budget ?? null,
+          // subscription_cards.chk_proposed_price requires NULL or > 0. A
+          // budget of 0 means "no budget stated", not a $0 quote — store NULL
+          // so the whole brief doesn't fail the CHECK constraint.
+          proposed_price: roleReq?.budget && roleReq.budget > 0 ? roleReq.budget : null,
           working_days: body.working_days,
           customer_name: body.contact_name,
           customer_email: body.email,
