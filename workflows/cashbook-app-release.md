@@ -96,6 +96,10 @@ No action needed. Changes stay local until the next release.
 - Forced update: `curl https://api.squadhub.in/cashbook/app-config` should return the new `minVersion`
 - Old app should show "Update Required" screen
 
+## Hand off for testing
+
+Once the app is loaded on the user's phone (OTA pushed or APK built/installed), give a plain-language summary of what changed and how to test it on the phone. Follow [test-handoff.md](test-handoff.md) — say whether it's an OTA (just reopen) or a new APK (install required) and the version. Do this automatically.
+
 ## Current State
 
 | Field | Value |
