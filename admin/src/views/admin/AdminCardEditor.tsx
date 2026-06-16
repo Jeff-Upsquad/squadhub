@@ -426,9 +426,21 @@ export default function AdminCardEditor({
     queryKey: ['admin-countries'],
     queryFn: () => api.get('/admin/countries').then((r) => r.data?.data || []),
   });
-  const countries: Array<{ id: string; name: string }> = countriesQuery.data || [];
-  const countryById: Record<string, { id: string; name: string }> = {};
-  countries.forEach((c) => { countryById[c.id] = c; });
+  // Defensive: never assume the endpoint handed back a clean array of
+  // well-formed rows. A null/malformed entry here used to take down the whole
+  // editor with a bare "client-side exception" instead of degrading the one
+  // Location field.
+  const countries: Array<{ id: string; name: string }> = useMemo(
+    () => (Array.isArray(countriesQuery.data) ? countriesQuery.data : []),
+    [countriesQuery.data],
+  );
+  const countryById: Record<string, { id: string; name: string }> = useMemo(() => {
+    const map: Record<string, { id: string; name: string }> = {};
+    countries.forEach((c) => {
+      if (c && typeof c.id === 'string') map[c.id] = c;
+    });
+    return map;
+  }, [countries]);
 
   // SquadHire categories — drives the publish gate. Empty = card is not
   // delivered to SquadHire (the "Not on SquadHire" badge in the list view).
@@ -438,8 +450,17 @@ export default function AdminCardEditor({
     queryFn: () => api.get('/admin/integrations/squadhire/categories').then((r) => r.data?.data || []),
     staleTime: 10 * 60 * 1000,
   });
-  const squadhireCategories: Array<{ id: string; name: string; slug: string }> =
-    squadhireCategoriesQuery.data || [];
+  // SquadHire categories come from an external service via a server proxy, so
+  // the shape is the least trustworthy data in this view. Coerce to an array
+  // and drop anything without a usable id before it reaches the render map.
+  const squadhireCategories: Array<{ id: string; name: string; slug: string }> = useMemo(
+    () =>
+      (Array.isArray(squadhireCategoriesQuery.data) ? squadhireCategoriesQuery.data : []).filter(
+        (c: any): c is { id: string; name: string; slug: string } =>
+          !!c && typeof c.id === 'string',
+      ),
+    [squadhireCategoriesQuery.data],
+  );
 
   const publishMutation = useMutation({
     mutationFn: async () => {
@@ -952,14 +973,14 @@ export default function AdminCardEditor({
             </Field>
             <Field label="States / regions">
               {(() => {
-                const selectedCountryId = targetCountryIds[0];
+                const selectedCountryId = Array.isArray(targetCountryIds) ? targetCountryIds[0] : undefined;
                 const selectedCountry = selectedCountryId ? countryById[selectedCountryId] : null;
-                const stateOptions = selectedCountry ? STATES_BY_COUNTRY_NAME[selectedCountry.name] || [] : [];
+                const stateOptions = selectedCountry?.name ? STATES_BY_COUNTRY_NAME[selectedCountry.name] || [] : [];
                 if (!selectedCountry) {
                   return <p className="text-xs text-[var(--color-sh-ink-faint)]">Pick a country above to enable.</p>;
                 }
                 if (stateOptions.length === 0) {
-                  return <p className="text-xs text-[var(--color-sh-ink-faint)]">No state list configured for {selectedCountry.name}.</p>;
+                  return <p className="text-xs text-[var(--color-sh-ink-faint)]">No state list configured for {selectedCountry.name || 'this country'}.</p>;
                 }
                 const selectedRegions = new Set(targetRegions.map((r) => r.region));
                 return (
@@ -974,7 +995,7 @@ export default function AdminCardEditor({
                           onClick={() => {
                             setTargetRegions((prev) => {
                               if (active) return prev.filter((r) => r.region !== state);
-                              return [...prev, { country_id: selectedCountryId, region: state }];
+                              return [...prev, { country_id: selectedCountry.id, region: state }];
                             });
                           }}
                           label={state}
@@ -1028,7 +1049,7 @@ export default function AdminCardEditor({
                             active ? prev.filter((id) => id !== cat.id) : [...prev, cat.id],
                           );
                         }}
-                        label={cat.name}
+                        label={typeof cat.name === 'string' && cat.name ? cat.name : cat.slug || cat.id}
                       />
                     );
                   })}
