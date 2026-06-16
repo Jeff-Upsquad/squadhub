@@ -714,7 +714,7 @@ export default function AdminCardEditor({
               </div>
               {tiers.length > 1 && (
                 <p className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">
-                  Publishing will create one card per tier — each broadcast only to that tier's partners and shown as a separate card to the business.
+                  Publishing creates one card with a tab per tier. Each tier is broadcast only to that tier&apos;s partners, and the business sees a single card with a tab for each tier.
                 </p>
               )}
             </Field>
@@ -740,7 +740,7 @@ export default function AdminCardEditor({
 
           {/* Deliverables — combined: catalog hours per selected tier (top)
               + shared custom deliverables list (bottom). Custom items are
-              applied to every tier card on publish. */}
+              applied to every tier tab of the published card. */}
           <Section title="Deliverables">
             <div className="space-y-5">
               {/* Plan deliverables — one column per selected tier */}
@@ -879,10 +879,10 @@ export default function AdminCardEditor({
           </Section>
 
           {/* Pricing — one labeled group per selected tier. With one tier
-              selected this renders a single block, visually similar to the
-              old single-trio layout. With N tiers each gets its own
-              proposed/margin/partner-price row that publishes as a
-              separate card. */}
+              selected this renders a single block. With N tiers each gets its
+              own proposed/margin/partner-price row, and on publish they become
+              one card with a tab per tier (grouped via brief_group_id) rather
+              than N separate cards. */}
           <Section title="Pricing">
             {tiers.length === 0 ? (
               <p className="text-xs text-[var(--color-sh-ink-faint)]">
@@ -890,6 +890,11 @@ export default function AdminCardEditor({
               </p>
             ) : (
               <div className="space-y-4">
+                {tiers.length > 1 && (
+                  <p className="rounded-lg bg-[var(--color-sh-cream)] px-3 py-2 text-[11px] text-[var(--color-sh-ink-muted)]">
+                    All {tiers.length} tiers publish as <strong>one card</strong> with a tab per tier — talents and the business each see only their tier&apos;s pricing.
+                  </p>
+                )}
                 {tiers.map((tier) => {
                   const entry = tierPricing[tier] || { proposedPrice: 0, markup: 0 };
                   const partnerPrice = partnerPriceForTier(tier);
@@ -909,7 +914,7 @@ export default function AdminCardEditor({
                           {tier} pricing
                         </h3>
                         <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-medium text-[var(--color-sh-ink-muted)]">
-                          1 card on publish
+                          {tiers.length > 1 ? 'Tab in 1 card' : '1 card on publish'}
                         </span>
                       </div>
                       <div className="grid grid-cols-3 gap-4">
