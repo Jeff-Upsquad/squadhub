@@ -454,7 +454,16 @@ export default function AdminPublishedCardRecipientsView({
       : bucket === 'assigned' ? 'Assigned'
       : bucket === 'archived' ? 'Archived'
       : 'Cancelled';
-  const distLabel = card.distribution === 'manual' ? 'Soft Published' : 'Broadcast';
+  // Lifecycle status pill (distinct from the distribution mode it used to show).
+  // For broadcast-mode cards: "Published" while staged (nothing pushed yet) vs
+  // "Broadcasted" once the Broadcast action has sent it. Soft-publish/draft keep
+  // their own labels.
+  const lifecycleStatus =
+    card.distribution === 'manual'
+      ? { label: 'Soft Published', bg: '#EEF2F6', color: '#475569' }
+      : card.needs_broadcast
+        ? { label: 'Published', bg: '#DBEAFE', color: '#1E40AF' }
+        : { label: 'Broadcasted', bg: '#DCFCE7', color: '#166534' };
   const publisher = card.published_by_user;
   const isUnreviewed = (bucket === 'assigned' || bucket === 'selected') && !card.admin_reviewed_at;
 
@@ -500,8 +509,8 @@ export default function AdminPublishedCardRecipientsView({
                   <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stateColor }} />
                   {stateLabel}
                 </span>
-                <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
-                  {distLabel}
+                <span className="sh-status-pill" style={{ backgroundColor: lifecycleStatus.bg, color: lifecycleStatus.color }}>
+                  {lifecycleStatus.label}
                 </span>
                 {card.recalled_at && (
                   <span className="sh-status-pill" style={{ backgroundColor: '#FFE9D9', color: '#9A3412' }}>
