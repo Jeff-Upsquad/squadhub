@@ -178,6 +178,7 @@ export default function AdminPublishedCardRecipientsView({
   // above still conveys who was assigned.
   const canAssign =
     !card.selected_recipient_id &&
+    !card.archived_at &&
     (card.state === 'published' || card.state === 'assigned');
 
   // Pre-check already-selected recipients
@@ -428,24 +429,30 @@ export default function AdminPublishedCardRecipientsView({
     [allRecipients, isManual],
   );
 
-  // Bucket-aware state pill (mirrors AdminPublishedCards.categorize). A card
-  // with selected_recipient_id always shows "Assigned" regardless of state.
-  const bucket: 'active' | 'selected' | 'assigned' | 'cancelled' = card.selected_recipient_id
-    ? 'assigned'
-    : card.state === 'assigned'
-      ? 'selected'
-      : card.state === 'closed'
-        ? 'cancelled'
-        : 'active';
+  // Bucket-aware state pill (mirrors AdminPublishedCards.categorize). Archived
+  // wins over everything — an archived card keeps state='published', so without
+  // this it would mislabel as "Active" and still offer Broadcast. A card with
+  // selected_recipient_id otherwise shows "Assigned" regardless of state.
+  const bucket: 'active' | 'selected' | 'assigned' | 'cancelled' | 'archived' = card.archived_at
+    ? 'archived'
+    : card.selected_recipient_id
+      ? 'assigned'
+      : card.state === 'assigned'
+        ? 'selected'
+        : card.state === 'closed'
+          ? 'cancelled'
+          : 'active';
   const stateColor =
     bucket === 'active' ? '#10B981'
       : bucket === 'selected' ? '#0EA5E9'
       : bucket === 'assigned' ? '#059669'
+      : bucket === 'archived' ? '#7C3AED'
       : '#6B7280';
   const stateLabel =
     bucket === 'active' ? 'Active'
       : bucket === 'selected' ? 'Selected'
       : bucket === 'assigned' ? 'Assigned'
+      : bucket === 'archived' ? 'Archived'
       : 'Cancelled';
   const distLabel = card.distribution === 'manual' ? 'Soft Published' : 'Broadcast';
   const publisher = card.published_by_user;
@@ -551,7 +558,6 @@ export default function AdminPublishedCardRecipientsView({
                   {publisher && <> by {publisher.display_name || publisher.email || publisher.id.slice(0, 8)}</>}
                 </p>
               )}
-              {tierTabs}
             </div>
             <div className="lg:w-[280px] lg:shrink-0">
               <div className="mb-2 flex items-center justify-between gap-2">
@@ -727,6 +733,10 @@ export default function AdminPublishedCardRecipientsView({
                 );
               })}
             </div>
+
+            {/* Per-tier tabs (multi-tier briefs) — switching loads that tier's
+                recipients into the counts + list below. */}
+            {tierTabs}
 
             {/* Tab bar */}
             <div className="overflow-x-auto">
