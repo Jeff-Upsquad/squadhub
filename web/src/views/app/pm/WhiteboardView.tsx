@@ -832,6 +832,21 @@ function Canvas({
     else lastEdgeClick.current = { id: edge.id, t: e.timeStamp };
   }, [canEdit]);
 
+  // Guard against an accidental whole-board wipe. The delete keys include
+  // Backspace, so a select-all + Backspace can clear everything in one stroke
+  // and the autosave then persists the empty board. Confirm when a single
+  // delete would remove every element on the canvas; single/partial deletes
+  // stay frictionless. (Server-side version history is the backstop — see
+  // migration 114 — but this stops the mistake before it happens.)
+  const onBeforeDelete = useCallback(async ({ nodes: dn }: { nodes: Node[]; edges: Edge[] }) => {
+    if (!canEdit) return false;
+    const remaining = rf.getNodes().length - dn.length;
+    if (dn.length >= 2 && remaining <= 0) {
+      return window.confirm(`Clear the whole whiteboard? This deletes all ${dn.length} elements.`);
+    }
+    return true;
+  }, [canEdit, rf]);
+
   // ── Undo / redo (⌘/Ctrl+Z, ⌘/Ctrl+Shift+Z or ⌘/Ctrl+Y) ──
   // Snapshots are coarse: a debounced recorder groups rapid changes (e.g. a
   // drag) into one history entry. Restores replay a snapshot back into RF.
@@ -950,6 +965,7 @@ function Canvas({
           nodesConnectable={canEdit}
           elementsSelectable={canEdit}
           deleteKeyCode={canEdit ? ['Backspace', 'Delete'] : null}
+          onBeforeDelete={onBeforeDelete}
           proOptions={{ hideAttribution: true }}
           className="wb-flow"
         >
