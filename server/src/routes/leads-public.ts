@@ -623,7 +623,7 @@ router.get('/card-link/:token', ipRateLimit, async (req: Request, res: Response)
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
       .select(
-        'id, state, source, brand_name, business_nature, notes, customer_name, customer_email, customer_phone, customer_location, service_type, working_days, target_languages, requirement_note, hours_note, plan_name, target_tiers, proposed_price',
+        'id, state, source, brand_name, business_nature, notes, customer_name, customer_email, customer_phone, customer_location, service_type, working_days, target_languages, requirement_note, hours_note, plan_name, target_tiers, proposed_price, tier_pricing',
       )
       .eq('id', link.card_id)
       .maybeSingle();
@@ -650,6 +650,29 @@ router.get('/card-link/:token', ipRateLimit, async (req: Request, res: Response)
         .eq('card_id', card.id)
         .eq('country_id', countryId);
       stateRegions = (tr || []).map((r: any) => r.region);
+    }
+
+    // Per-tier budgets the client previously stated — read from tier_pricing
+    // (each tier's proposed_price). Falls back to the single proposed_price
+    // applied to the first tier for legacy / single-tier cards.
+    const tp =
+      card.tier_pricing && typeof card.tier_pricing === 'object'
+        ? (card.tier_pricing as Record<string, { proposed_price?: number }>)
+        : {};
+    const tierBudgets: Record<string, number> = {};
+    for (const [tier, entry] of Object.entries(tp)) {
+      if (entry && typeof entry.proposed_price === 'number' && entry.proposed_price > 0) {
+        tierBudgets[tier] = entry.proposed_price;
+      }
+    }
+    const tgtTiers = Array.isArray(card.target_tiers) ? (card.target_tiers as string[]) : [];
+    if (
+      Object.keys(tierBudgets).length === 0 &&
+      typeof card.proposed_price === 'number' &&
+      card.proposed_price > 0 &&
+      tgtTiers.length > 0
+    ) {
+      tierBudgets[tgtTiers[0]] = card.proposed_price;
     }
 
     res.json({
@@ -682,8 +705,8 @@ router.get('/card-link/:token', ipRateLimit, async (req: Request, res: Response)
           // Subscription choices — the client's own selections, echoed back so
           // the shared link mirrors the original brief form.
           plan_name: card.plan_name,
-          tiers: Array.isArray(card.target_tiers) ? card.target_tiers : [],
-          budget: card.proposed_price,
+          tiers: tgtTiers,
+          tier_budgets: tierBudgets,
         },
       },
     });
@@ -724,7 +747,10 @@ const cardSubmitSchema = z.object({
   // to proposed_price (0 / omitted = "not stated" → leaves it null).
   tiers: z.array(z.enum(['Junior', 'Pro', 'Elite', 'Top Talents', 'Custom'])).max(5).optional().default([]),
   plan: z.string().trim().max(50).optional().or(z.literal('')),
-  budget: z.number().int().nonnegative().optional(),
+  // Per-tier monthly budget (the client's proposed price for that level),
+  // keyed by tier. Stored into tier_pricing so the multi-tier publish/fan-out
+  // uses each tier's own price. Values > 0 only.
+  tier_budgets: z.record(z.string(), z.number().int().nonnegative()).optional().default({}),
 });
 
 // POST /leads/card-link/:token/submit — update the SAME card; mark link used.
@@ -783,10 +809,21 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
       .maybeSingle();
     const countryId: string | null = (countryRow as any)?.id ?? null;
 
+    // The client's per-tier budgets → tier_pricing (each tier's proposed_price),
+    // so a multi-tier publish fans out with each level's own price. Only
+    // selected tiers with a budget > 0 are stored. proposed_price mirrors the
+    // single-tier case for back-compat (multi-tier reads from tier_pricing).
+    const tierPricing: Record<string, { proposed_price: number; markup: number }> = {};
+    for (const tier of body.tiers) {
+      const b = body.tier_budgets?.[tier];
+      if (typeof b === 'number' && b > 0) tierPricing[tier] = { proposed_price: b, markup: 0 };
+    }
+    const singleProposed =
+      body.tiers.length === 1 ? tierPricing[body.tiers[0]]?.proposed_price ?? null : null;
+
     // 1. UPDATE the SAME card. service_type/internal markup/state are NOT
     //    touched, but the client's own subscription choices (plan, experience
-    //    tiers, budget→proposed_price) are saved so they flow to the admin
-    //    editor — budget > 0 only, since 0/omitted means "not stated".
+    //    tiers, per-tier budgets) are saved so they flow to the admin editor.
     const { error: updErr } = await supabaseAdmin
       .from('subscription_cards')
       .update({
@@ -803,7 +840,8 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
         target_languages: body.languages,
         plan_name: body.plan || null,
         target_tiers: body.tiers,
-        proposed_price: body.budget && body.budget > 0 ? body.budget : null,
+        tier_pricing: tierPricing,
+        proposed_price: singleProposed,
         // The client reviewed the brief via the share link and submitted it —
         // surfaces as "Client approved" on the Form Requests queue.
         client_approved_at: new Date().toISOString(),

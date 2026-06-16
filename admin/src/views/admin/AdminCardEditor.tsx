@@ -102,6 +102,12 @@ interface Deliverable {
 
 const VALID_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const VALID_TIERS = ['Junior', 'Pro', 'Elite', 'Top Talents', 'Custom'];
+// Display order for the per-tier deliverables + pricing blocks: highest tier
+// first (Top Talents → Pro → Junior). Independent of selection order. 'Elite'
+// is the legacy name for 'Top Talents'; Custom sorts last.
+const TIER_DISPLAY_RANK: Record<string, number> = {
+  'top talents': 0, elite: 0, pro: 1, junior: 2, custom: 3,
+};
 const VALID_PLANS = ['starter', 'basic', 'plus', 'pro', 'personal'];
 const SERVICE_TYPES = ['Designers', 'Editors', 'Designer plus Editor', 'Accountants'];
 
@@ -141,6 +147,14 @@ export default function AdminCardEditor({
   const [planName, setPlanName] = useState('');
   const [originalProposedPrice, setOriginalProposedPrice] = useState<number | null>(null);
   const [tiers, setTiers] = useState<string[]>([]);
+  // Tier order for display blocks (deliverables + pricing): Top Talents → Pro
+  // → Junior. The stored `tiers` order is left untouched (it controls fan-out).
+  const displayTiers = useMemo(
+    () => [...tiers].sort(
+      (a, b) => (TIER_DISPLAY_RANK[a.toLowerCase()] ?? 99) - (TIER_DISPLAY_RANK[b.toLowerCase()] ?? 99),
+    ),
+    [tiers],
+  );
   const [workingDays, setWorkingDays] = useState<string[]>([]);
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
@@ -767,7 +781,7 @@ export default function AdminCardEditor({
                           <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
                             Cadence
                           </th>
-                          {tiers.map((tier) => (
+                          {displayTiers.map((tier) => (
                             <th
                               key={tier}
                               className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]"
@@ -780,7 +794,7 @@ export default function AdminCardEditor({
                       <tbody>
                         <tr className="border-t border-[var(--color-sh-warm-border)]">
                           <td className="px-3 py-2 font-medium text-[var(--color-sh-ink-muted)]">Daily</td>
-                          {tiers.map((tier) => {
+                          {displayTiers.map((tier) => {
                             const daily = catalogByTier[tier]?.plan?.daily_hours ?? null;
                             return (
                               <td key={tier} className="px-3 py-2 font-bold text-[var(--color-sh-ink)]">
@@ -791,7 +805,7 @@ export default function AdminCardEditor({
                         </tr>
                         <tr className="border-t border-[var(--color-sh-warm-border)]">
                           <td className="px-3 py-2 font-medium text-[var(--color-sh-ink-muted)]">Weekly</td>
-                          {tiers.map((tier) => {
+                          {displayTiers.map((tier) => {
                             const weekly = catalogByTier[tier]?.plan?.weekly_hours ?? null;
                             return (
                               <td key={tier} className="px-3 py-2 font-bold text-[var(--color-sh-ink)]">
@@ -804,7 +818,7 @@ export default function AdminCardEditor({
                           <td className="px-3 py-2 font-medium text-[var(--color-sh-ink-muted)]">
                             Monthly ({workingDaysCount} days)
                           </td>
-                          {tiers.map((tier) => {
+                          {displayTiers.map((tier) => {
                             const monthly = monthlyHoursForTier(tier);
                             return (
                               <td key={tier} className="px-3 py-2 font-bold text-[var(--color-sh-ink)]">
@@ -902,7 +916,7 @@ export default function AdminCardEditor({
                     All {tiers.length} tiers publish as <strong>one card</strong> with a tab per tier — talents and the business each see only their tier&apos;s pricing.
                   </p>
                 )}
-                {tiers.map((tier) => {
+                {displayTiers.map((tier) => {
                   const entry = tierPricing[tier] || { proposedPrice: 0, markup: 0 };
                   const partnerPrice = partnerPriceForTier(tier);
                   const catalogPricingRow = catalogByTier[tier]?.pricing?.[0] || null;
