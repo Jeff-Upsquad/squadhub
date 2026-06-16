@@ -623,7 +623,7 @@ router.get('/card-link/:token', ipRateLimit, async (req: Request, res: Response)
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
       .select(
-        'id, state, source, brand_name, business_nature, notes, customer_name, customer_email, customer_phone, customer_location, service_type, working_days, target_languages, requirement_note, hours_note',
+        'id, state, source, brand_name, business_nature, notes, customer_name, customer_email, customer_phone, customer_location, service_type, working_days, target_languages, requirement_note, hours_note, plan_name, target_tiers, proposed_price',
       )
       .eq('id', link.card_id)
       .maybeSingle();
@@ -659,8 +659,11 @@ router.get('/card-link/:token', ipRateLimit, async (req: Request, res: Response)
         expired: false,
         completed: false,
         expires_at: link.expires_at,
-        // Safe allow-list only — no pricing/tiers/squadhire/publish targets or
-        // salesperson identity. The client only ever sees their own brief.
+        // Safe allow-list only — the client sees their OWN brief, including the
+        // subscription choices they made on the original form (experience
+        // tier(s), plan, monthly budget) so they can confirm or adjust them.
+        // Still withheld: squadhire categories, publish targets, internal
+        // markup, and salesperson identity.
         prefill: {
           brand_name: card.brand_name,
           business_nature: card.business_nature,
@@ -676,6 +679,11 @@ router.get('/card-link/:token', ipRateLimit, async (req: Request, res: Response)
           state_regions: stateRegions,
           requirement_note: card.requirement_note,
           hours_note: card.hours_note,
+          // Subscription choices — the client's own selections, echoed back so
+          // the shared link mirrors the original brief form.
+          plan_name: card.plan_name,
+          tiers: Array.isArray(card.target_tiers) ? card.target_tiers : [],
+          budget: card.proposed_price,
         },
       },
     });
@@ -687,7 +695,10 @@ router.get('/card-link/:token', ipRateLimit, async (req: Request, res: Response)
 
 // Client-writable fields. NOTE: service_type is intentionally absent — the
 // role the card is for is immutable (a card is one of possibly-many siblings,
-// each pinned to a role). Pricing/tiers/targeting recipients are never exposed.
+// each pinned to a role). The client CAN now confirm/adjust their own
+// subscription choices (experience tier(s), plan, monthly budget) so the
+// shared link mirrors the original brief form; internal markup, squadhire
+// targeting, and publish recipients are still never exposed or writable.
 const cardSubmitSchema = z.object({
   brand_name: z.string().trim().min(1).max(200),
   business_nature: z.string().trim().min(1).max(200),
@@ -708,6 +719,12 @@ const cardSubmitSchema = z.object({
     }),
   requirement_note: z.string().trim().max(2000).optional().or(z.literal('')),
   hours_note: z.string().trim().max(200).optional().or(z.literal('')),
+  // Subscription choices — the client's own selections. tiers enum-guarded so
+  // they can't trip the subscription_cards.target_tiers CHECK; budget > 0 maps
+  // to proposed_price (0 / omitted = "not stated" → leaves it null).
+  tiers: z.array(z.enum(['Junior', 'Pro', 'Elite', 'Top Talents', 'Custom'])).max(5).optional().default([]),
+  plan: z.string().trim().max(50).optional().or(z.literal('')),
+  budget: z.number().int().nonnegative().optional(),
 });
 
 // POST /leads/card-link/:token/submit — update the SAME card; mark link used.
@@ -766,7 +783,10 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
       .maybeSingle();
     const countryId: string | null = (countryRow as any)?.id ?? null;
 
-    // 1. UPDATE the SAME card. service_type/pricing/tiers/state are NOT touched.
+    // 1. UPDATE the SAME card. service_type/internal markup/state are NOT
+    //    touched, but the client's own subscription choices (plan, experience
+    //    tiers, budget→proposed_price) are saved so they flow to the admin
+    //    editor — budget > 0 only, since 0/omitted means "not stated".
     const { error: updErr } = await supabaseAdmin
       .from('subscription_cards')
       .update({
@@ -781,6 +801,9 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
         hours_note: body.hours_note || null,
         working_days: body.working_days,
         target_languages: body.languages,
+        plan_name: body.plan || null,
+        target_tiers: body.tiers,
+        proposed_price: body.budget && body.budget > 0 ? body.budget : null,
         // The client reviewed the brief via the share link and submitted it —
         // surfaces as "Client approved" on the Form Requests queue.
         client_approved_at: new Date().toISOString(),
