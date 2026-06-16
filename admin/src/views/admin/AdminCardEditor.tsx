@@ -171,7 +171,11 @@ export default function AdminCardEditor({
   useEffect(() => {
     if (!card) return;
     setServiceType(card.service_type || '');
-    setPlanName(card.plan_name || '');
+    // Normalize to the canonical Title-case the <select> options use, so a
+    // plan saved as 'Starter' (from the brief form) matches and renders instead
+    // of falling through to the empty "Select…" placeholder. Falls back to the
+    // raw value for any non-standard plan so nothing is silently dropped.
+    setPlanName(PLAN_TO_CANONICAL[(card.plan_name || '').toLowerCase()] || card.plan_name || '');
     setTiers(card.target_tiers || []);
     setWorkingDays(card.working_days || []);
     setCustomerName(card.customer_name || '');
@@ -693,7 +697,10 @@ export default function AdminCardEditor({
                   className="sh-input"
                 >
                   <option value="">Select…</option>
-                  {VALID_PLANS.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+                  {VALID_PLANS.map((p) => {
+                    const label = PLAN_TO_CANONICAL[p] || p;
+                    return <option key={p} value={label}>{label}</option>;
+                  })}
                 </select>
               </Field>
             </div>

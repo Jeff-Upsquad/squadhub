@@ -72,11 +72,16 @@ export default function AdminPublishedCardRecipientsView({
   title,
   onBack,
   onOpenPanel,
+  tierTabs,
 }: {
   card: PublishedCard;
   title: string;
   onBack: () => void;
   onOpenPanel: () => void;
+  // For a multi-tier brief, a tab-per-tier control rendered under the title.
+  // Switching a tab swaps the active tier card so the recipients below are the
+  // talents matched to that tier. Undefined for single-tier cards.
+  tierTabs?: React.ReactNode;
 }) {
   const [activeTab, setActiveTab] = useState<StatusTab>('all');
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
@@ -546,6 +551,7 @@ export default function AdminPublishedCardRecipientsView({
                   {publisher && <> by {publisher.display_name || publisher.email || publisher.id.slice(0, 8)}</>}
                 </p>
               )}
+              {tierTabs}
             </div>
             <div className="lg:w-[280px] lg:shrink-0">
               <div className="mb-2 flex items-center justify-between gap-2">
