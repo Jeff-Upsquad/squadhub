@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import api from '../../services/api';
 import { usePMStore } from '../../stores/pmStore';
-import { useWorkspaceStore } from '../../stores/workspaceStore';
+import { useWorkspaceStore, type ChatKind } from '../../stores/workspaceStore';
 import type { HomeView } from '../../layouts/MainLayout';
 import InboxTaskDetail from './inbox/InboxTaskDetail';
 import InboxMessageDetail from './inbox/InboxMessageDetail';
@@ -55,6 +55,20 @@ export function avatarFor(n: Notification): { initials: string; color: string } 
   const seed = n.actor?.id || n.id;
   const hue = Array.from(seed).reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
   return { initials, color: `oklch(0.6 0.13 ${hue})` };
+}
+
+// Resolve a message/chat notification to the conversation it should open.
+// DMs deep-link by dm_conversation_id (kind 'dm'); channel posts by channel_id
+// (kind 'channel'). dm_received carries only dm_conversation_id, and a mention
+// inside a DM likewise has no channel_id — both must route as a DM, otherwise
+// the row click does nothing. Returns null for non-chat notifications.
+export function chatTargetFor(n: Notification): { id: string; kind: ChatKind } | null {
+  if (n.reference_type !== 'message' && n.reference_type !== 'chat_message') return null;
+  const dm = n.metadata?.dm_conversation_id as string | undefined;
+  if (dm) return { id: dm, kind: 'dm' };
+  const channel = n.metadata?.channel_id as string | undefined;
+  if (channel) return { id: channel, kind: 'channel' };
+  return null;
 }
 
 function ctxLabel(n: Notification): string {
@@ -195,8 +209,11 @@ export default function InboxView({
   const openSource = (n: Notification) => {
     if (n.reference_type === 'task' && n.metadata?.task_id) {
       setActiveTask(n.metadata.task_id as string);
-    } else if ((n.reference_type === 'message' || n.reference_type === 'chat_message') && n.metadata?.channel_id) {
-      setActiveChannel(n.metadata.channel_id as string);
+      return;
+    }
+    const target = chatTargetFor(n);
+    if (target) {
+      setActiveChannel(target.id, target.kind);
       setHomeView?.('chat');
     }
   };

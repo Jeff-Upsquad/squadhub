@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import { usePMStore } from '../stores/pmStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
-import { avatarFor, type Notification } from '../views/app/InboxView';
+import { avatarFor, chatTargetFor, type Notification } from '../views/app/InboxView';
 import type { HomeView } from '../layouts/MainLayout';
 
 /**
@@ -180,8 +180,11 @@ export default function InboxSlider({
     if (n.reference_type === 'task' && n.metadata?.task_id) {
       setActiveTask(n.metadata.task_id as string);
       onClose();
-    } else if ((n.reference_type === 'message' || n.reference_type === 'chat_message') && n.metadata?.channel_id) {
-      setActiveChannel(n.metadata.channel_id as string);
+      return;
+    }
+    const target = chatTargetFor(n);
+    if (target) {
+      setActiveChannel(target.id, target.kind);
       setHomeView('chat');
       onClose();
     }
