@@ -56,10 +56,12 @@ const LANGUAGES = [
 // Build-your-own-subscription workflow (mirrors upsquadconnect.com/pricing):
 // experience level(s) → plan → budget. Display labels are plural; stored
 // values match subscription_cards.target_tiers' CHECK (Junior/Pro/Top Talents).
-const EXPERIENCE_LEVELS: { label: string; value: string }[] = [
-  { label: 'Juniors', value: 'Junior' },
-  { label: 'Pros', value: 'Pro' },
-  { label: 'Top Talents', value: 'Top Talents' },
+// Descriptions mirror the UpSquad landing page so the client knows what each
+// level means before choosing.
+const EXPERIENCE_LEVELS: { label: string; value: string; desc: string }[] = [
+  { label: 'Juniors', value: 'Junior', desc: 'Less than 2 years of experience. Great for straightforward tasks and cost-effective output.' },
+  { label: 'Pros', value: 'Pro', desc: 'More than 2 years of experience with strong, well-rounded skill sets. Reliable quality across a wide range of work.' },
+  { label: 'Top Talents', value: 'Top Talents', desc: 'Top talents with 5+ years of experience. Best for high-stakes, complex, or premium creative work.' },
 ];
 
 // Plans differ by availability (Mon–Fri) — the same five bands seeded for
@@ -229,12 +231,14 @@ type RoleRequirement = {
   note: string;
   tiers: string[];
   plan: string;
-  budget: string;
+  // Per-tier monthly budget (the client's proposed price for that level),
+  // keyed by tier value.
+  tierBudgets: Record<string, string>;
 };
 const emptyRoleRequirements: Record<RoleSlug, RoleRequirement> = {
-  designer: { note: '', tiers: [], plan: '', budget: '' },
-  editor: { note: '', tiers: [], plan: '', budget: '' },
-  designer_plus_editor: { note: '', tiers: [], plan: '', budget: '' },
+  designer: { note: '', tiers: [], plan: '', tierBudgets: {} },
+  editor: { note: '', tiers: [], plan: '', tierBudgets: {} },
+  designer_plus_editor: { note: '', tiers: [], plan: '', tierBudgets: {} },
 };
 
 // One slug per role — used on submit to key the role_requirements payload
@@ -408,12 +412,19 @@ export default function ConnectPage() {
 
   function updateRoleReq(
     slug: RoleSlug,
-    field: 'note' | 'plan' | 'budget',
+    field: 'note' | 'plan',
     value: string,
   ) {
     setRoleRequirements((prev) => ({
       ...prev,
       [slug]: { ...prev[slug], [field]: value },
+    }));
+  }
+
+  function updateRoleTierBudget(slug: RoleSlug, tier: string, value: string) {
+    setRoleRequirements((prev) => ({
+      ...prev,
+      [slug]: { ...prev[slug], tierBudgets: { ...prev[slug].tierBudgets, [tier]: value } },
     }));
   }
 
@@ -458,23 +469,28 @@ export default function ConnectPage() {
     // shouldn't be sent), and drops entries where both fields are empty.
     const roleReqsPayload: Record<
       string,
-      { note?: string; tiers?: string[]; plan?: string; budget?: number }
+      { note?: string; tiers?: string[]; plan?: string; tier_budgets?: Record<string, number> }
     > = {};
     for (const r of roles) {
       const entry = roleRequirements[r];
       const note = entry.note.trim();
       const tiers = entry.tiers;
       const plan = entry.plan;
-      const budgetNum = entry.budget.trim() ? Math.round(Number(entry.budget)) : NaN;
-      // > 0, not >= 0: a budget of 0 means "not stated" and must not be sent —
-      // the server's proposed_price column rejects non-positive values.
-      const budget = Number.isFinite(budgetNum) && budgetNum > 0 ? budgetNum : undefined;
-      if (note || tiers.length || plan || budget !== undefined) {
+      // Per-tier budgets — only for selected tiers with a positive amount. A
+      // budget of 0 means "not stated" and must not be sent.
+      const tierBudgets: Record<string, number> = {};
+      for (const t of tiers) {
+        const raw = entry.tierBudgets[t]?.trim();
+        const n = raw ? Math.round(Number(raw)) : NaN;
+        if (Number.isFinite(n) && n > 0) tierBudgets[t] = n;
+      }
+      const hasBudgets = Object.keys(tierBudgets).length > 0;
+      if (note || tiers.length || plan || hasBudgets) {
         roleReqsPayload[roleToServiceTypeSlug(r)] = {
           ...(note ? { note } : {}),
           ...(tiers.length ? { tiers } : {}),
           ...(plan ? { plan } : {}),
-          ...(budget !== undefined ? { budget } : {}),
+          ...(hasBudgets ? { tier_budgets: tierBudgets } : {}),
         };
       }
     }
@@ -748,7 +764,7 @@ export default function ConnectPage() {
             <Section
               eyebrow="Subscription"
               title="Experience level & plan"
-              hint="Pick the talent experience and a weekly plan per role, add a short note, and name a monthly budget. All optional — we can finalize on the call."
+              hint="Pick the talent experience and a weekly plan per role, add a short note, and a monthly budget per level. All optional — we can finalize on the call."
             >
               {ROLE_OPTIONS.filter((o) => roles.includes(o.slug)).map((opt) => {
                 const req = roleRequirements[opt.slug];
@@ -765,21 +781,52 @@ export default function ConnectPage() {
                           <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
                         </label>
                         <p className="mb-3 text-xs text-[#7A7568]">
-                          Select one or more — we&apos;ll match talent across all chosen levels.
+                          Select one or more — we&apos;ll match talent across all chosen levels. For each level you pick, tell us your monthly budget for that level.
                         </p>
-                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                        <div className="space-y-2.5">
                           {EXPERIENCE_LEVELS.map((lvl) => {
                             const on = req.tiers.includes(lvl.value);
                             return (
-                              <button
+                              <div
                                 key={lvl.value}
-                                type="button"
-                                onClick={() => toggleRoleReqTier(opt.slug, lvl.value)}
-                                aria-pressed={on}
-                                className={`connect-chip ${on ? 'connect-chip-on' : ''}`}
+                                className={`overflow-hidden rounded-xl border transition ${on ? 'border-[#0a0a0a] bg-[#F2FCBC]/50' : 'border-[#E0DCCE] bg-white'}`}
                               >
-                                {on ? `✓ ${lvl.label}` : lvl.label}
-                              </button>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleRoleReqTier(opt.slug, lvl.value)}
+                                  aria-pressed={on}
+                                  className="flex w-full items-start gap-3 p-3.5 text-left"
+                                >
+                                  <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5] bg-white'}`}>
+                                    {on && (
+                                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    )}
+                                  </span>
+                                  <span className="min-w-0">
+                                    <span className="block text-sm font-semibold text-[#0a0a0a]">{lvl.label}</span>
+                                    <span className="mt-0.5 block text-xs leading-relaxed text-[#7A7568]">{lvl.desc}</span>
+                                  </span>
+                                </button>
+                                {on && (
+                                  <div className="border-t border-[#E0DCCE] px-3.5 py-3 sm:pl-11">
+                                    <label className="mb-1 block text-xs font-medium text-[#222]">
+                                      Monthly budget for {lvl.label} <span className="font-normal text-[#9C9486]">(optional)</span>
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      inputMode="numeric"
+                                      value={req.tierBudgets[lvl.value] ?? ''}
+                                      onChange={(e) => updateRoleTierBudget(opt.slug, lvl.value, e.target.value)}
+                                      placeholder={`e.g. ${currencySymbol}25000`}
+                                      className="connect-input"
+                                    />
+                                    <p className="mt-1 text-[11px] text-[#9C9486]">How much you&apos;re willing to pay per month for this level.</p>
+                                  </div>
+                                )}
+                              </div>
                             );
                           })}
                         </div>
@@ -857,22 +904,6 @@ export default function ConnectPage() {
                           </div>
                         )}
                       </div>
-
-                      <Field
-                        label="Monthly budget"
-                        optional
-                        hint={`Your target monthly spend in ${currencySymbol}.`}
-                      >
-                        <input
-                          type="number"
-                          min="0"
-                          inputMode="numeric"
-                          value={req.budget}
-                          onChange={(e) => updateRoleReq(opt.slug, 'budget', e.target.value)}
-                          placeholder={`e.g. ${currencySymbol}25000`}
-                          className="connect-input"
-                        />
-                      </Field>
 
                       <Field label="Short note" optional>
                         <textarea

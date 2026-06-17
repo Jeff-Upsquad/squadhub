@@ -351,7 +351,10 @@ const submissionSchema = z.object({
           .max(5)
           .optional(),
         plan: z.string().trim().max(50).optional(),
-        budget: z.number().int().nonnegative().optional(),
+        // Per-tier monthly budget (the client's proposed price for that level),
+        // keyed by tier. Stored into the card's tier_pricing so a multi-tier
+        // publish fans out with each level's own price.
+        tier_budgets: z.record(z.string(), z.number().int().nonnegative()).optional(),
       }),
     )
     .optional()
@@ -513,6 +516,19 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
 
       const roleReq = body.role_requirements?.[slug];
 
+      // Per-tier budgets → tier_pricing (each tier's proposed_price), so a
+      // multi-tier publish fans out with each level's own price. proposed_price
+      // mirrors the single-tier case for back-compat (CHECK allows NULL or > 0).
+      const roleTiers = roleReq?.tiers || [];
+      const roleTierBudgets = roleReq?.tier_budgets || {};
+      const roleTierPricing: Record<string, { proposed_price: number; markup: number }> = {};
+      for (const tier of roleTiers) {
+        const b = roleTierBudgets[tier];
+        if (typeof b === 'number' && b > 0) roleTierPricing[tier] = { proposed_price: b, markup: 0 };
+      }
+      const roleSingleProposed =
+        roleTiers.length === 1 ? roleTierPricing[roleTiers[0]]?.proposed_price ?? null : null;
+
       const { data: card, error } = await supabaseAdmin
         .from('subscription_cards')
         .insert({
@@ -524,10 +540,8 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
           service_type: SLUG_TO_SERVICE_TYPE[slug],
           target_tiers: roleReq?.tiers || [],
           plan_name: roleReq?.plan || null,
-          // subscription_cards.chk_proposed_price requires NULL or > 0. A
-          // budget of 0 means "no budget stated", not a $0 quote — store NULL
-          // so the whole brief doesn't fail the CHECK constraint.
-          proposed_price: roleReq?.budget && roleReq.budget > 0 ? roleReq.budget : null,
+          tier_pricing: roleTierPricing,
+          proposed_price: roleSingleProposed,
           working_days: body.working_days,
           customer_name: body.contact_name,
           customer_email: body.email,
