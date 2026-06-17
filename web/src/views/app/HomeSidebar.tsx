@@ -325,7 +325,7 @@ export default function HomeSidebar({
                 <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1z" />
               </svg>
             }
-            label="Home"
+            label="My home"
             active={homeView === 'hub'}
             onClick={() => onChangeView('hub')}
           />

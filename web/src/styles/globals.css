@@ -5328,6 +5328,24 @@ ol.sqc-list {
   flex-shrink: 0;
   background: var(--sh-bg);
 }
+/* Shown while a file is dragged over the conversation (see ChatPanel). */
+.sqc-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--sh-bg) 88%, transparent);
+  border: 2px dashed var(--sh-link, rgba(29,28,29,0.4));
+  border-radius: 10px;
+}
+.sqc-drop-overlay__label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sh-text);
+}
 .sqc-composer {
   border: 1px solid var(--sh-border);
   border-radius: 10px;
