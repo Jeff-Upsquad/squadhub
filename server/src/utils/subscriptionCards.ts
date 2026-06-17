@@ -360,6 +360,8 @@ export async function fanOutTierCards(
   //     recalled_at, archived_at, squadhire_synced_at, etc.)
   const COPY_FIELDS = [
     'source',
+    'card_type',
+    'assignment_details',
     'service_type',
     'plan_name',
     'working_days',

@@ -1355,6 +1355,32 @@ export function isTopTalentsTier(t: string | null | undefined): boolean {
 
 export type SubscriptionCardState = 'draft' | 'published' | 'assigned' | 'closed';
 /**
+ * Product line a card belongs to. `subscription` (default) is the recurring
+ * plan brief; `assignment` is a one-off freelance project (project budget +
+ * scope + timeline instead of a weekly plan); `hiring` is reserved. The same
+ * cards table + lifecycle serve all three — talent clients tag by this and the
+ * business portal shows assignments in a separate section.
+ */
+export type SubscriptionCardType = 'subscription' | 'assignment' | 'hiring';
+export const SUBSCRIPTION_CARD_TYPES: SubscriptionCardType[] = ['subscription', 'assignment', 'hiring'];
+
+/**
+ * Project-specific fields for card_type = 'assignment' (stored in the
+ * subscription_cards.assignment_details JSONB). The budget reuses
+ * proposed_price and the scope reuses notes / requirement_note, so this only
+ * carries what has no dedicated column.
+ */
+export interface AssignmentDetails {
+  /** Free-text timeline, e.g. "4 weeks", "2 months". */
+  duration?: string | null;
+  /** ISO date the engagement should start. */
+  start_date?: string | null;
+  /** ISO date the work is due by. */
+  deadline?: string | null;
+  /** Optional engagement shape, e.g. "one-off", "ongoing". */
+  scope_type?: string | null;
+}
+/**
  * `broadcast` (default) — at publish time the server fans out to all matching
  * partners and SquadHire broadcasts to its talents. `manual` — no fan-out;
  * the card is visible in admin Published Cards lists but recipients must be
@@ -1388,6 +1414,10 @@ export interface SubscriptionCard {
   id: string;
   submission_subscription_id: string;
   state: SubscriptionCardState;
+  /** Product line: 'subscription' (default), 'assignment' (freelance) or 'hiring'. */
+  card_type: SubscriptionCardType;
+  /** Project fields for assignment cards. Null on subscription / hiring cards. */
+  assignment_details?: AssignmentDetails | null;
   distribution: SubscriptionCardDistribution;
   working_days: WeekDay[];
   brand_name: string | null;
