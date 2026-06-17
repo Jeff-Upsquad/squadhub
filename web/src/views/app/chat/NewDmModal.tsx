@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { useAuthStore } from '../../../stores/authStore';
@@ -10,6 +11,7 @@ interface UserPick {
   display_name: string;
   avatar_url: string | null;
   user_type?: string;
+  role?: { name: string; color?: string | null } | null;
 }
 
 interface Props {
@@ -35,7 +37,7 @@ export default function NewDmModal({ workspaceId, onClose }: Props) {
     queryKey: ['user-search', query],
     queryFn: async () => {
       if (!query.trim()) return [] as UserPick[];
-      const r = await api.get('/users/search', { params: { q: query, limit: 8 } });
+      const r = await api.get('/users/search', { params: { q: query, limit: 8, workspace_id: workspaceId } });
       return (r.data?.data || []) as UserPick[];
     },
     enabled: query.trim().length > 0,
@@ -81,9 +83,9 @@ export default function NewDmModal({ workspaceId, onClose }: Props) {
     }
   };
 
-  return (
+  const modal = (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-24"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 px-4 py-10"
       onClick={onClose}
     >
       <div
@@ -158,8 +160,14 @@ export default function NewDmModal({ workspaceId, onClose }: Props) {
               </span>
               <span className="flex flex-col">
                 <span className="text-[14px] font-medium text-foreground">{u.display_name}</span>
-                {u.user_type && (
-                  <span className="text-[11px] uppercase tracking-wide text-foreground-muted">{u.user_type.replace('_', ' ')}</span>
+                {u.role?.name && (
+                  <span className="flex items-center gap-1.5 text-[11px] text-foreground-muted">
+                    <span
+                      className="inline-block h-[7px] w-[7px] shrink-0 rounded-full"
+                      style={{ backgroundColor: u.role.color || 'var(--sh-ink-4)' }}
+                    />
+                    {u.role.name}
+                  </span>
                 )}
               </span>
             </button>
@@ -190,4 +198,6 @@ export default function NewDmModal({ workspaceId, onClose }: Props) {
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }

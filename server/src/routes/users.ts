@@ -45,6 +45,7 @@ router.get('/search', requireAuth, async (req: Request, res: Response) => {
     const limit = Math.min(parseInt((req.query.limit as string) || '10', 10), 25);
     const channelId = (req.query.channel_id as string) || '';
     const dmConversationId = (req.query.dm_conversation_id as string) || '';
+    const workspaceId = (req.query.workspace_id as string) || '';
 
     // Scope the mention picker to a conversation when asked: channel → its
     // members (resource_memberships) + creator; DM → its participants. With no
@@ -99,7 +100,29 @@ router.get('/search', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    res.json({ success: true, data: data || [] });
+    // Attach each user's workspace role (name + color). Done as a separate
+    // lookup so the user query above keeps its limit/ordering/scope intact
+    // (a join could fan out rows for members with multiple memberships).
+    const users = data || [];
+    if (users.length > 0) {
+      const ids = users.map((u: any) => u.id);
+      let memberQuery = supabaseAdmin
+        .from('workspace_members')
+        .select('user_id, role:role_id(name, color)')
+        .in('user_id', ids);
+      if (workspaceId) memberQuery = memberQuery.eq('workspace_id', workspaceId);
+      const { data: members } = await memberQuery;
+      const roleByUser = new Map<string, { name: string; color: string | null } | null>();
+      for (const m of (members || []) as any[]) {
+        // Keep the first role we see per user (primary membership).
+        if (!roleByUser.has(m.user_id)) roleByUser.set(m.user_id, m.role || null);
+      }
+      for (const u of users as any[]) {
+        u.role = roleByUser.get(u.id) || null;
+      }
+    }
+
+    res.json({ success: true, data: users });
   } catch (err) {
     console.error('User search error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
