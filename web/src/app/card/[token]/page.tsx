@@ -96,10 +96,12 @@ const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
 
 // Mirrors the /connect brief form's subscription section. Display labels are
 // plural; stored values match subscription_cards.target_tiers' CHECK.
-const EXPERIENCE_LEVELS: { label: string; value: string }[] = [
-  { label: 'Juniors', value: 'Junior' },
-  { label: 'Pros', value: 'Pro' },
-  { label: 'Top Talents', value: 'Top Talents' },
+// Descriptions mirror the UpSquad landing page so the client knows what each
+// level means before choosing.
+const EXPERIENCE_LEVELS: { label: string; value: string; desc: string }[] = [
+  { label: 'Juniors', value: 'Junior', desc: 'Less than 2 years of experience. Great for straightforward tasks and cost-effective output.' },
+  { label: 'Pros', value: 'Pro', desc: 'More than 2 years of experience with strong, well-rounded skill sets. Reliable quality across a wide range of work.' },
+  { label: 'Top Talents', value: 'Top Talents', desc: 'Top talents with 5+ years of experience. Best for high-stakes, complex, or premium creative work.' },
 ];
 
 // Same five availability bands as /connect; stored as plan_name on the card.
@@ -128,7 +130,9 @@ type Prefill = {
   hours_note: string | null;
   plan_name: string | null;
   tiers: string[];
-  budget: number | null;
+  // Per-tier monthly budget (the client's proposed price for that level),
+  // keyed by tier value. Empty when no pricing was captured yet.
+  tier_budgets: Record<string, number>;
 };
 
 type LinkMeta = {
@@ -156,7 +160,8 @@ type FormData = {
   hours_note: string;
   tiers: string[];
   plan: string;
-  budget: string;
+  // Per-tier budget as the client types it, keyed by tier value.
+  tierBudgets: Record<string, string>;
 };
 
 const DEFAULT_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
@@ -178,7 +183,7 @@ const emptyForm: FormData = {
   hours_note: '',
   tiers: [],
   plan: '',
-  budget: '',
+  tierBudgets: {},
 };
 
 export default function CardShareTokenPage() {
@@ -224,7 +229,9 @@ export default function CardShareTokenPage() {
               hours_note: pf.hours_note || '',
               tiers: pf.tiers || [],
               plan: pf.plan_name || '',
-              budget: pf.budget != null ? String(pf.budget) : '',
+              tierBudgets: Object.fromEntries(
+                Object.entries(pf.tier_budgets || {}).map(([t, v]) => [t, String(v)]),
+              ),
             });
           }
         } else {
@@ -272,6 +279,10 @@ export default function CardShareTokenPage() {
     });
   }
 
+  function updateTierBudget(tier: string, value: string) {
+    setForm((prev) => ({ ...prev, tierBudgets: { ...prev.tierBudgets, [tier]: value } }));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -306,7 +317,16 @@ export default function CardShareTokenPage() {
           hours_note: form.hours_note.trim() || undefined,
           tiers: form.tiers,
           plan: form.plan || undefined,
-          budget: form.budget.trim() && Number(form.budget) > 0 ? Math.round(Number(form.budget)) : undefined,
+          // Per-tier budgets — only for selected tiers with a positive amount.
+          tier_budgets: Object.fromEntries(
+            form.tiers
+              .map((t) => {
+                const raw = form.tierBudgets[t]?.trim();
+                const n = raw ? Math.round(Number(raw)) : NaN;
+                return [t, Number.isFinite(n) && n > 0 ? n : null] as const;
+              })
+              .filter(([, v]) => v != null),
+          ),
         }),
       });
       const data = await res.json();
@@ -505,7 +525,7 @@ export default function CardShareTokenPage() {
           <Section
             eyebrow="Subscription"
             title="Experience level & plan"
-            hint="Confirm the talent experience, weekly plan, and a monthly budget. All optional — we can finalize on the call."
+            hint="Confirm the talent experience, weekly plan, and a monthly budget per level. All optional — we can finalize on the call."
           >
             <div>
               <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
@@ -513,21 +533,52 @@ export default function CardShareTokenPage() {
                 <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
               </label>
               <p className="mb-3 text-xs text-[#7A7568]">
-                Select one or more — we&apos;ll match talent across all chosen levels.
+                Select one or more — we&apos;ll match talent across all chosen levels. For each level you pick, tell us your monthly budget for that level.
               </p>
-              <div className="flex flex-wrap gap-1.5 sm:gap-2">
+              <div className="space-y-2.5">
                 {EXPERIENCE_LEVELS.map((lvl) => {
                   const on = form.tiers.includes(lvl.value);
                   return (
-                    <button
+                    <div
                       key={lvl.value}
-                      type="button"
-                      onClick={() => toggle('tiers', lvl.value)}
-                      aria-pressed={on}
-                      className={`connect-chip ${on ? 'connect-chip-on' : ''}`}
+                      className={`overflow-hidden rounded-xl border transition ${on ? 'border-[#0a0a0a] bg-[#F2FCBC]/50' : 'border-[#E0DCCE] bg-white'}`}
                     >
-                      {on ? `✓ ${lvl.label}` : lvl.label}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => toggle('tiers', lvl.value)}
+                        aria-pressed={on}
+                        className="flex w-full items-start gap-3 p-3.5 text-left"
+                      >
+                        <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5] bg-white'}`}>
+                          {on && (
+                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-[#0a0a0a]">{lvl.label}</span>
+                          <span className="mt-0.5 block text-xs leading-relaxed text-[#7A7568]">{lvl.desc}</span>
+                        </span>
+                      </button>
+                      {on && (
+                        <div className="border-t border-[#E0DCCE] px-3.5 py-3 sm:pl-11">
+                          <label className="mb-1 block text-xs font-medium text-[#222]">
+                            Monthly budget for {lvl.label} <span className="font-normal text-[#9C9486]">(optional)</span>
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            inputMode="numeric"
+                            value={form.tierBudgets[lvl.value] ?? ''}
+                            onChange={(e) => updateTierBudget(lvl.value, e.target.value)}
+                            placeholder="e.g. ₹25000"
+                            className="connect-input"
+                          />
+                          <p className="mt-1 text-[11px] text-[#9C9486]">How much you&apos;re willing to pay per month for this level.</p>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -585,17 +636,6 @@ export default function CardShareTokenPage() {
               </div>
             </div>
 
-            <Field label="Monthly budget" optional hint="Your target monthly spend in ₹.">
-              <input
-                type="number"
-                min="0"
-                inputMode="numeric"
-                value={form.budget}
-                onChange={(e) => update('budget', e.target.value)}
-                placeholder="e.g. ₹25000"
-                className="connect-input"
-              />
-            </Field>
           </Section>
 
           <Section eyebrow="Preferences" title="Talent preferences" hint="Where the talent should be, languages, and working days.">

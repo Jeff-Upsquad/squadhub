@@ -52,6 +52,10 @@ Only one deploy can run on the VPS at a time. If another deploy is already runni
 
 Try logging in on both https://squadhub.in and https://admin.squadhub.in to confirm API proxying works.
 
+### Hand off for testing
+
+After the deploy succeeds (this also covers **PD** = Push + Deploy), give the user a plain-language summary of what shipped and how to test it. Follow [test-handoff.md](test-handoff.md). Do this automatically — don't wait to be asked.
+
 ### Rollback
 
 Every deploy leaves behind timestamped image tags for all three services. To roll back a bad deploy to a prior known-good snapshot:

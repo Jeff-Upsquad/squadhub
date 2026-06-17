@@ -56,10 +56,12 @@ const LANGUAGES = [
 // Build-your-own-subscription workflow (mirrors upsquadconnect.com/pricing):
 // experience level(s) → plan → budget. Display labels are plural; stored
 // values match subscription_cards.target_tiers' CHECK (Junior/Pro/Top Talents).
-const EXPERIENCE_LEVELS: { label: string; value: string }[] = [
-  { label: 'Juniors', value: 'Junior' },
-  { label: 'Pros', value: 'Pro' },
-  { label: 'Top Talents', value: 'Top Talents' },
+// Descriptions mirror the UpSquad landing page so the client knows what each
+// level means before choosing.
+const EXPERIENCE_LEVELS: { label: string; value: string; desc: string }[] = [
+  { label: 'Juniors', value: 'Junior', desc: 'Less than 2 years of experience. Great for straightforward tasks and cost-effective output.' },
+  { label: 'Pros', value: 'Pro', desc: 'More than 2 years of experience with strong, well-rounded skill sets. Reliable quality across a wide range of work.' },
+  { label: 'Top Talents', value: 'Top Talents', desc: 'Top talents with 5+ years of experience. Best for high-stakes, complex, or premium creative work.' },
 ];
 
 // Plans differ by availability (Mon–Fri) — the same five bands seeded for
@@ -229,13 +231,16 @@ type RoleRequirement = {
   note: string;
   tiers: string[];
   plan: string;
+  // Per-tier monthly budget (the client's proposed price for that level),
+  // keyed by tier value. Subscription path only.
+  tierBudgets: Record<string, string>;
+  // Assignment path only: a single one-off project budget + timeline.
   budget: string;
-  // Assignment-only project fields (ignored for subscription briefs).
   duration: string;
   startDate: string;
   deadline: string;
 };
-const EMPTY_ROLE_REQ: RoleRequirement = { note: '', tiers: [], plan: '', budget: '', duration: '', startDate: '', deadline: '' };
+const EMPTY_ROLE_REQ: RoleRequirement = { note: '', tiers: [], plan: '', tierBudgets: {}, budget: '', duration: '', startDate: '', deadline: '' };
 const emptyRoleRequirements: Record<RoleSlug, RoleRequirement> = {
   designer: { ...EMPTY_ROLE_REQ },
   editor: { ...EMPTY_ROLE_REQ },
@@ -426,6 +431,13 @@ export default function ConnectBriefForm({
     }));
   }
 
+  function updateRoleTierBudget(slug: RoleSlug, tier: string, value: string) {
+    setRoleRequirements((prev) => ({
+      ...prev,
+      [slug]: { ...prev[slug], tierBudgets: { ...prev[slug].tierBudgets, [tier]: value } },
+    }));
+  }
+
   function toggleRoleReqTier(slug: RoleSlug, value: string) {
     setRoleRequirements((prev) => {
       const cur = prev[slug];
@@ -462,39 +474,59 @@ export default function ConnectBriefForm({
       return;
     }
 
-    // Build the per-role payload from current selections only. Skips roles
-    // the user ticked then un-ticked (their note/hours stay in state but
-    // shouldn't be sent), and drops entries where both fields are empty.
     const isAssignment = product === 'assignment';
+
+    // Build the per-role payload from current selections only. Skips roles
+    // the user ticked then un-ticked, and drops empty entries.
     const roleReqsPayload: Record<
       string,
       {
-        note?: string; tiers?: string[]; plan?: string; budget?: number;
-        duration?: string; start_date?: string; deadline?: string;
+        note?: string; tiers?: string[]; plan?: string;
+        tier_budgets?: Record<string, number>;
+        budget?: number; duration?: string; start_date?: string; deadline?: string;
       }
     > = {};
     for (const r of roles) {
       const entry = roleRequirements[r];
       const note = entry.note.trim();
       const tiers = entry.tiers;
-      // Assignments carry no weekly plan; budget is the one-time project budget.
-      const plan = isAssignment ? '' : entry.plan;
-      const budgetNum = entry.budget.trim() ? Math.round(Number(entry.budget)) : NaN;
-      // > 0, not >= 0: a budget of 0 means "not stated" and must not be sent —
-      // the server's proposed_price column rejects non-positive values.
-      const budget = Number.isFinite(budgetNum) && budgetNum > 0 ? budgetNum : undefined;
-      const duration = isAssignment ? entry.duration.trim() : '';
-      const startDate = isAssignment ? entry.startDate : '';
-      const deadline = isAssignment ? entry.deadline : '';
-      if (note || tiers.length || plan || budget !== undefined || duration || startDate || deadline) {
+
+      if (isAssignment) {
+        // Assignment: one-off project budget + timeline; no plan / per-tier price.
+        const n = entry.budget.trim() ? Math.round(Number(entry.budget)) : NaN;
+        const budget = Number.isFinite(n) && n > 0 ? n : undefined;
+        const duration = entry.duration.trim();
+        const startDate = entry.startDate;
+        const deadline = entry.deadline;
+        if (note || tiers.length || budget !== undefined || duration || startDate || deadline) {
+          roleReqsPayload[roleToServiceTypeSlug(r)] = {
+            ...(note ? { note } : {}),
+            ...(tiers.length ? { tiers } : {}),
+            ...(budget !== undefined ? { budget } : {}),
+            ...(duration ? { duration } : {}),
+            ...(startDate ? { start_date: startDate } : {}),
+            ...(deadline ? { deadline } : {}),
+          };
+        }
+        continue;
+      }
+
+      const plan = entry.plan;
+      // Per-tier budgets — only for selected tiers with a positive amount. A
+      // budget of 0 means "not stated" and must not be sent.
+      const tierBudgets: Record<string, number> = {};
+      for (const t of tiers) {
+        const raw = entry.tierBudgets[t]?.trim();
+        const n = raw ? Math.round(Number(raw)) : NaN;
+        if (Number.isFinite(n) && n > 0) tierBudgets[t] = n;
+      }
+      const hasBudgets = Object.keys(tierBudgets).length > 0;
+      if (note || tiers.length || plan || hasBudgets) {
         roleReqsPayload[roleToServiceTypeSlug(r)] = {
           ...(note ? { note } : {}),
           ...(tiers.length ? { tiers } : {}),
           ...(plan ? { plan } : {}),
-          ...(budget !== undefined ? { budget } : {}),
-          ...(duration ? { duration } : {}),
-          ...(startDate ? { start_date: startDate } : {}),
-          ...(deadline ? { deadline } : {}),
+          ...(hasBudgets ? { tier_budgets: tierBudgets } : {}),
         };
       }
     }
@@ -773,7 +805,7 @@ export default function ConnectBriefForm({
               hint={
                 product === 'assignment'
                   ? 'Pick the talent experience per role, set a project budget and timeline, and describe the scope. All optional — we can finalize on the call.'
-                  : 'Pick the talent experience and a weekly plan per role, add a short note, and name a monthly budget. All optional — we can finalize on the call.'
+                  : 'Pick the talent experience and a weekly plan per role, add a short note, and a monthly budget per level. All optional — we can finalize on the call.'
               }
             >
               {ROLE_OPTIONS.filter((o) => roles.includes(o.slug)).map((opt) => {
@@ -785,33 +817,111 @@ export default function ConnectBriefForm({
                       <span className="text-lg font-bold tracking-tight text-[#0a0a0a]">{opt.title}</span>
                     </div>
                     <div className="space-y-4">
+                      {product === 'assignment' ? (
+                      <>
+                        {/* Experience level(s) — for matching only (no per-tier budget) */}
+                        <div>
+                          <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
+                            <span>Experience level(s)</span>
+                            <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+                          </label>
+                          <p className="mb-3 text-xs text-[#7A7568]">Select one or more — we&apos;ll match talent across all chosen levels.</p>
+                          <div className="space-y-2.5">
+                            {EXPERIENCE_LEVELS.map((lvl) => {
+                              const on = req.tiers.includes(lvl.value);
+                              return (
+                                <div key={lvl.value} className={`overflow-hidden rounded-xl border transition ${on ? 'border-[#0a0a0a] bg-[#F2FCBC]/50' : 'border-[#E0DCCE] bg-white'}`}>
+                                  <button type="button" onClick={() => toggleRoleReqTier(opt.slug, lvl.value)} aria-pressed={on} className="flex w-full items-start gap-3 p-3.5 text-left">
+                                    <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5] bg-white'}`}>
+                                      {on && (<svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>)}
+                                    </span>
+                                    <span className="min-w-0">
+                                      <span className="block text-sm font-semibold text-[#0a0a0a]">{lvl.label}</span>
+                                      <span className="mt-0.5 block text-xs leading-relaxed text-[#7A7568]">{lvl.desc}</span>
+                                    </span>
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <Field label="Project budget" optional hint={`Total budget for this project in ${currencySymbol}.`}>
+                          <input type="number" min="0" inputMode="numeric" value={req.budget} onChange={(e) => updateRoleReq(opt.slug, 'budget', e.target.value)} placeholder={`e.g. ${currencySymbol}50000`} className="connect-input" />
+                        </Field>
+                        <Field label="Duration / timeline" optional hint="Rough length of the engagement.">
+                          <input type="text" value={req.duration} onChange={(e) => updateRoleReq(opt.slug, 'duration', e.target.value)} placeholder="e.g. 4 weeks, 2 months" className="connect-input" />
+                        </Field>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <Field label="Start date" optional>
+                            <input type="date" value={req.startDate} onChange={(e) => updateRoleReq(opt.slug, 'startDate', e.target.value)} className="connect-input" />
+                          </Field>
+                          <Field label="Deadline" optional>
+                            <input type="date" value={req.deadline} onChange={(e) => updateRoleReq(opt.slug, 'deadline', e.target.value)} className="connect-input" />
+                          </Field>
+                        </div>
+                        <Field label="Scope & deliverables" optional>
+                          <textarea rows={2} value={req.note} onChange={(e) => updateRoleReq(opt.slug, 'note', e.target.value)} placeholder="Describe the project scope, deliverables, and any context." className="connect-input resize-none" />
+                        </Field>
+                      </>
+                      ) : (
+                      <>
                       <div>
                         <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
                           <span>Experience level(s)</span>
                           <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
                         </label>
                         <p className="mb-3 text-xs text-[#7A7568]">
-                          Select one or more — we&apos;ll match talent across all chosen levels.
+                          Select one or more — we&apos;ll match talent across all chosen levels. For each level you pick, tell us your monthly budget for that level.
                         </p>
-                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                        <div className="space-y-2.5">
                           {EXPERIENCE_LEVELS.map((lvl) => {
                             const on = req.tiers.includes(lvl.value);
                             return (
-                              <button
+                              <div
                                 key={lvl.value}
-                                type="button"
-                                onClick={() => toggleRoleReqTier(opt.slug, lvl.value)}
-                                aria-pressed={on}
-                                className={`connect-chip ${on ? 'connect-chip-on' : ''}`}
+                                className={`overflow-hidden rounded-xl border transition ${on ? 'border-[#0a0a0a] bg-[#F2FCBC]/50' : 'border-[#E0DCCE] bg-white'}`}
                               >
-                                {on ? `✓ ${lvl.label}` : lvl.label}
-                              </button>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleRoleReqTier(opt.slug, lvl.value)}
+                                  aria-pressed={on}
+                                  className="flex w-full items-start gap-3 p-3.5 text-left"
+                                >
+                                  <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5] bg-white'}`}>
+                                    {on && (
+                                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    )}
+                                  </span>
+                                  <span className="min-w-0">
+                                    <span className="block text-sm font-semibold text-[#0a0a0a]">{lvl.label}</span>
+                                    <span className="mt-0.5 block text-xs leading-relaxed text-[#7A7568]">{lvl.desc}</span>
+                                  </span>
+                                </button>
+                                {on && (
+                                  <div className="border-t border-[#E0DCCE] px-3.5 py-3 sm:pl-11">
+                                    <label className="mb-1 block text-xs font-medium text-[#222]">
+                                      Monthly budget for {lvl.label} <span className="font-normal text-[#9C9486]">(optional)</span>
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      inputMode="numeric"
+                                      value={req.tierBudgets[lvl.value] ?? ''}
+                                      onChange={(e) => updateRoleTierBudget(opt.slug, lvl.value, e.target.value)}
+                                      placeholder={`e.g. ${currencySymbol}25000`}
+                                      className="connect-input"
+                                    />
+                                    <p className="mt-1 text-[11px] text-[#9C9486]">How much you&apos;re willing to pay per month for this level.</p>
+                                  </div>
+                                )}
+                              </div>
                             );
                           })}
                         </div>
                       </div>
 
-                      {product !== 'assignment' && (
                       <div>
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <label className="flex items-baseline gap-2 text-sm font-medium text-[#222]">
@@ -884,84 +994,18 @@ export default function ConnectBriefForm({
                           </div>
                         )}
                       </div>
-                      )}
 
-                      {product === 'assignment' ? (
-                        <>
-                          <Field
-                            label="Project budget"
-                            optional
-                            hint={`Total budget for this project in ${currencySymbol}.`}
-                          >
-                            <input
-                              type="number"
-                              min="0"
-                              inputMode="numeric"
-                              value={req.budget}
-                              onChange={(e) => updateRoleReq(opt.slug, 'budget', e.target.value)}
-                              placeholder={`e.g. ${currencySymbol}50000`}
-                              className="connect-input"
-                            />
-                          </Field>
-                          <Field label="Duration / timeline" optional hint="Rough length of the engagement.">
-                            <input
-                              type="text"
-                              value={req.duration}
-                              onChange={(e) => updateRoleReq(opt.slug, 'duration', e.target.value)}
-                              placeholder="e.g. 4 weeks, 2 months"
-                              className="connect-input"
-                            />
-                          </Field>
-                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <Field label="Start date" optional>
-                              <input
-                                type="date"
-                                value={req.startDate}
-                                onChange={(e) => updateRoleReq(opt.slug, 'startDate', e.target.value)}
-                                className="connect-input"
-                              />
-                            </Field>
-                            <Field label="Deadline" optional>
-                              <input
-                                type="date"
-                                value={req.deadline}
-                                onChange={(e) => updateRoleReq(opt.slug, 'deadline', e.target.value)}
-                                className="connect-input"
-                              />
-                            </Field>
-                          </div>
-                        </>
-                      ) : (
-                        <Field
-                          label="Monthly budget"
-                          optional
-                          hint={`Your target monthly spend in ${currencySymbol}.`}
-                        >
-                          <input
-                            type="number"
-                            min="0"
-                            inputMode="numeric"
-                            value={req.budget}
-                            onChange={(e) => updateRoleReq(opt.slug, 'budget', e.target.value)}
-                            placeholder={`e.g. ${currencySymbol}25000`}
-                            className="connect-input"
-                          />
-                        </Field>
-                      )}
-
-                      <Field label={product === 'assignment' ? 'Scope & deliverables' : 'Short note'} optional>
+                      <Field label="Short note" optional>
                         <textarea
                           rows={2}
                           value={req.note}
                           onChange={(e) => updateRoleReq(opt.slug, 'note', e.target.value)}
-                          placeholder={
-                            product === 'assignment'
-                              ? 'Describe the project scope, deliverables, and any context.'
-                              : "Explain the kind of work you're looking to get done."
-                          }
+                          placeholder="Explain the kind of work you're looking to get done."
                           className="connect-input resize-none"
                         />
                       </Field>
+                      </>
+                      )}
                     </div>
                   </div>
                 );

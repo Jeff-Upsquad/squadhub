@@ -178,6 +178,7 @@ export default function AdminPublishedCardRecipientsView({
   // above still conveys who was assigned.
   const canAssign =
     !card.selected_recipient_id &&
+    !card.archived_at &&
     (card.state === 'published' || card.state === 'assigned');
 
   // Pre-check already-selected recipients
@@ -428,26 +429,41 @@ export default function AdminPublishedCardRecipientsView({
     [allRecipients, isManual],
   );
 
-  // Bucket-aware state pill (mirrors AdminPublishedCards.categorize). A card
-  // with selected_recipient_id always shows "Assigned" regardless of state.
-  const bucket: 'active' | 'selected' | 'assigned' | 'cancelled' = card.selected_recipient_id
-    ? 'assigned'
-    : card.state === 'assigned'
-      ? 'selected'
-      : card.state === 'closed'
-        ? 'cancelled'
-        : 'active';
+  // Bucket-aware state pill (mirrors AdminPublishedCards.categorize). Archived
+  // wins over everything — an archived card keeps state='published', so without
+  // this it would mislabel as "Active" and still offer Broadcast. A card with
+  // selected_recipient_id otherwise shows "Assigned" regardless of state.
+  const bucket: 'active' | 'selected' | 'assigned' | 'cancelled' | 'archived' = card.archived_at
+    ? 'archived'
+    : card.selected_recipient_id
+      ? 'assigned'
+      : card.state === 'assigned'
+        ? 'selected'
+        : card.state === 'closed'
+          ? 'cancelled'
+          : 'active';
   const stateColor =
     bucket === 'active' ? '#10B981'
       : bucket === 'selected' ? '#0EA5E9'
       : bucket === 'assigned' ? '#059669'
+      : bucket === 'archived' ? '#7C3AED'
       : '#6B7280';
   const stateLabel =
     bucket === 'active' ? 'Active'
       : bucket === 'selected' ? 'Selected'
       : bucket === 'assigned' ? 'Assigned'
+      : bucket === 'archived' ? 'Archived'
       : 'Cancelled';
-  const distLabel = card.distribution === 'manual' ? 'Soft Published' : 'Broadcast';
+  // Lifecycle status pill (distinct from the distribution mode it used to show).
+  // For broadcast-mode cards: "Published" while staged (nothing pushed yet) vs
+  // "Broadcasted" once the Broadcast action has sent it. Soft-publish/draft keep
+  // their own labels.
+  const lifecycleStatus =
+    card.distribution === 'manual'
+      ? { label: 'Soft Published', bg: '#EEF2F6', color: '#475569' }
+      : card.needs_broadcast
+        ? { label: 'Published', bg: '#DBEAFE', color: '#1E40AF' }
+        : { label: 'Broadcasted', bg: '#DCFCE7', color: '#166534' };
   const publisher = card.published_by_user;
   const isUnreviewed = (bucket === 'assigned' || bucket === 'selected') && !card.admin_reviewed_at;
 
@@ -493,8 +509,8 @@ export default function AdminPublishedCardRecipientsView({
                   <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stateColor }} />
                   {stateLabel}
                 </span>
-                <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
-                  {distLabel}
+                <span className="sh-status-pill" style={{ backgroundColor: lifecycleStatus.bg, color: lifecycleStatus.color }}>
+                  {lifecycleStatus.label}
                 </span>
                 {card.recalled_at && (
                   <span className="sh-status-pill" style={{ backgroundColor: '#FFE9D9', color: '#9A3412' }}>
@@ -551,7 +567,6 @@ export default function AdminPublishedCardRecipientsView({
                   {publisher && <> by {publisher.display_name || publisher.email || publisher.id.slice(0, 8)}</>}
                 </p>
               )}
-              {tierTabs}
             </div>
             <div className="lg:w-[280px] lg:shrink-0">
               <div className="mb-2 flex items-center justify-between gap-2">
@@ -727,6 +742,10 @@ export default function AdminPublishedCardRecipientsView({
                 );
               })}
             </div>
+
+            {/* Per-tier tabs (multi-tier briefs) — switching loads that tier's
+                recipients into the counts + list below. */}
+            {tierTabs}
 
             {/* Tab bar */}
             <div className="overflow-x-auto">
