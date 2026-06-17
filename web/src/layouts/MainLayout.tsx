@@ -46,6 +46,8 @@ import DayPlannerView from '../views/app/DayPlannerView';
 import RoutinesView from '../views/app/RoutinesView';
 import LearningShell from '../views/app/learning/LearningShell';
 import ClipsView from '../views/app/clips/ClipsView';
+import AppsSidebar from '../views/app/apps/AppsSidebar';
+import { launchApp, type AppDef } from '../config/apps';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
 import { useNavHistory } from '../hooks/useNavHistory';
 import { useUnreadCount } from '../hooks/useUnreadCount';
@@ -448,6 +450,33 @@ export default function MainLayout() {
     setHomeView('tasks');
   };
 
+  // Launch an app from the home sidebar's pinned-apps section — switches to the
+  // home section and opens the app's view. Link-out apps (SquadBooks) hand off
+  // with an SSO token instead.
+  const handleLaunchApp = (app: AppDef) => {
+    void launchApp(app, {
+      workspace: currentWorkspace,
+      openView: (v) => {
+        setActiveSection('home');
+        setHomeView(v);
+        setMobileDrawerOpen(false);
+      },
+    });
+  };
+
+  // Open an app from the Apps module's sidebar — stays in the Apps section so
+  // the app list remains visible to switch between apps. Link-out apps hand off
+  // with an SSO token and leave the current view untouched.
+  const handleOpenAppInModule = (app: AppDef) => {
+    void launchApp(app, {
+      workspace: currentWorkspace,
+      openView: (v) => {
+        setHomeView(v);
+        setMobileDrawerOpen(false);
+      },
+    });
+  };
+
   // ---- In-app navigation history (sidebar back/forward buttons) ----
   // Page identity: which fields matter depends on the view, so background
   // changes (e.g. default channel auto-selecting while on a tasks view)
@@ -717,24 +746,37 @@ export default function MainLayout() {
           }`}
           style={{ boxShadow: 'var(--sh-sidebar-drop)' }}
         >
-          <HomeSidebar
-            workspaceId={currentWorkspace.id}
-            channels={channels}
-            activeChannelId={activeChannelId}
-            homeView={homeView}
-            inboxAlert={inboxAlert}
-            inboxPulse={inboxPulse}
-            canGoBack={nav.canGoBack}
-            canGoForward={nav.canGoForward}
-            onNavBack={nav.goBack}
-            onNavForward={nav.goForward}
-            onChangeView={(v) => { setActiveSection('home'); setHomeView(v); setMobileDrawerOpen(false); }}
-            onSelectChannel={handleSelectChannel}
-            onSelectDm={handleSelectDm}
-            onCreateChannel={() => setShowCreateChannel(true)}
-            onOpenSpaces={handleOpenSpaces}
-            onOpenSearch={() => setSearchOpen(true)}
-          />
+          {activeSection === 'apps' ? (
+            <AppsSidebar
+              activeView={homeView}
+              onOpenApp={handleOpenAppInModule}
+              canGoBack={nav.canGoBack}
+              canGoForward={nav.canGoForward}
+              onNavBack={nav.goBack}
+              onNavForward={nav.goForward}
+            />
+          ) : (
+            <HomeSidebar
+              workspaceId={currentWorkspace.id}
+              channels={channels}
+              activeChannelId={activeChannelId}
+              homeView={homeView}
+              inboxAlert={inboxAlert}
+              inboxPulse={inboxPulse}
+              canGoBack={nav.canGoBack}
+              canGoForward={nav.canGoForward}
+              onNavBack={nav.goBack}
+              onNavForward={nav.goForward}
+              onChangeView={(v) => { setActiveSection('home'); setHomeView(v); setMobileDrawerOpen(false); }}
+              onSelectChannel={handleSelectChannel}
+              onSelectDm={handleSelectDm}
+              onCreateChannel={() => setShowCreateChannel(true)}
+              onOpenSpaces={handleOpenSpaces}
+              onOpenSearch={() => setSearchOpen(true)}
+              onOpenApps={() => { setActiveSection('apps'); setMobileDrawerOpen(false); }}
+              onLaunchApp={handleLaunchApp}
+            />
+          )}
         </div>
       )}
       </aside>
@@ -758,6 +800,31 @@ export default function MainLayout() {
         <ActiveTimer />
         {activeSection === 'learning' ? (
           <LearningShell />
+        ) : activeSection === 'apps' ? (
+          // Apps module — render the app opened from the Apps sidebar, or an
+          // empty state prompting a selection. App views reuse the same
+          // components as the home section.
+          homeView === 'checkin' ? (
+            <CheckInWidget title="Daily Check-In Teammates" context="teammates" />
+          ) : homeView === 'checkin-partners' ? (
+            <CheckInWidget title="Daily Check-In Partners" context="partners" />
+          ) : homeView === 'time-management' ? (
+            <TimeManagementPage />
+          ) : homeView === 'sales-leads' ? (
+            <SalesLeadsPage />
+          ) : homeView === 'clips' ? (
+            <ClipsView />
+          ) : homeView === 'cashbook' && isPartner ? (
+            <PartnerCashBook />
+          ) : homeView === 'cashbook' && (userType === 'client' || userType === 'client_staff') ? (
+            <ClientCashBook />
+          ) : (
+            <div className="sh-view flex flex-1 flex-col items-center justify-center">
+              <div className="mb-4 opacity-20 text-[var(--sh-ink-3)]">{ICON.apps}</div>
+              <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>Apps</h3>
+              <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Select an app from the list to open it here</p>
+            </div>
+          )
         ) : activeSection !== 'home' ? (
           <div className="sh-view flex flex-1 flex-col items-center justify-center">
             <div className="mb-4 opacity-20 text-[var(--sh-ink-3)]">{ICON[activeSection as keyof typeof ICON]}</div>

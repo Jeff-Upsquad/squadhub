@@ -2,26 +2,22 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { Channel, SubscriptionCardRecipient } from '@squadhub/shared';
 import type { HomeView } from '../../layouts/MainLayout';
-import api, { getFreshAccessToken } from '../../services/api';
+import api from '../../services/api';
 import { useFavorites, useRemoveFavorite } from '../../hooks/useFavorites';
 import { useSharedWithMe } from '../../hooks/useSharedWithMe';
 import { useHasPermission } from '../../hooks/usePermissions';
 import { usePMStore } from '../../stores/pmStore';
 import SpaceTree from './pm/SpaceTree';
 import CreateSpaceModal from './pm/CreateSpaceModal';
-import { useHasMiniApp } from '../../hooks/useMiniApps';
+import { useAvailableApps } from '../../hooks/useApps';
+import { useAppFavoritesStore } from '../../stores/appFavoritesStore';
+import { AppIcon, type AppDef } from '../../config/apps';
 import { useUnreadCount } from '../../hooks/useUnreadCount';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useIsClient, useIsPartner } from '../../hooks/useUserType';
 import { useDms } from '../../hooks/useDms';
 import NewDmModal from './chat/NewDmModal';
 import DmListItem from './chat/DmListItem';
-
-// SquadBooks is a sibling app (own subdomain + DB). Launch = link-out with an
-// SSO handoff token, mirroring how Squad Clips hands off its session.
-const SQUADBOOKS_URL =
-  process.env.NEXT_PUBLIC_SQUADBOOKS_URL ||
-  (process.env.NODE_ENV === 'production' ? 'https://books.squadhub.in' : 'http://localhost:3300');
 
 // ---- Props ----
 interface HomeSidebarProps {
@@ -39,6 +35,10 @@ interface HomeSidebarProps {
   onCreateChannel: () => void;
   onOpenSpaces: () => void;
   onOpenSearch: () => void;
+  /** Open the Apps module (the "browse all apps" tab). */
+  onOpenApps: () => void;
+  /** Launch an app (internal view or SSO link-out) — owned by MainLayout. */
+  onLaunchApp: (app: AppDef) => void;
   /** Inbox notification badge is in its "recent" (red) window. */
   inboxAlert?: boolean;
   /** Inbox notification badge should pulse (just arrived). */
@@ -206,6 +206,8 @@ export default function HomeSidebar({
   onCreateChannel,
   onOpenSpaces,
   onOpenSearch,
+  onOpenApps,
+  onLaunchApp,
   inboxAlert = false,
   inboxPulse = false,
 }: HomeSidebarProps) {
@@ -230,16 +232,14 @@ export default function HomeSidebar({
   const [showCreateSpace, setShowCreateSpace] = useState(false);
   const isClient = useIsClient();
   const isPartner = useIsPartner();
-  const hasCheckin = useHasMiniApp('daily-checkin');
-  const hasCheckinPartners = useHasMiniApp('daily-checkin-partners');
-  const hasTimeManagement = useHasMiniApp('time-management');
-  const hasSalesLeads = useHasMiniApp('sales-leads');
-  const hasCashBook = useHasMiniApp('cash-book');
-  const hasSquadClips = useHasMiniApp('squad-clips');
-  const hasSquadBooks = useHasMiniApp('squadbooks');
+  // Apps the user can access + their pinned subset (shown in the Apps section).
+  const availableApps = useAvailableApps();
+  const appFavorites = useAppFavoritesStore((s) => s.favorites);
+  const favoriteApps = availableApps.filter((a) => appFavorites.includes(a.slug));
   const { data: inboxUnreadCount } = useUnreadCount();
 
   const [expandedSections, setExpandedSections] = useState({
+    apps: true,
     favorites: true,
     sharedWithMe: true,
     spaces: true,
@@ -381,130 +381,6 @@ export default function HomeSidebar({
             active={homeView === 'my-tasks'}
             onClick={() => onChangeView('my-tasks')}
           />
-          {hasCheckin && (
-            <button
-              onClick={() => onChangeView('checkin')}
-              className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
-                homeView === 'checkin'
-                  ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
-                  : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-              }`}
-              style={homeView === 'checkin' ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
-            >
-              <svg className={`h-[14px] w-[14px] shrink-0 ${homeView === 'checkin' ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Daily Check-In
-            </button>
-          )}
-
-          {hasCheckinPartners && (
-            <button
-              onClick={() => onChangeView('checkin-partners')}
-              className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
-                homeView === 'checkin-partners'
-                  ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
-                  : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-              }`}
-              style={homeView === 'checkin-partners' ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
-            >
-              <svg className={`h-[14px] w-[14px] shrink-0 ${homeView === 'checkin-partners' ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Daily Check-In
-            </button>
-          )}
-
-          {hasTimeManagement && (
-            <button
-              onClick={() => onChangeView('time-management')}
-              className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
-                homeView === 'time-management'
-                  ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
-                  : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-              }`}
-              style={homeView === 'time-management' ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
-            >
-              <svg className={`h-[14px] w-[14px] shrink-0 ${homeView === 'time-management' ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Time Management
-            </button>
-          )}
-
-          {hasSalesLeads && (
-            <button
-              onClick={() => onChangeView('sales-leads')}
-              className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
-                homeView === 'sales-leads'
-                  ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
-                  : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-              }`}
-              style={homeView === 'sales-leads' ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
-            >
-              <svg className={`h-[14px] w-[14px] shrink-0 ${homeView === 'sales-leads' ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`} fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-              </svg>
-              Sales Leads
-            </button>
-          )}
-
-          {hasCashBook && (
-            <button
-              onClick={() => onChangeView('cashbook')}
-              className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
-                homeView === 'cashbook'
-                  ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
-                  : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-              }`}
-              style={homeView === 'cashbook' ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
-            >
-              <svg className={`h-[14px] w-[14px] shrink-0 ${homeView === 'cashbook' ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`} fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
-              </svg>
-              Cash Book
-            </button>
-          )}
-
-          {hasSquadClips && (
-            <button
-              onClick={() => onChangeView('clips')}
-              className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
-                homeView === 'clips'
-                  ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
-                  : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-              }`}
-              style={homeView === 'clips' ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
-            >
-              <svg className={`h-[14px] w-[14px] shrink-0 ${homeView === 'clips' ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`} fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
-              </svg>
-              Squad Clips
-            </button>
-          )}
-
-          {hasSquadBooks && (
-            <button
-              onClick={async () => {
-                const token = await getFreshAccessToken();
-                if (!token || !currentWorkspace) return;
-                const url = `${SQUADBOOKS_URL}/sso#t=${encodeURIComponent(token)}&w=${encodeURIComponent(
-                  currentWorkspace.id,
-                )}&wn=${encodeURIComponent(currentWorkspace.name)}`;
-                window.open(url, '_blank', 'noopener');
-              }}
-              className="flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
-            >
-              <svg className="h-[14px] w-[14px] shrink-0 text-[var(--sh-ink-3)]" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </svg>
-              SquadBooks
-              <svg className="ml-auto h-3 w-3 shrink-0 text-[var(--sh-ink-4)]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-              </svg>
-            </button>
-          )}
-
           {isClient && (
             <button
               onClick={() => onChangeView('published-cards')}
@@ -532,6 +408,77 @@ export default function HomeSidebar({
 
         {/* Divider */}
         <div className="mx-2 border-t border-[var(--sh-hair)]" />
+
+        {/* Apps section — pinned apps. Only shown when the user has app access;
+            apps are pinned from the Apps module (the rail's grid icon). */}
+        {availableApps.length > 0 && (
+          <>
+            <div className="py-1">
+              <SectionHeader
+                title="Apps"
+                expanded={expandedSections.apps}
+                onToggle={() => toggleSection('apps')}
+                action={
+                  <button
+                    onClick={onOpenApps}
+                    className="text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink)]"
+                    title="Browse all apps"
+                    aria-label="Browse all apps"
+                  >
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                      <rect x="3" y="3" width="7" height="7" rx="1" />
+                      <rect x="14" y="3" width="7" height="7" rx="1" />
+                      <rect x="3" y="14" width="7" height="7" rx="1" />
+                      <rect x="14" y="14" width="7" height="7" rx="1" />
+                    </svg>
+                  </button>
+                }
+              />
+              {expandedSections.apps && (
+                <div className="px-2 pb-1">
+                  {favoriteApps.length === 0 ? (
+                    <button
+                      onClick={onOpenApps}
+                      className="w-full px-2 py-2 text-center text-[11.5px] text-[var(--sh-ink-4)] transition hover:text-[var(--sh-ink-3)]"
+                    >
+                      Star apps to pin them here
+                    </button>
+                  ) : (
+                    favoriteApps.map((app) => {
+                      const active = !!app.view && homeView === app.view;
+                      return (
+                        <button
+                          key={app.slug}
+                          onClick={() => onLaunchApp(app)}
+                          className={`mb-[1px] flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
+                            active
+                              ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+                              : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+                          }`}
+                          style={active ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+                        >
+                          <AppIcon
+                            paths={app.paths}
+                            className={`h-[14px] w-[14px] shrink-0 ${active ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`}
+                          />
+                          <span className="flex-1 truncate">{app.name}</span>
+                          {app.external && (
+                            <svg className="h-3 w-3 shrink-0 text-[var(--sh-ink-4)]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                            </svg>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="mx-2 border-t border-[var(--sh-hair)]" />
+          </>
+        )}
 
         {/* Favorites section */}
         <div className="py-1">
