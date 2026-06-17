@@ -6,6 +6,7 @@ export default function SignupPage() {
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -14,6 +15,12 @@ export default function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -133,6 +140,22 @@ export default function SignupPage() {
               minLength={8}
               className="h-11 w-full rounded-lg border border-[#E2E8F0] bg-white px-3.5 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-2 focus:ring-[#2962FF]/20 dark:border-divider dark:bg-surface-alt dark:text-foreground dark:placeholder-foreground-dim"
               placeholder="Min 8 characters"
+            />
+            <p className="mt-1.5 text-xs text-[#62748E] dark:text-foreground-muted">
+              First-time users: create your own password here — you&apos;ll use it to sign in.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-[#0F172B] dark:text-foreground">Confirm password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              minLength={8}
+              className="h-11 w-full rounded-lg border border-[#E2E8F0] bg-white px-3.5 text-sm text-[#0F172B] placeholder-[#90A1B9] outline-none transition focus:border-[#2962FF] focus:ring-2 focus:ring-[#2962FF]/20 dark:border-divider dark:bg-surface-alt dark:text-foreground dark:placeholder-foreground-dim"
+              placeholder="Re-enter your password"
             />
           </div>
 
