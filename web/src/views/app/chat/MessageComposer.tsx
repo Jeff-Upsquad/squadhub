@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -141,13 +141,18 @@ interface Props {
   onSend: () => void;
 }
 
-export default function MessageComposer({
+export interface MessageComposerHandle {
+  /** Stage a dropped/pasted file as a pending attachment (first file only, matching the picker). */
+  addFiles: (files: FileList | File[]) => void;
+}
+
+const MessageComposer = forwardRef<MessageComposerHandle, Props>(function MessageComposer({
   channelId,
   kind = 'channel',
   parentMessageId,
   placeholder,
   onSend,
-}: Props) {
+}: Props, ref) {
   const [sending, setSending] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -435,6 +440,14 @@ export default function MessageComposer({
     if (f) setPendingFile(f);
     e.target.value = '';
   };
+
+  // Let the surrounding chat panel forward dropped files into this composer.
+  useImperativeHandle(ref, () => ({
+    addFiles: (files: FileList | File[]) => {
+      const f = Array.from(files)[0];
+      if (f) setPendingFile(f);
+    },
+  }), []);
 
   const handleVoiceComplete = async (blob: Blob, durationMs: number) => {
     setRecording(false);
@@ -770,5 +783,7 @@ export default function MessageComposer({
         )}
     </form>
   );
-}
+});
+
+export default MessageComposer;
 

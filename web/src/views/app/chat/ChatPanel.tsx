@@ -4,8 +4,9 @@ import api from '../../../services/api';
 import { getSocket } from '../../../services/socket';
 import type { Message } from '@squadhub/shared';
 import MessageBubble, { DateSeparator } from './MessageBubble';
-import MessageComposer from './MessageComposer';
+import MessageComposer, { type MessageComposerHandle } from './MessageComposer';
 import ThreadPanel from './ThreadPanel';
+import { usePanelFileDrop } from '../pm/usePanelFileDrop';
 import { useWorkspaceStore, type ChatKind } from '../../../stores/workspaceStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useIsOnline } from '../../../stores/presenceStore';
@@ -254,10 +255,21 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
     return dt >= 0 && dt < 5 * 60 * 1000;
   };
 
+  // Drag a file anywhere over the conversation to stage it on the composer.
+  const composerRef = useRef<MessageComposerHandle>(null);
+  const { dragActive, panelHandlers } = usePanelFileDrop((files) => {
+    composerRef.current?.addFiles(files);
+  });
+
   return (
     <div className="squadhub-chat flex flex-1 overflow-hidden">
       {/* Main message column */}
-      <div className="flex flex-1 flex-col min-w-0">
+      <div className="relative flex flex-1 flex-col min-w-0" {...panelHandlers}>
+        {dragActive && (
+          <div aria-hidden className="sqc-drop-overlay">
+            <div className="sqc-drop-overlay__label">Drop a file to attach</div>
+          </div>
+        )}
         {/* Scrollable messages area */}
         <div className="sqc-msg-scroll" ref={scrollRef}>
           {/* Slack-style intro at the start of history */}
@@ -278,6 +290,7 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
         </div>
         {/* Composer pinned to bottom */}
         <MessageComposer
+          ref={composerRef}
           channelId={channelId}
           kind={kind}
           placeholder={composerPlaceholder}
