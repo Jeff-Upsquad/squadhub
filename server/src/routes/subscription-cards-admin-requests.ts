@@ -393,6 +393,14 @@ const clientBriefSchema = z.object({
     .default([]),
   plan_name: z.string().optional(),
   proposed_price: z.number().int().nonnegative().optional(),
+  // Product line. 'assignment' is a one-off freelance project — the plan is
+  // dropped and proposed_price is the one-time project budget; the timeline
+  // fields below are stored in assignment_details.
+  card_type: z.enum(['subscription', 'assignment']).optional().default('subscription'),
+  duration: z.string().optional(),
+  start_date: z.string().optional(),
+  deadline: z.string().optional(),
+  scope_type: z.string().optional(),
 });
 
 router.post('/subscription-cards/client-brief', async (req: Request, res: Response) => {
@@ -432,8 +440,22 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
         requirement_note: body.requirement_note || null,
         hours_note: body.hours_note || null,
         target_tiers: body.target_tiers || [],
-        plan_name: body.plan_name || null,
-        proposed_price: body.proposed_price ?? null,
+        // Assignment cards have no weekly plan; proposed_price is the one-time
+        // project budget. chk_proposed_price requires NULL or > 0, so coerce 0
+        // ("no budget stated") to NULL rather than fail the insert.
+        plan_name: body.card_type === 'assignment' ? null : body.plan_name || null,
+        proposed_price:
+          body.proposed_price && body.proposed_price > 0 ? body.proposed_price : null,
+        card_type: body.card_type,
+        assignment_details:
+          body.card_type === 'assignment'
+            ? {
+                duration: body.duration || null,
+                start_date: body.start_date || null,
+                deadline: body.deadline || null,
+                scope_type: body.scope_type || null,
+              }
+            : null,
         working_days: body.working_days || [],
         target_languages: body.languages || [],
         customer_name: body.contact_name || null,

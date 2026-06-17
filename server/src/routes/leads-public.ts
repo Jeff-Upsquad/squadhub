@@ -326,13 +326,15 @@ const submissionSchema = z.object({
   country_id: z.string().uuid(),
   state_regions: z.array(z.string().trim().min(1).max(100)).max(60).default([]),
   languages: z.array(z.string().trim().min(1).max(60)).min(1).max(20),
+  // Subscriptions need ≥1 working day; assignments don't use working days at
+  // all. The min-1 rule is enforced conditionally (subscription only) below.
   working_days: z
     .array(z.string().trim())
-    .min(1)
     .max(7)
     .refine((arr) => arr.every((d) => VALID_DAYS.has(d)), {
       message: 'working_days must be Mon..Sun',
-    }),
+    })
+    .default([]),
   // Per-role requirement details, keyed by service_type slug. Each card
   // emitted below picks up its own entry. Brand-level requirement_note is
   // no longer the source of truth — kept on the brand row as null going
@@ -351,14 +353,32 @@ const submissionSchema = z.object({
           .max(5)
           .optional(),
         plan: z.string().trim().max(50).optional(),
-        // Per-tier monthly budget (the client's proposed price for that level),
-        // keyed by tier. Stored into the card's tier_pricing so a multi-tier
-        // publish fans out with each level's own price.
+        // Subscription path: per-tier monthly budget (the client's proposed
+        // price per level), keyed by tier → card tier_pricing.
         tier_budgets: z.record(z.string(), z.number().int().nonnegative()).optional(),
+        // Assignment path: a single one-off project budget + timeline. budget
+        // → proposed_price; the timeline fields land in assignment_details.
+        budget: z.number().int().nonnegative().optional(),
+        duration: z.string().trim().max(200).optional(),
+        start_date: z.string().trim().max(40).optional(),
+        deadline: z.string().trim().max(40).optional(),
+        scope_type: z.string().trim().max(100).optional(),
       }),
     )
     .optional()
     .default({}),
+  // Product line for this submission. 'assignment' = a freelance project brief
+  // (project budget + scope + timeline instead of a weekly plan + monthly price).
+  card_type: z.enum(['subscription', 'assignment']).optional().default('subscription'),
+}).superRefine((val, ctx) => {
+  // Subscriptions still require at least one working day; assignments don't.
+  if (val.card_type !== 'assignment' && val.working_days.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['working_days'],
+      message: 'Please pick at least one working day.',
+    });
+  }
 });
 
 router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
@@ -539,9 +559,28 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
           markup: 0,
           service_type: SLUG_TO_SERVICE_TYPE[slug],
           target_tiers: roleReq?.tiers || [],
-          plan_name: roleReq?.plan || null,
-          tier_pricing: roleTierPricing,
-          proposed_price: roleSingleProposed,
+          // Assignments carry no weekly plan; subscriptions keep theirs.
+          plan_name: body.card_type === 'assignment' ? null : roleReq?.plan || null,
+          card_type: body.card_type,
+          assignment_details:
+            body.card_type === 'assignment'
+              ? {
+                  duration: roleReq?.duration || null,
+                  start_date: roleReq?.start_date || null,
+                  deadline: roleReq?.deadline || null,
+                  scope_type: roleReq?.scope_type || null,
+                }
+              : null,
+          // Subscriptions: per-tier budgets → tier_pricing (multi-tier fan-out).
+          // Assignments don't use per-tier pricing.
+          tier_pricing: body.card_type === 'assignment' ? {} : roleTierPricing,
+          // chk_proposed_price requires NULL or > 0. Assignment: the single
+          // project budget; subscription: the single-tier proposed price
+          // (multi-tier publishes from tier_pricing). 0 ("not stated") → NULL.
+          proposed_price:
+            body.card_type === 'assignment'
+              ? (roleReq?.budget && roleReq.budget > 0 ? roleReq.budget : null)
+              : roleSingleProposed,
           working_days: body.working_days,
           customer_name: body.contact_name,
           customer_email: body.email,
@@ -747,13 +786,15 @@ const cardSubmitSchema = z.object({
   country_id: z.string().uuid(),
   state_regions: z.array(z.string().trim().min(1).max(100)).max(60).default([]),
   languages: z.array(z.string().trim().min(1).max(60)).min(1).max(20),
+  // Subscriptions need ≥1 working day; assignments don't use working days at
+  // all. The min-1 rule is enforced conditionally (subscription only) below.
   working_days: z
     .array(z.string().trim())
-    .min(1)
     .max(7)
     .refine((arr) => arr.every((d) => VALID_DAYS.has(d)), {
       message: 'working_days must be Mon..Sun',
-    }),
+    })
+    .default([]),
   requirement_note: z.string().trim().max(2000).optional().or(z.literal('')),
   hours_note: z.string().trim().max(200).optional().or(z.literal('')),
   // Subscription choices — the client's own selections. tiers enum-guarded so

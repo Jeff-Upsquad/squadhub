@@ -1,109 +1,73 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import api from '@/services/api';
-import { showToast } from '@/components/Toast';
-import { STATES_BY_COUNTRY_NAME, LANGUAGE_OPTIONS } from './locationLanguageOptions';
+import { useEffect, useRef, useState } from 'react';
 
-// The internal-facing clone of the public /connect brief form — identical UI,
-// layout, copy, and fields. The salesperson fills out exactly what the client
-// would. Multi-select roles create one internal_brief card per role (mirroring
-// /connect), each tagged source='internal_brief' + created_by via the admin
-// endpoint. The slider picks which brief to open:
-//   'creative'   → Designer / Editor / Designer + Editor   (/connect)
-//   'accountant' → Accountant                              (/connect/accountant)
-export type BriefType = 'creative' | 'accountant';
-
-export const BRIEF_TYPES: { key: BriefType; title: string; blurb: string }[] = [
-  {
-    key: 'creative',
-    title: 'Designer / Video Editor',
-    blurb: 'Creative brief — designers, video editors, or both.',
-  },
-  {
-    key: 'accountant',
-    title: 'Accountant',
-    blurb: 'Finance brief — bookkeeping, GST, audits, and more.',
-  },
-];
-
-// Product line the brief belongs to. 'subscription' is the recurring-plan
-// brief; 'assignment' is a one-off freelance project (project budget + scope +
-// timeline instead of a weekly plan + monthly price). Both reuse this form and
-// land in the same All Deals → Published Cards pipeline.
-export type BriefProduct = 'subscription' | 'assignment';
-
-// Launcher options for the admin "New client brief" slider — the cartesian of
-// product × role type. Each opens ClientBriefForm with the matching product + type.
-export const BRIEF_LAUNCHERS: {
-  key: string;
-  product: BriefProduct;
-  type: BriefType;
-  title: string;
-  blurb: string;
-}[] = [
-  { key: 'sub-creative', product: 'subscription', type: 'creative', title: 'Subscription · Designer / Video Editor', blurb: 'Recurring creative subscription — designers, editors, or both.' },
-  { key: 'sub-accountant', product: 'subscription', type: 'accountant', title: 'Subscription · Accountant', blurb: 'Recurring finance subscription — bookkeeping, GST, audits.' },
-  { key: 'asg-creative', product: 'assignment', type: 'creative', title: 'Assignment · Designer / Video Editor', blurb: 'One-off freelance project — scope, budget & timeline.' },
-  { key: 'asg-accountant', product: 'assignment', type: 'accountant', title: 'Assignment · Accountant', blurb: 'One-off finance project — scope, budget & timeline.' },
-];
-
-type RoleOption = { slug: string; title: string; service_type: string; description: string };
-
-// Mirrors /connect's ROLE_OPTIONS. Multi-select; each maps to a canonical
-// service_type label, and each selected role becomes its own card.
-const ROLE_OPTIONS: RoleOption[] = [
-  {
-    slug: 'designer',
-    title: 'Designer',
-    service_type: 'Designers',
-    description: 'Static visuals — graphics, logos, branding, presentations, UI/UX, print collateral.',
-  },
-  {
-    slug: 'editor',
-    title: 'Editor',
-    service_type: 'Editors',
-    description: 'Motion & video — short-form reels, long-form edits, ads, corporate videos, animations.',
-  },
-  {
-    slug: 'designer_plus_editor',
-    title: 'Designer + Editor',
-    service_type: 'Designer plus Editor',
-    description: 'One person who does both — design work and video editing — instead of hiring two separate specialists.',
-  },
-];
-
-const ACCOUNTANT_ROLE: RoleOption = {
-  slug: 'accountant',
-  title: 'Accountant',
-  service_type: 'Accountants',
-  description: 'Bookkeeping, GST, reconciliations, audits, payroll, and financial reporting.',
+// Kept in sync with admin/locationLanguageOptions.ts.
+// Inlined here because /web has no /admin dependency by design.
+const STATES_BY_COUNTRY_NAME: Record<string, string[]> = {
+  India: [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+    'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+    'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+    'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Puducherry', 'Chandigarh',
+  ],
+  'United States': [
+    'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado',
+    'Connecticut', 'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho',
+    'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana',
+    'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota',
+    'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada',
+    'New Hampshire', 'New Jersey', 'New Mexico', 'New York',
+    'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon',
+    'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota',
+    'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington',
+    'West Virginia', 'Wisconsin', 'Wyoming', 'District of Columbia',
+  ],
+  'United Kingdom': ['England', 'Scotland', 'Wales', 'Northern Ireland'],
+  'United Arab Emirates': [
+    'Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain',
+    'Ras Al Khaimah', 'Fujairah',
+  ],
+  Singapore: ['Central', 'East', 'North', 'North-East', 'West'],
+  Australia: [
+    'New South Wales', 'Victoria', 'Queensland', 'Western Australia',
+    'South Australia', 'Tasmania', 'Australian Capital Territory',
+    'Northern Territory',
+  ],
+  Canada: [
+    'Alberta', 'British Columbia', 'Manitoba', 'New Brunswick',
+    'Newfoundland and Labrador', 'Nova Scotia', 'Ontario',
+    'Prince Edward Island', 'Quebec', 'Saskatchewan',
+    'Northwest Territories', 'Nunavut', 'Yukon',
+  ],
 };
 
-const COUNTRY_CODES = [
-  { code: '+91', flag: '🇮🇳' }, { code: '+1', flag: '🇺🇸' }, { code: '+44', flag: '🇬🇧' },
-  { code: '+971', flag: '🇦🇪' }, { code: '+65', flag: '🇸🇬' }, { code: '+61', flag: '🇦🇺' },
-  { code: '+49', flag: '🇩🇪' }, { code: '+33', flag: '🇫🇷' }, { code: '+81', flag: '🇯🇵' }, { code: '+86', flag: '🇨🇳' },
-];
+type Country = { id: string; name: string; currency: string; sort_order: number };
 
-const DEFAULT_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
+const LANGUAGES = [
+  'English', 'Hindi', 'Tamil', 'Telugu', 'Malayalam', 'Kannada',
+  'Marathi', 'Bengali', 'Gujarati', 'Punjabi', 'Urdu',
+  'Arabic', 'Spanish', 'French', 'German', 'Mandarin',
+];
 
 // Build-your-own-subscription workflow (mirrors upsquadconnect.com/pricing):
 // experience level(s) → plan → budget. Display labels are plural; stored
 // values match subscription_cards.target_tiers' CHECK (Junior/Pro/Top Talents).
-const EXPERIENCE_LEVELS: { label: string; value: string }[] = [
-  { label: 'Juniors', value: 'Junior' },
-  { label: 'Pros', value: 'Pro' },
-  { label: 'Top Talents', value: 'Top Talents' },
+// Descriptions mirror the UpSquad landing page so the client knows what each
+// level means before choosing.
+const EXPERIENCE_LEVELS: { label: string; value: string; desc: string }[] = [
+  { label: 'Juniors', value: 'Junior', desc: 'Less than 2 years of experience. Great for straightforward tasks and cost-effective output.' },
+  { label: 'Pros', value: 'Pro', desc: 'More than 2 years of experience with strong, well-rounded skill sets. Reliable quality across a wide range of work.' },
+  { label: 'Top Talents', value: 'Top Talents', desc: 'Top talents with 5+ years of experience. Best for high-stakes, complex, or premium creative work.' },
 ];
 
 // Plans differ by availability (Mon–Fri) — the same five bands seeded for
-// every subscription/tier (subscription_plans). Stored as plan_name on the
-// card. Numeric hours drive the compact picker; the pct/capacity/perDay/
-// perWeek/bestFor labels drive the full "Compare plans" modal (mirrors the
-// pricing-page comparison table).
+// every subscription/tier. Stored as plan_name on the card. Numeric hours
+// drive the compact picker; the pct/capacity/perDay/perWeek/bestFor labels
+// drive the full "Compare plans" modal (mirrors the pricing-page table).
 const PLAN_OPTIONS: {
   name: string;
   dailyHours: number;
@@ -149,7 +113,85 @@ const PLAN_FEATURES: { label: string; values: React.ReactNode[]; info?: string }
   { label: 'Shared Resource', values: ['Shared', 'Shared', 'Shared', 'Shared (High Priority)', 'Personal (exclusive)'] },
 ];
 
-type Country = { id: string; name: string };
+const COUNTRY_CODES = [
+  { code: '+91', flag: '🇮🇳' },
+  { code: '+1', flag: '🇺🇸' },
+  { code: '+44', flag: '🇬🇧' },
+  { code: '+971', flag: '🇦🇪' },
+  { code: '+65', flag: '🇸🇬' },
+  { code: '+61', flag: '🇦🇺' },
+  { code: '+49', flag: '🇩🇪' },
+  { code: '+33', flag: '🇫🇷' },
+  { code: '+81', flag: '🇯🇵' },
+  { code: '+86', flag: '🇨🇳' },
+];
+
+// Multi-select roles. Mirrors upsquadconnect.com's three service-type pills
+// (Designers / Editors / Designer plus Editor). At submit time, any
+// combination collapses to a single canonical service_type — picking
+// "Designer plus Editor" OR picking both Designer + Editor both map to
+// the hybrid service_type.
+type RoleSlug = 'designer' | 'editor' | 'designer_plus_editor';
+type ServiceType = 'designer' | 'video_editor' | 'designer_video_editor';
+
+const ROLE_OPTIONS: {
+  slug: RoleSlug;
+  title: string;
+  description: string;
+}[] = [
+  {
+    slug: 'designer',
+    title: 'Designer',
+    description: 'Static visuals — graphics, logos, branding, presentations, UI/UX, print collateral.',
+  },
+  {
+    slug: 'editor',
+    title: 'Editor',
+    description: 'Motion & video — short-form reels, long-form edits, ads, corporate videos, animations.',
+  },
+  {
+    slug: 'designer_plus_editor',
+    title: 'Designer + Editor',
+    description: 'One person who does both — design work and video editing — instead of hiring two separate specialists.',
+  },
+];
+
+function rolesToServiceType(roles: RoleSlug[]): ServiceType | null {
+  const hasDesigner = roles.includes('designer');
+  const hasEditor = roles.includes('editor');
+  const hasHybrid = roles.includes('designer_plus_editor');
+  if (hasHybrid || (hasDesigner && hasEditor)) return 'designer_video_editor';
+  if (hasDesigner) return 'designer';
+  if (hasEditor) return 'video_editor';
+  return null;
+}
+
+// One service_type per role checkbox ticked — no collapsing. Picking Designer
+// + Editor (two boxes) yields ['designer', 'video_editor'] so the backend
+// emits two separate cards (two specialists). The explicit "Designer + Editor"
+// combo box still maps to a single hybrid card.
+function rolesToServiceTypes(roles: RoleSlug[]): ServiceType[] {
+  const out: ServiceType[] = [];
+  if (roles.includes('designer')) out.push('designer');
+  if (roles.includes('editor')) out.push('video_editor');
+  if (roles.includes('designer_plus_editor')) out.push('designer_video_editor');
+  return out;
+}
+
+// Phone is stored as "+91 9447402340". Split on autofill by longest-matching
+// prefix in COUNTRY_CODES; fallback to +91.
+function splitPhone(stored: string | null | undefined): { code: string; number: string } {
+  const fallback = { code: '+91', number: '' };
+  if (!stored) return fallback;
+  const trimmed = stored.trim();
+  const sorted = [...COUNTRY_CODES].sort((a, b) => b.code.length - a.code.length);
+  for (const c of sorted) {
+    if (trimmed.startsWith(c.code)) {
+      return { code: c.code, number: trimmed.slice(c.code.length).trim() };
+    }
+  }
+  return { code: fallback.code, number: trimmed };
+}
 
 type FormData = {
   brand_name: string;
@@ -167,99 +209,238 @@ type FormData = {
 };
 
 const initialForm: FormData = {
-  brand_name: '', business_nature: '', business_note: '',
-  contact_name: '', email: '', country_code: '+91', phone: '',
-  business_location: '', country_id: '', state_regions: [],
-  languages: [], working_days: DEFAULT_DAYS,
+  brand_name: '',
+  business_nature: '',
+  business_note: '',
+  contact_name: '',
+  email: '',
+  country_code: '+91',
+  phone: '',
+  business_location: '',
+  country_id: '',
+  state_regions: [],
+  languages: [],
+  working_days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
 };
 
-type RoleReq = {
+// Per-role requirement details, captured in the "Requirement" section on
+// Step 2. One sub-row per role ticked in Step 1. Both fields optional —
+// kept here as strings (not narrowed to selected roles) so toggling a
+// role off and back on preserves what the user already typed.
+type RoleRequirement = {
   note: string;
   tiers: string[];
   plan: string;
+  // Per-tier monthly budget (the client's proposed price for that level),
+  // keyed by tier value. Subscription path only.
+  tierBudgets: Record<string, string>;
+  // Assignment path only: a single one-off project budget + timeline.
   budget: string;
-  // Assignment-only project fields (ignored for subscription briefs).
   duration: string;
   startDate: string;
   deadline: string;
 };
-const EMPTY_REQ: RoleReq = { note: '', tiers: [], plan: '', budget: '', duration: '', startDate: '', deadline: '' };
+const EMPTY_ROLE_REQ: RoleRequirement = { note: '', tiers: [], plan: '', tierBudgets: {}, budget: '', duration: '', startDate: '', deadline: '' };
+const emptyRoleRequirements: Record<RoleSlug, RoleRequirement> = {
+  designer: { ...EMPTY_ROLE_REQ },
+  editor: { ...EMPTY_ROLE_REQ },
+  designer_plus_editor: { ...EMPTY_ROLE_REQ },
+};
 
-export default function ClientBriefForm({
-  type,
+// One slug per role — used on submit to key the role_requirements payload
+// by the backend's service_type vocab (editor → video_editor).
+function roleToServiceTypeSlug(role: RoleSlug): ServiceType {
+  if (role === 'designer') return 'designer';
+  if (role === 'editor') return 'video_editor';
+  return 'designer_video_editor';
+}
+
+export default function ConnectBriefForm({
   product = 'subscription',
-  onClose,
-  onCreated,
 }: {
-  type: BriefType;
-  product?: BriefProduct;
-  onClose: () => void;
-  onCreated: () => void;
+  product?: 'subscription' | 'assignment';
 }) {
-  const qc = useQueryClient();
-  // Creative starts on the role step; accountant has a single fixed role.
-  const [step, setStep] = useState<1 | 2>(type === 'accountant' ? 2 : 1);
-  const [roles, setRoles] = useState<string[]>([]);
-  const [roleReqs, setRoleReqs] = useState<Record<string, RoleReq>>({});
-  // Slug of the role whose "Compare plans" modal is open (null = closed).
-  const [comparePlanRole, setComparePlanRole] = useState<string | null>(null);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [roles, setRoles] = useState<RoleSlug[]>([]);
   const [form, setForm] = useState<FormData>(initialForm);
-  const [error, setError] = useState('');
+  const [roleRequirements, setRoleRequirements] =
+    useState<Record<RoleSlug, RoleRequirement>>(emptyRoleRequirements);
+  // Slug of the role whose "Compare plans" modal is open (null = closed).
+  const [comparePlanRole, setComparePlanRole] = useState<RoleSlug | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
+  const [countries, setCountries] = useState<Country[]>([]);
+  // Autofill state — silent single-field lookup (email OR phone). On match,
+  // pre-fill contact + latest brand + talent prefs. The user can edit
+  // brand_name to start a fresh brand; that path clears brand-specific
+  // fields and dismisses the banner.
+  const [prefilledFromLead, setPrefilledFromLead] = useState(false);
+  const prefilledBrandRef = useRef<string | null>(null);
+  const lastLookupKeyRef = useRef<string | null>(null);
 
-  const countriesQuery = useQuery({
-    queryKey: ['admin-countries'],
-    queryFn: () => api.get('/admin/countries').then((r) => r.data?.data || []),
-  });
-  const countries: Country[] = countriesQuery.data || [];
+  // Fetch country list once. Default to India (matching the upsquad onboard
+  // form's behavior) but let the user pick any country we serve.
+  useEffect(() => {
+    fetch('/clients/countries')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data)) {
+          setCountries(data.data);
+          const india = data.data.find((c: Country) => c.name === 'India');
+          setForm((prev) => ({
+            ...prev,
+            country_id: prev.country_id || india?.id || data.data[0]?.id || '',
+          }));
+        }
+      })
+      .catch(() => {/* non-fatal — admin can fix country on review */});
+  }, []);
 
-  const selectedCountryName = useMemo(
-    () => countries.find((c) => c.id === form.country_id)?.name || '',
-    [countries, form.country_id],
-  );
-  const stateOptions = useMemo(
-    () => uniq([...(STATES_BY_COUNTRY_NAME[selectedCountryName] || []), ...form.state_regions]),
-    [selectedCountryName, form.state_regions],
-  );
-  const languageOptions = useMemo(() => uniq([...LANGUAGE_OPTIONS, ...form.languages]), [form.languages]);
+  // Debounced lookup: fire when email looks valid OR phone has ≥7 digits.
+  // Don't re-fire once we've already prefilled — would clobber edits the
+  // user makes after the autofill.
+  useEffect(() => {
+    if (prefilledFromLead) return;
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+    const phoneDigits = form.phone.replace(/\D/g, '');
+    const phoneOk = phoneDigits.length >= 7;
+    if (!emailOk && !phoneOk) return;
+    const phoneForLookup = phoneOk ? `${form.country_code} ${form.phone.trim()}`.trim() : '';
+    const key = `${emailOk ? form.email.trim().toLowerCase() : ''}|${phoneForLookup}`;
+    if (key === lastLookupKeyRef.current) return;
+    lastLookupKeyRef.current = key;
+
+    const t = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams();
+        if (emailOk) params.set('email', form.email.trim());
+        if (phoneOk) params.set('phone', phoneForLookup);
+        const r = await fetch(`/leads/lookup?${params.toString()}`);
+        const data = await r.json();
+        if (!data?.success || !data.data?.found) return;
+        const lead = data.data.lead;
+        const brand = (data.data.brands || [])[0];
+        if (!lead) return;
+
+        // Re-check the guard inside the timer — the user may have
+        // dismissed the banner during the debounce.
+        setPrefilledFromLead((already) => {
+          if (already) return true;
+
+          const phoneParts = splitPhone(lead.phone);
+          setForm((prev) => ({
+            ...prev,
+            contact_name: prev.contact_name || lead.contact_name || '',
+            email: prev.email || lead.email || '',
+            country_code: prev.phone ? prev.country_code : phoneParts.code,
+            phone: prev.phone || phoneParts.number,
+            // Brand + talent prefs from the most recent brand (if any).
+            brand_name: brand?.brand_name || prev.brand_name,
+            business_nature: brand?.business_nature || prev.business_nature,
+            business_note: brand?.business_note || prev.business_note,
+            // Per-role requirement details live on subscription_cards now,
+            // not on the brand. They're tied to Step 1 (which we don't
+            // autofill either), so we leave the Requirement section empty
+            // on rehydration — same rationale as the role pills below.
+            business_location: brand?.business_location || prev.business_location,
+            country_id: brand?.country_id || prev.country_id,
+            state_regions: brand?.target_regions?.length ? brand.target_regions : prev.state_regions,
+            languages: brand?.target_languages?.length ? brand.target_languages : prev.languages,
+            working_days: brand?.working_days?.length ? brand.working_days : prev.working_days,
+          }));
+
+          // Step 1 (role pills) is intentionally NOT autofilled. The brand row
+          // stores a single collapsed service_type slug, so rehydrating from
+          // it would silently overwrite multi-pick selections (Designer +
+          // Editor) with the combo. Make the user pick roles fresh every
+          // submission instead.
+
+          prefilledBrandRef.current = brand?.brand_name || null;
+          return true;
+        });
+      } catch {
+        // Silent — autofill is a UX nicety, not load-bearing.
+      }
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [form.email, form.phone, form.country_code, prefilledFromLead]);
+
+  const selectedCountryName = countries.find((c) => c.id === form.country_id)?.name || '';
+  const stateOptions = STATES_BY_COUNTRY_NAME[selectedCountryName] || [];
   // ₹ for India (default), $ for the other countries we serve.
   const currencySymbol = selectedCountryName && selectedCountryName !== 'India' ? '$' : '₹';
 
-  // Roles whose requirement cards + cards get created. Accountant is the single
-  // fixed role; creative is whatever was ticked on step 1.
-  const selectedRoles: RoleOption[] =
-    type === 'accountant' ? [ACCOUNTANT_ROLE] : ROLE_OPTIONS.filter((r) => roles.includes(r.slug));
-
   function update<K extends keyof FormData>(field: K, value: FormData[K]) {
-    setForm((prev) => ({ ...prev, [field]: value }));
-  }
-  function changeCountry(newId: string) {
-    setForm((prev) => ({ ...prev, country_id: newId, state_regions: [] }));
-  }
-  function toggle(field: 'state_regions' | 'languages' | 'working_days', value: string) {
     setForm((prev) => {
-      const set = new Set(prev[field]);
-      if (set.has(value)) set.delete(value);
-      else set.add(value);
-      return { ...prev, [field]: Array.from(set) };
+      // "Different brand?" path: once prefilled, if the user changes the
+      // brand_name away from the autofilled one, clear the brand-specific
+      // fields and dismiss the banner. Contact + talent prefs stay — same
+      // lead is most likely still the same lead.
+      if (
+        field === 'brand_name' &&
+        prefilledFromLead &&
+        prefilledBrandRef.current &&
+        typeof value === 'string' &&
+        value.trim().toLowerCase() !== prefilledBrandRef.current.toLowerCase()
+      ) {
+        setPrefilledFromLead(false);
+        prefilledBrandRef.current = null;
+        return {
+          ...prev,
+          brand_name: value as FormData['brand_name'],
+          business_nature: '',
+          business_note: '',
+          business_location: '',
+        };
+      }
+      return { ...prev, [field]: value };
     });
   }
-  function toggleRole(slug: string) {
-    setRoles((prev) => (prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]));
+
+  function changeCountry(newCountryId: string) {
+    // Drop any selected states — they're country-specific and won't make
+    // sense if the user switches countries.
+    setForm((prev) => ({ ...prev, country_id: newCountryId, state_regions: [] }));
   }
-  function getReq(slug: string): RoleReq {
-    return roleReqs[slug] || EMPTY_REQ;
+
+  function toggle(field: 'state_regions' | 'languages' | 'working_days', value: string) {
+    setForm((prev) => {
+      const arr = prev[field];
+      return {
+        ...prev,
+        [field]: arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value],
+      };
+    });
   }
-  function setReq(
-    slug: string,
-    key: 'note' | 'plan' | 'budget' | 'duration' | 'startDate' | 'deadline',
+
+  function toggleRole(slug: RoleSlug) {
+    setRoles((prev) =>
+      prev.includes(slug) ? prev.filter((r) => r !== slug) : [...prev, slug],
+    );
+  }
+
+  function updateRoleReq(
+    slug: RoleSlug,
+    field: 'note' | 'plan' | 'budget' | 'duration' | 'startDate' | 'deadline',
     value: string,
   ) {
-    setRoleReqs((prev) => ({ ...prev, [slug]: { ...(prev[slug] || EMPTY_REQ), [key]: value } }));
+    setRoleRequirements((prev) => ({
+      ...prev,
+      [slug]: { ...prev[slug], [field]: value },
+    }));
   }
-  function toggleReqTier(slug: string, value: string) {
-    setRoleReqs((prev) => {
-      const cur = prev[slug] || EMPTY_REQ;
+
+  function updateRoleTierBudget(slug: RoleSlug, tier: string, value: string) {
+    setRoleRequirements((prev) => ({
+      ...prev,
+      [slug]: { ...prev[slug], tierBudgets: { ...prev[slug].tierBudgets, [tier]: value } },
+    }));
+  }
+
+  function toggleRoleReqTier(slug: RoleSlug, value: string) {
+    setRoleRequirements((prev) => {
+      const cur = prev[slug];
       const tiers = cur.tiers.includes(value)
         ? cur.tiers.filter((t) => t !== value)
         : [...cur.tiers, value];
@@ -267,118 +448,168 @@ export default function ClientBriefForm({
     });
   }
 
+  function goToStep2() {
+    if (roles.length === 0) return;
+    setStep(2);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const serviceTypes = rolesToServiceTypes(roles);
+    if (serviceTypes.length === 0) {
+      setStep(1);
+      return;
+    }
     setError('');
-    if (!form.contact_name.trim() || !form.email.trim() || !form.phone.trim()) {
-      setError('Contact name, email, and phone are required.');
-      return;
-    }
-    if (!form.brand_name.trim() || !form.business_nature.trim() || !form.business_note.trim()) {
-      setError('Brand name, nature of business, and a short note are required.');
-      return;
-    }
-    if (!form.country_id) {
-      setError('Please select a country.');
-      return;
-    }
+
     if (form.languages.length === 0) {
-      setError('Please select at least one language.');
+      setError('Please pick at least one language.');
       return;
     }
     if (product !== 'assignment' && form.working_days.length === 0) {
-      setError('Please select at least one working day.');
+      setError('Please pick at least one working day.');
       return;
     }
 
-    const shared = {
-      brand_name: form.brand_name.trim(),
-      business_nature: form.business_nature.trim(),
-      business_note: form.business_note.trim(),
-      contact_name: form.contact_name.trim(),
-      email: form.email.trim(),
-      phone: `${form.country_code} ${form.phone.trim()}`.trim(),
-      business_location: form.business_location.trim() || undefined,
-      country_id: form.country_id || undefined,
-      state_regions: form.state_regions,
-      languages: form.languages,
-      // Assignments don't use working days — send none.
-      working_days: product === 'assignment' ? [] : form.working_days,
-    };
+    const isAssignment = product === 'assignment';
+
+    // Build the per-role payload from current selections only. Skips roles
+    // the user ticked then un-ticked, and drops empty entries.
+    const roleReqsPayload: Record<
+      string,
+      {
+        note?: string; tiers?: string[]; plan?: string;
+        tier_budgets?: Record<string, number>;
+        budget?: number; duration?: string; start_date?: string; deadline?: string;
+      }
+    > = {};
+    for (const r of roles) {
+      const entry = roleRequirements[r];
+      const note = entry.note.trim();
+      const tiers = entry.tiers;
+
+      if (isAssignment) {
+        // Assignment: one-off project budget + timeline; no plan / per-tier price.
+        const n = entry.budget.trim() ? Math.round(Number(entry.budget)) : NaN;
+        const budget = Number.isFinite(n) && n > 0 ? n : undefined;
+        const duration = entry.duration.trim();
+        const startDate = entry.startDate;
+        const deadline = entry.deadline;
+        if (note || tiers.length || budget !== undefined || duration || startDate || deadline) {
+          roleReqsPayload[roleToServiceTypeSlug(r)] = {
+            ...(note ? { note } : {}),
+            ...(tiers.length ? { tiers } : {}),
+            ...(budget !== undefined ? { budget } : {}),
+            ...(duration ? { duration } : {}),
+            ...(startDate ? { start_date: startDate } : {}),
+            ...(deadline ? { deadline } : {}),
+          };
+        }
+        continue;
+      }
+
+      const plan = entry.plan;
+      // Per-tier budgets — only for selected tiers with a positive amount. A
+      // budget of 0 means "not stated" and must not be sent.
+      const tierBudgets: Record<string, number> = {};
+      for (const t of tiers) {
+        const raw = entry.tierBudgets[t]?.trim();
+        const n = raw ? Math.round(Number(raw)) : NaN;
+        if (Number.isFinite(n) && n > 0) tierBudgets[t] = n;
+      }
+      const hasBudgets = Object.keys(tierBudgets).length > 0;
+      if (note || tiers.length || plan || hasBudgets) {
+        roleReqsPayload[roleToServiceTypeSlug(r)] = {
+          ...(note ? { note } : {}),
+          ...(tiers.length ? { tiers } : {}),
+          ...(plan ? { plan } : {}),
+          ...(hasBudgets ? { tier_budgets: tierBudgets } : {}),
+        };
+      }
+    }
 
     setSubmitting(true);
     try {
-      // One card per selected role — mirrors /connect creating a card per service_type.
-      await Promise.all(
-        selectedRoles.map((r) => {
-          const req = getReq(r.slug);
-          const budgetNum = req.budget.trim() ? Math.round(Number(req.budget)) : NaN;
-          return api.post('/admin/subscription-cards/client-brief', {
-            ...shared,
-            service_type: r.service_type,
-            card_type: product,
-            requirement_note: req.note.trim() || undefined,
-            target_tiers: req.tiers.length ? req.tiers : undefined,
-            // Assignments have no weekly plan; budget is the one-time project budget.
-            plan_name: product === 'assignment' ? undefined : req.plan || undefined,
-            proposed_price:
-              Number.isFinite(budgetNum) && budgetNum >= 0 ? budgetNum : undefined,
-            ...(product === 'assignment'
-              ? {
-                  duration: req.duration.trim() || undefined,
-                  start_date: req.startDate || undefined,
-                  deadline: req.deadline || undefined,
-                }
-              : {}),
-          });
+      const res = await fetch('/leads/landing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service_types: serviceTypes,
+          brand_name: form.brand_name.trim(),
+          business_nature: form.business_nature.trim(),
+          business_note: form.business_note.trim(),
+          contact_name: form.contact_name.trim(),
+          email: form.email.trim(),
+          phone: `${form.country_code} ${form.phone.trim()}`.trim(),
+          business_location: form.business_location.trim() || undefined,
+          country_id: form.country_id,
+          state_regions: form.state_regions,
+          languages: form.languages,
+          // Assignments don't use working days — send none.
+          working_days: product === 'assignment' ? [] : form.working_days,
+          card_type: product,
+          ...(Object.keys(roleReqsPayload).length > 0
+            ? { role_requirements: roleReqsPayload }
+            : {}),
         }),
-      );
-      const n = selectedRoles.length;
-      showToast(`${n} client brief${n > 1 ? 's' : ''} created — find ${n > 1 ? 'them' : 'it'} in New Deals`, 'success');
-      qc.invalidateQueries({ queryKey: ['admin-internal-brief-submissions'] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
-      onCreated();
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || err.message || 'Failed to create brief';
-      setError(msg);
-      showToast(msg, 'error');
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setError(data.error || 'Something went wrong. Please try again.');
+        return;
+      }
+      setSubmitted(true);
+      if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    } catch {
+      setError('Failed to submit. Please check your connection and try again.');
     } finally {
       setSubmitting(false);
     }
   }
 
-  return (
-    <div className="connect-bg fixed inset-0 z-40 overflow-y-auto px-4 py-6 sm:py-10">
-      <div className="mx-auto max-w-2xl">
-        <button
-          type="button"
-          onClick={onClose}
-          className="-ml-1 mb-3 flex items-center gap-1 text-sm text-foreground-muted transition hover:text-foreground"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Published Cards
-        </button>
+  if (submitted) {
+    return (
+      <div className="connect-bg flex min-h-screen items-center justify-center px-4 py-8">
+        <div className="w-full max-w-md rounded-2xl bg-white border border-[#E8E5DD] p-8 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#F4F1E8]">
+            <svg className="h-8 w-8 text-[#3A3A3A]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h1 className="text-xl font-semibold text-[#222]">Thank you!</h1>
+          <p className="mt-2 text-base text-[#5C5C5C]">
+            Your brief is in. Our team will review it and reach out within one business day to confirm next steps.
+          </p>
+        </div>
+        <style jsx global>{globalStyles}</style>
+      </div>
+    );
+  }
 
-        <header className="mb-6 text-center sm:mb-8">
-          <h1 className="text-[24px] font-semibold tracking-tight text-foreground sm:text-[28px]">
+  return (
+    <div className="connect-bg min-h-screen px-4 py-6 sm:py-10">
+      <div className="mx-auto max-w-2xl">
+        <header className="mb-6 sm:mb-8 text-center">
+          <h1 className="text-[24px] sm:text-[28px] font-semibold tracking-tight text-[#222]">
             Tell us about your brand
           </h1>
-          <p className="mt-1.5 text-sm text-foreground-muted sm:text-base">
+          <p className="mt-1.5 text-sm sm:text-base text-[#5C5C5C]">
             A few quick details so we can match you with the right talent.
           </p>
         </header>
 
-        {step === 1 && type === 'creative' && (
+        {step === 1 && (
           <section className="flex flex-col items-center">
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-foreground-muted">
+            <h2 className="mb-2 text-xs font-semibold tracking-[0.12em] text-[#7A7568] uppercase">
               What do you need?
             </h2>
-            <p className="mb-2 max-w-md text-center text-sm text-foreground-muted">
+            <p className="mb-2 max-w-md text-center text-sm text-[#5C5C5C]">
               Designers create static visuals, Editors craft motion and video, or pick a hybrid who does both.
             </p>
-            <p className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-ink bg-[#F2FCBC] px-3 py-1 text-xs font-semibold text-foreground">
+            <p className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-[#0a0a0a] bg-[#F2FCBC] px-3 py-1 text-xs font-semibold text-[#0a0a0a]">
               <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
@@ -387,16 +618,16 @@ export default function ClientBriefForm({
 
             <div className="mb-2 inline-flex flex-wrap justify-center gap-2">
               {ROLE_OPTIONS.map((opt) => {
-                const on = roles.includes(opt.slug);
+                const selected = roles.includes(opt.slug);
                 return (
                   <button
                     key={opt.slug}
                     type="button"
                     onClick={() => toggleRole(opt.slug)}
-                    aria-pressed={on}
-                    className={`connect-pill ${on ? 'connect-pill-on' : ''}`}
+                    aria-pressed={selected}
+                    className={`connect-pill ${selected ? 'connect-pill-on' : ''}`}
                   >
-                    {on && (
+                    {selected && (
                       <svg className="-mt-0.5 mr-1.5 inline-block h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
@@ -408,16 +639,18 @@ export default function ClientBriefForm({
             </div>
 
             {roles.length === 0 ? (
-              <p className="mt-4 text-sm font-medium text-[#C97744]">Pick at least one to continue.</p>
+              <p className="mt-4 text-sm font-medium text-[#C97744]">
+                Pick at least one to continue.
+              </p>
             ) : (
               <div className="mt-4 w-full max-w-md space-y-2">
                 {ROLE_OPTIONS.filter((o) => roles.includes(o.slug)).map((opt) => (
                   <div key={opt.slug} className="connect-role-card">
                     <div className="mb-1.5 flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full bg-[#FCF487] ring-1 ring-ink" />
-                      <span className="text-sm font-bold text-foreground">{opt.title}</span>
+                      <span className="h-2.5 w-2.5 rounded-full bg-[#FCF487] ring-1 ring-[#0a0a0a]" />
+                      <span className="text-sm font-bold text-[#0a0a0a]">{opt.title}</span>
                     </div>
-                    <p className="text-xs leading-relaxed text-foreground-muted">{opt.description}</p>
+                    <p className="text-xs leading-relaxed text-[#5C5C5C]">{opt.description}</p>
                   </div>
                 ))}
               </div>
@@ -426,7 +659,7 @@ export default function ClientBriefForm({
             <div className="mt-6 w-full max-w-md">
               <button
                 type="button"
-                onClick={() => setStep(2)}
+                onClick={goToStep2}
                 disabled={roles.length === 0}
                 className="connect-submit"
               >
@@ -440,8 +673,8 @@ export default function ClientBriefForm({
           <form onSubmit={handleSubmit} className="space-y-5 pb-8">
             <button
               type="button"
-              onClick={() => (type === 'accountant' ? onClose() : setStep(1))}
-              className="-ml-1 mb-2 flex items-center gap-1 text-sm text-foreground-muted hover:text-foreground"
+              onClick={() => setStep(1)}
+              className="-ml-1 mb-2 flex items-center gap-1 text-sm text-[#5C5C5C] hover:text-[#222]"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -449,12 +682,20 @@ export default function ClientBriefForm({
               Back
             </button>
 
+            {prefilledFromLead && (
+              <div className="rounded-lg border border-[#0a0a0a] bg-[#F2FCBC] px-4 py-3 text-sm text-[#0a0a0a]">
+                <span className="font-semibold">Welcome back —</span>{' '}
+                pre-filled from your last brief. Change brand name to start a new brand.
+              </div>
+            )}
+
             {error && (
-              <div className="rounded-lg border border-[#E0B7A2] bg-[#FBEFE9] px-4 py-3 text-sm text-[#8B3A1A]">
+              <div className="rounded-lg bg-[#FBEFE9] border border-[#E0B7A2] px-4 py-3 text-sm text-[#8B3A1A]">
                 {error}
               </div>
             )}
 
+            {/* Section: Contact (first so we can autofill on email/phone) */}
             <Section
               eyebrow="Customer"
               title="Your contact"
@@ -464,6 +705,7 @@ export default function ClientBriefForm({
                 <Field label="Email" required>
                   <input
                     type="email"
+                    required
                     value={form.email}
                     onChange={(e) => update('email', e.target.value)}
                     placeholder="you@company.com"
@@ -485,6 +727,7 @@ export default function ClientBriefForm({
                     <span className="connect-phone-divider" />
                     <input
                       type="tel"
+                      required
                       inputMode="tel"
                       value={form.phone}
                       onChange={(e) => update('phone', e.target.value)}
@@ -496,6 +739,7 @@ export default function ClientBriefForm({
                 <Field label="Contact Person Name" required>
                   <input
                     type="text"
+                    required
                     value={form.contact_name}
                     onChange={(e) => update('contact_name', e.target.value)}
                     placeholder="Full name"
@@ -505,6 +749,7 @@ export default function ClientBriefForm({
               </div>
             </Section>
 
+            {/* Section: Brand */}
             <Section
               eyebrow="Client brief"
               title="About your brand"
@@ -513,6 +758,7 @@ export default function ClientBriefForm({
               <Field label="Brand Name" required>
                 <input
                   type="text"
+                  required
                   value={form.brand_name}
                   onChange={(e) => update('brand_name', e.target.value)}
                   placeholder="Your brand name"
@@ -522,6 +768,7 @@ export default function ClientBriefForm({
               <Field label="Nature of Business" required>
                 <input
                   type="text"
+                  required
                   value={form.business_nature}
                   onChange={(e) => update('business_nature', e.target.value)}
                   placeholder="e.g. Retail, SaaS, Education"
@@ -530,6 +777,7 @@ export default function ClientBriefForm({
               </Field>
               <Field label="Short Note About the Business" required>
                 <textarea
+                  required
                   rows={3}
                   value={form.business_note}
                   onChange={(e) => update('business_note', e.target.value)}
@@ -548,56 +796,137 @@ export default function ClientBriefForm({
               </Field>
             </Section>
 
+            {/* Section: Subscription — build-your-own-plan per role, mirroring
+                the pricing page (experience level → plan → budget). All
+                optional; empties are dropped on submit. */}
             <Section
               eyebrow={product === 'assignment' ? 'Assignment' : 'Subscription'}
               title={product === 'assignment' ? 'Scope, budget & timeline' : 'Experience level & plan'}
               hint={
                 product === 'assignment'
                   ? 'Pick the talent experience per role, set a project budget and timeline, and describe the scope. All optional — we can finalize on the call.'
-                  : 'Pick the talent experience and a weekly plan per role, add a short note, and name a monthly budget. All optional — we can finalize on the call.'
+                  : 'Pick the talent experience and a weekly plan per role, add a short note, and a monthly budget per level. All optional — we can finalize on the call.'
               }
             >
-              {selectedRoles.map((opt) => {
-                const req = getReq(opt.slug);
+              {ROLE_OPTIONS.filter((o) => roles.includes(o.slug)).map((opt) => {
+                const req = roleRequirements[opt.slug];
                 return (
                   <div key={opt.slug} className="connect-role-req overflow-hidden">
                     <div className="-mx-4 -mt-3.5 mb-4 flex items-center gap-2.5 border-b border-[#E0DCCE] bg-[#F2FCBC] px-4 py-3">
-                      <span className="h-3.5 w-3.5 rounded-full bg-[#FCF487] ring-1 ring-ink" />
-                      <span className="text-lg font-bold tracking-tight text-foreground">{opt.title}</span>
+                      <span className="h-3.5 w-3.5 rounded-full bg-[#FCF487] ring-1 ring-[#0a0a0a]" />
+                      <span className="text-lg font-bold tracking-tight text-[#0a0a0a]">{opt.title}</span>
                     </div>
                     <div className="space-y-4">
+                      {product === 'assignment' ? (
+                      <>
+                        {/* Experience level(s) — for matching only (no per-tier budget) */}
+                        <div>
+                          <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
+                            <span>Experience level(s)</span>
+                            <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+                          </label>
+                          <p className="mb-3 text-xs text-[#7A7568]">Select one or more — we&apos;ll match talent across all chosen levels.</p>
+                          <div className="space-y-2.5">
+                            {EXPERIENCE_LEVELS.map((lvl) => {
+                              const on = req.tiers.includes(lvl.value);
+                              return (
+                                <div key={lvl.value} className={`overflow-hidden rounded-xl border transition ${on ? 'border-[#0a0a0a] bg-[#F2FCBC]/50' : 'border-[#E0DCCE] bg-white'}`}>
+                                  <button type="button" onClick={() => toggleRoleReqTier(opt.slug, lvl.value)} aria-pressed={on} className="flex w-full items-start gap-3 p-3.5 text-left">
+                                    <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5] bg-white'}`}>
+                                      {on && (<svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>)}
+                                    </span>
+                                    <span className="min-w-0">
+                                      <span className="block text-sm font-semibold text-[#0a0a0a]">{lvl.label}</span>
+                                      <span className="mt-0.5 block text-xs leading-relaxed text-[#7A7568]">{lvl.desc}</span>
+                                    </span>
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <Field label="Project budget" optional hint={`Total budget for this project in ${currencySymbol}.`}>
+                          <input type="number" min="0" inputMode="numeric" value={req.budget} onChange={(e) => updateRoleReq(opt.slug, 'budget', e.target.value)} placeholder={`e.g. ${currencySymbol}50000`} className="connect-input" />
+                        </Field>
+                        <Field label="Duration / timeline" optional hint="Rough length of the engagement.">
+                          <input type="text" value={req.duration} onChange={(e) => updateRoleReq(opt.slug, 'duration', e.target.value)} placeholder="e.g. 4 weeks, 2 months" className="connect-input" />
+                        </Field>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <Field label="Start date" optional>
+                            <input type="date" value={req.startDate} onChange={(e) => updateRoleReq(opt.slug, 'startDate', e.target.value)} className="connect-input" />
+                          </Field>
+                          <Field label="Deadline" optional>
+                            <input type="date" value={req.deadline} onChange={(e) => updateRoleReq(opt.slug, 'deadline', e.target.value)} className="connect-input" />
+                          </Field>
+                        </div>
+                        <Field label="Scope & deliverables" optional>
+                          <textarea rows={2} value={req.note} onChange={(e) => updateRoleReq(opt.slug, 'note', e.target.value)} placeholder="Describe the project scope, deliverables, and any context." className="connect-input resize-none" />
+                        </Field>
+                      </>
+                      ) : (
+                      <>
                       <div>
-                        <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-foreground">
+                        <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
                           <span>Experience level(s)</span>
-                          <span className="text-xs font-normal text-foreground-muted">(optional)</span>
+                          <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
                         </label>
-                        <p className="mb-3 text-xs text-foreground-muted">
-                          Select one or more — we&apos;ll match talent across all chosen levels.
+                        <p className="mb-3 text-xs text-[#7A7568]">
+                          Select one or more — we&apos;ll match talent across all chosen levels. For each level you pick, tell us your monthly budget for that level.
                         </p>
-                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                        <div className="space-y-2.5">
                           {EXPERIENCE_LEVELS.map((lvl) => {
                             const on = req.tiers.includes(lvl.value);
                             return (
-                              <button
+                              <div
                                 key={lvl.value}
-                                type="button"
-                                onClick={() => toggleReqTier(opt.slug, lvl.value)}
-                                aria-pressed={on}
-                                className={`connect-chip ${on ? 'connect-chip-on' : ''}`}
+                                className={`overflow-hidden rounded-xl border transition ${on ? 'border-[#0a0a0a] bg-[#F2FCBC]/50' : 'border-[#E0DCCE] bg-white'}`}
                               >
-                                {on ? `✓ ${lvl.label}` : lvl.label}
-                              </button>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleRoleReqTier(opt.slug, lvl.value)}
+                                  aria-pressed={on}
+                                  className="flex w-full items-start gap-3 p-3.5 text-left"
+                                >
+                                  <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5] bg-white'}`}>
+                                    {on && (
+                                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    )}
+                                  </span>
+                                  <span className="min-w-0">
+                                    <span className="block text-sm font-semibold text-[#0a0a0a]">{lvl.label}</span>
+                                    <span className="mt-0.5 block text-xs leading-relaxed text-[#7A7568]">{lvl.desc}</span>
+                                  </span>
+                                </button>
+                                {on && (
+                                  <div className="border-t border-[#E0DCCE] px-3.5 py-3 sm:pl-11">
+                                    <label className="mb-1 block text-xs font-medium text-[#222]">
+                                      Monthly budget for {lvl.label} <span className="font-normal text-[#9C9486]">(optional)</span>
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      inputMode="numeric"
+                                      value={req.tierBudgets[lvl.value] ?? ''}
+                                      onChange={(e) => updateRoleTierBudget(opt.slug, lvl.value, e.target.value)}
+                                      placeholder={`e.g. ${currencySymbol}25000`}
+                                      className="connect-input"
+                                    />
+                                    <p className="mt-1 text-[11px] text-[#9C9486]">How much you&apos;re willing to pay per month for this level.</p>
+                                  </div>
+                                )}
+                              </div>
                             );
                           })}
                         </div>
                       </div>
 
-                      {product !== 'assignment' && (
                       <div>
                         <div className="mb-1 flex items-center justify-between gap-2">
-                          <label className="flex items-baseline gap-2 text-sm font-medium text-foreground">
+                          <label className="flex items-baseline gap-2 text-sm font-medium text-[#222]">
                             <span>Plan</span>
-                            <span className="text-xs font-normal text-foreground-muted">(optional)</span>
+                            <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
                           </label>
                           {req.tiers.length > 0 && (
                             <button
@@ -613,7 +942,7 @@ export default function ClientBriefForm({
                             </button>
                           )}
                         </div>
-                        <p className="mb-3 text-xs text-foreground-muted">
+                        <p className="mb-3 text-xs text-[#7A7568]">
                           Plans differ by availability — how much of a creative partner you get each week.
                         </p>
                         {req.tiers.length === 0 ? (
@@ -639,7 +968,7 @@ export default function ClientBriefForm({
                                       key={p.name}
                                       role="button"
                                       aria-pressed={on}
-                                      onClick={() => setReq(opt.slug, 'plan', on ? '' : p.name)}
+                                      onClick={() => updateRoleReq(opt.slug, 'plan', on ? '' : p.name)}
                                       className={`cursor-pointer border-t border-[#E8E5DD] transition ${on ? 'bg-[#F2FCBC]' : 'bg-white hover:bg-[#FBFAF6]'}`}
                                     >
                                       <td className="px-2 py-2.5 font-semibold text-[#0a0a0a] sm:px-3">
@@ -665,90 +994,25 @@ export default function ClientBriefForm({
                           </div>
                         )}
                       </div>
-                      )}
 
-                      {product === 'assignment' ? (
-                        <>
-                          <Field
-                            label="Project budget"
-                            optional
-                            hint={`Total budget for this project in ${currencySymbol}.`}
-                          >
-                            <input
-                              type="number"
-                              min="0"
-                              inputMode="numeric"
-                              value={req.budget}
-                              onChange={(e) => setReq(opt.slug, 'budget', e.target.value)}
-                              placeholder={`e.g. ${currencySymbol}50000`}
-                              className="connect-input"
-                            />
-                          </Field>
-                          <Field label="Duration / timeline" optional hint="Rough length of the engagement.">
-                            <input
-                              type="text"
-                              value={req.duration}
-                              onChange={(e) => setReq(opt.slug, 'duration', e.target.value)}
-                              placeholder="e.g. 4 weeks, 2 months"
-                              className="connect-input"
-                            />
-                          </Field>
-                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <Field label="Start date" optional>
-                              <input
-                                type="date"
-                                value={req.startDate}
-                                onChange={(e) => setReq(opt.slug, 'startDate', e.target.value)}
-                                className="connect-input"
-                              />
-                            </Field>
-                            <Field label="Deadline" optional>
-                              <input
-                                type="date"
-                                value={req.deadline}
-                                onChange={(e) => setReq(opt.slug, 'deadline', e.target.value)}
-                                className="connect-input"
-                              />
-                            </Field>
-                          </div>
-                        </>
-                      ) : (
-                        <Field
-                          label="Monthly budget"
-                          optional
-                          hint={`Your target monthly spend in ${currencySymbol}.`}
-                        >
-                          <input
-                            type="number"
-                            min="0"
-                            inputMode="numeric"
-                            value={req.budget}
-                            onChange={(e) => setReq(opt.slug, 'budget', e.target.value)}
-                            placeholder={`e.g. ${currencySymbol}25000`}
-                            className="connect-input"
-                          />
-                        </Field>
-                      )}
-
-                      <Field label={product === 'assignment' ? 'Scope & deliverables' : 'Short note'} optional>
+                      <Field label="Short note" optional>
                         <textarea
                           rows={2}
                           value={req.note}
-                          onChange={(e) => setReq(opt.slug, 'note', e.target.value)}
-                          placeholder={
-                            product === 'assignment'
-                              ? 'Describe the project scope, deliverables, and any context.'
-                              : "Explain the kind of work you're looking to get done."
-                          }
+                          onChange={(e) => updateRoleReq(opt.slug, 'note', e.target.value)}
+                          placeholder="Explain the kind of work you're looking to get done."
                           className="connect-input resize-none"
                         />
                       </Field>
+                      </>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </Section>
 
+            {/* Section: Talent preferences */}
             <Section
               eyebrow="Talent preferences"
               title="Who you'd like to work with"
@@ -756,11 +1020,12 @@ export default function ClientBriefForm({
             >
               <Field label="Country" required hint="India is the default. Pick a different country if your talent should be elsewhere.">
                 <select
+                  required
                   value={form.country_id}
                   onChange={(e) => changeCountry(e.target.value)}
                   className="connect-input"
                 >
-                  <option value="">{countries.length === 0 ? 'Loading…' : 'Select a country'}</option>
+                  {countries.length === 0 && <option value="">Loading…</option>}
                   {countries.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -781,7 +1046,7 @@ export default function ClientBriefForm({
                 label="Languages"
                 hint="Languages the talent should be fluent in. Pick all that apply."
                 required
-                options={languageOptions}
+                options={LANGUAGES}
                 selected={form.languages}
                 onToggle={(v) => toggle('languages', v)}
               />
@@ -793,8 +1058,13 @@ export default function ClientBriefForm({
               )}
             </Section>
 
+            {/* Submit (sticky on mobile) */}
             <div className="connect-submit-wrap">
-              <button type="submit" disabled={submitting} className="connect-submit">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="connect-submit"
+              >
                 {submitting ? 'Submitting…' : 'Submit'}
               </button>
             </div>
@@ -803,13 +1073,13 @@ export default function ClientBriefForm({
       </div>
 
       {comparePlanRole && (() => {
-        const role = selectedRoles.find((r) => r.slug === comparePlanRole);
+        const role = ROLE_OPTIONS.find((o) => o.slug === comparePlanRole);
         if (!role) return null;
         return (
           <PlanCompareModal
             roleTitle={role.title}
-            selectedPlan={getReq(role.slug).plan}
-            onSelect={(name) => setReq(role.slug, 'plan', name)}
+            selectedPlan={roleRequirements[role.slug].plan}
+            onSelect={(name) => updateRoleReq(role.slug, 'plan', name)}
             onClose={() => setComparePlanRole(null)}
           />
         );
@@ -984,10 +1254,10 @@ function Section({
   eyebrow, title, hint, children,
 }: { eyebrow: string; title: string; hint: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-sh-warm-border bg-surface p-5 shadow-sm sm:p-6">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground-muted">{eyebrow}</p>
-      <h2 className="mt-1 text-lg font-semibold text-foreground">{title}</h2>
-      <p className="mt-1 text-sm text-foreground-muted">{hint}</p>
+    <section className="rounded-2xl bg-white border border-[#E8E5DD] p-5 sm:p-6 shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A7568]">{eyebrow}</p>
+      <h2 className="mt-1 text-lg font-semibold text-[#222]">{title}</h2>
+      <p className="mt-1 text-sm text-[#5C5C5C]">{hint}</p>
       <div className="mt-4 space-y-4">{children}</div>
     </section>
   );
@@ -1004,45 +1274,60 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium text-foreground">
+      <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium text-[#222]">
         <span>
           {label}
           {required && <span className="text-[#C13515]">*</span>}
         </span>
-        {optional && <span className="text-xs font-normal text-foreground-muted">(optional)</span>}
+        {optional && <span className="text-xs font-normal text-[#9C9486]">(optional)</span>}
       </label>
       {children}
-      {hint && <p className="mt-1.5 text-xs text-foreground-muted">{hint}</p>}
+      {hint && <p className="mt-1.5 text-xs text-[#7A7568]">{hint}</p>}
     </div>
   );
 }
 
+// Mirrors the upsquad website's WorkingDaysSelector behaviour:
+// Mon–Fri are the default 5-day week; Sat/Sun are explicitly optional.
+// A warning surfaces once a weekend day is added on top of a full week
+// (or any selection > 5 days), since both reduce the chance of talent
+// accepting the brief.
 const WORKING_DAYS = [
-  { key: 'Mon', optional: false }, { key: 'Tue', optional: false },
-  { key: 'Wed', optional: false }, { key: 'Thu', optional: false },
-  { key: 'Fri', optional: false }, { key: 'Sat', optional: true },
+  { key: 'Mon', optional: false },
+  { key: 'Tue', optional: false },
+  { key: 'Wed', optional: false },
+  { key: 'Thu', optional: false },
+  { key: 'Fri', optional: false },
+  { key: 'Sat', optional: true },
   { key: 'Sun', optional: true },
 ] as const;
 
 function WorkingDaysSelector({
   selected, onToggle,
 }: { selected: string[]; onToggle: (value: string) => void }) {
+  const weekdaySet = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
   const weekendCount = selected.filter((d) => d === 'Sat' || d === 'Sun').length;
-  const allWeekdaysSelected = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].every((d) => selected.includes(d));
-  const showWeekendWarning = weekendCount > 0 && (allWeekdaysSelected || selected.length > 5);
+  const allWeekdaysSelected = weekdaySet.every((d) => selected.includes(d));
+  const showWeekendWarning =
+    weekendCount > 0 && (allWeekdaysSelected || selected.length > 5);
 
   return (
     <div>
-      <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-foreground">
+      <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
         <span>Working Days<span className="text-[#C13515]">*</span></span>
       </label>
-      <p className="mb-2 text-xs text-foreground-muted">
-        Days you need the talent to be available — we&apos;ll match people whose schedule fits yours.
+      <p className="mb-2 text-xs text-[#7A7568]">
+        Days you need the talent to be available — we'll match people whose schedule fits yours.
       </p>
-      <p className="mb-3 text-xs text-foreground-muted">
+      <p className="mb-3 text-xs text-[#7A7568]">
         Mon–Fri are included by default. Add{' '}
-        <span className="font-semibold text-foreground">Sat</span> and/or{' '}
-        <span className="font-semibold text-foreground">Sun</span> if you need weekend coverage.
+        <span className="font-semibold text-[#3A3A3A]">Sat</span> and/or{' '}
+        <span className="font-semibold text-[#3A3A3A]">Sun</span> if you need weekend coverage
+        {weekendCount > 0 && (
+          <span className="text-[#5C5C5C]">
+            {' '}— currently {weekendCount} weekend day{weekendCount > 1 ? 's' : ''} added
+          </span>
+        )}.
       </p>
       <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
         {WORKING_DAYS.map((day) => {
@@ -1059,10 +1344,10 @@ function WorkingDaysSelector({
             >
               <span>{day.key}</span>
               {day.optional && !isOn && (
-                <span className="mt-0.5 text-[9px] uppercase tracking-widest text-foreground-muted">opt</span>
+                <span className="mt-0.5 text-[9px] uppercase tracking-widest text-[#9C9486]">opt</span>
               )}
               {isOn && (
-                <svg className="absolute right-1 top-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <svg className="absolute top-1 right-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               )}
@@ -1071,9 +1356,14 @@ function WorkingDaysSelector({
         })}
       </div>
       {showWeekendWarning && (
-        <p className="mt-3 text-xs font-medium text-[#8B3A1A]">
-          Less chance of talent accepting the request if weekends are selected.
-        </p>
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-[#E0B7A2] bg-[#FBEFE9] p-3">
+          <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#C97744]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <span className="text-xs font-medium leading-relaxed text-[#8B3A1A]">
+            Less chance of talent accepting the request if weekends are selected.
+          </span>
+        </div>
       )}
     </div>
   );
@@ -1092,14 +1382,14 @@ function ChipField({
 }) {
   return (
     <div>
-      <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-foreground">
+      <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
         <span>
           {label}
           {required && <span className="text-[#C13515]">*</span>}
         </span>
-        {optional && <span className="text-xs font-normal text-foreground-muted">(optional)</span>}
+        {optional && <span className="text-xs font-normal text-[#9C9486]">(optional)</span>}
       </label>
-      <p className="mb-3 text-xs text-foreground-muted">{hint}</p>
+      <p className="mb-3 text-xs text-[#7A7568]">{hint}</p>
       <div className="flex flex-wrap gap-1.5 sm:gap-2">
         {options.map((opt) => {
           const isOn = selected.includes(opt);
@@ -1186,6 +1476,11 @@ const globalStyles = `
   min-width: 0;
 }
 .connect-phone-input::placeholder { color: #9C9486; }
+
+/* Submit lives at the natural end of the form on every viewport.
+   Tried sticky and fixed earlier — both fight the Android soft keyboard
+   and end up either covering the active input or floating mid-form.
+   Letting it scroll with content is the only reliable behaviour. */
 .connect-submit-wrap {
   margin-top: 8px;
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -1218,6 +1513,7 @@ const globalStyles = `
   box-shadow: 3px 3px 0 0 #c0c0c0;
   cursor: not-allowed;
 }
+
 .connect-pill {
   padding: 8px 20px;
   border-radius: 9999px;
@@ -1244,6 +1540,7 @@ const globalStyles = `
   background: #F0E660;
   color: #0a0a0a;
 }
+
 .connect-role-card {
   background: #fff;
   border: 2px solid #0a0a0a;
@@ -1251,12 +1548,19 @@ const globalStyles = `
   padding: 14px 16px;
   box-shadow: 3px 3px 0 0 #0a0a0a;
 }
+
+/* Per-role row inside the Requirement section. Lighter than the Step 1
+   role card — it's a sub-block inside an existing Section, not its own
+   highlighted card. Vertical gap between rows is handled by the parent
+   Section's space-y-4. */
 .connect-role-req {
   background: #FBFAF6;
   border: 1px solid #E8E5DD;
   border-radius: 12px;
   padding: 14px 16px;
 }
+
+/* Selected chips (states, languages) — brand lime soft fill, ink ring */
 .connect-chip {
   min-height: 36px;
   padding: 6px 14px;
@@ -1276,6 +1580,8 @@ const globalStyles = `
   border-color: #0a0a0a;
   box-shadow: inset 0 0 0 1px #0a0a0a;
 }
+
+/* Selected working day cell — same brand lime treatment */
 .connect-day {
   position: relative;
   display: flex;

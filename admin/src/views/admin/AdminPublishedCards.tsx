@@ -9,7 +9,7 @@ import AdminPublishedCardRecipientsView from './AdminPublishedCardRecipientsView
 import AdminRequestsList from './AdminRequestsList';
 import AdminCustomCardsList from './AdminCustomCardsList';
 import SliderPanel from './clients/SliderPanel';
-import ClientBriefForm, { BRIEF_TYPES, type BriefType } from './ClientBriefForm';
+import ClientBriefForm, { BRIEF_LAUNCHERS, type BriefType, type BriefProduct } from './ClientBriefForm';
 
 export type PublishedCard = {
   id: string;
@@ -72,6 +72,11 @@ export type PublishedCard = {
   publish_targets?: string[] | null;
   plan_name?: string | null;
   service_type?: string | null;
+  // Product line. 'assignment' = freelance project (renders an Assignment badge
+  // + project budget/timeline instead of plan/monthly price). Defaults to
+  // 'subscription' on legacy rows.
+  card_type?: 'subscription' | 'assignment' | 'hiring' | null;
+  assignment_details?: { duration?: string | null; start_date?: string | null; deadline?: string | null; scope_type?: string | null } | null;
   source?: 'submission' | 'request' | 'custom' | null;
   submission?: {
     id: string;
@@ -136,6 +141,31 @@ export function ServiceTypeBadge({ serviceType }: { serviceType?: string | null 
       className="sh-status-pill shrink-0"
       style={{ backgroundColor: badge.bg, color: badge.color }}
       title={`From the ${badge.label} client brief`}
+    >
+      {badge.label}
+    </span>
+  );
+}
+
+/**
+ * Product-line badge. Marks freelance Assignment cards (and reserved Hiring
+ * cards) so they stand out from subscription cards in the same All Deals list.
+ * Subscription cards render nothing — that's the default, no badge needed.
+ */
+const CARD_TYPE_BADGES: Record<string, { label: string; bg: string; color: string }> = {
+  assignment: { label: 'Assignment', bg: '#FEF3C7', color: '#92400E' },
+  hiring: { label: 'Hiring', bg: '#FAE8FF', color: '#86198F' },
+};
+
+export function CardTypeBadge({ cardType }: { cardType?: string | null }) {
+  if (!cardType || cardType === 'subscription') return null;
+  const badge =
+    CARD_TYPE_BADGES[cardType] ?? { label: cardType, bg: '#EEF2F6', color: '#475569' };
+  return (
+    <span
+      className="sh-status-pill shrink-0"
+      style={{ backgroundColor: badge.bg, color: badge.color }}
+      title={`This is a ${badge.label.toLowerCase()} brief`}
     >
       {badge.label}
     </span>
@@ -217,7 +247,9 @@ export default function AdminPublishedCards() {
   const [groupBy, setGroupBy] = useState<GroupBy>('status');
   const [showPanel, setShowPanel] = useState(false);
   const [showBriefSlider, setShowBriefSlider] = useState(false);
-  const [briefType, setBriefType] = useState<BriefType | null>(null);
+  // The chosen launcher: which product (subscription/assignment) + role type
+  // the brief form opens with. null = no form open.
+  const [briefChoice, setBriefChoice] = useState<{ type: BriefType; product: BriefProduct } | null>(null);
 
   // Card detail view is driven by a URL query param (?card=<id>) so the
   // browser back button collapses the detail back to the list rather than
@@ -614,11 +646,11 @@ export default function AdminPublishedCards() {
           Pick a brief type. You&apos;ll fill out the client brief form, and it lands in New Deals.
         </p>
         <div className="space-y-3">
-          {BRIEF_TYPES.map((t) => (
+          {BRIEF_LAUNCHERS.map((t) => (
             <button
               key={t.key}
               type="button"
-              onClick={() => { setShowBriefSlider(false); setBriefType(t.key); }}
+              onClick={() => { setShowBriefSlider(false); setBriefChoice({ type: t.type, product: t.product }); }}
               className="flex w-full items-center justify-between rounded-xl border border-divider bg-surface px-4 py-3 text-left transition hover:border-ink hover:shadow-sm"
             >
               <span>
@@ -632,11 +664,12 @@ export default function AdminPublishedCards() {
       </SliderPanel>
 
       {/* The full /connect-style brief form opens as a standalone overlay. */}
-      {briefType && (
+      {briefChoice && (
         <ClientBriefForm
-          type={briefType}
-          onClose={() => setBriefType(null)}
-          onCreated={() => { setBriefType(null); switchTab('requests'); }}
+          type={briefChoice.type}
+          product={briefChoice.product}
+          onClose={() => setBriefChoice(null)}
+          onCreated={() => { setBriefChoice(null); switchTab('requests'); }}
         />
       )}
     </div>
@@ -714,6 +747,7 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
               {business}
             </p>
             <ServiceTypeBadge serviceType={serviceType} />
+            <CardTypeBadge cardType={card.card_type} />
           </div>
           {(planName || priceLabel) && (
             <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
@@ -1028,6 +1062,7 @@ function GroupedPublishedCard({ cards, onOpen }: {
           <div className="flex min-w-0 items-center gap-2">
             <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">{business}</p>
             <ServiceTypeBadge serviceType={serviceType} />
+            <CardTypeBadge cardType={rep.card_type} />
             <span
               className="sh-status-pill shrink-0"
               style={{ backgroundColor: '#E0E7FF', color: '#3730A3' }}

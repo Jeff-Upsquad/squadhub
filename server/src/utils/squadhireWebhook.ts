@@ -102,6 +102,15 @@ export interface SquadhireCardPayload {
   // same group_id into a single card with a tab per tier. NULL on single-tier
   // / legacy cards. Always sent so SquadHire can group (or ungroup) cleanly.
   group_id: string | null;
+  // Product line. 'subscription' (default) = the recurring-plan card; talents
+  // see it in the subscription feed and the business portal under My
+  // subscription. 'assignment' = a one-off freelance project — talent clients
+  // tag it "Assignment" in the same feed and the business portal lists it in a
+  // separate Assignments section. The project budget reuses content.monthly_price
+  // / content.customer_monthly_price; the timeline rides in
+  // content.assignment_details. Always sent so the consumer can store it on its
+  // own card_type column without parsing content.
+  card_type: 'subscription' | 'assignment' | 'hiring';
 }
 
 interface AttemptOutcome {
@@ -125,7 +134,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, distribution, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, source, proposed_price, markup, customer_company, customer_email, service_type, plan_name, plan_snapshot',
+      'id, state, distribution, card_type, assignment_details, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, source, proposed_price, markup, customer_company, customer_email, service_type, plan_name, plan_snapshot',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -192,6 +201,13 @@ export async function buildSquadhirePayloadForCard(
     );
     return null;
   }
+
+  // Product line. Assignment cards reuse the whole payload shape; they just
+  // skip the subscription-only plan/hours/price labels (their plan_name is
+  // null, so those resolutions naturally no-op) and carry project budget +
+  // timeline in `content` instead. Always sent so the consumer can store it.
+  const cardType: 'subscription' | 'assignment' | 'hiring' =
+    ((card as any).card_type as 'subscription' | 'assignment' | 'hiring') ?? 'subscription';
 
   // Map SquadHub state → SquadHire status. archived_at dominates: if
   // an admin explicitly archived the card it's hidden everywhere on
@@ -700,6 +716,21 @@ export async function buildSquadhirePayloadForCard(
     }
   }
 
+  // Assignment cards: stamp the type + project timeline into content so the
+  // talent clients can tag the card and render the timeline, and the business
+  // portal can list it under Assignments. The budget already rides in
+  // monthly_price / customer_monthly_price (the talent's pay / the client's
+  // project budget); the consumer relabels those for assignments. plan_name /
+  // hours_label are absent on these cards, so the subscription-only sections
+  // self-hide.
+  if (cardType !== 'subscription') {
+    content.card_type = cardType;
+    const ad = (card as any).assignment_details;
+    if (ad && typeof ad === 'object') {
+      content.assignment_details = ad;
+    }
+  }
+
   const distribution: 'broadcast' | 'manual' =
     card.distribution === 'manual' ? 'manual' : 'broadcast';
 
@@ -725,6 +756,7 @@ export async function buildSquadhirePayloadForCard(
     distribution,
     is_secondary: card.parent_card_id != null,
     group_id: ((card as any).brief_group_id as string | null) ?? null,
+    card_type: cardType,
     ...(businessEmail ? { business_email: businessEmail } : {}),
     ...(businessPhone ? { business_phone: businessPhone } : {}),
     ...(businessContactName ? { business_contact_name: businessContactName } : {}),

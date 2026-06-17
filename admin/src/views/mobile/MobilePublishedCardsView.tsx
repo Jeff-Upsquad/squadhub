@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
-import { squadhireDeliveryState, ServiceTypeBadge, type PublishedCard } from '@/views/admin/AdminPublishedCards';
+import { squadhireDeliveryState, ServiceTypeBadge, CardTypeBadge, type PublishedCard } from '@/views/admin/AdminPublishedCards';
 import MobileCardDetail from './MobileCardDetail';
 import MobileRequestsList from './MobileRequestsList';
 import MobileCustomCardsList from './MobileCustomCardsList';
@@ -379,6 +379,7 @@ function PublishedCardRow({
               {business}
             </p>
             <ServiceTypeBadge serviceType={serviceType} />
+            <CardTypeBadge cardType={card.card_type} />
           </div>
           {(planName || priceLabel) && (
             <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
