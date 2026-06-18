@@ -1,6 +1,8 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
+import { useAuthStore } from '../../../stores/authStore';
+import DmSidePanel, { type DmTarget } from './DmSidePanel';
 
 type TodayCheckin = {
   user_id: string;
@@ -68,6 +70,8 @@ export default function Overview() {
   const [days, setDays] = useState(30);
   const [sortKey, setSortKey] = useState<SortKey>('attendance');
   const [page, setPage] = useState(1);
+  const [dmUser, setDmUser] = useState<DmTarget | null>(null);
+  const meId = useAuthStore((s) => s.user?.id);
 
   const { data: res, isLoading } = useQuery({
     queryKey: ['admin-checkin-overview', days],
@@ -181,10 +185,20 @@ export default function Overview() {
                           </td>
                         </tr>
                         {group.rows.map((c) => (
-                          <tr key={c.user_id} className="border-b border-divider last:border-0">
+                          <tr key={c.user_id} className="group border-b border-divider last:border-0">
                             <td className="px-4 py-2.5">
-                              <div className="text-sm text-foreground">{c.display_name}</div>
-                              <div className="text-[11px] text-foreground-dim">{c.email}</div>
+                              <div className="flex items-center gap-2">
+                                <div className="min-w-0">
+                                  <div className="text-sm text-foreground">{c.display_name}</div>
+                                  <div className="text-[11px] text-foreground-dim">{c.email}</div>
+                                </div>
+                                {c.user_id !== meId && (
+                                  <MessageButton
+                                    name={c.display_name}
+                                    onClick={() => setDmUser({ id: c.user_id, display_name: c.display_name, avatar_url: c.avatar_url })}
+                                  />
+                                )}
+                              </div>
                             </td>
                             <td className="px-4 py-2.5 text-xs text-foreground-muted">{c.role || '—'}</td>
                             <td className="px-4 py-2.5 text-xs text-foreground-muted">
@@ -274,10 +288,20 @@ export default function Overview() {
           </thead>
           <tbody>
             {pagedLeaderboard.map((row) => (
-              <tr key={row.user_id} className="border-b border-divider last:border-0">
+              <tr key={row.user_id} className="group border-b border-divider last:border-0">
                 <td className="px-5 py-3">
-                  <div className="text-sm text-foreground">{row.display_name}</div>
-                  <div className="text-[11px] text-foreground-dim">{row.email}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm text-foreground">{row.display_name}</div>
+                      <div className="text-[11px] text-foreground-dim">{row.email}</div>
+                    </div>
+                    {row.user_id !== meId && (
+                      <MessageButton
+                        name={row.display_name}
+                        onClick={() => setDmUser({ id: row.user_id, display_name: row.display_name })}
+                      />
+                    )}
+                  </div>
                 </td>
                 <td className="px-5 py-3 text-xs text-foreground-muted">{row.role || '—'}</td>
                 <td className="px-5 py-3 text-sm text-foreground-muted">{row.working_days}</td>
@@ -321,7 +345,25 @@ export default function Overview() {
           </div>
         )}
       </section>
+
+      {dmUser && <DmSidePanel key={dmUser.id} user={dmUser} onClose={() => setDmUser(null)} />}
     </div>
+  );
+}
+
+function MessageButton({ name, onClick }: { name: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Message ${name}`}
+      aria-label={`Message ${name}`}
+      className="shrink-0 rounded-md p-1 text-foreground-muted opacity-0 transition hover:bg-surface-alt hover:text-foreground focus:opacity-100 group-hover:opacity-100"
+    >
+      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.6-.8L3 21l1.8-5.9a8.5 8.5 0 0 1-.8-3.6A8.38 8.38 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z" />
+      </svg>
+    </button>
   );
 }
 
