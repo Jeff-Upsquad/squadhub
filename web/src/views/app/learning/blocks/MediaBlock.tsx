@@ -1,11 +1,28 @@
 'use client';
-import type { LmsContentBlock } from '@squadhub/shared';
+import type { ImageAnnotationData, LmsContentBlock } from '@squadhub/shared';
+import AnnotationOverlay from './AnnotationOverlay';
+
+// Pull annotation overlay data out of the block's freeform metadata, tolerating
+// older/plain images (no annotations) and unknown future schema versions.
+function getAnnotations(block: LmsContentBlock): ImageAnnotationData | null {
+  const data = (block.metadata as { annotations?: ImageAnnotationData } | undefined)?.annotations;
+  if (!data || data.version !== 1 || !Array.isArray(data.annotations) || data.annotations.length === 0) {
+    return null;
+  }
+  return data;
+}
 
 export function ImageBlock({ block }: { block: LmsContentBlock }) {
   if (!block.file_url) return <PlaceholderBlock>Missing image</PlaceholderBlock>;
+  const alt = (block.metadata as { alt?: string } | undefined)?.alt || block.caption || '';
+  const annotations = getAnnotations(block);
   return (
     <figure className="my-2">
-      <img src={block.file_url} alt={block.caption || ''} className="w-full rounded-lg border border-[var(--sh-hair)]" />
+      {annotations ? (
+        <AnnotationOverlay src={block.file_url} alt={alt} data={annotations} />
+      ) : (
+        <img src={block.file_url} alt={alt} className="w-full rounded-lg border border-[var(--sh-hair)]" />
+      )}
       {block.caption && <figcaption className="mt-2 text-center text-[13px] text-[var(--sh-ink-3)]">{block.caption}</figcaption>}
     </figure>
   );

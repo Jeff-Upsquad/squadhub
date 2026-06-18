@@ -8,14 +8,19 @@ export default function LearningOverview({ onSelectItem }: { onSelectItem: (id: 
   const { data: assignments, isLoading } = useMyLearning();
   const all = assignments || [];
 
-  const { inProgress, assigned, completed } = useMemo(
-    () => ({
-      inProgress: all.filter((a) => a.status === 'in_progress'),
-      assigned: all.filter((a) => a.status === 'not_started'),
-      completed: all.filter((a) => a.status === 'completed'),
-    }),
-    [all]
-  );
+  // SOPs ("Systems & Processes") are reference docs — keep them out of the
+  // progress stats and surface them as their own quick-links section.
+  const { inProgress, assigned, completed, sops } = useMemo(() => {
+    const learning = all.filter((a) => a.item.track !== 'sop');
+    return {
+      inProgress: learning.filter((a) => a.status === 'in_progress'),
+      assigned: learning.filter((a) => a.status === 'not_started'),
+      completed: learning.filter((a) => a.status === 'completed'),
+      sops: all.filter((a) => a.item.track === 'sop'),
+    };
+  }, [all]);
+
+  const hasLearning = inProgress.length + assigned.length + completed.length > 0;
 
   if (isLoading) {
     return <div className="flex h-full items-center justify-center text-sm text-[var(--sh-ink-3)]">Loading…</div>;
@@ -48,21 +53,24 @@ export default function LearningOverview({ onSelectItem }: { onSelectItem: (id: 
           >
             Learning
           </h1>
-          <p className="mt-1 text-[13px] text-[var(--sh-ink-3)]">Training and updates assigned to you.</p>
+          <p className="mt-1 text-[13px] text-[var(--sh-ink-3)]">Training, guides and updates shared with you.</p>
 
-          {/* Stat strip */}
-          <div className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-[var(--sh-hair)] bg-[var(--sh-hair)]">
-            <Stat label="In progress" value={inProgress.length} />
-            <Stat label="Assigned" value={assigned.length} />
-            <Stat label="Completed" value={completed.length} accent="emerald" />
-          </div>
+          {/* Stat strip — only relevant when there's course/post learning. */}
+          {hasLearning && (
+            <div className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-[var(--sh-hair)] bg-[var(--sh-hair)]">
+              <Stat label="In progress" value={inProgress.length} />
+              <Stat label="Assigned" value={assigned.length} />
+              <Stat label="Completed" value={completed.length} accent="emerald" />
+            </div>
+          )}
         </header>
 
         {inProgress.length > 0 && (
           <Section title="Continue where you left off" entries={inProgress} onSelectItem={onSelectItem} />
         )}
         {assigned.length > 0 && <Section title="Assigned to you" entries={assigned} onSelectItem={onSelectItem} />}
-        {inProgress.length === 0 && assigned.length === 0 && (
+        {sops.length > 0 && <Section title="Systems & Processes" entries={sops} onSelectItem={onSelectItem} />}
+        {!hasLearning && sops.length === 0 && (
           <p className="mt-10 text-center text-[13px] text-[var(--sh-ink-3)]">
             🎉 You&apos;re all caught up. Pick anything from the list to revisit it.
           </p>
@@ -106,6 +114,7 @@ function Section({
 
 function OverviewCard({ entry, onClick }: { entry: MyLearningEntry; onClick: () => void }) {
   const { item, status, progress_percent } = entry;
+  const isSop = item.track === 'sop';
   return (
     <button
       onClick={onClick}
@@ -117,30 +126,37 @@ function OverviewCard({ entry, onClick }: { entry: MyLearningEntry; onClick: () 
         </span>
       ) : (
         <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-[var(--sh-hair-3)] text-xl">
-          {item.kind === 'course' ? '📚' : '📝'}
+          {isSop ? '📄' : item.kind === 'course' ? '📚' : '📝'}
         </span>
       )}
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-center gap-1.5">
           <span className="rounded-full bg-[var(--sh-hair-3)] px-1.5 py-px text-[9px] font-medium uppercase tracking-wider text-[var(--sh-ink-3)]">
-            {item.kind}
+            {isSop ? 'Guide' : item.kind}
           </span>
           {item.category && (
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.category.color }} />
           )}
         </span>
         <span className="truncate text-[13.5px] font-semibold leading-tight text-[var(--sh-ink)]">{item.title}</span>
-        <span className="flex items-center gap-2 pt-0.5">
-          <span className="h-1 flex-1 overflow-hidden rounded-full bg-[var(--sh-hair)]">
-            <span
-              className={`block h-full rounded-full ${status === 'completed' ? 'bg-emerald-500' : 'bg-[var(--sh-ink)]'}`}
-              style={{ width: `${progress_percent}%` }}
-            />
+        {/* SOPs are reference docs — show a short summary instead of a progress bar. */}
+        {isSop ? (
+          item.summary ? (
+            <span className="truncate text-[11.5px] leading-tight text-[var(--sh-ink-3)]">{item.summary}</span>
+          ) : null
+        ) : (
+          <span className="flex items-center gap-2 pt-0.5">
+            <span className="h-1 flex-1 overflow-hidden rounded-full bg-[var(--sh-hair)]">
+              <span
+                className={`block h-full rounded-full ${status === 'completed' ? 'bg-emerald-500' : 'bg-[var(--sh-ink)]'}`}
+                style={{ width: `${progress_percent}%` }}
+              />
+            </span>
+            <span className="shrink-0 text-[10px] tabular-nums text-[var(--sh-ink-3)]">
+              {status === 'completed' ? '✓' : `${progress_percent}%`}
+            </span>
           </span>
-          <span className="shrink-0 text-[10px] tabular-nums text-[var(--sh-ink-3)]">
-            {status === 'completed' ? '✓' : `${progress_percent}%`}
-          </span>
-        </span>
+        )}
       </span>
     </button>
   );

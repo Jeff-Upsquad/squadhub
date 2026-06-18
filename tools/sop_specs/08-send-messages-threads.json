@@ -1,0 +1,30 @@
+{
+  "title": "How to send messages and reply in threads",
+  "summary": "Post in a channel, and keep side-conversations tidy with threads.",
+  "category": "How-to",
+  "nav": [
+    { "clickText": "#general", "wait": 2000 }
+  ],
+  "blocks": [
+    {
+      "kind": "text",
+      "heading": "Messages and threads",
+      "paragraphs": [
+        "Type in the box at the bottom of a channel and press Cmd/Ctrl + Enter (or the send arrow) to post. To keep a side-conversation out of the main flow, open a thread on a message and reply there.",
+        "Hover a message to reveal its actions, including “Reply in thread”. Messages that already have replies show a “View thread” link."
+      ]
+    },
+    {
+      "kind": "shot",
+      "region": "body",
+      "wait": 800,
+      "caption": "A channel — composer and threads",
+      "alt": "A chat channel with the message composer and the view-thread link highlighted",
+      "markings": [
+        { "selector": "[contenteditable='true']", "type": "rect", "color": "red" },
+        { "selector": "[contenteditable='true']", "type": "text", "color": "ink", "text": "Type here, then Cmd/Ctrl+Enter to send" },
+        { "matchText": "View thread", "type": "badge", "color": "blue", "label": "1" }
+      ]
+    }
+  ]
+}

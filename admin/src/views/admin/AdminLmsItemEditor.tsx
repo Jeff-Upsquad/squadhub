@@ -18,6 +18,10 @@ type ItemDetail = LmsItem & {
   audience_user_ids: string[];
 };
 
+// All audience user types — used by the SOP "Everyone" quick-set, since
+// guides are normally shared with the whole org (no audience = nobody sees it).
+const ALL_USER_TYPES: UserType[] = ['internal', 'client', 'client_staff', 'partner', 'partner_employee'];
+
 export default function AdminLmsItemEditor({ itemId }: Props) {
   const qc = useQueryClient();
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
@@ -129,9 +133,15 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
             }`}>
               {item.status}
             </span>
-            <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
-              {item.kind}
-            </span>
+            {item.track === 'sop' ? (
+              <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700">
+                SOP / Guide
+              </span>
+            ) : (
+              <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                {item.kind}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -212,6 +222,17 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
           </Section>
 
           <Section title="Audience">
+            {item.track === 'sop' && (
+              <div className="mb-2.5 flex items-center justify-between gap-2 rounded-md bg-indigo-50 px-2.5 py-2 text-[11.5px] leading-snug text-indigo-800">
+                <span>Guides are usually shared with everyone. No audience = nobody sees it.</span>
+                <button
+                  onClick={() => setAudience.mutate({ user_types: ALL_USER_TYPES, user_ids: item.audience_user_ids || [] })}
+                  className="shrink-0 rounded border border-indigo-300 bg-white px-2 py-0.5 font-medium text-indigo-700 hover:bg-indigo-100"
+                >
+                  Everyone
+                </button>
+              </div>
+            )}
             <AudiencePicker
               userTypes={item.audience_types || []}
               userIds={item.audience_user_ids || []}

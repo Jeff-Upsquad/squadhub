@@ -1,0 +1,30 @@
+{
+  "title": "How to use the Inbox",
+  "summary": "Catch up on mentions, replies and updates — and clear them fast.",
+  "category": "Core Apps",
+  "nav": [
+    { "clickText": "Inbox", "wait": 2200 }
+  ],
+  "blocks": [
+    {
+      "kind": "text",
+      "heading": "Your Inbox",
+      "paragraphs": [
+        "The Inbox gathers everything that needs your attention — mentions, replies, task updates and more — in one place, so nothing slips through.",
+        "Open an item to jump straight to it, dismiss with “Not now”, or clear the lot with “Mark all read”."
+      ]
+    },
+    {
+      "kind": "shot",
+      "region": "body",
+      "wait": 900,
+      "caption": "The Inbox — open, dismiss, or clear all",
+      "alt": "The Inbox panel with the open, dismiss and mark-all-read actions highlighted",
+      "markings": [
+        { "matchText": "Open", "type": "badge", "color": "blue", "label": "1" },
+        { "matchText": "Not now", "type": "badge", "color": "blue", "label": "2" },
+        { "matchText": "Mark all read", "type": "rect", "color": "red" }
+      ]
+    }
+  ]
+}

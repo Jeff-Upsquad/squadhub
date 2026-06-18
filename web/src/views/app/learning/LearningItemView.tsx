@@ -37,7 +37,7 @@ export default function LearningItemView({ itemId, onBack }: { itemId: string; o
           </svg>
         </button>
         <span className="truncate text-[12.5px] font-medium text-[var(--sh-ink)]">{item.title}</span>
-        {assignment && (
+        {assignment && item.track !== 'sop' && (
           <span className="ml-auto flex items-center gap-2">
             <span className="text-[11px] text-[var(--sh-ink-3)]">{assignment.progress_percent}%</span>
             <div className="h-1 w-24 overflow-hidden rounded-full bg-[var(--sh-hair)]">

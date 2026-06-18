@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { LmsItem, LmsItemStatus, LmsItemKind, LmsCategory } from '@squadhub/shared';
+import type { LmsItem, LmsItemStatus, LmsItemKind, LmsTrack, LmsCategory } from '@squadhub/shared';
 
 const STATUS_COLORS: Record<LmsItemStatus, string> = {
   draft: 'bg-canvas text-foreground-muted',
@@ -24,14 +24,18 @@ export default function AdminLmsLibrary() {
   const [kindFilter, setKindFilter] = useState<LmsItemKind | ''>('');
   const [statusFilter, setStatusFilter] = useState<LmsItemStatus | ''>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [trackFilter, setTrackFilter] = useState<LmsTrack | ''>('');
+  const [showGen, setShowGen] = useState(false);
+  const [selectedSpec, setSelectedSpec] = useState('');
 
   const queryParams = new URLSearchParams();
   if (kindFilter) queryParams.set('kind', kindFilter);
   if (statusFilter) queryParams.set('status', statusFilter);
   if (categoryFilter) queryParams.set('category_id', categoryFilter);
+  if (trackFilter) queryParams.set('track', trackFilter);
 
   const { data: itemsRes } = useQuery({
-    queryKey: ['lms-items', kindFilter, statusFilter, categoryFilter],
+    queryKey: ['lms-items', kindFilter, statusFilter, categoryFilter, trackFilter],
     queryFn: () => api.get(`/admin/lms/items?${queryParams.toString()}`).then((r) => r.data),
   });
   const items: LmsItem[] = itemsRes?.data || [];
@@ -41,6 +45,27 @@ export default function AdminLmsLibrary() {
     queryFn: () => api.get('/admin/lms/categories').then((r) => r.data),
   });
   const categories: LmsCategory[] = catRes?.data || [];
+
+  // SOP generator specs (lazy — only when the modal opens).
+  const { data: specsRes } = useQuery({
+    queryKey: ['sop-specs'],
+    queryFn: () => api.get('/admin/lms/sop-specs').then((r) => r.data),
+    enabled: showGen,
+  });
+  const specs: { file: string; title: string }[] = specsRes?.data || [];
+
+  const generate = useMutation({
+    mutationFn: (spec: string) => api.post('/admin/lms/generate-sop', { spec }).then((r) => r.data),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['lms-items'] });
+      setShowGen(false);
+      if (res?.data?.itemId) router.push(`/admin/learning/${res.data.itemId}`);
+    },
+    onError: (e: any) => {
+      const d = e?.response?.data;
+      alert((d?.error || 'Generation failed') + (d?.detail ? `\n\n${d.detail}` : ''));
+    },
+  });
 
   const createItem = useMutation({
     mutationFn: (body: any) => api.post('/admin/lms/items', body).then((r) => r.data),
@@ -57,10 +82,11 @@ export default function AdminLmsLibrary() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['lms-items'] }),
   });
 
-  function onNew(kind: LmsItemKind) {
-    const title = prompt(`New ${kind} title`);
+  function onNew(kind: LmsItemKind, track: LmsTrack = 'learning') {
+    const label = track === 'sop' ? 'guide' : kind;
+    const title = prompt(`New ${label} title`);
     if (!title) return;
-    createItem.mutate({ kind, title });
+    createItem.mutate({ kind, track, title });
   }
 
   return (
@@ -77,6 +103,13 @@ export default function AdminLmsLibrary() {
           >
             Categories
           </Link>
+          <button
+            onClick={() => setShowGen(true)}
+            className="rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+            title="Auto-generate a Systems & Processes guide from a screen"
+          >
+            ✨ Auto-generate
+          </button>
           <div className="relative">
             <button
               onClick={() => setShowNewMenu((v) => !v)}
@@ -100,6 +133,14 @@ export default function AdminLmsLibrary() {
                   <span className="text-sm font-medium text-foreground">Course</span>
                   <span className="text-[11px] text-foreground-muted">Multi-lesson journey</span>
                 </button>
+                <div className="my-1 border-t border-divider" />
+                <button
+                  onClick={() => onNew('post', 'sop')}
+                  className="flex w-full flex-col px-3 py-2 text-left hover:bg-surface-alt"
+                >
+                  <span className="text-sm font-medium text-foreground">SOP / Guide</span>
+                  <span className="text-[11px] text-foreground-muted">Systems &amp; Processes how-to</span>
+                </button>
               </div>
             )}
           </div>
@@ -108,6 +149,10 @@ export default function AdminLmsLibrary() {
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
+        <FilterChip active={!trackFilter} onClick={() => setTrackFilter('')} label="All tracks" />
+        <FilterChip active={trackFilter === 'learning'} onClick={() => setTrackFilter('learning')} label="Learning" />
+        <FilterChip active={trackFilter === 'sop'} onClick={() => setTrackFilter('sop')} label="Systems & Processes" />
+        <span className="mx-1 h-4 w-px bg-well" />
         <FilterChip active={!kindFilter} onClick={() => setKindFilter('')} label="All kinds" />
         <FilterChip active={kindFilter === 'post'} onClick={() => setKindFilter('post')} label="Posts" />
         <FilterChip active={kindFilter === 'course'} onClick={() => setKindFilter('course')} label="Courses" />
@@ -154,7 +199,14 @@ export default function AdminLmsLibrary() {
                 <tr key={item.id} className="hover:bg-surface-alt">
                   <td className="px-4 py-3">
                     <Link href={`/admin/learning/${item.id}`} className="block">
-                      <div className="font-medium text-foreground">{item.title}</div>
+                      <div className="flex items-center gap-1.5 font-medium text-foreground">
+                        {item.title}
+                        {item.track === 'sop' && (
+                          <span className="rounded-full bg-indigo-50 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-indigo-700">
+                            SOP
+                          </span>
+                        )}
+                      </div>
                       {item.category && (
                         <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-foreground-muted">
                           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.category.color }} />
@@ -186,6 +238,51 @@ export default function AdminLmsLibrary() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {showGen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !generate.isPending && setShowGen(false)}>
+          <div className="w-full max-w-md rounded-xl border border-divider bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-foreground">✨ Auto-generate a guide</h2>
+            <p className="mt-1 text-[13px] text-foreground-muted">
+              Pick a screen recipe. We&apos;ll open the app, capture screenshots with markings, and create a draft SOP for you to review and publish.
+            </p>
+
+            <label className="mt-4 block text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Screen recipe</label>
+            <select
+              value={selectedSpec || specs[0]?.file || ''}
+              onChange={(e) => setSelectedSpec(e.target.value)}
+              disabled={generate.isPending || specs.length === 0}
+              className="mt-1 w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm focus:border-ink focus:outline-none disabled:opacity-60"
+            >
+              {specs.length === 0 ? (
+                <option value="">No recipes found (tools/sop_specs)</option>
+              ) : (
+                specs.map((s) => <option key={s.file} value={s.file}>{s.title}</option>)
+              )}
+            </select>
+
+            {generate.isPending ? (
+              <div className="mt-4 flex items-center gap-2 rounded-md bg-indigo-50 px-3 py-2.5 text-[13px] text-indigo-800">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-300 border-t-indigo-700" />
+                Generating… this takes ~30–60s (opening the app, capturing screens).
+              </div>
+            ) : (
+              <div className="mt-5 flex justify-end gap-2">
+                <button onClick={() => setShowGen(false)} className="rounded-lg border border-divider bg-surface px-4 py-2 text-sm text-foreground-muted hover:bg-surface-alt">
+                  Cancel
+                </button>
+                <button
+                  onClick={() => generate.mutate(selectedSpec || specs[0]?.file)}
+                  disabled={specs.length === 0}
+                  className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover disabled:opacity-50"
+                >
+                  Generate draft
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

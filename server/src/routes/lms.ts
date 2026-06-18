@@ -57,7 +57,7 @@ router.get('/my-items', async (req: Request, res: Response) => {
       .select(`
         id, status, progress_percent, assigned_at, started_at, completed_at,
         item:lms_items(
-          id, kind, title, slug, summary, cover_image_url, status, published_at,
+          id, kind, track, title, slug, summary, cover_image_url, status, published_at,
           category:lms_categories(id, name, slug, color)
         )
       `)
@@ -92,7 +92,7 @@ router.get('/my-due', async (req: Request, res: Response) => {
       .select(`
         id, status, progress_percent, assigned_at, started_at, completed_at, due_date,
         item:lms_items(
-          id, kind, title, slug, summary, cover_image_url, status, published_at,
+          id, kind, track, title, slug, summary, cover_image_url, status, published_at,
           category:lms_categories(id, name, slug, color)
         )
       `)
@@ -182,7 +182,7 @@ router.get('/items/:id', async (req: Request, res: Response) => {
     const { data: item, error: itemErr } = await supabaseAdmin
       .from('lms_items')
       .select(`
-        id, kind, title, slug, summary, cover_image_url, status, published_at, created_at, updated_at,
+        id, kind, track, title, slug, summary, cover_image_url, status, published_at, created_at, updated_at,
         category:lms_categories(id, name, slug, color)
       `)
       .eq('id', itemId)

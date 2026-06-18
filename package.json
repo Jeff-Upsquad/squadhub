@@ -20,6 +20,9 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
+    "gifenc": "^1.0.3",
+    "playwright": "^1.61.0",
+    "pngjs": "^7.0.0",
     "typescript": "^5.7.3"
   },
   "engines": {

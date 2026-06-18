@@ -1,5 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { spawn } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
@@ -7,6 +10,11 @@ import { supabaseAdmin } from '../supabase';
 const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
+
+// Repo root (server/src/routes -> ../../..). Used to locate the SOP generator.
+const REPO_ROOT = path.resolve(__dirname, '../../..');
+const SOP_SPECS_DIR = path.join(REPO_ROOT, 'tools', 'sop_specs');
+const SOP_SCRIPT = path.join(REPO_ROOT, 'tools', 'generate_sop.mjs');
 
 const BLOCK_TYPES = ['text', 'image', 'video_upload', 'video_embed', 'audio', 'pdf', 'quiz'] as const;
 const USER_TYPES = ['internal', 'client', 'client_staff', 'partner', 'partner_employee'] as const;
@@ -137,6 +145,7 @@ router.get('/items', async (req: Request, res: Response) => {
     const kindFilter = req.query.kind as string | undefined;
     const statusFilter = req.query.status as string | undefined;
     const categoryFilter = req.query.category_id as string | undefined;
+    const trackFilter = req.query.track as string | undefined;
 
     let query = supabaseAdmin
       .from('lms_items')
@@ -149,6 +158,7 @@ router.get('/items', async (req: Request, res: Response) => {
     if (kindFilter) query = query.eq('kind', kindFilter);
     if (statusFilter) query = query.eq('status', statusFilter);
     if (categoryFilter) query = query.eq('category_id', categoryFilter);
+    if (trackFilter) query = query.eq('track', trackFilter);
 
     const { data, error } = await query;
     if (error) {
@@ -200,6 +210,7 @@ router.get('/items', async (req: Request, res: Response) => {
 
 const itemCreateSchema = z.object({
   kind: z.enum(['post', 'course']),
+  track: z.enum(['learning', 'sop']).optional(),
   title: z.string().min(1).max(200),
   slug: z.string().optional(),
   summary: z.string().max(2000).nullable().optional(),
@@ -217,6 +228,7 @@ router.post('/items', async (req: Request, res: Response) => {
       .from('lms_items')
       .insert({
         kind: body.kind,
+        track: body.track ?? 'learning',
         title: body.title,
         slug,
         summary: body.summary ?? null,
@@ -246,6 +258,83 @@ router.post('/items', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
+
+// ------------------------------------------------------------
+// SOP auto-generator — runs tools/generate_sop.mjs (Playwright) for a chosen
+// spec and returns the new DRAFT item id. The "intelligence" (which screen,
+// which buttons, the copy) lives in tools/sop_specs/*.json; admins just pick
+// one and trigger it, then review/publish the draft.
+//
+// NOTE: requires Playwright + Chromium and a reachable web app at
+// SOP_GEN_BASE_URL on the host running this server.
+// ------------------------------------------------------------
+
+// GET /admin/lms/sop-specs — list available generator specs for the picker.
+router.get('/sop-specs', async (_req: Request, res: Response) => {
+  try {
+    if (!fs.existsSync(SOP_SPECS_DIR)) { res.json({ success: true, data: [] }); return; }
+    const specs = fs.readdirSync(SOP_SPECS_DIR)
+      .filter((f) => f.endsWith('.json'))
+      .map((file) => {
+        let title = file;
+        try { title = JSON.parse(fs.readFileSync(path.join(SOP_SPECS_DIR, file), 'utf8')).title || file; } catch { /* keep filename */ }
+        return { file, title };
+      });
+    res.json({ success: true, data: specs });
+  } catch (err) {
+    console.error('List SOP specs error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+const generateSchema = z.object({ spec: z.string().regex(/^[a-zA-Z0-9._-]+\.json$/, 'Invalid spec filename') });
+
+// POST /admin/lms/generate-sop — generate a draft SOP from a spec. Runs the
+// headless pipeline synchronously (~30–60s) and returns the new item id.
+router.post('/generate-sop', async (req: Request, res: Response) => {
+  try {
+    const { spec } = generateSchema.parse(req.body);
+    const specPath = path.join(SOP_SPECS_DIR, spec);
+    // Defense in depth: the resolved path must stay inside the specs dir.
+    if (!specPath.startsWith(SOP_SPECS_DIR + path.sep) || !fs.existsSync(specPath)) {
+      res.status(404).json({ success: false, error: 'Spec not found' });
+      return;
+    }
+
+    const baseUrl = process.env.SOP_GEN_BASE_URL || 'http://localhost:3000';
+    const email = process.env.SOP_GEN_USER_EMAIL || 'testlocal@test.com';
+
+    const result = await runGenerator(specPath, baseUrl, email);
+    if (!result.itemId) {
+      res.status(500).json({ success: false, error: 'Generation failed', detail: result.log.slice(-1200) });
+      return;
+    }
+    res.json({ success: true, data: { itemId: result.itemId } });
+  } catch (err) {
+    if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
+    console.error('Generate SOP error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+function runGenerator(specPath: string, baseUrl: string, email: string): Promise<{ itemId: string | null; log: string }> {
+  return new Promise((resolve) => {
+    const child = spawn('node', [SOP_SCRIPT, '--spec', specPath, '--base', baseUrl, '--email', email], { cwd: REPO_ROOT });
+    let out = '';
+    const onData = (d: Buffer) => { out += d.toString(); };
+    child.stdout.on('data', onData);
+    child.stderr.on('data', onData);
+
+    const timer = setTimeout(() => { child.kill('SIGKILL'); }, 240_000); // 4 min hard cap
+
+    child.on('close', () => {
+      clearTimeout(timer);
+      const m = out.match(/SOP_ITEM_ID=([0-9a-f-]{36})/);
+      resolve({ itemId: m ? m[1] : null, log: out });
+    });
+    child.on('error', (e) => { clearTimeout(timer); resolve({ itemId: null, log: `${out}\nspawn error: ${e.message}` }); });
+  });
+}
 
 // GET /admin/lms/items/:id — full item with lessons, blocks, audience
 router.get('/items/:id', async (req: Request, res: Response) => {
