@@ -41,6 +41,9 @@ export async function sendPartnerPush(notification: PartnerNotification): Promis
     reference_id: notification.reference_id || '',
     channel_id: asStr(meta.channel_id),
     dm_conversation_id: asStr(meta.dm_conversation_id),
+    // Thread root id when the message is a reply, so the app can deep-link the
+    // tap straight to the thread instead of the parent conversation.
+    parent_message_id: asStr(meta.parent_message_id),
   };
 
   try {
