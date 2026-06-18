@@ -30,7 +30,7 @@
         "label": "quickadd",
         "title": "Quick Add Task",
         "width": 560,
-        "height": 168,
+        "height": 184,
         "resizable": false,
         "center": true,
         "visible": false,

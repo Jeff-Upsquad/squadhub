@@ -38,34 +38,107 @@ export async function apiFetch(
   return res;
 }
 
+/**
+ * Thin wrapper over apiFetch for the API's standard `{ success, data, error }`
+ * envelope: returns `data` on success, throws the server's error otherwise.
+ */
+async function apiJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await apiFetch(path, init);
+  const json = await res.json().catch(() => ({} as any));
+  if (!res.ok || !json.success) {
+    throw new Error(json.error || `Request failed (${res.status})`);
+  }
+  return json.data as T;
+}
+
+export type TaskPriority = 'emergency' | 'urgent' | 'high' | 'normal' | 'low' | 'none';
+
+export interface AssignableUser {
+  id: string;
+  display_name: string;
+  email: string;
+  avatar_url: string | null;
+}
+
+export type AccessLevel = 'viewer' | 'commenter' | 'member' | 'manager';
+
+export interface ListLite {
+  id: string;
+  name: string;
+  is_locked?: boolean;
+  my_access_level?: AccessLevel;
+}
+
+export interface FolderLite {
+  id: string;
+  name: string;
+  lists?: ListLite[];
+}
+
+export interface SpaceLite {
+  id: string;
+  name: string;
+  color?: string | null;
+  lists?: ListLite[];
+  folders?: FolderLite[];
+}
+
+export interface WorkspaceLite {
+  id: string;
+  name: string;
+}
+
 export interface PersonalListResponse {
   space: { id: string; name: string };
   list: { id: string; name: string };
 }
 
 /** GET /pm/personal — get-or-create the user's private personal space + list. */
-export async function fetchPersonalList(): Promise<PersonalListResponse> {
-  const res = await apiFetch('/pm/personal');
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok || !json.success) {
-    throw new Error(json.error || 'Failed to load your personal list');
-  }
-  return json.data as PersonalListResponse;
+export function fetchPersonalList(): Promise<PersonalListResponse> {
+  return apiJson<PersonalListResponse>('/pm/personal');
 }
 
-/** POST /pm/tasks — create a task in the given list, assigned to the current user. */
-export async function createTask(listId: string, title: string): Promise<void> {
-  const userId = useAuthStore.getState().userId;
-  const res = await apiFetch('/pm/tasks', {
+/** GET /workspaces — the workspace(s) the current user belongs to. */
+export function fetchWorkspaces(): Promise<WorkspaceLite[]> {
+  return apiJson<WorkspaceLite[]>('/workspaces');
+}
+
+/** GET /pm/spaces — top-level spaces in a workspace (no nested lists/folders). */
+export function fetchSpaces(workspaceId: string): Promise<SpaceLite[]> {
+  return apiJson<SpaceLite[]>(`/pm/spaces?workspace_id=${encodeURIComponent(workspaceId)}`);
+}
+
+/** GET /pm/spaces/:id — a single space hydrated with its folders + lists. */
+export function fetchSpace(spaceId: string): Promise<SpaceLite> {
+  return apiJson<SpaceLite>(`/pm/spaces/${spaceId}`);
+}
+
+/** GET /pm/lists/:id/assignable-users — users who can be assigned tasks in a list. */
+export function fetchAssignableUsers(listId: string): Promise<AssignableUser[]> {
+  return apiJson<AssignableUser[]>(`/pm/lists/${listId}/assignable-users`);
+}
+
+export interface CreateTaskPayload {
+  list_id: string;
+  title: string;
+  description?: string;
+  priority?: TaskPriority;
+  work_date?: string | null;
+  assignee_ids?: string[];
+}
+
+/** POST /pm/tasks — create a task; returns the created task (we need its id). */
+export function createTask(payload: CreateTaskPayload): Promise<{ id: string }> {
+  return apiJson<{ id: string }>('/pm/tasks', {
     method: 'POST',
-    body: JSON.stringify({
-      list_id: listId,
-      title,
-      assignee_ids: userId ? [userId] : [],
-    }),
+    body: JSON.stringify(payload),
   });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok || !json.success) {
-    throw new Error(json.error || 'Failed to create task');
-  }
+}
+
+/** PATCH /pm/tasks/:id/focus — set/clear the server-side focus star (focused_at). */
+export async function setTaskFocus(taskId: string, focused: boolean): Promise<void> {
+  await apiJson(`/pm/tasks/${taskId}/focus`, {
+    method: 'PATCH',
+    body: JSON.stringify({ focused }),
+  });
 }
