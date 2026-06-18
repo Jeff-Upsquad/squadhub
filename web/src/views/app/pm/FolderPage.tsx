@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import type { Folder, List, SpaceStatus, Task } from '@squadhub/shared';
 import api from '../../../services/api';
-import { usePMStore, todayKey } from '../../../stores/pmStore';
+import { usePMStore } from '../../../stores/pmStore';
 import { useSpace } from '../../../hooks/useSpaces';
 import TaskGroupCard from './TaskGroupCard';
 import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGroup, type GroupBy } from '../../../lib/taskGrouping';
@@ -28,8 +28,6 @@ export default function FolderPage() {
   const groupByScope = usePMStore((s) => s.groupByScope);
   const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
-  const focusedTodayIds = usePMStore((s) => s.focusedTodayIds);
-  const focusedTodayDate = usePMStore((s) => s.focusedTodayDate);
   const [listFilter, setListFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const groupScopeKey = activeFolderId ? `folder:${activeFolderId}` : '';
@@ -117,8 +115,8 @@ export default function FolderPage() {
   }, [openTasks, groupBy, tz, fadingTaskIds]);
 
   const focusGroup = useMemo(() => {
-    return buildFocusTodayGroup(openTasks, focusedTodayIds, focusedTodayDate, todayKey());
-  }, [openTasks, focusedTodayIds, focusedTodayDate]);
+    return buildFocusTodayGroup(openTasks, tz);
+  }, [openTasks, tz]);
 
   if (!activeFolderId) {
     return (

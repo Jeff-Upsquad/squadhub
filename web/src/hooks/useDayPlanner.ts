@@ -224,6 +224,7 @@ export function useFocusTask() {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ['day-planner'] });
       qc.invalidateQueries({ queryKey: ['my-tasks'] });
+      qc.invalidateQueries({ queryKey: ['my-tasks-summary'] });
     },
   });
 }

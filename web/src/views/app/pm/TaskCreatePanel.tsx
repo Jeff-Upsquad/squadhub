@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCreateTask } from '../../../hooks/useTasks';
+import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { useAssignableUsersByList } from '../../../hooks/useAssignableUsers';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useSpace } from '../../../hooks/useSpaces';
@@ -403,7 +404,7 @@ export default function TaskCreatePanel({
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [focusOnCreate, setFocusOnCreate] = useState(false);
-  const toggleFocusToday = usePMStore((s) => s.toggleFocusToday);
+  const focusTask = useFocusTask();
   const filePickerRef = useRef<HTMLInputElement>(null);
 
   // Default task type, once the list of types is available.
@@ -508,7 +509,7 @@ export default function TaskCreatePanel({
         ...(metadata ? { metadata } : {}),
       });
 
-      if (focusOnCreate) toggleFocusToday(newTask.id);
+      if (focusOnCreate) focusTask.mutate({ id: newTask.id, focused: true });
 
       // Work-block config — write iff the user picked the work_block type.
       // Failure here doesn't roll back the task: the user can edit the

@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { Task, SpaceStatus } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
+import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useActiveWorkBlockRun, useRecordWorkBlockCompletion } from '../../../hooks/useWorkBlocks';
+import { isTaskFocusedToday } from '../../../lib/taskGrouping';
 import { avatarColor, initialOf, formatWhen, nextQuickDate } from './taskHelpers';
 import AssigneePicker from './AssigneePicker';
 import DatePicker from './DatePicker';
@@ -39,7 +41,8 @@ export default function TaskRow({
   canEdit?: boolean;
   listId: string;
 }) {
-  const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, toggleFocusToday, isFocusedToday, fadingTaskIds, markFading, unmarkFading, timer: globalTimer } = usePMStore();
+  const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, fadingTaskIds, markFading, unmarkFading, timer: globalTimer } = usePMStore();
+  const focusTask = useFocusTask();
   const { data: activeWB } = useActiveWorkBlockRun();
   // Per-row timer indicator: live ticking elapsed for whichever timer this row
   // owns (per-task timer OR a work-block run on this task). Updates once per
@@ -58,7 +61,7 @@ export default function TaskRow({
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [isTiming, isPerTaskTimer, globalTimer?.startedAt, activeWB?.run.started_at]);
-  const isFocused = isFocusedToday(task.id);
+  const isFocused = isTaskFocusedToday(task, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const effectiveListId = listId || (task as any).list_id || task.list?.id || null;
   const updateTask = useUpdateTask(effectiveListId);
   // Task list endpoints don't hydrate the `task_type` join — only the id —
@@ -278,7 +281,7 @@ export default function TaskRow({
               type="button"
               className="lv-focus-star"
               data-active={isFocused}
-              onClick={(e) => { e.stopPropagation(); toggleFocusToday(task.id); }}
+              onClick={(e) => { e.stopPropagation(); focusTask.mutate({ id: task.id, focused: !isFocused }); }}
               aria-label={isFocused ? 'Focused for today — click to remove' : 'Focus today'}
               title={isFocused ? 'Focused for today — click to remove' : 'Focus today'}
             >
