@@ -115,8 +115,8 @@ export default function FolderPage() {
   }, [openTasks, groupBy, tz, fadingTaskIds]);
 
   const focusGroup = useMemo(() => {
-    return buildFocusTodayGroup(openTasks, tz);
-  }, [openTasks, tz]);
+    return buildFocusTodayGroup(openTasks);
+  }, [openTasks]);
 
   if (!activeFolderId) {
     return (

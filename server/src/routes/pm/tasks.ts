@@ -399,16 +399,19 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     // tasks: any they're assigned to (already fetched above) plus any they
     // created (which may be unassigned or dateless, so missing from that set).
     {
-      // Focus resets daily: only tasks focused TODAY (caller tz) count.
-      const focusedToday = (t: any) => t.focused_at && fmt.format(new Date(t.focused_at)) === todayStr;
+      // Focus is persistent: a star stays until explicitly cleared (focused_at
+      // set to null). It does NOT reset overnight. The future-work-date gate
+      // (hide a starred task until its work_date arrives) is applied client-side
+      // in the Home Today list, so this bucket carries all focused tasks.
+      const isFocused = (t: any) => t.focused_at != null;
       const existingIds = new Set(tasks.map((t: any) => t.id));
-      const fromExisting = (tasks as any[]).filter(focusedToday);
+      const fromExisting = (tasks as any[]).filter(isFocused);
       const { data: createdFocused } = await supabaseAdmin
         .from('tasks')
         .select('*')
         .not('focused_at', 'is', null)
         .eq('created_by', req.userId!);
-      let extra = (createdFocused ?? []).filter((t: any) => !existingIds.has(t.id) && focusedToday(t));
+      let extra = (createdFocused ?? []).filter((t: any) => !existingIds.has(t.id) && isFocused(t));
       if (!includeDone) {
         extra = extra.filter((t: any) => t.status !== 'done' && t.status !== 'closed');
       }

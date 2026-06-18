@@ -5,7 +5,7 @@ import { useUpdateTask } from '../../../hooks/useTasks';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useActiveWorkBlockRun, useRecordWorkBlockCompletion } from '../../../hooks/useWorkBlocks';
-import { isTaskFocusedToday } from '../../../lib/taskGrouping';
+import { isTaskFocused } from '../../../lib/taskGrouping';
 import { avatarColor, initialOf, formatWhen, nextQuickDate } from './taskHelpers';
 import AssigneePicker from './AssigneePicker';
 import DatePicker from './DatePicker';
@@ -61,7 +61,7 @@ export default function TaskRow({
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [isTiming, isPerTaskTimer, globalTimer?.startedAt, activeWB?.run.started_at]);
-  const isFocused = isTaskFocusedToday(task, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  const isFocused = isTaskFocused(task);
   const effectiveListId = listId || (task as any).list_id || task.list?.id || null;
   const updateTask = useUpdateTask(effectiveListId);
   // Task list endpoints don't hydrate the `task_type` join — only the id —
