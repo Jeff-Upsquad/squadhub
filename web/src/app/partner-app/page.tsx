@@ -2,25 +2,31 @@
 
 import { useEffect, useState } from 'react';
 
-type AppConfig = {
-  minVersion: string;
-  downloadUrl: string;
+// Release manifest served by GET /partner-app/version — the same source of
+// truth the in-app updater polls and that `tools/release.sh` (GO LIVE) updates.
+type Manifest = {
+  version_code: number;
+  version_name: string;
+  apk_url: string;
+  release_notes?: string;
 };
 
 export default function PartnerAppLanding() {
-  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [manifest, setManifest] = useState<Manifest | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/partner-app/app-config')
+    fetch('/partner-app/version')
       .then((r) => r.json())
-      .then((data: AppConfig) => setConfig(data))
+      .then((res: { success: boolean; data: Manifest | null }) => setManifest(res.data))
       .catch(() => setError('Could not load app details. Please try again.'))
       .finally(() => setLoading(false));
   }, []);
 
-  const hasDownload = !!config?.downloadUrl;
+  // version_code starts at 1 (the bootstrap/fallback). A real release bumps it,
+  // so only offer the download once an actual version has been published.
+  const hasDownload = !!manifest && manifest.version_code > 1 && !!manifest.apk_url;
 
   return (
     <div className="min-h-screen bg-[#F0F2F5] text-[#0F172B]">
@@ -70,7 +76,7 @@ export default function PartnerAppLanding() {
               </div>
             ) : hasDownload ? (
               <a
-                href={config!.downloadUrl}
+                href={manifest!.apk_url}
                 download
                 className="group flex w-full items-center justify-between rounded-xl bg-[#0F172B] px-5 py-3.5 text-sm font-medium text-white transition hover:bg-[#1D293D] active:scale-[0.99]"
               >
@@ -87,7 +93,7 @@ export default function PartnerAppLanding() {
                   Download APK
                 </span>
                 <span className="rounded-full bg-white/10 px-2 py-0.5 font-mono text-[11px] text-white/80">
-                  v{config!.minVersion}
+                  v{manifest!.version_name}
                 </span>
               </a>
             ) : (
@@ -100,6 +106,24 @@ export default function PartnerAppLanding() {
               Android 8.0 or later · ~25 MB
             </p>
           </div>
+
+          {/* What's new */}
+          {hasDownload && manifest!.release_notes && (
+            <section className="mt-6 rounded-2xl border border-[#E2E8F0] bg-white p-5">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-[#62748E]">
+                What&apos;s new
+              </h2>
+              <ul className="mt-3 list-disc space-y-1.5 pl-4 text-[13px] leading-snug text-[#334155] marker:text-[#90A1B9]">
+                {manifest!.release_notes
+                  .split('\n')
+                  .map((l) => l.replace(/^[•\-\s]+/, '').trim())
+                  .filter(Boolean)
+                  .map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))}
+              </ul>
+            </section>
+          )}
 
           {/* Install steps */}
           <section className="mt-10">
