@@ -280,24 +280,19 @@ export function groupTasks(
   }
 }
 
-export function buildFocusTodayGroup(
-  tasks: Task[],
-  focusedTodayIds: string[],
-  _focusedTodayDate: string,
-  _todayKey: string,
-  sortBy: SortBy = 'manual',
-): Group | null {
-  // Focus is persistent now — no date gate; just whether anything is starred.
-  // The date params are kept for call-site compatibility but no longer read.
-  if (focusedTodayIds.length === 0) return null;
-  const ids = new Set(focusedTodayIds);
-  const matched = tasks.filter((t) => ids.has(t.id));
+// Focus is server-backed (the task's `focused_at` column, set by PATCH /focus
+// from any device incl. the desktop app) and resets daily: a task counts as
+// focused only when its focused_at falls on today (in the user's tz).
+export function isTaskFocusedToday(t: Task, tz: string): boolean {
+  return isToday(t.focused_at, tz);
+}
+
+export function buildFocusTodayGroup(tasks: Task[], tz: string, sortBy: SortBy = 'manual'): Group | null {
+  const matched = tasks.filter((t) => isTaskFocusedToday(t, tz));
   if (matched.length === 0) return null;
   const ordered =
     sortBy === 'manual'
-      ? (focusedTodayIds
-          .map((id) => matched.find((t) => t.id === id))
-          .filter(Boolean) as Task[])
+      ? [...matched].sort((a, b) => (a.focused_at ?? '').localeCompare(b.focused_at ?? ''))
       : sortTasks(matched, sortBy);
   return { key: 'focus_today', label: '★ Focus Today', sort: -1, tasks: ordered };
 }

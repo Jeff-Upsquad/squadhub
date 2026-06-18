@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import type { SpaceStatus } from '@squadhub/shared';
 import { useTasks, useUpdateTask, groupTasksByStatus } from '../../../hooks/useTasks';
-import { usePMStore, todayKey, type ListGroupBy } from '../../../stores/pmStore';
+import { usePMStore, type ListGroupBy } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
-import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, type SortBy } from '../../../lib/taskGrouping';
+import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, isTaskFocusedToday, type SortBy } from '../../../lib/taskGrouping';
 import { filterTasks, countActiveFilters, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
 import TaskGroupCard from './TaskGroupCard';
 
@@ -32,7 +32,7 @@ export default function ListView({
 }) {
   const { data: tasks, isLoading } = useTasks(listId, undefined);
   const updateTask = useUpdateTask(listId);
-  const { selectedTasks, clearSelection, focusedTodayIds, focusedTodayDate, fadingTaskIds } = usePMStore();
+  const { selectedTasks, clearSelection, fadingTaskIds } = usePMStore();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
@@ -48,15 +48,14 @@ export default function ListView({
       });
     }
     if (focusToday) {
-      // Focus stars are persistent (no overnight reset).
-      const focusedSet = new Set(focusedTodayIds);
-      arr = arr.filter((t) => focusedSet.has(t.id));
+      // Focus is server-backed (the task's focused_at column), resets daily.
+      arr = arr.filter((t) => isTaskFocusedToday(t, tz));
     }
     if (sortBy !== 'manual') {
       arr = sortTasks(arr, sortBy);
     }
     return arr;
-  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy, focusedTodayIds]);
+  }, [tasks, filters, searchQuery, myTasksOnly, currentUserId, tz, focusToday, sortBy]);
 
   const activeFilterCount = countActiveFilters(filters);
 
@@ -67,8 +66,8 @@ export default function ListView({
 
   const focusGroup = useMemo(() => {
     if (focusToday) return null;
-    return buildFocusTodayGroup(openTasks, focusedTodayIds, focusedTodayDate, todayKey(), sortBy);
-  }, [openTasks, focusedTodayIds, focusedTodayDate, focusToday, sortBy]);
+    return buildFocusTodayGroup(openTasks, tz, sortBy);
+  }, [openTasks, focusToday, sortBy, tz]);
 
   const statusGroups = useMemo(() => {
     if (groupBy !== 'status') return null;

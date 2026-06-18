@@ -63,21 +63,12 @@ export type MyTasksBuckets = {
   in_progress_today: Task[];
 };
 
-function useActiveFocusedIds(): string[] {
-  // Focus stars are persistent (no overnight reset), so always use them.
-  return usePMStore((s) => s.focusedTodayIds);
-}
-
 export function useMyTasks() {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const focusedIds = useActiveFocusedIds();
-  const focusedKey = focusedIds.join(',');
   return useQuery<MyTasksBuckets>({
-    queryKey: ['my-tasks', tz, focusedKey],
+    queryKey: ['my-tasks', tz],
     queryFn: async () => {
-      const params = new URLSearchParams({ tz });
-      if (focusedKey) params.set('focused_ids', focusedKey);
-      const res = await api.get(`/pm/tasks/my?${params.toString()}`);
+      const res = await api.get(`/pm/tasks/my?${new URLSearchParams({ tz }).toString()}`);
       return res.data.data;
     },
     staleTime: 30_000,

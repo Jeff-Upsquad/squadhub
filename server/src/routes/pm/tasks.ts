@@ -393,38 +393,27 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       else buckets.later.push(t);
     }
 
-    // Starred ("Focus today") tasks are tracked client-side in pmStore and
-    // surfaced on the Home focus list. They may not be in the assignee-filtered
-    // result above (e.g. unassigned, or no date set), so we fetch any missing
-    // ones here and return the full set in a separate `focused` bucket.
-    const focusedIds = Array.from(new Set(
-      ((req.query.focused_ids as string | undefined) ?? '')
-        .split(',').map((s) => s.trim()).filter(Boolean)
-    )).slice(0, 200);
-
-    if (focusedIds.length > 0) {
-      const alreadyFetched = new Map(tasks.map((t: any) => [t.id, t]));
-      const missingIds = focusedIds.filter((id) => !alreadyFetched.has(id));
-      let extras: any[] = [];
-      if (missingIds.length > 0) {
-        // Tasks not in the assignee-filtered set are only allowed in the
-        // focused bucket if the caller created them — prevents random
-        // unassigned tasks created by someone else from leaking onto the
-        // user's focus list when a stale star ID is sent up.
-        const { data: extra } = await supabaseAdmin
-          .from('tasks')
-          .select('*')
-          .in('id', missingIds)
-          .eq('created_by', req.userId!);
-        const filteredExtras = includeDone
-          ? (extra ?? [])
-          : (extra ?? []).filter((t: any) => t.status !== 'done' && t.status !== 'closed');
-        extras = await hydrateParents(await hydrateLists(await hydrateAssignees(filteredExtras)));
+    // Starred ("Focus") tasks are tracked server-side via the tasks.focused_at
+    // column (set by PATCH /tasks/:id/focus from any device, incl. the desktop
+    // app), so the focus list is cross-device. Surface the caller's focused
+    // tasks: any they're assigned to (already fetched above) plus any they
+    // created (which may be unassigned or dateless, so missing from that set).
+    {
+      // Focus resets daily: only tasks focused TODAY (caller tz) count.
+      const focusedToday = (t: any) => t.focused_at && fmt.format(new Date(t.focused_at)) === todayStr;
+      const existingIds = new Set(tasks.map((t: any) => t.id));
+      const fromExisting = (tasks as any[]).filter(focusedToday);
+      const { data: createdFocused } = await supabaseAdmin
+        .from('tasks')
+        .select('*')
+        .not('focused_at', 'is', null)
+        .eq('created_by', req.userId!);
+      let extra = (createdFocused ?? []).filter((t: any) => !existingIds.has(t.id) && focusedToday(t));
+      if (!includeDone) {
+        extra = extra.filter((t: any) => t.status !== 'done' && t.status !== 'closed');
       }
-      const fromExisting = focusedIds
-        .map((id) => alreadyFetched.get(id))
-        .filter(Boolean);
-      buckets.focused = [...fromExisting, ...extras];
+      const hydratedExtra = await hydrateParents(await hydrateLists(await hydrateAssignees(extra)));
+      buckets.focused = [...fromExisting, ...hydratedExtra];
     }
 
     // "In progress today" — tasks the caller has logged time on today (in their

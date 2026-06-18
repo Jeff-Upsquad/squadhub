@@ -4,6 +4,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
 import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useUpdateTaskTimeTracked } from '../../../hooks/useTasks';
 import { useTimeStats } from '../../../hooks/useTimer';
+import { useFocusTask } from '../../../hooks/useDayPlanner';
+import { isTaskFocusedToday } from '../../../lib/taskGrouping';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
@@ -185,7 +187,8 @@ export default function TaskDetailPanel({
   isPeek?: boolean;
 }) {
   const pmStore = usePMStore();
-  const { activeTaskId, timer, startTimer: globalStartTimer, stopTimer: globalStopTimer, toggleFocusToday, isFocusedToday: checkIsFocusedToday } = pmStore;
+  const { activeTaskId, timer, startTimer: globalStartTimer, stopTimer: globalStopTimer } = pmStore;
+  const focusTask = useFocusTask();
   // effectiveTaskId — primary uses the global activeTaskId; peek uses the override.
   const effectiveTaskId = taskIdOverride ?? activeTaskId;
   // Close routes: peek closes peekTaskId, primary closes activeTaskId. Opening
@@ -193,8 +196,9 @@ export default function TaskDetailPanel({
   // current peek task) — that matches the user's mental model of "this side
   // is for drilling in without losing the host on the other side."
   const setActiveTask = isPeek ? pmStore.setPeekTask : pmStore.setActiveTask;
-  const isFocusedToday = effectiveTaskId ? checkIsFocusedToday(effectiveTaskId) : false;
   const { data: task, isLoading } = useTask(effectiveTaskId);
+  const focusTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const isFocusedToday = task ? isTaskFocusedToday(task, focusTz) : false;
   const { data: comments } = useTaskComments(effectiveTaskId);
   const { data: taskTypes } = useTaskTypes();
   const { data: checklists } = useChecklists(effectiveTaskId);
@@ -683,7 +687,7 @@ export default function TaskDetailPanel({
           {task && (
             <button
               type="button"
-              onClick={() => toggleFocusToday(task.id)}
+              onClick={() => focusTask.mutate({ id: task.id, focused: !isFocusedToday })}
               className="td-nav-btn td-focus-star"
               data-active={isFocusedToday}
               title={isFocusedToday ? 'Focused for today — click to remove' : 'Focus today'}
