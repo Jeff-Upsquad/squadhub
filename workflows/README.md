@@ -11,6 +11,17 @@ Workflows are the instruction layer of the WAT framework. Each workflow:
 - Describes expected outputs
 - Includes edge case handling and troubleshooting
 
+## Command shorthands
+
+When the user invokes one of these (e.g. "cmpd", "/pd", "run cu"), read the matching file and execute its steps in order.
+
+| Shorthand | File | Meaning |
+|---|---|---|
+| **CM** | [cm.md](cm.md) | **Commit, Merge** — commit + merge to `main`, locally. No push/deploy. |
+| **PD** | [pd.md](pd.md) | **Push, Deploy** — push `main` to origin + deploy to prod. Assumes already committed/merged. |
+| **CMPD** | [cmpd.md](cmpd.md) | **Commit, Merge, Push, Deploy** — the full pipeline (CM + PD). |
+| **CU** | [cu.md](cu.md) | **Cleanup after CMPD** — remove the merged branch/worktree + reclaim VPS resources. |
+
 ## Structure
 
 ```
