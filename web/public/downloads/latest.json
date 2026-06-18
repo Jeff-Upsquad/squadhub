@@ -1,10 +1,10 @@
 {
-  "version": "0.1.1",
-  "notes": "Quick-add hotkey (Cmd+Shift+T), private My Tasks, and over-full-screen capture.",
-  "pub_date": "2026-06-14T14:02:11Z",
+  "version": "0.1.2",
+  "notes": "Quick Add now captures full task fields: pick a list (My Tasks + recent chips), assignee, priority, work date, focus star, and a description.",
+  "pub_date": "2026-06-18T06:29:36Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzVNZkYyMGRqY1VVYVJKTE1rVVlhb0tHc3ZXL1ZDQXhvRy81SzhnYVdwNHRXL1c2QllMN2RpaVBQV1pVdzRxVTRFUWhTZGxqNVhmVVZTSmRFeEhBZHc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNDQ1NjY0CWZpbGU6U3F1YWRIdWIuYXBwLnRhci5negpiV09UTlJUNVpEMGYrY2IxUnRmc0J6MWRuVW5hMkxrZzk2TWdkTVBzTnZQTVZWbUE3OU9ncUtRWVd2TERxOVBsWlArbkJFR1kwOEQ0UlBBY2Y2UFpCUT09Cg==",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzBqbCtOeVpPTHprMHJSM00wbitDNzhZRWhjMFF5dVZZV2dZYWcwMEJHSG5odEJBRG5vRWZNdnpuYlZyZW5jakE0QW85bXdZb21TamdLOUNodlQ3MEFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNzY0MDU1CWZpbGU6U3F1YWRIdWIuYXBwLnRhci5negpPQzB6ckpEMWZtZyt4NFF5ZnpLNnhYU3drSXozcmhwd0g1VStZdlhsTXAwOEZLOUNCUG5hWTdUREdsQS90MldITUp5WmdwUC92TlV4aDRvMmNvSVdDQT09Cg==",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
