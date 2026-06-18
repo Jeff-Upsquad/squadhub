@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
 import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
+import { useCreateTaskTimeEntry, useMyTimeEntries } from '../../../hooks/useTaskTimeEntries';
 import { usePMStore, type FocusBucket } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
+import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
 import { groupTasks, isFutureDay, type GroupBy } from '../../../lib/taskGrouping';
 import DayCalendar from '../day-planner/DayCalendar';
 import { planDateKey } from '../../../hooks/useDayPlanner';
@@ -46,11 +48,20 @@ export default function TodayList() {
     return unique.filter((t) => focusedSet.has(t.id) && !isFutureDay(t.work_date, tz));
   }, [data, focusedTodayIds, tz]);
 
+  // "In progress today" — tasks the user has logged time on today (computed
+  // server-side, full task objects, most-recently-worked first). These render
+  // as their own section ABOVE the focus list and are pulled out of the focus
+  // sections below so a worked task never shows up twice.
+  const inProgressTasks: Task[] = useMemo(() => data?.in_progress_today ?? [], [data]);
+  const inProgressIds = useMemo(() => new Set(inProgressTasks.map((t) => t.id)), [inProgressTasks]);
+
   // Split the focus list into the main list plus the manual Evening / Night
-  // triage buckets that render as their own sections below it.
-  const mainTasks = useMemo(() => tasks.filter((t) => !focusBuckets[t.id]), [tasks, focusBuckets]);
-  const eveningTasks = useMemo(() => tasks.filter((t) => focusBuckets[t.id] === 'evening'), [tasks, focusBuckets]);
-  const nightTasks = useMemo(() => tasks.filter((t) => focusBuckets[t.id] === 'night'), [tasks, focusBuckets]);
+  // triage buckets that render as their own sections below it. Tasks already in
+  // the "In progress today" section are excluded here to avoid duplicates.
+  const focusTasks = useMemo(() => tasks.filter((t) => !inProgressIds.has(t.id)), [tasks, inProgressIds]);
+  const mainTasks = useMemo(() => focusTasks.filter((t) => !focusBuckets[t.id]), [focusTasks, focusBuckets]);
+  const eveningTasks = useMemo(() => focusTasks.filter((t) => focusBuckets[t.id] === 'evening'), [focusTasks, focusBuckets]);
+  const nightTasks = useMemo(() => focusTasks.filter((t) => focusBuckets[t.id] === 'night'), [focusTasks, focusBuckets]);
 
   const groupBy = usePMStore((s) => s.todayListGroupBy);
   const setTodayListGroupBy = usePMStore((s) => s.setTodayListGroupBy);
@@ -62,6 +73,38 @@ export default function TodayList() {
 
   const today = useMemo(() => planDateKey(), []);
   const [viewDate, setViewDate] = useState<string>(today);
+
+  // Time tracked TODAY, per task and in total, from saved time entries plus the
+  // live elapsed of any running timer. Drives the per-row "tracked today" chip
+  // and the total on the In progress header. We only tick the clock while a
+  // timer is actually running so the figures advance live without a permanent
+  // 1s interval.
+  const { data: timeEntries } = useMyTimeEntries();
+  const timer = usePMStore((s) => s.timer);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!timer) return;
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [timer]);
+  const { secondsTodayByTask, totalTodaySeconds } = useMemo(() => {
+    const map = new Map<string, number>();
+    let total = 0;
+    for (const e of timeEntries ?? []) {
+      if (toLocalDateKey(e.started_at) !== today) continue;
+      const dur = e.duration_seconds || 0;
+      map.set(e.task_id, (map.get(e.task_id) || 0) + dur);
+      total += dur;
+    }
+    if (timer) {
+      const live = Math.max(0, Math.floor((nowTick - timer.startedAt) / 1000));
+      if (live > 0) {
+        map.set(timer.taskId, (map.get(timer.taskId) || 0) + live);
+        total += live;
+      }
+    }
+    return { secondsTodayByTask: map, totalTodaySeconds: total };
+  }, [timeEntries, today, timer, nowTick]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -85,6 +128,26 @@ export default function TodayList() {
 
   return (
     <>
+    {view === 'list' && !isLoading && !isError && inProgressTasks.length > 0 && (
+      <div className="hm-card hm-inprogress-card">
+        <div className="hm-card-head">
+          <span className="hm-live-dot" aria-hidden="true" />
+          <h3>In progress today</h3>
+          <span className="hm-count">· {inProgressTasks.length}</span>
+          <span className="hm-tracked-total" title="Total time tracked today">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+            </svg>
+            {formatTracked(totalTodaySeconds) || '0m'}
+          </span>
+        </div>
+        <div className="hm-list">
+          {inProgressTasks.map((t) => (
+            <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} />
+          ))}
+        </div>
+      </div>
+    )}
     <div className="hm-card">
       <div className="hm-card-head">
         <h3>Focus list</h3>
@@ -180,11 +243,20 @@ export default function TodayList() {
             </div>
           )}
 
-          {!isLoading && !isError && tasks.length === 0 && (
+          {!isLoading && !isError && focusTasks.length === 0 && (
             <div className="hm-empty">
               <div className="rule" />
-              <div className="h">Nothing starred yet.</div>
-              <div className="p">Star a task (★) and it shows up here.</div>
+              {tasks.length > 0 ? (
+                <>
+                  <div className="h">All caught up here.</div>
+                  <div className="p">Your starred tasks are in progress above.</div>
+                </>
+              ) : (
+                <>
+                  <div className="h">Nothing starred yet.</div>
+                  <div className="p">Star a task (★) and it shows up here.</div>
+                </>
+              )}
             </div>
           )}
 
@@ -192,7 +264,7 @@ export default function TodayList() {
             groupBy === 'none' ? (
               <div className="hm-list">
                 {mainTasks.map((t) => (
-                  <TodayRow key={t.id} task={t} onOpen={openTask} />
+                  <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} />
                 ))}
               </div>
             ) : (
@@ -204,7 +276,7 @@ export default function TodayList() {
                   </div>
                   <div className="hm-list" style={{ paddingTop: 0 }}>
                     {g.tasks.map((t) => (
-                      <TodayRow key={t.id} task={t} onOpen={openTask} />
+                      <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} />
                     ))}
                   </div>
                 </div>
@@ -225,7 +297,7 @@ export default function TodayList() {
           </div>
           <div className="hm-list">
             {eveningTasks.map((t) => (
-              <TodayRow key={t.id} task={t} onOpen={openTask} />
+              <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} />
             ))}
           </div>
         </div>
@@ -240,7 +312,7 @@ export default function TodayList() {
           </div>
           <div className="hm-list">
             {nightTasks.map((t) => (
-              <TodayRow key={t.id} task={t} onOpen={openTask} />
+              <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} />
             ))}
           </div>
         </div>
@@ -249,10 +321,44 @@ export default function TodayList() {
   );
 }
 
-function TodayRow({ task: t, onOpen }: { task: Task; onOpen: (id: string) => void }) {
+function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (id: string) => void; secondsToday?: number }) {
   const updateTask = useUpdateTask(null);
   const setFocusBucket = usePMStore((s) => s.setFocusBucket);
   const bucket = usePMStore((s) => s.focusBuckets[t.id]);
+  const timer = usePMStore((s) => s.timer);
+  const startTimer = usePMStore((s) => s.startTimer);
+  const stopTimer = usePMStore((s) => s.stopTimer);
+  const createEntry = useCreateTaskTimeEntry();
+  const isTracking = timer?.taskId === t.id;
+
+  // Persist a finished timer session as a time entry (bumps task.time_tracked
+  // server-side). Mirrors ActiveTimer.handleStopPerTask / the detail panel.
+  const saveSession = async (taskId: string, startedAt: number) => {
+    const secs = Math.floor((Date.now() - startedAt) / 1000);
+    if (secs < 1) return;
+    try {
+      await createEntry.mutateAsync({
+        taskId,
+        startedAt: new Date(startedAt).toISOString(),
+        durationSeconds: secs,
+      });
+    } catch (err) {
+      console.error('Failed to save tracked time:', err);
+    }
+  };
+
+  const onTimerClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isTracking) {
+      const stopped = stopTimer();
+      if (stopped) await saveSession(stopped.taskId, stopped.startedAt);
+      return;
+    }
+    // Starting here switches the single global timer to this task; if another
+    // task was being tracked, save its session first so no time is lost.
+    const prev = startTimer(t.id, t.title, t.list_id || '', t.time_tracked || 0);
+    if (prev) await saveSession(prev.taskId, prev.startedAt);
+  };
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   // Fixed-viewport coordinates for the bucket menu (null = closed). The menu is
@@ -335,6 +441,7 @@ function TodayRow({ task: t, onOpen }: { task: Task; onOpen: (id: string) => voi
       data-done={displayDone}
       data-fading={isFadingOut}
       data-subtask={isSubtask || undefined}
+      data-tracking={isTracking || undefined}
       onClick={() => onOpen(t.id)}
       onTransitionEnd={onRowTransitionEnd}
       role="button"
@@ -363,19 +470,32 @@ function TodayRow({ task: t, onOpen }: { task: Task; onOpen: (id: string) => voi
           {when.text}
         </span>
       )}
-      {assignee ? (
-        <div
-          className="hm-ava"
-          style={{ background: avatarColor(assignee.id || assignee.email) }}
-          title={assignee.display_name || assignee.email}
-        >
-          {initialOf(assignee.display_name || assignee.email)}
-        </div>
-      ) : (
-        <div className="hm-ava" data-empty="true" title="Unassigned">
-          –
-        </div>
+      {secondsToday > 0 && (
+        <span className="hm-tracked" data-live={isTracking || undefined} title="Tracked today">
+          {formatTracked(secondsToday)}
+        </span>
       )}
+      <button
+        type="button"
+        className="hm-timer-btn"
+        data-active={isTracking || undefined}
+        aria-label={isTracking ? 'Stop timer' : 'Start timer'}
+        title={isTracking ? 'Stop timer' : 'Start timer'}
+        onClick={onTimerClick}
+      >
+        {isTracking ? (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <rect x="6" y="6" width="12" height="12" rx="2" />
+          </svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="9.5" y1="2.5" x2="14.5" y2="2.5" />
+            <line x1="12" y1="2.5" x2="12" y2="5" />
+            <circle cx="12" cy="14" r="7.5" />
+            <line x1="12" y1="14" x2="14.5" y2="11.5" />
+          </svg>
+        )}
+      </button>
       <div className="hm-bucket" ref={bucketRef}>
         <button
           type="button"
@@ -392,6 +512,19 @@ function TodayRow({ task: t, onOpen }: { task: Task; onOpen: (id: string) => voi
           </svg>
         </button>
       </div>
+      {assignee ? (
+        <div
+          className="hm-ava"
+          style={{ background: avatarColor(assignee.id || assignee.email) }}
+          title={assignee.display_name || assignee.email}
+        >
+          {initialOf(assignee.display_name || assignee.email)}
+        </div>
+      ) : (
+        <div className="hm-ava" data-empty="true" title="Unassigned">
+          –
+        </div>
+      )}
       {menuPos && createPortal(
         <div
           ref={menuRef}

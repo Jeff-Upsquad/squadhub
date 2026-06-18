@@ -58,6 +58,9 @@ export type MyTasksBuckets = {
   upcoming: Task[];
   later: Task[];
   focused: Task[];
+  // Tasks the caller has logged time on today (user tz), most-recent first.
+  // Surfaced as the "In progress today" section above the Home focus list.
+  in_progress_today: Task[];
 };
 
 function useActiveFocusedIds(): string[] {

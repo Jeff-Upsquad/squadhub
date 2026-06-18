@@ -347,8 +347,8 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     const tomorrowStr = fmt.format(new Date(now.getTime() + dayMs));
     const upcomingCutoffStr = fmt.format(new Date(now.getTime() + 7 * dayMs));
 
-    const buckets: Record<'overdue' | 'today' | 'tomorrow' | 'upcoming' | 'later' | 'focused' | 'day_planner', any[]> = {
-      overdue: [], today: [], tomorrow: [], upcoming: [], later: [], focused: [], day_planner: [],
+    const buckets: Record<'overdue' | 'today' | 'tomorrow' | 'upcoming' | 'later' | 'focused' | 'in_progress_today' | 'day_planner', any[]> = {
+      overdue: [], today: [], tomorrow: [], upcoming: [], later: [], focused: [], in_progress_today: [], day_planner: [],
     };
 
     // All three date fields are TIMESTAMPTZ (migration 034 promoted
@@ -425,6 +425,50 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
         .map((id) => alreadyFetched.get(id))
         .filter(Boolean);
       buckets.focused = [...fromExisting, ...extras];
+    }
+
+    // "In progress today" — tasks the caller has logged time on today (in their
+    // tz). Pulls recent time entries and keeps those whose started_at lands on
+    // todayStr, most-recently-worked first. Full task objects (assignees, dates,
+    // parents) so the Home list renders these rows identically to the focus list.
+    const { data: recentEntries } = await supabaseAdmin
+      .from('task_time_entries')
+      .select('task_id, started_at')
+      .eq('user_id', req.userId!)
+      .order('started_at', { ascending: false })
+      .limit(300);
+    const workedTodayIds: string[] = [];
+    const seenWorked = new Set<string>();
+    for (const e of recentEntries || []) {
+      if (toTzDay((e as any).started_at) !== todayStr) continue;
+      const id = (e as any).task_id as string;
+      if (seenWorked.has(id)) continue;
+      seenWorked.add(id);
+      workedTodayIds.push(id);
+    }
+    if (workedTodayIds.length > 0) {
+      const have = new Map(tasks.map((t: any) => [t.id, t]));
+      const missingWorked = workedTodayIds.filter((id) => !have.has(id));
+      let workedExtras: any[] = [];
+      if (missingWorked.length > 0) {
+        // The user has time entries on these, so they had access — no created_by
+        // gate here (unlike the focus bucket). Still hide done/closed unless asked.
+        const { data: extraRows } = await supabaseAdmin
+          .from('tasks')
+          .select('*')
+          .in('id', missingWorked);
+        const filtered = includeDone
+          ? (extraRows ?? [])
+          : (extraRows ?? []).filter((t: any) => t.status !== 'done' && t.status !== 'closed');
+        workedExtras = await hydrateParents(await hydrateLists(await hydrateAssignees(filtered)));
+      }
+      const workedById = new Map<string, any>([
+        ...have,
+        ...workedExtras.map((t: any) => [t.id, t] as [string, any]),
+      ]);
+      buckets.in_progress_today = workedTodayIds
+        .map((id) => workedById.get(id))
+        .filter(Boolean);
     }
 
     res.json({ success: true, data: buckets });
