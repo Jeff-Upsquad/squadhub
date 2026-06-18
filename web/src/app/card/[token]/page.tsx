@@ -529,6 +529,58 @@ export default function CardShareTokenPage() {
           >
             <div>
               <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
+                <span>Plan</span>
+                <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+              </label>
+              <p className="mb-3 text-xs text-[#7A7568]">
+                Plans differ by availability — how much of a creative partner you get each week.
+              </p>
+              <div className="overflow-hidden rounded-xl border border-[#D9D5C7]">
+                <table className="w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="bg-[#F4F1E8] text-[11px] font-semibold uppercase tracking-wide text-[#7A7568]">
+                      <th className="px-2 py-2 sm:px-3">Plan</th>
+                      <th className="px-2 py-2 text-right sm:px-3">Day</th>
+                      <th className="px-2 py-2 text-right sm:px-3">Week</th>
+                      <th className="px-2 py-2 text-right sm:px-3">Month</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {PLAN_OPTIONS.map((p) => {
+                      const on = form.plan === p.name;
+                      return (
+                        <tr
+                          key={p.name}
+                          role="button"
+                          aria-pressed={on}
+                          onClick={() => update('plan', on ? '' : p.name)}
+                          className={`cursor-pointer border-t border-[#E8E5DD] transition ${on ? 'bg-[#F2FCBC]' : 'bg-white hover:bg-[#FBFAF6]'}`}
+                        >
+                          <td className="px-2 py-2.5 font-semibold text-[#0a0a0a] sm:px-3">
+                            <span className="flex items-center gap-2">
+                              <span className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5]'}`}>
+                                {on && (
+                                  <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </span>
+                              {p.name}
+                            </span>
+                          </td>
+                          <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.dailyHours} hr{p.dailyHours > 1 ? 's' : ''}</td>
+                          <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.weeklyHours} hrs</td>
+                          <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.monthlyHours} hrs</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
                 <span>Experience level(s)</span>
                 <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
               </label>
@@ -581,58 +633,6 @@ export default function CardShareTokenPage() {
                     </div>
                   );
                 })}
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
-                <span>Plan</span>
-                <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
-              </label>
-              <p className="mb-3 text-xs text-[#7A7568]">
-                Plans differ by availability — how much of a creative partner you get each week.
-              </p>
-              <div className="overflow-hidden rounded-xl border border-[#D9D5C7]">
-                <table className="w-full border-collapse text-left text-sm">
-                  <thead>
-                    <tr className="bg-[#F4F1E8] text-[11px] font-semibold uppercase tracking-wide text-[#7A7568]">
-                      <th className="px-2 py-2 sm:px-3">Plan</th>
-                      <th className="px-2 py-2 text-right sm:px-3">Day</th>
-                      <th className="px-2 py-2 text-right sm:px-3">Week</th>
-                      <th className="px-2 py-2 text-right sm:px-3">Month</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {PLAN_OPTIONS.map((p) => {
-                      const on = form.plan === p.name;
-                      return (
-                        <tr
-                          key={p.name}
-                          role="button"
-                          aria-pressed={on}
-                          onClick={() => update('plan', on ? '' : p.name)}
-                          className={`cursor-pointer border-t border-[#E8E5DD] transition ${on ? 'bg-[#F2FCBC]' : 'bg-white hover:bg-[#FBFAF6]'}`}
-                        >
-                          <td className="px-2 py-2.5 font-semibold text-[#0a0a0a] sm:px-3">
-                            <span className="flex items-center gap-2">
-                              <span className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5]'}`}>
-                                {on && (
-                                  <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                  </svg>
-                                )}
-                              </span>
-                              {p.name}
-                            </span>
-                          </td>
-                          <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.dailyHours} hr{p.dailyHours > 1 ? 's' : ''}</td>
-                          <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.weeklyHours} hrs</td>
-                          <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.monthlyHours} hrs</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
               </div>
             </div>
 
