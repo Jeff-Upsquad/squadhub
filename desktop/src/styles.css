@@ -301,6 +301,72 @@ body {
   color: var(--primary);
 }
 
+/* Update available / installer (Settings window) */
+.update-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  background: rgba(99, 102, 241, 0.14);
+  border: 1px solid var(--primary);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.update-box {
+  background: var(--bg-input);
+  border: 1px solid var(--primary);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-top: 8px;
+}
+
+.update-box.update-box-error {
+  border-color: var(--danger);
+}
+
+.update-box-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.update-ver {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.update-notes {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+  line-height: 1.4;
+}
+
+.update-box .btn {
+  margin: 0;
+}
+
+.update-progress {
+  height: 6px;
+  background: var(--bg);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.update-progress-bar {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
 /* Quick-add: list chips */
 .qa-chips,
 .qa-attrs {

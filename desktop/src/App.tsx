@@ -1,6 +1,4 @@
 import { useEffect } from 'react';
-import { check } from '@tauri-apps/plugin-updater';
-import { relaunch } from '@tauri-apps/plugin-process';
 import { useAuthStore } from './stores/authStore';
 import { connectSocket, disconnectSocket } from './services/socket';
 import Login from './Login';
@@ -13,22 +11,9 @@ export default function App() {
     hydrate();
   }, [hydrate]);
 
-  // Check for desktop updates on launch; if a newer signed build is published to
-  // the updater endpoint, download + install + relaunch. Runs only in the main
-  // window (the quickadd window renders QuickAdd, not App).
-  useEffect(() => {
-    (async () => {
-      try {
-        const update = await check();
-        if (update) {
-          await update.downloadAndInstall();
-          await relaunch();
-        }
-      } catch (e) {
-        console.error('Update check failed:', e);
-      }
-    })();
-  }, []);
+  // Desktop updates are surfaced + installed from the Settings window
+  // (see useUpdater): it auto-checks on mount and lets the user install on
+  // demand, instead of a silent download/relaunch on launch.
 
   useEffect(() => {
     if (!isAuthenticated) {
