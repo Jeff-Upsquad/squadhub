@@ -6,7 +6,7 @@ import { useCreateTaskTimeEntry, useMyTimeEntries } from '../../../hooks/useTask
 import { usePMStore, type FocusBucket } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
 import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
-import { groupTasks, isFutureDay, isTaskFocusedToday, type GroupBy } from '../../../lib/taskGrouping';
+import { groupTasks, isFutureDay, isTaskFocused, type GroupBy } from '../../../lib/taskGrouping';
 import DayCalendar from '../day-planner/DayCalendar';
 import { planDateKey } from '../../../hooks/useDayPlanner';
 
@@ -43,7 +43,7 @@ export default function TodayList() {
     const merged = [...data.overdue, ...data.today, ...(data.focused ?? [])];
     const seen = new Set<string>();
     const unique = merged.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
-    return unique.filter((t) => isTaskFocusedToday(t, tz) && !isFutureDay(t.work_date, tz));
+    return unique.filter((t) => isTaskFocused(t) && !isFutureDay(t.work_date, tz));
   }, [data, tz]);
 
   // "In progress today" — tasks the user has logged time on today (computed

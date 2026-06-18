@@ -3,7 +3,7 @@ import type { SpaceStatus } from '@squadhub/shared';
 import { useTasks, useUpdateTask, groupTasksByStatus } from '../../../hooks/useTasks';
 import { usePMStore, type ListGroupBy } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
-import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, isTaskFocusedToday, type SortBy } from '../../../lib/taskGrouping';
+import { groupTasks as groupTasksGeneric, partitionByCompletion, sortTasks, buildFocusTodayGroup, isTaskFocused, type SortBy } from '../../../lib/taskGrouping';
 import { filterTasks, countActiveFilters, EMPTY_FILTER, type TaskFilterState } from '../../../lib/filters';
 import TaskGroupCard from './TaskGroupCard';
 
@@ -48,8 +48,9 @@ export default function ListView({
       });
     }
     if (focusToday) {
-      // Focus is server-backed (the task's focused_at column), resets daily.
-      arr = arr.filter((t) => isTaskFocusedToday(t, tz));
+      // Focus is server-backed (the task's focused_at column) and persistent —
+      // a star stays until explicitly cleared; it does not reset overnight.
+      arr = arr.filter((t) => isTaskFocused(t));
     }
     if (sortBy !== 'manual') {
       arr = sortTasks(arr, sortBy);
@@ -66,8 +67,8 @@ export default function ListView({
 
   const focusGroup = useMemo(() => {
     if (focusToday) return null;
-    return buildFocusTodayGroup(openTasks, tz, sortBy);
-  }, [openTasks, focusToday, sortBy, tz]);
+    return buildFocusTodayGroup(openTasks, sortBy);
+  }, [openTasks, focusToday, sortBy]);
 
   const statusGroups = useMemo(() => {
     if (groupBy !== 'status') return null;

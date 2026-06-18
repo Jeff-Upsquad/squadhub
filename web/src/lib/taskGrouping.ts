@@ -281,14 +281,16 @@ export function groupTasks(
 }
 
 // Focus is server-backed (the task's `focused_at` column, set by PATCH /focus
-// from any device incl. the desktop app) and resets daily: a task counts as
-// focused only when its focused_at falls on today (in the user's tz).
-export function isTaskFocusedToday(t: Task, tz: string): boolean {
-  return isToday(t.focused_at, tz);
+// from any device incl. the desktop app) and *persistent*: a starred task stays
+// focused until it's explicitly unstarred (which clears focused_at to null). It
+// does NOT reset overnight. The home Focus list additionally hides a starred
+// task whose work_date is in the future until that day arrives (see TodayList).
+export function isTaskFocused(t: Task): boolean {
+  return t.focused_at != null;
 }
 
-export function buildFocusTodayGroup(tasks: Task[], tz: string, sortBy: SortBy = 'manual'): Group | null {
-  const matched = tasks.filter((t) => isTaskFocusedToday(t, tz));
+export function buildFocusTodayGroup(tasks: Task[], sortBy: SortBy = 'manual'): Group | null {
+  const matched = tasks.filter((t) => isTaskFocused(t));
   if (matched.length === 0) return null;
   const ordered =
     sortBy === 'manual'

@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import type { Task, TaskDayPlan } from '@squadhub/shared';
-import { usePMStore } from '../stores/pmStore';
 
 // ---------- helpers ----------
 
@@ -350,20 +349,12 @@ export function useScheduleTaskOnDay() {
       ]);
 
       // Also optimistically set focused_at on the task in every cached list
-      // so the star lights up immediately wherever the task appears.
+      // so the star lights up immediately wherever the task appears. Focus is
+      // read from task.focused_at everywhere now (see isTaskFocused), so there's
+      // no separate pmStore focus list to mirror into.
       const focusSnapshots = patchTaskInCaches(qc, vars.task_id, {
         focused_at: new Date().toISOString(),
       });
-
-      // The legacy task detail panel reads focus from pmStore's local list
-      // (not from task.focused_at). Mirror the focus into pmStore so the
-      // star indicator in the detail panel lights up too. resetFocusTodayIfStale
-      // first wipes yesterday's IDs if the day rolled over.
-      const pm = usePMStore.getState();
-      pm.resetFocusTodayIfStale();
-      if (!pm.isFocusedToday(vars.task_id)) {
-        pm.toggleFocusToday(vars.task_id);
-      }
 
       return { prev, queryKey, tempId, focusSnapshots };
     },

@@ -5,7 +5,7 @@ import { usePMStore } from '../../../stores/pmStore';
 import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useUpdateTaskTimeTracked } from '../../../hooks/useTasks';
 import { useTimeStats } from '../../../hooks/useTimer';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
-import { isTaskFocusedToday } from '../../../lib/taskGrouping';
+import { isTaskFocused } from '../../../lib/taskGrouping';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
@@ -197,8 +197,7 @@ export default function TaskDetailPanel({
   // is for drilling in without losing the host on the other side."
   const setActiveTask = isPeek ? pmStore.setPeekTask : pmStore.setActiveTask;
   const { data: task, isLoading } = useTask(effectiveTaskId);
-  const focusTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  const isFocusedToday = task ? isTaskFocusedToday(task, focusTz) : false;
+  const isFocused = task ? isTaskFocused(task) : false;
   const { data: comments } = useTaskComments(effectiveTaskId);
   const { data: taskTypes } = useTaskTypes();
   const { data: checklists } = useChecklists(effectiveTaskId);
@@ -687,13 +686,13 @@ export default function TaskDetailPanel({
           {task && (
             <button
               type="button"
-              onClick={() => focusTask.mutate({ id: task.id, focused: !isFocusedToday })}
+              onClick={() => focusTask.mutate({ id: task.id, focused: !isFocused })}
               className="td-nav-btn td-focus-star"
-              data-active={isFocusedToday}
-              title={isFocusedToday ? 'Focused for today — click to remove' : 'Focus today'}
-              aria-label={isFocusedToday ? 'Focused for today' : 'Focus today'}
+              data-active={isFocused}
+              title={isFocused ? 'Focused — click to remove' : 'Focus'}
+              aria-label={isFocused ? 'Focused' : 'Focus'}
             >
-              <span style={{ fontSize: 14, lineHeight: 1 }}>{isFocusedToday ? '★' : '☆'}</span>
+              <span style={{ fontSize: 14, lineHeight: 1 }}>{isFocused ? '★' : '☆'}</span>
             </button>
           )}
           <button type="button" onClick={handleCopyLink} className="td-nav-btn" title="Copy link">
