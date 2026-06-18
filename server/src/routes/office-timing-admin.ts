@@ -1,13 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
-import { requireAdmin } from '../middleware/admin';
+import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
 
 const router = Router();
 
+// Internal admins, or any user granted the 'check-ins' mini app.
 router.use(requireAuth);
-router.use(requireAdmin);
+router.use(requireMiniAppOrAdmin('check-ins'));
 
 const ELIGIBLE_USER_TYPES = ['internal', 'partner', 'partner_employee'] as const;
 

@@ -24,6 +24,7 @@ import HomeSidebar from '../views/app/HomeSidebar';
 import SearchPalette from '../views/app/SearchPalette';
 import SettingsSlider from '../components/SettingsSlider';
 import CheckInWidget from '../views/app/checkin/CheckInWidget';
+import CheckInsPage from '../views/app/check-ins/CheckInsPage';
 import TimeManagementPage from '../views/app/time-management/TimeManagementPage';
 import SalesLeadsPage from '../views/app/sales/SalesLeadsPage';
 import ThemeToggle from '../components/ThemeToggle';
@@ -58,7 +59,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner' | 'routines' | 'clips';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner' | 'routines' | 'clips';
 
 // One entry in the in-app navigation history: everything needed to bring the
 // user back to a view. Views switch via local state rather than URLs, so the
@@ -808,6 +809,8 @@ export default function MainLayout() {
             <CheckInWidget title="Daily Check-In Teammates" context="teammates" />
           ) : homeView === 'checkin-partners' ? (
             <CheckInWidget title="Daily Check-In Partners" context="partners" />
+          ) : homeView === 'check-ins' ? (
+            <CheckInsPage />
           ) : homeView === 'time-management' ? (
             <TimeManagementPage />
           ) : homeView === 'sales-leads' ? (
@@ -979,6 +982,8 @@ export default function MainLayout() {
             <CheckInWidget title="Daily Check-In Teammates" context="teammates" />
           ) : homeView === 'checkin-partners' ? (
             <CheckInWidget title="Daily Check-In Partners" context="partners" />
+          ) : homeView === 'check-ins' ? (
+            <CheckInsPage />
           ) : homeView === 'time-management' ? (
             <TimeManagementPage />
           ) : homeView === 'sales-leads' ? (

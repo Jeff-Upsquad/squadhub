@@ -1,16 +1,17 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
-import { requireAdmin } from '../middleware/admin';
+import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
 import { todayIST, formatTimeIST } from '../utils/ist';
 import { getEligibleUsers, getWorkingCalendar, resolveDeadlineTimes } from '../utils/checkin';
 
 const router = Router();
 
-// All admin check-in routes require auth + admin
+// Check-in management routes: internal admins, or any user granted the
+// 'check-ins' mini app (so the web mini app can use the same endpoints).
 router.use(requireAuth);
-router.use(requireAdmin);
+router.use(requireMiniAppOrAdmin('check-ins'));
 
 // ============================================================
 // Holiday Management
