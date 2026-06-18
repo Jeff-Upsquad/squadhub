@@ -7,8 +7,6 @@ import { connectSocket, disconnectSocket } from './services/socket';
 import Login from './Login';
 import Settings from './Settings';
 
-const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000; // re-check every 6h while running
-
 export default function App() {
   const { isAuthenticated, hydrated, hydrate } = useAuthStore();
 
@@ -16,17 +14,15 @@ export default function App() {
     hydrate();
   }, [hydrate]);
 
-  // Auto-update: check on launch and periodically while running. When a newer
-  // signed build is published, install it and relaunch automatically — unless
-  // the quick-add spotlight is open, so we never nuke an in-progress capture
-  // (we'll catch it on the next cycle / launch). Manual check + install also
-  // remains available in Settings (see useUpdater).
+  // Auto-update on launch: if a newer signed build is published, install it and
+  // relaunch — unless the quick-add spotlight is open, so we never interrupt an
+  // in-progress capture. A manual "Check for updates" also lives in Settings
+  // (see useUpdater); there's no periodic background check.
   useEffect(() => {
-    let cancelled = false;
-    const tryAutoUpdate = async () => {
+    (async () => {
       try {
         const update = await check();
-        if (!update || cancelled) return;
+        if (!update) return;
         const qa = await Window.getByLabel('quickadd');
         if (qa && (await qa.isVisible())) return; // user mid-capture; defer
         await update.downloadAndInstall();
@@ -34,13 +30,7 @@ export default function App() {
       } catch (e) {
         console.error('Auto-update failed:', e);
       }
-    };
-    void tryAutoUpdate();
-    const id = setInterval(() => void tryAutoUpdate(), UPDATE_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
+    })();
   }, []);
 
   useEffect(() => {
