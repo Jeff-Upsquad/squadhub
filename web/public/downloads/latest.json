@@ -1,10 +1,10 @@
 {
-  "version": "0.1.4",
-  "notes": "Quick Add menus (list, assignee, priority) now show in full instead of getting cut off by the window.",
-  "pub_date": "2026-06-18T07:34:59Z",
+  "version": "0.1.5",
+  "notes": "SquadHub now updates itself automatically. (Plus the earlier quick-add menu fix.)",
+  "pub_date": "2026-06-18T07:42:23Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzRTNWJxTGhncG1qbU1oRnFUdUN5YXhCWmJMZncxaVdLMEVIMTRJN0trV0hienpSRkNUUlRrOWdVTjMzODc0bjV6eTNBdmcxd2RxZExBdVNSSHdQMWcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNzY4MDM5CWZpbGU6U3F1YWRIdWIuYXBwLnRhci5negpjeFNzMHVOTTRkZFVkcG1sb05HMGV3RDk2aHFMbHU1QS9LVEFqLzJYQ28yZGpWK0Jhd0tqcGZZYWpXV0VUc2FYckErVFZJOG5Gc05WOGFuN3NqclZBdz09Cg==",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3hpZXpMOVhOWGN1MCtGOXdLTDhDQUdNcXJkTnMvVVE1TTRDaTEyd2pOTk50b3JwLzIrNXZSZDRIeC9lVTJ0Z3RaR0RudEV1TWt5SEhYVjNZbUdqYlFrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNzY4NDA4CWZpbGU6U3F1YWRIdWIuYXBwLnRhci5negpiQUN5eUlZWC92MmpzcDVMRWpVQ21idXJBRWd6d25JU2FvcXcvUkl2cndHTTRIaHpmaUoyUUt2SEwzWjluSmt6aVAxVXozR1cvRVdJeE11QW9nUjZEdz09Cg==",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
