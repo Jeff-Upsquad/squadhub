@@ -167,9 +167,12 @@ export default function QuickAdd() {
   }, []);
 
   // Grow/shrink the spotlight panel to fit its content (description, open menus).
+  // The window is `resizable: true` so setSize isn't ignored by macOS; clear any
+  // min/max constraints up front so it can grow past its initial height.
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
+    void win.setSizeConstraints(null).catch(() => {});
     const apply = () => {
       const h = Math.min(560, Math.max(120, Math.ceil(el.getBoundingClientRect().height)));
       void win.setSize(new LogicalSize(560, h)).catch(() => {});
