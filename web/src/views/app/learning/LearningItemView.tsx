@@ -24,16 +24,19 @@ export default function LearningItemView({ itemId, onBack }: { itemId: string; o
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Top bar */}
-      <div className="flex items-center gap-2 border-b border-[var(--sh-hair)] px-5 py-2.5">
+      {/* Top bar — back returns to the overview (desktop) or the list (mobile) */}
+      <div className="flex items-center gap-2 border-b border-[var(--sh-hair)] px-4 py-2.5">
         <button
           onClick={onBack}
-          className="rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] px-2.5 py-1 text-[12px] text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)]"
+          title="Back to learning"
+          aria-label="Back to learning"
+          className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[6px] text-[var(--sh-ink-3)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
         >
-          ← Learning
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <path d="M19 12H5M12 19l-7-7 7-7" />
+          </svg>
         </button>
-        <span className="text-[12px] text-[var(--sh-ink-3)]">/</span>
-        <span className="truncate text-[12px] text-[var(--sh-ink-2)]">{item.title}</span>
+        <span className="truncate text-[12.5px] font-medium text-[var(--sh-ink)]">{item.title}</span>
         {assignment && (
           <span className="ml-auto flex items-center gap-2">
             <span className="text-[11px] text-[var(--sh-ink-3)]">{assignment.progress_percent}%</span>

@@ -39,7 +39,7 @@ export default function CourseView({ item, assignment }: Props) {
   }
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-[280px_1fr]">
+    <div className="grid h-full grid-cols-1 md:grid-cols-[230px_1fr] lg:grid-cols-[260px_1fr]">
       {/* Lesson list */}
       <aside className="border-b border-[var(--sh-hair)] bg-[var(--surface)] md:border-b-0 md:border-r">
         <div className="border-b border-[var(--sh-hair)] p-4">
