@@ -1,10 +1,10 @@
 {
-  "version": "0.1.3",
-  "notes": "Quick Add menus no longer get clipped (the panel resizes to fit them), plus a new in-app updater: check for and install updates from Settings.",
-  "pub_date": "2026-06-18T07:09:25Z",
+  "version": "0.1.4",
+  "notes": "Quick Add menus (list, assignee, priority) now show in full instead of getting cut off by the window.",
+  "pub_date": "2026-06-18T07:34:59Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3k2ekZBdXJ6Q2tUL2doeVRsdE51a2dMVzZnT1cwWFY2LzhLTlNZbHRQWmw1dXhjWVBYTkR2dEs5MlBpVjc0K1FTdVg0WFBBZFRLV2Yya1owblQ1L2dRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNzY2NTM3CWZpbGU6U3F1YWRIdWIuYXBwLnRhci5negpWNlVUUUhLVFM1d010U0pyaGlheHJjUTBnWUVWREpla1NncTFKWVhGYWZQTVhuNHlHa0dEOGRMNVFCa1dMMGVMMEFuZGR0MExlS1RmWVpVT25Qa1ZDdz09Cg==",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzRTNWJxTGhncG1qbU1oRnFUdUN5YXhCWmJMZncxaVdLMEVIMTRJN0trV0hienpSRkNUUlRrOWdVTjMzODc0bjV6eTNBdmcxd2RxZExBdVNSSHdQMWcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNzY4MDM5CWZpbGU6U3F1YWRIdWIuYXBwLnRhci5negpjeFNzMHVOTTRkZFVkcG1sb05HMGV3RDk2aHFMbHU1QS9LVEFqLzJYQ28yZGpWK0Jhd0tqcGZZYWpXV0VUc2FYckErVFZJOG5Gc05WOGFuN3NqclZBdz09Cg==",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
