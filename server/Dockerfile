@@ -33,12 +33,21 @@ RUN npm run build -w shared && \
 FROM node:20-alpine
 WORKDIR /app
 
+# Chromium for the SOP auto-generator. Playwright can't run its bundled
+# (glibc) browser on alpine/musl, so it drives the system Chromium via
+# SOP_CHROMIUM_PATH. Enables the in-admin "Auto-generate" button on prod.
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont && \
+    if [ ! -e /usr/bin/chromium-browser ] && [ -e /usr/bin/chromium ]; then \
+      ln -s /usr/bin/chromium /usr/bin/chromium-browser; fi
+
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules/ ./node_modules/
 COPY --from=builder /app/shared/dist/ ./shared/dist/
 COPY --from=builder /app/shared/package.json ./shared/
 COPY --from=builder /app/server/dist/ ./server/dist/
 COPY --from=builder /app/server/package.json ./server/
+# Generator script + recipe specs (spawned as a child process by the server).
+COPY tools/ ./tools/
 
 EXPOSE 4000
 

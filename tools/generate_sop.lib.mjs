@@ -13,14 +13,20 @@ const { GIFEncoder, quantize, applyPalette } = gifenc;
 export const REPO_ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 // ---- env ----
+// Reads server/.env for local CLI runs; in the prod container (spawned by the
+// server) that file doesn't exist, so fall back to the inherited process.env.
 export function loadEnv() {
   const file = path.join(REPO_ROOT, 'server', '.env');
-  const txt = readFileSync(file, 'utf8');
-  return Object.fromEntries(
-    txt.split('\n')
-      .filter((l) => l && !l.trimStart().startsWith('#') && l.includes('='))
-      .map((l) => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()]; })
-  );
+  let fileEnv = {};
+  try {
+    const txt = readFileSync(file, 'utf8');
+    fileEnv = Object.fromEntries(
+      txt.split('\n')
+        .filter((l) => l && !l.trimStart().startsWith('#') && l.includes('='))
+        .map((l) => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()]; })
+    );
+  } catch { /* no file — rely on process.env (prod) */ }
+  return { ...process.env, ...fileEnv };
 }
 
 // ---- auth: mint a real Supabase session for a user via the service role ----
