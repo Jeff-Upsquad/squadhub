@@ -211,7 +211,6 @@ export default function HomeSidebar({
   inboxAlert = false,
   inboxPulse = false,
 }: HomeSidebarProps) {
-  const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
   const activeChannelKind = useWorkspaceStore((s) => s.activeChannelKind);
   const setDmConversations = useWorkspaceStore((s) => s.setDmConversations);
   const canSendDms = useHasPermission('can_send_dms');
@@ -255,20 +254,20 @@ export default function HomeSidebar({
     <div className="flex h-full w-full flex-col text-[var(--sh-ink-2)]">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-[var(--sh-hair)] px-4 py-3">
-        <button className="flex items-center gap-2 hover:opacity-80 transition">
+        {/* Brand lockup — "SquadHub" with a "Powered by UpSquad" subtitle,
+            matching the squadhire/login lockup style. */}
+        <div className="flex items-center gap-2">
           <span
             className="grid h-[22px] w-[22px] place-items-center rounded-[6px] bg-[var(--sh-ink)] text-[var(--sidebar)]"
-            style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', fontSize: 12, fontWeight: 700 }}
+            style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', fontSize: 10, fontWeight: 700, letterSpacing: '-0.02em' }}
           >
-            {(currentWorkspace?.name || 'S').charAt(0).toUpperCase()}
+            SH
           </span>
-          <span className="text-[13.5px] font-semibold text-[var(--sh-ink)]">
-            {currentWorkspace?.name || 'Home'}
-          </span>
-          <svg className="h-3.5 w-3.5 text-[var(--sh-ink-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+          <div className="flex flex-col leading-tight">
+            <span className="text-[13.5px] font-semibold text-[var(--sh-ink)]">SquadHub</span>
+            <span className="text-[10.5px] text-[var(--sh-ink-3)]">Powered by UpSquad</span>
+          </div>
+        </div>
         <div className="flex items-center gap-[2px]">
           <button
             onClick={onNavBack}
