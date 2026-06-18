@@ -1,0 +1,9 @@
+{
+  "version_code": 1,
+  "version_name": "2.0.0",
+  "apk_url": "https://api.squadhub.in/partner-downloads/squadhub-partner-latest.apk",
+  "sha256": "",
+  "release_notes": "",
+  "force_update": false,
+  "min_supported_version_code": 1
+}

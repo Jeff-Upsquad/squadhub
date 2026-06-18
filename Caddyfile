@@ -19,6 +19,20 @@ api.squadhub.in {
 			index index.html
 		}
 	}
+
+	# Sideloaded APKs for the native partner app's in-app updater.
+	# Drop release APKs in /var/www/partner-downloads on the host; the
+	# version manifest (GET /partner-app/version) points apk_url here.
+	handle /partner-downloads/* {
+		root * /srv/partner-downloads
+		uri strip_prefix /partner-downloads
+
+		@apk path *.apk
+		header @apk Content-Type application/vnd.android.package-archive
+
+		file_server
+	}
+
 	reverse_proxy server:4000
 }
 
