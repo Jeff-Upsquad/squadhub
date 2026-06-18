@@ -36,7 +36,15 @@ async function run() {
   log(`Auth: minting session for ${EMAIL}…`);
   const { payload, userId } = await mintSession(env, EMAIL);
 
-  const browser = await chromium.launch({ headless: !args.headed });
+  // In the prod container, SOP_CHROMIUM_PATH points at the system Chromium
+  // (Playwright can't run its bundled glibc browser on alpine/musl). Locally
+  // it's unset → Playwright uses its own browser. --no-sandbox/--disable-dev-shm
+  // are required when running as root in a container.
+  const browser = await chromium.launch({
+    headless: !args.headed,
+    executablePath: process.env.SOP_CHROMIUM_PATH || undefined,
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  });
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
   const page = await ctx.newPage();
 

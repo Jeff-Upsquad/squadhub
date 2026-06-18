@@ -3,8 +3,9 @@
   "summary": "How partners submit their daily check-in and see their attendance.",
   "category": "Check-Ins",
   "nav": [
-    { "clickText": "Apps", "wait": 1200 },
-    { "clickText": "Daily Check-In Partners", "wait": 2000 }
+    { "clickText": "Apps", "wait": 1500 },
+    { "clickText": "Daily Check-In (Partners)", "wait": 2400 },
+    { "clickText": "Check-In", "wait": 1200 }
   ],
   "blocks": [
     {

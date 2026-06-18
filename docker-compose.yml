@@ -47,6 +47,11 @@ services:
       - CASHBOOK_DOWNLOAD_URL=${CASHBOOK_DOWNLOAD_URL:-}
       - PARTNER_APP_MIN_VERSION=${PARTNER_APP_MIN_VERSION:-1.0.0}
       - PARTNER_APP_DOWNLOAD_URL=${PARTNER_APP_DOWNLOAD_URL:-}
+      # SOP auto-generator (admin "Auto-generate" button): drive the in-network
+      # web app with the system Chromium, screenshotting as this account.
+      - SOP_GEN_BASE_URL=${SOP_GEN_BASE_URL:-http://web:3000}
+      - SOP_GEN_USER_EMAIL=${SOP_GEN_USER_EMAIL:-testlocal@test.com}
+      - SOP_CHROMIUM_PATH=${SOP_CHROMIUM_PATH:-/usr/bin/chromium-browser}
     dns:
       - 1.1.1.1
       - 8.8.8.8
