@@ -95,6 +95,7 @@ export default function InboxMessageDetail({
   const queryClient = useQueryClient();
   const [text, setText] = useState('');
   const [mentions, setMentions] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<ThreadResponse>({
     queryKey: ['message-thread', messageId],
@@ -108,27 +109,36 @@ export default function InboxMessageDetail({
     mutationFn: async () => {
       if (!data?.root) return null;
       const root = data.root;
-      const res = await api.post('/messages', {
-        channel_id: root.channel_id,
-        dm_conversation_id: root.dm_conversation_id,
+      // Send only the id field that applies. The API schema treats channel_id /
+      // dm_conversation_id as optional-string (not nullable), so passing the
+      // unused one as `null` fails validation and the reply silently never sends.
+      const payload: Record<string, unknown> = {
         parent_message_id: root.id,
         content: text.trim(),
         type: 'text',
         mentions,
-      });
+      };
+      if (root.channel_id) payload.channel_id = root.channel_id;
+      else if (root.dm_conversation_id) payload.dm_conversation_id = root.dm_conversation_id;
+      const res = await api.post('/messages', payload);
       return res.data.data;
     },
     onSuccess: () => {
       setText('');
       setMentions([]);
+      setError(null);
       queryClient.invalidateQueries({ queryKey: ['message-thread', messageId] });
       queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
       queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] });
+    },
+    onError: (err: any) => {
+      setError(err?.response?.data?.error || 'Could not send reply. Please try again.');
     },
   });
 
   const handleSend = () => {
     if (!text.trim() || sendReply.isPending) return;
+    setError(null);
     sendReply.mutate();
   };
 
@@ -200,17 +210,24 @@ export default function InboxMessageDetail({
           background: 'var(--surface)',
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            alignItems: 'flex-end',
-            border: '1px solid var(--sh-hair)',
-            borderRadius: 8,
-            padding: '8px 12px',
-            background: 'var(--surface-alt)',
-          }}
-        >
+        {error && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              marginBottom: 8,
+              fontSize: 12,
+              color: 'var(--sh-danger, #d4463a)',
+            }}
+          >
+            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" /><path d="M12 8v4M12 16h.01" />
+            </svg>
+            {error}
+          </div>
+        )}
+        <div className="ib-reply-box">
           <MentionPicker
             value={text}
             mentions={mentions}
@@ -218,18 +235,30 @@ export default function InboxMessageDetail({
             onSubmit={handleSend}
             multiline
             rows={2}
-            placeholder={`Reply in thread… use @ to mention`}
-            className="w-full bg-transparent text-[13px] text-[color:var(--sh-ink)] placeholder:text-[color:var(--sh-ink-3)] focus:outline-none resize-none"
+            placeholder={`Reply… use @ to mention`}
+            className="w-full bg-transparent text-[13px] leading-[1.5] text-[color:var(--sh-ink)] placeholder:text-[color:var(--sh-ink-3)] focus:outline-none resize-none"
           />
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!text.trim() || sendReply.isPending}
-            className="td-pill-btn"
-            style={text.trim() ? { background: 'var(--sh-ink)', color: 'var(--surface)', borderColor: 'var(--sh-ink)' } : undefined}
-          >
-            Send
-          </button>
+          <div className="ib-reply-actions">
+            <span className="ib-reply-hint">⌘↵ to send</span>
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!text.trim() || sendReply.isPending}
+              className="ib-send-btn"
+              aria-label="Send reply"
+            >
+              {sendReply.isPending ? (
+                'Sending…'
+              ) : (
+                <>
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z" />
+                  </svg>
+                  Send
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

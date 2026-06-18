@@ -109,7 +109,7 @@ export default function InboxView({
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setActiveChannel = useWorkspaceStore((s) => s.setActiveChannel);
 
-  const [filter, setFilter] = useState<Filter>('all');
+  const [filter, setFilter] = useState<Filter>('unread');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -231,10 +231,10 @@ export default function InboxView({
       <div className="inbox-list">
         <DesktopNotificationsBanner />
         <div className="inbox-filter">
-          <div className="pill" data-active={filter === 'all'} onClick={() => setFilter('all')}>All</div>
           <div className="pill" data-active={filter === 'unread'} onClick={() => setFilter('unread')}>
             Unread{unreadCount > 0 ? ` · ${unreadCount}` : ''}
           </div>
+          <div className="pill" data-active={filter === 'all'} onClick={() => setFilter('all')}>All</div>
           <div className="pill" data-active={filter === 'mentions'} onClick={() => setFilter('mentions')}>Mentions</div>
           <div style={{ flex: 1 }} />
           <ViewSearchInput value={searchQuery} onChange={setSearchQuery} placeholder="Search notifications..." />
@@ -264,7 +264,7 @@ export default function InboxView({
               <div>
                 <div className="inbox-group-hd">Needs you · {groups.needs.length}</div>
                 {groups.needs.map((n) => (
-                  <NotifRow key={n.id} n={n} active={current?.id === n.id} onClick={() => onRowClick(n)} />
+                  <NotifRow key={n.id} n={n} active={current?.id === n.id} onClick={() => onRowClick(n)} onMarkRead={() => markRead.mutate(n.id)} />
                 ))}
               </div>
             )}
@@ -272,7 +272,7 @@ export default function InboxView({
               <div>
                 <div className="inbox-group-hd">FYI · {groups.fyi.length}</div>
                 {groups.fyi.map((n) => (
-                  <NotifRow key={n.id} n={n} active={current?.id === n.id} onClick={() => onRowClick(n)} />
+                  <NotifRow key={n.id} n={n} active={current?.id === n.id} onClick={() => onRowClick(n)} onMarkRead={() => markRead.mutate(n.id)} />
                 ))}
               </div>
             )}
@@ -308,7 +308,17 @@ function renderDetail(n: Notification, onOpen: () => void) {
   return <DetailPane n={n} onOpen={onOpen} />;
 }
 
-function NotifRow({ n, active, onClick }: { n: Notification; active: boolean; onClick: () => void }) {
+function NotifRow({
+  n,
+  active,
+  onClick,
+  onMarkRead,
+}: {
+  n: Notification;
+  active: boolean;
+  onClick: () => void;
+  onMarkRead: () => void;
+}) {
   const av = avatarFor(n);
   return (
     <div
@@ -326,10 +336,26 @@ function NotifRow({ n, active, onClick }: { n: Notification; active: boolean; on
         </div>
         <span className="ib-from">{n.actor?.display_name || 'System'}</span>
         <span className="ib-ctx">{ctxLabel(n)}</span>
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--sh-ink-3)' }}>{timeAgo(n.created_at)}</span>
+        <span className="ib-time">{timeAgo(n.created_at)}</span>
       </div>
       <div className="ib-title">{n.title}</div>
       {n.body && <div className="ib-snip">{n.body}</div>}
+      {!n.is_read && (
+        <button
+          type="button"
+          className="ib-mark-read"
+          title="Mark as read"
+          aria-label="Mark as read"
+          onClick={(e) => {
+            e.stopPropagation();
+            onMarkRead();
+          }}
+        >
+          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <path d="m5 12 5 5L20 7" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
