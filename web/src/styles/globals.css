@@ -5910,6 +5910,39 @@ ol.sqc-list {
 .hm-home .hm-task:hover .hm-bucket-btn,
 .hm-home .hm-task .hm-bucket-btn[data-open] { opacity: 1; }
 .hm-home .hm-task .hm-bucket-btn:hover { background: var(--sh-hair); color: var(--sh-ink); }
+
+/* Start / stop timer control — hidden until row hover, kept visible & green
+   while this task is the one being tracked. */
+.hm-home .hm-task .hm-timer-btn { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: none; border-radius: 6px; background: transparent; color: var(--sh-ink-4); cursor: pointer; flex: none; opacity: 0; transition: opacity 0.13s ease, background 0.13s ease, color 0.13s ease; }
+.hm-home .hm-task:hover .hm-timer-btn,
+.hm-home .hm-task .hm-timer-btn[data-active] { opacity: 1; }
+.hm-home .hm-task .hm-timer-btn:hover { background: var(--sh-hair); color: var(--hm-accent); }
+.hm-home .hm-task .hm-timer-btn[data-active] { color: var(--hm-accent); }
+
+/* "In progress today" section — a subtly accented variant of the focus card. */
+.hm-home .hm-inprogress-card { border-color: color-mix(in srgb, var(--hm-accent) 30%, var(--sh-hair)); }
+.hm-home .hm-inprogress-card .hm-card-head { border-bottom-color: color-mix(in srgb, var(--hm-accent) 16%, var(--sh-hair-3)); }
+.hm-home .hm-inprogress-card .hm-card-head h3 { color: var(--hm-accent); }
+.hm-home .hm-live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--hm-accent); flex: none; box-shadow: 0 0 0 0 color-mix(in srgb, var(--hm-accent) 55%, transparent); animation: hm-live-pulse 1.8s ease-out infinite; }
+@keyframes hm-live-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--hm-accent) 50%, transparent); }
+  70% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--hm-accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--hm-accent) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .hm-home .hm-live-dot { animation: none; } }
+
+/* Per-row "tracked today" chip — sits just left of the assignee avatar. Turns
+   accent-green while this task's timer is live. */
+.hm-home .hm-task .hm-tracked { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; color: color-mix(in srgb, var(--sh-ink) 55%, transparent); background: color-mix(in srgb, var(--sh-ink) 7%, transparent); border-radius: 999px; padding: 2px 8px; white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; }
+.hm-home .hm-task .hm-tracked[data-live] { color: var(--hm-accent); background: color-mix(in srgb, var(--hm-accent) 14%, transparent); }
+
+/* Total tracked today — right-aligned pill on the In progress header. */
+.hm-home .hm-inprogress-card .hm-tracked-total { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; color: var(--hm-accent); background: color-mix(in srgb, var(--hm-accent) 12%, transparent); border-radius: 999px; padding: 3px 10px; font-variant-numeric: tabular-nums; }
+.hm-home .hm-inprogress-card .hm-tracked-total svg { opacity: 0.85; }
+
+/* Running-timer row highlight — accent tint + left bar, in any section. */
+.hm-home .hm-task[data-tracking="true"] { background: color-mix(in srgb, var(--hm-accent) 9%, transparent); box-shadow: inset 2px 0 0 var(--hm-accent); }
+.hm-home .hm-task[data-tracking="true"]:hover { background: color-mix(in srgb, var(--hm-accent) 14%, transparent); }
 /* Bucket menu is portaled to <body>, so these are NOT scoped under .hm-home */
 .hm-bucket-menu { position: fixed; z-index: 50; min-width: 188px; background: var(--surface); border: 1px solid var(--sh-hair); border-radius: 10px; box-shadow: 0 10px 28px rgba(10, 10, 10, 0.12); padding: 4px; }
 .hm-bucket-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 6px 10px; border-radius: 7px; border: none; background: transparent; font-family: inherit; font-size: 12.5px; font-weight: 450; color: color-mix(in srgb, var(--sh-ink) 65%, transparent); text-align: left; cursor: pointer; }
