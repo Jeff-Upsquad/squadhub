@@ -8,6 +8,7 @@ import InboxTaskDetail from './inbox/InboxTaskDetail';
 import InboxMessageDetail from './inbox/InboxMessageDetail';
 import ViewSearchInput from '../../components/pm/ViewSearchInput';
 import DesktopNotificationsBanner from '../../components/DesktopNotificationsBanner';
+import { formatDateHeader, toLocalDateKey } from '../../lib/formatDuration';
 
 export type Notification = {
   id: string;
@@ -204,6 +205,25 @@ export default function InboxView({
     return out;
   }, [filtered]);
 
+  // The All view groups by date, latest first. `filtered` arrives pre-sorted by
+  // created_at DESC, so the first time a date key appears it is the most recent —
+  // pushing in encounter order keeps both the groups and their rows newest-first.
+  const dateGroups = useMemo(() => {
+    const out: { key: string; items: Notification[] }[] = [];
+    const index = new Map<string, Notification[]>();
+    for (const n of filtered) {
+      const key = toLocalDateKey(n.created_at);
+      let bucket = index.get(key);
+      if (!bucket) {
+        bucket = [];
+        index.set(key, bucket);
+        out.push({ key, items: bucket });
+      }
+      bucket.push(n);
+    }
+    return out;
+  }, [filtered]);
+
   const current = items.find((n) => n.id === activeId) || filtered[0] || null;
 
   const openSource = (n: Notification) => {
@@ -258,6 +278,17 @@ export default function InboxView({
           <div style={{ padding: 24, fontSize: 13, color: 'var(--sh-ink-3)' }}>
             {filter === 'unread' ? 'You\u2019re all caught up.' : filter === 'mentions' ? 'No mentions yet.' : 'No notifications yet.'}
           </div>
+        ) : filter === 'all' ? (
+          <>
+            {dateGroups.map((g) => (
+              <div key={g.key}>
+                <div className="inbox-group-hd">{formatDateHeader(g.key)} · {g.items.length}</div>
+                {g.items.map((n) => (
+                  <NotifRow key={n.id} n={n} active={current?.id === n.id} onClick={() => onRowClick(n)} onMarkRead={() => markRead.mutate(n.id)} />
+                ))}
+              </div>
+            ))}
+          </>
         ) : (
           <>
             {groups.needs.length > 0 && (
