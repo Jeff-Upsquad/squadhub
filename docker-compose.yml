@@ -14,6 +14,7 @@ services:
       - /var/www/profiles:/srv/profiles:ro
       - /var/www/attendanceapp:/srv/attendanceapp:ro
       - /var/www/cashbook-downloads:/srv/cashbook-downloads:ro
+      - /var/www/partner-downloads:/srv/partner-downloads:ro
       - /var/www/kia:/srv/kia:ro
       - /var/www/cashbook-web:/srv/cashbook-web:ro
       - /var/www/rioconnect:/srv/rioconnect:ro
