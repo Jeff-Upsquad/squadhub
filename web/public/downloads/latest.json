@@ -1,10 +1,10 @@
 {
-  "version": "0.1.5",
-  "notes": "SquadHub now updates itself automatically. (Plus the earlier quick-add menu fix.)",
-  "pub_date": "2026-06-18T07:42:23Z",
+  "version": "0.1.6",
+  "notes": "Automatic updates now run on launch only (plus the manual check in Settings).",
+  "pub_date": "2026-06-18T07:53:25Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3hpZXpMOVhOWGN1MCtGOXdLTDhDQUdNcXJkTnMvVVE1TTRDaTEyd2pOTk50b3JwLzIrNXZSZDRIeC9lVTJ0Z3RaR0RudEV1TWt5SEhYVjNZbUdqYlFrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNzY4NDA4CWZpbGU6U3F1YWRIdWIuYXBwLnRhci5negpiQUN5eUlZWC92MmpzcDVMRWpVQ21idXJBRWd6d25JU2FvcXcvUkl2cndHTTRIaHpmaUoyUUt2SEwzWjluSmt6aVAxVXozR1cvRVdJeE11QW9nUjZEdz09Cg==",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3hkWkxZOUNjdmFYbXA1d25FUUFUOWZvZFpnYUtDOG0yVERVVkFMWExJd3dOQnFGSlViY0cwN2JFcExETzd0bUJJQnFHREVwLzRwbkdzM3BKN3FQbUFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNzY5MTMyCWZpbGU6U3F1YWRIdWIuYXBwLnRhci5negpDU0ZNT0U0VHF1S1JTRzREeEE4QTlrVmM4TDNSdWl3dVprMmFEcFdxc1lwVTRDZ3BVRDdkN04wSnA0L3EwMjNZQzViK2VIbmYxTi90WmF6QVlWam1BQT09Cg==",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
