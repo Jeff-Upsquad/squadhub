@@ -2,11 +2,12 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { LmsContentBlock, LmsBlockType } from '@squadhub/shared';
+import type { LmsContentBlock, LmsBlockType, ImageAnnotationData } from '@squadhub/shared';
 import TiptapEditor from './TiptapEditor';
 import MediaUploader from './MediaUploader';
 import VideoEmbedInput from './VideoEmbedInput';
 import QuizEditor from './QuizEditor';
+import AnnotationEditor from './AnnotationEditor';
 
 interface Props {
   itemId: string;
@@ -153,7 +154,17 @@ function BlockEditor({ block, itemId, lessonId, onPatch }: {
             current={{ url: block.file_url, name: block.file_name }}
             onUploaded={(f) => onPatch({ file_url: f.url, file_name: f.name, file_size: f.size, mime_type: f.mime_type })}
           />
-          {block.file_url && <img src={block.file_url} alt={block.caption || ''} className="max-h-64 rounded-md border border-divider" />}
+          {block.file_url && (
+            <AnnotationEditor
+              src={block.file_url}
+              initial={(block.metadata as { annotations?: ImageAnnotationData } | undefined)?.annotations ?? null}
+              onChange={(data) => onPatch({ metadata: { ...(block.metadata || {}), annotations: data } })}
+            />
+          )}
+          <AltInput
+            value={(block.metadata as { alt?: string } | undefined)?.alt ?? null}
+            onChange={(alt) => onPatch({ metadata: { ...(block.metadata || {}), alt } })}
+          />
           <CaptionInput value={block.caption} onChange={(caption) => onPatch({ caption })} />
         </div>
       );
@@ -235,6 +246,22 @@ function CaptionInput({ value, onChange }: { value: string | null; onChange: (v:
         if (e.target.value !== (value || '')) onChange(e.target.value);
       }}
       placeholder="Caption (optional)"
+      className="w-full rounded-md border border-divider bg-surface px-3 py-1.5 text-[13px] placeholder-foreground-dim focus:border-ink focus:outline-none"
+    />
+  );
+}
+
+// Accessibility description for screenshots — also used as the fallback alt text
+// for the learner-side image renderer.
+function AltInput({ value, onChange }: { value: string | null; onChange: (v: string) => void }) {
+  return (
+    <input
+      type="text"
+      defaultValue={value || ''}
+      onBlur={(e) => {
+        if (e.target.value !== (value || '')) onChange(e.target.value);
+      }}
+      placeholder="Image description / alt text (for accessibility)"
       className="w-full rounded-md border border-divider bg-surface px-3 py-1.5 text-[13px] placeholder-foreground-dim focus:border-ink focus:outline-none"
     />
   );

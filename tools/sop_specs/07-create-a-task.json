@@ -1,0 +1,40 @@
+{
+  "title": "How to create a task and add it to a list",
+  "summary": "Use the quick create button, fill the details, pick a list and save.",
+  "category": "How-to",
+  "nav": [],
+  "blocks": [
+    {
+      "kind": "text",
+      "heading": "Creating a task",
+      "paragraphs": [
+        "Click the + (New task) button at the top of any screen to open the create panel. Pick which list it belongs to, give it a title, add any details (assignee, priority, due date), then click Create task.",
+        "The animation shows opening the create panel; the markings below point out the key fields."
+      ]
+    },
+    {
+      "kind": "gif",
+      "region": "body",
+      "caption": "Opening the create-task panel",
+      "maxWidth": 760,
+      "delay": 1100,
+      "frames": [
+        { "wait": 700 },
+        { "clickText": "Create new task", "wait": 1700 }
+      ]
+    },
+    {
+      "kind": "shot",
+      "region": "body",
+      "wait": 800,
+      "caption": "The create-task panel",
+      "alt": "The create-task panel with the list picker, assignee, due date and Create task button highlighted",
+      "markings": [
+        { "matchText": "Choose list", "type": "badge", "color": "blue", "label": "1" },
+        { "matchText": "Assignee", "type": "badge", "color": "blue", "label": "2" },
+        { "matchText": "Due date", "type": "badge", "color": "blue", "label": "3" },
+        { "matchText": "Create task", "type": "rect", "color": "red" }
+      ]
+    }
+  ]
+}

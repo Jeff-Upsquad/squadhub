@@ -1,0 +1,31 @@
+{
+  "title": "How to use My Tasks",
+  "summary": "Your personal task list — switch views, group, filter and add tasks.",
+  "category": "Core Apps",
+  "nav": [
+    { "clickText": "Tasks", "wait": 2800 }
+  ],
+  "blocks": [
+    {
+      "kind": "text",
+      "heading": "My Tasks",
+      "paragraphs": [
+        "My Tasks is your private to-do list. See it as a list, a board or a whiteboard, group and filter it however suits you, and add new tasks in a click.",
+        "The markings below point out the main controls."
+      ]
+    },
+    {
+      "kind": "shot",
+      "region": "body",
+      "wait": 1400,
+      "caption": "My Tasks — views and controls",
+      "alt": "The My Tasks view with the view tabs, filter, focus-today and new-task controls highlighted",
+      "markings": [
+        { "matchText": "List", "type": "badge", "color": "blue", "label": "1" },
+        { "matchText": "Filter", "type": "badge", "color": "blue", "label": "2" },
+        { "matchText": "Focus today", "type": "badge", "color": "blue", "label": "3" },
+        { "matchText": "New task", "type": "rect", "color": "red" }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,11 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# The SOP auto-generator (tools/generate_sop.mjs) uses Playwright, but it runs as
+# a separate tool with its own browser — not inside this app image. Skip the
+# Playwright browser download so `npm install` stays fast and never fails here.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
 # Copy all package files for full workspace install
 COPY package.json package-lock.json* ./
 COPY shared/package.json shared/

@@ -1,0 +1,49 @@
+{
+  "title": "How to use My Home",
+  "summary": "Your daily launchpad: what needs attention, today and overdue, at a glance.",
+  "category": "Core Apps",
+  "nav": [
+    { "clickText": "My Home", "wait": 1800 }
+  ],
+  "blocks": [
+    {
+      "kind": "text",
+      "heading": "My Home at a glance",
+      "paragraphs": [
+        "My Home is the first screen you see each day. It pulls together what needs your attention — new tasks to triage, what's due today, and anything overdue — so you can start with the smallest next step.",
+        "The markings below point out the key areas."
+      ]
+    },
+    {
+      "kind": "shot",
+      "region": "body",
+      "wait": 600,
+      "caption": "My Home — the daily overview",
+      "alt": "The My Home dashboard with the task summary cards highlighted",
+      "markings": [
+        { "matchText": "NEW TASKS", "type": "badge", "color": "blue", "label": "1" },
+        { "matchText": "TODAY", "type": "badge", "color": "blue", "label": "2" },
+        { "matchText": "OVERDUE", "type": "rect", "color": "red" },
+        { "matchText": "Focus list", "type": "text", "color": "ink", "text": "Starred tasks land here" }
+      ]
+    },
+    {
+      "kind": "gif",
+      "region": "body",
+      "caption": "Jumping between Home and Tasks",
+      "maxWidth": 760,
+      "delay": 1100,
+      "frames": [
+        { "wait": 700 },
+        { "clickText": "Tasks", "wait": 1600 },
+        { "clickText": "My Home", "wait": 1600 }
+      ]
+    },
+    {
+      "kind": "text",
+      "paragraphs": [
+        "Tip: star a task (★) and it appears in your Focus list so it's one click away."
+      ]
+    }
+  ]
+}

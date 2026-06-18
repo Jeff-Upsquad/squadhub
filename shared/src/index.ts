@@ -1813,6 +1813,10 @@ export interface CashBookSyncResponse {
 export type LmsItemKind = 'post' | 'course';
 export type LmsItemStatus = 'draft' | 'published' | 'archived';
 export type LmsAssignmentStatus = 'not_started' | 'in_progress' | 'completed';
+// Orthogonal to `kind`: 'learning' is the default course/post catalog;
+// 'sop' surfaces the item under the "Systems & Processes" section and hides
+// the course-style progress chrome (see migration 118).
+export type LmsTrack = 'learning' | 'sop';
 export type LmsBlockType =
   | 'text'
   | 'image'
@@ -1835,6 +1839,8 @@ export interface LmsCategory {
 export interface LmsItem {
   id: string;
   kind: LmsItemKind;
+  // 'learning' (default) or 'sop' — see LmsTrack / migration 118.
+  track: LmsTrack;
   title: string;
   slug: string;
   summary: string | null;
@@ -1890,6 +1896,65 @@ export interface LmsContentBlock {
   updated_at: string;
   // Only for quiz blocks
   quiz_questions?: LmsQuizQuestion[];
+}
+
+// ---- Image annotations (markings on screenshots) ----
+// Non-destructive overlay drawn on top of an `image` block. Stored as JSON in
+// LmsContentBlock.metadata.annotations (no schema change — `metadata` is a
+// freeform JSONB column). All geometry is in PERCENT (0–100) of the image's
+// natural width/height so markings scale responsively across desktop/mobile.
+export type AnnotationColor = 'red' | 'amber' | 'green' | 'blue' | 'ink';
+
+interface AnnotationBase {
+  id: string;
+  color: AnnotationColor;
+}
+
+// Highlight box around a region. x/y = top-left corner; w/h = size (all %).
+export interface RectAnnotation extends AnnotationBase {
+  type: 'rect';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+// Arrow pointing at something. (x1,y1) = tail, (x2,y2) = head (arrowhead end).
+export interface ArrowAnnotation extends AnnotationBase {
+  type: 'arrow';
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+// Free text callout anchored at (x,y) top-left. wPct caps width so it wraps.
+export interface TextAnnotation extends AnnotationBase {
+  type: 'text';
+  x: number;
+  y: number;
+  text: string;
+  wPct?: number;
+}
+
+// Numbered step badge — a small circle with a label, centered at (x,y).
+export interface BadgeAnnotation extends AnnotationBase {
+  type: 'badge';
+  x: number;
+  y: number;
+  label: string;
+}
+
+export type Annotation = RectAnnotation | ArrowAnnotation | TextAnnotation | BadgeAnnotation;
+
+// Lives at LmsContentBlock.metadata.annotations.
+export interface ImageAnnotationData {
+  version: 1;
+  // Natural pixel dims captured at author time — used for the SVG viewBox
+  // aspect ratio (keeps arrowheads/badges round) and to recompute % on edit.
+  naturalWidth?: number;
+  naturalHeight?: number;
+  annotations: Annotation[];
 }
 
 export interface LmsQuizOption {

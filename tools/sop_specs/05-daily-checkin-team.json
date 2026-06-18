@@ -1,0 +1,32 @@
+{
+  "title": "Daily Check-In (Team)",
+  "summary": "How teammates submit their daily check-in and see their attendance.",
+  "category": "Check-Ins",
+  "nav": [
+    { "clickText": "Apps", "wait": 1200 },
+    { "clickText": "Daily Check-In Teammates", "wait": 2000 }
+  ],
+  "blocks": [
+    {
+      "kind": "text",
+      "heading": "Your daily check-in",
+      "paragraphs": [
+        "Each working day, open Daily Check-In and submit before the deadline. Your status (On Time / Late) and attendance history are tracked here automatically.",
+        "Use the tabs to switch between Time Tracking, your Check-In, and Off Days."
+      ]
+    },
+    {
+      "kind": "shot",
+      "region": "body",
+      "wait": 900,
+      "caption": "The Daily Check-In screen",
+      "alt": "The team daily check-in screen with the Check-In tab, Check In button and status highlighted",
+      "markings": [
+        { "matchText": "Check-In", "type": "badge", "color": "blue", "label": "1" },
+        { "matchText": "Check In", "type": "rect", "color": "red" },
+        { "matchText": "On Time", "type": "badge", "color": "blue", "label": "2" },
+        { "matchText": "Off Days", "type": "text", "color": "ink", "text": "Log days off here" }
+      ]
+    }
+  ]
+}

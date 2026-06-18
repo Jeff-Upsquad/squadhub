@@ -5,6 +5,13 @@ import { useMyLearning, type MyLearningEntry } from '../../../hooks/useLms';
 // Module side menu for the Learning section. Mirrors AppsSidebar conventions:
 // a header, a search field, a status filter, and a scrollable list of items
 // grouped by category. Clicking a row opens the item in the content panel.
+//
+// Items split into two tracks (see LmsTrack / migration 118):
+//  - 'learning' — courses/posts that participate in the Continue/Assigned/Done
+//    progress tabs and counts.
+//  - 'sop' — "Systems & Processes" reference docs (e.g. "How to use Inbox").
+//    These live in their own always-visible section, ignore the progress tabs,
+//    and render without progress chrome.
 
 type Tab = 'continue' | 'assigned' | 'completed' | 'catalog';
 
@@ -22,6 +29,36 @@ const TABS: { key: Tab; label: string }[] = [
 
 const UNCATEGORIZED = '__none__';
 
+interface Group {
+  key: string;
+  name: string;
+  color: string | null;
+  items: MyLearningEntry[];
+}
+
+// Group a set of entries by their item's category, preserving a stable
+// (alphabetical, uncategorized-last) order. keyPrefix keeps the learning and
+// SOP collapse-state namespaces from colliding when the same category id
+// appears in both tracks.
+function groupByCategory(entries: MyLearningEntry[], keyPrefix = ''): Group[] {
+  const map = new Map<string, Group>();
+  for (const entry of entries) {
+    const cat = entry.item.category;
+    const key = keyPrefix + (cat?.id || UNCATEGORIZED);
+    if (!map.has(key)) {
+      map.set(key, { key, name: cat?.name || 'General', color: cat?.color || null, items: [] });
+    }
+    map.get(key)!.items.push(entry);
+  }
+  return [...map.values()].sort((a, b) => {
+    const au = a.key.endsWith(UNCATEGORIZED);
+    const bu = b.key.endsWith(UNCATEGORIZED);
+    if (au) return 1;
+    if (bu) return -1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 export default function LearningSidebar({ activeItemId, onSelectItem }: LearningSidebarProps) {
   const { data: assignments, isLoading } = useMyLearning();
   const [tab, setTab] = useState<Tab>('continue');
@@ -30,51 +67,46 @@ export default function LearningSidebar({ activeItemId, onSelectItem }: Learning
 
   const all = assignments || [];
 
+  // Split the two tracks. SOPs are reference docs and don't count toward the
+  // Continue/Assigned/Done tabs.
+  const learning = useMemo(() => all.filter((a) => a.item.track !== 'sop'), [all]);
+  const sops = useMemo(() => all.filter((a) => a.item.track === 'sop'), [all]);
+
   const counts = useMemo(
     () => ({
-      continue: all.filter((a) => a.status === 'in_progress').length,
-      assigned: all.filter((a) => a.status === 'not_started').length,
-      completed: all.filter((a) => a.status === 'completed').length,
-      catalog: all.length,
+      continue: learning.filter((a) => a.status === 'in_progress').length,
+      assigned: learning.filter((a) => a.status === 'not_started').length,
+      completed: learning.filter((a) => a.status === 'completed').length,
+      catalog: learning.length,
     }),
-    [all]
+    [learning]
   );
 
-  const visible = useMemo(() => {
-    const byTab = all.filter((a) => {
-      if (tab === 'continue') return a.status === 'in_progress';
-      if (tab === 'assigned') return a.status === 'not_started';
-      if (tab === 'completed') return a.status === 'completed';
-      return true;
-    });
-    const q = query.trim().toLowerCase();
-    if (!q) return byTab;
-    return byTab.filter(
-      (a) => a.item.title.toLowerCase().includes(q) || (a.item.summary || '').toLowerCase().includes(q)
-    );
-  }, [all, tab, query]);
+  const q = query.trim().toLowerCase();
+  const matchesQuery = (a: MyLearningEntry) =>
+    !q || a.item.title.toLowerCase().includes(q) || (a.item.summary || '').toLowerCase().includes(q);
 
-  // Group the visible items by category, preserving a stable order.
-  const groups = useMemo(() => {
-    const map = new Map<string, { name: string; color: string | null; items: MyLearningEntry[] }>();
-    for (const entry of visible) {
-      const cat = entry.item.category;
-      const key = cat?.id || UNCATEGORIZED;
-      if (!map.has(key)) {
-        map.set(key, { name: cat?.name || 'General', color: cat?.color || null, items: [] });
-      }
-      map.get(key)!.items.push(entry);
-    }
-    return [...map.entries()]
-      .map(([key, g]) => ({ key, ...g }))
-      .sort((a, b) => {
-        if (a.key === UNCATEGORIZED) return 1;
-        if (b.key === UNCATEGORIZED) return -1;
-        return a.name.localeCompare(b.name);
-      });
-  }, [visible]);
+  // Learning items: filtered by the active status tab, then the search query.
+  const learningVisible = useMemo(() => {
+    return learning
+      .filter((a) => {
+        if (tab === 'continue') return a.status === 'in_progress';
+        if (tab === 'assigned') return a.status === 'not_started';
+        if (tab === 'completed') return a.status === 'completed';
+        return true;
+      })
+      .filter(matchesQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [learning, tab, q]);
 
-  const showGroupHeaders = groups.length > 1;
+  // SOPs: search-filtered only — always shown regardless of the active tab.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const sopVisible = useMemo(() => sops.filter(matchesQuery), [sops, q]);
+
+  const learningGroups = useMemo(() => groupByCategory(learningVisible), [learningVisible]);
+  const sopGroups = useMemo(() => groupByCategory(sopVisible, 'sop::'), [sopVisible]);
+
+  const nothing = learningVisible.length === 0 && sopVisible.length === 0;
 
   return (
     <div className="flex h-full w-full flex-col text-[var(--sh-ink-2)]">
@@ -138,47 +170,97 @@ export default function LearningSidebar({ activeItemId, onSelectItem }: Learning
       <div className="flex-1 overflow-y-auto px-2 py-1">
         {isLoading ? (
           <p className="px-2 py-6 text-center text-[12px] text-[var(--sh-ink-3)]">Loading…</p>
-        ) : visible.length === 0 ? (
+        ) : nothing ? (
           <p className="px-3 py-6 text-center text-[12px] leading-relaxed text-[var(--sh-ink-3)]">
-            {query.trim() ? 'No matches.' : emptyCopy(tab)}
+            {q ? 'No matches.' : emptyCopy(tab)}
           </p>
         ) : (
-          groups.map((group) => {
-            const isCollapsed = !!collapsed[group.key];
-            return (
-              <div key={group.key} className="pb-1">
-                {showGroupHeaders && (
-                  <button
-                    onClick={() => setCollapsed((c) => ({ ...c, [group.key]: !c[group.key] }))}
-                    className="flex w-full items-center gap-1.5 px-2 pt-3 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--sh-ink-3)] transition-colors hover:text-[var(--sh-ink)]"
-                  >
-                    <svg className={`h-3 w-3 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} viewBox="0 0 18 18" fill="currentColor">
-                      <path d="M5 7h8L9 11z" />
-                    </svg>
-                    {group.color && <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: group.color }} />}
-                    <span className="truncate">{group.name}</span>
-                  </button>
-                )}
-                {!isCollapsed &&
-                  group.items.map((entry) => (
-                    <ItemRow
-                      key={entry.id}
-                      entry={entry}
-                      active={activeItemId === entry.item.id}
-                      onClick={() => onSelectItem(entry.item.id)}
-                    />
-                  ))}
+          <>
+            {/* Learning (course/post catalog, tab-filtered) */}
+            <GroupList
+              groups={learningGroups}
+              collapsed={collapsed}
+              setCollapsed={setCollapsed}
+              activeItemId={activeItemId}
+              onSelectItem={onSelectItem}
+            />
+
+            {/* Systems & Processes (reference docs, always visible) */}
+            {sopGroups.length > 0 && (
+              <div className={learningGroups.length > 0 ? 'mt-2 border-t border-[var(--sh-hair)] pt-2' : ''}>
+                <div className="flex items-center gap-1.5 px-2 pb-0.5 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--sh-ink-3)]">
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2-2 2.6-2.6z" />
+                  </svg>
+                  <span>Systems &amp; Processes</span>
+                </div>
+                <GroupList
+                  groups={sopGroups}
+                  collapsed={collapsed}
+                  setCollapsed={setCollapsed}
+                  activeItemId={activeItemId}
+                  onSelectItem={onSelectItem}
+                />
               </div>
-            );
-          })
+            )}
+          </>
         )}
       </div>
     </div>
   );
 }
 
+function GroupList({
+  groups,
+  collapsed,
+  setCollapsed,
+  activeItemId,
+  onSelectItem,
+}: {
+  groups: Group[];
+  collapsed: Record<string, boolean>;
+  setCollapsed: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  activeItemId: string | null;
+  onSelectItem: (id: string) => void;
+}) {
+  const showGroupHeaders = groups.length > 1;
+  return (
+    <>
+      {groups.map((group) => {
+        const isCollapsed = !!collapsed[group.key];
+        return (
+          <div key={group.key} className="pb-1">
+            {showGroupHeaders && (
+              <button
+                onClick={() => setCollapsed((c) => ({ ...c, [group.key]: !c[group.key] }))}
+                className="flex w-full items-center gap-1.5 px-2 pt-3 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--sh-ink-3)] transition-colors hover:text-[var(--sh-ink)]"
+              >
+                <svg className={`h-3 w-3 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} viewBox="0 0 18 18" fill="currentColor">
+                  <path d="M5 7h8L9 11z" />
+                </svg>
+                {group.color && <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: group.color }} />}
+                <span className="truncate">{group.name}</span>
+              </button>
+            )}
+            {!isCollapsed &&
+              group.items.map((entry) => (
+                <ItemRow
+                  key={entry.id}
+                  entry={entry}
+                  active={activeItemId === entry.item.id}
+                  onClick={() => onSelectItem(entry.item.id)}
+                />
+              ))}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 function ItemRow({ entry, active, onClick }: { entry: MyLearningEntry; active: boolean; onClick: () => void }) {
   const { item, status, progress_percent } = entry;
+  const isSop = item.track === 'sop';
   const done = status === 'completed';
   return (
     <button
@@ -197,7 +279,7 @@ function ItemRow({ entry, active, onClick }: { entry: MyLearningEntry; active: b
         </span>
       ) : (
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[7px] bg-[var(--sh-hair-3)] text-[15px]">
-          {item.kind === 'course' ? '📚' : '📝'}
+          {isSop ? '📄' : item.kind === 'course' ? '📚' : '📝'}
         </span>
       )}
 
@@ -205,7 +287,12 @@ function ItemRow({ entry, active, onClick }: { entry: MyLearningEntry; active: b
         <span className="flex items-center gap-1.5">
           <span className="truncate text-[12.5px] font-medium leading-tight">{item.title}</span>
         </span>
-        {done ? (
+        {/* SOPs are reference docs — show a short subtitle instead of progress chrome. */}
+        {isSop ? (
+          item.summary ? (
+            <span className="truncate text-[10.5px] leading-tight text-[var(--sh-ink-3)]">{item.summary}</span>
+          ) : null
+        ) : done ? (
           <span className="flex items-center gap-1 text-[10.5px] font-medium text-emerald-600">
             <span className="grid h-3 w-3 place-items-center rounded-full bg-emerald-500 text-[7px] text-white">✓</span>
             Completed
