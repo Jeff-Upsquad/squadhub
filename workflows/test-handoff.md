@@ -36,6 +36,7 @@ For a **localhost** handoff, swap the header to `🔗 Running locally — here's
 For an **Android** handoff, swap the header to `📱 Loaded on your phone — here's what to test:` and say whether it's an OTA update (just reopen the app) or a new APK (install required), plus the version.
 
 ## Notes
+- **Cover the whole shipped range, not just your commits.** A push/deploy ships EVERYTHING unpushed on `main`, including commits from other sessions/worktrees. Before handing off, diff the deployed range (the `BEFORE_SHA -> AFTER_SHA` that `deploy.sh` prints, or `origin/main..main` before a push) and list every feature that went live — not only what you built this session. Re-check migrations across that FULL range too (`deploy.sh` doesn't run them).
 - Map technical changes to user-visible behavior. "Added `brief_group_id` fan-out" → "Multi-tier briefs now show as one card with per-tier tabs."
 - If the deploy touched multiple surfaces (web + admin), give the test steps per surface.
 - If something shipped but couldn't be runtime-verified, say so plainly so the user knows to check it.
