@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { LogicalSize } from '@tauri-apps/api/dpi';
 import { useAuthStore } from './stores/authStore';
 import {
   fetchPersonalList,
@@ -94,7 +93,6 @@ async function loadPickableLists(): Promise<PickableList[]> {
 
 export default function QuickAdd() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
   const defaultListRef = useRef<SelectedList | null>(cachedPersonal);
   const win = getCurrentWindow();
 
@@ -163,24 +161,6 @@ export default function QuickAdd() {
     return () => {
       void unlisten.then((fn) => fn());
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Grow/shrink the spotlight panel to fit its content (description, open menus).
-  // The window is `resizable: true` so setSize isn't ignored by macOS; clear any
-  // min/max constraints up front so it can grow past its initial height.
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    void win.setSizeConstraints(null).catch(() => {});
-    const apply = () => {
-      const h = Math.min(560, Math.max(120, Math.ceil(el.getBoundingClientRect().height)));
-      void win.setSize(new LogicalSize(560, h)).catch(() => {});
-    };
-    const ro = new ResizeObserver(apply);
-    ro.observe(el);
-    apply();
-    return () => ro.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -321,7 +301,7 @@ export default function QuickAdd() {
 
   return (
     <div className="qa-scroll" onKeyDown={onContainerKeyDown}>
-      <div className="qa" ref={rootRef}>
+      <div className="qa">
       <div className="qa-row">
         <span className="qa-icon">+</span>
         <input
