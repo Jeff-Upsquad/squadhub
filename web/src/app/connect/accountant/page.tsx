@@ -713,6 +713,71 @@ export default function AccountantConnectPage() {
                 </div>
                 <div className="space-y-4">
                   <div>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <label className="flex items-baseline gap-2 text-sm font-medium text-[#222]">
+                        <span>Plan</span>
+                        <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setComparePlanOpen(true)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border-2 border-[#0a0a0a] bg-[#F2FCBC] px-3 py-1.5 text-xs font-bold text-[#0a0a0a] shadow-[2px_2px_0_0_#0a0a0a] transition hover:bg-[#FCF487] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0_0_#0a0a0a]"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <rect x="3" y="4" width="18" height="16" rx="1.5" />
+                          <path d="M9 4v16M15 4v16" />
+                        </svg>
+                        Compare all plans
+                      </button>
+                    </div>
+                    <p className="mb-3 text-xs text-[#7A7568]">
+                      Plans differ by availability — how much of an accountant you get each week.
+                    </p>
+                    <div className="overflow-hidden rounded-xl border border-[#D9D5C7]">
+                      <table className="w-full border-collapse text-left text-sm">
+                        <thead>
+                          <tr className="bg-[#F4F1E8] text-[11px] font-semibold uppercase tracking-wide text-[#7A7568]">
+                            <th className="px-2 py-2 sm:px-3">Plan</th>
+                            <th className="px-2 py-2 text-right sm:px-3">Day</th>
+                            <th className="px-2 py-2 text-right sm:px-3">Week</th>
+                            <th className="px-2 py-2 text-right sm:px-3">Month</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {PLAN_OPTIONS.map((p) => {
+                            const on = subscription.plan === p.name;
+                            return (
+                              <tr
+                                key={p.name}
+                                role="button"
+                                aria-pressed={on}
+                                onClick={() => updateSub('plan', on ? '' : p.name)}
+                                className={`cursor-pointer border-t border-[#E8E5DD] transition ${on ? 'bg-[#F2FCBC]' : 'bg-white hover:bg-[#FBFAF6]'}`}
+                              >
+                                <td className="px-2 py-2.5 font-semibold text-[#0a0a0a] sm:px-3">
+                                  <span className="flex items-center gap-2">
+                                    <span className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5]'}`}>
+                                      {on && (
+                                        <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      )}
+                                    </span>
+                                    {p.name}
+                                  </span>
+                                </td>
+                                <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.dailyHours} hr{p.dailyHours > 1 ? 's' : ''}</td>
+                                <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.weeklyHours} hrs</td>
+                                <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.monthlyHours} hrs</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div>
                     <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
                       <span>Experience level(s)</span>
                       <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
@@ -736,79 +801,6 @@ export default function AccountantConnectPage() {
                         );
                       })}
                     </div>
-                  </div>
-
-                  <div>
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <label className="flex items-baseline gap-2 text-sm font-medium text-[#222]">
-                        <span>Plan</span>
-                        <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
-                      </label>
-                      {subscription.tiers.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setComparePlanOpen(true)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border-2 border-[#0a0a0a] bg-[#F2FCBC] px-3 py-1.5 text-xs font-bold text-[#0a0a0a] shadow-[2px_2px_0_0_#0a0a0a] transition hover:bg-[#FCF487] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0_0_#0a0a0a]"
-                        >
-                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <rect x="3" y="4" width="18" height="16" rx="1.5" />
-                            <path d="M9 4v16M15 4v16" />
-                          </svg>
-                          Compare all plans
-                        </button>
-                      )}
-                    </div>
-                    <p className="mb-3 text-xs text-[#7A7568]">
-                      Plans differ by availability — how much of an accountant you get each week.
-                    </p>
-                    {subscription.tiers.length === 0 ? (
-                      <p className="text-sm font-medium text-[#C97744]">
-                        Pick an experience level to see plan options.
-                      </p>
-                    ) : (
-                      <div className="overflow-hidden rounded-xl border border-[#D9D5C7]">
-                        <table className="w-full border-collapse text-left text-sm">
-                          <thead>
-                            <tr className="bg-[#F4F1E8] text-[11px] font-semibold uppercase tracking-wide text-[#7A7568]">
-                              <th className="px-2 py-2 sm:px-3">Plan</th>
-                              <th className="px-2 py-2 text-right sm:px-3">Day</th>
-                              <th className="px-2 py-2 text-right sm:px-3">Week</th>
-                              <th className="px-2 py-2 text-right sm:px-3">Month</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {PLAN_OPTIONS.map((p) => {
-                              const on = subscription.plan === p.name;
-                              return (
-                                <tr
-                                  key={p.name}
-                                  role="button"
-                                  aria-pressed={on}
-                                  onClick={() => updateSub('plan', on ? '' : p.name)}
-                                  className={`cursor-pointer border-t border-[#E8E5DD] transition ${on ? 'bg-[#F2FCBC]' : 'bg-white hover:bg-[#FBFAF6]'}`}
-                                >
-                                  <td className="px-2 py-2.5 font-semibold text-[#0a0a0a] sm:px-3">
-                                    <span className="flex items-center gap-2">
-                                      <span className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5]'}`}>
-                                        {on && (
-                                          <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                          </svg>
-                                        )}
-                                      </span>
-                                      {p.name}
-                                    </span>
-                                  </td>
-                                  <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.dailyHours} hr{p.dailyHours > 1 ? 's' : ''}</td>
-                                  <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.weeklyHours} hrs</td>
-                                  <td className="px-2 py-2.5 text-right text-[#3A3A3A] sm:px-3">{p.monthlyHours} hrs</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
                   </div>
 
                   <Field
