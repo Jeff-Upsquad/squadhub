@@ -48,10 +48,14 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
     socket.on('new_message', handler);
     socket.on('thread_reply', handler);
     socket.on('new_reaction', handler);
+    socket.on('message_updated', handler);
+    socket.on('message_deleted', handler);
     return () => {
       socket.off('new_message', handler);
       socket.off('thread_reply', handler);
       socket.off('new_reaction', handler);
+      socket.off('message_updated', handler);
+      socket.off('message_deleted', handler);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parentId]);

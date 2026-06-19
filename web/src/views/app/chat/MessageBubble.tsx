@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Message, Reaction } from '@squadhub/shared';
 import api from '../../../services/api';
@@ -255,9 +255,13 @@ function ReactionsRow({
 function HoverActions({
   onAddReaction,
   onReplyInThread,
+  onMore,
+  showMore,
 }: {
   onAddReaction: () => void;
   onReplyInThread?: () => void;
+  onMore?: () => void;
+  showMore?: boolean;
 }) {
   return (
     <div className="sqc-msg__hover" onClick={(e) => e.stopPropagation()}>
@@ -281,9 +285,176 @@ function HoverActions({
           <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
         </svg>
       </button>
-      <button type="button" title="More">
-        <span style={{ fontSize: 16, lineHeight: 0.7 }}>⋯</span>
-      </button>
+      {showMore && (
+        <button type="button" onClick={onMore} title="More">
+          <span style={{ fontSize: 16, lineHeight: 0.7 }}>⋯</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---- Message action menu (⋯) ----
+function MessageActionMenu({
+  canEdit,
+  canDelete,
+  canViewHistory,
+  onEdit,
+  onDelete,
+  onHistory,
+  onClose,
+}: {
+  canEdit: boolean;
+  canDelete: boolean;
+  canViewHistory: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+  onHistory: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      {/* click-away backdrop */}
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div
+        className="absolute right-3 top-9 z-50 min-w-[160px] overflow-hidden rounded-[8px] border border-[var(--sh-border)] bg-[var(--sh-bg)] py-1 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+        role="menu"
+      >
+        {canEdit && (
+          <button type="button" className="sqc-msg__menu-item" onClick={onEdit} role="menuitem">
+            Edit
+          </button>
+        )}
+        {canViewHistory && (
+          <button type="button" className="sqc-msg__menu-item" onClick={onHistory} role="menuitem">
+            Edit history
+          </button>
+        )}
+        {canDelete && (
+          <button
+            type="button"
+            className="sqc-msg__menu-item sqc-msg__menu-item--danger"
+            onClick={onDelete}
+            role="menuitem"
+          >
+            Delete
+          </button>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ---- Admin edit-history modal (view prior versions + restore) ----
+type EditHistoryEntry = {
+  id: number;
+  previous_content: string;
+  replaced_at: string;
+  editor?: { id: string; display_name?: string | null } | null;
+};
+
+function EditHistoryModal({ messageId, onClose }: { messageId: string; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [current, setCurrent] = useState<{ content: string | null; edited_at?: string | null } | null>(null);
+  const [history, setHistory] = useState<EditHistoryEntry[]>([]);
+  const [restoringId, setRestoringId] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .get(`/messages/${messageId}/history`)
+      .then((r) => {
+        if (!alive) return;
+        const d = r.data?.data;
+        setCurrent(d?.current ?? null);
+        setHistory(d?.history ?? []);
+      })
+      .catch((e) => {
+        if (alive) setError(e?.response?.data?.error || 'Failed to load edit history');
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [messageId]);
+
+  const restore = async (historyId: number) => {
+    setRestoringId(historyId);
+    setError('');
+    try {
+      await api.post(`/messages/${messageId}/restore`, { history_id: historyId });
+      queryClient.invalidateQueries({ queryKey: ['messages'] });
+      queryClient.invalidateQueries({ queryKey: ['thread'] });
+      onClose();
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to restore version';
+      setError(msg);
+      setRestoringId(null);
+    }
+  };
+
+  const fmt = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-lg border border-[#E2E8F0] bg-[#F1F5F9] p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="font-[family-name:var(--font-display)] text-lg font-semibold text-[#0F172B]">Edit history</h3>
+          <button onClick={onClose} className="text-2xl leading-none text-[#666666] hover:text-[#0F172B]" title="Close">
+            ×
+          </button>
+        </div>
+
+        {loading && <p className="text-sm text-[#666666]">Loading…</p>}
+        {error && (
+          <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
+        )}
+
+        {!loading && !error && (
+          <div className="flex flex-col gap-3 overflow-auto">
+            <div className="rounded-md border border-[#CAD5E2] bg-white p-3">
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#2962FF]">Current</div>
+              <div className="whitespace-pre-wrap text-sm text-[#0F172B]">
+                {current?.content || <span className="italic text-[#999999]">(empty)</span>}
+              </div>
+            </div>
+
+            {history.length === 0 ? (
+              <p className="text-sm text-[#666666]">
+                No prior versions — this message hasn&apos;t been edited since history tracking started.
+              </p>
+            ) : (
+              history.map((h) => (
+                <div key={h.id} className="rounded-md border border-[#CAD5E2] bg-white p-3">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-[#666666]">
+                      {h.editor?.display_name || 'Unknown'} · {fmt(h.replaced_at)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => restore(h.id)}
+                      disabled={restoringId !== null}
+                      className="rounded-md border border-[#CAD5E2] px-2.5 py-1 text-xs font-medium text-[#0F172B] transition hover:border-[#2962FF] hover:text-[#2962FF] disabled:opacity-50"
+                    >
+                      {restoringId === h.id ? 'Restoring…' : 'Restore'}
+                    </button>
+                  </div>
+                  <div className="whitespace-pre-wrap text-sm text-[#0F172B]">{h.previous_content}</div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -498,6 +669,71 @@ export default function MessageBubble({ message, onOpenThread, inThread, grouped
     }
   };
 
+  const isAdmin = useAuthStore((s) => s.user?.is_admin) ?? false;
+  const editedAt = (message as Message & { edited_at?: string | null }).edited_at ?? null;
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(message.content || '');
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Mirror the server rules (routes/messages.ts): a sender can edit/delete their
+  // own message within 10 minutes; edits are text-only. Admins can view the edit
+  // history and restore prior versions of any message.
+  const EDIT_WINDOW_MS = 10 * 60 * 1000;
+  const isOwn = !!meId && message.sender_id === meId;
+  const withinWindow = Date.now() - new Date(message.created_at).getTime() < EDIT_WINDOW_MS;
+  const canEdit = isOwn && message.type === 'text' && withinWindow;
+  const canDelete = isOwn && withinWindow;
+  const canViewHistory = isAdmin;
+  const showMore = canEdit || canDelete || canViewHistory;
+
+  const saveEdit = async () => {
+    const content = draft.trim();
+    if (!content || busy) return;
+    setBusy(true);
+    setActionError('');
+    try {
+      await api.patch(`/messages/${message.id}`, { content });
+      queryClient.invalidateQueries({ queryKey: ['messages'] });
+      queryClient.invalidateQueries({ queryKey: ['thread', message.parent_message_id || message.id] });
+      setEditing(false);
+    } catch (err: unknown) {
+      setActionError(
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to edit message',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doDelete = async () => {
+    setMenuOpen(false);
+    if (busy || !window.confirm('Delete this message?')) return;
+    setBusy(true);
+    setActionError('');
+    try {
+      await api.delete(`/messages/${message.id}`);
+      queryClient.invalidateQueries({ queryKey: ['messages'] });
+      queryClient.invalidateQueries({ queryKey: ['thread', message.parent_message_id || message.id] });
+    } catch (err: unknown) {
+      setActionError(
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to delete message',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startEdit = () => {
+    setDraft(message.content || '');
+    setActionError('');
+    setEditing(true);
+    setMenuOpen(false);
+  };
+
   const initials = (sender?.display_name?.[0] || '?').toUpperCase();
   // Prefer client-computed thread meta (works even if DB reply_count is missing),
   // fall back to the server's denormalized count.
@@ -532,7 +768,24 @@ export default function MessageBubble({ message, onOpenThread, inThread, grouped
       <HoverActions
         onAddReaction={() => setShowPicker(true)}
         onReplyInThread={!inThread && onOpenThread ? onOpenThread : undefined}
+        onMore={() => setMenuOpen((v) => !v)}
+        showMore={showMore}
       />
+      {menuOpen && (
+        <MessageActionMenu
+          canEdit={canEdit}
+          canDelete={canDelete}
+          canViewHistory={canViewHistory}
+          onEdit={startEdit}
+          onDelete={doDelete}
+          onHistory={() => {
+            setHistoryOpen(true);
+            setMenuOpen(false);
+          }}
+          onClose={() => setMenuOpen(false)}
+        />
+      )}
+      {historyOpen && <EditHistoryModal messageId={message.id} onClose={() => setHistoryOpen(false)} />}
       {showPicker && (
         <div className="absolute right-4 top-4 z-50">
           <EmojiPicker
@@ -563,7 +816,60 @@ export default function MessageBubble({ message, onOpenThread, inThread, grouped
           </div>
         )}
 
-        {message.content && <div className="sqc-msg__content">{renderContent(message.content)}</div>}
+        {editing ? (
+          <div className="sqc-msg__edit">
+            <textarea
+              className="sqc-msg__edit-input"
+              value={draft}
+              autoFocus
+              rows={Math.min(8, Math.max(1, draft.split('\n').length))}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  saveEdit();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setEditing(false);
+                  setActionError('');
+                }
+              }}
+            />
+            <div className="sqc-msg__edit-actions">
+              <span className="sqc-msg__edit-hint">Enter to save · Esc to cancel</span>
+              <button
+                type="button"
+                className="sqc-msg__edit-btn"
+                onClick={() => {
+                  setEditing(false);
+                  setActionError('');
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="sqc-msg__edit-btn sqc-msg__edit-btn--primary"
+                onClick={saveEdit}
+                disabled={busy || !draft.trim()}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        ) : (
+          message.content && (
+            <div className="sqc-msg__content">
+              {renderContent(message.content)}
+              {editedAt && (
+                <span className="sqc-msg__edited" title={`Edited ${new Date(editedAt).toLocaleString()}`}>
+                  {' '}(edited)
+                </span>
+              )}
+            </div>
+          )
+        )}
+        {actionError && !editing && <div className="sqc-msg__edit-error">{actionError}</div>}
 
         {message.unfurl && <LinkUnfurlCard unfurl={message.unfurl} />}
         <AttachmentBlock message={message} />

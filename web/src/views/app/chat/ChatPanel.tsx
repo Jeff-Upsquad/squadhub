@@ -214,12 +214,16 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
     socket.on('new_message', handleNewMessage);
     socket.on('new_reaction', handleReaction);
     socket.on('thread_reply', handleNewMessage);
+    socket.on('message_updated', handleNewMessage);
+    socket.on('message_deleted', handleNewMessage);
     socket.on('new_notification', handleNotification);
     return () => {
       socket.emit('leave_channel', channelId);
       socket.off('new_message', handleNewMessage);
       socket.off('new_reaction', handleReaction);
       socket.off('thread_reply', handleNewMessage);
+      socket.off('message_updated', handleNewMessage);
+      socket.off('message_deleted', handleNewMessage);
       socket.off('new_notification', handleNotification);
     };
   }, [channelId, kind, queryClient, queryKey, clearConversationNotifications]);
