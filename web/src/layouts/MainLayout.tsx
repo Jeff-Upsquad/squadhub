@@ -569,6 +569,17 @@ export default function MainLayout() {
 
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
+  // The global top-bar "+" creates a SquadHub task. Hide it where the current
+  // surface already owns the top-right create affordance, so it doesn't stack a
+  // redundant button on top of theirs:
+  //   • list/board views — their own floating "New task" FAB (newTaskFabVisible)
+  //   • embedded standalone apps (Squad Clips, Daily Check-In, Time Management,
+  //     Sales Leads) — each renders its own header/actions; the global "+" was
+  //     overlapping e.g. Squad Clips' "New recording ▾" dropdown chevron.
+  const EMBEDDED_APP_VIEWS: HomeView[] = ['clips', 'checkin', 'checkin-partners', 'check-ins', 'time-management', 'sales-leads'];
+  const hideGlobalCreateBtn =
+    newTaskFabVisible || activeSection === 'apps' || EMBEDDED_APP_VIEWS.includes(homeView);
+
   return (
     <div className="flex h-[100dvh] bg-[var(--sidebar)] text-foreground">
       {/* Mobile top bar — only renders below md breakpoint. */}
@@ -589,15 +600,15 @@ export default function MainLayout() {
             {activeSection === 'home' ? SECTION_TITLES.home : SECTION_TITLES[activeSection]}
           </span>
         </div>
-        {/* Kept rendered (but hidden) when a view shows its own floating "New
-            task" button, so the title stays centered in this justify-between bar. */}
+        {/* Kept rendered (but hidden) when the current surface owns the create
+            affordance, so the title stays centered in this justify-between bar. */}
         <button
           type="button"
           onClick={() => setShowCreateTaskModal(true)}
           aria-label="Create new task"
-          aria-hidden={newTaskFabVisible}
-          tabIndex={newTaskFabVisible ? -1 : undefined}
-          className={`grid h-9 w-9 place-items-center rounded-[8px] text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)] ${newTaskFabVisible ? 'invisible pointer-events-none' : ''}`}
+          aria-hidden={hideGlobalCreateBtn}
+          tabIndex={hideGlobalCreateBtn ? -1 : undefined}
+          className={`grid h-9 w-9 place-items-center rounded-[8px] text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)] ${hideGlobalCreateBtn ? 'invisible pointer-events-none' : ''}`}
         >
           <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
             <path d="M12 5v14M5 12h14" />
@@ -791,11 +802,11 @@ export default function MainLayout() {
 
       {/* Main content area */}
       <div className="relative flex flex-1 flex-col overflow-hidden bg-surface pt-12 md:pt-0">
-        {/* Universal "New task" button — visible in all views. Hidden on
-            mobile because the mobile top bar has its own "+" button, and hidden
-            whenever a view (e.g. a list/board) shows its own floating "New task"
-            button, so the two create affordances don't both appear. */}
-        {!newTaskFabVisible && (
+        {/* Universal "New task" button — visible on task surfaces. Hidden on
+            mobile (the mobile top bar has its own "+"), and hidden wherever the
+            surface owns the top-right create affordance — a list/board's floating
+            "New task" FAB, or an embedded app's own header (see hideGlobalCreateBtn). */}
+        {!hideGlobalCreateBtn && (
           <button
             type="button"
             onClick={() => setShowCreateTaskModal(true)}
