@@ -577,8 +577,11 @@ export default function MainLayout() {
   //     Sales Leads) — each renders its own header/actions; the global "+" was
   //     overlapping e.g. Squad Clips' "New recording ▾" dropdown chevron.
   const EMBEDDED_APP_VIEWS: HomeView[] = ['clips', 'checkin', 'checkin-partners', 'check-ins', 'time-management', 'sales-leads'];
+  // Day Planner gets the create button as a bottom-right floating FAB instead of
+  // the top-right "+", which otherwise collides with the calendar's header.
+  const onDayPlanner = activeSection === 'home' && homeView === 'day-planner';
   const hideGlobalCreateBtn =
-    newTaskFabVisible || activeSection === 'apps' || EMBEDDED_APP_VIEWS.includes(homeView);
+    newTaskFabVisible || activeSection === 'apps' || EMBEDDED_APP_VIEWS.includes(homeView) || onDayPlanner;
 
   return (
     <div className="flex h-[100dvh] bg-[var(--sidebar)] text-foreground">
@@ -817,6 +820,22 @@ export default function MainLayout() {
             <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
               <path d="M12 5v14M5 12h14" />
             </svg>
+          </button>
+        )}
+        {/* Day Planner: the create button lives as a bottom-right floating FAB
+            (same style as the list view's) instead of the top-right "+". */}
+        {onDayPlanner && (
+          <button
+            type="button"
+            onClick={() => setShowCreateTaskModal(true)}
+            className="lv-newtask-fab"
+            aria-label="New task"
+            title="New task"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            New task
           </button>
         )}
         <EmergencyBanner />
