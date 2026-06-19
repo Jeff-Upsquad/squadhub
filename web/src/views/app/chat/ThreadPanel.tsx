@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { getSocket } from '../../../services/socket';
@@ -63,6 +63,22 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
   const root: Message | null = threadRes?.data?.root || null;
   const replies: Message[] = threadRes?.data?.replies || [];
 
+  // Keep the thread pinned to the newest reply: jump to the bottom when the
+  // thread opens and stick there as replies arrive, unless the reader has
+  // scrolled up to read history. Mirrors the main ChatPanel behaviour.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const lastParentRef = useRef<string | null>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !root) return;
+    const isNewThread = lastParentRef.current !== parentId;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+    if (isNewThread || nearBottom) {
+      el.scrollTop = el.scrollHeight;
+      lastParentRef.current = parentId;
+    }
+  }, [parentId, root, replies.length]);
+
   return (
     <div className="sqc-thread-panel relative flex w-[400px] shrink-0 flex-col border-l border-divider bg-white dark:bg-surface">
       {/* Header */}
@@ -85,7 +101,7 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
       </div>
 
       {/* Scroll area: parent message + divider + replies */}
-      <div className="flex flex-1 flex-col overflow-y-auto">
+      <div ref={scrollRef} className="flex flex-1 flex-col overflow-y-auto pb-3">
         {root && (
           <>
             <div className="pt-2">
