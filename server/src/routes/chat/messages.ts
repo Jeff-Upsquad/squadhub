@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
+import { requireAdmin } from '../../middleware/admin';
 import { loadChatContext } from '../../middleware/chat';
 import { supabaseAdmin } from '../../supabase-chat';
 import { sendChatPush } from '../../push/chat';
@@ -435,6 +436,94 @@ router.delete('/:id', async (req: Request, res: Response) => {
     });
   }
   res.json({ success: true });
+});
+
+// -------------------------------------------------------------
+// GET /chat/messages/:id/history — admin: view an edited message's prior
+// versions (newest first). Edits overwrite content in place; a DB trigger
+// snapshots the old text into chat_message_edits, so this is the recovery view.
+// -------------------------------------------------------------
+router.get('/:id/history', requireAdmin, async (req: Request, res: Response) => {
+  const { data: msg } = await supabaseAdmin
+    .from('chat_messages')
+    .select('id, content, edited_at, sender_id')
+    .eq('id', req.params.id)
+    .maybeSingle();
+  if (!msg) {
+    res.status(404).json({ success: false, error: 'Message not found' });
+    return;
+  }
+  const { data: history, error } = await supabaseAdmin
+    .from('chat_message_edits')
+    .select('id, previous_content, replaced_at, editor_id, editor:users!editor_id(id, display_name, avatar_url)')
+    .eq('message_id', req.params.id)
+    .order('replaced_at', { ascending: false });
+  if (error) {
+    res.status(500).json({ success: false, error: error.message });
+    return;
+  }
+  res.json({ success: true, data: { current: msg, history: history || [] } });
+});
+
+// -------------------------------------------------------------
+// POST /chat/messages/:id/restore — admin: restore a prior version.
+// Body: { history_id?: number } — defaults to the most recent prior version.
+// The restore itself overwrites current content, which the trigger captures
+// into history, so a restore is reversible too.
+// -------------------------------------------------------------
+const restoreSchema = z.object({ history_id: z.number().int().positive().optional() });
+
+router.post('/:id/restore', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const body = restoreSchema.parse(req.body ?? {});
+    const { data: msg } = await supabaseAdmin
+      .from('chat_messages')
+      .select('id, group_id, dm_conversation_id')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (!msg) {
+      res.status(404).json({ success: false, error: 'Message not found' });
+      return;
+    }
+
+    let q = supabaseAdmin
+      .from('chat_message_edits')
+      .select('id, previous_content')
+      .eq('message_id', req.params.id);
+    q = body.history_id
+      ? q.eq('id', body.history_id)
+      : q.order('replaced_at', { ascending: false }).limit(1);
+    const { data: rows } = await q;
+    const entry = rows?.[0];
+    if (!entry) {
+      res.status(404).json({ success: false, error: 'No edit history to restore' });
+      return;
+    }
+
+    const { data: updated, error } = await supabaseAdmin
+      .from('chat_messages')
+      .update({ content: entry.previous_content, edited_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .select(MESSAGE_SELECT)
+      .single();
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const io = req.app.get('io');
+    if (io) {
+      const room = msg.group_id ? `chat_group:${msg.group_id}` : `chat_dm:${msg.dm_conversation_id}`;
+      io.to(room).emit('chat_message_edit', updated);
+    }
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
 });
 
 export default router;
