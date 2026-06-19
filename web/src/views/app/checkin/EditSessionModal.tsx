@@ -75,10 +75,10 @@ export default function EditSessionModal({ session, onClose, workspaceId, contex
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
+      <div className="relative w-full max-w-md rounded-xl bg-surface p-6 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-[#0F172B]">Edit Session</h3>
-          <button onClick={onClose} className="rounded-md p-1 text-[#62748E] hover:bg-[#F1F5F9]">
+          <h3 className="text-base font-semibold text-foreground">Edit Session</h3>
+          <button onClick={onClose} className="rounded-md p-1 text-foreground-muted hover:bg-surface-alt">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -87,7 +87,7 @@ export default function EditSessionModal({ session, onClose, workspaceId, contex
 
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-[#90A1B9]">Type</label>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-foreground-dim">Type</label>
             <div className="grid grid-cols-3 gap-2">
               {TIMER_TYPES.map((t) => (
                 <button
@@ -96,8 +96,8 @@ export default function EditSessionModal({ session, onClose, workspaceId, contex
                   onClick={() => setType(t.value)}
                   className={`rounded-md border px-3 py-2 text-sm transition ${
                     type === t.value
-                      ? 'border-[#2962FF] bg-blue-50 font-medium text-[#2962FF]'
-                      : 'border-[#E2E8F0] text-[#62748E] hover:bg-[#F8FAFC]'
+                      ? 'border-accent bg-accent/10 font-medium text-accent'
+                      : 'border-divider text-foreground-muted hover:bg-surface-alt'
                   }`}
                 >
                   {t.label}
@@ -107,22 +107,22 @@ export default function EditSessionModal({ session, onClose, workspaceId, contex
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-[#90A1B9]">Start</label>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-foreground-dim">Start</label>
             <input
               type="datetime-local"
               value={startLocal}
               onChange={(e) => setStartLocal(e.target.value)}
-              className="w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+              className="w-full rounded-md border border-divider px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-[#90A1B9]">End</label>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-foreground-dim">End</label>
             <input
               type="datetime-local"
               value={endLocal}
               onChange={(e) => setEndLocal(e.target.value)}
-              className="w-full rounded-md border border-[#E2E8F0] px-3 py-2 text-sm text-[#0F172B] focus:border-[#2962FF] focus:outline-none"
+              className="w-full rounded-md border border-divider px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
             />
           </div>
 
@@ -133,7 +133,7 @@ export default function EditSessionModal({ session, onClose, workspaceId, contex
               type="button"
               onClick={handleDelete}
               disabled={busy}
-              className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-500/40 dark:text-red-300 dark:hover:bg-red-500/10 disabled:opacity-50"
             >
               Delete
             </button>
@@ -142,7 +142,7 @@ export default function EditSessionModal({ session, onClose, workspaceId, contex
                 type="button"
                 onClick={onClose}
                 disabled={busy}
-                className="rounded-md border border-[#E2E8F0] px-3 py-2 text-sm text-[#62748E] hover:bg-[#F8FAFC] disabled:opacity-50"
+                className="rounded-md border border-divider px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -150,7 +150,7 @@ export default function EditSessionModal({ session, onClose, workspaceId, contex
                 type="button"
                 onClick={handleSave}
                 disabled={busy}
-                className="rounded-md bg-[#2962FF] px-4 py-2 text-sm font-medium text-white hover:bg-[#1E50E6] disabled:opacity-50"
+                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
               >
                 {updateMut.isPending ? 'Saving…' : 'Save'}
               </button>
