@@ -93,7 +93,10 @@ export default function ClipsView() {
         className="h-full w-full border-0"
         // display-capture/microphone/camera power any future in-iframe capture;
         // the recorder itself opens as a popup (top-level) for reliability.
-        allow="display-capture; microphone; camera; clipboard-write; autoplay; fullscreen"
+        // picture-in-picture lets a playing clip pop out into a floating window
+        // (Permissions Policy must be delegated by this parent frame, else the
+        // embedded app sees document.pictureInPictureEnabled === false).
+        allow="display-capture; microphone; camera; clipboard-write; autoplay; fullscreen; picture-in-picture"
         allowFullScreen
         onLoad={() => void sendAuth()}
       />
