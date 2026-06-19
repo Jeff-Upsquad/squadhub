@@ -78,6 +78,43 @@ router.patch('/:id/read', async (req: Request, res: Response) => {
   }
 });
 
+// POST /notifications/read-conversation
+// Clears a conversation's unread notifications once the user opens it — viewing
+// the messages there counts as reading them. Pass dm_conversation_id for a DM or
+// channel_id for a channel; matches on the notification's metadata, so it covers
+// dm_received, message_mention, reaction_added, etc. for that conversation
+// (including thread replies, which carry the same conversation id).
+router.post('/read-conversation', async (req: Request, res: Response) => {
+  try {
+    const dmId = (req.body?.dm_conversation_id as string) || null;
+    const channelId = (req.body?.channel_id as string) || null;
+    if (!dmId && !channelId) {
+      res.status(400).json({ success: false, error: 'dm_conversation_id or channel_id required' });
+      return;
+    }
+
+    const metaKey = dmId ? 'dm_conversation_id' : 'channel_id';
+    const metaVal = (dmId || channelId) as string;
+
+    const { error } = await supabaseAdmin
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', req.userId!)
+      .eq('is_read', false)
+      .eq(`metadata->>${metaKey}`, metaVal);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Mark conversation read error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // POST /notifications/mark-all-read
 router.post('/mark-all-read', async (_req: Request, res: Response) => {
   try {

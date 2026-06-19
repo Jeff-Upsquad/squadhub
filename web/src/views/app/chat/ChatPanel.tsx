@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { getSocket } from '../../../services/socket';
@@ -10,6 +10,7 @@ import { usePanelFileDrop } from '../pm/usePanelFileDrop';
 import { useWorkspaceStore, type ChatKind } from '../../../stores/workspaceStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useIsOnline } from '../../../stores/presenceStore';
+import type { Notification } from '../InboxView';
 
 // Stable gradient for users without an avatar — same hash as MessageBubble.
 function hashGradient(id: string) {
@@ -101,6 +102,20 @@ function DmIntro({ dmId }: { dmId: string }) {
   );
 }
 
+// Does this notification belong to the conversation currently on screen?
+// DMs match on metadata.dm_conversation_id, channels on metadata.channel_id.
+// (message_mention rows carry both keys with the irrelevant one null, so the
+// kind-specific check keeps DM and channel notifications from crossing over.)
+function notifMatchesConversation(
+  n: { metadata?: Record<string, unknown> | null },
+  channelId: string,
+  kind: ChatKind,
+): boolean {
+  return kind === 'dm'
+    ? n.metadata?.dm_conversation_id === channelId
+    : n.metadata?.channel_id === channelId;
+}
+
 // ---- Format date for separator ----
 function formatDateLabel(dateStr: string): string {
   const date = new Date(dateStr);
@@ -154,6 +169,29 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
     refetchInterval: false,
   });
 
+  // Having a conversation on screen counts as reading its messages, so its
+  // inbox notifications should clear instead of leaving the bell badge nagging.
+  // Asks the server to mark every unread notification for this conversation as
+  // read, then optimistically drops the matching rows and refreshes the badge.
+  const clearConversationNotifications = useCallback(() => {
+    if (!channelId) return;
+    const body = kind === 'dm' ? { dm_conversation_id: channelId } : { channel_id: channelId };
+    api
+      .post('/notifications/read-conversation', body)
+      .then(() => {
+        queryClient.setQueryData<Notification[]>(['notifications', 'list'], (old) =>
+          (old || []).map((n) =>
+            !n.is_read && notifMatchesConversation(n, channelId, kind) ? { ...n, is_read: true } : n,
+          ),
+        );
+        queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+        queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] });
+      })
+      .catch(() => {
+        /* non-critical — the inbox can still be cleared manually */
+      });
+  }, [channelId, kind, queryClient]);
+
   // Listen for real-time messages on the same channel/DM room.
   useEffect(() => {
     const socket = getSocket();
@@ -167,17 +205,33 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
     const handleReaction = () => {
       queryClient.invalidateQueries({ queryKey });
     };
+    // A notification that lands for the conversation already on screen has, by
+    // definition, already been read — clear it without making the user leave.
+    const handleNotification = (n: { metadata?: Record<string, unknown> | null }) => {
+      if (notifMatchesConversation(n, channelId, kind)) clearConversationNotifications();
+    };
 
     socket.on('new_message', handleNewMessage);
     socket.on('new_reaction', handleReaction);
     socket.on('thread_reply', handleNewMessage);
+    socket.on('new_notification', handleNotification);
     return () => {
       socket.emit('leave_channel', channelId);
       socket.off('new_message', handleNewMessage);
       socket.off('new_reaction', handleReaction);
       socket.off('thread_reply', handleNewMessage);
+      socket.off('new_notification', handleNotification);
     };
-  }, [channelId, queryClient, queryKey]);
+  }, [channelId, kind, queryClient, queryKey, clearConversationNotifications]);
+
+  // On open: clear any notifications that piled up while the conversation was
+  // closed. Skip the write when the cached inbox already shows nothing to clear.
+  useEffect(() => {
+    if (!channelId) return;
+    const cached = queryClient.getQueryData<Notification[]>(['notifications', 'list']);
+    if (cached && !cached.some((n) => !n.is_read && notifMatchesConversation(n, channelId, kind))) return;
+    clearConversationNotifications();
+  }, [channelId, kind, queryClient, clearConversationNotifications]);
 
   const messages: Message[] = messagesRes?.data || [];
 
