@@ -1,4 +1,5 @@
 import HomeHero from './HomeHero';
+import HomeTimer from './HomeTimer';
 import TodayList from './TodayList';
 import DashboardStatRow from './DashboardStatRow';
 import SecondaryCardRow from './SecondaryCardRow';
@@ -10,7 +11,7 @@ export default function Home({ onOpenInbox }: { onOpenInbox: () => void }) {
   return (
     <div className="sh-view hm-home h-full overflow-y-auto">
       <div className="hm-wrap">
-        <HomeHero roleLabel="Home" />
+        <HomeHero aside={<HomeTimer />} />
         <DashboardStatRow onOpenInbox={onOpenInbox} />
         <SecondaryCardRow />
         <TodayList />
