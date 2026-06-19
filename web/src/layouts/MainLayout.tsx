@@ -210,6 +210,13 @@ function RailBtn({
   );
 }
 
+// Origin of the embedded Squad Clips mini-app — used to validate its postMessage
+// PiP notifications (see the clips keep-alive below). Mirrors ClipsView.tsx.
+const CLIPS_ORIGIN = new URL(
+  process.env.NEXT_PUBLIC_CLIPS_URL ||
+    (process.env.NODE_ENV === 'production' ? 'https://clips.squadhub.in' : 'http://localhost:3200'),
+).origin;
+
 export default function MainLayout() {
   const { currentWorkspace, activeChannelId, activeChannelKind, dmConversations, setWorkspace, setChannels, setActiveChannel } = useWorkspaceStore();
   const user = useAuthStore((s) => s.user);
@@ -260,6 +267,11 @@ export default function MainLayout() {
   const [inboxSliderOpen, setInboxSliderOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  // Squad Clips keep-alive: once the mini-app has been opened, keep it mounted
+  // while a clip is in Picture-in-Picture so a popped-out clip keeps playing as
+  // the user navigates around Squad Hub (the iframe would otherwise unmount).
+  const [clipsPipActive, setClipsPipActive] = useState(false);
+  const [clipsEverOpened, setClipsEverOpened] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -274,6 +286,28 @@ export default function MainLayout() {
   }, [profileOpen]);
 
   useEffect(() => { loadViewPreferences(); }, []);
+
+  // Mark the clips mini-app as "opened" the first time it's the active view, so
+  // we can keep it mounted afterward without eagerly loading it on app start.
+  useEffect(() => {
+    if (homeView === 'clips') setClipsEverOpened(true);
+  }, [homeView]);
+
+  // Listen for the clips iframe's PiP state. While a clip is popped out we keep
+  // ClipsView mounted even when the user navigates elsewhere in Squad Hub.
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== CLIPS_ORIGIN) return;
+      if (e.data?.type === 'squadclips:pip') setClipsPipActive(!!e.data.active);
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  // True when clips is the view currently displayed (matches the inline render
+  // conditions replaced by the persistent keep-alive instance below).
+  const clipsActive =
+    homeView === 'clips' && (activeSection === 'apps' || activeSection === 'home');
 
   // Lock body scroll while the mobile drawer is open so the underlying
   // page doesn't move behind the overlay.
@@ -866,7 +900,8 @@ export default function MainLayout() {
           ) : homeView === 'sales-leads' ? (
             <SalesLeadsPage />
           ) : homeView === 'clips' ? (
-            <ClipsView />
+            // Rendered by the persistent keep-alive instance below.
+            null
           ) : homeView === 'cashbook' && isPartner ? (
             <PartnerCashBook />
           ) : homeView === 'cashbook' && (userType === 'client' || userType === 'client_staff') ? (
@@ -1039,7 +1074,8 @@ export default function MainLayout() {
           ) : homeView === 'sales-leads' ? (
             <SalesLeadsPage />
           ) : homeView === 'clips' ? (
-            <ClipsView />
+            // Rendered by the persistent keep-alive instance below.
+            null
           ) : homeView === 'hub' && (userType === 'client' || userType === 'client_staff') ? (
             <ClientDashboard />
           ) : homeView === 'cashbook' && isPartner ? (
@@ -1053,6 +1089,23 @@ export default function MainLayout() {
           ) : (
             <Home onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} />
           )
+        )}
+        {/* Persistent Squad Clips instance. Shown in-flow when clips is the
+            active view; parked off-screen (still mounted) while a clip is in a
+            PiP window, so a popped-out clip keeps playing as the user moves
+            around Squad Hub. Unmounts only once PiP closes and you've left. */}
+        {clipsEverOpened && (clipsActive || clipsPipActive) && (
+          <div
+            className={clipsActive ? 'flex flex-1 flex-col min-h-0' : ''}
+            style={
+              clipsActive
+                ? undefined
+                : { position: 'absolute', width: 1, height: 1, left: -99999, top: 0, overflow: 'hidden', pointerEvents: 'none' }
+            }
+            aria-hidden={!clipsActive}
+          >
+            <ClipsView />
+          </div>
         )}
       </div>
 
