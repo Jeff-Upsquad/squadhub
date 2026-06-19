@@ -36,18 +36,18 @@ export default function CheckInWidget({ title = 'Daily Check-In', context = 'def
     checkin?.status === 'late' ? 'Late' : 'Pending';
 
   const statusColor =
-    isHoliday ? 'bg-gray-100 text-gray-500' :
-    !alreadyCheckedIn ? 'bg-amber-50 text-amber-600' :
-    checkin?.status === 'on_time' ? 'bg-emerald-50 text-emerald-600' :
-    checkin?.status === 'late' ? 'bg-yellow-50 text-yellow-600' :
-    'bg-amber-50 text-amber-600';
+    isHoliday ? 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-300' :
+    !alreadyCheckedIn ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300' :
+    checkin?.status === 'on_time' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300' :
+    checkin?.status === 'late' ? 'bg-yellow-50 text-yellow-600 dark:bg-yellow-500/15 dark:text-yellow-300' :
+    'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300';
 
   return (
     <div className="flex flex-1 flex-col">
       {/* Header */}
-      <div className="border-b border-[#E2E8F0] px-5 py-3">
+      <div className="border-b border-divider px-5 py-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-[family-name:var(--font-display)] text-sm font-semibold text-[#0F172B]">
+          <h2 className="font-[family-name:var(--font-display)] text-sm font-semibold text-foreground">
             {title}
           </h2>
           <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium ${statusColor}`}>
@@ -57,15 +57,15 @@ export default function CheckInWidget({ title = 'Daily Check-In', context = 'def
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-[#E2E8F0] px-5 py-2">
+      <div className="flex gap-1 border-b border-divider px-5 py-2">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`rounded-full px-3 py-1 text-xs font-medium transition ${
               activeTab === tab.id
-                ? 'bg-[#0F172B] text-white'
-                : 'bg-[#F1F5F9] text-[#62748E] hover:bg-[#E2E8F0] hover:text-[#0F172B]'
+                ? 'bg-sh-ink text-surface'
+                : 'bg-surface-alt text-foreground-muted hover:bg-divider hover:text-foreground'
             }`}
           >
             {tab.label}
@@ -85,42 +85,42 @@ export default function CheckInWidget({ title = 'Daily Check-In', context = 'def
       ) : (
         <div className="flex-1 overflow-y-auto">
           {/* Check-in status + action */}
-          <div className="flex flex-col items-center p-6 border-b border-[#E2E8F0]">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#F1F5F9]">
-              <svg className="h-8 w-8 text-[#62748E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex flex-col items-center p-6 border-b border-divider">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-alt">
+              <svg className="h-8 w-8 text-foreground-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
 
             {isHoliday ? (
               <div className="text-center">
-                <h3 className="font-[family-name:var(--font-display)] text-base font-medium text-[#62748E]">
+                <h3 className="font-[family-name:var(--font-display)] text-base font-medium text-foreground-muted">
                   Today is a Holiday
                 </h3>
-                <p className="mt-1 text-xs text-[#90A1B9]">No check-in required today.</p>
+                <p className="mt-1 text-xs text-foreground-dim">No check-in required today.</p>
               </div>
             ) : alreadyCheckedIn ? (
               <div className="text-center">
-                <h3 className="font-[family-name:var(--font-display)] text-base font-medium text-[#0F172B]">
+                <h3 className="font-[family-name:var(--font-display)] text-base font-medium text-foreground">
                   You're checked in!
                 </h3>
-                <p className="mt-1 text-xs text-[#90A1B9]">
+                <p className="mt-1 text-xs text-foreground-dim">
                   {checkin?.status === 'on_time' ? 'Submitted on time' : 'Submitted late'} at{' '}
                   {checkin?.submitted_at ? new Date(checkin.submitted_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : ''}
                 </p>
               </div>
             ) : (
               <div className="text-center">
-                <h3 className="font-[family-name:var(--font-display)] text-base font-medium text-[#0F172B]">
+                <h3 className="font-[family-name:var(--font-display)] text-base font-medium text-foreground">
                   Ready to check in?
                 </h3>
-                <p className="mt-1 text-xs text-[#90A1B9]">
+                <p className="mt-1 text-xs text-foreground-dim">
                   Deadline: {todayData?.deadline_time || '10:00'} IST
                   {todayData?.role && <span className="ml-1">({todayData.role.name})</span>}
                 </p>
                 <button
                   onClick={() => setShowSlider(true)}
-                  className="mt-3 rounded-lg bg-[#0F172B] px-5 py-2 text-sm font-medium text-white transition hover:bg-[#1D293D]"
+                  className="mt-3 rounded-lg bg-sh-ink px-5 py-2 text-sm font-medium text-surface transition hover:opacity-90"
                 >
                   Check In
                 </button>
