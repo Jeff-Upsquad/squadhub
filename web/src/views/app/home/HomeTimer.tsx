@@ -2,15 +2,16 @@ import { useEffect, useState } from 'react';
 import type { TimerType } from '@squadhub/shared';
 import { useActiveTimer, useTimeStats, useStartTimer, useStopTimer } from '../../../hooks/useTimer';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
+import { useIsPartner } from '../../../hooks/useUserType';
 
 /**
- * Hero work-clock for My Home. Surfaces the same Work / Break / No-work timers
- * as the Daily Check-In mini app (shared via context='default', so starting a
- * timer here shows up there and vice-versa). The day meter fills toward the
- * user's office-hours commitment and ticks live while a timer runs.
+ * Hero work-clock for My Home. Surfaces the SAME Work / Break / No-work timers
+ * as the user's Daily Check-In → Time Tracking tab: it uses the same per-user
+ * timer context the check-in section does ('partners' for partner users,
+ * 'teammates' for internal staff — see MainLayout), so a timer started here is
+ * the one running there and vice-versa. The day meter fills toward the user's
+ * office-hours commitment and ticks live while a timer runs.
  */
-
-const CONTEXT = 'default';
 
 const TIMERS: { type: TimerType; label: string }[] = [
   { type: 'work', label: 'Work' },
@@ -62,7 +63,11 @@ function CtrlIcon({ running }: { running: boolean }) {
 
 export default function HomeTimer() {
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
-  const scope = { workspaceId, context: CONTEXT };
+  // Match the context the user's own Daily Check-In uses (MainLayout passes
+  // 'partners'/'teammates'), so the home clock and the Check-In Time-Tracking
+  // tab read and write the same timer.
+  const isPartner = useIsPartner();
+  const scope = { workspaceId, context: isPartner ? 'partners' : 'teammates' };
   const { data: activeRes } = useActiveTimer(scope);
   const { data: statsRes } = useTimeStats(scope);
   const startTimer = useStartTimer(scope);
