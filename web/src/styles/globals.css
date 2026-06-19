@@ -2905,6 +2905,34 @@ body {
 .lv-newtask-btn:hover { opacity: 0.85; }
 .lv-newtask-btn:active { transform: scale(0.97); }
 
+/* Floating New task button — anchored bottom-right of the list view */
+.lv-newtask-fab {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 44px;
+  padding: 0 18px;
+  background: var(--sh-ink);
+  color: var(--surface);
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px -6px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.18);
+  transition: opacity 0.12s, transform 0.08s, box-shadow 0.12s;
+}
+.lv-newtask-fab:hover {
+  opacity: 0.92;
+  box-shadow: 0 12px 30px -6px rgba(0,0,0,0.42), 0 3px 8px rgba(0,0,0,0.2);
+}
+.lv-newtask-fab:active { transform: scale(0.96); }
+
 /* ── Row 2: Tabs (38px high, align-items flex-end) ── */
 .lv-tabs-row {
   display: flex;

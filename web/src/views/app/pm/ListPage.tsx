@@ -135,7 +135,7 @@ export default function ListPage({
     // is its content height, so the .lv-canvas scroll area below grows past the
     // viewport and gets clipped by MainLayout's overflow-hidden instead of
     // scrolling (same fix as the chat view in MainLayout).
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       {/* Row 1: Breadcrumb + global actions */}
       <div className="lv-breadcrumb-row">
         {/* Left: breadcrumb (hidden when embedded — the host view renders its own header) */}
@@ -196,17 +196,6 @@ export default function ListPage({
             </button>
           )}
 
-          {canEdit ? (
-            <button
-              onClick={() => setShowCreatePanel(true)}
-              className="lv-newtask-btn"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              New task
-            </button>
-          ) : null}
         </div>
       </div>
 
@@ -379,6 +368,21 @@ export default function ListPage({
           resourceName={listData?.name || 'List'}
           onClose={() => setShowShare(false)}
         />
+      )}
+
+      {/* Floating "New task" action — anchored bottom-right of the list view */}
+      {canEdit && (
+        <button
+          onClick={() => setShowCreatePanel(true)}
+          className="lv-newtask-fab"
+          aria-label="New task"
+          title="New task"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          New task
+        </button>
       )}
 
       {showCreatePanel && activeListId && canEdit && (
