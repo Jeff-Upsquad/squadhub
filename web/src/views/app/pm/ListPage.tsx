@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
@@ -116,6 +116,16 @@ export default function ListPage({
   const { data: tasksForOptions } = useTasks(activeListId, undefined);
   const assigneeOptions = useMemo(() => deriveAssigneeOptions(tasksForOptions ?? []), [tasksForOptions]);
   const tagOptions = useMemo(() => deriveTagOptions(tasksForOptions ?? []), [tasksForOptions]);
+
+  // Tell the global top-bar "+" to step aside while this view shows its own
+  // floating "New task" button (rendered below, gated on the same condition),
+  // so the two create affordances don't both appear at once.
+  const showNewTaskFab = !!activeListId && canEdit;
+  const setNewTaskFabVisible = usePMStore((s) => s.setNewTaskFabVisible);
+  useEffect(() => {
+    setNewTaskFabVisible(showNewTaskFab);
+    return () => setNewTaskFabVisible(false);
+  }, [showNewTaskFab, setNewTaskFabVisible]);
 
   if (!activeListId) {
     return (
@@ -370,8 +380,9 @@ export default function ListPage({
         />
       )}
 
-      {/* Floating "New task" action — anchored bottom-right of the list view */}
-      {canEdit && (
+      {/* Floating "New task" action — anchored bottom-right of the list view.
+          While this shows, the global top-bar "+" hides (see showNewTaskFab). */}
+      {showNewTaskFab && (
         <button
           onClick={() => setShowCreatePanel(true)}
           className="lv-newtask-fab"
