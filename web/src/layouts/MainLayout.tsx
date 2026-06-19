@@ -25,6 +25,8 @@ import SearchPalette from '../views/app/SearchPalette';
 import SettingsSlider from '../components/SettingsSlider';
 import CheckInWidget from '../views/app/checkin/CheckInWidget';
 import CheckInsPage from '../views/app/check-ins/CheckInsPage';
+import NotesShell from '../views/app/notes/NotesShell';
+import { useHasMiniApp } from '../hooks/useMiniApps';
 import TimeManagementPage from '../views/app/time-management/TimeManagementPage';
 import SalesLeadsPage from '../views/app/sales/SalesLeadsPage';
 import ThemeToggle from '../components/ThemeToggle';
@@ -223,6 +225,9 @@ export default function MainLayout() {
   const newTaskFabVisible = usePMStore((s) => s.newTaskFabVisible);
   const userType = useUserType();
   const isPartner = useIsPartner();
+  // SquadNotes is a gated mini app — the Documents rail icon only shows for
+  // granted users (admins are granted via Access Control, like Check-Ins).
+  const hasNotes = useHasMiniApp('squad-notes');
   // Restore the last view from the persisted PM store (MainLayout only mounts
   // after pmStore hydration — see useHasHydrated — so getState() is the saved
   // value, not the default). This keeps a full-page refresh on the view the
@@ -675,7 +680,9 @@ export default function MainLayout() {
             active={activeSection === 'home' && homeView === 'my-tasks'}
             onClick={() => { setActiveSection('home'); setHomeView('my-tasks'); }}
           />
-          <RailBtn icon={ICON.docs} label="Docs" active={activeSection === 'docs'} onClick={() => setActiveSection('docs')} />
+          {hasNotes && (
+            <RailBtn icon={ICON.docs} label="Docs" active={activeSection === 'docs'} onClick={() => setActiveSection('docs')} />
+          )}
           <RailBtn icon={ICON.cal}  label="Cal"  active={activeSection === 'cal'}  onClick={() => setActiveSection('cal')} />
           <RailBtn icon={ICON.apps} label="Apps" active={activeSection === 'apps'} onClick={() => setActiveSection('apps')} />
           <RailBtn icon={ICON.learning} label="Learning" active={activeSection === 'learning'} onClick={() => setActiveSection('learning')} />
@@ -758,7 +765,7 @@ export default function MainLayout() {
       </div>
 
       {/* Module sidebar — always visible, flat edges, drop shadow to the right */}
-      {currentWorkspace && activeSection !== 'learning' && (
+      {currentWorkspace && activeSection !== 'learning' && activeSection !== 'docs' && (
         <div
           className={`flex h-full shrink-0 flex-col overflow-hidden bg-[var(--sidebar)] border-r border-[var(--sh-hair)] relative z-[2] transition-[width] duration-200 ease-in-out ${
             sidebarOpen ? 'w-[280px]' : 'w-0'
@@ -823,6 +830,8 @@ export default function MainLayout() {
         <ActiveTimer />
         {activeSection === 'learning' ? (
           <LearningShell />
+        ) : activeSection === 'docs' ? (
+          <NotesShell />
         ) : activeSection === 'apps' ? (
           // Apps module — render the app opened from the Apps sidebar, or an
           // empty state prompting a selection. App views reuse the same

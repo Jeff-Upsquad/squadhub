@@ -34,6 +34,6 @@ export function requireMiniAppOrAdmin(slug: string) {
       return;
     }
 
-    res.status(403).json({ success: false, error: 'Access denied: requires the Check-Ins app' });
+    res.status(403).json({ success: false, error: `Access denied: requires the ${slug} app` });
   };
 }

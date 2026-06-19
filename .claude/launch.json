@@ -387,6 +387,13 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-convert-from-cards/admin && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3003"],
       "port": 3003
+    },
+    {
+      "name": "Squadnotes Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/squadnotes/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3120"],
+      "port": 3120,
+      "autoPort": true
     }
   ]
 }
