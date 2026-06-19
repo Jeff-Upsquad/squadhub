@@ -168,6 +168,29 @@ export async function generateTaskUploadUrl(
   return { uploadUrl, objectKey, publicUrl };
 }
 
+// Generate a pre-signed URL for SquadNotes media/file uploads.
+// Path: notes/<note_id>/<timestamp>_<filename>
+export async function generateNoteUploadUrl(
+  noteId: string,
+  filename: string,
+  contentType: string,
+): Promise<{ uploadUrl: string; objectKey: string; publicUrl: string }> {
+  const timestamp = Date.now();
+  const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const objectKey = `notes/${noteId}/${timestamp}_${safeFilename}`;
+
+  const command = new PutObjectCommand({
+    Bucket: config.r2BucketName,
+    Key: objectKey,
+    ContentType: contentType,
+  });
+
+  const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 3600 });
+  const publicUrl = `${config.r2PublicUrl}/${objectKey}`;
+
+  return { uploadUrl, objectKey, publicUrl };
+}
+
 // Confirms an object exists in R2 and returns its size. Used post-upload to
 // re-validate client-reported file size before inserting a DB row.
 export async function headR2Object(objectKey: string): Promise<{ contentLength: number; contentType: string | undefined } | null> {
