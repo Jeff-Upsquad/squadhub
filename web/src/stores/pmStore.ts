@@ -37,6 +37,11 @@ interface PMState {
   // activeDashboardTab — that drives the right-sliding bucket panel; this is a
   // distinct full-screen overlay. Not persisted (a modal shouldn't reopen on reload).
   newTasksOpen: boolean;
+  // True while a list/board view is showing its own floating "New task" button.
+  // The global top-bar "+" create button hides itself when this is set, so the
+  // two create affordances don't both show at once. Transient (not persisted) —
+  // set by ListPage on mount/unmount, mirrors newTasksOpen.
+  newTaskFabVisible: boolean;
   contextListId: string | null;
   viewMode: ViewMode;
   listGroupBy: ListGroupBy;
@@ -81,6 +86,7 @@ interface PMState {
   setActiveDashboardTab: (tab: DashboardTab | null) => void;
   setActiveSecondaryCard: (key: string | null) => void;
   setNewTasksOpen: (open: boolean) => void;
+  setNewTaskFabVisible: (visible: boolean) => void;
   setViewMode: (mode: ViewMode) => void;
   setListGroupBy: (g: ListGroupBy) => void;
   setMyTasksOnly: (v: boolean) => void;
@@ -134,6 +140,7 @@ export const usePMStore = create<PMState>()(
       activeDashboardTab: null,
       activeSecondaryCard: null,
       newTasksOpen: false,
+      newTaskFabVisible: false,
       contextListId: null,
       viewMode: 'list',
       listGroupBy: 'status',
@@ -168,6 +175,7 @@ export const usePMStore = create<PMState>()(
       setActiveDashboardTab: (tab) => set({ activeDashboardTab: tab }),
       setActiveSecondaryCard: (key) => set({ activeSecondaryCard: key }),
       setNewTasksOpen: (open) => set({ newTasksOpen: open }),
+      setNewTaskFabVisible: (visible) => set({ newTaskFabVisible: visible }),
       setViewMode: (mode) => set({ viewMode: mode }),
       setListGroupBy: (g) => { set({ listGroupBy: g }); triggerSave(); },
       setMyTasksOnly: (v) => { set({ myTasksOnly: v }); triggerSave(); },
@@ -336,7 +344,7 @@ export const usePMStore = create<PMState>()(
           focusBuckets: s.focusBuckets,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',

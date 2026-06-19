@@ -218,6 +218,9 @@ export default function MainLayout() {
   const activeFolderId = usePMStore((s) => s.activeFolderId);
   const activeSpacePageId = usePMStore((s) => s.activeSpacePageId);
   const activeDesignFolderId = usePMStore((s) => s.activeDesignFolderId);
+  // A list/board view shows its own floating "New task" button; when it does,
+  // the global top-bar "+" hides so the two create affordances don't overlap.
+  const newTaskFabVisible = usePMStore((s) => s.newTaskFabVisible);
   const userType = useUserType();
   const isPartner = useIsPartner();
   // Restore the last view from the persisted PM store (MainLayout only mounts
@@ -586,11 +589,15 @@ export default function MainLayout() {
             {activeSection === 'home' ? SECTION_TITLES.home : SECTION_TITLES[activeSection]}
           </span>
         </div>
+        {/* Kept rendered (but hidden) when a view shows its own floating "New
+            task" button, so the title stays centered in this justify-between bar. */}
         <button
           type="button"
           onClick={() => setShowCreateTaskModal(true)}
           aria-label="Create new task"
-          className="grid h-9 w-9 place-items-center rounded-[8px] text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)]"
+          aria-hidden={newTaskFabVisible}
+          tabIndex={newTaskFabVisible ? -1 : undefined}
+          className={`grid h-9 w-9 place-items-center rounded-[8px] text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)] ${newTaskFabVisible ? 'invisible pointer-events-none' : ''}`}
         >
           <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
             <path d="M12 5v14M5 12h14" />
@@ -785,18 +792,22 @@ export default function MainLayout() {
       {/* Main content area */}
       <div className="relative flex flex-1 flex-col overflow-hidden bg-surface pt-12 md:pt-0">
         {/* Universal "New task" button — visible in all views. Hidden on
-            mobile because the mobile top bar has its own "+" button. */}
-        <button
-          type="button"
-          onClick={() => setShowCreateTaskModal(true)}
-          title="New task"
-          aria-label="Create new task"
-          className="absolute right-3 top-2 z-40 hidden h-8 w-8 place-items-center rounded-[9px] border border-transparent text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition md:grid"
-        >
-          <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-        </button>
+            mobile because the mobile top bar has its own "+" button, and hidden
+            whenever a view (e.g. a list/board) shows its own floating "New task"
+            button, so the two create affordances don't both appear. */}
+        {!newTaskFabVisible && (
+          <button
+            type="button"
+            onClick={() => setShowCreateTaskModal(true)}
+            title="New task"
+            aria-label="Create new task"
+            className="absolute right-3 top-2 z-40 hidden h-8 w-8 place-items-center rounded-[9px] border border-transparent text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition md:grid"
+          >
+            <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+        )}
         <EmergencyBanner />
         <ActiveTimer />
         {activeSection === 'learning' ? (
