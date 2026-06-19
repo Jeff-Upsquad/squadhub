@@ -241,6 +241,69 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+// GET /messages/unread-summary — per-channel + per-DM unread counts for the
+// current user, used by the native app to badge the Chat tab and conversation
+// rows. Declared BEFORE GET /:id so the literal path wins over the :id param.
+router.get('/unread-summary', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('chat_unread_summary', {
+      p_user_id: req.userId!,
+    });
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const channels: Record<string, number> = {};
+    const dms: Record<string, number> = {};
+    let total = 0;
+    for (const row of (data || []) as Array<{ scope_type: string; scope_id: string; unread_count: number }>) {
+      const count = Number(row.unread_count) || 0;
+      if (count <= 0) continue;
+      if (row.scope_type === 'channel') channels[row.scope_id] = count;
+      else if (row.scope_type === 'dm') dms[row.scope_id] = count;
+      total += count;
+    }
+
+    res.json({ success: true, data: { channels, dms, total } });
+  } catch (err) {
+    console.error('Unread summary error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /messages/mark-read — mark a channel or DM read up to now for the current
+// user, clearing its unread badge. Body: { channel_id } or { dm_conversation_id }.
+router.post('/mark-read', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const channelId = typeof req.body?.channel_id === 'string' ? req.body.channel_id : null;
+    const dmConversationId =
+      typeof req.body?.dm_conversation_id === 'string' ? req.body.dm_conversation_id : null;
+    if (!channelId && !dmConversationId) {
+      res.status(400).json({ success: false, error: 'channel_id or dm_conversation_id required' });
+      return;
+    }
+
+    const scopeType = channelId ? 'channel' : 'dm';
+    const scopeId = channelId || dmConversationId;
+    const now = new Date().toISOString();
+
+    const { error } = await supabaseAdmin.from('message_reads').upsert(
+      { user_id: req.userId!, scope_type: scopeType, scope_id: scopeId, last_read_at: now, updated_at: now },
+      { onConflict: 'user_id,scope_type,scope_id' },
+    );
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Mark chat read error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // GET /messages/:id — fetch a single message with sender (used by inbox)
 router.get('/:id', requireAuth, async (req: Request, res: Response) => {
   try {
