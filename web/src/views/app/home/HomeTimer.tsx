@@ -120,31 +120,28 @@ export default function HomeTimer() {
 
   return (
     <div className="hm-timer" data-state={activeType || 'idle'}>
-      <div className="hm-timer-top">
-        <span className="hm-timer-eyebrow">Time today</span>
-        <span className="hm-timer-status" data-running={!!activeSession}>
-          <span className="hm-timer-dot" />
-          {activeSession ? STATUS_TEXT[activeType as TimerType] : 'Not tracking'}
-        </span>
-      </div>
-
+      {/* Readout row — worked total · live progress bar · commitment + status */}
       <div className="hm-timer-meter">
-        <div className="hm-timer-nums">
-          <span className="worked">
-            {fmtDur(work)}
-            <em>worked</em>
-          </span>
+        <span className="worked">
+          {fmtDur(work)}
+          <em>worked</em>
+        </span>
+        <div className="hm-timer-bar" data-running={!!activeSession}>
+          <div className="seg work" data-live={activeType === 'work'} style={{ width: `${workPct}%` }} />
+          <div className="seg break" data-live={activeType === 'break'} style={{ width: `${breakPct}%` }} />
+          <div className="seg nowork" data-live={activeType === 'no_work'} style={{ width: `${noWorkPct}%` }} />
+        </div>
+        <div className="hm-timer-readout">
           {hasCommitment && (
             <span className="commit">
               of {fmtDur(commitment)}
               {workOfCommit !== null && ` · ${workOfCommit}%`}
             </span>
           )}
-        </div>
-        <div className="hm-timer-bar" data-running={!!activeSession}>
-          <div className="seg work" data-live={activeType === 'work'} style={{ width: `${workPct}%` }} />
-          <div className="seg break" data-live={activeType === 'break'} style={{ width: `${breakPct}%` }} />
-          <div className="seg nowork" data-live={activeType === 'no_work'} style={{ width: `${noWorkPct}%` }} />
+          <span className="hm-timer-status" data-running={!!activeSession}>
+            <span className="hm-timer-dot" />
+            {activeSession ? STATUS_TEXT[activeType as TimerType] : 'Not tracking'}
+          </span>
         </div>
       </div>
 

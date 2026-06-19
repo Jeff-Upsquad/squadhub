@@ -5949,8 +5949,8 @@ ol.sqc-list {
   --tmr-break: #C68A2E;
   --tmr-nowork: #64748B;
   --tmr-cur: var(--sh-ink-4);
-  width: 320px; flex: none; display: flex; flex-direction: column; gap: 13px;
-  padding: 14px 15px 15px; background: var(--surface);
+  width: 480px; flex: none; display: flex; flex-direction: column; gap: 11px;
+  padding: 13px 16px; background: var(--surface);
   border: 1px solid var(--sh-hair); border-radius: 14px;
   box-shadow: 0 1px 2px rgba(10, 10, 10, 0.02), 0 10px 28px rgba(10, 10, 10, 0.03);
   animation: hm-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.04s both;
@@ -5960,9 +5960,12 @@ ol.sqc-list {
 .hm-home .hm-timer[data-state="break"] { --tmr-cur: var(--tmr-break); }
 .hm-home .hm-timer[data-state="no_work"] { --tmr-cur: var(--tmr-nowork); }
 
-.hm-home .hm-timer-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.hm-home .hm-timer-eyebrow { font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); }
-.hm-home .hm-timer-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 52%, transparent); }
+.hm-home .hm-timer-meter { display: flex; align-items: center; gap: 14px; }
+.hm-home .hm-timer-meter .worked { flex: none; font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-weight: 600; font-size: 17px; line-height: 1; letter-spacing: -0.02em; color: color-mix(in srgb, var(--sh-ink) 88%, transparent); font-variant-numeric: tabular-nums; }
+.hm-home .hm-timer-meter .worked em { font-style: normal; font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 48%, transparent); margin-left: 5px; }
+.hm-home .hm-timer-readout { flex: none; display: inline-flex; align-items: center; gap: 12px; margin-left: auto; }
+.hm-home .hm-timer-readout .commit { font-size: 11px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hm-home .hm-timer-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 52%, transparent); white-space: nowrap; }
 .hm-home .hm-timer-status[data-running="true"] { color: color-mix(in srgb, var(--tmr-cur) 90%, var(--sh-ink)); }
 .hm-home .hm-timer-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sh-ink-4); flex: none; }
 .hm-home .hm-timer-status[data-running="true"] .hm-timer-dot { background: var(--tmr-cur); animation: hm-timer-pulse 1.7s ease-out infinite; }
@@ -5971,12 +5974,7 @@ ol.sqc-list {
   70%, 100% { box-shadow: 0 0 0 6px transparent; }
 }
 
-.hm-home .hm-timer-nums { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-.hm-home .hm-timer-nums .worked { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-weight: 600; font-size: 19px; line-height: 1; letter-spacing: -0.02em; color: color-mix(in srgb, var(--sh-ink) 88%, transparent); font-variant-numeric: tabular-nums; }
-.hm-home .hm-timer-nums .worked em { font-style: normal; font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 48%, transparent); margin-left: 5px; }
-.hm-home .hm-timer-nums .commit { font-size: 11px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 50%, transparent); font-variant-numeric: tabular-nums; white-space: nowrap; }
-
-.hm-home .hm-timer-bar { position: relative; display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--sh-ink) 9%, transparent); }
+.hm-home .hm-timer-bar { position: relative; display: flex; flex: 1 1 auto; min-width: 80px; height: 8px; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--sh-ink) 9%, transparent); }
 .hm-home .hm-timer-bar .seg { height: 100%; transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
 .hm-home .hm-timer-bar .seg.work { background: var(--tmr-work); }
 .hm-home .hm-timer-bar .seg.break { background: var(--tmr-break); }
@@ -5985,17 +5983,17 @@ ol.sqc-list {
 @keyframes hm-timer-shimmer { from { background-position: 200% 0; } to { background-position: -120% 0; } }
 
 .hm-home .hm-timer-ctrls { display: flex; gap: 6px; }
-.hm-home .hm-timer-btn { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 34px; padding: 0 8px; border-radius: 9px; border: 1px solid var(--sh-hair); background: transparent; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 550; color: color-mix(in srgb, var(--sh-ink) 68%, transparent); font-variant-numeric: tabular-nums; transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
-.hm-home .hm-timer-btn .ic { display: grid; place-items: center; flex: none; }
-.hm-home .hm-timer-btn .ic svg { width: 13px; height: 13px; }
-.hm-home .hm-timer-btn .lb { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hm-home .hm-timer-btn:hover:not([data-on="true"]):not(:disabled) { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair-2); }
-.hm-home .hm-timer-btn:focus-visible { outline: 2px solid var(--tmr-cur); outline-offset: 1px; }
-.hm-home .hm-timer-btn:disabled { cursor: default; opacity: 0.55; }
-.hm-home .hm-timer-btn[data-on="true"] { color: #fff; border-color: transparent; }
-.hm-home .hm-timer-btn[data-type="work"][data-on="true"] { background: var(--tmr-work); }
-.hm-home .hm-timer-btn[data-type="break"][data-on="true"] { background: var(--tmr-break); }
-.hm-home .hm-timer-btn[data-type="no_work"][data-on="true"] { background: var(--tmr-nowork); }
+.hm-home .hm-timer-ctrls .hm-timer-btn { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 32px; padding: 0 8px; border-radius: 9px; border: 1px solid var(--sh-hair); background: transparent; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 550; color: color-mix(in srgb, var(--sh-ink) 68%, transparent); font-variant-numeric: tabular-nums; transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
+.hm-home .hm-timer-ctrls .hm-timer-btn .ic { display: grid; place-items: center; flex: none; }
+.hm-home .hm-timer-ctrls .hm-timer-btn .ic svg { width: 13px; height: 13px; }
+.hm-home .hm-timer-ctrls .hm-timer-btn .lb { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-home .hm-timer-ctrls .hm-timer-btn:hover:not([data-on="true"]):not(:disabled) { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair-2); }
+.hm-home .hm-timer-ctrls .hm-timer-btn:focus-visible { outline: 2px solid var(--tmr-cur); outline-offset: 1px; }
+.hm-home .hm-timer-ctrls .hm-timer-btn:disabled { cursor: default; opacity: 0.55; }
+.hm-home .hm-timer-ctrls .hm-timer-btn[data-on="true"] { color: #fff; border-color: transparent; }
+.hm-home .hm-timer-ctrls .hm-timer-btn[data-type="work"][data-on="true"] { background: var(--tmr-work); }
+.hm-home .hm-timer-ctrls .hm-timer-btn[data-type="break"][data-on="true"] { background: var(--tmr-break); }
+.hm-home .hm-timer-ctrls .hm-timer-btn[data-type="no_work"][data-on="true"] { background: var(--tmr-nowork); }
 
 @media (max-width: 880px) {
   .hm-home .hm-hero-row { flex-direction: column; gap: 18px; }
