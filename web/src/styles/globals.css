@@ -4971,7 +4971,9 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
      a stray horizontal scrollbar above the composer. Content wraps anyway. */
   overflow-x: hidden;
   min-height: 0;
-  padding-bottom: 4px;
+  /* Breathing room so the newest message clears the composer instead of
+     sitting flush against (or tucked behind) the text box. */
+  padding-bottom: 12px;
 }
 .sqc-msg-scroll::-webkit-scrollbar { width: 10px; }
 .sqc-msg-scroll::-webkit-scrollbar-thumb {
