@@ -21,18 +21,30 @@ const audienceSchema = z
   })
   .strict();
 
+const targetViewSchema = z
+  .string()
+  .max(80)
+  .nullable()
+  .optional()
+  .refine((v) => v == null || NAVIGABLE_TIP_VIEWS.some((x) => x.value === v), {
+    message: 'Unknown target_view',
+  });
+
+// One guided-tour step. Same placement shape as a single-card tip.
+const stepSchema = z.object({
+  title: z.string().min(1).max(120),
+  body: z.string().min(1).max(2000),
+  target_view: targetViewSchema,
+  target_anchor: z.string().max(80).nullable().optional(),
+});
+
 const createTipSchema = z.object({
   title: z.string().min(1).max(120),
   body: z.string().min(1).max(2000),
-  target_view: z
-    .string()
-    .max(80)
-    .nullable()
-    .optional()
-    .refine((v) => v == null || NAVIGABLE_TIP_VIEWS.some((x) => x.value === v), {
-      message: 'Unknown target_view',
-    }),
+  target_view: targetViewSchema,
   target_anchor: z.string().max(80).nullable().optional(),
+  // Null/empty ⇒ single card. Otherwise an ordered guided tour (max 8 steps).
+  steps: z.array(stepSchema).max(8).nullable().optional(),
   audience: audienceSchema.optional(),
 });
 
@@ -125,6 +137,7 @@ router.post('/', async (req: Request, res: Response) => {
         body: body.body,
         target_view: body.target_view ?? null,
         target_anchor: body.target_anchor ?? null,
+        steps: body.steps && body.steps.length > 0 ? body.steps : null,
         audience: body.audience ?? {},
         is_active: false,
         created_by: req.userId,
@@ -155,6 +168,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (body.body !== undefined) patch.body = body.body;
     if (body.target_view !== undefined) patch.target_view = body.target_view ?? null;
     if (body.target_anchor !== undefined) patch.target_anchor = body.target_anchor ?? null;
+    if (body.steps !== undefined) patch.steps = body.steps && body.steps.length > 0 ? body.steps : null;
     if (body.audience !== undefined) patch.audience = body.audience ?? {};
 
     const { data, error } = await supabaseAdmin

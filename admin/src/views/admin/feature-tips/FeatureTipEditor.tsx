@@ -6,6 +6,7 @@ import api from '../../../services/api';
 import {
   FeatureTipRow,
   TipAudience,
+  TipStep,
   USER_TYPE_OPTIONS,
   WORKSPACE_ROLE_OPTIONS,
 } from './types';
@@ -47,6 +48,33 @@ export default function FeatureTipEditor({
   const [targetView, setTargetView] = useState(tip?.target_view ?? '');
   const [targetAnchor, setTargetAnchor] = useState(tip?.target_anchor ?? '');
   const [showPreview, setShowPreview] = useState(false);
+
+  // A tip is either a single card (placement below) or a guided tour (ordered
+  // steps). Title/body always label the tip; in tour mode they aren't shown to
+  // users — the steps are.
+  const [tourMode, setTourMode] = useState<boolean>((tip?.steps?.length ?? 0) > 0);
+  const [steps, setSteps] = useState<TipStep[]>(tip?.steps ?? []);
+
+  const switchToTour = () => {
+    setTourMode(true);
+    if (steps.length === 0) {
+      // Seed the first step from any single-card placement already entered.
+      setSteps([{ title: title.trim(), body: body.trim(), target_view: targetView || null, target_anchor: targetAnchor || null }]);
+    }
+  };
+  const updateStep = (idx: number, patch: Partial<TipStep>) =>
+    setSteps((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
+  const addStep = () =>
+    setSteps((prev) => [...prev, { title: '', body: '', target_view: null, target_anchor: null }]);
+  const removeStep = (idx: number) => setSteps((prev) => prev.filter((_, i) => i !== idx));
+  const moveStep = (idx: number, dir: -1 | 1) =>
+    setSteps((prev) => {
+      const j = idx + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[j]] = [next[j], next[idx]];
+      return next;
+    });
 
   const initialAudience = tip?.audience ?? {};
   const audienceEmpty =
@@ -145,13 +173,23 @@ export default function FeatureTipEditor({
     return a;
   };
 
+  const cleanSteps = (): TipStep[] =>
+    steps.map((s) => ({
+      title: s.title.trim(),
+      body: s.body.trim(),
+      target_view: s.target_view || null,
+      target_anchor: s.target_anchor || null,
+    }));
+
   const save = useMutation({
     mutationFn: () => {
       const payload = {
         title: title.trim(),
         body: body.trim(),
-        target_view: targetView || null,
-        target_anchor: targetAnchor || null,
+        // Tour mode drives placement through steps, not the top-level fields.
+        target_view: tourMode ? null : targetView || null,
+        target_anchor: tourMode ? null : targetAnchor || null,
+        steps: tourMode && steps.length > 0 ? cleanSteps() : null,
         audience: buildAudience(),
       };
       return tip
@@ -165,8 +203,10 @@ export default function FeatureTipEditor({
   // which the server would treat as everyone — block it so intent is explicit.
   const audienceChosen =
     allUsers || Object.values(buildAudience()).some((v) => Array.isArray(v) && v.length > 0);
+  const stepsValid =
+    !tourMode || (steps.length > 0 && steps.every((s) => s.title.trim().length > 0 && s.body.trim().length > 0));
   const canSave =
-    title.trim().length > 0 && body.trim().length > 0 && audienceChosen && !save.isPending;
+    title.trim().length > 0 && body.trim().length > 0 && audienceChosen && stepsValid && !save.isPending;
 
   return (
     <>
@@ -202,34 +242,70 @@ export default function FeatureTipEditor({
           </div>
 
           <div className="rounded-lg border border-divider bg-canvas p-3.5 space-y-3">
-            <p className="text-xs font-medium uppercase tracking-wider text-foreground-dim">Placement</p>
-            <div>
-              <label className={LABEL}>Guide to screen (optional)</label>
-              <select value={targetView} onChange={(e) => setTargetView(e.target.value)} className={INPUT}>
-                <option value="">No screen — show a centered card</option>
-                {targetViews.map((v) => (
-                  <option key={v.value} value={v.value}>{v.label}</option>
-                ))}
-              </select>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium uppercase tracking-wider text-foreground-dim">Placement</p>
+              <div className="flex rounded-md border border-divider bg-surface p-0.5 text-xs font-medium">
+                <button
+                  type="button"
+                  onClick={() => setTourMode(false)}
+                  className={`rounded px-2.5 py-1 transition ${!tourMode ? 'bg-surface-alt text-foreground' : 'text-foreground-muted hover:text-foreground'}`}
+                >
+                  Single card
+                </button>
+                <button
+                  type="button"
+                  onClick={switchToTour}
+                  className={`rounded px-2.5 py-1 transition ${tourMode ? 'bg-surface-alt text-foreground' : 'text-foreground-muted hover:text-foreground'}`}
+                >
+                  Guided tour
+                </button>
+              </div>
             </div>
-            <div>
-              <label className={LABEL}>Spotlight element (optional)</label>
-              <input
-                value={targetAnchor}
-                onChange={(e) => setTargetAnchor(e.target.value)}
-                list="tip-anchor-keys"
-                className={INPUT}
-                placeholder="e.g. rail.tasks"
+
+            {/* Shared anchor autocomplete for every placement field. */}
+            <datalist id="tip-anchor-keys">
+              {anchorKeys.map((k) => (
+                <option key={k} value={k} />
+              ))}
+            </datalist>
+
+            {!tourMode ? (
+              <PlacementFields
+                targetView={targetView}
+                onTargetView={setTargetView}
+                targetAnchor={targetAnchor}
+                onTargetAnchor={setTargetAnchor}
+                targetViews={targetViews}
               />
-              <datalist id="tip-anchor-keys">
-                {anchorKeys.map((k) => (
-                  <option key={k} value={k} />
+            ) : (
+              <div className="space-y-3">
+                <p className="text-[11px] text-foreground-dim">
+                  Users step through these in order (Back / Next). The title &amp; description above just label the
+                  tour — they aren’t shown during it.
+                </p>
+                {steps.map((s, idx) => (
+                  <StepCard
+                    key={idx}
+                    index={idx}
+                    total={steps.length}
+                    step={s}
+                    targetViews={targetViews}
+                    onChange={(patch) => updateStep(idx, patch)}
+                    onRemove={() => removeStep(idx)}
+                    onMove={(dir) => moveStep(idx, dir)}
+                  />
                 ))}
-              </datalist>
-              <p className="mt-1 text-[11px] text-foreground-dim">
-                Anchors a coachmark to that element. Leave both empty for a centered “What’s new” card.
-              </p>
-            </div>
+                {steps.length < 8 && (
+                  <button
+                    type="button"
+                    onClick={addStep}
+                    className="w-full rounded-md border border-dashed border-divider-strong py-2 text-xs font-medium text-foreground-muted transition hover:border-accent hover:text-foreground"
+                  >
+                    + Add step
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="rounded-lg border border-divider bg-canvas p-3.5 space-y-3">
@@ -337,10 +413,95 @@ export default function FeatureTipEditor({
           targetView={targetView || null}
           targetAnchor={targetAnchor || null}
           viewLabel={targetViews.find((v) => v.value === targetView)?.label}
+          steps={tourMode && steps.length > 0 ? cleanSteps() : null}
+          targetViews={targetViews}
           onClose={() => setShowPreview(false)}
         />
       )}
     </>
+  );
+}
+
+function PlacementFields({
+  targetView,
+  onTargetView,
+  targetAnchor,
+  onTargetAnchor,
+  targetViews,
+}: {
+  targetView: string;
+  onTargetView: (v: string) => void;
+  targetAnchor: string;
+  onTargetAnchor: (v: string) => void;
+  targetViews: { value: string; label: string }[];
+}) {
+  return (
+    <>
+      <div>
+        <label className={LABEL}>Guide to screen (optional)</label>
+        <select value={targetView} onChange={(e) => onTargetView(e.target.value)} className={INPUT}>
+          <option value="">No screen — show a centered card</option>
+          {targetViews.map((v) => (
+            <option key={v.value} value={v.value}>{v.label}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className={LABEL}>Spotlight element (optional)</label>
+        <input
+          value={targetAnchor}
+          onChange={(e) => onTargetAnchor(e.target.value)}
+          list="tip-anchor-keys"
+          className={INPUT}
+          placeholder="e.g. rail.tasks"
+        />
+        <p className="mt-1 text-[11px] text-foreground-dim">
+          Anchors a coachmark to that element. Leave both empty for a centered “What’s new” card.
+        </p>
+      </div>
+    </>
+  );
+}
+
+function StepCard({
+  index,
+  total,
+  step,
+  targetViews,
+  onChange,
+  onRemove,
+  onMove,
+}: {
+  index: number;
+  total: number;
+  step: TipStep;
+  targetViews: { value: string; label: string }[];
+  onChange: (patch: Partial<TipStep>) => void;
+  onRemove: () => void;
+  onMove: (dir: -1 | 1) => void;
+}) {
+  return (
+    <div className="space-y-2.5 rounded-md border border-divider bg-surface p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground-dim">Step {index + 1}</span>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => onMove(-1)} disabled={index === 0} title="Move up" className="rounded px-1.5 py-0.5 text-foreground-dim transition hover:bg-surface-alt hover:text-foreground disabled:opacity-30">↑</button>
+          <button type="button" onClick={() => onMove(1)} disabled={index === total - 1} title="Move down" className="rounded px-1.5 py-0.5 text-foreground-dim transition hover:bg-surface-alt hover:text-foreground disabled:opacity-30">↓</button>
+          <button type="button" onClick={onRemove} title="Remove step" className="rounded px-1.5 py-0.5 text-foreground-dim transition hover:bg-surface-alt hover:text-red-500">✕</button>
+        </div>
+      </div>
+      <input value={step.title} onChange={(e) => onChange({ title: e.target.value })} maxLength={120} className={INPUT} placeholder="Step title" />
+      <textarea value={step.body} onChange={(e) => onChange({ body: e.target.value })} rows={2} maxLength={2000} className={INPUT} placeholder="What to point out…" />
+      <div className="grid grid-cols-2 gap-2">
+        <select value={step.target_view ?? ''} onChange={(e) => onChange({ target_view: e.target.value || null })} className={INPUT}>
+          <option value="">No screen</option>
+          {targetViews.map((v) => (
+            <option key={v.value} value={v.value}>{v.label}</option>
+          ))}
+        </select>
+        <input value={step.target_anchor ?? ''} onChange={(e) => onChange({ target_anchor: e.target.value || null })} list="tip-anchor-keys" className={INPUT} placeholder="Spotlight (e.g. rail.apps)" />
+      </div>
+    </div>
   );
 }
 

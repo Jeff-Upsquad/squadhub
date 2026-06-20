@@ -4,6 +4,7 @@ import type { HomeView } from '../../../layouts/MainLayout';
 import { APP_CATEGORY_ORDER, AppIcon, type AppDef } from '../../../config/apps';
 import { useAvailableApps } from '../../../hooks/useApps';
 import { useAppFavorites, useToggleAppFavorite } from '../../../hooks/useAppFavorites';
+import { useActiveTipAnchor } from '../../../stores/featureTipStore';
 
 // Module side menu bar shown when the Apps rail module is active. Lists the
 // apps the user can access, grouped by category, in the same list style as the
@@ -91,6 +92,13 @@ export default function AppsSidebar({
   const groups = useMemo(() => groupByCategory(apps), [apps]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
+  // While a feature tip spotlights the star (the "pin your apps" tour), surface
+  // the otherwise hover-only star on the first app so the coachmark has a stable,
+  // visible target to point at.
+  const activeAnchor = useActiveTipAnchor();
+  const tourStar = activeAnchor === 'apps.star';
+  const firstAppSlug = groups[0]?.apps[0]?.slug ?? null;
+
   return (
     <div className="flex h-full w-full flex-col text-[var(--sh-ink-2)]">
       {/* Header — mirrors the home sidebar */}
@@ -148,6 +156,7 @@ export default function AppsSidebar({
                   catApps.map((app) => {
                     const active = !!app.view && activeView === app.view;
                     const pinned = favorites.includes(app.slug);
+                    const spotlightStar = tourStar && app.slug === firstAppSlug;
                     return (
                       <div key={app.slug} className="group flex items-center">
                         <button
@@ -175,13 +184,16 @@ export default function AppsSidebar({
                             e.stopPropagation();
                             toggleFavorite.mutate({ slug: app.slug, favorited: pinned });
                           }}
+                          data-tip-anchor={spotlightStar ? 'apps.star' : undefined}
                           title={pinned ? 'Unpin from sidebar' : 'Pin to sidebar'}
                           aria-label={pinned ? 'Unpin from sidebar' : 'Pin to sidebar'}
                           aria-pressed={pinned}
                           className={`mr-1 rounded p-0.5 transition ${
                             pinned
                               ? 'text-[var(--sh-warn,#f5a623)]'
-                              : 'text-[var(--sh-ink-4)] opacity-0 hover:text-[var(--sh-ink)] group-hover:opacity-100'
+                              : spotlightStar
+                                ? 'text-[var(--sh-warn,#f5a623)] opacity-100'
+                                : 'text-[var(--sh-ink-4)] opacity-0 hover:text-[var(--sh-ink)] group-hover:opacity-100'
                           }`}
                         >
                           <svg className="h-[13px] w-[13px]" viewBox="0 0 24 24" fill={pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">

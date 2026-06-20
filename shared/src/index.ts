@@ -2412,6 +2412,16 @@ export interface FeatureTipAudience {
   user_ids?: string[];
 }
 
+/** One step of a guided tour. Same placement shape as a single-card tip. */
+export interface FeatureTipStep {
+  title: string;
+  body: string;
+  /** Target screen key (a web HomeView, or 'apps' for the Apps module). */
+  target_view: string | null;
+  /** `data-tip-anchor` key of the element to spotlight on that screen. */
+  target_anchor: string | null;
+}
+
 export interface FeatureTip {
   id: string;
   title: string;
@@ -2420,6 +2430,9 @@ export interface FeatureTip {
   target_view: string | null;
   /** `data-tip-anchor` key of the element to spotlight. Null ⇒ centered card. */
   target_anchor: string | null;
+  /** Ordered steps for a multi-step guided tour. Null/empty ⇒ single card built
+   *  from the top-level title/body/target_view/target_anchor. */
+  steps: FeatureTipStep[] | null;
   audience: FeatureTipAudience;
   is_active: boolean;
   current_revision: number;
@@ -2436,6 +2449,8 @@ export interface PendingFeatureTip {
   body: string;
   target_view: string | null;
   target_anchor: string | null;
+  /** Ordered steps when this tip is a guided tour; null/empty ⇒ single card. */
+  steps: FeatureTipStep[] | null;
   revision: number;
 }
 
@@ -2471,6 +2486,9 @@ export const NAVIGABLE_TIP_VIEWS: { value: string; label: string }[] = [
   { value: 'time-management', label: 'Time Management' },
   { value: 'sales-leads', label: 'Sales Leads' },
   { value: 'clips', label: 'Squad Clips' },
+  // 'apps' is not a HomeView — it opens the Apps module (the rail's grid icon),
+  // whose side menu hosts the star/pin control. Handled specially by the web nav.
+  { value: 'apps', label: 'Apps (module)' },
   // NOTE: 'cashbook' is intentionally excluded — it only renders for partner /
   // client users (internal users fall through to Home), so guided nav there
   // would silently mis-navigate. Tip authors target Cash Book via an anchor on a
@@ -2492,4 +2510,6 @@ export const TIP_ANCHOR_KEYS: readonly string[] = [
   'rail.more',
   'rail.timesheet',
   'action.new-task',
+  'home.apps', // Home sidebar "Apps" section (pinned mini apps)
+  'apps.star', // star/pin toggle on an app row in the Apps module side menu
 ] as const;

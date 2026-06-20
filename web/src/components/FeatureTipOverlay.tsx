@@ -3,15 +3,20 @@
 // The user-facing Feature Tip overlay. Renders the current pending tip (from
 // featureTipStore) as either:
 //   • a coachmark — a spotlight + popover anchored to a UI element, when the
-//     tip has a `target_anchor` that resolves on screen; or
+//     (current step's) `target_anchor` resolves on screen; or
 //   • a centered "What's New" card otherwise.
-// When a tip targets a screen the user isn't on, the card offers "Show me",
-// which navigates there (guided nav) so the coachmark can resolve.
 //
-// Acknowledgement is non-blocking but persistent: "Got it" accepts permanently;
-// "Dismiss" snoozes for 3h (server-side) and the tip returns until accepted.
-import { useEffect, useRef, useState } from 'react';
+// A tip is either a SINGLE card or a multi-step GUIDED TOUR (tip.steps). A tour
+// walks its steps with Back / Next, auto-navigating to each step's target screen
+// (and revealing the spotlighted element), and only accepts on the final step.
+// A single card keeps the original "Show me" guided-nav behavior.
+//
+// Acknowledgement is non-blocking but persistent: finishing ("Got it"/"Done")
+// accepts permanently; "Dismiss"/"Skip" snoozes for 3h (server-side) and the tip
+// returns until accepted.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import type { FeatureTipStep } from '@squadhub/shared';
 import api from '../services/api';
 import { featureTipStore, useCurrentTip } from '../stores/featureTipStore';
 import { useTipAnchor } from '../hooks/useTipAnchor';
@@ -22,14 +27,47 @@ export default function FeatureTipOverlay() {
   const tip = useCurrentTip();
   const queryClient = useQueryClient();
   const [guided, setGuided] = useState(false);
+  const [stepIndex, setStepIndex] = useState(0);
   const primaryRef = useRef<HTMLButtonElement>(null);
 
-  const { rect, found } = useTipAnchor(tip?.target_anchor ?? null, !!tip);
+  // A tip is a tour when it carries ≥1 explicit steps; otherwise it is a single
+  // card synthesized from the top-level fields. Either way we render `steps[i]`.
+  const steps: FeatureTipStep[] = useMemo(() => {
+    if (!tip) return [];
+    if (tip.steps && tip.steps.length > 0) return tip.steps;
+    return [{ title: tip.title, body: tip.body, target_view: tip.target_view, target_anchor: tip.target_anchor }];
+  }, [tip]);
+  const isTour = steps.length > 1;
+  const lastIndex = Math.max(0, steps.length - 1);
+  const i = Math.min(stepIndex, lastIndex);
+  const step = steps[i] ?? null;
+  const isLast = i >= lastIndex;
 
-  // Reset the guided flag whenever a different tip becomes current.
+  const { rect, found } = useTipAnchor(step?.target_anchor ?? null, !!tip && !!step);
+
+  // Restart at the first step whenever a different tip becomes current.
   useEffect(() => {
+    setStepIndex(0);
     setGuided(false);
   }, [tip?.id, tip?.revision]);
+
+  // Publish the spotlighted anchor so other components can react (e.g. the Apps
+  // module reveals its hover-only star while it is the target).
+  useEffect(() => {
+    featureTipStore.setActiveAnchor(step?.target_anchor ?? null);
+    return () => featureTipStore.setActiveAnchor(null);
+  }, [step?.target_anchor]);
+
+  // Tours auto-navigate to each step's screen as it becomes active, so the
+  // coachmark can resolve without the user hunting for "Show me".
+  useEffect(() => {
+    if (!tip || !isTour) return;
+    if (step?.target_view) {
+      featureTipStore.requestNavigate(step.target_view);
+      setGuided(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tip?.id, tip?.revision, i, isTour]);
 
   const refetch = () => queryClient.invalidateQueries({ queryKey: ['feature-tips', 'pending'] });
 
@@ -57,9 +95,15 @@ export default function FeatureTipOverlay() {
   const busy = accept.isPending || dismiss.isPending;
   const doAccept = () => tip && !busy && accept.mutate({ id: tip.id, revision: tip.revision });
   const doDismiss = () => tip && !busy && dismiss.mutate({ id: tip.id, revision: tip.revision });
+  const doNext = () => {
+    if (busy) return;
+    if (isLast) doAccept();
+    else setStepIndex(i + 1);
+  };
+  const doBack = () => !busy && setStepIndex(Math.max(0, i - 1));
   const showMe = () => {
-    if (tip?.target_view) {
-      featureTipStore.requestNavigate(tip.target_view);
+    if (step?.target_view) {
+      featureTipStore.requestNavigate(step.target_view);
       setGuided(true);
     }
   };
@@ -77,13 +121,30 @@ export default function FeatureTipOverlay() {
       clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tip?.id, tip?.revision, busy]);
+  }, [tip?.id, tip?.revision, i, busy]);
 
-  if (!tip) return null;
+  if (!tip || !step) return null;
 
-  const hasAnchor = !!tip.target_anchor;
+  const hasAnchor = !!step.target_anchor;
   const coachmark = hasAnchor && found && !!rect;
-  const canGuide = !!tip.target_view && !coachmark && !guided;
+  const canGuide = !isTour && !!step.target_view && !coachmark && !guided;
+
+  const actions = (
+    <Actions
+      primaryRef={primaryRef}
+      busy={busy}
+      isTour={isTour}
+      stepIndex={i}
+      stepCount={steps.length}
+      isLast={isLast}
+      canGuide={canGuide}
+      onAccept={doAccept}
+      onDismiss={doDismiss}
+      onShowMe={showMe}
+      onNext={doNext}
+      onBack={doBack}
+    />
+  );
 
   const keyframes = (
     <style>{`
@@ -100,21 +161,14 @@ export default function FeatureTipOverlay() {
       className="relative w-full max-w-sm rounded-2xl border border-[var(--sh-hair)] bg-[var(--surface)] p-5 shadow-2xl"
       style={{ animation: `sh-tip-in 220ms cubic-bezier(0.32,0.72,0,1) both` }}
     >
-      <Badge />
+      <Badge isTour={isTour} />
       <h3 id="sh-tip-title" className="mt-3 text-base font-semibold text-[var(--sh-ink)]">
-        {tip.title}
+        {step.title}
       </h3>
       <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-[var(--sh-ink-3)]">
-        {tip.body}
+        {step.body}
       </p>
-      <Actions
-        primaryRef={primaryRef}
-        busy={busy}
-        canGuide={canGuide}
-        onAccept={doAccept}
-        onDismiss={doDismiss}
-        onShowMe={showMe}
-      />
+      {actions}
     </div>
   );
 
@@ -124,7 +178,7 @@ export default function FeatureTipOverlay() {
       <>
         {keyframes}
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={doDismiss} />
+          <div className="absolute inset-0 bg-black/40" onClick={isTour ? undefined : doDismiss} />
           {card}
         </div>
       </>
@@ -178,28 +232,21 @@ export default function FeatureTipOverlay() {
           className="rounded-2xl border border-[var(--sh-hair)] bg-[var(--surface)] p-4 shadow-2xl"
           style={{ ...popStyle, pointerEvents: 'auto', animation: 'sh-tip-in 220ms cubic-bezier(0.32,0.72,0,1) both' }}
         >
-          <Badge />
+          <Badge isTour={isTour} />
           <h3 id="sh-tip-title" className="mt-2.5 text-sm font-semibold text-[var(--sh-ink)]">
-            {tip.title}
+            {step.title}
           </h3>
           <p className="mt-1 whitespace-pre-line text-[13px] leading-relaxed text-[var(--sh-ink-3)]">
-            {tip.body}
+            {step.body}
           </p>
-          <Actions
-            primaryRef={primaryRef}
-            busy={busy}
-            canGuide={false}
-            onAccept={doAccept}
-            onDismiss={doDismiss}
-            onShowMe={showMe}
-          />
+          {actions}
         </div>
       </div>
     </>
   );
 }
 
-function Badge() {
+function Badge({ isTour }: { isTour: boolean }) {
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide"
@@ -209,7 +256,7 @@ function Badge() {
         <path d="M9 18h6M10 22h4" />
         <path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1v.2h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z" />
       </svg>
-      What&apos;s new
+      {isTour ? 'Quick tour' : "What's new"}
     </span>
   );
 }
@@ -217,18 +264,72 @@ function Badge() {
 function Actions({
   primaryRef,
   busy,
+  isTour,
+  stepIndex,
+  stepCount,
+  isLast,
   canGuide,
   onAccept,
   onDismiss,
   onShowMe,
+  onNext,
+  onBack,
 }: {
   primaryRef: React.RefObject<HTMLButtonElement | null>;
   busy: boolean;
+  isTour: boolean;
+  stepIndex: number;
+  stepCount: number;
+  isLast: boolean;
   canGuide: boolean;
   onAccept: () => void;
   onDismiss: () => void;
   onShowMe: () => void;
+  onNext: () => void;
+  onBack: () => void;
 }) {
+  // Guided tour: step counter + Skip / Back / Next(→Done on the last step).
+  if (isTour) {
+    return (
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-medium text-[var(--sh-ink-4)]">
+          {stepIndex + 1} of {stepCount}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onDismiss}
+            disabled={busy}
+            className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] disabled:opacity-50"
+          >
+            Skip
+          </button>
+          {stepIndex > 0 && (
+            <button
+              type="button"
+              onClick={onBack}
+              disabled={busy}
+              className="rounded-lg border border-[var(--sh-hair)] px-3 py-1.5 text-sm font-medium text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] disabled:opacity-50"
+            >
+              Back
+            </button>
+          )}
+          <button
+            ref={primaryRef}
+            type="button"
+            onClick={onNext}
+            disabled={busy}
+            className="rounded-lg px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition disabled:opacity-50"
+            style={{ background: 'var(--color-accent)' }}
+          >
+            {isLast ? 'Done' : 'Next'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Single card: original Dismiss / Show me / Got it.
   return (
     <div className="mt-4 flex items-center justify-end gap-2">
       <button

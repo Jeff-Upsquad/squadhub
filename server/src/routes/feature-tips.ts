@@ -28,6 +28,7 @@ router.get('/pending', async (req: Request, res: Response) => {
       body: string;
       target_view: string | null;
       target_anchor: string | null;
+      steps: any;
       revision: number;
       audience: any;
     }>;
@@ -47,6 +48,7 @@ router.get('/pending', async (req: Request, res: Response) => {
         body: t.body,
         target_view: t.target_view,
         target_anchor: t.target_anchor,
+        steps: Array.isArray(t.steps) && t.steps.length > 0 ? t.steps : null,
         revision: t.revision,
       }));
 
