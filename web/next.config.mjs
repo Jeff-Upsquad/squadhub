@@ -29,6 +29,7 @@ const nextConfig = {
       { source: '/app-favorites/:path*', destination: `${API_URL}/app-favorites/:path*` },
       { source: '/notes/:path*', destination: `${API_URL}/notes/:path*` },
       { source: '/checkin/:path*', destination: `${API_URL}/checkin/:path*` },
+      { source: '/timesheet/:path*', destination: `${API_URL}/timesheet/:path*` },
       { source: '/off-days/:path*', destination: `${API_URL}/off-days/:path*` },
       { source: '/pm/:path*', destination: `${API_URL}/pm/:path*` },
       { source: '/mini-apps/:path*', destination: `${API_URL}/mini-apps/:path*` },

@@ -5,12 +5,14 @@ import CheckInSlider from './CheckInSlider';
 import TimerTab from './TimerTab';
 import DashboardTab from './DashboardTab';
 import OffDaysTab from './OffDaysTab';
+import DailyTimesheetTab from './DailyTimesheetTab';
 
-type Tab = 'timers' | 'checkin' | 'offdays';
+type Tab = 'timers' | 'checkin' | 'timesheet' | 'offdays';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'timers', label: 'Time Tracking' },
   { id: 'checkin', label: 'Check-In' },
+  { id: 'timesheet', label: 'Daily Timesheet' },
   { id: 'offdays', label: 'Off Days' },
 ];
 
@@ -81,6 +83,10 @@ export default function CheckInWidget({ title = 'Daily Check-In', context = 'def
       ) : activeTab === 'offdays' ? (
         <div className="flex-1 overflow-y-auto">
           <OffDaysTab />
+        </div>
+      ) : activeTab === 'timesheet' ? (
+        <div className="flex-1 overflow-y-auto">
+          <DailyTimesheetTab />
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
