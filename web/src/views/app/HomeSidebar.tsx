@@ -307,7 +307,7 @@ export default function HomeSidebar({
         <button
           type="button"
           onClick={onOpenSearch}
-          className="w-full pl-[30px] pr-10 py-[7px] bg-[var(--surface)] border border-[var(--sh-hair)] rounded-lg text-[12.5px] text-left text-[var(--sh-ink-4)] outline-none hover:border-[var(--sh-ink-4)] focus:border-[var(--sh-ink-4)] transition"
+          className="w-full pl-[30px] pr-10 py-[4px] bg-[var(--surface)] border border-[var(--sh-hair)] rounded-lg text-[12.5px] text-left text-[var(--sh-ink-4)] outline-none hover:border-[var(--sh-ink-4)] focus:border-[var(--sh-ink-4)] transition"
           aria-label="Open workspace search"
         >
           Search or jump to…
