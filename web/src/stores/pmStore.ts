@@ -8,6 +8,9 @@ export type ViewMode = 'list' | 'board' | 'whiteboard';
 export type DashboardTab = 'today' | 'overdue' | 'tomorrow' | 'all';
 export type ListGroupBy = Extract<GroupBy, 'status' | 'none' | 'work_date' | 'due_date' | 'priority'>;
 export type TodayListView = 'list' | 'calendar';
+// Calendar app view mode + which weekday the Week/Month grids start on (0=Sun…6=Sat).
+// Synced cross-device via the view-preferences payload.
+export type CalendarMode = 'month' | 'week' | '5day' | '4day' | 'day';
 // Manual "later today" triage buckets for the Home Focus list. A starred task
 // can be moved into Evening (after 3 PM) or Night (after 7 PM); these are labels
 // only — no clock-driven behavior. Mirrors the focusedTodayIds persistence.
@@ -68,6 +71,8 @@ interface PMState {
   focusTodayScope: Record<string, boolean>;
   todayListGroupBy: GroupBy;
   todayListView: TodayListView;
+  calendarMode: CalendarMode;
+  calendarWeekStart: number;
   // Last in-app view (MainLayout's section + home sub-view), persisted so a
   // full-page refresh restores where the user was instead of resetting to My
   // Home. Stored as plain strings to avoid a store→layout import cycle;
@@ -105,6 +110,8 @@ interface PMState {
   setScopedFocusToday: (scopeKey: string, value: boolean) => void;
   setTodayListGroupBy: (value: GroupBy) => void;
   setTodayListView: (value: TodayListView) => void;
+  setCalendarMode: (value: CalendarMode) => void;
+  setCalendarWeekStart: (value: number) => void;
   setLastView: (section: string, homeView: string) => void;
   toggleFocusToday: (taskId: string) => void;
   setFocusBucket: (taskId: string, bucket: FocusBucket | null) => void;
@@ -159,6 +166,8 @@ export const usePMStore = create<PMState>()(
       focusTodayScope: {},
       todayListGroupBy: 'none',
       todayListView: 'list',
+      calendarMode: 'month',
+      calendarWeekStart: 0,
       lastActiveSection: 'home',
       lastHomeView: 'hub',
 
@@ -269,6 +278,14 @@ export const usePMStore = create<PMState>()(
         set({ todayListView: value });
         triggerSave();
       },
+      setCalendarMode: (value) => {
+        set({ calendarMode: value });
+        triggerSave();
+      },
+      setCalendarWeekStart: (value) => {
+        set({ calendarWeekStart: value });
+        triggerSave();
+      },
       setLastView: (section, homeView) => set({ lastActiveSection: section, lastHomeView: homeView }),
       // Focus stars are persistent now — they no longer clear overnight. Kept
       // as a no-op so existing callers (e.g. useDayPlanner) stay valid.
@@ -315,6 +332,15 @@ export const usePMStore = create<PMState>()(
         if (prefs.todayListView === 'list' || prefs.todayListView === 'calendar') {
           patch.todayListView = prefs.todayListView;
         }
+        if (
+          prefs.calendarMode === 'month' || prefs.calendarMode === 'week' ||
+          prefs.calendarMode === '5day' || prefs.calendarMode === '4day' || prefs.calendarMode === 'day'
+        ) {
+          patch.calendarMode = prefs.calendarMode;
+        }
+        if (typeof prefs.calendarWeekStart === 'number' && prefs.calendarWeekStart >= 0 && prefs.calendarWeekStart <= 6) {
+          patch.calendarWeekStart = prefs.calendarWeekStart;
+        }
         // Focus is persistent — always restore the saved stars (no overnight
         // reset / staleness check).
         if (Array.isArray(prefs.focusedTodayIds)) {
@@ -339,6 +365,8 @@ export const usePMStore = create<PMState>()(
           focusTodayScope: s.focusTodayScope,
           todayListGroupBy: s.todayListGroupBy,
           todayListView: s.todayListView,
+          calendarMode: s.calendarMode,
+          calendarWeekStart: s.calendarWeekStart,
           focusedTodayIds: s.focusedTodayIds,
           focusedTodayDate: s.focusedTodayDate,
           focusBuckets: s.focusBuckets,
@@ -369,6 +397,8 @@ export const usePMStore = create<PMState>()(
         focusTodayScope: state.focusTodayScope,
         todayListGroupBy: state.todayListGroupBy,
         todayListView: state.todayListView,
+        calendarMode: state.calendarMode,
+        calendarWeekStart: state.calendarWeekStart,
         lastActiveSection: state.lastActiveSection,
         lastHomeView: state.lastHomeView,
       }),
