@@ -32,10 +32,6 @@ interface PMState {
   activeTaskId: string | null;
   activeDesignFolderId: string | null;
   activeDashboardTab: DashboardTab | null;
-  // Which Home secondary "type" card (Routines / Courses / Meetings) has its
-  // slide-in list panel open. Keyed by the card's config key; null = closed.
-  // Not persisted — a panel shouldn't reopen on reload (mirrors newTasksOpen).
-  activeSecondaryCard: string | null;
   // The full-page "New Tasks" review popup (My Home). Separate from
   // activeDashboardTab — that drives the right-sliding bucket panel; this is a
   // distinct full-screen overlay. Not persisted (a modal shouldn't reopen on reload).
@@ -89,7 +85,6 @@ interface PMState {
   setActiveDesignFolder: (id: string | null) => void;
   setContextListId: (id: string | null) => void;
   setActiveDashboardTab: (tab: DashboardTab | null) => void;
-  setActiveSecondaryCard: (key: string | null) => void;
   setNewTasksOpen: (open: boolean) => void;
   setNewTaskFabVisible: (visible: boolean) => void;
   setViewMode: (mode: ViewMode) => void;
@@ -145,7 +140,6 @@ export const usePMStore = create<PMState>()(
       activeTaskId: null,
       activeDesignFolderId: null,
       activeDashboardTab: null,
-      activeSecondaryCard: null,
       newTasksOpen: false,
       newTaskFabVisible: false,
       contextListId: null,
@@ -182,7 +176,6 @@ export const usePMStore = create<PMState>()(
       setActiveDesignFolder: (id) => set({ activeDesignFolderId: id, activeListId: null, activeFolderId: null, activeSpacePageId: null, contextListId: null, selectedTasks: [] }),
       setContextListId: (id) => set({ contextListId: id }),
       setActiveDashboardTab: (tab) => set({ activeDashboardTab: tab }),
-      setActiveSecondaryCard: (key) => set({ activeSecondaryCard: key }),
       setNewTasksOpen: (open) => set({ newTasksOpen: open }),
       setNewTaskFabVisible: (visible) => set({ newTaskFabVisible: visible }),
       setViewMode: (mode) => set({ viewMode: mode }),
@@ -372,7 +365,7 @@ export const usePMStore = create<PMState>()(
           focusBuckets: s.focusBuckets,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, newTasksOpen: false, newTaskFabVisible: false, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',

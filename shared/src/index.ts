@@ -534,6 +534,13 @@ export interface Task {
   // Set on spawned copies: which template they came from + the occurrence date.
   recurring_parent_id?: string | null;
   recurrence_instance_date?: string | null;
+  // Mirror link: a task materialised from a "disappearing card" source. NULL on
+  // ordinary tasks. source_kind is 'course' | 'meeting'; source_id is the
+  // lms_assignment / meeting id; source_user_id is the owning user (a meeting
+  // fans out to one mirror task per participant). See taskMirror service.
+  source_kind?: string | null;
+  source_id?: string | null;
+  source_user_id?: string | null;
   // Joined
   status?: SpaceStatus;
   task_type?: TaskType;

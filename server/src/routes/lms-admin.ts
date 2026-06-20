@@ -6,6 +6,7 @@ import path from 'path';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
+import { mirrorCourseItem } from '../services/taskMirror';
 
 const router = Router();
 router.use(requireAuth);
@@ -589,6 +590,11 @@ router.post('/items/:id/publish', async (req: Request, res: Response) => {
       }
     }
 
+    // Mirror assignments with a due date into tasks (no-op for those without one).
+    mirrorCourseItem(itemId).catch((err) =>
+      console.error('[lms-admin] course mirror sync failed (publish):', err),
+    );
+
     res.json({ success: true, data: { ...updated, assignment_count: userIds.length } });
   } catch (err) {
     console.error('Publish error:', err);
@@ -626,6 +632,9 @@ router.post('/items/:id/resync-audience', async (req: Request, res: Response) =>
         return;
       }
     }
+    mirrorCourseItem(itemId).catch((err) =>
+      console.error('[lms-admin] course mirror sync failed (resync):', err),
+    );
     res.json({ success: true, data: { synced_user_count: userIds.length } });
   } catch (err) {
     console.error('Resync audience error:', err);

@@ -1761,7 +1761,11 @@ export default function TaskCreatePanel({
               left: Math.min(typeAnchor.left, window.innerWidth - 232),
             }}
           >
-            {(taskTypes || []).map((t) => (
+            {(taskTypes || [])
+              // Mirror types (Course/Meeting) + Routine are system-managed — set
+              // automatically on materialised/recurring tasks, never hand-picked.
+              .filter((t) => !['course', 'meeting', 'routine'].includes(t.key))
+              .map((t) => (
               <button
                 key={t.id}
                 type="button"

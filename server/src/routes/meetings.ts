@@ -2,8 +2,17 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../supabase';
+import { mirrorMeeting } from '../services/taskMirror';
 
 const router = Router();
+
+// Keep the meeting's mirror tasks in sync without ever failing the primary
+// request — a mirror hiccup must not block creating/finishing a meeting.
+function syncMeetingMirror(meetingId: string): void {
+  mirrorMeeting(meetingId).catch((err) =>
+    console.error('[meetings] mirror sync failed:', err),
+  );
+}
 
 router.use(requireAuth);
 
@@ -83,6 +92,7 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
+    syncMeetingMirror((data as any).id);
     res.json({ success: true, data });
   } catch (err: any) {
     if (err?.name === 'ZodError') {
@@ -134,6 +144,8 @@ router.post('/:id/done', async (req: Request, res: Response) => {
       return;
     }
 
+    // Meeting is no longer 'scheduled' → mirror sync removes its tasks.
+    syncMeetingMirror(id as string);
     res.json({ success: true, data });
   } catch (err) {
     console.error('Mark meeting done error:', err);

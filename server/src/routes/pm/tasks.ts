@@ -483,11 +483,14 @@ router.get('/tasks/new', async (req: Request, res: Response) => {
     const includeReviewed = req.query.include_reviewed === 'true';
 
     // Same base shape as /tasks/my: skip routine templates and done/closed tasks.
+    // Also skip mirrored Course/Meeting tasks — they're auto-materialised, not
+    // something the user needs to "review" as a freshly-assigned task.
     const base = () =>
       supabaseAdmin
         .from('tasks')
         .select('*')
         .is('recurrence', null)
+        .is('source_kind', null)
         .not('status', 'in', '(done,closed)');
 
     // (A) Assigned to me.
