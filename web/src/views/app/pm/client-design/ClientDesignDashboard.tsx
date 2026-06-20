@@ -256,7 +256,9 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
                     onNewRequest={handleNewTask}
                   />
               )}
-              {tab === 'reports' && <ReportsTab requests={filteredRequests} plan={plan} />}
+              {tab === 'reports' && (
+                <ReportsTab requests={filteredRequests} plan={plan} folderId={folderId} />
+              )}
               {tab === 'completed' && (
                 <CompletedTab
                   requests={filteredRequests}
