@@ -52,6 +52,11 @@ export const config = {
   squadhireCallbackSecret: process.env.SQUADHIRE_CALLBACK_SECRET || '',
   squadhireAdminUrl: process.env.SQUADHIRE_ADMIN_URL || '',
 
+  // Candidates mini app — instant env kill switch for the SquadHire proxy.
+  // Set CANDIDATES_PROXY_ENABLED=false to make /candidates/* return 503 without
+  // a deploy (complements the mini_apps.is_enabled=false kill switch).
+  candidatesProxyEnabled: (process.env.CANDIDATES_PROXY_ENABLED || 'true') !== 'false',
+
   // upsquad website — admin API for subscription requests.
   // When unset, the proxy endpoints return 503 and local dev works without it.
   upsquadApiUrl: process.env.UPSQUAD_API_URL || '',
