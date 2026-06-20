@@ -7,6 +7,8 @@ import { useFavorites, useRemoveFavorite } from '../../hooks/useFavorites';
 import { useSharedWithMe } from '../../hooks/useSharedWithMe';
 import { useHasPermission } from '../../hooks/usePermissions';
 import { usePMStore } from '../../stores/pmStore';
+import { useTabsStore } from '../../stores/tabsStore';
+import { wantsNewTab, buildListSnapshot, buildFolderSnapshot, buildSpaceSnapshot, buildChatSnapshot, buildAppSnapshot } from '../../lib/tabSnapshots';
 import SpaceTree from './pm/SpaceTree';
 import CreateSpaceModal from './pm/CreateSpaceModal';
 import { useAvailableApps } from '../../hooks/useApps';
@@ -450,7 +452,15 @@ export default function HomeSidebar({
                       return (
                         <button
                           key={app.slug}
-                          onClick={() => onLaunchApp(app)}
+                          onClick={(e) => {
+                            if (app.view && wantsNewTab(e)) {
+                              e.preventDefault();
+                              useTabsStore.getState().openInNewTab(buildAppSnapshot(app.view, 'home'), { background: e.button === 1 });
+                              return;
+                            }
+                            onLaunchApp(app);
+                          }}
+                          onAuxClick={(e) => { if (e.button === 1 && app.view) { e.preventDefault(); useTabsStore.getState().openInNewTab(buildAppSnapshot(app.view, 'home'), { background: true }); } }}
                           className={`mb-[1px] flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
                             active
                               ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
@@ -498,26 +508,45 @@ export default function HomeSidebar({
                   Star items to pin them here
                 </p>
               )}
-              {favorites?.map((fav) => (
+              {favorites?.map((fav) => {
+                // ⌘/Ctrl-click or middle-click opens the favorite in a new tab.
+                const favSnapshot = () => {
+                  if (fav.item_type === 'channel') return buildChatSnapshot(fav.item_id, 'channel');
+                  if (fav.item_type === 'list') return buildListSnapshot(fav.space_id || '', fav.item_id);
+                  if (fav.item_type === 'space') return buildSpaceSnapshot(fav.item_id);
+                  if (fav.item_type === 'folder') return buildFolderSnapshot(fav.space_id || '', fav.item_id);
+                  return null;
+                };
+                const openFav = (e?: React.MouseEvent) => {
+                  if (e && wantsNewTab(e)) {
+                    const snap = favSnapshot();
+                    if (snap) {
+                      e.preventDefault();
+                      useTabsStore.getState().openInNewTab(snap, { background: e.button === 1 });
+                      return;
+                    }
+                  }
+                  if (fav.item_type === 'channel') {
+                    onSelectChannel(fav.item_id);
+                    return;
+                  }
+                  if (fav.item_type === 'list') {
+                    if (fav.space_id) setActiveSpace(fav.space_id);
+                    setActiveList(fav.item_id);
+                  } else if (fav.item_type === 'space') {
+                    setActiveSpace(fav.item_id);
+                    setActiveSpacePage(fav.item_id);
+                  } else if (fav.item_type === 'folder') {
+                    if (fav.space_id) setActiveSpace(fav.space_id);
+                    setActiveFolder(fav.item_id);
+                  }
+                  onChangeView('tasks');
+                };
+                return (
                 <div key={fav.id} className="group flex items-center">
                   <button
-                    onClick={() => {
-                      if (fav.item_type === 'channel') {
-                        onSelectChannel(fav.item_id);
-                        return;
-                      }
-                      if (fav.item_type === 'list') {
-                        if (fav.space_id) setActiveSpace(fav.space_id);
-                        setActiveList(fav.item_id);
-                      } else if (fav.item_type === 'space') {
-                        setActiveSpace(fav.item_id);
-                        setActiveSpacePage(fav.item_id);
-                      } else if (fav.item_type === 'folder') {
-                        if (fav.space_id) setActiveSpace(fav.space_id);
-                        setActiveFolder(fav.item_id);
-                      }
-                      onChangeView('tasks');
-                    }}
+                    onClick={openFav}
+                    onAuxClick={(e) => { if (e.button === 1) openFav(e); }}
                     className="flex flex-1 items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
                   >
                     <FavoriteIcon type={fav.item_type} />
@@ -533,7 +562,8 @@ export default function HomeSidebar({
                     </svg>
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -558,18 +588,23 @@ export default function HomeSidebar({
                   {sharedItems.map((item) => (
                     <button
                       key={item.id}
-                      onClick={() => {
-                        if (item.resource_type === 'list') {
-                          setActiveSpace(item.space_id);
-                          setActiveList(item.resource_id);
-                          // Explicitly switch to the tasks view (like Favorites
-                          // does). Relying on MainLayout's activeListId-change
-                          // effect silently fails when the clicked list is
-                          // already the active one, so nothing opens until a
-                          // page refresh re-runs that effect on mount.
-                          onChangeView('tasks');
+                      onClick={(e) => {
+                        if (item.resource_type !== 'list') return;
+                        if (wantsNewTab(e)) {
+                          e.preventDefault();
+                          useTabsStore.getState().openInNewTab(buildListSnapshot(item.space_id, item.resource_id), { background: e.button === 1 });
+                          return;
                         }
+                        setActiveSpace(item.space_id);
+                        setActiveList(item.resource_id);
+                        // Explicitly switch to the tasks view (like Favorites
+                        // does). Relying on MainLayout's activeListId-change
+                        // effect silently fails when the clicked list is
+                        // already the active one, so nothing opens until a
+                        // page refresh re-runs that effect on mount.
+                        onChangeView('tasks');
                       }}
+                      onAuxClick={(e) => { if (e.button === 1 && item.resource_type === 'list') { e.preventDefault(); useTabsStore.getState().openInNewTab(buildListSnapshot(item.space_id, item.resource_id), { background: true }); } }}
                       className="flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] text-[var(--sh-ink-2)] transition hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]"
                     >
                       <FavoriteIcon type={item.resource_type} />
