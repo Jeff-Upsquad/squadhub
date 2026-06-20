@@ -29,6 +29,7 @@ export type SearchTask = {
   status: string | null;
   priority: string | null;
   due_date: string | null;
+  display_number: number | null;
   list_id: string;
   list_name: string | null;
   folder_id: string | null;

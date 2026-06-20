@@ -28,9 +28,12 @@ import {
   type NodeProps,
   type EdgeProps,
 } from '@xyflow/react';
-import type { SpaceStatus, WhiteboardData, WhiteboardNode, WhiteboardEdge, WhiteboardNodeData, WhiteboardNodeType, WhiteboardShape, WhiteboardLineType } from '@squadhub/shared';
+import type { SpaceStatus, WhiteboardData, WhiteboardNode, WhiteboardEdge, WhiteboardNodeData, WhiteboardNodeType, WhiteboardShape, WhiteboardLineType, Task } from '@squadhub/shared';
+import { getTaskStatusCategory } from '@squadhub/shared';
 import { useWhiteboard, useWhiteboardAutosave } from '../../../hooks/useWhiteboard';
-import { useCreateTask, useUpdateTask } from '../../../hooks/useTasks';
+import { useCreateTask, useUpdateTask, useTasks } from '../../../hooks/useTasks';
+import { useWorkspaceSearch } from '../../../hooks/useWorkspaceSearch';
+import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { usePMStore } from '../../../stores/pmStore';
 
 type WBNode = Node<WhiteboardNodeData>;
@@ -114,8 +117,36 @@ function ShapePicker({ current, onPick }: { current?: string; onPick: (key: Whit
   );
 }
 
+// A task the picker can attach to an element. Carried from either the current
+// list (full Task) or a workspace-wide search hit (SearchTask). `subtitle` is
+// the source-location breadcrumb (space · folder · list), shown on the card for
+// tasks that live in another list.
+type MentionTask = { id: string; title: string; display_number: number | null; done: boolean; subtitle?: string | null };
+
+// Local node-kind union: the persisted WhiteboardNodeType plus the synthetic
+// 'task' card used for mentions (kept here so this compiles regardless of how
+// the shared package resolves during dev).
+type WBKind = WhiteboardNodeType | 'task';
+
+// A task counts as "done" when its status sits in the done/closed category.
+// Accepts a joined status object, a status-key string, or the literal
+// 'done'/'todo' the whiteboard checkbox itself writes.
+function statusIsDone(status: unknown): boolean {
+  if (status && typeof status === 'object') {
+    const cat = (status as { category?: string }).category;
+    return cat === 'done' || cat === 'closed';
+  }
+  if (typeof status === 'string' && status) {
+    if (status === 'done' || status === 'closed') return true;
+    const cat = getTaskStatusCategory(status);
+    return cat === 'done' || cat === 'closed';
+  }
+  return false;
+}
+
 interface WhiteboardCtx {
   canEdit: boolean;
+  listId: string;
   startConnectDrag: (sourceId: string, side: Position, e: React.PointerEvent) => void;
   editingId: string | null;
   startEditing: (id: string) => void;
@@ -123,7 +154,9 @@ interface WhiteboardCtx {
   updateNodeText: (id: string, text: string) => void;
   setNodeData: (id: string, patch: Partial<WhiteboardNodeData>) => void;
   convertToTask: (id: string) => void;
+  mentionTask: (id: string, task: MentionTask) => void;
   unlinkTask: (id: string) => void;
+  removeNode: (id: string) => void;
   openTask: (taskId: string) => void;
   toggleDone: (id: string) => void;
   duplicateNode: (nodeId: string, position: Position) => void;
@@ -292,16 +325,92 @@ function DuplicateArrows({ nodeId, side, onArrowEnter }: { nodeId: string; side:
   );
 }
 
+// Dropdown for "Mention a task". Empty query → tasks in the current list;
+// typing searches every list the caller can access (workspace-wide). Picking a
+// row links the selected element to that existing task as a *mention*.
+function TaskMentionPicker({ currentTaskId, onPick }: { currentTaskId?: string | null; onPick: (t: MentionTask) => void }) {
+  const { listId } = useWB();
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
+  const [q, setQ] = useState('');
+  const query = q.trim();
+  const searching = query.length > 0;
+
+  const { data: listTasks = [], isLoading: listLoading } = useTasks(listId);
+  const { tasks: searchTasks, isLoading: searchLoading } = useWorkspaceSearch(workspaceId, query);
+
+  const rows = useMemo(() => {
+    if (searching) {
+      return searchTasks
+        .filter((t) => t.id !== currentTaskId)
+        .map((t) => ({
+          task: { id: t.id, title: t.title, display_number: t.display_number ?? null, done: statusIsDone(t.status) } as MentionTask,
+          subtitle: [t.space_name, t.folder_name, t.list_name].filter(Boolean).join(' · ') || null,
+        }));
+    }
+    return (listTasks as Task[])
+      .filter((t) => t.id !== currentTaskId && !t.parent_task_id)
+      .map((t) => ({
+        task: { id: t.id, title: t.title, display_number: t.display_number ?? null, done: statusIsDone((t as { status?: unknown }).status) } as MentionTask,
+        subtitle: null as string | null,
+      }));
+  }, [searching, searchTasks, listTasks, currentTaskId]);
+
+  const loading = searching ? searchLoading : listLoading;
+
+  return (
+    <div className="wb-mention-pop nodrag nowheel">
+      <input
+        className="wb-mention-search"
+        placeholder="Search tasks in any list…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        autoFocus
+      />
+      <div className="wb-mention-list">
+        {!searching && <div className="wb-mention-head">Tasks in this list</div>}
+        {loading && rows.length === 0 && <div className="wb-mention-empty">Searching…</div>}
+        {!loading && rows.length === 0 && (
+          <div className="wb-mention-empty">{searching ? 'No matching tasks' : 'No tasks in this list yet'}</div>
+        )}
+        {rows.map(({ task, subtitle }) => (
+          <button key={task.id} type="button" className="wb-mention-row" onClick={() => onPick({ ...task, subtitle })}>
+            <span className="wb-mention-row-main">
+              <span className={`wb-mention-title ${task.done ? 'wb-mention-done' : ''}`}>{task.title || 'Untitled task'}</span>
+              {subtitle && <span className="wb-mention-sub">{subtitle}</span>}
+            </span>
+            {task.display_number != null && <span className="wb-mention-num">#{task.display_number}</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Floating edit bar shown above a selected element. Colour, text formatting,
-// and the convert-to-task action all live here.
-function EditBar({ id, data, type, visible }: { id: string; data: WhiteboardNodeData; type: WhiteboardNodeType; visible: boolean }) {
-  const { setNodeData, convertToTask, unlinkTask, openTask } = useWB();
+// and the convert-to-task / mention-a-task actions all live here.
+function EditBar({ id, data, type, visible }: { id: string; data: WhiteboardNodeData; type: WBKind; visible: boolean }) {
+  const { setNodeData, convertToTask, mentionTask, unlinkTask, removeNode, openTask } = useWB();
   const [colorOpen, setColorOpen] = useState(false);
   const [shapeOpen, setShapeOpen] = useState(false);
+  const [mentionOpen, setMentionOpen] = useState(false);
   const size = data.fontSize || 'md';
   const noFill = data.color === NO_FILL;
   const triggerColor = noFill ? 'transparent' : (data.color || (type === 'shape' ? 'var(--surface)' : STICKY_COLORS[0]));
-  useEffect(() => { if (!visible) { setColorOpen(false); setShapeOpen(false); } }, [visible]);
+  useEffect(() => { if (!visible) { setColorOpen(false); setShapeOpen(false); setMentionOpen(false); } }, [visible]);
+  // A mentioned-task card is a fixed reference, not a formatting target — its
+  // bar only opens the task or removes the card.
+  if (type === 'task') {
+    return (
+      <NodeToolbar isVisible={visible} position={Position.Top} offset={22} className="wb-ebar nodrag nowheel">
+        <button type="button" className="wb-ebar-btn wb-ebar-text wb-ebar-mention" title="Open task" onClick={() => data.taskId && openTask(data.taskId)}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7M17 7H8M17 7v9" /></svg>
+          Open task
+        </button>
+        <span className="wb-ebar-sep" />
+        <button type="button" className="wb-ebar-btn wb-ebar-text" title="Remove this task card" onClick={() => removeNode(id)}>Remove</button>
+      </NodeToolbar>
+    );
+  }
   return (
     <NodeToolbar isVisible={visible} position={Position.Top} offset={22} className="wb-ebar nodrag nowheel">
       {type !== 'text' && (
@@ -368,10 +477,25 @@ function EditBar({ id, data, type, visible }: { id: string; data: WhiteboardNode
           <button type="button" className="wb-ebar-btn wb-ebar-text" title="Unlink task" onClick={() => unlinkTask(id)}>Unlink</button>
         </>
       ) : (
-        <button type="button" className="wb-ebar-btn wb-ebar-text wb-ebar-convert" title="Convert this element to a task" onClick={() => convertToTask(id)}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-          Convert to task
-        </button>
+        <>
+          <button type="button" className="wb-ebar-btn wb-ebar-text wb-ebar-convert" title="Convert this element to a task" onClick={() => convertToTask(id)}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+            Convert to task
+          </button>
+          <div className="wb-color-wrap">
+            <button type="button" className="wb-ebar-btn wb-ebar-text wb-ebar-mention" title="Mention an existing task" onClick={() => setMentionOpen((o) => !o)}>
+              <span className="wb-ebar-at">@</span>
+              Mention a task
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+            </button>
+            {mentionOpen && (
+              <TaskMentionPicker
+                currentTaskId={data.taskId}
+                onPick={(t) => { mentionTask(id, t); setMentionOpen(false); }}
+              />
+            )}
+          </div>
+        </>
       )}
     </NodeToolbar>
   );
@@ -425,7 +549,53 @@ function ShapeNode({ id, data, selected }: NodeProps<WBNode>) {
   );
 }
 
-const nodeTypes = { sticky: StickyNode, text: TextNode, shape: ShapeNode };
+// Mentioned-task card — a dedicated, read-only reference to an existing task.
+// Deliberately distinct from the sticky/shape/text elements: a bordered card
+// with a violet accent rail, a "TASK" tag, a done checkbox, the task number
+// (opens the task), the title, and — for tasks from another list — a source
+// breadcrumb. Connectable to other elements via the side arrows.
+function TaskCardNode({ id, data, selected }: NodeProps<WBNode>) {
+  const { canEdit, openTask, toggleDone } = useWB();
+  const { side, onMouseMove, onMouseLeave, cancelHide } = useNearestSide();
+  const done = !!data.done;
+  const loc = typeof data.taskList === 'string' ? data.taskList : '';
+  return (
+    <div className={`wb-taskcard nodrag ${done ? 'wb-taskcard-done' : ''}`} onMouseMove={canEdit ? onMouseMove : undefined} onMouseLeave={onMouseLeave}>
+      <NodeHandles />
+      <EditBar id={id} data={data} type="task" visible={!!selected && canEdit} />
+      {!selected && <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />}
+      <div className="wb-taskcard-head">
+        <button
+          type="button"
+          className="wb-taskcard-check"
+          role="checkbox"
+          aria-checked={done}
+          disabled={!canEdit}
+          title={done ? 'Mark not done' : 'Mark done'}
+          onClick={(e) => { e.stopPropagation(); if (canEdit) toggleDone(id); }}
+        >
+          {done && (
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+          )}
+        </button>
+        <span className="wb-taskcard-tag">Task</span>
+        <button type="button" className="wb-taskcard-open" title="Open task" onClick={(e) => { e.stopPropagation(); if (data.taskId) openTask(data.taskId); }}>
+          {data.taskNumber != null ? `#${data.taskNumber}` : 'Open'}
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7M17 7H8M17 7v9" /></svg>
+        </button>
+      </div>
+      <div className="wb-taskcard-title">{data.text || 'Untitled task'}</div>
+      {loc && (
+        <div className="wb-taskcard-loc">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>
+          <span>{loc}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const nodeTypes = { sticky: StickyNode, text: TextNode, shape: ShapeNode, task: TaskCardNode };
 
 const ARROW = { type: MarkerType.ArrowClosed } as const;
 const edgeMarkers = (d?: { arrowStart?: boolean; arrowEnd?: boolean }) => ({
@@ -551,6 +721,8 @@ function serialize(nodes: WBNode[], edges: WBEdge[], viewport?: WhiteboardData['
       taskId: n.data.taskId ?? null,
       taskNumber: n.data.taskNumber ?? null,
       done: n.data.done,
+      taskMention: n.data.taskMention ?? false,
+      taskList: n.data.taskList ?? null,
     },
   }));
   const sEdges: WhiteboardEdge[] = edges.map((e) => ({
@@ -648,9 +820,11 @@ function Canvas({
   const updateNodeText = useCallback((id: string, text: string) => {
     const node = rf.getNode(id) as WBNode | undefined;
     setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, text } } : n)));
-    // If this element is linked to a task, keep the task's title in sync with
-    // the element's text (the element text IS the task name).
-    if (node?.data.taskId) {
+    // If this element is a CONVERTED task, keep the task's title in sync with
+    // the element's text (the element text IS the task name). A MENTION is just
+    // a reference — editing the element must never rename the linked task (it
+    // may live in another list), so skip the sync when data.taskMention is set.
+    if (node?.data.taskId && !node.data.taskMention) {
       updateTask.mutate({ id: node.data.taskId, title: text.trim() || 'Untitled task' });
     }
   }, [rf, setNodes, updateTask]);
@@ -668,7 +842,37 @@ function Canvas({
     );
   }, [rf, createTask, statuses, setNodeData]);
 
-  const unlinkTask = useCallback((id: string) => setNodeData(id, { taskId: null, taskNumber: null, done: false }), [setNodeData]);
+  // Mention (reference) an existing task from the element's edit bar. Unlike
+  // convertToTask, this creates NO task and does NOT alter the selected element:
+  // it drops a dedicated task CARD (its own node type) that references the task
+  // just ABOVE the selected element. The card is flagged taskMention so editing
+  // never renames the linked task (which may live in another list).
+  const mentionTask = useCallback((id: string, task: MentionTask) => {
+    const src = rf.getNode(id) as WBNode | undefined;
+    // Card width is fixed by CSS (~248px incl. border); height auto-fits. Centre
+    // it over the element and stack it just above the top edge.
+    const CARD_W = 248, CARD_H_EST = 112, GAP = 24;
+    const srcW = src?.width ?? src?.measured?.width ?? 180;
+    const pos = src
+      ? { x: src.position.x + srcW / 2 - CARD_W / 2, y: src.position.y - CARD_H_EST - GAP }
+      : { x: 0, y: 0 };
+    const newId = crypto.randomUUID();
+    const data: WhiteboardNodeData = {
+      text: task.title || 'Untitled task',
+      taskId: task.id,
+      taskNumber: task.display_number ?? null,
+      taskMention: true,
+      done: task.done,
+      taskList: task.subtitle ?? null,
+    };
+    setNodes((nds) => [
+      ...nds.map((n) => (n.selected ? { ...n, selected: false } : n)),
+      { id: newId, type: 'task', position: pos, data, selected: true },
+    ]);
+  }, [rf, setNodes]);
+
+  const unlinkTask = useCallback((id: string) => setNodeData(id, { taskId: null, taskNumber: null, done: false, taskMention: false }), [setNodeData]);
+  const removeNode = useCallback((id: string) => setNodes((nds) => nds.filter((n) => n.id !== id)), [setNodes]);
   const openTask = useCallback((taskId: string) => usePMStore.getState().setActiveTask(taskId), []);
 
   // Checkbox on a task element marks the linked task complete / not-done. The
@@ -696,7 +900,9 @@ function Canvas({
     lastDup.current = now;
     const src = rf.getNode(nodeId) as WBNode | undefined;
     if (!src) return;
-    const type = (src.type as WhiteboardNodeType) || 'sticky';
+    // A task card is a reference, not a reusable shape — duplicating one yields a
+    // fresh blank sticky rather than an empty (broken) task card.
+    const type: WhiteboardNodeType = src.type === 'task' ? 'sticky' : ((src.type as WhiteboardNodeType) || 'sticky');
     const w = src.width ?? src.measured?.width ?? DEFAULT_SIZE[type]?.width ?? 180;
     const h = src.height ?? src.measured?.height ?? DEFAULT_SIZE[type]?.height ?? 120;
     const GAP = 64;
@@ -904,8 +1110,8 @@ function Canvas({
   }, [canEdit, undo, redo]);
 
   const ctx = useMemo<WhiteboardCtx>(
-    () => ({ canEdit, startConnectDrag, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, unlinkTask, openTask, toggleDone, duplicateNode, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, setEdgeLabel, setEdgeWaypoint }),
-    [canEdit, startConnectDrag, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, unlinkTask, openTask, toggleDone, duplicateNode, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, setEdgeLabel, setEdgeWaypoint],
+    () => ({ canEdit, listId, startConnectDrag, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, mentionTask, unlinkTask, removeNode, openTask, toggleDone, duplicateNode, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, setEdgeLabel, setEdgeWaypoint }),
+    [canEdit, listId, startConnectDrag, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, mentionTask, unlinkTask, removeNode, openTask, toggleDone, duplicateNode, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, setEdgeLabel, setEdgeWaypoint],
   );
 
   // Place new nodes at the centre of the current viewport.
