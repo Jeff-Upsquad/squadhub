@@ -40,18 +40,18 @@ export default function TodayTimeSummary({
   const breakOverLimit = breakLimitSeconds !== null && breakSeconds > breakLimitSeconds;
 
   return (
-    <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+    <div className="rounded-xl border border-divider bg-surface-alt p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-[#90A1B9]">Today's Time</h4>
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Today's Time</h4>
         {overBySeconds > 0 && (
-          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-600">
+          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:bg-red-500/20 dark:text-red-300">
             +{formatDuration(overBySeconds)} over
           </span>
         )}
       </div>
 
       {(hasOffice || tracked > 0) && (
-        <div className="relative mb-3 h-2.5 overflow-hidden rounded-full bg-[#E2E8F0]">
+        <div className="relative mb-3 h-2.5 overflow-hidden rounded-full bg-divider">
           <div className="flex h-full" style={{ width: `${cappedTrackedPct}%` }}>
             {workPct > 0 && <div className="bg-blue-500" style={{ width: `${(workPct / trackedPct) * 100}%` }} />}
             {breakPct > 0 && <div className="bg-amber-400" style={{ width: `${(breakPct / trackedPct) * 100}%` }} />}
@@ -70,27 +70,27 @@ export default function TodayTimeSummary({
       <div className="grid grid-cols-3 gap-3 text-center">
         <div>
           <p className="text-lg font-bold text-blue-600">{formatDuration(workSeconds)}</p>
-          <p className="text-[10px] uppercase tracking-wider text-[#90A1B9]">Work</p>
+          <p className="text-[10px] uppercase tracking-wider text-foreground-dim">Work</p>
         </div>
         <div>
           <p className="text-lg font-bold text-amber-500">{formatDuration(breakSeconds)}</p>
-          <p className="text-[10px] uppercase tracking-wider text-[#90A1B9]">Break</p>
+          <p className="text-[10px] uppercase tracking-wider text-foreground-dim">Break</p>
         </div>
         <div>
           <p className="text-lg font-bold text-gray-500">{formatDuration(noWorkSeconds)}</p>
-          <p className="text-[10px] uppercase tracking-wider text-[#90A1B9]">No Work</p>
+          <p className="text-[10px] uppercase tracking-wider text-foreground-dim">No Work</p>
         </div>
       </div>
 
       {hasOffice && (
         <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
           {unaccountedSeconds > 0 && (
-            <span className="rounded-full bg-[#E2E8F0] px-2 py-0.5 text-[10px] font-medium text-[#62748E]">
+            <span className="rounded-full bg-divider px-2 py-0.5 text-[10px] font-medium text-foreground-muted">
               Unaccounted: {formatDuration(unaccountedSeconds)}
             </span>
           )}
           {breakOverLimit && (
-            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-600">
+            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:bg-red-500/20 dark:text-red-300">
               Break over limit
             </span>
           )}
@@ -98,7 +98,7 @@ export default function TodayTimeSummary({
       )}
 
       {!hasOffice && tracked === 0 && (
-        <p className="mt-1 text-center text-xs text-[#90A1B9]">Start a timer to begin tracking</p>
+        <p className="mt-1 text-center text-xs text-foreground-dim">Start a timer to begin tracking</p>
       )}
     </div>
   );

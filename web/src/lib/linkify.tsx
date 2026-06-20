@@ -1,12 +1,7 @@
 import React from 'react';
+import { URL_PATTERN, splitTrailingPunct, toHref } from './urlPattern';
 
-const URL_RE = /(\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+)/gi;
-
-function trimTrailingPunct(url: string): { url: string; tail: string } {
-  const m = url.match(/[.,!?;:)\]}'"]+$/);
-  if (!m) return { url, tail: '' };
-  return { url: url.slice(0, url.length - m[0].length), tail: m[0] };
-}
+const URL_RE = new RegExp(URL_PATTERN, 'gi');
 
 export function linkifyText(text: string): React.ReactNode {
   if (!text) return text;
@@ -16,8 +11,8 @@ export function linkifyText(text: string): React.ReactNode {
   for (const m of text.matchAll(URL_RE)) {
     const start = m.index!;
     if (start > last) out.push(text.slice(last, start));
-    const { url, tail } = trimTrailingPunct(m[0]);
-    const href = url.startsWith('www.') ? `https://${url}` : url;
+    const { url, tail } = splitTrailingPunct(m[0]);
+    const href = toHref(url);
     out.push(
       <a
         key={i++}

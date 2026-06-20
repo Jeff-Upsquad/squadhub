@@ -25,6 +25,8 @@ import SearchPalette from '../views/app/SearchPalette';
 import SettingsSlider from '../components/SettingsSlider';
 import CheckInWidget from '../views/app/checkin/CheckInWidget';
 import CheckInsPage from '../views/app/check-ins/CheckInsPage';
+import NotesShell from '../views/app/notes/NotesShell';
+import { useHasMiniApp } from '../hooks/useMiniApps';
 import TimeManagementPage from '../views/app/time-management/TimeManagementPage';
 import SalesLeadsPage from '../views/app/sales/SalesLeadsPage';
 import ThemeToggle from '../components/ThemeToggle';
@@ -215,6 +217,13 @@ function RailBtn({
   );
 }
 
+// Origin of the embedded Squad Clips mini-app — used to validate its postMessage
+// PiP notifications (see the clips keep-alive below). Mirrors ClipsView.tsx.
+const CLIPS_ORIGIN = new URL(
+  process.env.NEXT_PUBLIC_CLIPS_URL ||
+    (process.env.NODE_ENV === 'production' ? 'https://clips.squadhub.in' : 'http://localhost:3200'),
+).origin;
+
 export default function MainLayout() {
   const { currentWorkspace, activeChannelId, activeChannelKind, dmConversations, setWorkspace, setChannels, setActiveChannel } = useWorkspaceStore();
   const user = useAuthStore((s) => s.user);
@@ -230,6 +239,9 @@ export default function MainLayout() {
   const newTaskFabVisible = usePMStore((s) => s.newTaskFabVisible);
   const userType = useUserType();
   const isPartner = useIsPartner();
+  // SquadNotes is a gated mini app — the Documents rail icon only shows for
+  // granted users (admins are granted via Access Control, like Check-Ins).
+  const hasNotes = useHasMiniApp('squad-notes');
   // Restore the last view from the persisted PM store (MainLayout only mounts
   // after pmStore hydration — see useHasHydrated — so getState() is the saved
   // value, not the default). This keeps a full-page refresh on the view the
@@ -262,6 +274,11 @@ export default function MainLayout() {
   const [inboxSliderOpen, setInboxSliderOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  // Squad Clips keep-alive: once the mini-app has been opened, keep it mounted
+  // while a clip is in Picture-in-Picture so a popped-out clip keeps playing as
+  // the user navigates around Squad Hub (the iframe would otherwise unmount).
+  const [clipsPipActive, setClipsPipActive] = useState(false);
+  const [clipsEverOpened, setClipsEverOpened] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -276,6 +293,28 @@ export default function MainLayout() {
   }, [profileOpen]);
 
   useEffect(() => { loadViewPreferences(); }, []);
+
+  // Mark the clips mini-app as "opened" the first time it's the active view, so
+  // we can keep it mounted afterward without eagerly loading it on app start.
+  useEffect(() => {
+    if (homeView === 'clips') setClipsEverOpened(true);
+  }, [homeView]);
+
+  // Listen for the clips iframe's PiP state. While a clip is popped out we keep
+  // ClipsView mounted even when the user navigates elsewhere in Squad Hub.
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== CLIPS_ORIGIN) return;
+      if (e.data?.type === 'squadclips:pip') setClipsPipActive(!!e.data.active);
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  // True when clips is the view currently displayed (matches the inline render
+  // conditions replaced by the persistent keep-alive instance below).
+  const clipsActive =
+    homeView === 'clips' && (activeSection === 'apps' || activeSection === 'home');
 
   // Lock body scroll while the mobile drawer is open so the underlying
   // page doesn't move behind the overlay.
@@ -612,8 +651,11 @@ export default function MainLayout() {
   //     Sales Leads) — each renders its own header/actions; the global "+" was
   //     overlapping e.g. Squad Clips' "New recording ▾" dropdown chevron.
   const EMBEDDED_APP_VIEWS: HomeView[] = ['clips', 'checkin', 'checkin-partners', 'check-ins', 'time-management', 'sales-leads'];
+  // Day Planner gets the create button as a bottom-right floating FAB instead of
+  // the top-right "+", which otherwise collides with the calendar's header.
+  const onDayPlanner = activeSection === 'home' && homeView === 'day-planner';
   const hideGlobalCreateBtn =
-    newTaskFabVisible || activeSection === 'apps' || EMBEDDED_APP_VIEWS.includes(homeView);
+    newTaskFabVisible || activeSection === 'apps' || EMBEDDED_APP_VIEWS.includes(homeView) || onDayPlanner;
 
   return (
     <div className="flex h-[100dvh] bg-[var(--sidebar)] text-foreground">
@@ -714,7 +756,9 @@ export default function MainLayout() {
             active={activeSection === 'home' && homeView === 'my-tasks'}
             onClick={() => { setActiveSection('home'); setHomeView('my-tasks'); }}
           />
-          <RailBtn icon={ICON.docs} label="Docs" anchorKey="rail.docs" active={activeSection === 'docs'} onClick={() => setActiveSection('docs')} />
+          {hasNotes && (
+            <RailBtn icon={ICON.docs} label="Docs" anchorKey="rail.docs" active={activeSection === 'docs'} onClick={() => setActiveSection('docs')} />
+          )}
           <RailBtn icon={ICON.cal}  label="Cal"  anchorKey="rail.cal"  active={activeSection === 'cal'}  onClick={() => setActiveSection('cal')} />
           <RailBtn icon={ICON.apps} label="Apps" anchorKey="rail.apps" active={activeSection === 'apps'} onClick={() => setActiveSection('apps')} />
           <RailBtn icon={ICON.learning} label="Learning" anchorKey="rail.learning" active={activeSection === 'learning'} onClick={() => setActiveSection('learning')} />
@@ -798,7 +842,7 @@ export default function MainLayout() {
       </div>
 
       {/* Module sidebar — always visible, flat edges, drop shadow to the right */}
-      {currentWorkspace && activeSection !== 'learning' && (
+      {currentWorkspace && activeSection !== 'learning' && activeSection !== 'docs' && (
         <div
           className={`flex h-full shrink-0 flex-col overflow-hidden bg-[var(--sidebar)] border-r border-[var(--sh-hair)] relative z-[2] transition-[width] duration-200 ease-in-out ${
             sidebarOpen ? 'w-[280px]' : 'w-0'
@@ -860,10 +904,28 @@ export default function MainLayout() {
             </svg>
           </button>
         )}
+        {/* Day Planner: the create button lives as a bottom-right floating FAB
+            (same style as the list view's) instead of the top-right "+". */}
+        {onDayPlanner && (
+          <button
+            type="button"
+            onClick={() => setShowCreateTaskModal(true)}
+            className="lv-newtask-fab"
+            aria-label="New task"
+            title="New task"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            New task
+          </button>
+        )}
         <EmergencyBanner />
         <ActiveTimer />
         {activeSection === 'learning' ? (
           <LearningShell />
+        ) : activeSection === 'docs' ? (
+          <NotesShell />
         ) : activeSection === 'apps' ? (
           // Apps module — render the app opened from the Apps sidebar, or an
           // empty state prompting a selection. App views reuse the same
@@ -879,7 +941,8 @@ export default function MainLayout() {
           ) : homeView === 'sales-leads' ? (
             <SalesLeadsPage />
           ) : homeView === 'clips' ? (
-            <ClipsView />
+            // Rendered by the persistent keep-alive instance below.
+            null
           ) : homeView === 'cashbook' && isPartner ? (
             <PartnerCashBook />
           ) : homeView === 'cashbook' && (userType === 'client' || userType === 'client_staff') ? (
@@ -1052,7 +1115,8 @@ export default function MainLayout() {
           ) : homeView === 'sales-leads' ? (
             <SalesLeadsPage />
           ) : homeView === 'clips' ? (
-            <ClipsView />
+            // Rendered by the persistent keep-alive instance below.
+            null
           ) : homeView === 'hub' && (userType === 'client' || userType === 'client_staff') ? (
             <ClientDashboard />
           ) : homeView === 'cashbook' && isPartner ? (
@@ -1066,6 +1130,23 @@ export default function MainLayout() {
           ) : (
             <Home onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} />
           )
+        )}
+        {/* Persistent Squad Clips instance. Shown in-flow when clips is the
+            active view; parked off-screen (still mounted) while a clip is in a
+            PiP window, so a popped-out clip keeps playing as the user moves
+            around Squad Hub. Unmounts only once PiP closes and you've left. */}
+        {clipsEverOpened && (clipsActive || clipsPipActive) && (
+          <div
+            className={clipsActive ? 'flex flex-1 flex-col min-h-0' : ''}
+            style={
+              clipsActive
+                ? undefined
+                : { position: 'absolute', width: 1, height: 1, left: -99999, top: 0, overflow: 'hidden', pointerEvents: 'none' }
+            }
+            aria-hidden={!clipsActive}
+          >
+            <ClipsView />
+          </div>
         )}
       </div>
 

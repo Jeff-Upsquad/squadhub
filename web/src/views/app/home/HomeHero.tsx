@@ -1,14 +1,14 @@
 import { useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { useAuthStore } from '../../../stores/authStore';
 import { getDailyQuote } from '../../../lib/dailyQuote';
 
 /**
  * Shared hero for every role home: date eyebrow, display greeting with a
- * muted full-stop, daily quote. Role flavour comes in via props —
- * `greetingPrefix` overrides the time-of-day greeting, `roleLabel` keeps
- * the small which-home-am-I tag aligned right on the eyebrow line.
+ * muted full-stop, daily quote. `greetingPrefix` overrides the time-of-day
+ * greeting; `aside` slots a widget (e.g. the work timer) into the top-right.
  */
-export default function HomeHero({ roleLabel, greetingPrefix }: { roleLabel: string; greetingPrefix?: string }) {
+export default function HomeHero({ greetingPrefix, aside }: { greetingPrefix?: string; aside?: ReactNode }) {
   const user = useAuthStore((s) => s.user);
 
   const { eyebrow, firstName } = useMemo(() => {
@@ -37,14 +37,18 @@ export default function HomeHero({ roleLabel, greetingPrefix }: { roleLabel: str
 
   return (
     <div className="hm-hero">
-      <div className="hm-eyebrow-row">
-        <span className="hm-eyebrow">{eyebrow}</span>
-        <span className="hm-role">{roleLabel}</span>
+      <div className="hm-hero-row">
+        <div className="hm-hero-lede">
+          <div className="hm-eyebrow-row">
+            <span className="hm-eyebrow">{eyebrow}</span>
+          </div>
+          <h1 className="hm-greet">
+            {greeting}, {firstName}<span className="dot">.</span>
+          </h1>
+          <p className="hm-sub">{quote}</p>
+        </div>
+        {aside ? <div className="hm-hero-aside">{aside}</div> : null}
       </div>
-      <h1 className="hm-greet">
-        {greeting}, {firstName}<span className="dot">.</span>
-      </h1>
-      <p className="hm-sub">{quote}</p>
     </div>
   );
 }

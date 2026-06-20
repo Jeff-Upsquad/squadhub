@@ -5,6 +5,7 @@ import api from '../../../services/api';
 import { useAuthStore } from '../../../stores/authStore';
 import EmojiPicker from './EmojiPicker';
 import LinkUnfurlCard from './LinkUnfurlCard';
+import { URL_PATTERN, URL_TEST, splitTrailingPunct, toHref } from '../../../lib/urlPattern';
 
 // ---- Markdown rendering ----
 // Supports the formatting available in the composer toolbar:
@@ -12,7 +13,16 @@ import LinkUnfurlCard from './LinkUnfurlCard';
 //   ```code fence```, > blockquote, - bullet list, 1. numbered list,
 //   plus @mentions and bare URLs.
 const SELF_MENTIONS = new Set(['@channel', '@here', '@everyone']);
-const INLINE_RE = /(\*\*[^*\n]+\*\*|_[^_\n]+_|~~[^~\n]+~~|`[^`\n]+`|\[[^\]\n]+\]\([^)\s]+\)|@\w+|https?:\/\/[^\s]+)/g;
+
+// Inline markdown + @mentions + URLs. URL matching is shared with the rest of
+// the app via URL_PATTERN (which contributes no capture groups, so the outer
+// group below stays the single capture that String.split relies on).
+const INLINE_RE = new RegExp(
+  String.raw`(\*\*[^*\n]+\*\*|_[^_\n]+_|~~[^~\n]+~~|` +
+    '`[^`\\n]+`' +
+    String.raw`|\[[^\]\n]+\]\([^)\s]+\)|@\w+|${URL_PATTERN})`,
+  'gi',
+);
 
 function renderInline(text: string, keyPrefix: string) {
   const parts = text.split(INLINE_RE);
@@ -47,11 +57,15 @@ function renderInline(text: string, keyPrefix: string) {
         </span>
       );
     }
-    if (/^https?:\/\//.test(part)) {
+    if (URL_TEST.test(part)) {
+      const { url, tail } = splitTrailingPunct(part);
       return (
-        <a key={key} href={part} target="_blank" rel="noopener noreferrer" className="sqc-link">
-          {part}
-        </a>
+        <Fragment key={key}>
+          <a href={toHref(url)} target="_blank" rel="noopener noreferrer" className="sqc-link">
+            {url}
+          </a>
+          {tail}
+        </Fragment>
       );
     }
     return <span key={key}>{part}</span>;
