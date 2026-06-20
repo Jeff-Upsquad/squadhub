@@ -726,6 +726,9 @@ export interface ServerToClientEvents {
   user_offline: (data: { user_id: string }) => void;
   online_users: (data: { user_ids: string[] }) => void;
   new_notification: (notification: Notification) => void;
+  // Content-free nudge: an admin triggered/edited a Feature Tip — clients
+  // re-fetch GET /feature-tips/pending. No payload (no per-user fan-out).
+  feature_tips_changed: () => void;
 }
 
 export interface ClientToServerEvents {
@@ -2376,3 +2379,108 @@ export function describeTaskRecurrence(rule: TaskRecurrence | null | undefined):
   }
   return 'Repeats';
 }
+
+// ============================================================
+// ---- Feature Tips (admin-triggered tooltips / coachmarks) ----
+// An admin authors a "tip" announcing a new feature, optionally anchored to a
+// UI element on a target screen. Tips are pushed to users (new + existing);
+// each user must actively accept ("OK/Got it") or can Dismiss (snooze 3h →
+// re-appears until accepted). All acknowledgement state is server-side — never
+// localStorage. Re-triggering reissues a tip (a new revision) to everyone or
+// just the un-accepted, preserving per-round acceptance history.
+// ============================================================
+
+export type FeatureTipStatus = 'accepted' | 'dismissed';
+export type TriggerScope = 'everyone' | 'unaccepted';
+
+/** Audience filter for a tip. `{}` (empty) ⇒ ALL active users. Otherwise a user
+ *  is in the audience if they match ANY specified key (filters are OR-unioned). */
+export interface FeatureTipAudience {
+  user_types?: UserType[];
+  workspace_roles?: ('super_admin' | 'admin' | 'member' | 'guest')[];
+  role_ids?: string[];
+  department_ids?: string[];
+  user_ids?: string[];
+}
+
+export interface FeatureTip {
+  id: string;
+  title: string;
+  body: string;
+  /** Target screen key (a web HomeView). Null ⇒ centered "What's New" card. */
+  target_view: string | null;
+  /** `data-tip-anchor` key of the element to spotlight. Null ⇒ centered card. */
+  target_anchor: string | null;
+  audience: FeatureTipAudience;
+  is_active: boolean;
+  current_revision: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  last_triggered_at: string | null;
+}
+
+/** Slim payload returned to clients by GET /feature-tips/pending. */
+export interface PendingFeatureTip {
+  id: string;
+  title: string;
+  body: string;
+  target_view: string | null;
+  target_anchor: string | null;
+  revision: number;
+}
+
+export interface FeatureTipRosterRow {
+  user: Pick<User, 'id' | 'display_name' | 'email' | 'avatar_url'>;
+  /** 'snoozed' = dismissed and still within the 3h window; 'pending' = in the
+   *  audience but no current-revision ack (or snooze elapsed). */
+  status: 'accepted' | 'snoozed' | 'pending';
+  accepted_at: string | null;
+  dismissed_until: string | null;
+}
+
+export interface FeatureTipRoster {
+  revision: number;
+  counts: { accepted: number; snoozed: number; pending: number; total: number };
+  rows: FeatureTipRosterRow[];
+}
+
+/** Canonical catalog of screens a tip can navigate to ("Show me" guided nav).
+ *  `value` matches a web `HomeView` that renders a real view in the home rail
+ *  section. Shared so web (overlay), admin (editor dropdown) and server stay in
+ *  sync. External link-outs (e.g. SquadBooks) are intentionally excluded. */
+export const NAVIGABLE_TIP_VIEWS: { value: string; label: string }[] = [
+  { value: 'hub', label: 'Home' },
+  { value: 'chat', label: 'Chat' },
+  { value: 'tasks', label: 'Tasks' },
+  { value: 'my-tasks', label: 'My Tasks' },
+  { value: 'inbox', label: 'Inbox' },
+  { value: 'day-planner', label: 'Day Planner' },
+  { value: 'routines', label: 'Routines' },
+  { value: 'checkin', label: 'Daily Check-In' },
+  { value: 'check-ins', label: 'Check-Ins' },
+  { value: 'time-management', label: 'Time Management' },
+  { value: 'sales-leads', label: 'Sales Leads' },
+  { value: 'clips', label: 'Squad Clips' },
+  // NOTE: 'cashbook' is intentionally excluded — it only renders for partner /
+  // client users (internal users fall through to Home), so guided nav there
+  // would silently mis-navigate. Tip authors target Cash Book via an anchor on a
+  // partner/client audience instead.
+];
+
+/** Starter catalog of stable `data-tip-anchor` keys. Convention: "<area>.<element>",
+ *  kebab-case. The web app tags these elements; the admin editor offers them for
+ *  autocomplete (admins may also type a not-yet-shipped key — it degrades to a
+ *  centered card until the element exists). Grow this list as features ship. */
+export const TIP_ANCHOR_KEYS: readonly string[] = [
+  'rail.home',
+  'rail.inbox',
+  'rail.tasks',
+  'rail.docs',
+  'rail.cal',
+  'rail.apps',
+  'rail.learning',
+  'rail.more',
+  'rail.timesheet',
+  'action.new-task',
+] as const;
