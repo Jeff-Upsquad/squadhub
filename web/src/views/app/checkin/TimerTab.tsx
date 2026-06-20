@@ -13,6 +13,16 @@ function formatOfficeHours(totalSeconds: number): string {
   return `${m}m`;
 }
 
+// Converts a "HH:MM" 24-hour time string to a 12-hour "h:MM AM/PM" string.
+function formatTime12h(time: string): string {
+  const [hStr, mStr = '00'] = time.split(':');
+  const hour24 = parseInt(hStr, 10);
+  if (Number.isNaN(hour24)) return time;
+  const ampm = hour24 >= 12 ? 'PM' : 'AM';
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${mStr} ${ampm}`;
+}
+
 const TIMER_CONFIG: { type: TimerType; label: string; icon: string; color: string; activeColor: string; activeBg: string }[] = [
   {
     type: 'work',
@@ -85,14 +95,14 @@ export default function TimerTab({ context = 'default' }: { context?: string }) 
             <div className="text-sm font-medium text-foreground">{officeTiming.label}</div>
           </div>
           <div className="mt-0.5 text-xs text-foreground-muted">
-            {officeTiming.from_time} – {officeTiming.to_time}
+            {formatTime12h(officeTiming.from_time)} – {formatTime12h(officeTiming.to_time)}
             {officeHoursLabel && <> · <span className="text-foreground">{officeHoursLabel}</span></>}
           </div>
         </div>
       )}
 
       {/* Timer buttons */}
-      <div className="space-y-2">
+      <div className="flex items-stretch gap-2">
         {TIMER_CONFIG.map((cfg) => {
           const isActive = activeType === cfg.type;
           return (
@@ -100,26 +110,24 @@ export default function TimerTab({ context = 'default' }: { context?: string }) 
               key={cfg.type}
               onClick={() => handleTimerClick(cfg.type)}
               disabled={isPending}
-              className={`flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3 transition disabled:opacity-50 ${
+              className={`relative flex flex-1 flex-col items-center justify-center gap-1.5 rounded-xl border-2 px-2 py-3 text-center transition disabled:opacity-50 ${
                 isActive ? `${cfg.activeBg} ${cfg.activeColor}` : cfg.color
               }`}
             >
-              <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={cfg.icon} />
-              </svg>
-              <div className="flex flex-1 items-center justify-between">
-                <span className="text-sm font-medium">
-                  {isActive ? `Stop ${cfg.label}` : `Start ${cfg.label}`}
-                </span>
-                {isActive && activeSession && (
-                  <TimerDisplay startTime={activeSession.start_time} className="text-sm" />
-                )}
-              </div>
               {isActive && (
-                <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute right-2 top-2 flex h-2.5 w-2.5">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
                   <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
                 </span>
+              )}
+              <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={cfg.icon} />
+              </svg>
+              <span className="text-xs font-medium leading-tight">
+                {isActive ? `Stop ${cfg.label}` : `Start ${cfg.label}`}
+              </span>
+              {isActive && activeSession && (
+                <TimerDisplay startTime={activeSession.start_time} className="text-xs" />
               )}
             </button>
           );
