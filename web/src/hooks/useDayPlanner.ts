@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQuery, useQueries, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import type { Task, TaskDayPlan } from '@squadhub/shared';
 
@@ -99,6 +99,32 @@ export function useDayPlans(date: string) {
     enabled: !!date,
     staleTime: 30_000,
   });
+}
+
+// Multi-day fetch for the Calendar's week / 4-day / 5-day grids. `useQueries`
+// lets the number of days vary across renders (mode switches) without breaking
+// the rules of hooks. Each query shares the SAME ['day-plans', date] key as
+// useDayPlans, so the scheduling mutations' cache patches + invalidations apply
+// here for free. Returns a date→plans map.
+export function useDayPlansRange(dates: string[]): Record<string, TaskDayPlan[]> {
+  const tz = tzNow();
+  const results = useQueries({
+    queries: dates.map((date) => ({
+      queryKey: ['day-plans', date] as const,
+      queryFn: async () => {
+        const params = new URLSearchParams({ date, tz });
+        const res = await api.get(`/pm/day-plans?${params.toString()}`);
+        return (res.data?.data ?? []) as TaskDayPlan[];
+      },
+      enabled: !!date,
+      staleTime: 30_000,
+    })),
+  });
+  const out: Record<string, TaskDayPlan[]> = {};
+  dates.forEach((d, i) => {
+    out[d] = (results[i]?.data as TaskDayPlan[] | undefined) ?? [];
+  });
+  return out;
 }
 
 // ---------- mutations ----------
@@ -409,6 +435,79 @@ export function useUpdateDayPlan() {
     },
     onSettled: (_data, _err, vars) => {
       qc.invalidateQueries({ queryKey: ['day-plans', vars.plan_date] });
+    },
+  });
+}
+
+// Move a calendar block to a new (day, time) — the headline interaction of the
+// multi-day grid. Same day → single upsert (POST). Across days → delete the old
+// row then upsert on the new date (the unique key is task_id+user_id+plan_date,
+// so a plain upsert would leave a duplicate behind on the old day). Optimistic
+// on BOTH ['day-plans', date] caches so the block slides under the cursor with
+// no round-trip, carrying its hydrated task embed across columns.
+export function useMoveDayPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: {
+      task_id: string;
+      from_date: string;
+      to_date: string;
+      start_minute: number;
+      duration_minutes: number;
+    }) => {
+      if (vars.from_date !== vars.to_date) {
+        const params = new URLSearchParams({ task_id: vars.task_id, plan_date: vars.from_date });
+        await api.delete(`/pm/day-plans?${params.toString()}`);
+      }
+      const res = await api.post('/pm/day-plans', {
+        task_id: vars.task_id,
+        plan_date: vars.to_date,
+        start_minute: vars.start_minute,
+        duration_minutes: vars.duration_minutes,
+      });
+      return res.data?.data as TaskDayPlan;
+    },
+    onMutate: async (vars) => {
+      const fromKey = ['day-plans', vars.from_date] as const;
+      const toKey = ['day-plans', vars.to_date] as const;
+      const cross = vars.from_date !== vars.to_date;
+      await qc.cancelQueries({ queryKey: fromKey });
+      if (cross) await qc.cancelQueries({ queryKey: toKey });
+      const prevFrom = qc.getQueryData<TaskDayPlan[]>(fromKey);
+      const prevTo = qc.getQueryData<TaskDayPlan[]>(toKey);
+      const moving = (prevFrom || []).find((p) => p.task_id === vars.task_id);
+
+      if (!cross) {
+        qc.setQueryData<TaskDayPlan[]>(fromKey, (old) =>
+          (old || []).map((p) =>
+            p.task_id === vars.task_id
+              ? { ...p, start_minute: vars.start_minute, duration_minutes: vars.duration_minutes }
+              : p,
+          ),
+        );
+      } else {
+        qc.setQueryData<TaskDayPlan[]>(fromKey, (old) => (old || []).filter((p) => p.task_id !== vars.task_id));
+        qc.setQueryData<TaskDayPlan[]>(toKey, (old) => {
+          const base = (old || []).filter((p) => p.task_id !== vars.task_id);
+          if (!moving) return base;
+          return [
+            ...base,
+            { ...moving, plan_date: vars.to_date, start_minute: vars.start_minute, duration_minutes: vars.duration_minutes },
+          ];
+        });
+      }
+      return { fromKey, toKey, prevFrom, prevTo, cross };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (!ctx) return;
+      qc.setQueryData(ctx.fromKey, ctx.prevFrom);
+      if (ctx.cross) qc.setQueryData(ctx.toKey, ctx.prevTo);
+    },
+    onSettled: (_data, _err, vars) => {
+      qc.invalidateQueries({ queryKey: ['day-plans', vars.from_date] });
+      if (vars.to_date !== vars.from_date) qc.invalidateQueries({ queryKey: ['day-plans', vars.to_date] });
+      qc.invalidateQueries({ queryKey: ['day-planner'] });
+      qc.invalidateQueries({ queryKey: ['my-tasks'] });
     },
   });
 }

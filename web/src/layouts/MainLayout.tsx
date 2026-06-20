@@ -47,6 +47,7 @@ import InboxView from '../views/app/InboxView';
 import InboxSlider from '../components/InboxSlider';
 import MyTasksView from '../views/app/MyTasksView';
 import DayPlannerView from '../views/app/DayPlannerView';
+import CalendarView from '../views/app/calendar/CalendarView';
 import RoutinesView from '../views/app/RoutinesView';
 import LearningShell from '../views/app/learning/LearningShell';
 import ClipsView from '../views/app/clips/ClipsView';
@@ -665,8 +666,12 @@ export default function MainLayout() {
   // Day Planner gets the create button as a bottom-right floating FAB instead of
   // the top-right "+", which otherwise collides with the calendar's header.
   const onDayPlanner = activeSection === 'home' && homeView === 'day-planner';
+  // Calendar owns its own header nav (prev/next + view switch) on the top-right,
+  // so suppress the global "+" the same way Day Planner does. It's the dedicated
+  // 'cal' rail section (full-width, no module sidebar).
+  const onCalendar = activeSection === 'cal';
   const hideGlobalCreateBtn =
-    newTaskFabVisible || activeSection === 'apps' || EMBEDDED_APP_VIEWS.includes(homeView) || onDayPlanner;
+    newTaskFabVisible || activeSection === 'apps' || EMBEDDED_APP_VIEWS.includes(homeView) || onDayPlanner || onCalendar;
 
   return (
     <div className="flex h-[100dvh] bg-[var(--sidebar)] text-foreground">
@@ -853,7 +858,7 @@ export default function MainLayout() {
       </div>
 
       {/* Module sidebar — always visible, flat edges, drop shadow to the right */}
-      {currentWorkspace && activeSection !== 'learning' && activeSection !== 'docs' && (
+      {currentWorkspace && activeSection !== 'learning' && activeSection !== 'docs' && activeSection !== 'cal' && (
         <div
           className={`flex h-full shrink-0 flex-col overflow-hidden bg-[var(--sidebar)] border-r border-[var(--sh-hair)] relative z-[2] transition-[width] duration-200 ease-in-out ${
             sidebarOpen ? 'w-[280px]' : 'w-0'
@@ -937,6 +942,8 @@ export default function MainLayout() {
           <LearningShell />
         ) : activeSection === 'docs' ? (
           <NotesShell />
+        ) : activeSection === 'cal' ? (
+          <CalendarView />
         ) : activeSection === 'apps' ? (
           // Apps module — render the app opened from the Apps sidebar, or an
           // empty state prompting a selection. App views reuse the same
