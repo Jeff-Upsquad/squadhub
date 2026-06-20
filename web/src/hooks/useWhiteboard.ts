@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef } from 'react';
 import api from '../services/api';
 import type { WhiteboardData } from '@squadhub/shared';
@@ -25,6 +25,7 @@ export function useWhiteboard(listId: string | null) {
 // on every canvas change (it coalesces), and `flush()` to persist immediately
 // (also runs automatically on unmount so the last edit is never lost).
 export function useWhiteboardAutosave(listId: string | null) {
+  const qc = useQueryClient();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = useRef<WhiteboardData | null>(null);
 
@@ -33,9 +34,18 @@ export function useWhiteboardAutosave(listId: string | null) {
     const data = pending.current;
     if (data && listId) {
       pending.current = null;
-      api.put(`/pm/lists/${listId}/whiteboard`, { data }).catch(() => {});
+      // Keep the query cache in step with what we're persisting. The whiteboard
+      // view unmounts when you switch List/Board/Whiteboard tabs (or open another
+      // list) and remounts seeded from this cache. Because the query is
+      // staleTime/gcTime Infinity it never refetches, so without this the stale
+      // first-load blob is restored on remount — your edits vanish and the next
+      // autosave serializes that stale state right back over the server copy.
+      qc.setQueryData(['whiteboard', listId], data);
+      api.put(`/pm/lists/${listId}/whiteboard`, { data }).catch((err) => {
+        console.error('Whiteboard autosave failed', err);
+      });
     }
-  }, [listId]);
+  }, [listId, qc]);
 
   const save = useCallback((data: WhiteboardData) => {
     pending.current = data;
