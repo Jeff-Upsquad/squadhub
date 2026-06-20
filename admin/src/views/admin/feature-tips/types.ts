@@ -1,4 +1,8 @@
 // Shared shapes for the admin Feature Tips views.
+
+/** Which app a tip targets. The web and app tip lists are managed separately. */
+export type TipPlatform = 'web' | 'app';
+
 export interface TipAudience {
   user_types?: string[];
   workspace_roles?: string[];
@@ -17,6 +21,7 @@ export interface TipStep {
 
 export interface FeatureTipRow {
   id: string;
+  platform?: TipPlatform;
   title: string;
   body: string;
   target_view: string | null;

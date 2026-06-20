@@ -9,13 +9,16 @@ router.use(requireAuth);
 
 const SNOOZE_MS = 3 * 60 * 60 * 1000; // Dismiss snooze window: 3 hours
 
-// GET /feature-tips/pending — tips the current user should see right now.
-// The SQL function handles active/accept/snooze/revision math; we then drop any
-// tip the user is not in the audience for (audience needs role/dept joins).
+// GET /feature-tips/pending?platform=web|app — tips the current user should see
+// right now on the given surface (defaults to 'web'; the native app passes 'app').
+// The SQL function handles platform + active/accept/snooze/revision math; we then
+// drop any tip the user is not in the audience for (audience needs role/dept joins).
 router.get('/pending', async (req: Request, res: Response) => {
   try {
+    const platform = req.query.platform === 'app' ? 'app' : 'web';
     const { data, error } = await supabaseAdmin.rpc('feature_tips_pending_for_user', {
       p_user_id: req.userId!,
+      p_platform: platform,
     });
     if (error) {
       res.status(500).json({ success: false, error: error.message });

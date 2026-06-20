@@ -6,6 +6,7 @@ import api from '../../../services/api';
 import {
   FeatureTipRow,
   TipAudience,
+  TipPlatform,
   TipStep,
   USER_TYPE_OPTIONS,
   WORKSPACE_ROLE_OPTIONS,
@@ -26,10 +27,12 @@ interface NameRow {
 
 export default function FeatureTipEditor({
   tip,
+  platform = 'web',
   onClose,
   onSaved,
 }: {
   tip: FeatureTipRow | null;
+  platform?: TipPlatform;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -88,16 +91,16 @@ export default function FeatureTipEditor({
   const [userIds, setUserIds] = useState<string[]>(initialAudience.user_ids ?? []);
   const [userSearch, setUserSearch] = useState('');
 
-  // Catalogs + audience option sources.
+  // Catalogs + audience option sources (platform-scoped: web rail vs app tabs).
   const { data: viewsRes } = useQuery({
-    queryKey: ['admin-tip-target-views'],
-    queryFn: () => api.get('/admin/feature-tips/target-views').then((r) => r.data),
+    queryKey: ['admin-tip-target-views', platform],
+    queryFn: () => api.get(`/admin/feature-tips/target-views?platform=${platform}`).then((r) => r.data),
   });
   const targetViews: { value: string; label: string }[] = viewsRes?.data || [];
 
   const { data: anchorsRes } = useQuery({
-    queryKey: ['admin-tip-anchor-keys'],
-    queryFn: () => api.get('/admin/feature-tips/anchor-keys').then((r) => r.data),
+    queryKey: ['admin-tip-anchor-keys', platform],
+    queryFn: () => api.get(`/admin/feature-tips/anchor-keys?platform=${platform}`).then((r) => r.data),
   });
   const anchorKeys: string[] = anchorsRes?.data || [];
 
@@ -194,7 +197,8 @@ export default function FeatureTipEditor({
       };
       return tip
         ? api.put(`/admin/feature-tips/${tip.id}`, payload)
-        : api.post('/admin/feature-tips', payload);
+        : // platform is set only at create time; it's immutable thereafter.
+          api.post('/admin/feature-tips', { ...payload, platform });
     },
     onSuccess: onSaved,
   });
@@ -453,7 +457,7 @@ function PlacementFields({
           onChange={(e) => onTargetAnchor(e.target.value)}
           list="tip-anchor-keys"
           className={INPUT}
-          placeholder="e.g. rail.tasks"
+          placeholder="Spotlight element key"
         />
         <p className="mt-1 text-[11px] text-foreground-dim">
           Anchors a coachmark to that element. Leave both empty for a centered “What’s new” card.
@@ -499,7 +503,7 @@ function StepCard({
             <option key={v.value} value={v.value}>{v.label}</option>
           ))}
         </select>
-        <input value={step.target_anchor ?? ''} onChange={(e) => onChange({ target_anchor: e.target.value || null })} list="tip-anchor-keys" className={INPUT} placeholder="Spotlight (e.g. rail.apps)" />
+        <input value={step.target_anchor ?? ''} onChange={(e) => onChange({ target_anchor: e.target.value || null })} list="tip-anchor-keys" className={INPUT} placeholder="Spotlight element key" />
       </div>
     </div>
   );

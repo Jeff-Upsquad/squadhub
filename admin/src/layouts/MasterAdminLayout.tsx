@@ -186,6 +186,13 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
               </svg>
               Feature Tips
             </NavLink>
+            <NavLink href="/admin/app-feature-tips">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <rect x="7" y="2" width="10" height="20" rx="2" ry="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 18h2" />
+              </svg>
+              App Tooltips
+            </NavLink>
           </div>
 
           <div className="!mt-4 border-t border-divider pt-3">

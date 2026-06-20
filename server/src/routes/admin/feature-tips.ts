@@ -4,10 +4,39 @@ import { requireAuth } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/admin';
 import { supabaseAdmin } from '../../supabase';
 import { resolveAudience } from '../../services/featureTipAudience';
-import { NAVIGABLE_TIP_VIEWS, TIP_ANCHOR_KEYS } from '@squadhub/shared';
+import {
+  NAVIGABLE_TIP_VIEWS,
+  TIP_ANCHOR_KEYS,
+  APP_NAV_TIP_VIEWS,
+  APP_TIP_ANCHOR_KEYS,
+  type TipPlatform,
+} from '@squadhub/shared';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
+
+// Platform-scoped placement catalogs. Each platform's editor only offers its own
+// screens/anchors (web has a left rail; the app has a bottom tab bar, etc.).
+function platformOf(v: unknown): TipPlatform {
+  return v === 'app' ? 'app' : 'web';
+}
+function viewsFor(platform: TipPlatform) {
+  return platform === 'app' ? APP_NAV_TIP_VIEWS : NAVIGABLE_TIP_VIEWS;
+}
+function anchorsFor(platform: TipPlatform) {
+  return platform === 'app' ? APP_TIP_ANCHOR_KEYS : TIP_ANCHOR_KEYS;
+}
+
+// Validate every target_view in a tip (top-level + each step) against the
+// platform's catalog. Returns an error message, or null when all are valid.
+function placementError(platform: TipPlatform, body: { target_view?: string | null; steps?: Array<{ target_view?: string | null }> | null }): string | null {
+  const allowed = new Set(viewsFor(platform).map((v) => v.value));
+  const views: (string | null | undefined)[] = [body.target_view, ...((body.steps ?? []).map((s) => s.target_view))];
+  for (const v of views) {
+    if (v != null && !allowed.has(v)) return `Unknown target_view "${v}" for platform "${platform}"`;
+  }
+  return null;
+}
 
 const audienceSchema = z
   .object({
@@ -21,14 +50,9 @@ const audienceSchema = z
   })
   .strict();
 
-const targetViewSchema = z
-  .string()
-  .max(80)
-  .nullable()
-  .optional()
-  .refine((v) => v == null || NAVIGABLE_TIP_VIEWS.some((x) => x.value === v), {
-    message: 'Unknown target_view',
-  });
+// target_view membership is validated per-platform in the handler (see
+// placementError) since the valid set depends on the tip's platform.
+const targetViewSchema = z.string().max(80).nullable().optional();
 
 // One guided-tour step. Same placement shape as a single-card tip.
 const stepSchema = z.object({
@@ -39,6 +63,8 @@ const stepSchema = z.object({
 });
 
 const createTipSchema = z.object({
+  // Which app this tip targets. Immutable after create.
+  platform: z.enum(['web', 'app']).optional(),
   title: z.string().min(1).max(120),
   body: z.string().min(1).max(2000),
   target_view: targetViewSchema,
@@ -48,20 +74,21 @@ const createTipSchema = z.object({
   audience: audienceSchema.optional(),
 });
 
-const updateTipSchema = createTipSchema.partial();
+// Editing never changes platform — it's omitted from the update shape.
+const updateTipSchema = createTipSchema.omit({ platform: true }).partial();
 
 const triggerSchema = z.object({
   scope: z.enum(['everyone', 'unaccepted']),
 });
 
-// GET /admin/feature-tips/target-views — catalog for the editor dropdown.
-router.get('/target-views', (_req: Request, res: Response) => {
-  res.json({ success: true, data: NAVIGABLE_TIP_VIEWS });
+// GET /admin/feature-tips/target-views?platform= — catalog for the editor dropdown.
+router.get('/target-views', (req: Request, res: Response) => {
+  res.json({ success: true, data: viewsFor(platformOf(req.query.platform)) });
 });
 
-// GET /admin/feature-tips/anchor-keys — catalog for the editor autocomplete.
-router.get('/anchor-keys', (_req: Request, res: Response) => {
-  res.json({ success: true, data: TIP_ANCHOR_KEYS });
+// GET /admin/feature-tips/anchor-keys?platform= — catalog for the editor autocomplete.
+router.get('/anchor-keys', (req: Request, res: Response) => {
+  res.json({ success: true, data: anchorsFor(platformOf(req.query.platform)) });
 });
 
 // GET /admin/feature-tips — list with pagination + current-revision accepted count.
@@ -74,6 +101,7 @@ router.get('/', async (req: Request, res: Response) => {
     let query = supabaseAdmin
       .from('feature_tips')
       .select('*', { count: 'exact' })
+      .eq('platform', platformOf(req.query.platform)) // each section lists only its own platform
       .order('created_at', { ascending: false })
       .range(from, from + limit - 1);
 
@@ -130,9 +158,16 @@ router.get('/:id', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   try {
     const body = createTipSchema.parse(req.body);
+    const platform = platformOf(body.platform);
+    const placeErr = placementError(platform, body);
+    if (placeErr) {
+      res.status(400).json({ success: false, error: placeErr });
+      return;
+    }
     const { data, error } = await supabaseAdmin
       .from('feature_tips')
       .insert({
+        platform,
         title: body.title,
         body: body.body,
         target_view: body.target_view ?? null,
@@ -163,6 +198,25 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const body = updateTipSchema.parse(req.body);
+
+    // Validate placement against the tip's existing (immutable) platform.
+    if (body.target_view !== undefined || body.steps !== undefined) {
+      const { data: existing } = await supabaseAdmin
+        .from('feature_tips')
+        .select('platform')
+        .eq('id', req.params.id as string)
+        .single();
+      if (!existing) {
+        res.status(404).json({ success: false, error: 'Tip not found' });
+        return;
+      }
+      const placeErr = placementError(platformOf(existing.platform), body);
+      if (placeErr) {
+        res.status(400).json({ success: false, error: placeErr });
+        return;
+      }
+    }
+
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (body.title !== undefined) patch.title = body.title;
     if (body.body !== undefined) patch.body = body.body;
