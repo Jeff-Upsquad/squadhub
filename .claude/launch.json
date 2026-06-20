@@ -2,6 +2,13 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "Cool Elbakyan Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/cool-elbakyan-f9fce2/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3123"],
+      "port": 3123,
+      "autoPort": true
+    },
+    {
       "name": "Infallible Lumiere Web",
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/infallible-lumiere-fd9eac/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3116"],
