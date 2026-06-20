@@ -53,6 +53,7 @@ const FONT_PX: Record<NonNullable<WhiteboardNodeData['fontSize']>, number> = { s
 const DEFAULT_SIZE: Partial<Record<WhiteboardNodeType, { width: number; height: number }>> = {
   sticky: { width: 188, height: 152 },
   shape: { width: 176, height: 120 },
+  task: { width: 248, height: 116 },
 };
 
 const OPPOSITE: Record<string, string> = { t: 'b', b: 't', l: 'r', r: 'l' };
@@ -560,14 +561,15 @@ function TaskCardNode({ id, data, selected }: NodeProps<WBNode>) {
   const done = !!data.done;
   const loc = typeof data.taskList === 'string' ? data.taskList : '';
   return (
-    <div className={`wb-taskcard nodrag ${done ? 'wb-taskcard-done' : ''}`} onMouseMove={canEdit ? onMouseMove : undefined} onMouseLeave={onMouseLeave}>
+    <div className={`wb-taskcard ${done ? 'wb-taskcard-done' : ''}`} onMouseMove={canEdit ? onMouseMove : undefined} onMouseLeave={onMouseLeave}>
+      <NodeResizer minWidth={184} minHeight={84} isVisible={!!selected && canEdit} color="var(--sh-ink-3)" />
       <NodeHandles />
       <EditBar id={id} data={data} type="task" visible={!!selected && canEdit} />
       {!selected && <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />}
       <div className="wb-taskcard-head">
         <button
           type="button"
-          className="wb-taskcard-check"
+          className="wb-taskcard-check nodrag"
           role="checkbox"
           aria-checked={done}
           disabled={!canEdit}
@@ -579,7 +581,7 @@ function TaskCardNode({ id, data, selected }: NodeProps<WBNode>) {
           )}
         </button>
         <span className="wb-taskcard-tag">Task</span>
-        <button type="button" className="wb-taskcard-open" title="Open task" onClick={(e) => { e.stopPropagation(); if (data.taskId) openTask(data.taskId); }}>
+        <button type="button" className="wb-taskcard-open nodrag" title="Open task" onClick={(e) => { e.stopPropagation(); if (data.taskId) openTask(data.taskId); }}>
           {data.taskNumber != null ? `#${data.taskNumber}` : 'Open'}
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7M17 7H8M17 7v9" /></svg>
         </button>
@@ -849,12 +851,12 @@ function Canvas({
   // never renames the linked task (which may live in another list).
   const mentionTask = useCallback((id: string, task: MentionTask) => {
     const src = rf.getNode(id) as WBNode | undefined;
-    // Card width is fixed by CSS (~248px incl. border); height auto-fits. Centre
-    // it over the element and stack it just above the top edge.
-    const CARD_W = 248, CARD_H_EST = 112, GAP = 24;
+    // The card is a real sized node (draggable + resizable). Start at the default
+    // size, centred over the element and stacked just above its top edge.
+    const CARD_W = DEFAULT_SIZE.task!.width, CARD_H = DEFAULT_SIZE.task!.height, GAP = 24;
     const srcW = src?.width ?? src?.measured?.width ?? 180;
     const pos = src
-      ? { x: src.position.x + srcW / 2 - CARD_W / 2, y: src.position.y - CARD_H_EST - GAP }
+      ? { x: src.position.x + srcW / 2 - CARD_W / 2, y: src.position.y - CARD_H - GAP }
       : { x: 0, y: 0 };
     const newId = crypto.randomUUID();
     const data: WhiteboardNodeData = {
@@ -867,7 +869,7 @@ function Canvas({
     };
     setNodes((nds) => [
       ...nds.map((n) => (n.selected ? { ...n, selected: false } : n)),
-      { id: newId, type: 'task', position: pos, data, selected: true },
+      { id: newId, type: 'task', position: pos, width: CARD_W, height: CARD_H, data, selected: true },
     ]);
   }, [rf, setNodes]);
 
