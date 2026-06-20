@@ -541,10 +541,11 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
       // mirrors the single-tier case for back-compat (CHECK allows NULL or > 0).
       const roleTiers = roleReq?.tiers || [];
       const roleTierBudgets = roleReq?.tier_budgets || {};
-      const roleTierPricing: Record<string, { proposed_price: number; markup: number }> = {};
+      // markup null = inherit the plan catalog margin (no per-card adjustment yet).
+      const roleTierPricing: Record<string, { proposed_price: number; markup: number | null }> = {};
       for (const tier of roleTiers) {
         const b = roleTierBudgets[tier];
-        if (typeof b === 'number' && b > 0) roleTierPricing[tier] = { proposed_price: b, markup: 0 };
+        if (typeof b === 'number' && b > 0) roleTierPricing[tier] = { proposed_price: b, markup: null };
       }
       const roleSingleProposed =
         roleTiers.length === 1 ? roleTierPricing[roleTiers[0]]?.proposed_price ?? null : null;
@@ -556,7 +557,8 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
           // Lands in the New Deals queue as 'new'. An admin reviews it, fills in
           // the rest, and "Save Draft" promotes new → draft before publishing.
           state: 'new',
-          markup: 0,
+          // null = inherit the plan catalog margin until an admin adjusts it.
+          markup: null,
           service_type: SLUG_TO_SERVICE_TYPE[slug],
           target_tiers: roleReq?.tiers || [],
           // Assignments carry no weekly plan; subscriptions keep theirs.
@@ -868,10 +870,11 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
     // so a multi-tier publish fans out with each level's own price. Only
     // selected tiers with a budget > 0 are stored. proposed_price mirrors the
     // single-tier case for back-compat (multi-tier reads from tier_pricing).
-    const tierPricing: Record<string, { proposed_price: number; markup: number }> = {};
+    // markup null = inherit the plan catalog margin (no per-card adjustment yet).
+    const tierPricing: Record<string, { proposed_price: number; markup: number | null }> = {};
     for (const tier of body.tiers) {
       const b = body.tier_budgets?.[tier];
-      if (typeof b === 'number' && b > 0) tierPricing[tier] = { proposed_price: b, markup: 0 };
+      if (typeof b === 'number' && b > 0) tierPricing[tier] = { proposed_price: b, markup: null };
     }
     const singleProposed =
       body.tiers.length === 1 ? tierPricing[body.tiers[0]]?.proposed_price ?? null : null;

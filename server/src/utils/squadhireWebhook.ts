@@ -1,4 +1,4 @@
-import { formatDeliverableCadence } from '@squadhub/shared';
+import { formatDeliverableCadence, resolveFinalizedPrice, resolvePartnerPrice } from '@squadhub/shared';
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
 
@@ -134,7 +134,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, distribution, card_type, assignment_details, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, source, proposed_price, markup, customer_company, customer_email, service_type, plan_name, plan_snapshot',
+      'id, state, distribution, card_type, assignment_details, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, source, proposed_price, subscription_price, markup, customer_company, customer_email, service_type, plan_name, plan_snapshot',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -159,7 +159,7 @@ export async function buildSquadhirePayloadForCard(
     const { data: parent } = await supabaseAdmin
       .from('subscription_cards')
       .select(
-        'id, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids',
+        'id, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, proposed_price, subscription_price, markup, partner_price_override',
       )
       .eq('id', card.parent_card_id)
       .maybeSingle();
@@ -591,15 +591,28 @@ export async function buildSquadhirePayloadForCard(
     }
   }
 
-  // For non-staged cards: proposed_price is what the customer pays/sees,
-  // markup (displayed as "Margin") is the platform commission, and the talent
-  // earns the remainder (proposed - margin).
+  // A finalized subscription price set on the card is the source of truth for
+  // what the client pays — it overrides the catalog customer price on staged
+  // cards. (resolvedCurrency is only set once a staged branch resolved, so this
+  // is a no-op for non-staged cards, which set the customer price just below.)
+  {
+    const finalized = (contentSource as any).subscription_price as number | null;
+    if (finalized != null && finalized > 0 && resolvedCurrency) {
+      resolvedCustomerMonthlyPrice = finalized;
+    }
+  }
+
+  // For non-staged cards: the finalized subscription price (or proposed price)
+  // is what the customer pays/sees, and the talent earns the partner price
+  // (finalized - final margin, or the partner override). No catalog plan is
+  // linked on these cards, so a null markup resolves to a zero margin here
+  // (the talent earns the full finalized price) — same as the old default.
   if (!staged && cardSource && NON_STAGED_SOURCES.has(cardSource)) {
-    const proposedPrice = (contentSource as any).proposed_price as number | null;
-    const markup = (contentSource as any).markup as number | null;
-    if (proposedPrice) {
-      resolvedMonthlyPrice = Math.max(0, proposedPrice - (markup || 0));
-      resolvedCustomerMonthlyPrice = proposedPrice;
+    const finalized = resolveFinalizedPrice(contentSource as any);
+    const partner = resolvePartnerPrice(contentSource as any);
+    if (finalized != null) {
+      resolvedMonthlyPrice = partner ?? finalized;
+      resolvedCustomerMonthlyPrice = finalized;
       resolvedCurrency = 'INR';
     }
   }

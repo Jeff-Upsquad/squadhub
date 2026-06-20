@@ -170,7 +170,7 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
       const stagedIds = stagedSubs.map((s: any) => s.id);
       const { data: stgCards } = await supabaseAdmin
         .from('subscription_cards')
-        .select('id, submission_subscription_id, state, published_at, card_code, linked_folder_id, linked_at')
+        .select('id, submission_subscription_id, state, published_at, card_code, linked_folder_id, linked_at, proposed_price, subscription_price, markup, partner_price_override')
         .in('submission_subscription_id', stagedIds);
 
       (stgCards || []).forEach((crd: any) => {
@@ -188,13 +188,13 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
       leadRow?.email
         ? supabaseAdmin
             .from('subscription_cards')
-            .select('id, service_type, plan_name, state, published_at, card_code, linked_folder_id, linked_at')
+            .select('id, service_type, plan_name, state, published_at, card_code, linked_folder_id, linked_at, proposed_price, subscription_price, markup, partner_price_override')
             .ilike('customer_email', leadRow.email.trim())
         : Promise.resolve({ data: [] as any[] }),
       phoneSuffix
         ? supabaseAdmin
             .from('subscription_cards')
-            .select('id, service_type, plan_name, state, published_at, card_code, linked_folder_id, linked_at')
+            .select('id, service_type, plan_name, state, published_at, card_code, linked_folder_id, linked_at, proposed_price, subscription_price, markup, partner_price_override')
             .ilike('customer_phone', `%${phoneSuffix}`)
         : Promise.resolve({ data: [] as any[] }),
     ]);
@@ -238,7 +238,7 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
             const newPrio = statePriority[crd.state] ?? 0;
             const oldPrio = existing ? (statePriority[existing.state] ?? 0) : -1;
             if (!existing || newPrio > oldPrio) {
-              cardBySubPlan[key] = { id: crd.id, state: crd.state, published_at: crd.published_at, card_code: crd.card_code, linked_folder_id: crd.linked_folder_id, linked_at: crd.linked_at };
+              cardBySubPlan[key] = { id: crd.id, state: crd.state, published_at: crd.published_at, card_code: crd.card_code, linked_folder_id: crd.linked_folder_id, linked_at: crd.linked_at, proposed_price: crd.proposed_price ?? null, subscription_price: crd.subscription_price ?? null, markup: crd.markup ?? null, partner_price_override: crd.partner_price_override ?? null };
             }
             matchedTextCardIds.add(crd.id);
           }
@@ -250,7 +250,7 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
     unmatchedCards = textCards
       .filter((crd: any) => !matchedTextCardIds.has(crd.id))
       .reduce((acc: Record<string, any>, crd: any) => {
-        if (!acc[crd.id]) acc[crd.id] = { id: crd.id, state: crd.state, published_at: crd.published_at, card_code: crd.card_code, linked_folder_id: crd.linked_folder_id, linked_at: crd.linked_at };
+        if (!acc[crd.id]) acc[crd.id] = { id: crd.id, state: crd.state, published_at: crd.published_at, card_code: crd.card_code, linked_folder_id: crd.linked_folder_id, linked_at: crd.linked_at, proposed_price: crd.proposed_price ?? null, subscription_price: crd.subscription_price ?? null, markup: crd.markup ?? null, partner_price_override: crd.partner_price_override ?? null };
         return acc;
       }, {});
 
@@ -313,7 +313,7 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
           createdCs.push(newCs);
           subsMap[matchedSub.id] = matchedSub;
           plansMap[matchedPlan.id] = matchedPlan;
-          cardBySubPlan[key] = { id: crd.id, state: crd.state, published_at: crd.published_at, card_code: crd.card_code, linked_folder_id: crd.linked_folder_id, linked_at: crd.linked_at };
+          cardBySubPlan[key] = { id: crd.id, state: crd.state, published_at: crd.published_at, card_code: crd.card_code, linked_folder_id: crd.linked_folder_id, linked_at: crd.linked_at, proposed_price: crd.proposed_price ?? null, subscription_price: crd.subscription_price ?? null, markup: crd.markup ?? null, partner_price_override: crd.partner_price_override ?? null };
           matchedTextCardIds.add(crd.id);
           existingKeys.add(key);
         }
@@ -328,7 +328,7 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
       unmatchedCards = textCards
         .filter((crd: any) => !matchedTextCardIds.has(crd.id))
         .reduce((acc: Record<string, any>, crd: any) => {
-          if (!acc[crd.id]) acc[crd.id] = { id: crd.id, state: crd.state, published_at: crd.published_at, card_code: crd.card_code, linked_folder_id: crd.linked_folder_id, linked_at: crd.linked_at };
+          if (!acc[crd.id]) acc[crd.id] = { id: crd.id, state: crd.state, published_at: crd.published_at, card_code: crd.card_code, linked_folder_id: crd.linked_folder_id, linked_at: crd.linked_at, proposed_price: crd.proposed_price ?? null, subscription_price: crd.subscription_price ?? null, markup: crd.markup ?? null, partner_price_override: crd.partner_price_override ?? null };
           return acc;
         }, {});
     }

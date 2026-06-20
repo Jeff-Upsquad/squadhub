@@ -8,6 +8,7 @@ import AssignRecipientPicker from './AssignRecipientPicker';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import CardCodeChip from '@/components/CardCodeChip';
 import { showToast } from '@/components/Toast';
+import { resolveFinalizedPrice, resolvePlanMargin, resolvePartnerPrice } from '@squadhub/shared';
 import type { PublishedCard } from './AdminPublishedCards';
 
 export type PartnerRecipient = {
@@ -1067,6 +1068,14 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
   const planPrice = plan?.pricing?.[0];
   const priceCurrency = planPrice?.country?.currency || card.submission?.country?.currency || '';
 
+  // Pricing model (see shared helpers): finalized price = subscription_price
+  // ?? proposed_price; final margin = adjusted (markup) ?? plan margin;
+  // partner price = override ?? (finalized − final margin).
+  const cur = priceCurrency || '₹';
+  const finalizedPrice = resolveFinalizedPrice(card);
+  const planMargin = resolvePlanMargin(planPrice, finalizedPrice);
+  const partnerPrice = resolvePartnerPrice(card, planPrice);
+
   return (
     <div className="px-5 py-5 space-y-5 text-sm">
       {isSecondaryView && (
@@ -1181,29 +1190,39 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
         />
         <DetailRow
           label="Proposed price"
-          value={card.proposed_price ? `₹${card.proposed_price.toLocaleString()}/mo` : EMPTY}
+          value={card.proposed_price ? `${cur} ${card.proposed_price.toLocaleString()}/mo` : EMPTY}
         />
         <DetailRow
-          label="Margin"
-          value={card.markup ? `₹${card.markup.toLocaleString()}/mo` : EMPTY}
+          label="Subscription price"
+          value={card.subscription_price ? `${cur} ${card.subscription_price.toLocaleString()}/mo` : EMPTY}
         />
+      </DetailSection>
+
+      <DetailSection title="Margin">
+        <DetailRow
+          label="Plan margin"
+          value={planMargin != null ? `${cur} ${planMargin.toLocaleString()}/mo` : EMPTY}
+        />
+        <DetailRow
+          label="Adjusted margin"
+          value={card.markup != null ? `${cur} ${card.markup.toLocaleString()}/mo` : 'Using plan margin'}
+        />
+      </DetailSection>
+
+      <DetailSection title="Partner price">
         <DetailRow
           label="Partner price (computed)"
-          value={
-            card.proposed_price
-              ? `₹${Math.max(0, card.proposed_price - (card.markup || 0)).toLocaleString()}/mo`
-              : EMPTY
-          }
+          value={partnerPrice != null ? `${cur} ${partnerPrice.toLocaleString()}/mo` : EMPTY}
         />
         <DetailRow
           label="Partner price override"
           value={
             activeCard.partner_price_override != null
-              ? `${priceCurrency || '₹'} ${activeCard.partner_price_override.toLocaleString()}`
+              ? `${cur} ${activeCard.partner_price_override.toLocaleString()}`
               : isSecondaryView
                 ? 'Same as primary'
                 : card.partner_price_override != null
-                  ? `${priceCurrency || '₹'} ${card.partner_price_override.toLocaleString()}`
+                  ? `${cur} ${card.partner_price_override.toLocaleString()}`
                   : EMPTY
           }
         />

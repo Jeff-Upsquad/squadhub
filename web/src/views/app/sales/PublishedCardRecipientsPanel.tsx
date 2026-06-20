@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import type { Country, SubscriptionCard, ClientSubmissionSubscription } from '@squadhub/shared';
+import { resolveFinalizedPrice, resolvePartnerPrice } from '@squadhub/shared';
 
 type PublishedCardItem = SubscriptionCard & {
   submission?: { id: string; business_name: string; country_id: string; country?: Country | null } | null;
@@ -150,7 +151,7 @@ export default function PublishedCardRecipientsPanel({
 
 function CardDetails({ card, countries }: { card: PublishedCardItem; countries: Country[] }) {
   const plan = card.submission_subscription?.plan as
-    | { plan: string; tier: string; pricing?: { country_id: string; price: number; country?: Country | null }[] }
+    | { plan: string; tier: string; pricing?: { country_id: string; price: number; margin_value?: number; margin_type?: 'fixed' | 'percent'; country?: Country | null }[] }
     | undefined
     | null;
   const planLabel = plan ? `${plan.plan} · ${plan.tier}` : '';
@@ -176,6 +177,11 @@ function CardDetails({ card, countries }: { card: PublishedCardItem; countries: 
 
   const planPrice = plan?.pricing?.[0];
   const priceCurrency = planPrice?.country?.currency || card.submission?.country?.currency || '';
+  const cur = priceCurrency || '₹';
+  // Finalized price the client pays (subscription price, else proposed) and the
+  // partner's pay (override, else finalized − final margin).
+  const finalizedPrice = resolveFinalizedPrice(card);
+  const partnerPrice = resolvePartnerPrice(card, planPrice);
 
   return (
     <div className="border-b border-[var(--sh-hair)] px-5 py-4 space-y-4 text-sm">
@@ -230,11 +236,20 @@ function CardDetails({ card, countries }: { card: PublishedCardItem; countries: 
         </DetailSection>
       )}
 
-      {(planPrice || card.partner_price_override != null) && (
+      {(planPrice || finalizedPrice != null || card.partner_price_override != null) && (
         <DetailSection title="Pricing">
-          {planPrice && <DetailRow label="Plan price" value={`${priceCurrency} ${planPrice.price.toLocaleString()}`} />}
+          {planPrice && <DetailRow label="Plan price" value={`${cur} ${planPrice.price.toLocaleString()}`} />}
+          {card.proposed_price != null && (
+            <DetailRow label="Proposed price" value={`${cur} ${card.proposed_price.toLocaleString()}/mo`} />
+          )}
+          {card.subscription_price != null && (
+            <DetailRow label="Subscription price" value={`${cur} ${card.subscription_price.toLocaleString()}/mo`} />
+          )}
+          {partnerPrice != null && (
+            <DetailRow label="Partner price" value={`${cur} ${partnerPrice.toLocaleString()}/mo`} />
+          )}
           {card.partner_price_override != null && (
-            <DetailRow label="Partner override" value={`${priceCurrency} ${card.partner_price_override.toLocaleString()}`} />
+            <DetailRow label="Partner override" value={`${cur} ${card.partner_price_override.toLocaleString()}`} />
           )}
         </DetailSection>
       )}

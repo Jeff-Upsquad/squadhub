@@ -260,7 +260,8 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
         subscription_request_id,
         state: 'draft',
         proposed_price: requestData.proposed_price,
-        markup: 0,
+        // null = inherit the plan catalog margin until an admin adjusts it.
+        markup: null,
         service_type: requestData.service_type,
         plan_name: requestData.plan,
         target_tiers: tiers,
@@ -338,7 +339,8 @@ router.post('/subscription-cards/custom', async (req: Request, res: Response) =>
       .insert({
         source: 'custom',
         state: 'draft',
-        markup: 0,
+        // null = inherit the plan catalog margin until an admin adjusts it.
+        markup: null,
         customer_company: body.customer_company || null,
         customer_name: body.customer_name || null,
         customer_email: body.customer_email || null,
@@ -431,7 +433,8 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
         // the details and "Save Draft" promotes new → draft, which unlocks the
         // shareable client link (link generation is draft-gated).
         state: 'new',
-        markup: 0,
+        // null = inherit the plan catalog margin until an admin adjusts it.
+        markup: null,
         created_by: req.userId!,
         service_type: body.service_type,
         brand_name: body.brand_name || null,
@@ -559,7 +562,10 @@ const editCardSchema = z.object({
     per_month: z.number().default(0),
   })).optional(),
   proposed_price: z.number().int().positive().nullable().optional(),
-  markup: z.number().int().min(0).optional(),
+  // Finalized monthly client price. null = not finalized (falls back to proposed).
+  subscription_price: z.number().int().positive().nullable().optional(),
+  // Adjusted margin. null = inherit the plan catalog margin.
+  markup: z.number().int().min(0).nullable().optional(),
   // Per-tier draft pricing. Used when the admin picks 2+ tiers — the
   // publish handler validates every selected tier has an entry here, then
   // fans the draft out to one published card per tier (each card carries
@@ -569,7 +575,8 @@ const editCardSchema = z.object({
       z.string(),
       z.object({
         proposed_price: z.number().int().min(0),
-        markup: z.number().int().min(0),
+        markup: z.number().int().min(0).nullable().optional(),
+        subscription_price: z.number().int().positive().nullable().optional(),
       }),
     )
     .optional(),
@@ -628,6 +635,7 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
     if (body.working_days !== undefined) updates.working_days = body.working_days;
     if (body.custom_deliverables !== undefined) updates.custom_deliverables = body.custom_deliverables;
     if (body.proposed_price !== undefined) updates.proposed_price = body.proposed_price;
+    if (body.subscription_price !== undefined) updates.subscription_price = body.subscription_price;
     if (body.markup !== undefined) updates.markup = body.markup;
     if (body.tier_pricing !== undefined) updates.tier_pricing = body.tier_pricing;
     if (body.partner_price_override !== undefined) updates.partner_price_override = body.partner_price_override;
