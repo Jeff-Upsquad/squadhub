@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 
@@ -63,9 +63,12 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import FeatureTipOverlay from '../components/FeatureTipOverlay';
 import { usePendingTips } from '../hooks/usePendingTips';
 import { featureTipStore } from '../stores/featureTipStore';
+import TabBar from '../components/TabBar';
+import { useTabsStore } from '../stores/tabsStore';
+import { canonicalKey, buildHomeSnapshot } from '../lib/tabSnapshots';
 
 // ---- Types ----
-type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
+export type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
 export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner' | 'routines' | 'clips';
 
 // One entry in the in-app navigation history: everything needed to bring the
@@ -239,6 +242,8 @@ export default function MainLayout() {
   // A list/board view shows its own floating "New task" button; when it does,
   // the global top-bar "+" hides so the two create affordances don't overlap.
   const newTaskFabVisible = usePMStore((s) => s.newTaskFabVisible);
+  // The tab strip only shows with ≥2 tabs; the top-right "+" sits below it when so.
+  const tabStripVisible = useTabsStore((s) => s.tabs.length > 1);
   const userType = useUserType();
   const isPartner = useIsPartner();
   // SquadNotes is a gated mini app — the Documents rail icon only shows for
@@ -593,31 +598,52 @@ export default function MainLayout() {
     }),
     [activeSection, homeView, activeChannelId, activeChannelKind, activeSpaceId, activeListId, activeFolderId, activeSpacePageId, activeDesignFolderId],
   );
+
+  // Apply a saved snapshot to the live view — shared by the sidebar back/forward
+  // history and the top tab strip (both restore a NavSnapshot). Setters used here
+  // are stable (useState/zustand actions), so this is safe to memoize.
+  const applySnapshot = useCallback((s: NavSnapshot) => {
+    setActiveSection(s.section);
+    setHomeView(s.homeView);
+    if (s.section === 'home' && s.homeView === 'chat') {
+      setActiveChannel(s.channelId, s.channelKind);
+    } else if (s.section === 'home' && s.homeView === 'tasks') {
+      // Raw setState: the individual pm setters clear sibling selections,
+      // which would fight the exact state being restored.
+      usePMStore.setState({
+        activeSpaceId: s.spaceId,
+        activeListId: s.listId,
+        activeFolderId: s.folderId,
+        activeSpacePageId: s.spacePageId,
+        activeDesignFolderId: s.designFolderId,
+        contextListId: s.listId,
+        selectedTasks: [],
+      });
+    }
+    setMobileDrawerOpen(false);
+  }, [setActiveChannel]);
+
+  // Identity of the live view for the tab strip (mini-apps keyed per-app, unlike
+  // navKey). Kept in refs so the once-mounted tab subscriber reads current values.
+  const tabKey = useMemo(() => canonicalKey(navSnapshot), [navSnapshot]);
+  const navSnapshotRef = useRef(navSnapshot);
+  navSnapshotRef.current = navSnapshot;
+  const liveKeyRef = useRef(tabKey);
+  liveKeyRef.current = tabKey;
+
+  // Live-mirror: keep the active tab in sync with the live view. Declared before
+  // useNavHistory's recorder and the trailing navRestoringRef reset so it runs
+  // with the guard still set during a restore (refresh-only, never create/focus).
+  useEffect(() => {
+    useTabsStore.getState().onNavigate(navSnapshot, tabKey, navRestoringRef.current);
+  }, [navSnapshot, tabKey]);
+
   const nav = useNavHistory<NavSnapshot>({
     snapshot: navSnapshot,
     key: navKey,
     resetKey: currentWorkspace?.id,
     restoringRef: navRestoringRef,
-    onRestore: (s) => {
-      setActiveSection(s.section);
-      setHomeView(s.homeView);
-      if (s.section === 'home' && s.homeView === 'chat') {
-        setActiveChannel(s.channelId, s.channelKind);
-      } else if (s.section === 'home' && s.homeView === 'tasks') {
-        // Raw setState: the individual pm setters clear sibling selections,
-        // which would fight the exact state being restored.
-        usePMStore.setState({
-          activeSpaceId: s.spaceId,
-          activeListId: s.listId,
-          activeFolderId: s.folderId,
-          activeSpacePageId: s.spacePageId,
-          activeDesignFolderId: s.designFolderId,
-          contextListId: s.listId,
-          selectedTasks: [],
-        });
-      }
-      setMobileDrawerOpen(false);
-    },
+    onRestore: applySnapshot,
   });
   // Declared after the auto-switch effects and the recorder inside
   // useNavHistory, so it runs last in the restore commit and closes the
@@ -625,6 +651,34 @@ export default function MainLayout() {
   useEffect(() => {
     navRestoringRef.current = false;
   });
+
+  // Restore a tab's snapshot into the live view when the active tab changes
+  // (tab click, close, new-tab). The store fires this synchronously inside the
+  // triggering click's call stack, so the navRestoringRef guard behaves exactly
+  // like the back/forward restore above. Skipped when the live view already
+  // matches (e.g. onNavigate just focused an existing tab) to avoid redundant work.
+  useEffect(() => {
+    return useTabsStore.subscribe((state, prev) => {
+      if (state.activeTabId === prev.activeTabId) return;
+      const tab = state.tabs.find((t) => t.id === state.activeTabId);
+      if (!tab) return;
+      if (canonicalKey(tab.snapshot) === liveKeyRef.current) return;
+      navRestoringRef.current = true;
+      applySnapshot(tab.snapshot);
+    });
+  }, [applySnapshot]);
+
+  // Seed the tab strip on first load; reset it on a genuine workspace switch
+  // (list/folder/channel ids are workspace-scoped — mirrors nav-history's reset).
+  useEffect(() => {
+    if (!currentWorkspace) return;
+    const st = useTabsStore.getState();
+    if (st.workspaceId != null && st.workspaceId !== currentWorkspace.id) {
+      st.resetForWorkspace(currentWorkspace.id, buildHomeSnapshot('hub'));
+    } else {
+      st.ensureSeed(navSnapshotRef.current, currentWorkspace.id);
+    }
+  }, [currentWorkspace?.id]);
 
   // Loading state
   if (workspacesLoading) {
@@ -902,10 +956,13 @@ export default function MainLayout() {
 
       {/* Main content area */}
       <div className="relative flex flex-1 flex-col overflow-hidden bg-surface pt-12 md:pt-0">
+        {/* Chrome-style tab strip (desktop only) — each tab is a saved view. */}
+        <TabBar />
         {/* Universal "New task" button — visible on task surfaces. Hidden on
             mobile (the mobile top bar has its own "+"), and hidden wherever the
             surface owns the top-right create affordance — a list/board's floating
-            "New task" FAB, or an embedded app's own header (see hideGlobalCreateBtn). */}
+            "New task" FAB, or an embedded app's own header (see hideGlobalCreateBtn).
+            Offset below the tab strip's height on desktop. */}
         {!hideGlobalCreateBtn && (
           <button
             type="button"
@@ -913,7 +970,7 @@ export default function MainLayout() {
             title="New task"
             aria-label="Create new task"
             data-tip-anchor="action.new-task"
-            className="absolute right-3 top-2 z-40 hidden h-8 w-8 place-items-center rounded-[9px] border border-transparent text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition md:grid"
+            className={`absolute right-3 top-2 z-40 hidden h-8 w-8 place-items-center rounded-[9px] border border-transparent text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition md:grid ${tabStripVisible ? 'md:top-[44px]' : ''}`}
           >
             <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
               <path d="M12 5v14M5 12h14" />

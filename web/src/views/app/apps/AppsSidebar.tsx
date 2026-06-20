@@ -5,6 +5,8 @@ import { APP_CATEGORY_ORDER, AppIcon, type AppDef } from '../../../config/apps';
 import { useAvailableApps } from '../../../hooks/useApps';
 import { useAppFavorites, useToggleAppFavorite } from '../../../hooks/useAppFavorites';
 import { useActiveTipAnchor } from '../../../stores/featureTipStore';
+import { useTabsStore } from '../../../stores/tabsStore';
+import { wantsNewTab, buildAppSnapshot } from '../../../lib/tabSnapshots';
 
 // Module side menu bar shown when the Apps rail module is active. Lists the
 // apps the user can access, grouped by category, in the same list style as the
@@ -160,7 +162,20 @@ export default function AppsSidebar({
                     return (
                       <div key={app.slug} className="group flex items-center">
                         <button
-                          onClick={() => onOpenApp(app)}
+                          onClick={(e) => {
+                            if (app.view && wantsNewTab(e)) {
+                              e.preventDefault();
+                              useTabsStore.getState().openInNewTab(buildAppSnapshot(app.view, 'apps'), { background: e.button === 1 });
+                              return;
+                            }
+                            onOpenApp(app);
+                          }}
+                          onAuxClick={(e) => {
+                            if (e.button === 1 && app.view) {
+                              e.preventDefault();
+                              useTabsStore.getState().openInNewTab(buildAppSnapshot(app.view, 'apps'), { background: true });
+                            }
+                          }}
                           className={`mb-[1px] flex flex-1 items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
                             active
                               ? 'border border-[var(--sh-hair)] bg-[var(--surface)] font-medium text-[var(--sh-ink)]'

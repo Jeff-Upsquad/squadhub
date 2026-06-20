@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { useSpaces, useSpace, useCreateList } from '../../../hooks/useSpaces';
 import { useHasPermission } from '../../../hooks/usePermissions';
 import { usePMStore } from '../../../stores/pmStore';
+import { useTabsStore } from '../../../stores/tabsStore';
+import { wantsNewTab, buildListSnapshot, buildFolderSnapshot, buildDesignFolderSnapshot, buildSpaceSnapshot } from '../../../lib/tabSnapshots';
 import CreateSpaceModal from './CreateSpaceModal';
 import CreateFolderListModal from './CreateFolderListModal';
 import CreateAreaSpaceModal from './CreateAreaSpaceModal';
@@ -192,7 +194,15 @@ function ListItem({ list, isManager = false, myAccess }: { list: List; isManager
   const { activeListId, setActiveList, setActiveSpace } = usePMStore();
   const [showSettings, setShowSettings] = useState(false);
   const isActive = activeListId === list.id;
-  const openList = () => { setActiveSpace(list.space_id); setActiveList(list.id); };
+  const openList = (e?: React.MouseEvent) => {
+    if (e && wantsNewTab(e)) {
+      e.preventDefault();
+      useTabsStore.getState().openInNewTab(buildListSnapshot(list.space_id, list.id), { background: e.button === 1 });
+      return;
+    }
+    setActiveSpace(list.space_id);
+    setActiveList(list.id);
+  };
 
   return (
     <>
@@ -201,6 +211,7 @@ function ListItem({ list, isManager = false, myAccess }: { list: List; isManager
         role="button"
         tabIndex={0}
         onClick={openList}
+        onAuxClick={(e) => { if (e.button === 1) openList(e); }}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openList(); } }}
         className={`flex w-full items-center gap-2 rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
           isActive
@@ -290,6 +301,18 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
   const createList = useCreateList(spaceId);
   const isActive = activeFolderId === folder.id;
   const isTemplateSpace = !!folder.client_space_template_id;
+  const openFolder = (e?: React.MouseEvent) => {
+    if (e && wantsNewTab(e)) {
+      e.preventDefault();
+      const snap = isTemplateSpace
+        ? buildDesignFolderSnapshot(spaceId, folder.id)
+        : buildFolderSnapshot(spaceId, folder.id);
+      useTabsStore.getState().openInNewTab(snap, { background: e.button === 1 });
+      return;
+    }
+    setActiveSpace(spaceId);
+    isTemplateSpace ? setActiveDesignFolder(folder.id) : setActiveFolder(folder.id);
+  };
 
   return (
     <div>
@@ -302,7 +325,8 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
           <TriangleChevron open={open} />
         </button>
         <button
-          onClick={() => { setActiveSpace(spaceId); isTemplateSpace ? setActiveDesignFolder(folder.id) : setActiveFolder(folder.id); }}
+          onClick={openFolder}
+          onAuxClick={(e) => { if (e.button === 1) openFolder(e); }}
           className={`flex min-w-0 flex-1 items-center gap-2 rounded-[6px] px-[5px] py-[5px] text-left text-[13px] transition ${
             isActive
               ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
@@ -460,7 +484,12 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
   const canAddItems = canAtLeast(myAccess, 'member');
   const isManager = canAtLeast(myAccess, 'manager');
 
-  const handleRowClick = () => {
+  const handleRowClick = (e?: React.MouseEvent) => {
+    if (e && wantsNewTab(e)) {
+      e.preventDefault();
+      useTabsStore.getState().openInNewTab(buildSpaceSnapshot(spaceId), { background: e.button === 1 });
+      return;
+    }
     setActiveSpace(spaceId);
     setActiveSpacePage(spaceId);
     setOpen(true);
@@ -485,6 +514,7 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
         </button>
         <button
           onClick={handleRowClick}
+          onAuxClick={(e) => { if (e.button === 1) handleRowClick(e); }}
           className={`flex min-w-0 flex-1 items-center gap-2 rounded-[6px] px-[5px] py-[5px] text-left text-[13px] transition ${
             isRowActive
               ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
