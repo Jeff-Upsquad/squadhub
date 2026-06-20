@@ -3,7 +3,7 @@ import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import type { HomeView } from '../../../layouts/MainLayout';
 import { APP_CATEGORY_ORDER, AppIcon, type AppDef } from '../../../config/apps';
 import { useAvailableApps } from '../../../hooks/useApps';
-import { useAppFavoritesStore } from '../../../stores/appFavoritesStore';
+import { useAppFavorites, useToggleAppFavorite } from '../../../hooks/useAppFavorites';
 
 // Module side menu bar shown when the Apps rail module is active. Lists the
 // apps the user can access, grouped by category, in the same list style as the
@@ -85,8 +85,8 @@ export default function AppsSidebar({
 }: AppsSidebarProps) {
   const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
   const apps = useAvailableApps();
-  const favorites = useAppFavoritesStore((s) => s.favorites);
-  const toggleFavorite = useAppFavoritesStore((s) => s.toggle);
+  const { data: favorites = [] } = useAppFavorites();
+  const toggleFavorite = useToggleAppFavorite();
 
   const groups = useMemo(() => groupByCategory(apps), [apps]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -173,7 +173,7 @@ export default function AppsSidebar({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            toggleFavorite(app.slug);
+                            toggleFavorite.mutate({ slug: app.slug, favorited: pinned });
                           }}
                           title={pinned ? 'Unpin from sidebar' : 'Pin to sidebar'}
                           aria-label={pinned ? 'Unpin from sidebar' : 'Pin to sidebar'}

@@ -26,6 +26,7 @@ const nextConfig = {
       { source: '/users/:path*', destination: `${API_URL}/users/:path*` },
       { source: '/dms/:path*', destination: `${API_URL}/dms/:path*` },
       { source: '/favorites/:path*', destination: `${API_URL}/favorites/:path*` },
+      { source: '/app-favorites/:path*', destination: `${API_URL}/app-favorites/:path*` },
       { source: '/notes/:path*', destination: `${API_URL}/notes/:path*` },
       { source: '/checkin/:path*', destination: `${API_URL}/checkin/:path*` },
       { source: '/off-days/:path*', destination: `${API_URL}/off-days/:path*` },

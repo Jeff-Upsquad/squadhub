@@ -700,6 +700,15 @@ export interface Favorite {
   space_id?: string | null;
 }
 
+// Per-user pinned mini-apps (global, not workspace-scoped). Apps are keyed by
+// slug rather than a UUID, so they live in their own `app_favorites` table.
+export interface AppFavorite {
+  id: string;
+  user_id: string;
+  app_slug: string;
+  created_at: string;
+}
+
 // ---- Shared With Me ----
 export interface SharedWithMeItem {
   id: string;
