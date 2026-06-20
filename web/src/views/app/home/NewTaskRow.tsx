@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUpdateTask } from '../../../hooks/useTasks';
 import { useReviewTask, type NewTask } from '../../../hooks/useNewTasks';
+import { useFocusTask } from '../../../hooks/useDayPlanner';
+import { isTaskFocused } from '../../../lib/taskGrouping';
 import { usePMStore } from '../../../stores/pmStore';
 import AssigneePicker from '../pm/AssigneePicker';
 import TaskStatusPicker from '../pm/TaskStatusPicker';
@@ -32,6 +34,33 @@ function fmtDateCell(iso?: string | null): string {
   if (!hasTime) return datePart;
   const timePart = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   return `${datePart} · ${timePart}`;
+}
+
+// Time-estimate parse/format — mirrors TaskDetailPanel / TaskCreatePanel so the
+// "2h 30m" shorthand reads and writes the same everywhere.
+function parseTimeInput(input: string): number | null {
+  const trimmed = input.trim().toLowerCase();
+  if (!trimmed) return null;
+  let totalMinutes = 0;
+  const hourMatch = trimmed.match(/(\d+)\s*h/);
+  const minMatch = trimmed.match(/(\d+)\s*m/);
+  if (hourMatch) totalMinutes += parseInt(hourMatch[1]) * 60;
+  if (minMatch) totalMinutes += parseInt(minMatch[1]);
+  if (!hourMatch && !minMatch) {
+    const num = parseFloat(trimmed);
+    if (!isNaN(num)) totalMinutes = Math.round(num * 60);
+    else return null;
+  }
+  return totalMinutes > 0 ? totalMinutes : null;
+}
+
+function formatMinutes(minutes: number | null | undefined): string {
+  if (!minutes) return '';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
 }
 
 const PRIORITIES: { key: string; label: string; color: string }[] = [
@@ -102,7 +131,56 @@ function PriorityMenu({
   );
 }
 
-type Editor = null | 'assignee' | 'priority' | 'work' | 'start' | 'due';
+// A tiny inline editor for the time estimate — accepts the same "2h 30m" shorthand
+// as the task detail panel. Commits on Enter or click-away; Escape discards.
+function EstimateMenu({
+  anchorRect,
+  value,
+  onApply,
+  onClose,
+}: {
+  anchorRect: DOMRect | null;
+  value: number | null;
+  onApply: (mins: number | null) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [input, setInput] = useState(() => formatMinutes(value));
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onApply(parseTimeInput(input));
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [input, onApply]);
+
+  if (!anchorRect || typeof document === 'undefined') return null;
+  const width = 168;
+  let left = anchorRect.left;
+  if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
+  const top = anchorRect.bottom + 4;
+
+  return createPortal(
+    <div ref={ref} className="nt-menu nt-estimate-menu" style={{ position: 'fixed', top, left, width, zIndex: 100 }}>
+      <input
+        autoFocus
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onApply(parseTimeInput(input));
+          if (e.key === 'Escape') onClose();
+        }}
+        placeholder="e.g. 2h 30m"
+        className="nt-estimate-input"
+      />
+      <div className="nt-estimate-hint">Enter to save · Esc to cancel</div>
+    </div>,
+    document.body,
+  );
+}
+
+type Editor = null | 'assignee' | 'priority' | 'work' | 'start' | 'due' | 'estimate';
 
 export default function NewTaskRow({
   task,
@@ -114,6 +192,7 @@ export default function NewTaskRow({
   const qc = useQueryClient();
   const updateTask = useUpdateTask(null);
   const reviewTask = useReviewTask();
+  const focusTask = useFocusTask();
   // Opening a task sets activeTaskId → the global TaskDetailPanel renders on top of
   // this popup (which stays mounted underneath). See z-index note in globals.css.
   const setActiveTask = usePMStore((s) => s.setActiveTask);
@@ -129,6 +208,7 @@ export default function NewTaskRow({
   const priority = (t.priority as string) || 'none';
   const priDef = PRIORITIES.find((p) => p.key === priority);
   const breadcrumb = [t.space?.name, t.list?.name].filter(Boolean).join(' / ') || t.parent_task?.title || '';
+  const isFocused = isTaskFocused(task);
 
   // Optimistically patch both queue caches so a cell updates instantly, then let the
   // server be the source of truth (a refetch may legitimately drop the row — e.g.
@@ -148,6 +228,20 @@ export default function NewTaskRow({
     setEditor(kind);
   };
   const closeEditor = () => { setEditor(null); setAnchorRect(null); };
+
+  // Toggle the persistent "focus today" star. useFocusTask patches the day-planner /
+  // my-tasks caches but not the new-tasks queue, so patch those here for an instant
+  // flip; the mutation persists tasks.focused_at server-side.
+  const onToggleFocus = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const focused = !isFocused;
+    const focused_at = focused ? new Date().toISOString() : null;
+    for (const key of [['new-tasks', false], ['new-tasks', true]] as const) {
+      qc.setQueryData(key, (old: NewTask[] | undefined) =>
+        Array.isArray(old) ? old.map((row) => (row.id === task.id ? { ...row, focused_at } : row)) : old);
+    }
+    focusTask.mutate({ id: task.id, focused });
+  };
 
   const onToggleReview = () => {
     if (showReviewed) {
@@ -196,8 +290,22 @@ export default function NewTaskRow({
 
       {/* Task */}
       <div className="nt-cell nt-c-task">
-        <button type="button" className="nt-title" title={`Open “${t.title}”`} onClick={() => setActiveTask(task.id)}>{t.title}</button>
-        {breadcrumb && <div className="nt-breadcrumb" title={breadcrumb}>{breadcrumb}</div>}
+        <div className="nt-task-main">
+          <button
+            type="button"
+            className="nt-focus-star"
+            data-active={isFocused || undefined}
+            aria-label={isFocused ? 'Focused for today — click to remove' : 'Focus today'}
+            title={isFocused ? 'Focused for today — click to remove' : 'Focus today'}
+            onClick={onToggleFocus}
+          >
+            {isFocused ? '★' : '☆'}
+          </button>
+          <div className="nt-task-text">
+            <button type="button" className="nt-title" title={`Open “${t.title}”`} onClick={() => setActiveTask(task.id)}>{t.title}</button>
+            {breadcrumb && <div className="nt-breadcrumb" title={breadcrumb}>{breadcrumb}</div>}
+          </div>
+        </div>
       </div>
 
       {/* Assignee */}
@@ -246,6 +354,13 @@ export default function NewTaskRow({
         />
       </div>
 
+      {/* Estimate */}
+      <div className="nt-cell nt-c-estimate">
+        <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('estimate', e)}>
+          {t.time_estimate ? <span>{formatMinutes(t.time_estimate)}</span> : <span className="nt-placeholder">Estimate</span>}
+        </button>
+      </div>
+
       {/* Work date */}
       <div className="nt-cell nt-c-date">
         <button type="button" className="nt-cellbtn" onClick={(e) => openEditor('work', e)}>
@@ -284,6 +399,14 @@ export default function NewTaskRow({
           anchorRect={anchorRect}
           value={priority}
           onPick={(p) => { applyEdit({ priority: p }); closeEditor(); }}
+          onClose={closeEditor}
+        />
+      )}
+      {editor === 'estimate' && (
+        <EstimateMenu
+          anchorRect={anchorRect}
+          value={(t.time_estimate as number | null) ?? null}
+          onApply={(mins) => { applyEdit({ time_estimate: mins }); closeEditor(); }}
           onClose={closeEditor}
         />
       )}

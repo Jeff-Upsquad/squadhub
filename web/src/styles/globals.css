@@ -6297,9 +6297,9 @@ ol.sqc-list {
 .nt-close:hover { background: var(--sh-hair-3); color: var(--sh-ink); border-color: var(--sh-hair); }
 
 .nt-scroll { flex: 1; overflow: auto; }
-.nt-table { min-width: 1040px; }
+.nt-table { min-width: 1140px; }
 
-.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 64px minmax(220px, 2.2fr) 132px 120px 168px 124px 124px 124px; align-items: center; gap: 4px; padding: 0 16px; }
+.nt-row-grid, .nt-head-row { display: grid; grid-template-columns: 64px minmax(220px, 2.2fr) 132px 120px 168px 100px 124px 124px 124px; align-items: center; gap: 4px; padding: 0 16px; }
 .nt-head-row { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--sh-hair-3); padding-top: 10px; padding-bottom: 10px; }
 .nt-col { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; color: var(--sh-ink-4); }
 
@@ -6317,6 +6317,20 @@ ol.sqc-list {
 .nt-title { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; font-family: inherit; font-size: 13px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 90%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .nt-title:hover { color: var(--sh-ink); text-decoration: underline; text-underline-offset: 2px; }
 .nt-breadcrumb { font-size: 11px; color: var(--sh-ink-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+
+/* Task cell holds the focus star alongside the title/breadcrumb stack. */
+.nt-task-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.nt-task-text { min-width: 0; flex: 1; }
+.nt-focus-star { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 5px; background: transparent; border: none; font-size: 14px; line-height: 1; color: var(--sh-ink-4); cursor: pointer; opacity: 0; transition: opacity 0.12s, color 0.12s, background 0.12s; }
+.nt-row:hover .nt-focus-star { opacity: 1; }
+.nt-focus-star:hover { background: var(--sh-hair-3); color: #f59e0b; }
+.nt-focus-star[data-active] { opacity: 1; color: #f59e0b; }
+
+/* Inline estimate editor popover. */
+.nt-estimate-menu { padding: 8px; }
+.nt-estimate-input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--sh-hair); border-radius: 7px; background: var(--surface); color: var(--sh-ink); font-family: inherit; font-size: 12.5px; outline: none; transition: border-color 0.12s; }
+.nt-estimate-input:focus { border-color: var(--sh-ink-3); }
+.nt-estimate-hint { font-size: 10px; color: var(--sh-ink-4); margin-top: 6px; }
 
 .nt-cellbtn { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 8px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--sh-ink-2); font-size: 12.5px; cursor: pointer; transition: background 0.12s, border-color 0.12s, box-shadow 0.12s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nt-cellbtn:hover { background: var(--surface); border-color: var(--sh-hair); box-shadow: var(--sh-shadow-sm); }
