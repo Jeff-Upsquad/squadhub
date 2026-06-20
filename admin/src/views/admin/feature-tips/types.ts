@@ -7,12 +7,22 @@ export interface TipAudience {
   user_ids?: string[];
 }
 
+// One step of a guided tour (same placement shape as a single-card tip).
+export interface TipStep {
+  title: string;
+  body: string;
+  target_view: string | null;
+  target_anchor: string | null;
+}
+
 export interface FeatureTipRow {
   id: string;
   title: string;
   body: string;
   target_view: string | null;
   target_anchor: string | null;
+  /** Ordered steps for a guided tour; null/empty ⇒ single card. */
+  steps?: TipStep[] | null;
   audience: TipAudience;
   is_active: boolean;
   current_revision: number;

@@ -414,7 +414,7 @@ export default function HomeSidebar({
             apps are pinned from the Apps module (the rail's grid icon). */}
         {availableApps.length > 0 && (
           <>
-            <div className="py-1">
+            <div className="py-1" data-tip-anchor="home.apps">
               <SectionHeader
                 title="Apps"
                 expanded={expandedSections.apps}

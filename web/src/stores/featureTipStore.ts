@@ -13,6 +13,12 @@ let index = 0;
 let listeners: Array<() => void> = [];
 let navListeners: Array<(view: string) => void> = [];
 
+// The anchor key the overlay is currently spotlighting (the active tour step's
+// target_anchor), or null. Components can react to it — e.g. the Apps module
+// reveals its hover-only star while it is the spotlight target.
+let activeAnchor: string | null = null;
+let anchorListeners: Array<() => void> = [];
+
 function emit() {
   listeners.forEach((l) => l());
 }
@@ -64,6 +70,22 @@ export const featureTipStore = {
       navListeners = navListeners.filter((l) => l !== cb);
     };
   },
+
+  // The currently-spotlighted anchor key (set by the overlay as a tour advances).
+  setActiveAnchor(anchor: string | null) {
+    if (anchor === activeAnchor) return;
+    activeAnchor = anchor;
+    anchorListeners.forEach((l) => l());
+  },
+  subscribeAnchor(cb: () => void) {
+    anchorListeners.push(cb);
+    return () => {
+      anchorListeners = anchorListeners.filter((l) => l !== cb);
+    };
+  },
+  getActiveAnchor(): string | null {
+    return activeAnchor;
+  },
 };
 
 /** Current tip to display, or null. */
@@ -71,6 +93,15 @@ export function useCurrentTip(): PendingFeatureTip | null {
   return useSyncExternalStore(
     featureTipStore.subscribe,
     featureTipStore.getSnapshot,
+    () => null,
+  );
+}
+
+/** The anchor key currently being spotlighted by a feature tip, or null. */
+export function useActiveTipAnchor(): string | null {
+  return useSyncExternalStore(
+    featureTipStore.subscribeAnchor,
+    featureTipStore.getActiveAnchor,
     () => null,
   );
 }

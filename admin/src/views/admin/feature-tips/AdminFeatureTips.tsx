@@ -80,7 +80,9 @@ export default function AdminFeatureTips() {
                     <StatusBadge active={t.is_active} revision={t.current_revision} />
                   </td>
                   <td className="px-4 py-3 text-xs text-foreground-muted">
-                    {t.target_anchor ? (
+                    {t.steps && t.steps.length > 0 ? (
+                      <span className="text-foreground">Guided tour · {t.steps.length} steps</span>
+                    ) : t.target_anchor ? (
                       <>
                         <span className="text-foreground">{t.target_view || '—'}</span>
                         <div className="font-[family-name:var(--font-mono)] text-[11px] text-foreground-dim">
@@ -146,6 +148,7 @@ export default function AdminFeatureTips() {
           targetView={previewTip.target_view}
           targetAnchor={previewTip.target_anchor}
           viewLabel={previewTip.target_view}
+          steps={previewTip.steps ?? null}
           onClose={() => setPreviewTip(null)}
         />
       )}

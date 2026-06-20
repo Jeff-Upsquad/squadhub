@@ -457,12 +457,22 @@ export default function MainLayout() {
     setHomeView(v);
     setMobileDrawerOpen(false);
   };
+  // A tip step targets either a HomeView or the special 'apps' module (the rail's
+  // grid icon, whose side menu hosts the star/pin control).
+  const navigateToTipTarget = (target: string) => {
+    if (target === 'apps') {
+      setActiveSection('apps');
+      setMobileDrawerOpen(false);
+      return;
+    }
+    navigateToView(target as HomeView);
+  };
   const { data: pendingTips } = usePendingTips(!!currentWorkspace);
   useEffect(() => {
     featureTipStore.setQueue(pendingTips ?? []);
   }, [pendingTips]);
-  // "Show me" → the overlay asks, we navigate.
-  useEffect(() => featureTipStore.subscribeNav((view) => navigateToView(view as HomeView)), []);
+  // "Show me" / tour auto-nav → the overlay asks, we navigate.
+  useEffect(() => featureTipStore.subscribeNav((view) => navigateToTipTarget(view)), []);
   // Re-check pending tips when the user changes screens (so a coachmark anchored
   // to a freshly-entered view shows without waiting for the next poll).
   useEffect(() => {
