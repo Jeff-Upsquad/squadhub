@@ -180,6 +180,12 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
               </svg>
               Squad Chat
             </NavLink>
+            <NavLink href="/admin/feature-tips">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.1v.2h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0012 2z" />
+              </svg>
+              Feature Tips
+            </NavLink>
           </div>
 
           <div className="!mt-4 border-t border-divider pt-3">

@@ -48,6 +48,7 @@ const nextConfig = {
       { source: '/meetings/:path*', destination: `${API_URL}/meetings/:path*` },
       { source: '/profile-access/:path*', destination: `${API_URL}/profile-access/:path*` },
       { source: '/view-preferences/:path*', destination: `${API_URL}/view-preferences/:path*` },
+      { source: '/feature-tips/:path*', destination: `${API_URL}/feature-tips/:path*` },
     ],
   }),
 

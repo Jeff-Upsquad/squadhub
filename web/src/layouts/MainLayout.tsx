@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 
 const ADMIN_APP_URL = process.env.NEXT_PUBLIC_ADMIN_URL || (process.env.NODE_ENV === 'production' ? '/admin' : 'http://localhost:3001');
@@ -8,7 +8,7 @@ import { useAuthStore } from '../stores/authStore';
 import { usePMStore } from '../stores/pmStore';
 import { loadViewPreferences } from '../stores/viewPreferencesSync';
 import type { Workspace, Channel } from '@squadhub/shared';
-import { connectSocket, disconnectSocket } from '../services/socket';
+import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
 import { usePresenceStore } from '../stores/presenceStore';
 import ChatPanel from '../views/app/chat/ChatPanel';
 import CreateChannelModal from '../views/app/chat/CreateChannelModal';
@@ -58,6 +58,9 @@ import { useNotificationFreshness } from '../hooks/useNotificationFreshness';
 import { useBrowserNotifications } from '../hooks/useBrowserNotifications';
 import BrowserNotificationsToggle from '../components/BrowserNotificationsToggle';
 import { useIsMobile } from '../hooks/useIsMobile';
+import FeatureTipOverlay from '../components/FeatureTipOverlay';
+import { usePendingTips } from '../hooks/usePendingTips';
+import { featureTipStore } from '../stores/featureTipStore';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
@@ -163,6 +166,7 @@ function RailBtn({
   badge,
   badgeAlert = false,
   badgePulse = false,
+  anchorKey,
   onClick,
 }: {
   icon: React.ReactNode;
@@ -173,12 +177,15 @@ function RailBtn({
   badgeAlert?: boolean;
   /** Play the expanding pulse ring (a notification just arrived). */
   badgePulse?: boolean;
+  /** Stable key so a Feature Tip coachmark can anchor to this rail button. */
+  anchorKey?: string;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
       title={label}
+      data-tip-anchor={anchorKey}
       className={`relative grid h-10 w-10 place-items-center rounded-[9px] transition ${
         active
           ? 'border border-[var(--sh-hair)] bg-[var(--surface)] text-[var(--sh-ink)]'
@@ -442,6 +449,34 @@ export default function MainLayout() {
     }
   }, [currentWorkspace]);
 
+  // ---- Feature Tips (admin-triggered coachmarks / announcements) ----
+  const queryClient = useQueryClient();
+  // Guide a tip's target_view by driving the same nav state apps use.
+  const navigateToView = (v: HomeView) => {
+    setActiveSection('home');
+    setHomeView(v);
+    setMobileDrawerOpen(false);
+  };
+  const { data: pendingTips } = usePendingTips(!!currentWorkspace);
+  useEffect(() => {
+    featureTipStore.setQueue(pendingTips ?? []);
+  }, [pendingTips]);
+  // "Show me" → the overlay asks, we navigate.
+  useEffect(() => featureTipStore.subscribeNav((view) => navigateToView(view as HomeView)), []);
+  // Re-check pending tips when the user changes screens (so a coachmark anchored
+  // to a freshly-entered view shows without waiting for the next poll).
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ['feature-tips', 'pending'] });
+  }, [activeSection, homeView, queryClient]);
+  // A trigger broadcasts this content-free event — re-fetch immediately.
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+    const onChanged = () => queryClient.invalidateQueries({ queryKey: ['feature-tips', 'pending'] });
+    socket.on('feature_tips_changed', onChanged);
+    return () => { socket.off('feature_tips_changed', onChanged); };
+  }, [currentWorkspace, queryClient]);
+
   const openInboxNotification = (notificationId: string) => {
     setActiveSection('home');
     setHomeView('inbox');
@@ -648,6 +683,7 @@ export default function MainLayout() {
           type="button"
           onClick={() => setShowCreateTaskModal(true)}
           aria-label="Create new task"
+          data-tip-anchor="action.new-task"
           aria-hidden={hideGlobalCreateBtn}
           tabIndex={hideGlobalCreateBtn ? -1 : undefined}
           className={`grid h-9 w-9 place-items-center rounded-[8px] text-[var(--sh-ink)] hover:bg-[var(--sh-hair-3)] ${hideGlobalCreateBtn ? 'invisible pointer-events-none' : ''}`}
@@ -693,12 +729,14 @@ export default function MainLayout() {
           <RailBtn
             icon={ICON.home}
             label="My Home"
+            anchorKey="rail.home"
             active={activeSection === 'home' && homeView === 'hub'}
             onClick={() => { setActiveSection('home'); setHomeView('hub'); }}
           />
           <RailBtn
             icon={ICON.inbox}
             label="Inbox"
+            anchorKey="rail.inbox"
             badge={unreadCount > 0 ? unreadCount : undefined}
             badgeAlert={inboxAlert}
             badgePulse={inboxPulse}
@@ -714,21 +752,23 @@ export default function MainLayout() {
           <RailBtn
             icon={ICON.tasks}
             label="Tasks"
+            anchorKey="rail.tasks"
             active={activeSection === 'home' && homeView === 'my-tasks'}
             onClick={() => { setActiveSection('home'); setHomeView('my-tasks'); }}
           />
           {hasNotes && (
-            <RailBtn icon={ICON.docs} label="Docs" active={activeSection === 'docs'} onClick={() => setActiveSection('docs')} />
+            <RailBtn icon={ICON.docs} label="Docs" anchorKey="rail.docs" active={activeSection === 'docs'} onClick={() => setActiveSection('docs')} />
           )}
-          <RailBtn icon={ICON.cal}  label="Cal"  active={activeSection === 'cal'}  onClick={() => setActiveSection('cal')} />
-          <RailBtn icon={ICON.apps} label="Apps" active={activeSection === 'apps'} onClick={() => setActiveSection('apps')} />
-          <RailBtn icon={ICON.learning} label="Learning" active={activeSection === 'learning'} onClick={() => setActiveSection('learning')} />
+          <RailBtn icon={ICON.cal}  label="Cal"  anchorKey="rail.cal"  active={activeSection === 'cal'}  onClick={() => setActiveSection('cal')} />
+          <RailBtn icon={ICON.apps} label="Apps" anchorKey="rail.apps" active={activeSection === 'apps'} onClick={() => setActiveSection('apps')} />
+          <RailBtn icon={ICON.learning} label="Learning" anchorKey="rail.learning" active={activeSection === 'learning'} onClick={() => setActiveSection('learning')} />
           <button
             onClick={(e) => {
               setTimesheetAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
               setTimesheetOpen((v) => !v);
             }}
             title="Time sheet"
+            data-tip-anchor="rail.timesheet"
             className={`relative grid h-10 w-10 place-items-center rounded-[9px] transition ${
               timesheetOpen
                 ? 'border border-[var(--sh-hair)] bg-[var(--surface)] text-[var(--sh-ink)]'
@@ -745,7 +785,7 @@ export default function MainLayout() {
 
         {/* Second nav: More */}
         <div className="flex w-full flex-col items-center gap-[2px]">
-          <RailBtn icon={ICON.more}  label="More"    active={activeSection === 'more'}    onClick={() => setActiveSection('more')} />
+          <RailBtn icon={ICON.more}  label="More"    anchorKey="rail.more"    active={activeSection === 'more'}    onClick={() => setActiveSection('more')} />
         </div>
 
         {/* Spacer */}
@@ -856,6 +896,7 @@ export default function MainLayout() {
             onClick={() => setShowCreateTaskModal(true)}
             title="New task"
             aria-label="Create new task"
+            data-tip-anchor="action.new-task"
             className="absolute right-3 top-2 z-40 hidden h-8 w-8 place-items-center rounded-[9px] border border-transparent text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition md:grid"
           >
             <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -1166,6 +1207,9 @@ export default function MainLayout() {
 
       {/* Toast notifications */}
       <ToastContainer />
+
+      {/* Admin-triggered Feature Tips (coachmarks / "what's new" cards) */}
+      <FeatureTipOverlay />
 
       {/* Workspace search palette */}
       {searchOpen && currentWorkspace && (

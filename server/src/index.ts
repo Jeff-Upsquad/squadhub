@@ -97,6 +97,8 @@ import profileAccessRoutes from './routes/profile-access';
 import profileAccessAdminRoutes from './routes/profile-access-admin';
 import viewPreferencesRoutes from './routes/view-preferences';
 import meetingsRoutes from './routes/meetings';
+import featureTipsRoutes from './routes/feature-tips';
+import adminFeatureTipsRoutes from './routes/admin/feature-tips';
 import { startCheckInCron } from './cron/checkin-cron';
 import { startTimerCron } from './cron/timer-cron';
 import { startScheduledMessagesSweeper } from './cron/scheduled-messages-cron';
@@ -230,6 +232,10 @@ app.use('/admin/profile-access', profileAccessAdminRoutes);
 
 // User view preferences (filters, groupBy, sort — synced across browsers)
 app.use('/view-preferences', viewPreferencesRoutes);
+
+// Feature Tips (admin-triggered tooltips / coachmarks)
+app.use('/feature-tips', featureTipsRoutes);
+app.use('/admin/feature-tips', adminFeatureTipsRoutes);
 
 // 404 handler
 app.use((_req, res) => {
