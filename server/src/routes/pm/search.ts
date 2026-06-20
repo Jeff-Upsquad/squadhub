@@ -203,7 +203,7 @@ router.get('/search', async (req: Request, res: Response) => {
 
     const { data: matches, error } = await supabaseAdmin
       .from('tasks')
-      .select('id, title, status, priority, due_date, list_id, parent_task_id, created_at')
+      .select('id, title, status, priority, due_date, display_number, list_id, parent_task_id, created_at')
       .in('list_id', accessibleListIds)
       .is('parent_task_id', null)
       .is('recurrence', null)
@@ -274,6 +274,7 @@ router.get('/search', async (req: Request, res: Response) => {
         status: t.status,
         priority: t.priority,
         due_date: t.due_date,
+        display_number: t.display_number ?? null,
         list_id: t.list_id,
         list_name: list?.name || null,
         folder_id: list?.folder_id || null,

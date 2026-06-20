@@ -6674,6 +6674,110 @@ ol.sqc-list {
 .wb-ebar-text { padding: 0 8px; }
 .wb-ebar-convert { color: #2563eb; }
 .wb-ebar-convert:hover { background: rgba(37,99,235,0.12); color: #2563eb; }
+.wb-ebar-mention { color: #7c3aed; }
+.wb-ebar-mention:hover { background: rgba(124,58,237,0.12); color: #7c3aed; }
+.wb-ebar-at { font-size: 14px; font-weight: 800; line-height: 1; }
+
+/* "Mention a task" dropdown — search box + scrollable task list. Drops below
+   the edit bar, aligned to its right edge (the button sits near the bar's end). */
+.wb-mention-pop {
+  position: absolute;
+  top: calc(100% + 8px); right: 0;
+  width: 300px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--sh-hair);
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.22);
+  z-index: 30;
+}
+.wb-mention-search {
+  width: 100%; height: 32px;
+  margin-bottom: 6px; padding: 0 10px;
+  border: 1px solid var(--sh-hair); border-radius: 8px;
+  background: var(--surface-alt); color: var(--sh-ink);
+  font-size: 12.5px; outline: none;
+}
+.wb-mention-search:focus { border-color: var(--sh-accent); }
+.wb-mention-list { max-height: 280px; overflow-y: auto; }
+.wb-mention-head {
+  padding: 6px 8px 4px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--sh-ink-3);
+}
+.wb-mention-empty { padding: 12px 8px; font-size: 12px; color: var(--sh-ink-3); text-align: center; }
+.wb-mention-row {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 8px;
+  border: none; background: transparent; border-radius: 8px;
+  cursor: pointer; text-align: left;
+}
+.wb-mention-row:hover { background: var(--sh-hair-3); }
+.wb-mention-row-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.wb-mention-title {
+  font-size: 13px; font-weight: 600; color: var(--sh-ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wb-mention-done { text-decoration: line-through; color: var(--sh-ink-3); }
+.wb-mention-sub {
+  font-size: 11px; color: var(--sh-ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wb-mention-num {
+  flex-shrink: 0;
+  font-size: 11px; font-weight: 700; color: var(--sh-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Mentioned-task card — a dedicated reference node, distinct from sticky/shape. */
+.wb-taskcard {
+  width: 248px;
+  box-sizing: border-box;
+  position: relative;
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 11px 13px 12px;
+  background: var(--surface);
+  border: 1px solid var(--sh-hair);
+  border-left: 3px solid #7c3aed;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.16);
+  color: var(--sh-ink);
+}
+.wb-taskcard-head { display: flex; align-items: center; gap: 8px; }
+.wb-taskcard-check {
+  width: 16px; height: 16px; flex-shrink: 0; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1.6px solid var(--sh-ink-3); border-radius: 5px;
+  background: transparent; color: #fff; cursor: pointer;
+}
+.wb-taskcard-check[aria-checked="true"] { background: #7c3aed; border-color: #7c3aed; }
+.wb-taskcard-check:disabled { cursor: default; }
+.wb-taskcard-tag {
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
+  color: #7c3aed;
+}
+.wb-taskcard-open {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 8px;
+  border: none; border-radius: 999px;
+  background: var(--sh-hair-3); color: var(--sh-ink-2);
+  font-size: 10.5px; font-weight: 700; cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.wb-taskcard-open:hover { background: rgba(124,58,237,0.14); color: #7c3aed; }
+.wb-taskcard-title {
+  font-size: 14px; font-weight: 600; line-height: 1.35; color: var(--sh-ink);
+  word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.wb-taskcard-loc {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--sh-ink-3); min-width: 0;
+}
+.wb-taskcard-loc svg { flex-shrink: 0; opacity: 0.75; }
+.wb-taskcard-loc span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb-taskcard-done .wb-taskcard-title { text-decoration: line-through; color: var(--sh-ink-3); }
 
 /* Completed task element: strike + dim the text. */
 .wb-done { text-decoration: line-through; opacity: 0.55; }

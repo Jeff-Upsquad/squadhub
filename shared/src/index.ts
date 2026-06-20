@@ -341,7 +341,9 @@ export interface List {
 // A list's whiteboard is persisted as a single app-owned JSONB blob
 // (list_whiteboards.data). The shape is owned by the whiteboard view; the
 // server stores it opaquely and does not validate the contents.
-export type WhiteboardNodeType = 'sticky' | 'text' | 'shape';
+// 'task' is a dedicated card that REFERENCES an existing task (added via the
+// element edit bar's "Mention a task"); the others are free-form elements.
+export type WhiteboardNodeType = 'sticky' | 'text' | 'shape' | 'task';
 export type WhiteboardShape =
   | 'rect' | 'roundRect' | 'ellipse' | 'diamond'
   | 'triangle' | 'triangleDown' | 'parallelogram'
@@ -362,6 +364,14 @@ export interface WhiteboardNodeData {
   taskId?: string | null;
   taskNumber?: number | null;
   done?: boolean;
+  // True when the element MENTIONS (references) a pre-existing task rather than
+  // having been converted into a freshly-created one. Mentions render as a
+  // dedicated 'task' card whose text is a read-only reference: editing it does
+  // NOT rename the linked task (which may live in another list).
+  taskMention?: boolean;
+  // Source-location breadcrumb (e.g. "Space · Folder · List") shown on a mention
+  // card when the referenced task lives in a different list.
+  taskList?: string | null;
   [key: string]: unknown;
 }
 
