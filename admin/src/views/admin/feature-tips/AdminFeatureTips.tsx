@@ -4,13 +4,13 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import ConfirmDialog from '../../../components/ConfirmDialog';
-import { FeatureTipRow, audienceSummary } from './types';
+import { FeatureTipRow, TipPlatform, audienceSummary } from './types';
 import FeatureTipEditor from './FeatureTipEditor';
 import FeatureTipRoster from './FeatureTipRoster';
 import FeatureTipTriggerDialog from './FeatureTipTriggerDialog';
 import FeatureTipPreview from './FeatureTipPreview';
 
-export default function AdminFeatureTips() {
+export default function AdminFeatureTips({ platform = 'web' }: { platform?: TipPlatform }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<FeatureTipRow | 'new' | null>(null);
   const [rosterTip, setRosterTip] = useState<FeatureTipRow | null>(null);
@@ -18,9 +18,10 @@ export default function AdminFeatureTips() {
   const [deleteTip, setDeleteTip] = useState<FeatureTipRow | null>(null);
   const [previewTip, setPreviewTip] = useState<FeatureTipRow | null>(null);
 
+  const listKey = ['admin-feature-tips', platform];
   const { data: res, isLoading } = useQuery({
-    queryKey: ['admin-feature-tips'],
-    queryFn: () => api.get('/admin/feature-tips').then((r) => r.data),
+    queryKey: listKey,
+    queryFn: () => api.get(`/admin/feature-tips?platform=${platform}`).then((r) => r.data),
   });
   const tips: FeatureTipRow[] = res?.data || [];
 
@@ -28,18 +29,23 @@ export default function AdminFeatureTips() {
     mutationFn: (id: string) => api.delete(`/admin/feature-tips/${id}`),
     onSuccess: () => {
       setDeleteTip(null);
-      qc.invalidateQueries({ queryKey: ['admin-feature-tips'] });
+      qc.invalidateQueries({ queryKey: listKey });
     },
   });
+
+  const isApp = platform === 'app';
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">Feature Tips</h1>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">
+            {isApp ? 'App Tooltips' : 'Feature Tips'}
+          </h1>
           <p className="mt-1 text-sm text-foreground-muted">
-            Announce new features with a coachmark or card. Trigger to push it to users — each must accept
-            it (or dismiss to be reminded in 3 hours). Re-trigger any time.
+            {isApp
+              ? 'Announce features inside the native partner app with a coachmark or card. Trigger to push it to app users — each must accept it (or dismiss to be reminded in 3 hours). Re-trigger any time.'
+              : 'Announce new features with a coachmark or card. Trigger to push it to users — each must accept it (or dismiss to be reminded in 3 hours). Re-trigger any time.'}
           </p>
         </div>
         <button
@@ -120,10 +126,11 @@ export default function AdminFeatureTips() {
       {editing && (
         <FeatureTipEditor
           tip={editing === 'new' ? null : editing}
+          platform={platform}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
-            qc.invalidateQueries({ queryKey: ['admin-feature-tips'] });
+            qc.invalidateQueries({ queryKey: listKey });
           }}
         />
       )}
@@ -136,7 +143,7 @@ export default function AdminFeatureTips() {
           onClose={() => setTriggerTip(null)}
           onTriggered={() => {
             setTriggerTip(null);
-            qc.invalidateQueries({ queryKey: ['admin-feature-tips'] });
+            qc.invalidateQueries({ queryKey: listKey });
           }}
         />
       )}

@@ -2402,6 +2402,11 @@ export function describeTaskRecurrence(rule: TaskRecurrence | null | undefined):
 export type FeatureTipStatus = 'accepted' | 'dismissed';
 export type TriggerScope = 'everyone' | 'unaccepted';
 
+/** Surface a tip is authored for. 'web' = the browser app, 'app' = the native
+ *  partner Android app. A tip only ever shows on its own platform; the two are
+ *  managed from separate admin sections and target platform-specific screens. */
+export type TipPlatform = 'web' | 'app';
+
 /** Audience filter for a tip. `{}` (empty) ⇒ ALL active users. Otherwise a user
  *  is in the audience if they match ANY specified key (filters are OR-unioned). */
 export interface FeatureTipAudience {
@@ -2424,6 +2429,9 @@ export interface FeatureTipStep {
 
 export interface FeatureTip {
   id: string;
+  /** Which app this tip targets. Defaults to 'web' for tips created before the
+   *  platform split. App tips render in the native partner app's overlay. */
+  platform: TipPlatform;
   title: string;
   body: string;
   /** Target screen key (a web HomeView). Null ⇒ centered "What's New" card. */
@@ -2512,4 +2520,37 @@ export const TIP_ANCHOR_KEYS: readonly string[] = [
   'action.new-task',
   'home.apps', // Home sidebar "Apps" section (pinned mini apps)
   'apps.star', // star/pin toggle on an app row in the Apps module side menu
+] as const;
+
+// ============================================================
+// APP (native partner Android app) tip catalogs
+// ============================================================
+// The phone app has a different surface than the web: a bottom tab bar (Home /
+// Chat / Inbox / More) and drill-in sections rather than a left rail. These
+// catalogs mirror the app's real navigation routes and `Modifier.tipAnchor`
+// keys so the admin "App Tooltips" editor offers only valid app placements.
+
+/** Screens an app tip can navigate to ("Show me" / guided-tour auto-nav). Each
+ *  `value` maps to a navigation route the native app knows how to open. */
+export const APP_NAV_TIP_VIEWS: { value: string; label: string }[] = [
+  { value: 'home', label: 'Home' },
+  { value: 'chat', label: 'Chat' },
+  { value: 'inbox', label: 'Inbox' },
+  { value: 'more', label: 'More / Account' },
+  { value: 'my-tasks', label: 'My Tasks' },
+  { value: 'new-tasks', label: 'Review (New Tasks)' },
+  { value: 'check-in', label: 'Daily Check-In' },
+  { value: 'tasks', label: 'Tasks' },
+];
+
+/** Stable `Modifier.tipAnchor` keys the native app tags. Convention mirrors web:
+ *  "<area>.<element>", kebab-case. An anchor not currently on screen degrades to
+ *  a centered "What's new" card, so targeting a hidden element is always safe. */
+export const APP_TIP_ANCHOR_KEYS: readonly string[] = [
+  'nav.home', // Home bottom-tab item
+  'nav.chat', // Chat bottom-tab item
+  'nav.inbox', // Inbox bottom-tab item
+  'nav.more', // More bottom-tab item
+  'home.profile', // profile avatar on the Home header
+  'home.checkin', // Daily Check-In shortcut card on Home
 ] as const;
