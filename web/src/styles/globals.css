@@ -6729,9 +6729,10 @@ ol.sqc-list {
   font-variant-numeric: tabular-nums;
 }
 
-/* Mentioned-task card — a dedicated reference node, distinct from sticky/shape. */
+/* Mentioned-task card — a dedicated reference node, distinct from sticky/shape.
+   Fills its React Flow node box so it can be dragged and resized. */
 .wb-taskcard {
-  width: 248px;
+  width: 100%; height: 100%;
   box-sizing: border-box;
   position: relative;
   display: flex; flex-direction: column; gap: 7px;
@@ -6742,7 +6743,10 @@ ol.sqc-list {
   border-radius: 12px;
   box-shadow: 0 6px 20px rgba(0,0,0,0.16);
   color: var(--sh-ink);
+  overflow: hidden;
+  cursor: grab;
 }
+.wb-taskcard:active { cursor: grabbing; }
 .wb-taskcard-head { display: flex; align-items: center; gap: 8px; }
 .wb-taskcard-check {
   width: 16px; height: 16px; flex-shrink: 0; padding: 0;
@@ -6767,9 +6771,9 @@ ol.sqc-list {
 }
 .wb-taskcard-open:hover { background: rgba(124,58,237,0.14); color: #7c3aed; }
 .wb-taskcard-title {
+  flex: 1 1 auto; min-height: 0;
   font-size: 14px; font-weight: 600; line-height: 1.35; color: var(--sh-ink);
-  word-break: break-word;
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  word-break: break-word; overflow: hidden;
 }
 .wb-taskcard-loc {
   display: flex; align-items: center; gap: 5px;
