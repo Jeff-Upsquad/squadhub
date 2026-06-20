@@ -748,6 +748,11 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
             </p>
             <ServiceTypeBadge serviceType={serviceType} />
             <CardTypeBadge cardType={card.card_type} />
+            {card.card_code && (
+              <span className="shrink-0 font-mono text-[10px] text-[var(--color-sh-ink-faint)]">
+                {card.card_code}
+              </span>
+            )}
           </div>
           {(planName || priceLabel) && (
             <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
