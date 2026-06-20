@@ -2554,3 +2554,109 @@ export const APP_TIP_ANCHOR_KEYS: readonly string[] = [
   'home.profile', // profile avatar on the Home header
   'home.checkin', // Daily Check-In shortcut card on Home
 ] as const;
+// ---------------------------------------------------------------------------
+// Candidates mini app
+//
+// DTOs for the "Candidates" mini app. SquadHub renders a thin UI and proxies
+// reads/writes to SquadHire (Profiles), which owns the data (lead_submissions /
+// lead_notes). These mirror SquadHire's shapes; the proxy validates responses
+// against them at the boundary as a tolerant reader (unknown fields ignored,
+// optional fields tolerate absence), so additive SquadHire changes never break
+// the UI.
+// ---------------------------------------------------------------------------
+
+export interface CandidateLinkedTalent {
+  id: string;
+  full_name: string;
+  onboarding_completed?: boolean;
+  skip_onboarding?: boolean;
+}
+
+export interface CandidateOnboardingProgress {
+  signed_up: boolean;
+  onboarding_completed: boolean;
+  onboarding_bypassed?: boolean;
+  basic_profile_completed: boolean;
+  job_profile_completed: boolean;
+  portfolio_completed: boolean;
+}
+
+/** A row in the candidate list. */
+export interface CandidateListItem {
+  id: string;
+  form_type: string;
+  status: string;
+  name: string;
+  email: string | null;
+  phone: string;
+  form_data: Record<string, unknown>;
+  auto_approved: boolean;
+  created_at: string;
+  linked_talent: CandidateLinkedTalent | null;
+}
+
+/** Full candidate detail (superset of the list row). */
+export interface Candidate extends CandidateListItem {
+  resume_url?: string | null;
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
+  admin_notes?: string | null;
+  archive_reason?: string | null;
+  profile_type?: string | null;
+  profile_type_custom?: string | null;
+  onboarding_progress?: CandidateOnboardingProgress;
+  deleted_at?: string | null;
+}
+
+export interface CandidateNote {
+  id: string;
+  lead_id: string;
+  content: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CandidatesListResponse {
+  leads: CandidateListItem[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+}
+
+/** Onboarding tab row — a signed-up candidate with onboarding progress. */
+export interface OnboardingListItem extends CandidateListItem {
+  onboarding_progress: CandidateOnboardingProgress;
+}
+export interface OnboardingListResponse {
+  leads: OnboardingListItem[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+}
+
+/** Interview Responses tab — a first-level interview invitation. */
+export interface InterviewInvitation {
+  id: string;
+  lead_id: string;
+  lead_name: string;
+  lead_phone: string;
+  lead_email: string | null;
+  form_type: string;
+  created_at: string;
+  expires_at: string;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  response_count: number;
+}
+export interface InterviewInvitationsResponse {
+  invitations: InterviewInvitation[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+}

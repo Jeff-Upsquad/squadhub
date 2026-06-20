@@ -49,6 +49,7 @@ const nextConfig = {
       { source: '/profile-access/:path*', destination: `${API_URL}/profile-access/:path*` },
       { source: '/view-preferences/:path*', destination: `${API_URL}/view-preferences/:path*` },
       { source: '/feature-tips/:path*', destination: `${API_URL}/feature-tips/:path*` },
+      { source: '/candidates/:path*', destination: `${API_URL}/candidates/:path*` },
     ],
   }),
 

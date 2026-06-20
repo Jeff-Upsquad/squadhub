@@ -25,6 +25,7 @@ import SearchPalette from '../views/app/SearchPalette';
 import SettingsSlider from '../components/SettingsSlider';
 import CheckInWidget from '../views/app/checkin/CheckInWidget';
 import CheckInsPage from '../views/app/check-ins/CheckInsPage';
+import CandidatesPage from '../views/app/candidates/CandidatesPage';
 import NotesShell from '../views/app/notes/NotesShell';
 import { useHasMiniApp } from '../hooks/useMiniApps';
 import TimeManagementPage from '../views/app/time-management/TimeManagementPage';
@@ -64,7 +65,7 @@ import { featureTipStore } from '../stores/featureTipStore';
 
 // ---- Types ----
 type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner' | 'routines' | 'clips';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner' | 'routines' | 'clips';
 
 // One entry in the in-app navigation history: everything needed to bring the
 // user back to a view. Views switch via local state rather than URLs, so the
@@ -660,7 +661,7 @@ export default function MainLayout() {
   //   • embedded standalone apps (Squad Clips, Daily Check-In, Time Management,
   //     Sales Leads) — each renders its own header/actions; the global "+" was
   //     overlapping e.g. Squad Clips' "New recording ▾" dropdown chevron.
-  const EMBEDDED_APP_VIEWS: HomeView[] = ['clips', 'checkin', 'checkin-partners', 'check-ins', 'time-management', 'sales-leads'];
+  const EMBEDDED_APP_VIEWS: HomeView[] = ['clips', 'checkin', 'checkin-partners', 'check-ins', 'candidates', 'time-management', 'sales-leads'];
   // Day Planner gets the create button as a bottom-right floating FAB instead of
   // the top-right "+", which otherwise collides with the calendar's header.
   const onDayPlanner = activeSection === 'home' && homeView === 'day-planner';
@@ -946,6 +947,8 @@ export default function MainLayout() {
             <CheckInWidget title="Daily Check-In Partners" context="partners" />
           ) : homeView === 'check-ins' ? (
             <CheckInsPage />
+          ) : homeView === 'candidates' ? (
+            <CandidatesPage />
           ) : homeView === 'time-management' ? (
             <TimeManagementPage />
           ) : homeView === 'sales-leads' ? (
@@ -1120,6 +1123,8 @@ export default function MainLayout() {
             <CheckInWidget title="Daily Check-In Partners" context="partners" />
           ) : homeView === 'check-ins' ? (
             <CheckInsPage />
+          ) : homeView === 'candidates' ? (
+            <CandidatesPage />
           ) : homeView === 'time-management' ? (
             <TimeManagementPage />
           ) : homeView === 'sales-leads' ? (
