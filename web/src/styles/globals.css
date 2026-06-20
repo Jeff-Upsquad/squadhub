@@ -15,8 +15,8 @@
   --foreground:       #1D1C1D;
   --foreground-muted: #616061;
   --foreground-dim:   rgba(29,28,29,0.5);
-  --icon-bar:         #EDEDED;
-  --sidebar:          #F6F6F6;
+  --icon-bar:         #F0F0F0;
+  --sidebar:          #F0F0F0;
   --sidebar-text:     #0A0A0A;
   --sidebar-active:   #FFFFFF;
   --sidebar-hover:    rgba(10,10,10,0.04);
