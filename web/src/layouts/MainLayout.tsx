@@ -334,6 +334,7 @@ export default function MainLayout() {
 
   // Global keyboard shortcuts:
   //   ⌘K / Ctrl+K -> open workspace search palette
+  //   ⌘N / Ctrl+N -> open the New Task creation panel
   //   /           -> focus the view's top-right search input (when not already typing)
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null) => {
@@ -347,6 +348,21 @@ export default function MainLayout() {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
         setSearchOpen(true);
+        return;
+      }
+      // ⌘N (Mac) / Ctrl+N (Windows/Linux) opens the New Task panel. Ignore when
+      // a chord modifier is also held (e.g. ⌘⇧N = incognito) so we don't hijack
+      // those. Note: most browsers reserve ⌘N/Ctrl+N for "new window" and won't
+      // let the page cancel it — this fires in standalone/PWA & desktop webview
+      // contexts where the browser doesn't grab the combo first.
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        !e.altKey &&
+        (e.key === 'n' || e.key === 'N')
+      ) {
+        e.preventDefault();
+        setShowCreateTaskModal(true);
         return;
       }
       if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !isEditableTarget(e.target)) {
