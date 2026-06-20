@@ -1304,6 +1304,81 @@ export interface SubscriptionPlanPricing {
   country?: Country;
 }
 
+/** Per-tier pricing stored in subscription_cards.tier_pricing JSONB for
+ *  multi-tier draft cards: `{ [tier]: { proposed_price, markup, ... } }`. */
+export interface SubscriptionCardTierPricing {
+  proposed_price?: number | null;
+  /** Adjusted margin override; null/undefined = use the plan catalog margin. */
+  markup?: number | null;
+  /** Finalized monthly price for this tier; falls back to proposed_price. */
+  subscription_price?: number | null;
+}
+
+// ---- Pricing resolution helpers (single source of truth) ----
+// Model:
+//   Plan price         — catalog minimum (SubscriptionPlanPricing.price)
+//   Proposed price     — what the client asked for in the brief
+//   Subscription price — the FINALIZED monthly price the client pays
+//   Plan margin        — catalog default (margin_value + margin_type)
+//   Adjusted margin    — per-card override (markup); null = use plan margin
+//   Final margin       — adjusted if set, else plan margin
+//   Partner price      — partner_price_override, else finalized - final margin
+
+type CardPriceFields = {
+  subscription_price?: number | null;
+  proposed_price?: number | null;
+  markup?: number | null;
+  partner_price_override?: number | null;
+};
+type PlanMarginFields = { margin_value?: number | null; margin_type?: 'fixed' | 'percent' | null };
+
+/** Finalized monthly client price: the finalized subscription price if set,
+ *  else the proposed price. null when neither is a positive amount. */
+export function resolveFinalizedPrice(card: CardPriceFields): number | null {
+  if (card.subscription_price != null && card.subscription_price > 0) return card.subscription_price;
+  if (card.proposed_price != null && card.proposed_price > 0) return card.proposed_price;
+  return null;
+}
+
+/** The plan's catalog margin as an absolute INR amount. Percent margins are
+ *  applied to `basePrice` (the finalized price). null when no plan pricing or
+ *  a percent margin has no base to apply against. */
+export function resolvePlanMargin(
+  pricing: PlanMarginFields | null | undefined,
+  basePrice: number | null,
+): number | null {
+  if (!pricing || pricing.margin_value == null) return null;
+  if (pricing.margin_type === 'percent') {
+    if (basePrice == null) return null;
+    return Math.round((basePrice * pricing.margin_value) / 100);
+  }
+  return pricing.margin_value;
+}
+
+/** Final margin: the per-card adjusted margin (markup) if set, else the plan
+ *  margin. null when neither is available. */
+export function resolveFinalMargin(
+  card: CardPriceFields,
+  pricing: PlanMarginFields | null | undefined,
+  basePrice: number | null,
+): number | null {
+  if (card.markup != null) return card.markup;
+  return resolvePlanMargin(pricing, basePrice);
+}
+
+/** Partner price: the override if set, else finalized price minus final
+ *  margin. null when there's no finalized price to compute from. */
+export function resolvePartnerPrice(
+  card: CardPriceFields,
+  pricing?: PlanMarginFields | null,
+): number | null {
+  if (card.partner_price_override != null) return card.partner_price_override;
+  const finalized = resolveFinalizedPrice(card);
+  if (finalized == null) return null;
+  const margin = resolveFinalMargin(card, pricing, finalized) ?? 0;
+  return Math.max(0, finalized - margin);
+}
+
 export interface SubscriptionDeliverableType {
   id: string;
   subscription_id: string;
@@ -1556,6 +1631,14 @@ export interface SubscriptionCard {
   squadhire_category_ids: string[];
   /** Per-card override of the plan's default partner price. null = use default. */
   partner_price_override: number | null;
+  /** Customer's proposed monthly price from the brief (INR). null = none. */
+  proposed_price: number | null;
+  /** Finalized monthly price the client pays (INR). null = use proposed_price. */
+  subscription_price: number | null;
+  /** Adjusted margin (INR/month). null = use the plan catalog margin. */
+  markup: number | null;
+  /** Per-tier pricing for multi-tier draft cards: { [tier]: {...} }. */
+  tier_pricing?: Record<string, SubscriptionCardTierPricing>;
   published_at: string | null;
   published_by: string | null;
   closed_at: string | null;
@@ -1737,7 +1820,7 @@ export interface ClientSubscription {
   subscription?: Subscription;
   plan?: SubscriptionPlanRow;
   deliverables?: ClientSubscriptionDeliverable[];
-  card?: { id: string; state: string; published_at: string | null; card_code: string | null; linked_folder_id: string | null; linked_at: string | null } | null;
+  card?: { id: string; state: string; published_at: string | null; card_code: string | null; linked_folder_id: string | null; linked_at: string | null; proposed_price: number | null; subscription_price: number | null; markup: number | null; partner_price_override: number | null } | null;
 }
 
 // ---- Cash Book ----

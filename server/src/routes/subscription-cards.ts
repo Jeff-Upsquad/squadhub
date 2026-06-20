@@ -622,7 +622,7 @@ router.get(
           .in('id', planIds.length ? planIds : ['00000000-0000-0000-0000-000000000000']),
         supabaseAdmin
           .from('subscription_plan_pricing')
-          .select('plan_id, country_id, price')
+          .select('plan_id, country_id, price, margin_value, margin_type')
           .in('plan_id', planIds.length ? planIds : ['00000000-0000-0000-0000-000000000000']),
         supabaseAdmin.from('countries').select('id, name, currency'),
       ]);

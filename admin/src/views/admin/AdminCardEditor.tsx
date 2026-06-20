@@ -73,11 +73,14 @@ interface CardData {
   target_languages: string[];
   custom_deliverables: Deliverable[];
   proposed_price: number | null;
-  markup: number;
-  // Per-tier draft pricing: { Junior: { proposed_price, markup }, Pro: ... }.
+  // Finalized monthly client price. null = not finalized (falls back to proposed).
+  subscription_price: number | null;
+  // Adjusted margin. null = inherit the plan catalog margin.
+  markup: number | null;
+  // Per-tier draft pricing: { Junior: { proposed_price, markup, subscription_price }, ... }.
   // Cleared at publish — fan-out copies each tier's values onto its own
   // sibling card. Empty {} on single-tier drafts.
-  tier_pricing: Record<string, { proposed_price: number; markup: number }> | null;
+  tier_pricing: Record<string, { proposed_price: number; markup: number | null; subscription_price?: number | null }> | null;
   publish_targets: string[];
   customer_name: string | null;
   customer_email: string | null;
@@ -167,7 +170,9 @@ export default function AdminCardEditor({
   // with N tiers it renders N stacked groups. On publish, the backend
   // either flips the single card to published (1 tier) or fans out N
   // sibling cards (2+ tiers), reading prices from this map either way.
-  const [tierPricing, setTierPricing] = useState<Record<string, { proposedPrice: number; markup: number }>>({});
+  // markup null = inherit the plan catalog margin; subscriptionPrice null =
+  // not finalized (falls back to proposedPrice).
+  const [tierPricing, setTierPricing] = useState<Record<string, { proposedPrice: number; markup: number | null; subscriptionPrice: number | null }>>({});
   const [publishTargets, setPublishTargets] = useState<string[]>(['partner', 'talent']);
   const [distribution, setDistribution] = useState<string>('broadcast');
   const [brandName, setBrandName] = useState('');
@@ -204,12 +209,13 @@ export default function AdminCardEditor({
     const dbTierPricing = card.tier_pricing && typeof card.tier_pricing === 'object'
       ? card.tier_pricing
       : null;
-    const initialPricing: Record<string, { proposedPrice: number; markup: number }> = {};
+    const initialPricing: Record<string, { proposedPrice: number; markup: number | null; subscriptionPrice: number | null }> = {};
     if (dbTierPricing) {
       Object.entries(dbTierPricing).forEach(([tier, p]) => {
         initialPricing[tier] = {
           proposedPrice: (p as any)?.proposed_price ?? 0,
-          markup: (p as any)?.markup ?? 0,
+          markup: (p as any)?.markup ?? null,
+          subscriptionPrice: (p as any)?.subscription_price ?? null,
         };
       });
     }
@@ -217,7 +223,8 @@ export default function AdminCardEditor({
       if (!initialPricing[tier]) {
         initialPricing[tier] = {
           proposedPrice: card.proposed_price || 0,
-          markup: card.markup || 0,
+          markup: card.markup ?? null,
+          subscriptionPrice: card.subscription_price ?? null,
         };
       }
     });
@@ -248,7 +255,7 @@ export default function AdminCardEditor({
         if (isOn) {
           delete np[tier];
         } else if (!np[tier]) {
-          np[tier] = { proposedPrice: 0, markup: 0 };
+          np[tier] = { proposedPrice: 0, markup: null, subscriptionPrice: null };
         }
         return np;
       });
@@ -257,12 +264,13 @@ export default function AdminCardEditor({
   }, []);
 
   const updateTierPricing = useCallback(
-    (tier: string, field: 'proposedPrice' | 'markup', value: number) => {
+    (tier: string, field: 'proposedPrice' | 'markup' | 'subscriptionPrice', value: number | null) => {
       setTierPricing((prev) => ({
         ...prev,
         [tier]: {
           proposedPrice: prev[tier]?.proposedPrice ?? 0,
-          markup: prev[tier]?.markup ?? 0,
+          markup: prev[tier]?.markup ?? null,
+          subscriptionPrice: prev[tier]?.subscriptionPrice ?? null,
           [field]: value,
         },
       }));
@@ -320,53 +328,30 @@ export default function AdminCardEditor({
   const catalogMarginForTier = useCallback(
     (tier: string): number | null => {
       const row = catalogByTier[tier]?.pricing?.[0] || null;
-      const proposed = tierPricing[tier]?.proposedPrice ?? 0;
-      if (!row || proposed <= 0) return null;
+      const entry = tierPricing[tier];
+      // Percent margins apply to the finalized price (what the client pays).
+      const base = entry?.subscriptionPrice ?? entry?.proposedPrice ?? 0;
+      if (!row || base <= 0) return null;
       return row.margin_type === 'percent'
-        ? Math.round((proposed * row.margin_value) / 100)
+        ? Math.round((base * row.margin_value) / 100)
         : row.margin_value;
     },
     [catalogByTier, tierPricing],
   );
 
-  // Seed margin from catalog when admin hasn't set one yet for a tier.
-  // Mirrors the legacy single-tier seed: only fires once per (card load,
-  // tier, proposed price change) via the dep on tierPricingProposedKey.
-  const tierPricingProposedKey = useMemo(
-    () => tiers.map((t) => `${t}:${tierPricing[t]?.proposedPrice ?? 0}`).join('|'),
-    [tiers, tierPricing],
-  );
-  useEffect(() => {
-    if (!card) return;
-    setTierPricing((prev) => {
-      let changed = false;
-      const next: typeof prev = { ...prev };
-      for (const tier of tiers) {
-        const entry = next[tier];
-        if (!entry) continue;
-        if (entry.markup > 0) continue;
-        const row = catalogByTier[tier]?.pricing?.[0];
-        if (!row || entry.proposedPrice <= 0) continue;
-        const suggested = row.margin_type === 'percent'
-          ? Math.round((entry.proposedPrice * row.margin_value) / 100)
-          : row.margin_value;
-        if (suggested > 0) {
-          next[tier] = { ...entry, markup: suggested };
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [card?.id, tierPricingProposedKey, JSON.stringify(Object.keys(catalogByTier))]);
-
+  // Partner price preview: finalized price (subscription price, else proposed)
+  // minus the final margin (the admin's adjusted markup, else the plan margin).
+  // A blank markup inherits the catalog margin rather than meaning "zero".
   const partnerPriceForTier = useCallback(
     (tier: string): number | null => {
       const entry = tierPricing[tier];
-      if (!entry || entry.proposedPrice <= 0) return null;
-      return Math.max(0, entry.proposedPrice - (entry.markup || 0));
+      if (!entry) return null;
+      const finalized = entry.subscriptionPrice ?? (entry.proposedPrice > 0 ? entry.proposedPrice : null);
+      if (finalized == null) return null;
+      const margin = entry.markup ?? catalogMarginForTier(tier) ?? 0;
+      return Math.max(0, finalized - margin);
     },
-    [tierPricing],
+    [tierPricing, catalogMarginForTier],
   );
 
   // Whether at least one selected tier has catalog data loaded — used to
@@ -376,11 +361,12 @@ export default function AdminCardEditor({
 
   // Build the API tier_pricing map (snake_case shape) from the form state.
   const tierPricingPayload = useMemo(() => {
-    const out: Record<string, { proposed_price: number; markup: number }> = {};
+    const out: Record<string, { proposed_price: number; markup: number | null; subscription_price: number | null }> = {};
     for (const [tier, entry] of Object.entries(tierPricing)) {
       out[tier] = {
         proposed_price: entry.proposedPrice ?? 0,
-        markup: entry.markup ?? 0,
+        markup: entry.markup ?? null,
+        subscription_price: entry.subscriptionPrice ?? null,
       };
     }
     return out;
@@ -394,8 +380,12 @@ export default function AdminCardEditor({
     return tierPricing[tiers[0]]?.proposedPrice || null;
   }, [tiers, tierPricing]);
   const legacyMarkup = useMemo(() => {
-    if (tiers.length !== 1) return 0;
-    return tierPricing[tiers[0]]?.markup || 0;
+    if (tiers.length !== 1) return null;
+    return tierPricing[tiers[0]]?.markup ?? null;
+  }, [tiers, tierPricing]);
+  const legacySubscriptionPrice = useMemo(() => {
+    if (tiers.length !== 1) return null;
+    return tierPricing[tiers[0]]?.subscriptionPrice ?? null;
   }, [tiers, tierPricing]);
 
   const saveMutation = useMutation({
@@ -409,6 +399,7 @@ export default function AdminCardEditor({
         customer_email: customerEmail || null,
         customer_phone: customerPhone || null,
         proposed_price: legacyProposedPrice,
+        subscription_price: legacySubscriptionPrice,
         markup: legacyMarkup,
         tier_pricing: tierPricingPayload,
         publish_targets: publishTargets,
@@ -917,7 +908,7 @@ export default function AdminCardEditor({
                   </p>
                 )}
                 {displayTiers.map((tier) => {
-                  const entry = tierPricing[tier] || { proposedPrice: 0, markup: 0 };
+                  const entry = tierPricing[tier] || { proposedPrice: 0, markup: null, subscriptionPrice: null };
                   const partnerPrice = partnerPriceForTier(tier);
                   const catalogPricingRow = catalogByTier[tier]?.pricing?.[0] || null;
                   const catalogMarginInRupees = catalogMarginForTier(tier);
@@ -938,7 +929,7 @@ export default function AdminCardEditor({
                           {tiers.length > 1 ? 'Tab in 1 card' : '1 card on publish'}
                         </span>
                       </div>
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-2 gap-4">
                         <Field label="Proposed Price (₹/mo)">
                           <input
                             type="number"
@@ -960,22 +951,46 @@ export default function AdminCardEditor({
                             </p>
                           )}
                         </Field>
+                        <Field label="Subscription Price (₹/mo)">
+                          <input
+                            type="number"
+                            min={0}
+                            value={entry.subscriptionPrice ?? ''}
+                            placeholder={entry.proposedPrice ? `${entry.proposedPrice}` : ''}
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value);
+                              updateTierPricing(tier, 'subscriptionPrice', Number.isFinite(v) && v > 0 ? v : null);
+                            }}
+                            disabled={!isEditable}
+                            className="sh-input"
+                          />
+                          <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
+                            Finalized price the client pays. Blank = use proposed.
+                          </p>
+                        </Field>
                         <Field label="Margin (₹/mo)">
                           <input
                             type="number"
                             min={0}
-                            value={entry.markup || ''}
-                            onChange={(e) =>
-                              updateTierPricing(tier, 'markup', parseInt(e.target.value) || 0)
-                            }
+                            value={entry.markup ?? ''}
+                            placeholder={catalogMarginInRupees != null ? `${catalogMarginInRupees}` : ''}
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value);
+                              updateTierPricing(tier, 'markup', Number.isFinite(v) ? v : null);
+                            }}
                             disabled={!isEditable}
                             className="sh-input"
                           />
-                          {catalogPricingRow && (
+                          {catalogPricingRow ? (
                             <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
-                              Catalog: {catalogPricingRow.margin_type === 'percent'
+                              {entry.markup == null ? 'Using plan margin — ' : 'Plan: '}
+                              {catalogPricingRow.margin_type === 'percent'
                                 ? `${catalogPricingRow.margin_value}% (= ₹${(catalogMarginInRupees ?? 0).toLocaleString()})`
                                 : `₹${catalogPricingRow.margin_value.toLocaleString()} (flat)`}
+                            </p>
+                          ) : (
+                            <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
+                              Blank = use plan margin.
                             </p>
                           )}
                         </Field>
@@ -983,7 +998,7 @@ export default function AdminCardEditor({
                           <div className="flex h-[40px] items-center rounded-[10px] border border-[var(--color-sh-warm-border)] bg-surface px-3 text-sm font-bold text-[var(--color-sh-ink)]">
                             {partnerPrice != null ? `₹${partnerPrice.toLocaleString()}` : '—'}
                           </div>
-                          <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">= Proposed − Margin</p>
+                          <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">= Finalized − Margin</p>
                         </Field>
                       </div>
                     </div>

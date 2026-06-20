@@ -15,6 +15,7 @@ import type {
   SubscriptionTier,
   DeliverableKind,
 } from '@squadhub/shared';
+import { resolveFinalizedPrice } from '@squadhub/shared';
 import SliderPanel from './SliderPanel';
 
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
@@ -328,8 +329,14 @@ function ClientSubscriptionCard({
   const pricing = cs.plan?.pricing?.find((p) => p.country_id === country?.id) || null;
   const sym = country?.currency === 'USD' ? '$' : '\u20B9';
   const locale = country?.currency === 'USD' ? 'en-US' : 'en-IN';
-  const priceLabel = pricing
-    ? `${sym}${pricing.price.toLocaleString(locale)}/mo`
+  // Show the price the client is actually billed: the linked card's finalized
+  // subscription price (or proposed price). Fall back to the plan's catalog
+  // price only if neither is set. Treat 0 as "not set" rather than a real price.
+  const finalizedPrice = cs.card ? resolveFinalizedPrice(cs.card) : null;
+  const catalogPrice = pricing && pricing.price > 0 ? pricing.price : null;
+  const priceVal = finalizedPrice ?? catalogPrice;
+  const priceLabel = priceVal != null
+    ? `${sym}${priceVal.toLocaleString(locale)}/mo`
     : 'No price set';
 
   const statusMutation = useMutation({

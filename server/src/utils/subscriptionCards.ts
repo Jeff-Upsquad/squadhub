@@ -267,7 +267,7 @@ export async function fanOutTierCards(
   const targetTiers: string[] = Array.isArray(original.target_tiers)
     ? (original.target_tiers as string[]).filter(Boolean)
     : [];
-  const tierPricing: Record<string, { proposed_price?: number; markup?: number }> =
+  const tierPricing: Record<string, { proposed_price?: number; markup?: number | null; subscription_price?: number | null }> =
     original.tier_pricing && typeof original.tier_pricing === 'object'
       ? original.tier_pricing
       : {};
@@ -289,7 +289,9 @@ export async function fanOutTierCards(
       const entry = tierPricing[targetTiers[0]];
       if (entry && entry.proposed_price && entry.proposed_price > 0) {
         updates.proposed_price = entry.proposed_price;
-        updates.markup = entry.markup ?? 0;
+        // null markup = inherit the plan catalog margin (don't coerce to 0).
+        updates.markup = entry.markup ?? null;
+        updates.subscription_price = entry.subscription_price ?? null;
       }
     }
     // Freeze the plan-side data this card displays so subsequent plan
@@ -335,7 +337,8 @@ export async function fanOutTierCards(
       published_by: publishedBy,
       target_tiers: [firstTier],
       proposed_price: firstEntry.proposed_price ?? null,
-      markup: firstEntry.markup ?? 0,
+      markup: firstEntry.markup ?? null,
+      subscription_price: firstEntry.subscription_price ?? null,
       tier_pricing: {},
       plan_snapshot: originalSnapshot,
       brief_group_id: groupId,
@@ -347,7 +350,7 @@ export async function fanOutTierCards(
   // Fields copied verbatim onto each sibling. Deliberate omissions:
   //   - id (auto)
   //   - state, distribution, published_at, published_by (set fresh)
-  //   - target_tiers, proposed_price, markup (overridden per sibling)
+  //   - target_tiers, proposed_price, markup, subscription_price (overridden per sibling)
   //   - tier_pricing (cleared)
   //   - parent_card_id (NULL — siblings stay independent so SquadHire
   //     surfaces them all on the business dashboard)
@@ -395,7 +398,8 @@ export async function fanOutTierCards(
       published_by: publishedBy,
       target_tiers: [tier],
       proposed_price: entry.proposed_price ?? null,
-      markup: entry.markup ?? 0,
+      markup: entry.markup ?? null,
+      subscription_price: entry.subscription_price ?? null,
       tier_pricing: {},
       brief_group_id: groupId,
     };

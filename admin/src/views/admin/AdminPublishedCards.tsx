@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { resolveFinalizedPrice } from '@squadhub/shared';
 import api from '@/services/api';
 import AdminPublishedCardRecipientsPanel from './AdminPublishedCardRecipientsPanel';
 import AdminPublishedCardRecipientsView from './AdminPublishedCardRecipientsView';
@@ -68,6 +69,8 @@ export type PublishedCard = {
   customer_phone?: string | null;
   customer_location?: string | null;
   proposed_price?: number | null;
+  /** Finalized monthly price the client pays. null = falls back to proposed_price. */
+  subscription_price?: number | null;
   markup?: number | null;
   publish_targets?: string[] | null;
   plan_name?: string | null;
@@ -90,7 +93,7 @@ export type PublishedCard = {
       id: string;
       plan: string;
       tier: string;
-      pricing?: { country_id: string; price: number; country?: { id: string; name: string; currency: string } | null }[];
+      pricing?: { country_id: string; price: number; margin_value?: number; margin_type?: 'fixed' | 'percent'; country?: { id: string; name: string; currency: string } | null }[];
     } | null;
   } | null;
   recipient_counts?: {
@@ -707,13 +710,13 @@ function CardGroup({
   );
 }
 
-// Customer-facing monthly price for a card. Staged cards carry it on the
-// plan's pricing row; non-staged (brief/request/custom) cards carry it as
-// proposed_price written at publish (per tier, post fan-out).
+// Customer-facing monthly price for a card: the finalized subscription price
+// (or proposed price) the client pays. Staged cards have neither, so fall back
+// to the plan's catalog pricing row.
 function priceLabelForCard(card: PublishedCard): string {
   const planPrice = card.submission_subscription?.plan?.pricing?.[0];
   const priceCurrency = planPrice?.country?.currency || '₹';
-  const priceValue = planPrice?.price ?? card.proposed_price ?? null;
+  const priceValue = resolveFinalizedPrice(card) ?? planPrice?.price ?? null;
   return priceValue ? `${priceCurrency}${Number(priceValue).toLocaleString()}/mo` : '';
 }
 
