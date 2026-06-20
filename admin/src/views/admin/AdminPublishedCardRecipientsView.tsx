@@ -5,6 +5,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import CardCodeChip from '@/components/CardCodeChip';
 import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import { openLeadInCRM } from '@/utils/squadCrm';
 import type { PublishedCard } from './AdminPublishedCards';
@@ -561,6 +562,11 @@ export default function AdminPublishedCardRecipientsView({
                 )}
               </div>
               <h1 className="sh-display text-2xl sm:text-3xl truncate">{title}</h1>
+              {card.card_code && (
+                <div className="mt-2">
+                  <CardCodeChip code={card.card_code} />
+                </div>
+              )}
               {card.published_at && (
                 <p className="mt-2 text-xs text-[var(--color-sh-ink-faint)]">
                   Published {new Date(card.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}

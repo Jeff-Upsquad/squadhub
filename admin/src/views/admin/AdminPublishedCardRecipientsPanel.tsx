@@ -6,6 +6,7 @@ import api from '@/services/api';
 import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import AssignRecipientPicker from './AssignRecipientPicker';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import CardCodeChip from '@/components/CardCodeChip';
 import { showToast } from '@/components/Toast';
 import type { PublishedCard } from './AdminPublishedCards';
 
@@ -1089,6 +1090,7 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
           {sourceBadge && (
             <span className="sh-status-pill" style={{ backgroundColor: '#F2EBFE', color: '#6B21A8' }}>{sourceBadge}</span>
           )}
+          {activeCard.card_code && <CardCodeChip code={activeCard.card_code} />}
         </div>
         {(planLabel || fallbackPlanLabel) && (
           <p className="text-xs text-[var(--color-sh-ink-muted)]">{planLabel || fallbackPlanLabel}</p>
@@ -1246,6 +1248,12 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
       </DetailSection>
 
       <DetailSection title="Metadata">
+        {card.card_code && (
+          <div className="flex justify-between gap-3">
+            <span className="text-xs text-[var(--color-sh-ink-faint)]">Card code</span>
+            <CardCodeChip code={card.card_code} />
+          </div>
+        )}
         <DetailRow label="Card ID" value={card.id} />
         <DetailRow label="Created" value={card.created_at ? formatFullDateTime(card.created_at) : EMPTY} />
         <DetailRow label="Updated" value={card.updated_at ? formatFullDateTime(card.updated_at) : EMPTY} />
