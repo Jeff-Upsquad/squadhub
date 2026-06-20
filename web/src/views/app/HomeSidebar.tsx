@@ -10,7 +10,7 @@ import { usePMStore } from '../../stores/pmStore';
 import SpaceTree from './pm/SpaceTree';
 import CreateSpaceModal from './pm/CreateSpaceModal';
 import { useAvailableApps } from '../../hooks/useApps';
-import { useAppFavoritesStore } from '../../stores/appFavoritesStore';
+import { useAppFavorites, useMigrateLocalAppFavorites } from '../../hooks/useAppFavorites';
 import { AppIcon, type AppDef } from '../../config/apps';
 import { useUnreadCount } from '../../hooks/useUnreadCount';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
@@ -233,7 +233,9 @@ export default function HomeSidebar({
   const isPartner = useIsPartner();
   // Apps the user can access + their pinned subset (shown in the Apps section).
   const availableApps = useAvailableApps();
-  const appFavorites = useAppFavoritesStore((s) => s.favorites);
+  // One-time backfill of any pins saved client-side before server sync existed.
+  useMigrateLocalAppFavorites(true);
+  const { data: appFavorites = [] } = useAppFavorites();
   const favoriteApps = availableApps.filter((a) => appFavorites.includes(a.slug));
   const { data: inboxUnreadCount } = useUnreadCount();
 
