@@ -5,12 +5,14 @@ import ChecklistsPanel from './ChecklistsPanel';
 import DeadlinesPanel from './DeadlinesPanel';
 import OfficeTimingPanel from './OfficeTimingPanel';
 import HolidaysPanel from './HolidaysPanel';
+import TimesheetAdminPanel from './TimesheetAdminPanel';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'history', label: 'History' },
   { id: 'checklists', label: 'Checklists' },
   { id: 'deadlines', label: 'Deadlines' },
+  { id: 'timesheet', label: 'Daily Timesheet' },
   { id: 'office-timing', label: 'Virtual Office Timing' },
   { id: 'holidays', label: 'Holidays' },
 ] as const;
@@ -26,7 +28,7 @@ export default function CheckInsPage() {
         <div className="mb-6">
           <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Daily Check-Ins</h1>
           <p className="mt-1 text-sm text-foreground-muted">
-            Attendance overview, history, checklists, deadlines, virtual office timing, and holidays — all in one place.
+            Attendance overview, history, checklists, deadlines, daily timesheets, virtual office timing, and holidays — all in one place.
           </p>
         </div>
 
@@ -48,6 +50,7 @@ export default function CheckInsPage() {
         {activeTab === 'history' && <HistoryPanel />}
         {activeTab === 'checklists' && <ChecklistsPanel />}
         {activeTab === 'deadlines' && <DeadlinesPanel />}
+        {activeTab === 'timesheet' && <TimesheetAdminPanel />}
         {activeTab === 'office-timing' && <OfficeTimingPanel />}
         {activeTab === 'holidays' && <HolidaysPanel />}
       </div>

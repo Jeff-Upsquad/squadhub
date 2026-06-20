@@ -880,6 +880,92 @@ export interface CheckInDashboardSummary {
   attendance_rate: number;
 }
 
+// ---- Daily Timesheet ----
+export type TimesheetTargetKind = 'hours' | 'item';
+// on_time = submitted on the sheet's own date; late = backfilled on a later day;
+// no_submission = end-of-day placeholder for a missed working day.
+export type TimesheetStatus = 'on_time' | 'late' | 'no_submission';
+
+// Admin-set, per-user/per-client target. `label` names an item target
+// (e.g. "Designs"); for hours targets it is cosmetic.
+export interface TimesheetTarget {
+  id: string;
+  user_id: string;
+  client_id: string;
+  kind: TimesheetTargetKind;
+  label: string;
+  per_day: number;
+  per_week: number;
+  per_month: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  client?: { id: string; business_name: string } | null;
+}
+
+// One progress line on a timesheet — a client+kind target with the
+// auto-computed (and possibly user-adjusted) achievement for day/week/month.
+export interface TimesheetProgressLine {
+  client_id: string;
+  client_name: string;
+  kind: TimesheetTargetKind;
+  label: string;
+  target_day: number;
+  target_week: number;
+  target_month: number;
+  achieved_day: number;
+  achieved_week: number;
+  achieved_month: number;
+  // The system-computed day value before any manual adjustment (audit trail).
+  auto_day: number;
+}
+
+// A completed task surfaced in the "review" list, grouped by client.
+export interface TimesheetCompletedTask {
+  id: string;
+  title: string;
+  client_id: string | null;
+  client_name: string | null;
+  time_tracked_seconds: number;
+}
+
+export interface Timesheet {
+  id: string;
+  user_id: string;
+  date: string;
+  submitted_at: string | null;
+  status: TimesheetStatus;
+  summary: string;
+  tracked_work_seconds: number;
+  office_hours_total_seconds: number;
+  completed_task_ids: string[];
+  progress: TimesheetProgressLine[];
+  created_at: string;
+  // Joined
+  user?: User;
+}
+
+// Payload returned by GET /timesheet/today — the live state used to render the
+// tab before submission (or the stored snapshot, if already submitted).
+export interface TimesheetTodayResponse {
+  date: string;
+  is_holiday: boolean;
+  is_backfill: boolean;          // date is a past working day with no submission
+  already_submitted: boolean;
+  timesheet: Timesheet | null;   // existing row if submitted (or placeholder)
+  progress: TimesheetProgressLine[];
+  completed_tasks: TimesheetCompletedTask[];
+  tracked_work_seconds: number;
+  office_timing: OfficeTimingSummary | null;
+}
+
+export interface TimesheetDashboardDay {
+  date: string;
+  status: TimesheetStatus | 'holiday';
+  submitted_at?: string | null;
+}
+
 // ---- Time Tracking ----
 export type TimerType = 'work' | 'break' | 'no_work';
 

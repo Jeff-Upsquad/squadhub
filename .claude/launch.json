@@ -401,6 +401,13 @@
       "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/squadnotes/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3120"],
       "port": 3120,
       "autoPort": true
+    },
+    {
+      "name": "Daily Timesheet Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/adoring-shaw-005a72/web' && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3131"],
+      "port": 3131,
+      "autoPort": true
     }
   ]
 }
