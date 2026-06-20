@@ -231,6 +231,20 @@ export default function TaskRow({
                 <path d="M12 7v5l3 2" />
               </svg>
             )}
+            {(resolvedTaskType?.key === 'course' || resolvedTaskType?.key === 'meeting') && (
+              <span
+                aria-label={resolvedTaskType.name}
+                title={resolvedTaskType.name}
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 999,
+                  background: resolvedTaskType.color || 'var(--sh-ink-4)',
+                  flexShrink: 0,
+                  display: 'inline-block',
+                }}
+              />
+            )}
             <span className="lv-title">{task.title}</span>
             {task.recurring_parent_id && (
               <svg

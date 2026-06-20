@@ -2,9 +2,18 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../supabase';
+import { mirrorCourseAssignment } from '../services/taskMirror';
 
 const router = Router();
 router.use(requireAuth);
+
+// Keep an assignment's mirror task in sync without ever failing the learner's
+// request (status change → the mirror updates/removes itself).
+function syncCourseMirror(assignmentId: string): void {
+  mirrorCourseAssignment(assignmentId).catch((err) =>
+    console.error('[lms] course mirror sync failed:', err),
+  );
+}
 
 // Which lessons of a set is this user allowed to see?
 // A lesson with no audience rows is visible to everyone enrolled; otherwise it
@@ -330,6 +339,7 @@ router.post('/assignments/:id/start', async (req: Request, res: Response) => {
       return;
     }
 
+    syncCourseMirror((assignment as any).id);
     res.json({ success: true, data });
   } catch (err) {
     console.error('Start assignment error:', err);
@@ -436,6 +446,8 @@ router.post('/assignments/:id/lessons/:lessonId/complete', async (req: Request, 
       return;
     }
 
+    // Completing the assignment removes its mirror task; otherwise it stays.
+    syncCourseMirror(assignmentId);
     res.json({ success: true, data: updated });
   } catch (err) {
     console.error('Complete lesson error:', err);

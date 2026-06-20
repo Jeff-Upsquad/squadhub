@@ -289,6 +289,16 @@ export default function TaskDetailPanel({
     return taskTypes.find((t) => t.id === (task as any).task_type_id) || null;
   }, [task, taskTypes]);
 
+  // Type shown in the read-only "Type" row. A spawned routine instance reads as
+  // "Routine" regardless of its underlying type (which stays intact so its
+  // status keeps resolving correctly) — see taskMirror notes.
+  const displayType = useMemo<TaskType | null>(() => {
+    if (task?.recurring_parent_id && taskTypes) {
+      return taskTypes.find((t) => t.key === 'routine') || currentType;
+    }
+    return currentType;
+  }, [task, taskTypes, currentType]);
+
   const customFields: TaskTypeField[] = currentType?.fields || [];
   const customValues = ((task?.metadata as TaskMetadata | undefined)?.custom || {}) as Record<string, unknown>;
 
@@ -940,6 +950,30 @@ export default function TaskDetailPanel({
                   <span className="label">Details</span>
                 </div>
                 <div className="td-settings-card" data-twocol="true" style={{ border: 'none', borderRadius: 0, marginBottom: 0 }}>
+                {/* Type — read-only; resolved from the cached useTaskTypes() list
+                    since /pm/tasks/:id doesn't hydrate the task_type join */}
+                <div className="td-settings-row" data-half="true" style={{ cursor: 'default' }}>
+                  <span className="k">{META_ICONS.Type}Type</span>
+                  <span className="v">
+                    {displayType ? (
+                      <span
+                        className="td-prop-chip"
+                        style={{
+                          background: displayType.color
+                            ? `color-mix(in oklch, ${displayType.color} 14%, transparent)`
+                            : 'var(--surface-alt)',
+                          color: displayType.color || 'var(--sh-ink-3)',
+                        }}
+                      >
+                        <span className="dot" style={{ background: displayType.color || 'var(--sh-ink-4)' }} />
+                        {displayType.name}
+                      </span>
+                    ) : (
+                      <span className="td-prop-empty">—</span>
+                    )}
+                  </span>
+                </div>
+
                 {/* Status */}
                 <div
                   className="td-settings-row"
@@ -1833,6 +1867,12 @@ const META_ICONS: Record<string, React.ReactNode> = {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="9" />
       <path d="M9 12l2 2 4-4" />
+    </svg>
+  ),
+  Type: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7l9-4 9 4-9 4-9-4z" />
+      <path d="M3 12l9 4 9-4M3 17l9 4 9-4" />
     </svg>
   ),
   Priority: (
