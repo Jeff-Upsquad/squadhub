@@ -342,11 +342,6 @@ function ClientSubscriptionCard({
     onSuccess: () => onRefetch(),
   });
 
-  const resetMutation = useMutation({
-    mutationFn: () => api.post(`/admin/clients/${clientId}/subscriptions/${cs.id}/deliverables/reset`),
-    onSuccess: () => onRefetch(),
-  });
-
   const card = cs.card;
 
   async function copyCode(code: string) {
@@ -432,9 +427,6 @@ function ClientSubscriptionCard({
         {cs.status === 'cancelled' && (
           <button onClick={() => statusMutation.mutate('active')} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Reactivate</button>
         )}
-        <button onClick={() => resetMutation.mutate()} className="rounded bg-canvas px-2 py-1 text-[10px] font-medium text-foreground-muted hover:bg-well" disabled={resetMutation.isPending}>
-          {resetMutation.isPending ? 'Resetting…' : 'Reset to plan'}
-        </button>
         <button onClick={() => removeMutation.mutate()} className="rounded bg-canvas px-2 py-1 text-[10px] font-medium text-foreground-muted hover:bg-well">Remove</button>
           {linkedFolderName && (
             <button onClick={() => unlinkMutation.mutate()} className="rounded bg-rose-50 px-2 py-1 text-[10px] font-medium text-rose-700 hover:bg-rose-100" disabled={unlinkMutation.isPending}>
@@ -512,7 +504,7 @@ function ClientDeliverablesEditor({
   return (
     <div className="space-y-2">
       {deliverables.length === 0 && !adding && (
-        <p className="text-xs text-foreground-dim">No deliverables. Click +Add or Reset to plan.</p>
+        <p className="text-xs text-foreground-dim">No deliverables. Click +Add to create one.</p>
       )}
 
       {deliverables.map((d) => (
