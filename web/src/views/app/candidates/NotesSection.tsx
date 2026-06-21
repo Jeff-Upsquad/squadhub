@@ -111,7 +111,10 @@ export default function NotesSection({
                 <div className="group">
                   <p className="whitespace-pre-wrap text-sm text-foreground">{note.content}</p>
                   <div className="mt-1 flex items-center gap-3 text-xs text-foreground-dim">
-                    <span>{new Date(note.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="truncate">
+                      {new Date(note.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      {note.author_name || note.author_email ? ` · ${note.author_name || note.author_email}` : ''}
+                    </span>
                     {editable && (
                       <button
                         onClick={() => { setEditingId(note.id); setEditDraft(note.content); }}

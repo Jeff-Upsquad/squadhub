@@ -17,7 +17,8 @@ import {
  * SquadHub renders the UI; SquadHire owns the data. Every request is forwarded
  * to SquadHire's signed integration surface (/api/integrations/squadhub/
  * candidates/*) over the shared X-SquadHub-Signature secret, with the acting
- * user's email in X-SquadHub-Actor for the audit trail.
+ * user's email in X-SquadHub-Actor (and display name in X-SquadHub-Actor-Name)
+ * for the audit trail and note attribution.
  *
  * Resilience (so a SquadHire wobble doesn't take this app down):
  *   - per-call timeout (fail fast)
@@ -126,6 +127,7 @@ async function callUpstream(
     'X-SquadHub-Signature': config.squadhireWebhookSecret,
   };
   if (req.userEmail) headers['X-SquadHub-Actor'] = req.userEmail;
+  if (req.userName) headers['X-SquadHub-Actor-Name'] = req.userName;
   let body: string | undefined;
   if (method !== 'GET' && method !== 'HEAD') {
     headers['Content-Type'] = 'application/json';

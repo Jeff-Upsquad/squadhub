@@ -9,6 +9,7 @@ declare global {
     interface Request {
       userId?: string;
       userEmail?: string;
+      userName?: string;
       userType?: UserType;
     }
   }
@@ -38,7 +39,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     const { data: profile } = await supabaseAdmin
       .from('users')
-      .select('user_type, status')
+      .select('user_type, status, display_name')
       .eq('id', data.user.id)
       .single();
 
@@ -52,6 +53,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     }
 
     req.userType = (profile?.user_type as UserType) || 'internal';
+    req.userName = (profile?.display_name as string) || undefined;
 
     next();
   } catch {
