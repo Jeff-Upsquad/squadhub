@@ -4,6 +4,7 @@ import api from '../services/api';
 import type { Task, Folder } from '@squadhub/shared';
 import type { RequestStatus } from '../views/app/pm/client-design/atoms/StatusPill';
 import type { RequestRowData } from '../views/app/pm/client-design/atoms/RequestRow';
+import { listNameToStatus } from '../lib/designSpaceLists';
 
 export interface FolderDetail extends Folder {
   lists?: (NonNullable<Folder['lists']>[number] & { name: string; id: string })[];
@@ -18,15 +19,6 @@ export function useFolder(folderId: string | null) {
     },
     enabled: !!folderId,
   });
-}
-
-function listNameToStatus(name: string): RequestStatus | null {
-  const n = name.trim().toLowerCase();
-  if (n === 'briefs' || n === 'queued' || n === 'queue') return 'queued';
-  if (n === 'in progress' || n === 'in-progress' || n === 'progress') return 'progress';
-  if (n === 'reviews' || n === 'review' || n === 'in review') return 'review';
-  if (n === 'completed' || n === 'done') return 'done';
-  return null;
 }
 
 export interface FolderTasksResult {
