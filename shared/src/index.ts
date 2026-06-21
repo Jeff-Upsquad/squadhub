@@ -2751,6 +2751,14 @@ export const APP_TIP_ANCHOR_KEYS: readonly string[] = [
 // the UI.
 // ---------------------------------------------------------------------------
 
+/**
+ * Permission tier a user/role holds for a candidate category (view < edit <
+ * full). view = read-only, edit = update status/notes, full = incl. delete.
+ */
+export type CandidatePermission = 'view' | 'edit' | 'full';
+/** Candidate category → the current user's permission tier (absent = no access). */
+export type CandidateAccessMap = Partial<Record<string, CandidatePermission>>;
+
 export interface CandidateLinkedTalent {
   id: string;
   full_name: string;

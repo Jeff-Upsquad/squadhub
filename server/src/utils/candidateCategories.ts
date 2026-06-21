@@ -1,52 +1,71 @@
 import { supabaseAdmin } from '../supabase';
 import { getUserRoleIds } from './roles';
+import type { CandidatePermission, CandidateAccessMap } from '@squadhub/shared';
 
 export const ALL_CANDIDATE_CATEGORIES = ['creative', 'accountant', 'sales'] as const;
 export type CandidateCategory = (typeof ALL_CANDIDATE_CATEGORIES)[number];
+export type { CandidatePermission, CandidateAccessMap };
+
+const RANK: Record<CandidatePermission, number> = { view: 1, edit: 2, full: 3 };
+
+/** True when `level` is present and meets or exceeds `min` (view < edit < full). */
+export function meetsLevel(level: CandidatePermission | undefined, min: CandidatePermission): boolean {
+  return !!level && RANK[level] >= RANK[min];
+}
+
+/** The higher of two tiers — used to merge a user's direct + role grants. */
+function higher(a: CandidatePermission | undefined, b: CandidatePermission): CandidatePermission {
+  return a && RANK[a] >= RANK[b] ? a : b;
+}
 
 /**
- * Categories the user may access in the Candidates mini app.
+ * Candidate categories the user may access, each mapped to their permission tier.
  *
- *  - Internal admins → all.
- *  - Users with NO grant rows (direct or via any of their roles) → all
- *    (unrestricted; keeps existing users working before anyone is scoped).
- *  - Otherwise → exactly the granted categories.
+ *  - Internal admins → every category at 'full'.
+ *  - Everyone else → the union of their direct grants and the grants on any of
+ *    their roles, taking the HIGHEST tier per category.
+ *  - No grants → empty map (deny-by-default: no access until explicitly granted).
  *
- * Access layers on top of the `candidates` mini-app grant (which gates the app
- * itself); this only narrows WHICH categories are visible.
+ * Layers on top of the `candidates` mini-app grant (which gates the app itself);
+ * this decides WHICH categories are visible and what may be done within each.
  */
 export async function allowedCandidateCategories(
   userId: string,
   userType: string | undefined,
-): Promise<CandidateCategory[]> {
-  // Internal admins always see every category.
+): Promise<CandidateAccessMap> {
+  // Internal admins always have full access to every category.
   if (!userType || userType === 'internal') {
     const { data: user } = await supabaseAdmin.from('users').select('is_admin').eq('id', userId).single();
-    if (user?.is_admin) return [...ALL_CANDIDATE_CATEGORIES];
+    if (user?.is_admin) {
+      return Object.fromEntries(ALL_CANDIDATE_CATEGORIES.map((c) => [c, 'full'])) as CandidateAccessMap;
+    }
   }
 
-  const cats = new Set<string>();
+  const map: CandidateAccessMap = {};
+  const apply = (rows: { category: string; permission: CandidatePermission }[] | null) => {
+    (rows || []).forEach((r) => {
+      if ((ALL_CANDIDATE_CATEGORIES as readonly string[]).includes(r.category)) {
+        map[r.category] = higher(map[r.category], r.permission);
+      }
+    });
+  };
 
+  // Direct user grants.
   const { data: userRows } = await supabaseAdmin
     .from('candidate_category_access')
-    .select('category')
+    .select('category, permission')
     .eq('user_id', userId);
-  (userRows || []).forEach((r: { category: string }) => cats.add(r.category));
+  apply(userRows as { category: string; permission: CandidatePermission }[] | null);
 
+  // Role grants (union with direct, highest tier wins).
   const roleIds = await getUserRoleIds(userId);
   if (roleIds.length > 0) {
     const { data: roleRows } = await supabaseAdmin
       .from('candidate_category_access')
-      .select('category')
+      .select('category, permission')
       .in('role_id', roleIds);
-    (roleRows || []).forEach((r: { category: string }) => cats.add(r.category));
+    apply(roleRows as { category: string; permission: CandidatePermission }[] | null);
   }
 
-  // No explicit scoping → unrestricted.
-  if (cats.size === 0) return [...ALL_CANDIDATE_CATEGORIES];
-  return ALL_CANDIDATE_CATEGORIES.filter((c) => cats.has(c));
-}
-
-export function isCategoryRestricted(allowed: readonly string[]): boolean {
-  return allowed.length < ALL_CANDIDATE_CATEGORIES.length;
+  return map;
 }

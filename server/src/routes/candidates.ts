@@ -3,7 +3,13 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { config } from '../config';
-import { allowedCandidateCategories, isCategoryRestricted } from '../utils/candidateCategories';
+import {
+  allowedCandidateCategories,
+  meetsLevel,
+  ALL_CANDIDATE_CATEGORIES,
+  type CandidateAccessMap,
+  type CandidatePermission,
+} from '../utils/candidateCategories';
 
 /**
  * Candidates mini app — thin proxy to SquadHire (Profiles).
@@ -205,42 +211,104 @@ async function proxyWrite(req: Request, res: Response, method: string, suffix: s
   }
 }
 
-// ---- Category access (which of Creative/Accountant/Sales a user may see) ----
-/** Per-request cached list of categories this user may access. */
-async function allowedCats(req: Request): Promise<string[]> {
-  const r = req as Request & { _allowedCats?: string[] };
+// ---- Category access (tier per Creative/Accountant/Sales the user holds) -----
+/** Per-request cached map of category → the user's permission tier. */
+async function allowedCats(req: Request): Promise<CandidateAccessMap> {
+  const r = req as Request & { _allowedCats?: CandidateAccessMap };
   if (!r._allowedCats) r._allowedCats = await allowedCandidateCategories(req.userId!, req.userType);
   return r._allowedCats;
 }
 
-/** Guard for list endpoints: a scoped user must request an allowed form_type. */
-async function ensureFormTypeAllowed(req: Request, res: Response): Promise<boolean> {
-  const allowed = await allowedCats(req);
-  if (!isCategoryRestricted(allowed)) return true;
+// A record's form_type never changes, so cache id → form_type briefly to keep the
+// guards from re-resolving on every read/write. `suffix` is an upstream GET that
+// returns `{ form_type }` (the candidate detail, or a note/interview resolver).
+type FormTypeCache = Map<string, { formType: string; expiresAt: number }>;
+async function resolveUpstreamFormType(
+  req: Request,
+  id: string,
+  cache: FormTypeCache,
+  suffix: string,
+): Promise<string | null> {
+  const now = Date.now();
+  const hit = cache.get(id);
+  if (hit && hit.expiresAt > now) return hit.formType;
+  try {
+    const r = await callUpstream(req, 'GET', suffix);
+    if (r.ok) {
+      const ft = (JSON.parse(r.body) as { form_type?: string })?.form_type;
+      if (ft) {
+        cache.set(id, { formType: ft, expiresAt: now + 5 * 60_000 });
+        return ft;
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  return null;
+}
+
+const candidateFormTypeCache: FormTypeCache = new Map();
+const noteFormTypeCache: FormTypeCache = new Map();
+const interviewFormTypeCache: FormTypeCache = new Map();
+// Candidate detail already carries form_type; notes/interviews resolve via their
+// own SquadHire endpoints (the noteId / interview id carries no candidate id).
+const resolveFormType = (req: Request, id: string) =>
+  resolveUpstreamFormType(req, id, candidateFormTypeCache, `/${id}`);
+const resolveNoteFormType = (req: Request, noteId: string) =>
+  resolveUpstreamFormType(req, noteId, noteFormTypeCache, `/notes/${noteId}/form-type`);
+const resolveInterviewFormType = (req: Request, interviewId: string) =>
+  resolveUpstreamFormType(req, interviewId, interviewFormTypeCache, `/interviews/${interviewId}/form-type`);
+
+/**
+ * Guard for list endpoints. No form_type = the cross-category "All" view, which
+ * requires (at least view) access to EVERY category; otherwise the user needs
+ * `min` on the requested form_type.
+ */
+async function ensureFormTypeAllowed(req: Request, res: Response, min: CandidatePermission = 'view'): Promise<boolean> {
+  const map = await allowedCats(req);
   const ft = (req.query.form_type as string) || '';
-  if (!ft || !allowed.includes(ft)) {
+  if (!ft) {
+    if (ALL_CANDIDATE_CATEGORIES.every((c) => meetsLevel(map[c], min))) return true;
+    res.status(403).json({ success: false, error: 'You do not have access to all candidate categories' });
+    return false;
+  }
+  if (!meetsLevel(map[ft], min)) {
     res.status(403).json({ success: false, error: 'You do not have access to this candidate category' });
     return false;
   }
   return true;
 }
 
-/** Guard for by-id writes: resolve the candidate's category and check access. */
-async function ensureCandidateAllowed(req: Request, res: Response, id: string): Promise<boolean> {
-  const allowed = await allowedCats(req);
-  if (!isCategoryRestricted(allowed)) return true;
-  try {
-    const detail = await callUpstream(req, 'GET', `/${id}`);
-    if (detail.ok) {
-      const ft = (JSON.parse(detail.body) as { form_type?: string })?.form_type;
-      if (ft && allowed.includes(ft)) return true;
-    }
-  } catch {
-    /* fall through to 403 */
-  }
-  res.status(403).json({ success: false, error: 'You do not have access to this candidate' });
+/**
+ * Guard for record-scoped reads/writes: resolve the record's REAL category, then
+ * require `min`. The category is resolved authoritatively from SquadHire (never
+ * trusted from the client), via the supplied `resolve` fn.
+ *
+ * Fast path: when the user has `min` on EVERY category (e.g. admins), the
+ * record's category is irrelevant — skip the upstream resolve so the guard stays
+ * cheap and doesn't fail when SquadHire is briefly unreachable.
+ */
+async function ensureResolvedAllowed(
+  req: Request,
+  res: Response,
+  min: CandidatePermission,
+  resolve: () => Promise<string | null>,
+  subject = 'this action',
+): Promise<boolean> {
+  const map = await allowedCats(req);
+  if (ALL_CANDIDATE_CATEGORIES.every((c) => meetsLevel(map[c], min))) return true;
+  const ft = await resolve();
+  if (ft && meetsLevel(map[ft], min)) return true;
+  res.status(403).json({ success: false, error: `You do not have permission for ${subject}` });
   return false;
 }
+
+const ensureCandidateAllowed = (req: Request, res: Response, id: string, min: CandidatePermission) =>
+  ensureResolvedAllowed(req, res, min, () => resolveFormType(req, id), 'this candidate');
+const ensureNoteAllowed = (req: Request, res: Response, noteId: string, min: CandidatePermission) =>
+  ensureResolvedAllowed(req, res, min, () => resolveNoteFormType(req, noteId), 'this note');
+const ensureInterviewAllowed = (req: Request, res: Response, interviewId: string, min: CandidatePermission) =>
+  ensureResolvedAllowed(req, res, min, () => resolveInterviewFormType(req, interviewId), 'this interview');
 
 // ---- Routes -----------------------------------------------------------------
 // Health: reports proxy wiring + breaker state without hitting upstream.
@@ -260,16 +328,18 @@ router.get('/categories', async (req, res) => {
 router.get('/', async (req, res) => { if (!(await ensureFormTypeAllowed(req, res))) return; proxyRead(req, res, '', listSchema); });
 router.get('/onboarding', async (req, res) => { if (!(await ensureFormTypeAllowed(req, res))) return; proxyRead(req, res, '/onboarding', listSchema); });
 router.get('/interviews', async (req, res) => { if (!(await ensureFormTypeAllowed(req, res))) return; proxyRead(req, res, '/interviews', interviewsSchema); });
-router.get('/:id/notes', (req, res) => proxyRead(req, res, `/${req.params.id}/notes`, notesSchema));
-router.get('/:id', (req, res) => proxyRead(req, res, `/${req.params.id}`, detailSchema));
+router.get('/:id/notes', async (req, res) => { if (!(await ensureCandidateAllowed(req, res, req.params.id, 'view'))) return; proxyRead(req, res, `/${req.params.id}/notes`, notesSchema); });
+router.get('/:id', async (req, res) => { if (!(await ensureCandidateAllowed(req, res, req.params.id, 'view'))) return; proxyRead(req, res, `/${req.params.id}`, detailSchema); });
 
-// Writes (notes-specific paths registered before the generic /:id ones)
-router.patch('/interviews/:id/reviewed', (req, res) => proxyWrite(req, res, 'PATCH', `/interviews/${req.params.id}/reviewed`));
-router.post('/:id/notes', async (req, res) => { if (!(await ensureCandidateAllowed(req, res, req.params.id))) return; proxyWrite(req, res, 'POST', `/${req.params.id}/notes`); });
-router.patch('/notes/:noteId', (req, res) => proxyWrite(req, res, 'PATCH', `/notes/${req.params.noteId}`));
-router.delete('/notes/:noteId', (req, res) => proxyWrite(req, res, 'DELETE', `/notes/${req.params.noteId}`));
-router.patch('/:id/status', async (req, res) => { if (!(await ensureCandidateAllowed(req, res, req.params.id))) return; proxyWrite(req, res, 'PATCH', `/${req.params.id}/status`); });
-router.patch('/:id/restore', async (req, res) => { if (!(await ensureCandidateAllowed(req, res, req.params.id))) return; proxyWrite(req, res, 'PATCH', `/${req.params.id}/restore`); });
-router.delete('/:id', async (req, res) => { if (!(await ensureCandidateAllowed(req, res, req.params.id))) return; proxyWrite(req, res, 'DELETE', `/${req.params.id}`); });
+// Writes (notes-specific paths registered before the generic /:id ones).
+// noteId / interview routes carry no candidate id, so the category is resolved
+// authoritatively from SquadHire (ensureNoteAllowed / ensureInterviewAllowed).
+router.patch('/interviews/:id/reviewed', async (req, res) => { if (!(await ensureInterviewAllowed(req, res, req.params.id, 'edit'))) return; proxyWrite(req, res, 'PATCH', `/interviews/${req.params.id}/reviewed`); });
+router.post('/:id/notes', async (req, res) => { if (!(await ensureCandidateAllowed(req, res, req.params.id, 'edit'))) return; proxyWrite(req, res, 'POST', `/${req.params.id}/notes`); });
+router.patch('/notes/:noteId', async (req, res) => { if (!(await ensureNoteAllowed(req, res, req.params.noteId, 'edit'))) return; proxyWrite(req, res, 'PATCH', `/notes/${req.params.noteId}`); });
+router.delete('/notes/:noteId', async (req, res) => { if (!(await ensureNoteAllowed(req, res, req.params.noteId, 'full'))) return; proxyWrite(req, res, 'DELETE', `/notes/${req.params.noteId}`); });
+router.patch('/:id/status', async (req, res) => { if (!(await ensureCandidateAllowed(req, res, req.params.id, 'edit'))) return; proxyWrite(req, res, 'PATCH', `/${req.params.id}/status`); });
+router.patch('/:id/restore', async (req, res) => { if (!(await ensureCandidateAllowed(req, res, req.params.id, 'full'))) return; proxyWrite(req, res, 'PATCH', `/${req.params.id}/restore`); });
+router.delete('/:id', async (req, res) => { if (!(await ensureCandidateAllowed(req, res, req.params.id, 'full'))) return; proxyWrite(req, res, 'DELETE', `/${req.params.id}`); });
 
 export default router;

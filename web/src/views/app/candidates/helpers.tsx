@@ -1,4 +1,15 @@
-import type { CandidateListItem } from '@squadhub/shared';
+import type { CandidateListItem, CandidatePermission } from '@squadhub/shared';
+
+// ---- Permission tiers (mirror the server's candidate access engine) ----------
+const PERM_RANK: Record<CandidatePermission, number> = { view: 1, edit: 2, full: 3 };
+/** True when `level` is present and meets or exceeds `min` (view < edit < full). */
+export function meetsLevel(level: CandidatePermission | undefined, min: CandidatePermission): boolean {
+  return !!level && PERM_RANK[level] >= PERM_RANK[min];
+}
+/** Can change status, add/edit notes, mark reviewed. */
+export const canEdit = (level: CandidatePermission | undefined): boolean => meetsLevel(level, 'edit');
+/** Can delete / restore — the most privileged tier. */
+export const canManage = (level: CandidatePermission | undefined): boolean => meetsLevel(level, 'full');
 
 // Status → human label (ported from SquadHire's Candidates module).
 export const STATUS_LABELS: Record<string, string> = {

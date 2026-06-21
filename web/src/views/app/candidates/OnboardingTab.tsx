@@ -59,20 +59,20 @@ export default function OnboardingTab() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { data: allowed } = useAllowedCategories();
-  const restricted = !!allowed && allowed.length < 3;
-  const tabs = useMemo(() => {
-    const cats = allowed ?? CATEGORY_TABS.map((t) => t.value);
-    const catTabs = CATEGORY_TABS.filter((t) => cats.includes(t.value));
-    return restricted ? catTabs : [{ value: '', label: 'All' }, ...catTabs];
-  }, [allowed, restricted]);
+  const restricted = !!allowed && Object.keys(allowed).length < 3;
+  const catTabs = useMemo(() => CATEGORY_TABS.filter((t) => allowed?.[t.value]), [allowed]);
+  const tabs = useMemo(
+    () => (restricted ? catTabs : [{ value: '', label: 'All' }, ...catTabs]),
+    [restricted, catTabs],
+  );
 
   // Scoped users can't request "All" — default to their first allowed category.
   useEffect(() => {
-    if (restricted && allowed && !allowed.includes(formType)) {
-      setFormType(allowed[0]);
+    if (restricted && allowed && !allowed[formType]) {
+      setFormType(catTabs[0]?.value ?? '');
       setPage(1);
     }
-  }, [restricted, allowed, formType]);
+  }, [restricted, allowed, formType, catTabs]);
 
   const { data, isLoading, isPlaceholderData } = useQuery<OnboardingListResponse>({
     queryKey: ['candidates-onboarding', formType, search, page],
@@ -85,7 +85,7 @@ export default function OnboardingTab() {
       return (await api.get(`/candidates/onboarding?${params.toString()}`)).data;
     },
     placeholderData: keepPreviousData,
-    enabled: !!allowed && (!restricted || allowed.includes(formType)),
+    enabled: !!allowed && (!restricted || !!allowed[formType]),
   });
 
   const leads = data?.leads ?? [];

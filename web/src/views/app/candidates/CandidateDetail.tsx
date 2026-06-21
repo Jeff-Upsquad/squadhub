@@ -12,8 +12,11 @@ import {
   cleanPhone,
   FIELD_LABELS,
   formatFieldValue,
+  canEdit,
+  canManage,
 } from './helpers';
 import NotesSection from './NotesSection';
+import { useAllowedCategories } from './useAllowedCategories';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -92,6 +95,7 @@ export default function CandidateDetail({ candidateId, onClose }: { candidateId:
     queryFn: async () => (await api.get(`/candidates/${candidateId}`)).data,
     enabled: !!candidateId,
   });
+  const { data: allowed } = useAllowedCategories();
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['candidate', candidateId] });
@@ -144,6 +148,9 @@ export default function CandidateDetail({ candidateId, onClose }: { candidateId:
   // Deep-link into the SquadHire CRM, keyed by phone (mirrors SquadHire admin).
   const crmUrl = `https://shcrm.squadhub.in/app/leads/lookup?phone=${linkPhone}`;
   const stages = stagesFor(lead.form_type);
+  const level = allowed?.[lead.form_type];
+  const editable = canEdit(level);
+  const manageable = canManage(level);
 
   return (
     <div className="space-y-5">
@@ -200,8 +207,8 @@ export default function CandidateDetail({ candidateId, onClose }: { candidateId:
                 key={s.value}
                 type="button"
                 onClick={() => handleStage(s.value, lead.status)}
-                disabled={active || statusMutation.isPending}
-                title={active ? 'Current stage' : `Move to ${s.label}`}
+                disabled={active || statusMutation.isPending || !editable}
+                title={!editable ? 'View-only access' : active ? 'Current stage' : `Move to ${s.label}`}
                 className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
                   active
                     ? `border-transparent ${TONE_CLASS[s.tone]} ring-2 ring-inset ring-[var(--color-accent)]`
@@ -228,7 +235,7 @@ export default function CandidateDetail({ candidateId, onClose }: { candidateId:
             </div>
             <button
               onClick={() => statusMutation.mutate({ status: 'archived', archive_reason: archiveReason || undefined })}
-              disabled={statusMutation.isPending}
+              disabled={statusMutation.isPending || !editable}
               className="rounded-lg border border-red-400/40 bg-surface px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-500/5 disabled:opacity-50"
             >
               {statusMutation.isPending ? 'Archiving…' : 'Confirm archive'}
@@ -264,7 +271,7 @@ export default function CandidateDetail({ candidateId, onClose }: { candidateId:
 
       {/* Notes */}
       <Section title="Notes">
-        <NotesSection candidateId={lead.id} />
+        <NotesSection candidateId={lead.id} formType={lead.form_type} level={level} />
       </Section>
 
       {/* Application details (read-only) */}
@@ -310,7 +317,8 @@ export default function CandidateDetail({ candidateId, onClose }: { candidateId:
         </Section>
       )}
 
-      {/* Danger zone */}
+      {/* Danger zone — Full access only */}
+      {manageable && (
       <Section title="Danger Zone">
         {lead.deleted_at ? (
           <div className="space-y-3">
@@ -336,6 +344,7 @@ export default function CandidateDetail({ candidateId, onClose }: { candidateId:
           </div>
         )}
       </Section>
+      )}
     </div>
   );
 }
