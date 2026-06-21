@@ -8,6 +8,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import CardCodeChip from '@/components/CardCodeChip';
 import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import { openLeadInCRM } from '@/utils/squadCrm';
+import { resolveFinalizedPrice } from '@squadhub/shared';
 import type { PublishedCard } from './AdminPublishedCards';
 import type { RecipientsResponse } from './AdminPublishedCardRecipientsPanel';
 
@@ -468,6 +469,26 @@ export default function AdminPublishedCardRecipientsView({
   const publisher = card.published_by_user;
   const isUnreviewed = (bucket === 'assigned' || bucket === 'selected') && !card.admin_reviewed_at;
 
+  // Plan summary — surfaced as its own card on the page so the plan's identity,
+  // hours, and finalized monthly price are visible without opening the drawer.
+  const plan = card.submission_subscription?.plan;
+  const planPrice = plan?.pricing?.[0];
+  const priceCurrency = planPrice?.country?.currency || card.submission?.country?.currency || '';
+  const cur = priceCurrency || '₹';
+  const finalizedPrice = resolveFinalizedPrice(card);
+  const planNameDisplay = plan?.plan || card.plan_name || null;
+  const planTierDisplay = plan?.tier || null;
+  const serviceDisplay = card.submission_subscription?.subscription?.name || card.service_type || null;
+  const hoursDeliverable = (card.plan_default_deliverables || []).find((d) => d.kind === 'hours');
+  const planHours = hoursDeliverable
+    ? [
+        hoursDeliverable.per_day ? `${hoursDeliverable.per_day} hrs/day` : null,
+        hoursDeliverable.per_week ? `${hoursDeliverable.per_week} hrs/week` : null,
+        hoursDeliverable.per_month ? `${hoursDeliverable.per_month} hrs/month` : null,
+      ].filter(Boolean).join(' · ') || null
+    : null;
+  const planPriceDisplay = finalizedPrice != null ? `${cur} ${finalizedPrice.toLocaleString()}/mo` : null;
+
   // Broadcast summary info
   const partnerCount = (card.recipient_counts?.partners?.pending ?? 0) +
     (card.recipient_counts?.partners?.accepted ?? 0) +
@@ -500,105 +521,114 @@ export default function AdminPublishedCardRecipientsView({
           </button>
         </div>
         <div className="sh-card p-6">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2 mb-3">
-                <span
-                  className="sh-status-pill"
-                  style={{ backgroundColor: `${stateColor}1F`, color: stateColor }}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stateColor }} />
-                  {stateLabel}
-                </span>
-                <span className="sh-status-pill" style={{ backgroundColor: lifecycleStatus.bg, color: lifecycleStatus.color }}>
-                  {lifecycleStatus.label}
-                </span>
-                {card.recalled_at && (
-                  <span className="sh-status-pill" style={{ backgroundColor: '#FFE9D9', color: '#9A3412' }}>
-                    Recalled
-                  </span>
-                )}
-                {isUnreviewed && (
-                  <span
-                    className="sh-status-pill"
-                    style={{ backgroundColor: '#DC2626', color: 'white' }}
-                    title={
-                      bucket === 'selected'
-                        ? 'A talent has been selected for this card. Mark as reviewed to clear the badge.'
-                        : 'A talent has been assigned to this card. Mark as reviewed to clear the badge.'
-                    }
-                  >
-                    NEW
-                  </span>
-                )}
-                {bucket === 'selected' && (
-                  <button
-                    onClick={() => undoMutation.mutate()}
-                    disabled={undoMutation.isPending}
-                    className="sh-btn-danger"
-                  >
-                    {undoMutation.isPending ? 'Reverting…' : 'Undo Selection'}
-                  </button>
-                )}
-                {isUnreviewed && (
-                  <button
-                    onClick={() => markReviewedMutation.mutate()}
-                    disabled={markReviewedMutation.isPending}
-                    className="sh-btn-success"
-                  >
-                    {markReviewedMutation.isPending ? 'Marking…' : 'Mark as Reviewed'}
-                  </button>
-                )}
-                {bucket === 'active' && (
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Broadcast this card to matching talents?')) broadcastToTalentsMutation.mutate();
-                    }}
-                    disabled={broadcastToTalentsMutation.isPending}
-                    className="sh-btn-primary"
-                  >
-                    {broadcastToTalentsMutation.isPending ? 'Broadcasting…' : 'Broadcast to talents'}
-                  </button>
-                )}
-              </div>
-              <h1 className="sh-display text-2xl sm:text-3xl truncate">{title}</h1>
-              {card.card_code && (
-                <div className="mt-2">
-                  <CardCodeChip code={card.card_code} />
-                </div>
-              )}
-              {card.published_at && (
-                <p className="mt-2 text-xs text-[var(--color-sh-ink-faint)]">
-                  Published {new Date(card.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  {publisher && <> by {publisher.display_name || publisher.email || publisher.id.slice(0, 8)}</>}
-                </p>
-              )}
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <span
+              className="sh-status-pill"
+              style={{ backgroundColor: `${stateColor}1F`, color: stateColor }}
+            >
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stateColor }} />
+              {stateLabel}
+            </span>
+            <span className="sh-status-pill" style={{ backgroundColor: lifecycleStatus.bg, color: lifecycleStatus.color }}>
+              {lifecycleStatus.label}
+            </span>
+            {card.recalled_at && (
+              <span className="sh-status-pill" style={{ backgroundColor: '#FFE9D9', color: '#9A3412' }}>
+                Recalled
+              </span>
+            )}
+            {isUnreviewed && (
+              <span
+                className="sh-status-pill"
+                style={{ backgroundColor: '#DC2626', color: 'white' }}
+                title={
+                  bucket === 'selected'
+                    ? 'A talent has been selected for this card. Mark as reviewed to clear the badge.'
+                    : 'A talent has been assigned to this card. Mark as reviewed to clear the badge.'
+                }
+              >
+                NEW
+              </span>
+            )}
+            {bucket === 'selected' && (
+              <button
+                onClick={() => undoMutation.mutate()}
+                disabled={undoMutation.isPending}
+                className="sh-btn-danger"
+              >
+                {undoMutation.isPending ? 'Reverting…' : 'Undo Selection'}
+              </button>
+            )}
+            {isUnreviewed && (
+              <button
+                onClick={() => markReviewedMutation.mutate()}
+                disabled={markReviewedMutation.isPending}
+                className="sh-btn-success"
+              >
+                {markReviewedMutation.isPending ? 'Marking…' : 'Mark as Reviewed'}
+              </button>
+            )}
+            {bucket === 'active' && (
+              <button
+                onClick={() => {
+                  if (window.confirm('Broadcast this card to matching talents?')) broadcastToTalentsMutation.mutate();
+                }}
+                disabled={broadcastToTalentsMutation.isPending}
+                className="sh-btn-primary"
+              >
+                {broadcastToTalentsMutation.isPending ? 'Broadcasting…' : 'Broadcast to talents'}
+              </button>
+            )}
+          </div>
+          <h1 className="sh-display text-2xl sm:text-3xl truncate">{title}</h1>
+          {card.card_code && (
+            <div className="mt-2">
+              <CardCodeChip code={card.card_code} />
             </div>
-            <div className="lg:w-[280px] lg:shrink-0">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <h4 className="sh-section-heading">Customer</h4>
-                <button
-                  type="button"
-                  onClick={() => openLeadInCRM({
-                    submission_id: card.submission?.id,
-                    phone: card.customer_phone,
-                    email: card.customer_email,
-                  })}
-                  title="Open this lead in Squad CRM"
-                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-[var(--color-sh-ink-muted)] hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)] transition"
-                >
-                  View in CRM
-                  <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                  </svg>
-                </button>
-              </div>
-              <div className="space-y-1.5 text-xs">
-                <HeaderDetailRow label="Contact Person" value={card.customer_name} />
-                <HeaderDetailRow label="Email" value={card.customer_email} />
-                <HeaderDetailRow label="Phone" value={card.customer_phone} />
-                <HeaderDetailRow label="Location" value={card.customer_location} />
-              </div>
+          )}
+          {card.published_at && (
+            <p className="mt-2 text-xs text-[var(--color-sh-ink-faint)]">
+              Published {new Date(card.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              {publisher && <> by {publisher.display_name || publisher.email || publisher.id.slice(0, 8)}</>}
+            </p>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="sh-card p-5">
+            <h4 className="sh-section-heading mb-3">Plan</h4>
+            <div className="space-y-1.5 text-xs">
+              <HeaderDetailRow label="Plan" value={planNameDisplay} />
+              <HeaderDetailRow label="Tier" value={planTierDisplay} />
+              <HeaderDetailRow label="Service" value={serviceDisplay} />
+              <HeaderDetailRow label="Hours" value={planHours} />
+              <HeaderDetailRow label="Price" value={planPriceDisplay} />
+            </div>
+          </div>
+          <div className="sh-card p-5">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h4 className="sh-section-heading">Customer</h4>
+              <button
+                type="button"
+                onClick={() => openLeadInCRM({
+                  submission_id: card.submission?.id,
+                  phone: card.customer_phone,
+                  email: card.customer_email,
+                })}
+                title="Open this lead in Squad CRM"
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-[var(--color-sh-ink-muted)] hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)] transition"
+              >
+                View in CRM
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-1.5 text-xs">
+              <HeaderDetailRow label="Contact Person" value={card.customer_name} />
+              <HeaderDetailRow label="Email" value={card.customer_email} />
+              <HeaderDetailRow label="Phone" value={card.customer_phone} />
+              <HeaderDetailRow label="Location" value={card.customer_location} />
             </div>
           </div>
         </div>
@@ -614,8 +644,8 @@ export default function AdminPublishedCardRecipientsView({
           <>
             {/* Selected talent(s) — emerald card mirroring the SquadHire business view */}
             {selectedRecipients.length > 0 && (
-              <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/50 p-5 sm:p-6">
-                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-emerald-800">
+              <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/50 p-5 sm:p-6 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -624,7 +654,7 @@ export default function AdminPublishedCardRecipientsView({
                 <div className="space-y-3">
                   {selectedRecipients.map((r) => (
                     <div key={`selected-${r.type}-${r.id}`} className="flex items-center gap-4">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface text-[var(--color-sh-ink)] text-base font-bold ring-1 ring-emerald-200">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface text-[var(--color-sh-ink)] text-base font-bold ring-1 ring-emerald-200 dark:ring-emerald-500/40">
                         {r.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -654,14 +684,14 @@ export default function AdminPublishedCardRecipientsView({
                             target="_blank"
                             rel="noopener noreferrer"
                             title="View profile in SquadHire"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-emerald-700 hover:bg-emerald-100 transition"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-emerald-700 hover:bg-emerald-100 transition dark:text-emerald-300 dark:hover:bg-emerald-500/20"
                           >
                             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                             </svg>
                           </a>
                         )}
-                        <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
                           Selected
                         </span>
                       </div>
@@ -669,7 +699,7 @@ export default function AdminPublishedCardRecipientsView({
                   ))}
                 </div>
                 {bucket === 'assigned' && (
-                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-emerald-200 pt-4">
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-emerald-200 pt-4 dark:border-emerald-500/30">
                     <button
                       onClick={() => {
                         if (window.confirm('Unassign this talent?\n\nThis ends the live subscription on SquadHire — reconcile it there too. The card reopens so you can select someone else.')) undoMutation.mutate();
@@ -688,7 +718,7 @@ export default function AdminPublishedCardRecipientsView({
                     >
                       {reopenMutation.isPending ? 'Reopening…' : 'Reopen for new talents'}
                     </button>
-                    <span className="text-[11px] text-emerald-700/80">
+                    <span className="text-[11px] text-emerald-700/80 dark:text-emerald-300/90">
                       To reassign, unassign and then pick another talent below.
                     </span>
                   </div>
