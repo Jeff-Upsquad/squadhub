@@ -1,3 +1,28 @@
+import type { TaskTypeField } from '@squadhub/shared';
+
+/** Short scalar field types that can pair 2-up in the brief form. Long-form
+ *  controls (textarea, multi_select, select) always span full width. */
+export const PAIRABLE_FIELD_TYPES = new Set<string>(['text', 'url', 'number', 'date']);
+
+/** Greedily group a flat field list so consecutive short scalars pair into
+ *  2-up rows; everything else (and a lone trailing scalar) spans full width. */
+export function groupDesignFields(fields: TaskTypeField[]): TaskTypeField[][] {
+  const groups: TaskTypeField[][] = [];
+  let i = 0;
+  while (i < fields.length) {
+    const f = fields[i];
+    const next = fields[i + 1];
+    if (PAIRABLE_FIELD_TYPES.has(f.field_type) && next && PAIRABLE_FIELD_TYPES.has(next.field_type)) {
+      groups.push([f, next]);
+      i += 2;
+    } else {
+      groups.push([f]);
+      i += 1;
+    }
+  }
+  return groups;
+}
+
 function hashHue(input: string): number {
   let h = 0;
   for (let i = 0; i < input.length; i++) h = (h * 31 + input.charCodeAt(i)) | 0;

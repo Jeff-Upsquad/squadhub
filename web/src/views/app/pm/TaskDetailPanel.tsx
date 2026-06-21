@@ -24,7 +24,7 @@ import AssigneePicker from './AssigneePicker';
 import MentionPicker from '../../../components/MentionPicker';
 import DatePicker from './DatePicker';
 import RepeatPicker from './RepeatPicker';
-import { nextQuickDate } from './taskHelpers';
+import { nextQuickDate, groupDesignFields } from './taskHelpers';
 import EmergencyConfirm from './EmergencyConfirm';
 import TaskStatusPicker from './TaskStatusPicker';
 import ListPickerCombobox from './ListPickerCombobox';
@@ -841,23 +841,49 @@ export default function TaskDetailPanel({
                 )}
               </div>
 
-              {currentType?.key === 'design_task' && customFields.length > 0 && (
+              {(currentType?.key === 'design_task' || currentType?.key === 'video_edit_task') && customFields.length > 0 && (
                 <>
-                  <div className="td-eyebrow">{currentType?.name || 'Brief'}</div>
-                  <div className="td-settings-card" style={{ marginBottom: 12 }}>
-                    {customFields.map((field) => (
-                      <CustomFieldRow
-                        key={field.id}
-                        field={field}
-                        value={customValues[field.key]}
-                        onChange={(v) => updateCustomField(field.key, v)}
-                        otherValue={customValues[field.key + '_other']}
-                        onOtherChange={(v) => updateCustomField(field.key + '_other', v)}
-                        canEdit={canEdit}
-                      />
-                    ))}
+                  <div className="td-section-strong" style={{ marginTop: 4 }}>
+                    {currentType?.key === 'video_edit_task' ? (
+                      <svg className="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    ) : (
+                      <svg className="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    )}
+                    <span className="title">{currentType?.key === 'video_edit_task' ? 'Video Editing Brief' : 'Design Details'}</span>
                   </div>
-
+                  <div className="td-design-form" style={{ marginBottom: 12 }}>
+                    {groupDesignFields(customFields).map((group) =>
+                      group.length === 2 ? (
+                        <div className="td-field-pair" key={group[0].id}>
+                          {group.map((field) => (
+                            <CustomFieldRow
+                              key={field.id}
+                              field={field}
+                              value={customValues[field.key]}
+                              onChange={(v) => updateCustomField(field.key, v)}
+                              otherValue={customValues[field.key + '_other']}
+                              onOtherChange={(v) => updateCustomField(field.key + '_other', v)}
+                              canEdit={canEdit}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <CustomFieldRow
+                          key={group[0].id}
+                          field={group[0]}
+                          value={customValues[group[0].key]}
+                          onChange={(v) => updateCustomField(group[0].key, v)}
+                          otherValue={customValues[group[0].key + '_other']}
+                          onOtherChange={(v) => updateCustomField(group[0].key + '_other', v)}
+                          canEdit={canEdit}
+                        />
+                      )
+                    )}
+                  </div>
                 </>
               )}
 
@@ -1363,9 +1389,10 @@ export default function TaskDetailPanel({
                 </div>
               </div>
 
-              {/* Custom fields for non-design_task types — render before sections */}
-              {currentType?.key !== 'design_task' && customFields.length > 0 && (
-                <div className="mb-2 mt-3">
+              {/* Custom fields for other types (not design/video, which render their
+                  brief above) — render before sections */}
+              {currentType?.key !== 'design_task' && currentType?.key !== 'video_edit_task' && customFields.length > 0 && (
+                <div className="td-design-form mb-2 mt-3">
                   {customFields.map((field) => (
                     <CustomFieldRow
                       key={field.id}
@@ -1940,66 +1967,91 @@ function CustomFieldRow({
   onOtherChange?: (v: unknown) => void;
   canEdit: boolean;
 }) {
-  const baseInputCls = `rounded-lg border bg-transparent px-3 py-1.5 text-[13px] outline-none ${canEdit ? '' : 'cursor-default opacity-70'}`;
-  const baseStyle: React.CSSProperties = { borderColor: 'var(--sh-hair)' };
-
-  let control: React.ReactNode = null;
   const str = typeof value === 'string' ? value : value == null ? '' : String(value);
   const otherStr = typeof otherValue === 'string' ? otherValue : '';
+  const ghost = field.placeholder || `Add ${field.label.toLowerCase()}…`;
+  const dim = canEdit ? '' : ' opacity-70';
+
+  // Checkbox is an inline exception — box + label on one row, no label header.
+  if (field.field_type === 'checkbox') {
+    return (
+      <div className="td-field td-field--check">
+        <label className="td-check-row">
+          <input type="checkbox" checked={!!value} disabled={!canEdit} onChange={(e) => onChange(e.target.checked)} />
+          <span className="td-check-box">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12l5 5 9-11" />
+            </svg>
+          </span>
+          <span>
+            {field.label}
+            {field.is_required && <span className="req"> *</span>}
+          </span>
+        </label>
+      </div>
+    );
+  }
+
+  let control: React.ReactNode = null;
 
   switch (field.field_type) {
     case 'textarea':
       control = (
         <textarea
           defaultValue={str}
-          placeholder={field.placeholder || ''}
+          placeholder={ghost}
           disabled={!canEdit}
           onBlur={(e) => e.target.value !== str && onChange(e.target.value || null)}
           rows={2}
-          className={`${baseInputCls} w-full resize-none`}
-          style={baseStyle}
+          className={`td-input-shell${dim}`}
         />
       );
       break;
     case 'select':
       control = (
-        <select
-          value={str}
-          disabled={!canEdit}
-          onChange={(e) => onChange(e.target.value || null)}
-          className={baseInputCls}
-          style={baseStyle}
-        >
-          <option value="">—</option>
-          {field.options.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
+        <div className="td-select-wrap">
+          <select
+            value={str}
+            disabled={!canEdit}
+            onChange={(e) => onChange(e.target.value || null)}
+            className={`td-input-shell${dim}`}
+          >
+            <option value="">—</option>
+            {field.options.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <svg className="chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </div>
       );
       break;
     case 'multi_select': {
       const arr: string[] = Array.isArray(value) ? (value as string[]) : [];
       const otherSelected = arr.includes('__other__') || (field.allow_other && !!otherStr);
-      const pillCls = (on: boolean) =>
-        `rounded-full px-3 py-1 text-[12px] ${
-          on ? 'bg-[color:var(--sh-ink)] text-[color:var(--surface)]' : 'bg-[color:var(--sh-hair-3)] text-[color:var(--sh-ink-2)]'
-        } ${canEdit ? '' : 'cursor-default opacity-70'}`;
+      const Check = (
+        <span className="chip-check">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12l5 5 9-11" />
+          </svg>
+        </span>
+      );
       control = (
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap gap-1.5">
+        <div className="td-chip-group">
+          <div className="td-chip-row">
             {field.options.map((o) => {
               const on = arr.includes(o.value);
               return (
                 <button
                   key={o.value}
                   type="button"
+                  aria-pressed={on}
                   disabled={!canEdit}
-                  onClick={() => {
-                    const next = on ? arr.filter((v) => v !== o.value) : [...arr, o.value];
-                    onChange(next);
-                  }}
-                  className={pillCls(on)}
+                  onClick={() => onChange(on ? arr.filter((v) => v !== o.value) : [...arr, o.value])}
+                  className={`td-chip${on ? ' is-on' : ''}${dim}`}
                 >
+                  {Check}
                   {o.label}
                 </button>
               );
@@ -2008,17 +2060,19 @@ function CustomFieldRow({
               <button
                 key="__other__"
                 type="button"
+                aria-pressed={!!otherSelected}
                 disabled={!canEdit}
                 onClick={() => {
                   if (otherSelected) {
                     onChange(arr.filter((v) => v !== '__other__'));
                     onOtherChange?.(null);
-                  } else {
-                    if (!arr.includes('__other__')) onChange([...arr, '__other__']);
+                  } else if (!arr.includes('__other__')) {
+                    onChange([...arr, '__other__']);
                   }
                 }}
-                className={pillCls(otherSelected)}
+                className={`td-chip${otherSelected ? ' is-on' : ''}${dim}`}
               >
+                {Check}
                 Other
               </button>
             )}
@@ -2027,14 +2081,13 @@ function CustomFieldRow({
             <input
               type="text"
               defaultValue={otherStr}
-              placeholder="Describe…"
+              placeholder="Describe what you need…"
               disabled={!canEdit}
               onBlur={(e) => {
                 const v = e.target.value.trim();
                 if (v !== otherStr) onOtherChange?.(v || null);
               }}
-              className={`${baseInputCls} max-w-md`}
-              style={baseStyle}
+              className={`td-input-shell td-chip-other-input${dim}`}
             />
           )}
         </div>
@@ -2045,15 +2098,15 @@ function CustomFieldRow({
       control = (
         <input
           type="number"
+          inputMode="numeric"
           defaultValue={str}
-          placeholder={field.placeholder || ''}
+          placeholder={ghost}
           disabled={!canEdit}
           onBlur={(e) => {
             const v = e.target.value;
             onChange(v === '' ? null : Number(v));
           }}
-          className={baseInputCls}
-          style={baseStyle}
+          className={`td-input-shell${dim}`}
         />
       );
       break;
@@ -2064,8 +2117,7 @@ function CustomFieldRow({
           value={str}
           disabled={!canEdit}
           onChange={(e) => onChange(e.target.value || null)}
-          className={baseInputCls}
-          style={baseStyle}
+          className={`td-input-shell${dim}`}
         />
       );
       break;
@@ -2077,19 +2129,7 @@ function CustomFieldRow({
           placeholder={field.placeholder || 'https://'}
           disabled={!canEdit}
           onBlur={(e) => e.target.value !== str && onChange(e.target.value || null)}
-          className={`${baseInputCls} min-w-[240px]`}
-          style={baseStyle}
-        />
-      );
-      break;
-    case 'checkbox':
-      control = (
-        <input
-          type="checkbox"
-          checked={!!value}
-          disabled={!canEdit}
-          onChange={(e) => onChange(e.target.checked)}
-          className="h-4 w-4 cursor-pointer rounded"
+          className={`td-input-shell${dim}`}
         />
       );
       break;
@@ -2099,34 +2139,36 @@ function CustomFieldRow({
         <input
           type="text"
           defaultValue={str}
-          placeholder={field.placeholder || ''}
+          placeholder={ghost}
           disabled={!canEdit}
           onBlur={(e) => e.target.value !== str && onChange(e.target.value || null)}
-          className={`${baseInputCls} min-w-[200px]`}
-          style={baseStyle}
+          className={`td-input-shell${dim}`}
         />
       );
   }
 
   return (
-    <div className="td-meta-row grid py-2 items-start text-[13px]" style={{ gridTemplateColumns: '112px 1fr' }}>
-      <span className="td-meta-k td-mono text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--sh-ink-4)] font-medium pt-1">
-        {field.label}
-        {field.is_required && <span className="text-red-500">*</span>}
-      </span>
-      <div className="min-w-0 flex-1">
-        {control}
+    <div className="td-field">
+      <div className="td-field-label">
+        <span className="lbl">
+          {field.label}
+          {field.is_required && <span className="req">*</span>}
+        </span>
         {field.help_url && (
           <a
             href={field.help_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-1.5 inline-block text-[11px] underline text-[color:var(--sh-ink-3)] hover:text-[color:var(--sh-ink)]"
+            className="td-field-help"
           >
-            View size chart ↗
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 17L17 7M9 7h8v8" />
+            </svg>
+            View size chart
           </a>
         )}
       </div>
+      {control}
     </div>
   );
 }
