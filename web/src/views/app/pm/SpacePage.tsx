@@ -347,6 +347,7 @@ export default function SpacePage() {
                 onStatusChange={noopStatusChange}
                 canEdit
                 showAddRow={false}
+                dimFocused={!!focusGroup}
               />
             ) : (
               groups.map((g) => (
@@ -360,6 +361,7 @@ export default function SpacePage() {
                   onStatusChange={noopStatusChange}
                   canEdit
                   showAddRow={false}
+                  dimFocused={!!focusGroup}
                 />
               ))
             )}

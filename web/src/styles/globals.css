@@ -2726,6 +2726,15 @@ body {
   .lv-focus-title { font-size: 16px; }
 }
 
+/* Focused tasks that also appear in the Focus Today banner above are shown
+   faded in their regular group — a quiet "already in focus" reminder. Excludes
+   rows mid fade-off so the completion animation's own opacity ramp still wins. */
+.lv-row[data-dimmed="true"]:not([data-fading="true"]) {
+  opacity: 0.5;
+  transition: opacity 0.15s ease, background 120ms ease;
+}
+.lv-row[data-dimmed="true"]:not([data-fading="true"]):hover { opacity: 1; }
+
 /* Body wrapper — no padding/margin so rows align with header */
 .lv-card-body,
 .lv-card > div:not(.lv-card-head):not(.lv-add) {

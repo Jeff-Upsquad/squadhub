@@ -149,6 +149,7 @@ export default function ListView({
               onStatusChange={handleStatusChange}
               canEdit={canEdit}
               showAddRow={canEdit}
+              dimFocused={!!focusGroup}
               defaultNewTaskStatus={status.category}
               onDrop={handleStatusChange}
             />
@@ -164,6 +165,7 @@ export default function ListView({
               onStatusChange={handleStatusChange}
               canEdit={canEdit}
               showAddRow={canEdit}
+              dimFocused={!!focusGroup}
             />
             {completedTasks.length > 0 && (
               <TaskGroupCard
@@ -193,6 +195,7 @@ export default function ListView({
                 onStatusChange={handleStatusChange}
                 canEdit={canEdit}
                 showAddRow={false}
+                dimFocused={!!focusGroup}
               />
             ))}
             {completedTasks.length > 0 && (

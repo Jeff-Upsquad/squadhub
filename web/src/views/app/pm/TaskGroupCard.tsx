@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Task, SpaceStatus } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useCreateTask } from '../../../hooks/useTasks';
-import { isTaskCompleted } from '../../../lib/taskGrouping';
+import { isTaskCompleted, isTaskFocused } from '../../../lib/taskGrouping';
 import TaskRow from './TaskRow';
 
 interface TaskGroupCardProps {
@@ -20,6 +20,8 @@ interface TaskGroupCardProps {
   defaultCollapsed?: boolean;
   /** 'focus' renders the elevated amber "Focus Today" spotlight treatment. */
   variant?: 'default' | 'focus';
+  /** Fade focused (but not completed) rows — signals they're already in the Focus Today banner above. */
+  dimFocused?: boolean;
 }
 
 export default function TaskGroupCard({
@@ -36,6 +38,7 @@ export default function TaskGroupCard({
   onDrop,
   defaultCollapsed = false,
   variant = 'default',
+  dimFocused = false,
 }: TaskGroupCardProps) {
   const isFocus = variant === 'focus';
   const { collapsedGroups, toggleGroupCollapse } = usePMStore();
@@ -204,6 +207,7 @@ export default function TaskGroupCard({
               onStatusChange={onStatusChange}
               canEdit={canEdit}
               listId={listId || (task as any).list_id || task.list?.id || ''}
+              dimmed={dimFocused && !isFocus && isTaskFocused(task) && !isTaskCompleted(task)}
             />
           ))}
 

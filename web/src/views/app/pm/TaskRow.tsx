@@ -26,6 +26,7 @@ export default function TaskRow({
   depth = 0,
   canEdit = true,
   listId,
+  dimmed = false,
 }: {
   task: Task;
   statuses: SpaceStatus[];
@@ -33,6 +34,8 @@ export default function TaskRow({
   depth?: number;
   canEdit?: boolean;
   listId: string;
+  /** Render faded — used for focused tasks that also appear in the Focus Today banner above. */
+  dimmed?: boolean;
 }) {
   const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, fadingTaskIds, markFading, unmarkFading, timer: globalTimer } = usePMStore();
   const focusTask = useFocusTask();
@@ -167,6 +170,7 @@ export default function TaskRow({
         data-selected={isSelected}
         data-done={displayDone}
         data-fading={isFading}
+        data-dimmed={dimmed || undefined}
         data-type={isWorkBlock ? 'work_block' : undefined}
         style={depth > 0 ? { paddingLeft: 20 + depth * 22 } : undefined}
       >
