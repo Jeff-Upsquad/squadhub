@@ -2808,6 +2808,12 @@ export interface CandidateNote {
   lead_id: string;
   content: string;
   created_by: string;
+  /** Email of the SquadHub user who wrote the note (X-SquadHub-Actor). Null for
+   *  legacy notes and notes authored directly in the SquadHire CRM. */
+  author_email?: string | null;
+  /** Display name of that user (X-SquadHub-Actor-Name); preferred over email in
+   *  the UI. Null when the user has no profile name. */
+  author_name?: string | null;
   created_at: string;
   updated_at: string;
 }
