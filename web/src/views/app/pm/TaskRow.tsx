@@ -189,6 +189,20 @@ export default function TaskRow({
 
         {/* Title only — meta line (space · due · tags) removed; dedicated columns below */}
         <div className="min-w-0">
+          {/* Parent task reference — shown only for subtasks rendered at the top
+              level (depth 0); nested subtask rows already sit under their parent
+              so the breadcrumb would be redundant. Clicking opens the parent. */}
+          {depth === 0 && task.parent_task && (
+            <button
+              type="button"
+              className="lv-parent-ref"
+              onClick={(e) => { e.stopPropagation(); setActiveTask(task.parent_task!.id); }}
+              title={`Parent task: ${task.parent_task.title}`}
+            >
+              <span aria-hidden>↳</span>
+              <span className="lv-parent-ref-title">{task.parent_task.title}</span>
+            </button>
+          )}
           <div className="flex items-center gap-1.5 min-w-0">
             {priorityLevel && (priorityLevel === 'p0' || priorityLevel === 'p1') && (
               <span className="lv-priority-dot" data-level={priorityLevel} aria-label={`Priority ${priorityLevel.toUpperCase()}`} />

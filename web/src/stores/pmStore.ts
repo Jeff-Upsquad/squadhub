@@ -15,6 +15,7 @@ export type CalendarMode = 'month' | 'week' | '5day' | '4day' | 'day';
 // can be moved into Evening (after 3 PM) or Night (after 7 PM); these are labels
 // only — no clock-driven behavior. Mirrors the focusedTodayIds persistence.
 export type FocusBucket = 'evening' | 'night';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner';
 
 interface TimerState {
   taskId: string;
@@ -41,6 +42,7 @@ interface PMState {
   // two create affordances don't both show at once. Transient (not persisted) —
   // set by ListPage on mount/unmount, mirrors newTasksOpen.
   newTaskFabVisible: boolean;
+  homeView: HomeView;
   contextListId: string | null;
   viewMode: ViewMode;
   listGroupBy: ListGroupBy;
@@ -87,6 +89,7 @@ interface PMState {
   setActiveDashboardTab: (tab: DashboardTab | null) => void;
   setNewTasksOpen: (open: boolean) => void;
   setNewTaskFabVisible: (visible: boolean) => void;
+  setHomeView: (v: HomeView) => void;
   setViewMode: (mode: ViewMode) => void;
   setListGroupBy: (g: ListGroupBy) => void;
   setMyTasksOnly: (v: boolean) => void;
@@ -142,6 +145,7 @@ export const usePMStore = create<PMState>()(
       activeDashboardTab: null,
       newTasksOpen: false,
       newTaskFabVisible: false,
+      homeView: 'hub',
       contextListId: null,
       viewMode: 'list',
       listGroupBy: 'status',
@@ -178,6 +182,7 @@ export const usePMStore = create<PMState>()(
       setActiveDashboardTab: (tab) => set({ activeDashboardTab: tab }),
       setNewTasksOpen: (open) => set({ newTasksOpen: open }),
       setNewTaskFabVisible: (visible) => set({ newTaskFabVisible: visible }),
+      setHomeView: (v) => set({ homeView: v }),
       setViewMode: (mode) => set({ viewMode: mode }),
       setListGroupBy: (g) => { set({ listGroupBy: g }); triggerSave(); },
       setMyTasksOnly: (v) => { set({ myTasksOnly: v }); triggerSave(); },
@@ -365,7 +370,7 @@ export const usePMStore = create<PMState>()(
           focusBuckets: s.focusBuckets,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, newTasksOpen: false, newTaskFabVisible: false, contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',
@@ -377,6 +382,7 @@ export const usePMStore = create<PMState>()(
         activeSpacePageId: state.activeSpacePageId,
         activeDesignFolderId: state.activeDesignFolderId,
         activeDashboardTab: state.activeDashboardTab,
+        homeView: state.homeView,
         contextListId: state.contextListId,
         timer: state.timer,
         listGroupBy: state.listGroupBy,

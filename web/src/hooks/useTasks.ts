@@ -24,7 +24,7 @@ function invalidateTaskLists(qc: QueryClient, listId: string | null) {
   qc.invalidateQueries({ queryKey: ['day-plans'] });
 }
 
-export function useTasks(listId: string | null, filters?: { status?: string; priority?: string; sort?: string }) {
+export function useTasks(listId: string | null, filters?: { status?: string; priority?: string; sort?: string; includeSubtasks?: boolean }) {
   return useQuery<Task[]>({
     queryKey: ['tasks', listId, filters],
     queryFn: async () => {
@@ -32,6 +32,9 @@ export function useTasks(listId: string | null, filters?: { status?: string; pri
       if (filters?.status) params.set('status', filters.status);
       if (filters?.priority) params.set('priority', filters.priority);
       if (filters?.sort) params.set('sort', filters.sort);
+      // Include subtasks as their own flat rows (each shows its parent) instead
+      // of hiding them. Default endpoint behaviour still filters them out.
+      if (filters?.includeSubtasks) params.set('include_subtasks', 'true');
       const res = await api.get(`/pm/tasks?${params}`);
       return res.data.data;
     },

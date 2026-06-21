@@ -1787,6 +1787,30 @@ body {
   text-overflow: ellipsis;
 }
 
+/* Parent-task breadcrumb shown above a subtask's title in list rows */
+.lv-parent-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  margin-bottom: 1px;
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--sh-ink-4);
+  cursor: pointer;
+  overflow: hidden;
+}
+.lv-parent-ref:hover { color: var(--sh-ink-2); }
+.lv-parent-ref .lv-parent-ref-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .lv-meta {
   display: flex;
   align-items: center;
@@ -4256,6 +4280,45 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
   font-weight: 400;
 }
 .td-bcrumb .chev { opacity: 0.5; }
+
+/* Parent-task reference chip — shown above the title when a task is a subtask */
+.td-parent-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  border: 1px solid var(--sh-hair);
+  border-radius: 6px;
+  background: var(--sh-hair-3);
+  color: var(--sh-ink-3);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.12s, color 0.12s;
+}
+.td-parent-ref:hover {
+  border-color: var(--sh-hair-2);
+  color: var(--sh-ink);
+}
+.td-parent-ref svg { flex: none; opacity: 0.7; }
+.td-parent-ref .td-parent-ref-label {
+  flex: none;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--sh-ink-4);
+}
+.td-parent-ref .td-parent-ref-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 
 /* Description box — bordered with mono mini-label */
 .td-desc-box {
