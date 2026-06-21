@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { RequestRowData } from '../atoms/RequestRow';
 import type { DesignPlan } from '../../../../../hooks/useClientDesignPlan';
 import {
@@ -7,7 +8,10 @@ import {
   type WeekPoint,
   type MonthPoint,
 } from '../../../../../hooks/useClientDesignTimeHistory';
+import api from '../../../../../services/api';
 import { formatHours } from '../atoms/LiveTimer';
+
+type PeriodKey = 'this_month' | 'prev_month' | 'custom';
 
 // ---------------------------------------------------------------------------
 // Date helpers (Monday-based weeks, matching useClientDesignPlan / history)
@@ -61,17 +65,6 @@ function Delta({ value, suffix = '' }: { value: number | null; suffix?: string }
       {up ? '▲' : flat ? '·' : '▼'} {up ? '+' : ''}
       {value}%{suffix}
     </span>
-  );
-}
-
-function Spark({ values }: { values: number[] }) {
-  const max = Math.max(1, ...values);
-  return (
-    <div className="cd-spark">
-      {values.map((v, i) => (
-        <span key={i} style={{ height: `${Math.max(8, (v / max) * 100)}%` }} />
-      ))}
-    </div>
   );
 }
 
@@ -135,18 +128,6 @@ export default function ReportsTab({
     return { thisWeek, lastWeek, thisMonth, lastMonth, total: done.length };
   }, [done, weekStart, lastWeekStart, monthStart, lastMonthStart]);
 
-  // Tasks completed per week aligned to the history week buckets (for spark).
-  const weeklyCounts = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const r of done) {
-      const d = completedAt(r);
-      if (!d) continue;
-      const key = toISODate(startOfWeek(d));
-      map.set(key, (map.get(key) || 0) + 1);
-    }
-    return history.weeks.map((w) => map.get(w.key) || 0);
-  }, [done, history.weeks]);
-
   // ---- Completed tasks grouped by completion week --------------------------
   const weekGroups = useMemo(() => {
     const groups = new Map<string, RequestRowData[]>();
@@ -182,125 +163,212 @@ export default function ReportsTab({
 
   // ---- Derived time figures -------------------------------------------------
   const weekRemaining = Math.max(0, plan.weeklyHours - plan.usedWeek);
-  const monthRemaining = Math.max(0, plan.monthlyHours - plan.usedMonth);
+
+  // ---- Period selector (drives the month column + its task count) -----------
+  const todayISO = toISODate(now);
+  const [period, setPeriod] = useState<PeriodKey>('this_month');
+  const [customFrom, setCustomFrom] = useState(() => toISODate(monthStart));
+  const [customTo, setCustomTo] = useState(todayISO);
+
+  const periodRange = useMemo(() => {
+    if (period === 'prev_month') {
+      const s = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const e = new Date(now.getFullYear(), now.getMonth(), 0);
+      return {
+        from: toISODate(s), to: toISODate(e),
+        label: 'Previous month', countLabel: 'last month',
+        // No remaining/allotment for a completed month — show time spent only.
+        // (The Monthly history section already charts past months vs allotment.)
+        allot: null as number | null, isCurrent: false,
+      };
+    }
+    if (period === 'custom') {
+      const s = new Date(`${customFrom}T00:00:00`);
+      const e = new Date(`${customTo}T00:00:00`);
+      return {
+        from: customFrom, to: customTo,
+        label: `${shortDate(s)} – ${shortDate(e)}`, countLabel: 'in range',
+        allot: null as number | null, isCurrent: false,
+      };
+    }
+    return {
+      from: toISODate(monthStart), to: todayISO,
+      label: 'This month', countLabel: 'this month',
+      allot: plan.monthlyHours as number | null, isCurrent: true,
+    };
+  }, [period, customFrom, customTo, now, monthStart, todayISO, plan.monthlyHours]);
+
+  const { data: periodData } = useQuery({
+    queryKey: ['folder-time-period', folderId, periodRange.from, periodRange.to],
+    queryFn: async () => {
+      try {
+        const r = await api.get(
+          `/pm/folders/${folderId}/time-summary?from=${periodRange.from}&to=${periodRange.to}`,
+        );
+        return r.data.data as { date: string; total_work_seconds: number }[];
+      } catch {
+        return [] as { date: string; total_work_seconds: number }[];
+      }
+    },
+    enabled: !!folderId && !!periodRange.from && !!periodRange.to,
+  });
+
+  const periodUsed = useMemo(() => {
+    if (!periodData) return periodRange.isCurrent ? plan.usedMonth : 0;
+    const secs = periodData.reduce((s, d) => s + (d.total_work_seconds || 0), 0);
+    return Math.round((secs / 3600) * 10) / 10;
+  }, [periodData, periodRange.isCurrent, plan.usedMonth]);
+
+  const periodRemaining =
+    periodRange.allot != null ? Math.max(0, periodRange.allot - periodUsed) : null;
+
+  const periodTaskCount = useMemo(() => {
+    const from = new Date(`${periodRange.from}T00:00:00`);
+    const to = new Date(`${periodRange.to}T23:59:59`);
+    return done.filter((r) => {
+      const d = completedAt(r);
+      return d != null && d >= from && d <= to;
+    }).length;
+  }, [done, periodRange.from, periodRange.to]);
 
   return (
     <div className="cd-rep2">
-      {/* ---------------- KPI strip: task counts + hours ---------------- */}
-      <div className="cd-kpi-row">
-        <div className="cd-kpi">
-          <div className="cd-kpi-label">Completed this week</div>
-          <div className="cd-kpi-value">
-            <span className="cd-kpi-num">{counts.thisWeek}</span>
-            <span className="cd-kpi-unit">tasks</span>
-          </div>
-          <div className="cd-kpi-delta">
-            <Delta value={pctDelta(counts.thisWeek, counts.lastWeek)} suffix=" WoW" />
-          </div>
-          <Spark values={weeklyCounts.slice(-8)} />
-        </div>
-
-        <div className="cd-kpi">
-          <div className="cd-kpi-label">Completed this month</div>
-          <div className="cd-kpi-value">
-            <span className="cd-kpi-num">{counts.thisMonth}</span>
-            <span className="cd-kpi-unit">tasks</span>
-          </div>
-          <div className="cd-kpi-delta">
-            <Delta value={pctDelta(counts.thisMonth, counts.lastMonth)} suffix=" MoM" />
-          </div>
-        </div>
-
-        <div className="cd-kpi">
-          <div className="cd-kpi-label">Total delivered</div>
-          <div className="cd-kpi-value">
-            <span className="cd-kpi-num">{counts.total}</span>
-            <span className="cd-kpi-unit">tasks</span>
-          </div>
-          <div className="cd-kpi-delta" style={{ color: 'var(--cd-fg-3)' }}>
-            all time
-          </div>
-        </div>
-
-        <div className="cd-kpi">
-          <div className="cd-kpi-label">Hours this week</div>
-          <div className="cd-kpi-value">
-            <span className="cd-kpi-num">{plan.usedWeek}</span>
-            <span className="cd-kpi-unit">/ {plan.weeklyHours}h</span>
-          </div>
-          <div className="cd-kpi-delta">{formatHours(weekRemaining)} left</div>
-          <Spark values={history.weeks.slice(-8).map((w) => w.actualHours)} />
-        </div>
-
-        <div className="cd-kpi">
-          <div className="cd-kpi-label">Hours this month</div>
-          <div className="cd-kpi-value">
-            <span className="cd-kpi-num">{plan.usedMonth}</span>
-            <span className="cd-kpi-unit">/ {plan.monthlyHours}h</span>
-          </div>
-          <div className="cd-kpi-delta">{formatHours(monthRemaining)} left</div>
-          <Spark values={history.months.map((m) => m.actualHours)} />
-        </div>
-      </div>
-
-      {/* ---------------- Time tracking: this week / this month ---------------- */}
-      <div className="cd-rep2-section-head">
+      {/* ---------------- Section 1: hours this week / period / counts ---------------- */}
+      <div className="cd-rep2-section-head" style={{ alignItems: 'flex-start' }}>
         <div>
           <div className="cd-rep-label">Time tracking</div>
           <div className="cd-rep-sub">Actual hours worked vs. your plan allotment</div>
+          <div className="cd-tt-legend" style={{ marginTop: 8 }}>
+            <span><i className="sw actual" /> Actual — time worked</span>
+            <span className={ELAPSED_ENABLED ? '' : 'is-off'}>
+              <i className="sw elapsed" /> Elapsed — idle time still billed {!ELAPSED_ENABLED && <ElapsedTag />}
+            </span>
+          </div>
         </div>
-        <div className="cd-tt-legend">
-          <span><i className="sw actual" /> Actual — time worked</span>
-          <span className={ELAPSED_ENABLED ? '' : 'is-off'}>
-            <i className="sw elapsed" /> Elapsed — idle time still billed {!ELAPSED_ENABLED && <ElapsedTag />}
-          </span>
+        <div className="cd-period">
+          <select
+            className="cd-period-select"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as PeriodKey)}
+            aria-label="Reporting period"
+          >
+            <option value="this_month">This month</option>
+            <option value="prev_month">Previous month</option>
+            <option value="custom">Custom…</option>
+          </select>
+          {period === 'custom' && (
+            <span className="cd-period-dates">
+              <input
+                type="date"
+                className="cd-period-date"
+                value={customFrom}
+                max={customTo}
+                onChange={(e) => setCustomFrom(e.target.value)}
+              />
+              <span className="sep">→</span>
+              <input
+                type="date"
+                className="cd-period-date"
+                value={customTo}
+                min={customFrom}
+                max={todayISO}
+                onChange={(e) => setCustomTo(e.target.value)}
+              />
+            </span>
+          )}
         </div>
       </div>
 
       <div className="cd-rep-grid">
-        {([
-          {
-            label: 'This week',
-            used: plan.usedWeek,
-            allot: plan.weeklyHours,
-            remaining: weekRemaining,
-          },
-          {
-            label: 'This month',
-            used: plan.usedMonth,
-            allot: plan.monthlyHours,
-            remaining: monthRemaining,
-          },
-        ] as const).map((t, i) => (
-          <div className="cd-rep-card span-6" key={t.label} style={i === 1 ? { borderRight: 0 } : undefined}>
-            <div className="cd-rep-label">{t.label}</div>
-            <div className="cd-rep-big" style={{ fontSize: 40 }}>
-              {formatHours(t.used)}
-              <span className="unit">/ {t.allot}h</span>
+        {/* Col 1 — hours this week */}
+        <div className="cd-rep-card span-5">
+          <div className="cd-rep-label">This week</div>
+          <div className="cd-rep-big" style={{ fontSize: 40 }}>
+            {formatHours(plan.usedWeek)}
+            <span className="unit">/ {plan.weeklyHours}h</span>
+          </div>
+          <UsageBar used={plan.usedWeek} allot={plan.weeklyHours} />
+          <div className="cd-stat-row">
+            <div className="cd-stat">
+              <div className="cd-stat-label">Actual</div>
+              <div className="cd-stat-val">{formatHours(plan.usedWeek)}</div>
             </div>
-            <UsageBar used={t.used} allot={t.allot} />
-            <div className="cd-stat-row">
-              <div className="cd-stat">
-                <div className="cd-stat-label">Actual</div>
-                <div className="cd-stat-val">{formatHours(t.used)}</div>
-              </div>
-              <div className="cd-stat">
-                <div className="cd-stat-label">Elapsed {!ELAPSED_ENABLED && <ElapsedTag />}</div>
-                <div className="cd-stat-val is-muted">{elapsedDisplay(0)}</div>
-              </div>
-              <div className="cd-stat">
-                <div className="cd-stat-label">Total</div>
-                <div className="cd-stat-val">{formatHours(t.used)}</div>
-              </div>
-              <div className="cd-stat">
-                <div className="cd-stat-label">Remaining</div>
-                <div className="cd-stat-val" style={{ color: t.remaining > 0 ? 'var(--cd-done)' : 'var(--cd-fg-2)' }}>
-                  {formatHours(t.remaining)}
-                </div>
+            <div className="cd-stat">
+              <div className="cd-stat-label">Elapsed {!ELAPSED_ENABLED && <ElapsedTag />}</div>
+              <div className="cd-stat-val is-muted">{elapsedDisplay(0)}</div>
+            </div>
+            <div className="cd-stat">
+              <div className="cd-stat-label">Total</div>
+              <div className="cd-stat-val">{formatHours(plan.usedWeek)}</div>
+            </div>
+            <div className="cd-stat">
+              <div className="cd-stat-label">Remaining</div>
+              <div className="cd-stat-val" style={{ color: weekRemaining > 0 ? 'var(--cd-done)' : 'var(--cd-fg-2)' }}>
+                {formatHours(weekRemaining)}
               </div>
             </div>
           </div>
-        ))}
+        </div>
+
+        {/* Col 2 — hours for the selected period (month / prev / custom) */}
+        <div className="cd-rep-card span-5">
+          <div className="cd-rep-label">{periodRange.label}</div>
+          <div className="cd-rep-big" style={{ fontSize: 40 }}>
+            {formatHours(periodUsed)}
+            {periodRange.allot != null && <span className="unit">/ {periodRange.allot}h</span>}
+          </div>
+          {periodRange.allot != null ? (
+            <UsageBar used={periodUsed} allot={periodRange.allot} />
+          ) : (
+            <div className="cd-bar-track">
+              <div className="cd-bar-fill" style={{ width: '100%', opacity: 0.22 }} />
+            </div>
+          )}
+          <div className="cd-stat-row">
+            <div className="cd-stat">
+              <div className="cd-stat-label">Actual</div>
+              <div className="cd-stat-val">{formatHours(periodUsed)}</div>
+            </div>
+            <div className="cd-stat">
+              <div className="cd-stat-label">Elapsed {!ELAPSED_ENABLED && <ElapsedTag />}</div>
+              <div className="cd-stat-val is-muted">{elapsedDisplay(0)}</div>
+            </div>
+            <div className="cd-stat">
+              <div className="cd-stat-label">Total</div>
+              <div className="cd-stat-val">{formatHours(periodUsed)}</div>
+            </div>
+            <div className="cd-stat">
+              <div className="cd-stat-label">Remaining</div>
+              <div className="cd-stat-val" style={{ color: periodRemaining && periodRemaining > 0 ? 'var(--cd-done)' : 'var(--cd-fg-2)' }}>
+                {periodRemaining != null ? formatHours(periodRemaining) : '—'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Col 3 — task counts (less prominent) */}
+        <div className="cd-rep-card span-2" style={{ borderRight: 0 }}>
+          <div className="cd-rep-label">Tasks done</div>
+          <div className="cd-counts">
+            <div className="cd-count-item">
+              <div className="cd-count-num">{counts.thisWeek}</div>
+              <div className="cd-count-label">this week</div>
+              <div className="cd-count-delta">
+                <Delta value={pctDelta(counts.thisWeek, counts.lastWeek)} suffix=" WoW" />
+              </div>
+            </div>
+            <div className="cd-count-item">
+              <div className="cd-count-num">{periodTaskCount}</div>
+              <div className="cd-count-label">{periodRange.countLabel}</div>
+              {periodRange.isCurrent && (
+                <div className="cd-count-delta">
+                  <Delta value={pctDelta(counts.thisMonth, counts.lastMonth)} suffix=" MoM" />
+                </div>
+              )}
+            </div>
+            <div className="cd-count-foot">{counts.total} delivered all-time</div>
+          </div>
+        </div>
       </div>
 
       {/* ---------------- Daily time spent ---------------- */}
