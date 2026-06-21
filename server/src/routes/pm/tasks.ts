@@ -280,7 +280,8 @@ router.get('/tasks', async (req: Request, res: Response) => {
       return;
     }
 
-    const hydrated = await hydrateAssignees(data || []);
+    const withAssignees = await hydrateAssignees(data || []);
+    const hydrated = await hydrateParents(withAssignees);
     res.json({ success: true, data: hydrated });
   } catch (err) {
     console.error('Get tasks error:', err);
@@ -622,7 +623,10 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
       .eq('parent_task_id', id)
       .order('created_at', { ascending: true });
 
-    const [hydratedTask] = await hydrateAssignees([task]);
+    const [withAssignees] = await hydrateAssignees([task]);
+    // Attach `parent_task: { id, title } | null` so the detail panel can show
+    // (and link to) the parent when this task is a subtask.
+    const [hydratedTask] = await hydrateParents([withAssignees]);
     const hydratedSubtasks = await hydrateAssignees(subtasks || []);
 
     res.json({

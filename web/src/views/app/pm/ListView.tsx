@@ -30,7 +30,9 @@ export default function ListView({
   sortBy?: SortBy;
   focusToday?: boolean;
 }) {
-  const { data: tasks, isLoading } = useTasks(listId, undefined);
+  // Include subtasks as flat rows so a subtask is discoverable in the list and
+  // can show its parent (TaskRow renders a parent breadcrumb for these).
+  const { data: tasks, isLoading } = useTasks(listId, { includeSubtasks: true });
   const updateTask = useUpdateTask(listId);
   const { selectedTasks, clearSelection, focusedTodayIds, focusedTodayDate, fadingTaskIds } = usePMStore();
   const currentUserId = useAuthStore((s) => s.user?.id);
