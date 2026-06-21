@@ -2,6 +2,13 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "Vibrant Payne Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/vibrant-payne-43f2c2/web' && INTERNAL_API_URL=https://api.squadhub.in exec npx next dev -p 3131"],
+      "port": 3131,
+      "autoPort": true
+    },
+    {
       "name": "Cool Elbakyan Web",
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/cool-elbakyan-f9fce2/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3123"],
