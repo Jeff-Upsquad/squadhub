@@ -21,10 +21,14 @@ function higher(a: CandidatePermission | undefined, b: CandidatePermission): Can
 /**
  * Candidate categories the user may access, each mapped to their permission tier.
  *
- *  - Internal admins → every category at 'full'.
- *  - Everyone else → the union of their direct grants and the grants on any of
- *    their roles, taking the HIGHEST tier per category.
- *  - No grants → empty map (deny-by-default: no access until explicitly granted).
+ *  - Everyone → the union of their direct grants and the grants on any of their
+ *    roles, taking the HIGHEST tier per category.
+ *  - Internal admins → 'full' on every category they have NOT been explicitly
+ *    scoped on. An explicit grant CAPS the tier for that category, so an admin
+ *    granted creative→view is read-only on creative but still full on the rest.
+ *    (An admin with no grants at all keeps full access to everything.)
+ *  - Non-admins with no grants → empty map (deny-by-default: no access until
+ *    explicitly granted).
  *
  * Layers on top of the `candidates` mini-app grant (which gates the app itself);
  * this decides WHICH categories are visible and what may be done within each.
@@ -33,14 +37,6 @@ export async function allowedCandidateCategories(
   userId: string,
   userType: string | undefined,
 ): Promise<CandidateAccessMap> {
-  // Internal admins always have full access to every category.
-  if (!userType || userType === 'internal') {
-    const { data: user } = await supabaseAdmin.from('users').select('is_admin').eq('id', userId).single();
-    if (user?.is_admin) {
-      return Object.fromEntries(ALL_CANDIDATE_CATEGORIES.map((c) => [c, 'full'])) as CandidateAccessMap;
-    }
-  }
-
   const map: CandidateAccessMap = {};
   const apply = (rows: { category: string; permission: CandidatePermission }[] | null) => {
     (rows || []).forEach((r) => {
@@ -65,6 +61,17 @@ export async function allowedCandidateCategories(
       .select('category, permission')
       .in('role_id', roleIds);
     apply(roleRows as { category: string; permission: CandidatePermission }[] | null);
+  }
+
+  // Internal admins default to 'full' on any category they have NOT been
+  // explicitly scoped on; explicit grants above already capped the rest.
+  if (!userType || userType === 'internal') {
+    const { data: user } = await supabaseAdmin.from('users').select('is_admin').eq('id', userId).single();
+    if (user?.is_admin) {
+      for (const c of ALL_CANDIDATE_CATEGORIES) {
+        if (!map[c]) map[c] = 'full';
+      }
+    }
   }
 
   return map;
