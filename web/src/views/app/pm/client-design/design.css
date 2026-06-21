@@ -816,6 +816,25 @@
 .cd-tl-row.is-today .cd-tl-val { color: var(--cd-fg-0); font-weight: 500; }
 .cd-tl-row.is-weekend { opacity: 0.5; }
 
+/* past-period breakdown: month subtotal + grand total rows */
+.cd-tl-row.cd-tl-subtotal {
+  border-top: 1px solid var(--cd-br-1);
+  border-bottom: 0;
+  margin-top: 2px;
+}
+.cd-tl-row.cd-tl-subtotal .cd-tl-label,
+.cd-tl-row.cd-tl-subtotal .cd-tl-val {
+  color: var(--cd-fg-0); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.cd-tl-row.cd-tl-total {
+  border-top: 2px solid var(--cd-br-2);
+  border-bottom: 0;
+}
+.cd-tl-row.cd-tl-total .cd-tl-label,
+.cd-tl-row.cd-tl-total .cd-tl-val {
+  color: var(--cd-fg-0); font-weight: 700;
+}
+
 /* completed-tasks-by-week groups */
 .cd-wk-group { border-bottom: 1px solid var(--cd-br-0); }
 .cd-wk-group:last-child { border-bottom: 0; }
@@ -867,8 +886,10 @@
 
 @media (max-width: 1000px) {
   .cd-rep-grid > .cd-rep-card.span-2,
+  .cd-rep-grid > .cd-rep-card.span-4,
   .cd-rep-grid > .cd-rep-card.span-5,
-  .cd-rep-grid > .cd-rep-card.span-6 {
+  .cd-rep-grid > .cd-rep-card.span-6,
+  .cd-rep-grid > .cd-rep-card.span-8 {
     grid-column: 1 / -1;
     border-right: 0;
   }
