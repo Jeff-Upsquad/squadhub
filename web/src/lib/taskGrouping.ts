@@ -296,5 +296,5 @@ export function buildFocusTodayGroup(tasks: Task[], sortBy: SortBy = 'manual'): 
     sortBy === 'manual'
       ? [...matched].sort((a, b) => (a.focused_at ?? '').localeCompare(b.focused_at ?? ''))
       : sortTasks(matched, sortBy);
-  return { key: 'focus_today', label: '★ Focus Today', sort: -1, tasks: ordered };
+  return { key: 'focus_today', label: 'Focus Today', sort: -1, tasks: ordered };
 }
