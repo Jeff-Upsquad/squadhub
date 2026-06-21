@@ -1076,6 +1076,23 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
   const planMargin = resolvePlanMargin(planPrice, finalizedPrice);
   const partnerPrice = resolvePartnerPrice(card, planPrice);
 
+  // Plan summary — the plan's identity (name/tier/service) alongside its
+  // headline deliverable (hours) and finalized monthly price. The full
+  // breakdown stays in the Deliverables/Pricing/Margin sections below.
+  const planNameDisplay = plan?.plan || card.plan_name || EMPTY;
+  const planTierDisplay = plan?.tier || EMPTY;
+  const serviceDisplay =
+    card.submission_subscription?.subscription?.name || card.service_type || EMPTY;
+  const hoursDeliverable = (card.plan_default_deliverables || []).find((d) => d.kind === 'hours');
+  const planHoursDisplay = hoursDeliverable
+    ? [
+        hoursDeliverable.per_day ? `${hoursDeliverable.per_day} hrs/day` : null,
+        hoursDeliverable.per_week ? `${hoursDeliverable.per_week} hrs/week` : null,
+        hoursDeliverable.per_month ? `${hoursDeliverable.per_month} hrs/month` : null,
+      ].filter(Boolean).join(' · ') || EMPTY
+    : EMPTY;
+  const planPriceDisplay = finalizedPrice != null ? `${cur} ${finalizedPrice.toLocaleString()}/mo` : EMPTY;
+
   return (
     <div className="px-5 py-5 space-y-5 text-sm">
       {isSecondaryView && (
@@ -1121,6 +1138,14 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
           </div>
         )}
       </div>
+
+      <DetailSection title="Plan">
+        <DetailRow label="Plan" value={planNameDisplay} />
+        <DetailRow label="Tier" value={planTierDisplay} />
+        <DetailRow label="Service" value={serviceDisplay} />
+        <DetailRow label="Hours" value={planHoursDisplay} />
+        <DetailRow label="Price" value={planPriceDisplay} />
+      </DetailSection>
 
       <DetailSection title="Working & business">
         <DetailRow label="Working days" value={card.working_days?.length ? card.working_days.join(' · ') : EMPTY} />
