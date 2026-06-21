@@ -43,7 +43,12 @@ interface GrantRow {
   permission: string;
 }
 
-// GET /admin/candidate-access — categories, add-pickers (roles + internal users),
+// User types that may be granted candidate access via the picker. Internal staff
+// plus partner_employees (e.g. external recruiters working a category). Partners
+// (owner accounts) and clients are intentionally excluded.
+const GRANTABLE_USER_TYPES = ['internal', 'partner_employee'] as const;
+
+// GET /admin/candidate-access — categories, add-pickers (roles + grantable users),
 // and the current grants (denormalised with subject names for the UI).
 router.get('/', async (_req: Request, res: Response) => {
   try {
@@ -52,7 +57,7 @@ router.get('/', async (_req: Request, res: Response) => {
       supabaseAdmin
         .from('users')
         .select('id, email, display_name, user_type')
-        .eq('user_type', 'internal')
+        .in('user_type', GRANTABLE_USER_TYPES as unknown as string[])
         .order('display_name'),
       supabaseAdmin.from('candidate_category_access').select('category, role_id, user_id, permission'),
     ]);

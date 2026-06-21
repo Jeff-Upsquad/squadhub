@@ -23,7 +23,11 @@ interface UserLite {
   id: string;
   email: string | null;
   display_name: string;
+  user_type?: string;
 }
+
+// Humanised label for non-internal grantees (internal staff need no badge).
+const USER_TYPE_LABEL: Record<string, string> = { partner_employee: 'Partner' };
 interface AccessData {
   categories: string[];
   roles: RoleLite[];
@@ -158,7 +162,8 @@ export default function AdminCandidateAccess() {
         <span className="font-medium text-foreground">View</span> = read-only,{' '}
         <span className="font-medium text-foreground">Edit</span> = update status &amp; notes,{' '}
         <span className="font-medium text-foreground">Full</span> = everything incl. delete. When someone has both a
-        direct and a role grant, the higher level wins. Admins always have full access.
+        direct and a role grant, the higher level wins. Admins get full access by default — but a grant here applies to
+        them too, capping their level for that category.
       </div>
 
       {isLoading || !data ? (
@@ -261,7 +266,14 @@ export default function AdminCandidateAccess() {
                           className="flex items-center justify-between border-b border-divider px-3 py-2 last:border-0"
                         >
                           <div className="min-w-0">
-                            <div className="truncate text-sm font-medium text-foreground">{u.display_name || '—'}</div>
+                            <div className="flex items-center gap-2">
+                              <span className="truncate text-sm font-medium text-foreground">{u.display_name || '—'}</span>
+                              {u.user_type && u.user_type !== 'internal' && (
+                                <span className="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-500">
+                                  {USER_TYPE_LABEL[u.user_type] ?? u.user_type}
+                                </span>
+                              )}
+                            </div>
                             <div className="truncate text-xs text-foreground-muted">{u.email || u.id}</div>
                           </div>
                           <button
