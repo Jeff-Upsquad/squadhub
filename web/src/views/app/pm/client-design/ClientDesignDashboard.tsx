@@ -146,7 +146,12 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
   const effectiveStatuses = (space as any)?.space_statuses || space?.statuses || [];
 
   return (
-    <div className="flex flex-1 flex-col">
+    // min-h-0 / min-w-0 are load-bearing: this is a flex child of the layout's
+    // column container, and without them its automatic min-size stays at content
+    // height — the tall Reports tab then overflows instead of letting the inner
+    // `.cd-root` scroll, which clips the top and breaks scrolling. (Matches the
+    // chat/clips sibling views in MainLayout.)
+    <div className="flex flex-1 flex-col min-h-0 min-w-0">
       {/* Row 1: Breadcrumb + global actions */}
       <div className="lv-breadcrumb-row">
         <div className="lv-breadcrumb">
