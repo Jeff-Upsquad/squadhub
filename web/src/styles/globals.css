@@ -5078,6 +5078,246 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
 }
 
 /* -------------------------------------------------------------------------- */
+/* Design / Video brief — guided form (stacked label-above-control fields)     */
+/* Replaces the cramped 90px-label property grid for the creative-brief inputs. */
+/* -------------------------------------------------------------------------- */
+
+.td-design-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+/* One field block — label above, full-width control below */
+.td-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+/* Label row — field name on the left, optional help pill on the right */
+.td-field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.td-field-label .lbl {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--sh-ink-3);
+  letter-spacing: -0.005em;
+}
+.td-field-label .lbl svg { color: var(--sh-ink-4); flex: none; }
+.td-design-form .req { color: oklch(0.6 0.19 25); font-weight: 600; margin-left: 2px; }
+.td-field-hint {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--sh-ink-4);
+  margin-top: -2px;
+}
+
+/* Help pill (e.g. "View size chart") — promoted from a tiny underline */
+.td-field-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--td-accent);
+  background: var(--td-accent-soft);
+  text-decoration: none;
+  transition: background .12s ease, color .12s ease;
+}
+.td-field-help:hover { background: color-mix(in oklch, var(--td-accent-soft) 65%, var(--td-accent) 14%); color: var(--td-accent-2); }
+.td-field-help svg { flex: none; }
+
+/* 2-up grid for short scalar fields (text / url / number / date) */
+.td-field-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+  min-width: 0;
+}
+.td-field-pair > .td-field { min-width: 0; }
+@media (max-width: 540px) {
+  .td-field-pair { grid-template-columns: 1fr; }
+}
+
+/* Input shell — a real bordered box for text / url / number / date / select / textarea */
+.td-input-shell {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--sh-hair);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--sh-ink);
+  font-family: var(--td-font-body);
+  font-size: 13px;
+  line-height: 1.4;
+  transition: border-color .14s ease, box-shadow .14s ease;
+}
+input.td-input-shell,
+select.td-input-shell { height: 38px; padding: 0 12px; }
+textarea.td-input-shell {
+  min-height: 64px;
+  padding: 9px 12px;
+  resize: vertical;
+  line-height: 1.5;
+}
+.td-input-shell::placeholder { color: var(--sh-ink-4); }
+.td-input-shell:hover { border-color: var(--sh-hair-2); }
+
+/* Select — strip native chrome, draw our own chevron */
+.td-select-wrap { position: relative; width: 100%; }
+.td-select-wrap > select.td-input-shell {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 32px;
+  cursor: pointer;
+}
+.td-select-wrap > .chev {
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--sh-ink-4);
+}
+
+/* Chips — multi_select + the Other toggle. Accent-soft selected state. */
+.td-chip-group { display: flex; flex-direction: column; gap: 8px; }
+.td-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.td-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 6px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--sh-hair);
+  background: var(--surface-alt);
+  color: var(--sh-ink-2);
+  font-family: var(--td-font-body);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease, color .12s ease;
+}
+.td-chip:hover { border-color: var(--sh-hair-2); background: color-mix(in oklch, var(--sh-hair-3) 60%, var(--surface)); }
+.td-chip .chip-check {
+  display: inline-flex;
+  align-items: center;
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  margin-right: 0;
+  transition: width .14s ease, opacity .12s ease, margin-right .14s ease;
+}
+.td-chip .chip-check svg { flex: none; }
+.td-chip.is-on {
+  background: var(--td-accent-soft);
+  border-color: color-mix(in oklch, var(--td-accent) 45%, transparent);
+  color: var(--td-accent-2);
+}
+.td-chip.is-on .chip-check { width: 13px; opacity: 1; margin-right: 5px; }
+.td-chip:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--td-accent-soft); }
+
+/* allow_other free-text — reveals full-width on its own line */
+.td-chip-other-input { margin-top: 2px; }
+
+/* Custom checkbox field — inline box + label */
+.td-field--check { flex-direction: row; align-items: center; gap: 10px; }
+.td-check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--sh-ink);
+}
+.td-check-row input { position: absolute; opacity: 0; width: 0; height: 0; }
+.td-check-box {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid var(--sh-hair-2);
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  flex: none;
+  transition: background .12s ease, border-color .12s ease;
+}
+.td-check-box svg { opacity: 0; color: #fff; }
+.td-check-row input:checked + .td-check-box {
+  background: var(--td-accent);
+  border-color: var(--td-accent);
+}
+.td-check-row input:checked + .td-check-box svg { opacity: 1; }
+.td-check-row input:focus-visible + .td-check-box { box-shadow: 0 0 0 3px var(--td-accent-soft); }
+
+/* Brief — hero writing surface with an accent inset edge */
+.td-brief-field .td-field-label .lbl { font-size: 13px; font-weight: 600; color: var(--sh-ink); }
+.td-brief-hero {
+  border: 1px solid var(--sh-hair);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: inset 3px 0 0 var(--td-accent);
+  padding: 11px 14px 11px 15px;
+  transition: border-color .14s ease, box-shadow .14s ease;
+}
+.td-brief-hero .td-brief-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 92px;
+  resize: vertical;
+  border: none;
+  background: transparent;
+  outline: none;
+  color: var(--sh-ink);
+  font-family: var(--td-font-body);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.td-brief-hero .td-brief-input::placeholder { color: var(--sh-ink-4); }
+
+/* Focus — accent ring on the shell / hero / select. Overrides the panel's
+   default focus-visible (border sq-gray-900 + box-shadow:none) — needs the
+   full panel prefix + !important to win on specificity. */
+.td-panel .td-design-form .td-input-shell:focus,
+.td-panel-luma .td-design-form .td-input-shell:focus,
+.td-panel-luma.apple.td-shell .td-design-form .td-input-shell:focus,
+.td-panel .td-design-form .td-brief-hero:focus-within,
+.td-panel-luma .td-design-form .td-brief-hero:focus-within,
+.td-panel-luma.apple.td-shell .td-design-form .td-brief-hero:focus-within {
+  outline: none;
+  border-color: var(--td-accent) !important;
+  box-shadow: 0 0 0 3px var(--td-accent-soft) !important;
+}
+.td-panel-luma.apple.td-shell .td-design-form .td-brief-hero:focus-within {
+  box-shadow: inset 3px 0 0 var(--td-accent), 0 0 0 3px var(--td-accent-soft) !important;
+}
+
+/* Voice notes inside the brief form — full-width drop-zone affordance */
+.td-design-form .td-voice-rec-btn {
+  width: 100%;
+  justify-content: center;
+  min-height: 42px;
+  border-radius: 10px;
+}
+
+/* Dark mode — let native date/select popups invert */
+.dark .td-design-form { color-scheme: dark; }
+
+/* -------------------------------------------------------------------------- */
 /* Voice Note Recorder & Player                                               */
 /* -------------------------------------------------------------------------- */
 

@@ -14,7 +14,7 @@ import RepeatPicker from './RepeatPicker';
 import EmergencyConfirm from './EmergencyConfirm';
 import ListPickerCombobox from './ListPickerCombobox';
 import TaskStatusPicker from './TaskStatusPicker';
-import { nextQuickDate } from './taskHelpers';
+import { nextQuickDate, groupDesignFields } from './taskHelpers';
 import { useDraftTaskStore, type SerializableDraft } from '../../../stores/draftTaskStore';
 import { usePMStore } from '../../../stores/pmStore';
 import { showToast } from '../../../components/Toast';
@@ -334,6 +334,7 @@ export default function TaskCreatePanel({
   );
   const isVideoTask = isDesignTask && customTaskTypeKey === 'video_edit_task';
   const designFields: TaskTypeField[] = designType?.fields || [];
+  const designFieldGroups = useMemo(() => groupDesignFields(designFields), [designFields]);
   const [designCustom, setDesignCustom] = useState<Record<string, unknown>>({});
   const setDesignField = (key: string, v: unknown) =>
     setDesignCustom((prev) => {
@@ -988,35 +989,59 @@ export default function TaskCreatePanel({
                 )}
                 <span className="title">{isVideoTask ? 'Video Editing Brief' : 'Design Details'}</span>
               </div>
-              <div className="td-settings-card">
-                <div className="td-settings-row" style={{ gridColumn: '1 / -1', borderRight: 'none' }}>
-                  <span className="k">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 4h12l4 4v12H4z" />
-                      <path d="M8 8h8M8 12h6" />
-                    </svg>
-                    Brief<span style={{ color: 'oklch(0.55 0.18 25)', marginLeft: 2 }}>*</span>
-                  </span>
-                  <span className="v" style={{ display: 'block' }}>
+              <div className="td-design-form">
+                {/* Brief — hero writing surface, the primary field */}
+                <div className="td-field td-brief-field">
+                  <div className="td-field-label">
+                    <span className="lbl">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 4h12l4 4v12H4z" />
+                        <path d="M8 8h8M8 12h6" />
+                      </svg>
+                      Brief<span className="req">*</span>
+                    </span>
+                  </div>
+                  <div className="td-brief-hero">
                     <textarea
                       value={draft.description}
                       onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-                      placeholder="Describe what you want. Goals, context, what success looks like."
-                      rows={3}
-                      className="td-about w-full resize-none bg-transparent outline-none"
+                      placeholder={isVideoTask
+                        ? 'Describe the video — goal, story, tone, and what a great result looks like.'
+                        : 'Describe what you want — goals, context, and what success looks like.'}
+                      rows={4}
+                      className="td-brief-input"
                     />
-                  </span>
+                  </div>
+                  <span className="td-field-hint">The most important part — the clearer the brief, the better the result.</span>
                 </div>
-                {designFields.map((field) => (
-                  <DesignFieldRow
-                    key={field.id}
-                    field={field}
-                    value={designCustom[field.key]}
-                    otherValue={designCustom[field.key + '_other']}
-                    onChange={(v) => setDesignField(field.key, v)}
-                    onOtherChange={(v) => setDesignField(field.key + '_other', v)}
-                  />
-                ))}
+
+                {/* Custom brief fields — short scalars pair 2-up, the rest full width */}
+                {designFieldGroups.map((group) =>
+                  group.length === 2 ? (
+                    <div className="td-field-pair" key={group[0].id}>
+                      {group.map((field) => (
+                        <DesignFieldRow
+                          key={field.id}
+                          field={field}
+                          value={designCustom[field.key]}
+                          otherValue={designCustom[field.key + '_other']}
+                          onChange={(v) => setDesignField(field.key, v)}
+                          onOtherChange={(v) => setDesignField(field.key + '_other', v)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <DesignFieldRow
+                      key={group[0].id}
+                      field={group[0]}
+                      value={designCustom[group[0].key]}
+                      otherValue={designCustom[group[0].key + '_other']}
+                      onChange={(v) => setDesignField(group[0].key, v)}
+                      onOtherChange={(v) => setDesignField(group[0].key + '_other', v)}
+                    />
+                  )
+                )}
+
                 <VoiceNoteRecorder onAddFile={(f) => addDraftFiles([f])} />
               </div>
             </>
@@ -1861,6 +1886,28 @@ function DesignFieldRow({
 }) {
   const str = typeof value === 'string' ? value : value == null ? '' : String(value);
   const otherStr = typeof otherValue === 'string' ? otherValue : '';
+  // Generic ghost text so a field never renders as a purposeless empty box.
+  const ghost = field.placeholder || `Add ${field.label.toLowerCase()}…`;
+
+  // Checkbox is an inline exception — box + label on one row, no label header.
+  if (field.field_type === 'checkbox') {
+    return (
+      <div className="td-field td-field--check">
+        <label className="td-check-row">
+          <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />
+          <span className="td-check-box">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12l5 5 9-11" />
+            </svg>
+          </span>
+          <span>
+            {field.label}
+            {field.is_required && <span className="req"> *</span>}
+          </span>
+        </label>
+      </div>
+    );
+  }
 
   let control: React.ReactNode = null;
 
@@ -1868,25 +1915,27 @@ function DesignFieldRow({
     case 'multi_select': {
       const arr: string[] = Array.isArray(value) ? (value as string[]) : [];
       const otherSelected = arr.includes('__other__') || (field.allow_other && !!otherStr);
+      const Check = (
+        <span className="chip-check">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12l5 5 9-11" />
+          </svg>
+        </span>
+      );
       control = (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div className="flex flex-wrap gap-1.5">
+        <div className="td-chip-group">
+          <div className="td-chip-row">
             {field.options.map((o) => {
               const on = arr.includes(o.value);
               return (
                 <button
                   key={o.value}
                   type="button"
+                  aria-pressed={on}
                   onClick={() => onChange(on ? arr.filter((v) => v !== o.value) : [...arr, o.value])}
-                  className="td-prop-chip"
-                  style={{
-                    background: on ? 'var(--sh-ink)' : 'var(--surface-alt)',
-                    color: on ? 'var(--surface)' : 'var(--sh-ink-2)',
-                    border: `1px solid ${on ? 'var(--sh-ink)' : 'var(--sh-hair-3)'}`,
-                    fontSize: 12,
-                    cursor: 'pointer',
-                  }}
+                  className={`td-chip${on ? ' is-on' : ''}`}
                 >
+                  {Check}
                   {o.label}
                 </button>
               );
@@ -1894,6 +1943,7 @@ function DesignFieldRow({
             {field.allow_other && (
               <button
                 type="button"
+                aria-pressed={!!otherSelected}
                 onClick={() => {
                   if (otherSelected) {
                     onChange(arr.filter((v) => v !== '__other__'));
@@ -1902,15 +1952,9 @@ function DesignFieldRow({
                     onChange([...arr, '__other__']);
                   }
                 }}
-                className="td-prop-chip"
-                style={{
-                  background: otherSelected ? 'var(--sh-ink)' : 'var(--surface-alt)',
-                  color: otherSelected ? 'var(--surface)' : 'var(--sh-ink-2)',
-                  border: `1px solid ${otherSelected ? 'var(--sh-ink)' : 'var(--sh-hair-3)'}`,
-                  fontSize: 12,
-                  cursor: 'pointer',
-                }}
+                className={`td-chip${otherSelected ? ' is-on' : ''}`}
               >
+                {Check}
                 Other
               </button>
             )}
@@ -1919,10 +1963,9 @@ function DesignFieldRow({
             <input
               type="text"
               value={otherStr}
-              placeholder="Describe…"
+              placeholder="Describe what you need…"
               onChange={(e) => onOtherChange(e.target.value || null)}
-              className="text-[12.5px] bg-transparent border rounded-lg px-2.5 py-1.5 outline-none w-full"
-              style={{ borderColor: 'var(--sh-hair)' }}
+              className="td-input-shell td-chip-other-input"
             />
           )}
         </div>
@@ -1931,27 +1974,31 @@ function DesignFieldRow({
     }
     case 'select':
       control = (
-        <select
-          value={str}
-          onChange={(e) => onChange(e.target.value || null)}
-          className="text-[12.5px] bg-transparent border rounded-lg px-2.5 py-1.5 outline-none"
-          style={{ borderColor: 'var(--sh-hair)' }}
-        >
-          <option value="">—</option>
-          {field.options.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
+        <div className="td-select-wrap">
+          <select
+            value={str}
+            onChange={(e) => onChange(e.target.value || null)}
+            className="td-input-shell"
+          >
+            <option value="">—</option>
+            {field.options.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <svg className="chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </div>
       );
       break;
     case 'textarea':
       control = (
         <textarea
           rows={2}
-          placeholder={field.placeholder || ''}
+          placeholder={ghost}
           value={str}
           onChange={(e) => onChange(e.target.value || null)}
-          className="td-about w-full resize-none bg-transparent outline-none text-[12.5px]"
+          className="td-input-shell"
         />
       );
       break;
@@ -1959,11 +2006,11 @@ function DesignFieldRow({
       control = (
         <input
           type="number"
-          placeholder={field.placeholder || ''}
+          inputMode="numeric"
+          placeholder={ghost}
           value={str}
           onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
-          className="text-[12.5px] bg-transparent border-b outline-none w-28"
-          style={{ borderColor: 'var(--sh-hair)' }}
+          className="td-input-shell"
         />
       );
       break;
@@ -1973,8 +2020,7 @@ function DesignFieldRow({
           type="date"
           value={str}
           onChange={(e) => onChange(e.target.value || null)}
-          className="text-[12.5px] bg-transparent border rounded-lg px-2.5 py-1.5 outline-none"
-          style={{ borderColor: 'var(--sh-hair)' }}
+          className="td-input-shell"
         />
       );
       break;
@@ -1985,17 +2031,7 @@ function DesignFieldRow({
           placeholder={field.placeholder || 'https://'}
           value={str}
           onChange={(e) => onChange(e.target.value || null)}
-          className="text-[12.5px] bg-transparent border rounded-lg px-2.5 py-1.5 outline-none w-full"
-          style={{ borderColor: 'var(--sh-hair)' }}
-        />
-      );
-      break;
-    case 'checkbox':
-      control = (
-        <input
-          type="checkbox"
-          checked={!!value}
-          onChange={(e) => onChange(e.target.checked)}
+          className="td-input-shell"
         />
       );
       break;
@@ -2004,34 +2040,36 @@ function DesignFieldRow({
       control = (
         <input
           type="text"
-          placeholder={field.placeholder || ''}
+          placeholder={ghost}
           value={str}
           onChange={(e) => onChange(e.target.value || null)}
-          className="text-[12.5px] bg-transparent border rounded-lg px-2.5 py-1.5 outline-none w-full"
-          style={{ borderColor: 'var(--sh-hair)' }}
+          className="td-input-shell"
         />
       );
   }
 
   return (
-    <div className="td-settings-row" style={{ gridColumn: '1 / -1', borderRight: 'none' }}>
-      <span className="k" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <span>
+    <div className="td-field">
+      <div className="td-field-label">
+        <span className="lbl">
           {field.label}
-          {field.is_required && <span style={{ color: 'oklch(0.55 0.18 25)', marginLeft: 2 }}>*</span>}
+          {field.is_required && <span className="req">*</span>}
         </span>
         {field.help_url && (
           <a
             href={field.help_url}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ fontSize: 10.5, color: 'var(--sh-ink-4)', textDecoration: 'underline' }}
+            className="td-field-help"
           >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 17L17 7M9 7h8v8" />
+            </svg>
             View size chart
           </a>
         )}
-      </span>
-      <span className="v" style={{ display: 'block' }}>{control}</span>
+      </div>
+      {control}
     </div>
   );
 }
@@ -2117,18 +2155,19 @@ function VoiceNoteRecorder({ onAddFile }: { onAddFile: (file: File) => void }) {
   };
 
   return (
-    <div className="td-settings-row" style={{ gridColumn: '1 / -1', borderRight: 'none' }}>
-      <span className="k">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
-          <path d="M19 10v2a7 7 0 01-14 0v-2" />
-          <line x1="12" y1="19" x2="12" y2="23" />
-          <line x1="8" y1="23" x2="16" y2="23" />
-        </svg>
-        Voice notes
-      </span>
-      <span className="v" style={{ display: 'block' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div className="td-field">
+      <div className="td-field-label">
+        <span className="lbl">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+            <path d="M19 10v2a7 7 0 01-14 0v-2" />
+            <line x1="12" y1="19" x2="12" y2="23" />
+            <line x1="8" y1="23" x2="16" y2="23" />
+          </svg>
+          Voice notes
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {notes.map((n) => (
             <VoiceNotePlayer key={n.id} note={n} onRemove={() => removeNote(n.id)} />
           ))}
@@ -2157,8 +2196,7 @@ function VoiceNoteRecorder({ onAddFile }: { onAddFile: (file: File) => void }) {
               Record voice note
             </button>
           )}
-        </div>
-      </span>
+      </div>
     </div>
   );
 }
