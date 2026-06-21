@@ -294,13 +294,13 @@ function SpaceIconSmall() {
 
 // ---- Folder item ----
 function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }: { folder: Folder; spaceId: string; canAdd: boolean; canDelete: boolean; isManager: boolean; myAccess?: AccessLevel | null }) {
-  const { activeFolderId, setActiveFolder, setActiveSpace, setActiveDesignFolder } = usePMStore();
+  const { activeFolderId, activeDesignFolderId, setActiveFolder, setActiveSpace, setActiveDesignFolder } = usePMStore();
   const [open, setOpen] = useState(true);
   const [adding, setAdding] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const createList = useCreateList(spaceId);
-  const isActive = activeFolderId === folder.id;
   const isTemplateSpace = !!folder.client_space_template_id;
+  const isActive = isTemplateSpace ? activeDesignFolderId === folder.id : activeFolderId === folder.id;
   const openFolder = (e?: React.MouseEvent) => {
     if (e && wantsNewTab(e)) {
       e.preventDefault();
