@@ -758,22 +758,6 @@ export default function TaskDetailPanel({
               </button>
             )
           )}
-          {task && (
-            <button
-              type="button"
-              onClick={handleToggleDone}
-              disabled={!canEdit}
-              className="td-pill-btn"
-              data-accent={!isDone ? 'true' : undefined}
-              data-completed={isDone ? 'true' : undefined}
-              title={isDone ? 'Reopen task' : 'Mark complete'}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M5 12l5 5 9-11" />
-              </svg>
-              {isDone ? 'Completed' : 'Complete'}
-            </button>
-          )}
         </div>
 
         {/* Scrollable body */}
