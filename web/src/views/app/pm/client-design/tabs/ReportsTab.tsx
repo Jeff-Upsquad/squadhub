@@ -629,10 +629,45 @@ function PeriodBreakdown({
   weeklyHours: number;
   monthlyHours: number;
 }) {
+  const totalHours = data.totalSecs / 3600;
+  // Allotment across the period (one month's allotment per month spanned),
+  // mirroring how the current-month card shows hours vs. monthly allotment.
+  const allot = monthlyHours * Math.max(1, data.months.length);
+  const remaining = Math.max(0, allot - totalHours);
+  // Single month → the month name ("May 2026"); a multi-month range keeps its range label.
+  const heading = data.months.length === 1 ? data.months[0].label : label;
   return (
     <div className="cd-rep-card span-8">
-      <div className="cd-rep-label">{label}</div>
-      <div className="cd-rep-sub" style={{ marginBottom: 10 }}>
+      {/* Month summary — mirrors the current-month card, headed by the month name */}
+      <div className="cd-rep-label">{heading}</div>
+      <div className="cd-rep-big" style={{ fontSize: 40 }}>
+        {formatHours(totalHours)}
+        <span className="unit">/ {allot}h</span>
+      </div>
+      <UsageBar used={totalHours} allot={allot} />
+      <div className="cd-stat-row">
+        <div className="cd-stat">
+          <div className="cd-stat-label">Actual</div>
+          <div className="cd-stat-val">{formatHours(totalHours)}</div>
+        </div>
+        <div className="cd-stat">
+          <div className="cd-stat-label">Elapsed {!ELAPSED_ENABLED && <ElapsedTag />}</div>
+          <div className="cd-stat-val is-muted">{elapsedDisplay(0)}</div>
+        </div>
+        <div className="cd-stat">
+          <div className="cd-stat-label">Total</div>
+          <div className="cd-stat-val">{formatHours(totalHours)}</div>
+        </div>
+        <div className="cd-stat">
+          <div className="cd-stat-label">Remaining</div>
+          <div className="cd-stat-val" style={{ color: remaining > 0 ? 'var(--cd-done)' : 'var(--cd-fg-2)' }}>
+            {formatHours(remaining)}
+          </div>
+        </div>
+      </div>
+
+      {/* Weekly breakdown */}
+      <div className="cd-rep-sub" style={{ margin: '20px 0 10px' }}>
         Utilization by week, with tasks delivered
       </div>
       <div className="cd-tl-head">
@@ -657,26 +692,22 @@ function PeriodBreakdown({
               </div>
             );
           })}
-          <div className="cd-tl-row cd-tl-subtotal">
-            <span className="cd-tl-label">{m.label}</span>
-            <div className="cd-tl-bar">
-              <UsageBar used={m.secs / 3600} allot={monthlyHours} />
+          {/* Per-month subtotal only when the range spans multiple months
+              (for a single month the summary card above is the total). */}
+          {data.multiMonth && (
+            <div className="cd-tl-row cd-tl-subtotal">
+              <span className="cd-tl-label">{m.label}</span>
+              <div className="cd-tl-bar">
+                <UsageBar used={m.secs / 3600} allot={monthlyHours} />
+              </div>
+              <span className="cd-tl-val">{formatHours(m.secs / 3600)}</span>
+              <span className="cd-tl-val">{m.tasks}</span>
             </div>
-            <span className="cd-tl-val">{formatHours(m.secs / 3600)}</span>
-            <span className="cd-tl-val">{m.tasks}</span>
-          </div>
+          )}
         </div>
       ))}
-      {data.multiMonth && (
-        <div className="cd-tl-row cd-tl-total">
-          <span className="cd-tl-label">Total</span>
-          <div className="cd-tl-bar" />
-          <span className="cd-tl-val">{formatHours(data.totalSecs / 3600)}</span>
-          <span className="cd-tl-val">{data.totalTasks}</span>
-        </div>
-      )}
       <div className="cd-rep-sub" style={{ marginTop: 10, fontSize: 10.5 }}>
-        Week bars vs. weekly allotment · month bars vs. monthly allotment.
+        Week bars vs. weekly allotment · summary vs. monthly allotment.
       </div>
     </div>
   );
