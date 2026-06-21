@@ -244,6 +244,7 @@ export default function FolderPage() {
                 groupKey="focus_today"
                 label={focusGroup.label}
                 dotColor="#f59e0b"
+                variant="focus"
                 tasks={focusGroup.tasks}
                 allStatuses={spaceStatuses}
                 listId={null}

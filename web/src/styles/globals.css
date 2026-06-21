@@ -2618,6 +2618,114 @@ body {
   padding: 0 6px;
 }
 
+/* ── Focus Today — editorial "agenda" banner (D2) ──────────── */
+.lv-card--focus {
+  border-color: rgba(245, 158, 11, 0.30);
+  box-shadow:
+    0 6px 22px -12px rgba(245, 158, 11, 0.35),
+    0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.dark .lv-card--focus {
+  border-color: rgba(245, 158, 11, 0.28);
+  box-shadow:
+    0 6px 24px -14px rgba(245, 158, 11, 0.30),
+    0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Banner header — flex layout, not the table grid */
+.lv-card-head.lv-focus-head {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 60px;
+  padding: 12px 18px;
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.06) 0%, rgba(245, 158, 11, 0) 100%);
+  border-bottom: 1px solid var(--sh-hair-3);
+}
+.dark .lv-card-head.lv-focus-head {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.10) 0%, rgba(245, 158, 11, 0) 100%);
+}
+.lv-focus-lead { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.lv-focus-head .gh-chevron { color: var(--sh-ink-3); }
+
+/* Gradient star badge */
+.lv-focus-badge {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  box-shadow: 0 3px 8px rgba(245, 158, 11, 0.45);
+}
+
+.lv-focus-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lv-focus-eyebrow {
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sh-ink-4);
+  white-space: nowrap;
+}
+.lv-focus-title {
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  color: var(--sh-ink);
+  width: fit-content;
+  max-width: 100%;
+  padding: 0 2px;
+  background: linear-gradient(transparent 62%, rgba(245, 158, 11, 0.30) 62%, rgba(245, 158, 11, 0.30) 94%, transparent 94%);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dark .lv-focus-title {
+  background: linear-gradient(transparent 62%, rgba(245, 158, 11, 0.34) 62%, rgba(245, 158, 11, 0.34) 94%, transparent 94%);
+}
+
+/* Right meta — "x of y done" + donut progress ring */
+.lv-focus-meta { display: flex; align-items: center; gap: 12px; flex: none; }
+.lv-focus-done {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  color: var(--sh-ink-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.lv-focus-ring { position: relative; width: 38px; height: 38px; flex: none; }
+.lv-focus-ring .lv-ring-track { stroke: var(--sh-hair-3); }
+.dark .lv-focus-ring .lv-ring-track { stroke: var(--sh-hair-2); }
+.lv-focus-ring-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--sh-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Planner rows — drop the vertical cell dividers for an airier list */
+.lv-card.lv-card--focus .lv-cell { border-left-color: transparent !important; }
+
+/* Narrow viewports — hide the "x of y done" label, keep the ring */
+@media (max-width: 640px) {
+  .lv-focus-done { display: none; }
+  .lv-card-head.lv-focus-head { padding: 10px 14px; min-height: 54px; }
+  .lv-focus-title { font-size: 16px; }
+}
+
 /* Body wrapper — no padding/margin so rows align with header */
 .lv-card-body,
 .lv-card > div:not(.lv-card-head):not(.lv-add) {

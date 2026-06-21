@@ -18,6 +18,8 @@ interface TaskGroupCardProps {
   defaultNewTaskStatus?: string;
   onDrop?: (taskId: string, statusId: string) => void;
   defaultCollapsed?: boolean;
+  /** 'focus' renders the elevated amber "Focus Today" spotlight treatment. */
+  variant?: 'default' | 'focus';
 }
 
 export default function TaskGroupCard({
@@ -33,7 +35,9 @@ export default function TaskGroupCard({
   defaultNewTaskStatus,
   onDrop,
   defaultCollapsed = false,
+  variant = 'default',
 }: TaskGroupCardProps) {
+  const isFocus = variant === 'focus';
   const { collapsedGroups, toggleGroupCollapse } = usePMStore();
   const isCollapsed = collapsedGroups[groupKey] ?? defaultCollapsed;
   const [isDragOver, setIsDragOver] = useState(false);
@@ -43,6 +47,13 @@ export default function TaskGroupCard({
   const completedCount = tasks.filter(isTaskCompleted).length;
   const totalCount = tasks.length;
   const pct = totalCount ? Math.round((completedCount / totalCount) * 100) : 0;
+
+  // Focus banner (D2 "agenda") — live date eyebrow + donut progress ring.
+  const RING_C = 2 * Math.PI * 15;
+  const ringOffset = RING_C * (1 - pct / 100);
+  const focusDateLabel = isFocus
+    ? `${new Date().toLocaleDateString(undefined, { weekday: 'long' })} · ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+    : '';
 
   const handleDragOver = (e: React.DragEvent) => {
     if (!onDrop) return;
@@ -62,64 +73,125 @@ export default function TaskGroupCard({
 
   return (
     <div
-      className="lv-card"
+      className={isFocus ? 'lv-card lv-card--focus' : 'lv-card'}
       data-dragover={isDragOver}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Group header */}
-      <div
-        className="lv-card-head"
-        onClick={() => toggleGroupCollapse(groupKey)}
-      >
-        <div className="gh-left">
-          <span className="gh-chevron">
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              style={{
-                transform: isCollapsed ? 'none' : 'rotate(90deg)',
-                transition: 'transform 0.15s',
-              }}
-            >
-              <path d="M9 5l7 7-7 7" />
-            </svg>
-          </span>
-          {dotColor && (
-            <span
-              className="lv-glyph-dot"
-              style={{
-                background: dotColor,
-                boxShadow: `0 0 0 3px ${dotColor}22`,
-              }}
-            />
-          )}
-          <span className="gh-title">{label}</span>
-          <span className="lv-progress">
-            <span
-              className="lv-progress-fill"
-              style={{
-                width: `${pct}%`,
-                background: dotColor || 'var(--sh-ink-3)',
-              }}
-            />
-          </span>
-          <span className="lv-fraction">
-            {completedCount}/{totalCount}
-          </span>
+      {/* Group header — focus renders the editorial "agenda" banner;
+          every other group keeps the compact table-style header. */}
+      {isFocus ? (
+        <div
+          className="lv-card-head lv-focus-head"
+          onClick={() => toggleGroupCollapse(groupKey)}
+        >
+          <div className="lv-focus-lead">
+            <span className="gh-chevron">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                style={{
+                  transform: isCollapsed ? 'none' : 'rotate(90deg)',
+                  transition: 'transform 0.15s',
+                }}
+              >
+                <path d="M9 5l7 7-7 7" />
+              </svg>
+            </span>
+            <span className="lv-focus-badge" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+            </span>
+            <div className="lv-focus-heading">
+              <span className="lv-focus-eyebrow">{focusDateLabel}</span>
+              <span className="lv-focus-title">{label}</span>
+            </div>
+          </div>
+          <div className="lv-focus-meta">
+            <span className="lv-focus-done">
+              {completedCount} of {totalCount} done
+            </span>
+            <span className="lv-focus-ring">
+              <svg width="38" height="38" viewBox="0 0 38 38" aria-hidden="true">
+                <circle className="lv-ring-track" cx="19" cy="19" r="15" fill="none" strokeWidth="4" />
+                <circle
+                  cx="19"
+                  cy="19"
+                  r="15"
+                  fill="none"
+                  stroke="#f59e0b"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeDasharray={RING_C}
+                  strokeDashoffset={ringOffset}
+                  transform="rotate(-90 19 19)"
+                  style={{ transition: 'stroke-dashoffset 0.4s' }}
+                />
+              </svg>
+              <span className="lv-focus-ring-label">{pct}%</span>
+            </span>
+          </div>
         </div>
-        <span className="gh-col">Priority</span>
-        <span className="gh-col">Assignee</span>
-        <span className="gh-col">Work date</span>
-        <span className="gh-col">Due</span>
-        <span />
-      </div>
+      ) : (
+        <div
+          className="lv-card-head"
+          onClick={() => toggleGroupCollapse(groupKey)}
+        >
+          <div className="gh-left">
+            <span className="gh-chevron">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                style={{
+                  transform: isCollapsed ? 'none' : 'rotate(90deg)',
+                  transition: 'transform 0.15s',
+                }}
+              >
+                <path d="M9 5l7 7-7 7" />
+              </svg>
+            </span>
+            {dotColor && (
+              <span
+                className="lv-glyph-dot"
+                style={{
+                  background: dotColor,
+                  boxShadow: `0 0 0 3px ${dotColor}22`,
+                }}
+              />
+            )}
+            <span className="gh-title">{label}</span>
+            <span className="lv-progress">
+              <span
+                className="lv-progress-fill"
+                style={{
+                  width: `${pct}%`,
+                  background: dotColor || 'var(--sh-ink-3)',
+                }}
+              />
+            </span>
+            <span className="lv-fraction">
+              {completedCount}/{totalCount}
+            </span>
+          </div>
+          <span className="gh-col">Priority</span>
+          <span className="gh-col">Assignee</span>
+          <span className="gh-col">Work date</span>
+          <span className="gh-col">Due</span>
+          <span />
+        </div>
+      )}
 
       {/* Task rows */}
       {!isCollapsed && (
