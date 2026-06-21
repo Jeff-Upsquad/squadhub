@@ -11,6 +11,7 @@ import CreateAreaSpaceModal from './CreateAreaSpaceModal';
 import ManageMembersModal from './ManageMembersModal';
 import SettingsSlider from '../../../components/SettingsSlider';
 import { canAtLeast } from '../../../lib/access';
+import { isDesignStatusListName } from '../../../lib/designSpaceLists';
 import type { Folder, List, AccessLevel, Space } from '@squadhub/shared';
 
 // ---- Lock icon for private items ----
@@ -349,7 +350,13 @@ function FolderItem({ folder, spaceId, canAdd, canDelete, isManager, myAccess }:
 
       {open && (
         <div className="pb-1 pl-8 pr-2">
-          {folder.lists?.map((list) => (
+          {/* Template-based spaces seed status lists (Briefs / In Progress / Reviews /
+              Completed) that surface as views inside the Design Space page, not as
+              sidebar children. Hide those; show only lists the user added manually. */}
+          {(isTemplateSpace
+            ? folder.lists?.filter((list) => !isDesignStatusListName(list.name))
+            : folder.lists
+          )?.map((list) => (
             <ListItem key={list.id} list={list} isManager={isManager} myAccess={myAccess} />
           ))}
           {adding && (
