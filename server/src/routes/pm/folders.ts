@@ -858,11 +858,13 @@ router.get('/folders/:id/time-summary', async (req: Request, res: Response) => {
       return;
     }
 
+    // NOTE: `tasks` has no `deleted_at` column (tasks are hard-deleted, unlike
+    // folders/lists). Filtering on it makes PostgREST error and silently return
+    // no rows, which zeroed out the design-space time reports. Don't filter it.
     const { data: tasks } = await supabaseAdmin
       .from('tasks')
       .select('id')
-      .in('list_id', listIds)
-      .is('deleted_at', null);
+      .in('list_id', listIds);
     const taskIds = (tasks || []).map((t: any) => t.id);
     if (taskIds.length === 0) {
       res.json({ success: true, data: [] });
