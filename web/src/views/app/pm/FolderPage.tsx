@@ -9,6 +9,7 @@ import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGro
 import FilterBar from '../../../components/pm/FilterBar';
 import GroupByDropdown from '../../../components/pm/GroupByDropdown';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
+import ClientFolderReport from './client-design/ClientFolderReport';
 import {
   EMPTY_FILTER,
   countActiveFilters,
@@ -129,6 +130,12 @@ export default function FolderPage() {
         </div>
       </div>
     );
+  }
+
+  // A client folder holds no direct lists — its child design/video spaces hang
+  // off it. Render the per-space report (tabbed) instead of the empty task list.
+  if (folder?.folder_type === 'client') {
+    return <ClientFolderReport folder={folder} />;
   }
 
   const totalCount = allTasks.length;
