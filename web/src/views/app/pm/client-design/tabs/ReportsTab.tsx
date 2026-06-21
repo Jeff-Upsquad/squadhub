@@ -113,7 +113,13 @@ export default function ReportsTab({
     [now.getTime()],
   );
 
-  const completedAt = (r: RequestRowData) => (r.updated_at ? new Date(r.updated_at) : null);
+  // Tasks carry no updated_at/completed_at column, so fall back to the day the
+  // work was scheduled (work_date) and finally created_at. Without this, every
+  // completion-date figure below (counts + "Completed tasks by week") is empty.
+  const completedAt = (r: RequestRowData) => {
+    const ts = r.updated_at || (r as any).work_date || (r as any).created_at;
+    return ts ? new Date(ts) : null;
+  };
 
   const counts = useMemo(() => {
     let thisWeek = 0, lastWeek = 0, thisMonth = 0, lastMonth = 0;
@@ -150,7 +156,7 @@ export default function ReportsTab({
         const label =
           key === thisKey ? 'This week' : key === lastKey ? 'Last week' : `${shortDate(ws)} – ${shortDate(we)}`;
         const sorted = [...tasks].sort(
-          (a, b) => +new Date(b.updated_at) - +new Date(a.updated_at),
+          (a, b) => +(completedAt(b) ?? 0) - +(completedAt(a) ?? 0),
         );
         const actualHours = sorted.reduce((s, t) => s + (t.time_tracked || 0) / 3600, 0);
         return { key, label, range: `${shortDate(ws)} – ${shortDate(we)}`, tasks: sorted, actualHours };
@@ -481,7 +487,10 @@ export default function ReportsTab({
                           {cat && <span className="tag">{cat}</span>}
                         </span>
                         <span className="cd-wk-task-date">
-                          {t.updated_at ? shortDate(new Date(t.updated_at)) : '—'}
+                          {(() => {
+                            const d = completedAt(t);
+                            return d ? shortDate(d) : '—';
+                          })()}
                         </span>
                         <span className="cd-wk-task-val">{formatHours((t.time_tracked || 0) / 3600)}</span>
                         <span className="cd-wk-task-val is-muted">{elapsedDisplay(0)}</span>
