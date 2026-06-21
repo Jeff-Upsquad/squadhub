@@ -82,6 +82,22 @@ const interviewsSchema = z
     total_pages: z.number(),
   })
   .passthrough();
+const formsSchema = z
+  .object({
+    forms: z.array(
+      z
+        .object({
+          form_type: z.string(),
+          title: z.string(),
+          description: z.string(),
+          url_path: z.string(),
+          public_url: z.string(),
+          enabled: z.boolean(),
+        })
+        .passthrough(),
+    ),
+  })
+  .passthrough();
 
 function configured(): boolean {
   return !!(config.candidatesProxyEnabled && config.squadhireWebhookUrl && config.squadhireWebhookSecret);
@@ -322,6 +338,40 @@ router.get('/health', (_req: Request, res: Response) => {
 // Categories this user may access (drives the hub cards + category tabs).
 router.get('/categories', async (req, res) => {
   res.json({ success: true, categories: await allowedCats(req) });
+});
+
+// Public forms (the /apply/* lead-capture links) for the "Public Forms" panel.
+// Literal route — must precede /:id. Returns only the forms whose category the
+// user can at least view (deny-by-default, same as the hub cards).
+router.get('/forms', async (req, res) => {
+  if (!configured()) {
+    res.status(503).json({ success: false, error: 'Candidates is not configured on this server' });
+    return;
+  }
+  if (breakerIsOpen()) {
+    res.status(503).json({ success: false, error: 'SquadHire is temporarily unavailable' });
+    return;
+  }
+  try {
+    const result = await callUpstream(req, 'GET', '/forms');
+    if (!result.ok) {
+      res.status(result.status).type('application/json').send(result.body);
+      return;
+    }
+    let parsed: z.infer<typeof formsSchema>;
+    try {
+      parsed = formsSchema.parse(JSON.parse(result.body));
+    } catch (e) {
+      console.error('[candidates] boundary validation failed for GET /forms:', (e as Error)?.message);
+      res.status(502).json({ success: false, error: 'Unexpected response from SquadHire' });
+      return;
+    }
+    const map = await allowedCats(req);
+    const forms = parsed.forms.filter((f) => meetsLevel(map[f.form_type], 'view'));
+    res.json({ forms });
+  } catch {
+    res.status(503).json({ success: false, error: 'SquadHire is temporarily unavailable' });
+  }
 });
 
 // Reads — literal sub-collections (onboarding / interviews) before the /:id route.
