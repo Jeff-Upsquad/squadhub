@@ -591,7 +591,9 @@
   border-bottom: 1px solid var(--cd-br-0);
   min-width: 0;
 }
+.cd-rep-card.span-2 { grid-column: span 2; }
 .cd-rep-card.span-4 { grid-column: span 4; }
+.cd-rep-card.span-5 { grid-column: span 5; }
 .cd-rep-card.span-6 { grid-column: span 6; }
 .cd-rep-card.span-8 { grid-column: span 8; }
 .cd-rep-card.span-12 { grid-column: span 12; }
@@ -695,6 +697,43 @@
   border-radius: 6px;
   padding: 0 5px; line-height: 1.6;
   margin-left: 5px; vertical-align: middle;
+}
+
+/* period selector (top-right of section 1) */
+.cd-period { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cd-period-select,
+.cd-period-date {
+  font-family: var(--cd-font-mono); font-size: 11.5px;
+  color: var(--cd-fg-0);
+  background: var(--cd-bg-1);
+  border: 1px solid var(--cd-br-1);
+  border-radius: var(--cd-radius-sm);
+  padding: 6px 10px;
+}
+.cd-period-select { cursor: pointer; }
+.cd-period-select:hover,
+.cd-period-date:hover { border-color: var(--cd-br-2); }
+.cd-period-date { color-scheme: light; }
+.dark .cd-root .cd-period-date { color-scheme: dark; }
+.cd-period-dates { display: inline-flex; align-items: center; gap: 6px; }
+.cd-period-dates .sep { color: var(--cd-fg-3); font-family: var(--cd-font-mono); }
+
+/* task-count column (less prominent, right of section 1) */
+.cd-counts { display: flex; flex-direction: column; gap: 16px; margin-top: 8px; }
+.cd-count-item { line-height: 1.1; }
+.cd-count-num {
+  font-family: var(--cd-font-serif); font-size: 26px; font-weight: 500;
+  letter-spacing: -0.01em; color: var(--cd-fg-0);
+}
+.cd-count-label {
+  font-family: var(--cd-font-mono); font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--cd-fg-2); margin-top: 3px;
+}
+.cd-count-delta { font-family: var(--cd-font-mono); font-size: 10px; margin-top: 4px; }
+.cd-count-foot {
+  font-family: var(--cd-font-mono); font-size: 10px;
+  color: var(--cd-fg-3); margin-top: 2px;
 }
 
 /* time-tracking legend */
@@ -826,6 +865,14 @@
 .cd-wk-task-val { font-family: var(--cd-font-mono); font-size: 11px; color: var(--cd-fg-1); text-align: right; }
 .cd-wk-task-val.is-muted { color: var(--cd-fg-3); }
 
+@media (max-width: 1000px) {
+  .cd-rep-grid > .cd-rep-card.span-2,
+  .cd-rep-grid > .cd-rep-card.span-5,
+  .cd-rep-grid > .cd-rep-card.span-6 {
+    grid-column: 1 / -1;
+    border-right: 0;
+  }
+}
 @media (max-width: 760px) {
   .cd-stat-row { grid-template-columns: repeat(2, 1fr); }
   .cd-tl-head, .cd-tl-row { grid-template-columns: 92px 1fr 52px 52px; gap: 8px; }
