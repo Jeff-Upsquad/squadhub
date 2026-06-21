@@ -37,8 +37,9 @@ export default function ApplicationsTab() {
   const isHubMode = !formType;
 
   const { data: allowed } = useAllowedCategories();
+  // Deny-by-default: only show categories present in the user's access map.
   const visibleCards = useMemo(
-    () => CATEGORY_CARDS.filter((c) => !allowed || allowed.includes(c.value)),
+    () => CATEGORY_CARDS.filter((c) => !!allowed?.[c.value]),
     [allowed],
   );
 
@@ -105,6 +106,11 @@ export default function ApplicationsTab() {
           <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Candidates</h1>
           <p className="mt-1 text-sm text-foreground-muted">Choose a category to review applications.</p>
         </div>
+        {allowed && visibleCards.length === 0 && (
+          <div className="rounded-xl border border-dashed border-divider py-12 text-center text-sm text-foreground-muted">
+            You don&apos;t have access to any candidate categories yet. Ask an admin to grant you access.
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {visibleCards.map((cat) => (
             <button

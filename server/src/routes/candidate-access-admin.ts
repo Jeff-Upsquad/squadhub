@@ -6,23 +6,45 @@ import { supabaseAdmin } from '../supabase';
 import { ALL_CANDIDATE_CATEGORIES } from '../utils/candidateCategories';
 
 /**
- * Admin surface for candidate category access — which of Creative / Accountant
- * / Sales each role or user may see in the Candidates mini app. Writes the
- * candidate_category_access table; the candidates proxy enforces it.
+ * Admin surface for candidate category access — who (which role or user) may see
+ * each of Creative / Accountant / Sales in the Candidates mini app, and at what
+ * tier (view / edit / full). Writes the candidate_category_access table; the
+ * candidates proxy enforces it.
  *
- * A subject (role or user) with NO rows is unrestricted (sees all categories).
- * Grant rows narrow them to exactly the listed categories.
+ * Deny-by-default: a (non-admin) user with no matching grant — directly or via a
+ * role — has no access. A user's effective tier is the highest of their direct
+ * grant and any of their roles' grants for that category.
  */
 
 const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
-const categoriesSchema = z.object({
-  categories: z.array(z.enum(ALL_CANDIDATE_CATEGORIES)).default([]),
+const PERMISSIONS = ['view', 'edit', 'full'] as const;
+
+const grantSchema = z.object({
+  category: z.enum(ALL_CANDIDATE_CATEGORIES),
+  subject_type: z.enum(['role', 'user']),
+  subject_id: z.string().uuid(),
+  permission: z.enum(PERMISSIONS).default('view'),
+});
+const removeSchema = z.object({
+  category: z.enum(ALL_CANDIDATE_CATEGORIES),
+  subject_type: z.enum(['role', 'user']),
+  subject_id: z.string().uuid(),
 });
 
-// GET /admin/candidate-access — pickers + current grants for the matrix UI.
+interface GrantRow {
+  category: string;
+  subject_type: 'role' | 'user';
+  subject_id: string;
+  subject_name: string;
+  subject_email: string | null;
+  permission: string;
+}
+
+// GET /admin/candidate-access — categories, add-pickers (roles + internal users),
+// and the current grants (denormalised with subject names for the UI).
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const [{ data: roles }, { data: users }, { data: grants }] = await Promise.all([
@@ -32,19 +54,37 @@ router.get('/', async (_req: Request, res: Response) => {
         .select('id, email, display_name, user_type')
         .eq('user_type', 'internal')
         .order('display_name'),
-      supabaseAdmin.from('candidate_category_access').select('category, role_id, user_id'),
+      supabaseAdmin.from('candidate_category_access').select('category, role_id, user_id, permission'),
     ]);
 
-    const roleGrants: Record<string, string[]> = {};
-    const userGrants: Record<string, string[]> = {};
-    for (const g of grants || []) {
-      if (g.role_id) (roleGrants[g.role_id] ||= []).push(g.category);
-      else if (g.user_id) (userGrants[g.user_id] ||= []).push(g.category);
-    }
+    const roleName = new Map((roles || []).map((r) => [r.id, r.name]));
+    const userById = new Map((users || []).map((u) => [u.id, u]));
+
+    const out: GrantRow[] = (grants || []).map((g) => {
+      if (g.role_id) {
+        return {
+          category: g.category,
+          subject_type: 'role',
+          subject_id: g.role_id,
+          subject_name: roleName.get(g.role_id) || 'Unknown role',
+          subject_email: null,
+          permission: g.permission,
+        };
+      }
+      const u = userById.get(g.user_id);
+      return {
+        category: g.category,
+        subject_type: 'user',
+        subject_id: g.user_id,
+        subject_name: u?.display_name || u?.email || 'Unknown user',
+        subject_email: u?.email ?? null,
+        permission: g.permission,
+      };
+    });
 
     res.json({
       success: true,
-      data: { categories: ALL_CANDIDATE_CATEGORIES, roles: roles || [], users: users || [], roleGrants, userGrants },
+      data: { categories: ALL_CANDIDATE_CATEGORIES, roles: roles || [], users: users || [], grants: out },
     });
   } catch (err) {
     console.error('candidate-access list error:', err);
@@ -52,49 +92,57 @@ router.get('/', async (_req: Request, res: Response) => {
   }
 });
 
-/** Replace the full set of categories granted to a subject (role or user). */
-async function replaceGrants(
-  subject: { role_id: string } | { user_id: string },
-  categories: string[],
-  res: Response,
-) {
-  const column = 'role_id' in subject ? 'role_id' : 'user_id';
-  const id = 'role_id' in subject ? subject.role_id : subject.user_id;
+// POST /admin/candidate-access/grant — add a grant or update its tier (upsert on
+// the existing (category, subject) row).
+router.post('/grant', async (req: Request, res: Response) => {
+  const parsed = grantSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: 'Invalid grant' });
+    return;
+  }
+  const { category, subject_type, subject_id, permission } = parsed.data;
+  const column = subject_type === 'role' ? 'role_id' : 'user_id';
 
-  const del = await supabaseAdmin.from('candidate_category_access').delete().eq(column, id);
+  const existing = await supabaseAdmin
+    .from('candidate_category_access')
+    .select('id')
+    .eq('category', category)
+    .eq(column, subject_id)
+    .maybeSingle();
+  if (existing.error) {
+    res.status(500).json({ success: false, error: existing.error.message });
+    return;
+  }
+
+  const result = existing.data
+    ? await supabaseAdmin.from('candidate_category_access').update({ permission }).eq('id', existing.data.id)
+    : await supabaseAdmin.from('candidate_category_access').insert({ category, [column]: subject_id, permission });
+  if (result.error) {
+    res.status(500).json({ success: false, error: result.error.message });
+    return;
+  }
+  res.json({ success: true });
+});
+
+// DELETE /admin/candidate-access/grant — remove a grant.
+router.delete('/grant', async (req: Request, res: Response) => {
+  const parsed = removeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: 'Invalid request' });
+    return;
+  }
+  const { category, subject_type, subject_id } = parsed.data;
+  const column = subject_type === 'role' ? 'role_id' : 'user_id';
+  const del = await supabaseAdmin
+    .from('candidate_category_access')
+    .delete()
+    .eq('category', category)
+    .eq(column, subject_id);
   if (del.error) {
     res.status(500).json({ success: false, error: del.error.message });
     return;
   }
-  if (categories.length > 0) {
-    const rows = categories.map((category) => ({ category, ...subject }));
-    const ins = await supabaseAdmin.from('candidate_category_access').insert(rows);
-    if (ins.error) {
-      res.status(500).json({ success: false, error: ins.error.message });
-      return;
-    }
-  }
-  res.json({ success: true, data: { categories } });
-}
-
-// PUT /admin/candidate-access/role/:roleId  { categories: [...] }
-router.put('/role/:roleId', async (req: Request, res: Response) => {
-  const parsed = categoriesSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ success: false, error: 'Invalid categories' });
-    return;
-  }
-  await replaceGrants({ role_id: String(req.params.roleId) }, parsed.data.categories, res);
-});
-
-// PUT /admin/candidate-access/user/:userId  { categories: [...] }
-router.put('/user/:userId', async (req: Request, res: Response) => {
-  const parsed = categoriesSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ success: false, error: 'Invalid categories' });
-    return;
-  }
-  await replaceGrants({ user_id: String(req.params.userId) }, parsed.data.categories, res);
+  res.json({ success: true });
 });
 
 export default router;

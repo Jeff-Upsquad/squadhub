@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import type { InterviewInvitation, InterviewInvitationsResponse } from '@squadhub/shared';
 import api from '../../../services/api';
 import { showToast } from '../../../components/Toast';
-import { Chip, formatPhone, type Tone } from './helpers';
+import { Chip, formatPhone, canEdit, type Tone } from './helpers';
 import CandidateSidePanel from './CandidateSidePanel';
 import { useAllowedCategories } from './useAllowedCategories';
 
@@ -45,19 +45,19 @@ export default function InterviewsTab() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
   const { data: allowed } = useAllowedCategories();
-  const restricted = !!allowed && allowed.length < 3;
-  const tabs = useMemo(() => {
-    const cats = allowed ?? CATEGORY_TABS.map((t) => t.value);
-    const catTabs = CATEGORY_TABS.filter((t) => cats.includes(t.value));
-    return restricted ? catTabs : [{ value: '', label: 'All' }, ...catTabs];
-  }, [allowed, restricted]);
+  const restricted = !!allowed && Object.keys(allowed).length < 3;
+  const catTabs = useMemo(() => CATEGORY_TABS.filter((t) => allowed?.[t.value]), [allowed]);
+  const tabs = useMemo(
+    () => (restricted ? catTabs : [{ value: '', label: 'All' }, ...catTabs]),
+    [restricted, catTabs],
+  );
 
   useEffect(() => {
-    if (restricted && allowed && !allowed.includes(formType)) {
-      setFormType(allowed[0]);
+    if (restricted && allowed && !allowed[formType]) {
+      setFormType(catTabs[0]?.value ?? '');
       setPage(1);
     }
-  }, [restricted, allowed, formType]);
+  }, [restricted, allowed, formType, catTabs]);
 
   const queryKey = ['candidates-interviews', formType, status, search, page];
   const { data, isLoading } = useQuery<InterviewInvitationsResponse>({
@@ -72,12 +72,12 @@ export default function InterviewsTab() {
       return (await api.get(`/candidates/interviews?${params.toString()}`)).data;
     },
     placeholderData: keepPreviousData,
-    enabled: !!allowed && (!restricted || allowed.includes(formType)),
+    enabled: !!allowed && (!restricted || !!allowed[formType]),
   });
 
   const reviewedMutation = useMutation({
-    mutationFn: async ({ id, reviewed }: { id: string; reviewed: boolean }) => {
-      await api.patch(`/candidates/interviews/${id}/reviewed`, { reviewed });
+    mutationFn: async ({ id, reviewed, formType: ft }: { id: string; reviewed: boolean; formType: string }) => {
+      await api.patch(`/candidates/interviews/${id}/reviewed?form_type=${encodeURIComponent(ft)}`, { reviewed });
     },
     onMutate: async ({ id, reviewed }) => {
       await queryClient.cancelQueries({ queryKey });
@@ -169,6 +169,7 @@ export default function InterviewsTab() {
               rows.map((row) => {
                 const rs = rowStatus(row);
                 const isReviewed = !!row.reviewed_at;
+                const editable = canEdit(allowed?.[row.form_type]);
                 return (
                   <tr
                     key={row.id}
@@ -179,10 +180,16 @@ export default function InterviewsTab() {
                       <input
                         type="checkbox"
                         checked={isReviewed}
-                        disabled={reviewedMutation.isPending}
-                        onChange={(e) => reviewedMutation.mutate({ id: row.id, reviewed: e.target.checked })}
-                        title={isReviewed && row.reviewed_at ? `Reviewed on ${fmtDate(row.reviewed_at)}` : 'Mark as reviewed'}
-                        className="h-4 w-4 cursor-pointer rounded border-divider accent-[var(--color-accent)]"
+                        disabled={reviewedMutation.isPending || !editable}
+                        onChange={(e) => reviewedMutation.mutate({ id: row.id, reviewed: e.target.checked, formType: row.form_type })}
+                        title={
+                          !editable
+                            ? 'View-only access — you cannot mark as reviewed'
+                            : isReviewed && row.reviewed_at
+                              ? `Reviewed on ${fmtDate(row.reviewed_at)}`
+                              : 'Mark as reviewed'
+                        }
+                        className={`h-4 w-4 rounded border-divider accent-[var(--color-accent)] ${editable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
                       />
                     </td>
                     <td className="px-4 py-3">
