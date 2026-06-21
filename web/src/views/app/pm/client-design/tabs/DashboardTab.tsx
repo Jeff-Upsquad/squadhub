@@ -52,16 +52,28 @@ export default function DashboardTab({
   const inProgress = useMemo(() => requests.filter((r) => r._derivedStatus === 'progress'), [requests]);
 
   const remainingToday = Math.max(0, plan.dailyHours - plan.usedToday);
-  const remainingWeek = Math.max(0, plan.weeklyHours - plan.usedWeek);
-  const remainingMonth = Math.max(0, plan.monthlyHours - plan.usedMonth);
+  const pctOfToday = plan.dailyHours
+    ? Math.round((plan.usedToday / plan.dailyHours) * 100)
+    : 0;
   const pctOfWeek = plan.weeklyHours
     ? Math.round((plan.usedWeek / plan.weeklyHours) * 100)
     : 0;
   const pctOfMonth = plan.monthlyHours
     ? Math.round((plan.usedMonth / plan.monthlyHours) * 100)
     : 0;
+  const designersWorking = new Set(
+    inProgress.flatMap((r) => r.assignees?.map((a) => a.id) || []),
+  ).size;
 
-  const kpis = [
+  const kpis: {
+    label: string;
+    dot: string;
+    num: number;
+    unit: string;
+    delta: string;
+    spark: number[];
+    pct: number | null;
+  }[] = [
     {
       label: 'Active requests',
       dot: 'var(--cd-progress)',
@@ -69,14 +81,16 @@ export default function DashboardTab({
       unit: 'open',
       delta: `${inProgress.length} in progress`,
       spark: [3, 4, 3, 5, 4, 6, 5, active.length % 9 || 7],
+      pct: active.length ? Math.round((inProgress.length / active.length) * 100) : null,
     },
     {
       label: 'In progress',
       dot: 'var(--cd-progress)',
       num: inProgress.length,
       unit: 'tasks',
-      delta: `${new Set(inProgress.flatMap((r) => r.assignees?.map((a) => a.id) || [])).size} designers working`,
+      delta: `${designersWorking} designer${designersWorking === 1 ? '' : 's'} working`,
       spark: [1, 2, 2, 1, 3, 2, 3, 2],
+      pct: null,
     },
     {
       label: 'Today',
@@ -85,6 +99,7 @@ export default function DashboardTab({
       unit: `/ ${plan.dailyHours}h`,
       delta: `${remainingToday.toFixed(1)}h remaining`,
       spark: [1, 3, 2, 4, 3, 2, 3, 2],
+      pct: pctOfToday,
     },
     {
       label: 'This week',
@@ -93,6 +108,7 @@ export default function DashboardTab({
       unit: `/ ${plan.weeklyHours}h`,
       delta: `${pctOfWeek}% of plan`,
       spark: [2, 3, 4, 3, 4, 3, 4, 3],
+      pct: pctOfWeek,
     },
     {
       label: 'This month',
@@ -101,8 +117,13 @@ export default function DashboardTab({
       unit: `/ ${plan.monthlyHours}h`,
       delta: `${pctOfMonth}% used`,
       spark: [8, 7, 6, 5, 4, 4, 3, 3],
+      pct: pctOfMonth,
     },
   ];
+
+  const visibleKpis = hoursLinked
+    ? kpis
+    : kpis.filter((k) => k.label === 'Active requests' || k.label === 'In progress');
 
   const groups = useMemo(() => {
     const by: Record<string, RequestRowData[]> = {};
@@ -122,25 +143,36 @@ export default function DashboardTab({
 
   return (
     <>
-      <div className="cd-kpi-row">
-        {(!hoursLinked ? kpis.filter((k) =>
-          k.label === 'Active requests' || k.label === 'In progress'
-        ) : kpis).map((k) => (
-          <div className="cd-kpi" key={k.label}>
-            <div className="cd-kpi-label">
-              <span className="cd-kpi-dot" style={{ background: k.dot }} />
-              {k.label}
-            </div>
-            <div className="cd-spark">
-              {k.spark.map((v, i) => (
-                <span key={i} style={{ height: `${Math.max(4, v * 3)}px`, opacity: 0.3 + i * 0.08 }} />
-              ))}
+      <div className="cd-kpi-row" data-count={visibleKpis.length}>
+        {visibleKpis.map((k) => (
+          <div
+            className="cd-kpi"
+            key={k.label}
+            style={{ '--kpi-accent': k.dot } as React.CSSProperties}
+          >
+            <div className="cd-kpi-top">
+              <div className="cd-kpi-label">
+                <span className="cd-kpi-dot" />
+                {k.label}
+              </div>
+              <div className="cd-spark" aria-hidden="true">
+                {k.spark.map((v, i) => (
+                  <span key={i} style={{ height: `${Math.max(3, v * 2.4)}px` }} />
+                ))}
+              </div>
             </div>
             <div className="cd-kpi-value">
               <span className="cd-kpi-num">{k.num}</span>
               <span className="cd-kpi-unit">{k.unit}</span>
             </div>
-            <div className="cd-kpi-delta">{k.delta}</div>
+            <div className="cd-kpi-foot">
+              {k.pct != null && (
+                <div className="cd-kpi-progress">
+                  <span style={{ width: `${Math.min(100, Math.max(0, k.pct))}%` }} />
+                </div>
+              )}
+              <div className="cd-kpi-delta">{k.delta}</div>
+            </div>
           </div>
         ))}
       </div>

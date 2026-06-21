@@ -758,22 +758,6 @@ export default function TaskDetailPanel({
               </button>
             )
           )}
-          {task && (
-            <button
-              type="button"
-              onClick={handleToggleDone}
-              disabled={!canEdit}
-              className="td-pill-btn"
-              data-accent={!isDone ? 'true' : undefined}
-              data-completed={isDone ? 'true' : undefined}
-              title={isDone ? 'Reopen task' : 'Mark complete'}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M5 12l5 5 9-11" />
-              </svg>
-              {isDone ? 'Completed' : 'Complete'}
-            </button>
-          )}
         </div>
 
         {/* Scrollable body */}
@@ -782,6 +766,24 @@ export default function TaskDetailPanel({
             <div className="flex items-center justify-center py-20 text-[color:var(--sh-ink-3)] text-sm">Loading…</div>
           ) : (
             <>
+              {/* Parent task reference — when this task is a subtask, show a
+                  clickable chip that opens the parent. */}
+              {task.parent_task && (
+                <button
+                  type="button"
+                  className="td-parent-ref"
+                  onClick={() => setActiveTask(task.parent_task!.id)}
+                  title={`Open parent task: ${task.parent_task.title}`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 14L4 9l5-5" />
+                    <path d="M4 9h11a5 5 0 015 5v6" />
+                  </svg>
+                  <span className="td-parent-ref-label">Parent</span>
+                  <span className="td-parent-ref-title">{task.parent_task.title}</span>
+                </button>
+              )}
+
               {/* Title row */}
               <div className="flex items-start gap-3" style={{ marginBottom: 14 }}>
                 <button
