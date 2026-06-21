@@ -114,6 +114,7 @@ export default function TaskGroupCard({
             {completedCount}/{totalCount}
           </span>
         </div>
+        <span className="gh-col">Priority</span>
         <span className="gh-col">Assignee</span>
         <span className="gh-col">Work date</span>
         <span className="gh-col">Due</span>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Task, SpaceStatus } from '@squadhub/shared';
+import type { Task, SpaceStatus, TaskPriority } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
@@ -9,6 +9,7 @@ import { isTaskFocused } from '../../../lib/taskGrouping';
 import { avatarColor, initialOf, formatWhen, nextQuickDate } from './taskHelpers';
 import AssigneePicker from './AssigneePicker';
 import DatePicker from './DatePicker';
+import PriorityPicker, { PRIORITY_META } from './PriorityPicker';
 
 function fmtClock(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -17,14 +18,6 @@ function fmtClock(seconds: number): string {
   if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
   return `${m}:${String(s).padStart(2,'0')}`;
 }
-
-const PRIORITY_LEVEL: Record<string, string | null> = {
-  urgent: 'p0',
-  high: 'p1',
-  normal: 'p2',
-  low: 'p3',
-  none: null,
-};
 
 export default function TaskRow({
   task,
@@ -82,6 +75,7 @@ export default function TaskRow({
 
   // Inline picker anchors — null = closed, DOMRect = open & positioned
   const [assigneeAnchor, setAssigneeAnchor] = useState<DOMRect | null>(null);
+  const [priorityAnchor, setPriorityAnchor] = useState<DOMRect | null>(null);
   const [workDateAnchor, setWorkDateAnchor] = useState<DOMRect | null>(null);
   const [dueDateAnchor, setDueDateAnchor] = useState<DOMRect | null>(null);
 
@@ -93,7 +87,8 @@ export default function TaskRow({
   const isDone = statusCategory === 'done' || statusCategory === 'closed';
   const isFading = fadingTaskIds.has(task.id);
   const displayDone = isDone || isFading;
-  const priorityLevel = PRIORITY_LEVEL[task.priority || 'none'];
+  const priority = (task.priority || 'none') as TaskPriority;
+  const priorityMeta = PRIORITY_META[priority];
   const workWhen = formatWhen(task.work_date);
   const dueWhen = formatWhen(task.due_date);
   const assignees = task.assignees || [];
@@ -204,9 +199,6 @@ export default function TaskRow({
             </button>
           )}
           <div className="flex items-center gap-1.5 min-w-0">
-            {priorityLevel && (priorityLevel === 'p0' || priorityLevel === 'p1') && (
-              <span className="lv-priority-dot" data-level={priorityLevel} aria-label={`Priority ${priorityLevel.toUpperCase()}`} />
-            )}
             {hasSubtasks && (
               <button
                 type="button"
@@ -316,6 +308,24 @@ export default function TaskRow({
               {isFocused ? '★' : '☆'}
             </button>
           </div>
+        </div>
+
+        {/* Priority cell — clickable, opens PriorityPicker */}
+        <div
+          className="lv-cell lv-cell--priority"
+          data-empty={priority === 'none'}
+          onClick={canEdit ? (e) => openPicker(e, setPriorityAnchor) : undefined}
+          style={{ cursor: canEdit ? 'pointer' : 'default' }}
+          title={canEdit ? 'Change priority' : undefined}
+        >
+          {priority === 'none' ? (
+            <span className="lv-cell-value">—</span>
+          ) : (
+            <span className="lv-pri">
+              <span className="lv-pri-dot" style={{ background: priorityMeta.color }} />
+              <span className="lv-pri-label">{priorityMeta.label}</span>
+            </span>
+          )}
         </div>
 
         {/* Assignee cell — clickable, opens AssigneePicker */}
@@ -453,6 +463,16 @@ export default function TaskRow({
           anchorRect={assigneeAnchor}
           onChange={(ids) => updateTask.mutate({ id: task.id, assignee_ids: ids, list_id: effectiveListId || undefined } as any)}
           onClose={() => setAssigneeAnchor(null)}
+        />
+      )}
+
+      {priorityAnchor && (
+        <PriorityPicker
+          anchorRect={priorityAnchor}
+          value={priority}
+          taskTitle={task.title}
+          onChange={(p) => updateTask.mutate({ id: task.id, priority: p, list_id: effectiveListId || undefined } as any)}
+          onClose={() => setPriorityAnchor(null)}
         />
       )}
 

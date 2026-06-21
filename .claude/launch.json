@@ -2,6 +2,13 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "Zealous Pike Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/zealous-pike-c2058c/web' && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3140"],
+      "port": 3140,
+      "autoPort": true
+    },
+    {
       "name": "Cool Elbakyan Web",
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/cool-elbakyan-f9fce2/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3123"],
