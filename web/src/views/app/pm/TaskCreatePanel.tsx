@@ -1013,6 +1013,8 @@ export default function TaskCreatePanel({
                     />
                   </div>
                   <span className="td-field-hint">The most important part — the clearer the brief, the better the result.</span>
+                  {/* Voice notes — speak the brief instead of writing it */}
+                  <VoiceNoteRecorder onAddFile={(f) => addDraftFiles([f])} />
                 </div>
 
                 {/* Custom brief fields — short scalars pair 2-up, the rest full width */}
@@ -1041,8 +1043,6 @@ export default function TaskCreatePanel({
                     />
                   )
                 )}
-
-                <VoiceNoteRecorder onAddFile={(f) => addDraftFiles([f])} />
               </div>
             </>
           )}
