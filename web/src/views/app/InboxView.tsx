@@ -241,6 +241,10 @@ export default function InboxView({
   const onRowClick = (n: Notification) => {
     setActiveId(n.id);
     if (!n.is_read) markRead.mutate(n.id);
+    // Chat notifications stay in the right detail pane (which has its own
+    // "Open in chat" button) instead of navigating away to the channel on
+    // click. Tasks and other sources still open their source directly.
+    if (chatTargetFor(n)) return;
     openSource(n);
   };
 
