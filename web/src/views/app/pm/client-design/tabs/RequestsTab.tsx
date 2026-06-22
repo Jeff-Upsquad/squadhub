@@ -244,11 +244,20 @@ export default function RequestsTab({
   filterStatus,
   statuses,
   listByStatus,
+  emptyHint,
+  collapseCompletedByDefault = false,
 }: {
   requests: RequestRowData[];
   filterStatus?: RequestStatus | null;
   statuses: SpaceStatus[];
   listByStatus: Record<string, { id: string; name: string } | null>;
+  // Friendlier copy shown when the space has no requests at all (and no filters
+  // are active) — e.g. an onboarding hint. Falls back to the "no match" message.
+  emptyHint?: React.ReactNode;
+  // Start the Completed (done) status group collapsed on load. Used by the
+  // merged Dashboard so the long completed list doesn't dominate the view; the
+  // dedicated Completed tab leaves it expanded.
+  collapseCompletedByDefault?: boolean;
 }) {
   const [activeFilters, setActiveFilters] = useState<Set<RequestStatus>>(() => {
     const s = new Set<RequestStatus>();
@@ -348,7 +357,9 @@ export default function RequestsTab({
             color: 'var(--cd-fg-3)',
           }}
         >
-          No requests match the current filters
+          {emptyHint && requests.length === 0 && activeFilters.size === 0
+            ? emptyHint
+            : 'No requests match the current filters'}
         </div>
       )}
 
@@ -362,6 +373,7 @@ export default function RequestsTab({
           allStatuses={statuses}
           listId={g.listId}
           onStatusChange={noop}
+          defaultCollapsed={collapseCompletedByDefault && g.key === 'done'}
         />
       ))}
       <div style={{ height: 40 }} />

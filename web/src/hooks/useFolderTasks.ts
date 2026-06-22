@@ -48,6 +48,16 @@ export function useFolderTasks(folderId: string | null): FolderTasksResult {
   const isLoading =
     folderQuery.isLoading || taskQueries.some((q) => q.isLoading || q.isFetching);
 
+  // Constant-size dependency for the memo below. We can't spread
+  // `taskQueries.map((q) => q.data)` into the deps array — its length tracks the
+  // number of lists, and React requires the deps array to keep a constant size
+  // across renders (otherwise it logs "the final argument passed to useMemo
+  // changed size between renders"). Each query's `dataUpdatedAt` advances on
+  // every successful (re)fetch, so this signature changes whenever any list's
+  // task data changes; its value also changes when lists are added/removed
+  // (different number of segments), and `folder` covers list identity.
+  const tasksSignature = taskQueries.map((q) => q.dataUpdatedAt).join('|');
+
   return useMemo(() => {
     const requests: RequestRowData[] = [];
     const listByStatus: Record<RequestStatus, { id: string; name: string } | null> = {
@@ -93,6 +103,8 @@ export function useFolderTasks(folderId: string | null): FolderTasksResult {
     for (const r of requests) byStatus[r._derivedStatus].push(r);
 
     return { isLoading, requests, folder, listByStatus, byStatus };
+    // `lists`/`taskQueries` are intentionally tracked via `folder` +
+    // `tasksSignature` (a constant-size proxy) rather than listed directly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, folder, ...taskQueries.map((q) => q.data)]);
+  }, [isLoading, folder, tasksSignature]);
 }

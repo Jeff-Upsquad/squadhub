@@ -9,25 +9,20 @@ import { useSpace } from '../../../../hooks/useSpaces';
 import { usePMStore } from '../../../../stores/pmStore';
 import { canAtLeast } from '../../../../lib/access';
 import DashboardTab from './tabs/DashboardTab';
-import RequestsTab from './tabs/RequestsTab';
 import BoardTab from './tabs/BoardTab';
 import ReportsTab from './tabs/ReportsTab';
 import CompletedTab from './tabs/CompletedTab';
 import TaskCreatePanel from '../TaskCreatePanel';
 import SquadShareModal from './SquadShareModal';
 
-type TabKey = 'dashboard' | 'requests' | 'board' | 'reports' | 'completed';
+type TabKey = 'dashboard' | 'board' | 'reports' | 'completed';
 const TAB_STORAGE = 'cd.tab';
+const TAB_KEYS: TabKey[] = ['dashboard', 'board', 'reports', 'completed'];
 
 const TAB_ICONS: Record<TabKey, React.ReactNode> = {
   dashboard: (
     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 13a1 1 0 011-1h4a1 1 0 011 1v6a1 1 0 01-1 1h-4a1 1 0 01-1-1v-6z" />
-    </svg>
-  ),
-  requests: (
-    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
     </svg>
   ),
   board: (
@@ -50,8 +45,10 @@ const TAB_ICONS: Record<TabKey, React.ReactNode> = {
 export default function ClientDesignDashboard({ folderId }: { folderId: string }) {
   const [tab, setTab] = useState<TabKey>(() => {
     if (typeof window === 'undefined') return 'dashboard';
-    const v = window.localStorage.getItem(TAB_STORAGE);
-    return (v as TabKey) || 'dashboard';
+    // Validate against the current tab set so users whose saved tab is the now
+    // removed 'requests' (merged into Dashboard) don't land on a blank pane.
+    const v = window.localStorage.getItem(TAB_STORAGE) as TabKey | null;
+    return v && TAB_KEYS.includes(v) ? v : 'dashboard';
   });
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -135,8 +132,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
   const doneCount = requests.filter((r) => r._derivedStatus === 'done').length;
 
   const tabs: { key: TabKey; label: string; count?: number }[] = [
-    { key: 'dashboard', label: 'Dashboard' },
-    { key: 'requests', label: 'Requests', count: activeCount },
+    { key: 'dashboard', label: 'Dashboard', count: activeCount },
     { key: 'board', label: 'Board' },
     { key: 'reports', label: 'Reports' },
     { key: 'completed', label: 'Completed', count: doneCount },
@@ -243,13 +239,6 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
                   folderId={folderId}
                   requests={filteredRequests}
                   plan={plan}
-                  statuses={effectiveStatuses}
-                  listByStatus={listByStatus}
-                />
-              )}
-              {tab === 'requests' && (
-                <RequestsTab
-                  requests={filteredRequests}
                   statuses={effectiveStatuses}
                   listByStatus={listByStatus}
                 />

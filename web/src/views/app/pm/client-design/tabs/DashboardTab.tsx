@@ -1,20 +1,10 @@
 import { useMemo, useState } from 'react';
 import type { SpaceStatus } from '@squadhub/shared';
 import type { RequestRowData } from '../atoms/RequestRow';
-import { STATUS_LABELS } from '../atoms/StatusPill';
-import type { RequestStatus } from '../atoms/StatusPill';
 import type { DesignPlan } from '../../../../../hooks/useClientDesignPlan';
-import TaskGroupCard from '../../TaskGroupCard';
+import RequestsTab from './RequestsTab';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../../../services/api';
-
-const STATUS_ORDER: RequestStatus[] = ['progress', 'review', 'queued', 'done'];
-const STATUS_COLOR: Record<RequestStatus, string> = {
-  queued: 'var(--cd-queued)',
-  progress: 'var(--cd-progress)',
-  review: 'var(--cd-review)',
-  done: 'var(--cd-done)',
-};
 
 export default function DashboardTab({
   requests,
@@ -124,22 +114,6 @@ export default function DashboardTab({
   const visibleKpis = hoursLinked
     ? kpis
     : kpis.filter((k) => k.label === 'Active requests' || k.label === 'In progress');
-
-  const groups = useMemo(() => {
-    const by: Record<string, RequestRowData[]> = {};
-    for (const r of requests) {
-      (by[r._derivedStatus] = by[r._derivedStatus] || []).push(r);
-    }
-    return STATUS_ORDER.filter((k) => by[k] && by[k].length > 0).map((k) => ({
-      key: k,
-      label: STATUS_LABELS[k],
-      color: STATUS_COLOR[k],
-      items: by[k],
-      listId: listByStatus[k]?.id || null,
-    }));
-  }, [requests, listByStatus]);
-
-  const noop = () => {};
 
   return (
     <>
@@ -271,38 +245,20 @@ export default function DashboardTab({
         </div>
       )}
 
-      <div>
-        {groups.length === 0 && (
-          <div
-            style={{
-              padding: 24,
-              fontFamily: 'var(--cd-font-mono)',
-              fontSize: 11,
-              color: 'var(--cd-fg-3)',
-              border: '1px dashed var(--cd-br-1)',
-              borderRadius: 6,
-              textAlign: 'center',
-              marginTop: 4,
-            }}
-          >
+      {/* Interactive request list (Filter / Sort / Group toolbar + grouped rows),
+          merged in from the former "Requests" tab so this Dashboard carries both
+          the KPI overview and the full request management UI. */}
+      <RequestsTab
+        requests={requests}
+        statuses={statuses}
+        listByStatus={listByStatus}
+        collapseCompletedByDefault
+        emptyHint={
+          <>
             No design requests yet. Press <b style={{ color: 'var(--cd-fg-1)' }}>N</b> to submit one.
-          </div>
-        )}
-
-        {groups.map((g) => (
-          <TaskGroupCard
-            key={g.key}
-            groupKey={`design-dashboard-${g.key}`}
-            label={g.label}
-            dotColor={g.color}
-            tasks={g.items}
-            allStatuses={statuses}
-            listId={g.listId}
-            onStatusChange={noop}
-          />
-        ))}
-        <div style={{ height: 40 }} />
-      </div>
+          </>
+        }
+      />
     </>
   );
 }
