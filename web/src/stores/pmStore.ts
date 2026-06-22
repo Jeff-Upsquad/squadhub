@@ -94,6 +94,7 @@ interface PMState {
   setListGroupBy: (g: ListGroupBy) => void;
   setMyTasksOnly: (v: boolean) => void;
   toggleGroupCollapse: (statusId: string) => void;
+  setGroupCollapsed: (groupKey: string, collapsed: boolean) => void;
   toggleTaskSelection: (taskId: string) => void;
   selectAllTasks: (taskIds: string[]) => void;
   clearSelection: () => void;
@@ -192,6 +193,14 @@ export const usePMStore = create<PMState>()(
             ...state.collapsedGroups,
             [statusId]: !state.collapsedGroups[statusId],
           },
+        })),
+      // Explicitly set a group's collapsed state. Prefer this over
+      // toggleGroupCollapse when the caller knows the effective state but the
+      // stored value may be undefined (e.g. a group with defaultCollapsed) —
+      // flipping `undefined` would make the first click a no-op.
+      setGroupCollapsed: (groupKey, collapsed) =>
+        set((state) => ({
+          collapsedGroups: { ...state.collapsedGroups, [groupKey]: collapsed },
         })),
       toggleTaskSelection: (taskId) =>
         set((state) => ({

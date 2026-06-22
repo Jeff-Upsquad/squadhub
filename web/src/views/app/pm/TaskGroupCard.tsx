@@ -41,8 +41,11 @@ export default function TaskGroupCard({
   dimFocused = false,
 }: TaskGroupCardProps) {
   const isFocus = variant === 'focus';
-  const { collapsedGroups, toggleGroupCollapse } = usePMStore();
+  const { collapsedGroups, setGroupCollapsed } = usePMStore();
   const isCollapsed = collapsedGroups[groupKey] ?? defaultCollapsed;
+  // Toggle from the *effective* state so the first click always works, even
+  // when the stored value is still undefined (e.g. a defaultCollapsed group).
+  const toggleCollapse = () => setGroupCollapsed(groupKey, !isCollapsed);
   const [isDragOver, setIsDragOver] = useState(false);
   const [addTitle, setAddTitle] = useState<string | null>(null);
   const createTask = useCreateTask(listId);
@@ -87,7 +90,7 @@ export default function TaskGroupCard({
       {isFocus ? (
         <div
           className="lv-card-head lv-focus-head"
-          onClick={() => toggleGroupCollapse(groupKey)}
+          onClick={toggleCollapse}
         >
           <div className="lv-focus-lead">
             <span className="gh-chevron">
@@ -145,7 +148,7 @@ export default function TaskGroupCard({
       ) : (
         <div
           className="lv-card-head"
-          onClick={() => toggleGroupCollapse(groupKey)}
+          onClick={toggleCollapse}
         >
           <div className="gh-left">
             <span className="gh-chevron">
