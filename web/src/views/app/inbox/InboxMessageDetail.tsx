@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import api from '../../../services/api';
 import MentionPicker from '../../../components/MentionPicker';
+import type { Notification } from '../InboxView';
 
 function initials(name?: string | null) {
   if (!name) return '?';
@@ -128,8 +129,48 @@ export default function InboxMessageDetail({
       setMentions([]);
       setError(null);
       queryClient.invalidateQueries({ queryKey: ['message-thread', messageId] });
-      queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] });
+
+      // Replying means the user has read this conversation, so its unread inbox
+      // notifications should clear instead of leaving the bell badge nagging.
+      // Previewing a message in the detail pane doesn't mark it read (the list
+      // auto-selects the first item, so that would empty the inbox on open), but
+      // a reply is a deliberate action — mirror ChatPanel's read-conversation
+      // clear here. Optimistically drop the matching rows, persist on the
+      // server, then refresh the count once it lands.
+      const root = data?.root;
+      const convId = root?.dm_conversation_id || root?.channel_id || null;
+      const body = root?.dm_conversation_id
+        ? { dm_conversation_id: root.dm_conversation_id }
+        : root?.channel_id
+          ? { channel_id: root.channel_id }
+          : null;
+
+      if (convId) {
+        queryClient.setQueryData<Notification[]>(['notifications', 'list'], (old) =>
+          (old || []).map((n) =>
+            !n.is_read &&
+            (n.metadata?.dm_conversation_id === convId || n.metadata?.channel_id === convId)
+              ? { ...n, is_read: true }
+              : n,
+          ),
+        );
+      }
+
+      const refreshBadge = () => {
+        queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+        queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] });
+      };
+
+      if (body) {
+        api
+          .post('/notifications/read-conversation', body)
+          .catch(() => {
+            /* non-critical — the inbox can still be cleared manually */
+          })
+          .finally(refreshBadge);
+      } else {
+        refreshBadge();
+      }
     },
     onError: (err: any) => {
       setError(err?.response?.data?.error || 'Could not send reply. Please try again.');

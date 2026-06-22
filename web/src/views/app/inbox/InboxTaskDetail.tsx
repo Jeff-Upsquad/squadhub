@@ -1,7 +1,10 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTask, useTaskComments, useAddComment, useUpdateTask } from '../../../hooks/useTasks';
+import api from '../../../services/api';
 import MentionPicker from '../../../components/MentionPicker';
 import { linkifyText } from '../../../lib/linkify';
+import type { Notification } from '../InboxView';
 
 function initials(name?: string | null) {
   if (!name) return '?';
@@ -32,11 +35,14 @@ function formatTime(iso: string) {
 
 export default function InboxTaskDetail({
   taskId,
+  notificationId,
   onOpen,
 }: {
   taskId: string;
+  notificationId?: string;
   onOpen: () => void;
 }) {
+  const queryClient = useQueryClient();
   const { data: task, isLoading } = useTask(taskId);
   const { data: comments } = useTaskComments(taskId);
   const addComment = useAddComment(taskId);
@@ -45,11 +51,33 @@ export default function InboxTaskDetail({
   const [text, setText] = useState('');
   const [mentions, setMentions] = useState<string[]>([]);
 
+  // Commenting on a task notification is a deliberate action that counts as
+  // reading it, so its unread state should clear instead of leaving the bell
+  // badge nagging. Tasks have no read-conversation endpoint (unlike DMs), so
+  // mark just this notification read. Mere preview must NOT mark read — the
+  // inbox auto-selects the first unread item, so that would empty the list on
+  // open; only this explicit comment triggers it.
+  const markNotificationRead = () => {
+    if (!notificationId) return;
+    queryClient.setQueryData<Notification[]>(['notifications', 'list'], (old) =>
+      (old || []).map((n) => (n.id === notificationId ? { ...n, is_read: true } : n)),
+    );
+    api
+      .patch(`/notifications/${notificationId}/read`)
+      .catch(() => {
+        /* non-critical — the inbox can still be cleared manually */
+      })
+      .finally(() => {
+        queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+        queryClient.invalidateQueries({ queryKey: ['notifications', 'list'] });
+      });
+  };
+
   const handleSend = () => {
     if (!text.trim()) return;
     addComment.mutate(
       { content: text.trim(), mentions },
-      { onSuccess: () => { setText(''); setMentions([]); } },
+      { onSuccess: () => { setText(''); setMentions([]); markNotificationRead(); } },
     );
   };
 
