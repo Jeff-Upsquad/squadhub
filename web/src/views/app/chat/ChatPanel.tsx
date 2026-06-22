@@ -192,6 +192,20 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
       });
   }, [channelId, kind, queryClient]);
 
+  // Mirror of the native partner app's chat read tracking. Web has no chat
+  // unread badge of its own, but the Android app badges its Chat tab from a
+  // per-user read high-water mark (POST /messages/mark-read). Web only ever
+  // cleared inbox *notifications*, so reading or replying here never advanced
+  // that mark and the phone kept showing the conversation as unread. Advance it
+  // whenever the conversation is on screen so the two stay in sync.
+  const markChatRead = useCallback(() => {
+    if (!channelId) return;
+    const body = kind === 'dm' ? { dm_conversation_id: channelId } : { channel_id: channelId };
+    api.post('/messages/mark-read', body).catch(() => {
+      /* non-critical — only affects the mobile app's unread badge */
+    });
+  }, [channelId, kind]);
+
   // Listen for real-time messages on the same channel/DM room.
   useEffect(() => {
     const socket = getSocket();
@@ -201,6 +215,9 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
 
     const handleNewMessage = () => {
       queryClient.invalidateQueries({ queryKey });
+      // A message arriving in the conversation already on screen is read on
+      // sight — keep the mobile app's read mark current.
+      markChatRead();
     };
     const handleReaction = () => {
       queryClient.invalidateQueries({ queryKey });
@@ -226,16 +243,19 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
       socket.off('message_deleted', handleNewMessage);
       socket.off('new_notification', handleNotification);
     };
-  }, [channelId, kind, queryClient, queryKey, clearConversationNotifications]);
+  }, [channelId, kind, queryClient, queryKey, clearConversationNotifications, markChatRead]);
 
   // On open: clear any notifications that piled up while the conversation was
   // closed. Skip the write when the cached inbox already shows nothing to clear.
   useEffect(() => {
     if (!channelId) return;
+    // Advance the chat read mark for the mobile app on every open — even when
+    // there are no inbox notifications to clear (the guard below can skip those).
+    markChatRead();
     const cached = queryClient.getQueryData<Notification[]>(['notifications', 'list']);
     if (cached && !cached.some((n) => !n.is_read && notifMatchesConversation(n, channelId, kind))) return;
     clearConversationNotifications();
-  }, [channelId, kind, queryClient, clearConversationNotifications]);
+  }, [channelId, kind, queryClient, clearConversationNotifications, markChatRead]);
 
   const messages: Message[] = messagesRes?.data || [];
 
