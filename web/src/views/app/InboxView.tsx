@@ -326,7 +326,7 @@ export default function InboxView({
 
 function renderDetail(n: Notification, onOpen: () => void) {
   if (n.reference_type === 'task' && n.metadata?.task_id) {
-    return <InboxTaskDetail taskId={n.metadata.task_id as string} onOpen={onOpen} />;
+    return <InboxTaskDetail taskId={n.metadata.task_id as string} notificationId={n.id} onOpen={onOpen} />;
   }
   if (n.reference_type === 'message' && (n.metadata?.message_id || n.reference_id)) {
     return (
