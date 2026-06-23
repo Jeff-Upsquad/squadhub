@@ -1,4 +1,4 @@
-import type { Task } from '@squadhub/shared';
+import type { Task, SpaceStatus } from '@squadhub/shared';
 import Avatar from './Avatar';
 import LiveTimer, { formatHours } from './LiveTimer';
 import { StatusDot } from './StatusPill';
@@ -7,7 +7,10 @@ import { usePMStore } from '../../../../../stores/pmStore';
 import type { RequestStatus } from './StatusPill';
 
 export interface RequestRowData extends Task {
+  /** Coarse 4-bucket lane, derived from the resolved stage's category. */
   _derivedStatus: RequestStatus;
+  /** The exact design/video-space stage this task sits in (8-stage pipeline). */
+  _stage?: SpaceStatus | null;
   _listName?: string;
 }
 

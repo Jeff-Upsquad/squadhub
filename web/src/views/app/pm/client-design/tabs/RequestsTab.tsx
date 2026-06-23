@@ -1,18 +1,9 @@
 import { useMemo, useState, useEffect } from 'react';
 import type { SpaceStatus } from '@squadhub/shared';
 import type { RequestRowData } from '../atoms/RequestRow';
-import { STATUS_LABELS } from '../atoms/StatusPill';
-import type { RequestStatus } from '../atoms/StatusPill';
+import { sortStages } from '../../../../../lib/designSpaceLists';
 import { IconFilter, IconSort, IconGrid } from '../atoms/Icons';
 import TaskGroupCard from '../../TaskGroupCard';
-
-const STATUS_ORDER: RequestStatus[] = ['progress', 'review', 'queued', 'done'];
-const STATUS_COLOR: Record<RequestStatus, string> = {
-  queued: 'var(--cd-queued)',
-  progress: 'var(--cd-progress)',
-  review: 'var(--cd-review)',
-  done: 'var(--cd-done)',
-};
 
 // ---- Sort ----
 type SortKey = 'newest' | 'oldest' | 'priority' | 'due' | 'title';
@@ -104,7 +95,8 @@ interface RequestGroup {
 function buildGroups(
   items: RequestRowData[],
   groupBy: GroupKey,
-  listByStatus: Record<string, { id: string; name: string } | null>,
+  sortedStages: SpaceStatus[],
+  briefsListId: string | null,
 ): RequestGroup[] {
   if (groupBy === 'none') {
     return items.length
@@ -150,18 +142,22 @@ function buildGroups(
     }));
   }
 
-  // status (default)
+  // status (default) — one group per real 8-stage pipeline status, in order.
   const by: Record<string, RequestRowData[]> = {};
   for (const r of items) {
-    (by[r._derivedStatus] = by[r._derivedStatus] || []).push(r);
+    const id = r._stage?.id;
+    if (!id) continue;
+    (by[id] = by[id] || []).push(r);
   }
-  return STATUS_ORDER.filter((k) => by[k] && by[k].length > 0).map((k) => ({
-    key: k,
-    label: STATUS_LABELS[k],
-    color: STATUS_COLOR[k],
-    items: by[k],
-    listId: listByStatus[k]?.id || null,
-  }));
+  return sortedStages
+    .filter((s) => by[s.id] && by[s.id].length > 0)
+    .map((s) => ({
+      key: s.id,
+      label: s.name,
+      color: s.color,
+      items: by[s.id],
+      listId: briefsListId,
+    }));
 }
 
 function ToolbarMenu<T extends string>({
@@ -241,39 +237,37 @@ function readStored<T extends string>(key: string, valid: readonly T[], fallback
 
 export default function RequestsTab({
   requests,
-  filterStatus,
   statuses,
   listByStatus,
   emptyHint,
   collapseCompletedByDefault = false,
 }: {
   requests: RequestRowData[];
-  filterStatus?: RequestStatus | null;
   statuses: SpaceStatus[];
   listByStatus: Record<string, { id: string; name: string } | null>;
   // Friendlier copy shown when the space has no requests at all (and no filters
   // are active) — e.g. an onboarding hint. Falls back to the "no match" message.
   emptyHint?: React.ReactNode;
-  // Start the Completed (done) status group collapsed on load. Used by the
-  // merged Dashboard so the long completed list doesn't dominate the view; the
-  // dedicated Completed tab leaves it expanded.
+  // Start the Closed stage group collapsed on load. Used by the merged Dashboard
+  // so the long completed list doesn't dominate the view; the dedicated
+  // Completed tab leaves it expanded.
   collapseCompletedByDefault?: boolean;
 }) {
-  const [activeFilters, setActiveFilters] = useState<Set<RequestStatus>>(() => {
-    const s = new Set<RequestStatus>();
-    if (filterStatus) s.add(filterStatus);
-    return s;
-  });
+  const sortedStages = useMemo(() => sortStages(statuses), [statuses]);
+  const briefsListId = listByStatus.queued?.id || null;
+  const closedStageId = useMemo(
+    () => sortedStages.find((s) => s.category === 'closed')?.id ?? null,
+    [sortedStages],
+  );
+
+  // Stage ids the user has toggled on in the filter bar (empty = show all).
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(() => new Set());
   const [sortBy, setSortBy] = useState<SortKey>(() =>
     readStored(SORT_STORAGE, SORT_OPTIONS.map((o) => o.key), 'newest'),
   );
   const [groupBy, setGroupBy] = useState<GroupKey>(() =>
     readStored(GROUP_STORAGE, GROUP_OPTIONS.map((o) => o.key), 'status'),
   );
-
-  useEffect(() => {
-    if (filterStatus) setActiveFilters(new Set([filterStatus]));
-  }, [filterStatus]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') window.localStorage.setItem(SORT_STORAGE, sortBy);
@@ -284,30 +278,31 @@ export default function RequestsTab({
 
   const filtered = useMemo(() => {
     if (activeFilters.size === 0) return requests;
-    return requests.filter((r) => activeFilters.has(r._derivedStatus));
+    return requests.filter((r) => (r._stage ? activeFilters.has(r._stage.id) : false));
   }, [requests, activeFilters]);
 
   const sorted = useMemo(() => sortRequests(filtered, sortBy), [filtered, sortBy]);
 
   const groups = useMemo(
-    () => buildGroups(sorted, groupBy, listByStatus),
-    [sorted, groupBy, listByStatus],
+    () => buildGroups(sorted, groupBy, sortedStages, briefsListId),
+    [sorted, groupBy, sortedStages, briefsListId],
   );
 
-  const toggleFilter = (k: RequestStatus) => {
+  const toggleFilter = (id: string) => {
     const s = new Set(activeFilters);
-    if (s.has(k)) s.delete(k);
-    else s.add(k);
+    if (s.has(id)) s.delete(id);
+    else s.add(id);
     setActiveFilters(s);
   };
 
-  const statusCounts: Record<RequestStatus, number> = {
-    queued: 0,
-    progress: 0,
-    review: 0,
-    done: 0,
-  };
-  for (const r of requests) statusCounts[r._derivedStatus]++;
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const r of requests) {
+      const id = r._stage?.id;
+      if (id) counts[id] = (counts[id] || 0) + 1;
+    }
+    return counts;
+  }, [requests]);
 
   const noop = () => {};
 
@@ -317,17 +312,17 @@ export default function RequestsTab({
         <button className="cd-topbar-btn" style={{ border: '1px solid var(--cd-br-0)' }}>
           <IconFilter size={12} /> Filter
         </button>
-        {STATUS_ORDER.map((k) => (
+        {sortedStages.map((s) => (
           <button
-            key={k}
-            className={`cd-filter-chip${activeFilters.has(k) ? ' active' : ''}`}
-            onClick={() => toggleFilter(k)}
+            key={s.id}
+            className={`cd-filter-chip${activeFilters.has(s.id) ? ' active' : ''}`}
+            onClick={() => toggleFilter(s.id)}
           >
             <span
-              style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_COLOR[k] }}
+              style={{ width: 6, height: 6, borderRadius: '50%', background: s.color }}
             />
-            {STATUS_LABELS[k]}
-            <span className="count">{statusCounts[k]}</span>
+            {s.name}
+            <span className="count">{statusCounts[s.id] || 0}</span>
           </button>
         ))}
         <div style={{ flex: 1 }} />
@@ -373,7 +368,7 @@ export default function RequestsTab({
           allStatuses={statuses}
           listId={g.listId}
           onStatusChange={noop}
-          defaultCollapsed={collapseCompletedByDefault && g.key === 'done'}
+          defaultCollapsed={collapseCompletedByDefault && groupBy === 'status' && g.key === closedStageId}
         />
       ))}
       <div style={{ height: 40 }} />

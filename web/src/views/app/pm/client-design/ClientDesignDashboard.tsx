@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import './design.css';
 import api from '../../../../services/api';
-import { useFolderTasks } from '../../../../hooks/useFolderTasks';
+import { useFolder, useFolderTasks } from '../../../../hooks/useFolderTasks';
 import { useClientDesignPlan } from '../../../../hooks/useClientDesignPlan';
 import { useTaskTypes } from '../../../../hooks/useTaskTypes';
+import { useUpdateTask } from '../../../../hooks/useTasks';
 import { useSpace } from '../../../../hooks/useSpaces';
 import { usePMStore } from '../../../../stores/pmStore';
 import { canAtLeast } from '../../../../lib/access';
+import { sortStages } from '../../../../lib/designSpaceLists';
 import DashboardTab from './tabs/DashboardTab';
 import BoardTab from './tabs/BoardTab';
 import ReportsTab from './tabs/ReportsTab';
@@ -58,10 +60,17 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
 
   const qc = useQueryClient();
   const setActiveTask = usePMStore((s) => s.setActiveTask);
-  const { folder, requests, byStatus, listByStatus, isLoading } = useFolderTasks(folderId);
+  // Resolve the space (and its 8-stage status catalog) first so the resolved
+  // stages can be fed into useFolderTasks for accurate grouping. useFolder here
+  // shares the ['folder', folderId] query with useFolderTasks (no extra fetch).
+  const { data: folderForSpace } = useFolder(folderId);
+  const { data: space } = useSpace(folderForSpace?.space_id ?? null);
+  const effectiveStatuses = (space as any)?.space_statuses || space?.statuses || [];
+  const sortedStatuses = useMemo(() => sortStages(effectiveStatuses), [effectiveStatuses]);
+  const { folder, requests, listByStatus, isLoading } = useFolderTasks(folderId, sortedStatuses);
+  const updateTask = useUpdateTask(null);
   const plan = useClientDesignPlan(folderId);
   const { data: taskTypes } = useTaskTypes();
-  const { data: space } = useSpace(folder?.space_id ?? null);
   const openRequest = (id: string) => setActiveTask(id);
 
   const templateSlug = (folder as any)?.client_space_template?.slug as string | undefined;
@@ -128,8 +137,8 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
     return requests.filter((r) => r.title?.toLowerCase().includes(q));
   }, [requests, searchQuery]);
 
-  const activeCount = requests.filter((r) => r._derivedStatus !== 'done').length;
-  const doneCount = requests.filter((r) => r._derivedStatus === 'done').length;
+  const activeCount = requests.filter((r) => r._stage?.category !== 'closed').length;
+  const doneCount = requests.filter((r) => r._stage?.category === 'closed').length;
 
   const tabs: { key: TabKey; label: string; count?: number }[] = [
     { key: 'dashboard', label: 'Dashboard', count: activeCount },
@@ -139,7 +148,6 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
   ];
 
   const briefsListId = listByStatus.queued?.id || pendingListId;
-  const effectiveStatuses = (space as any)?.space_statuses || space?.statuses || [];
 
   return (
     // min-h-0 / min-w-0 are load-bearing: this is a flex child of the layout's
@@ -239,15 +247,17 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
                   folderId={folderId}
                   requests={filteredRequests}
                   plan={plan}
-                  statuses={effectiveStatuses}
+                  statuses={sortedStatuses}
                   listByStatus={listByStatus}
                 />
               )}
               {tab === 'board' && (
                   <BoardTab
-                    byStatus={byStatus}
+                    requests={filteredRequests}
+                    statuses={sortedStatuses}
                     onOpenRequest={(r) => openRequest(r.id)}
                     onNewRequest={handleNewTask}
+                    onMoveStage={(id, name) => updateTask.mutate({ id, status: name })}
                   />
               )}
               {tab === 'reports' && (
@@ -256,7 +266,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
               {tab === 'completed' && (
                 <CompletedTab
                   requests={filteredRequests}
-                  statuses={effectiveStatuses}
+                  statuses={sortedStatuses}
                   listByStatus={listByStatus}
                 />
               )}
@@ -276,8 +286,8 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
           isDesignTask
           customTaskTypeKey={taskTypeKey}
           designTaskTypeId={designType?.id || null}
-          statuses={effectiveStatuses}
-          defaultStatus={effectiveStatuses[0]?.name}
+          statuses={sortedStatuses}
+          defaultStatus={sortedStatuses[0]?.name}
         />
       )}
 
