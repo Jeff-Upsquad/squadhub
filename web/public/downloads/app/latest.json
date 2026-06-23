@@ -1,0 +1,19 @@
+{
+  "version": "0.1.0",
+  "notes": "",
+  "pub_date": "2026-06-23T19:29:48.861Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3hVNFM4d1ZvNHZ5d1oyWUpUVDlWN3haZ1lPZXQ5dkJYTE5GbTNkcW9OZUtzTEtKdGthZWErbVhibVhKNkRFWkpYZ2RSbmVaNmlPcjQybmU5ZGdib0FZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMjQyOTgzCWZpbGU6U3F1YWRIdWIuYXBwLnRhci5negp0cEkrZHFxZ3N0NGtabUxPOGc0TjFvQ3VuSXgvSmdTZzB0UEJMOFd1amQ3U0hUZFpoUFJuVUlCOUR0N25PUHpia1NjdnF1cllPMEQzQWZpU0EwYlZDQT09Cg==",
+      "url": "https://squadhub.in/downloads/app/SquadHub.app.tar.gz"
+    },
+    "darwin-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3hVNFM4d1ZvNHZ5d1oyWUpUVDlWN3haZ1lPZXQ5dkJYTE5GbTNkcW9OZUtzTEtKdGthZWErbVhibVhKNkRFWkpYZ2RSbmVaNmlPcjQybmU5ZGdib0FZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMjQyOTgzCWZpbGU6U3F1YWRIdWIuYXBwLnRhci5negp0cEkrZHFxZ3N0NGtabUxPOGc0TjFvQ3VuSXgvSmdTZzB0UEJMOFd1amQ3U0hUZFpoUFJuVUlCOUR0N25PUHpia1NjdnF1cllPMEQzQWZpU0EwYlZDQT09Cg==",
+      "url": "https://squadhub.in/downloads/app/SquadHub.app.tar.gz"
+    },
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdy92VG03TUlVOVoyMDVMRlFZdm9yMWE3TzlhUzQ2L1UxYWJidi9ZMEs2b1VlTERRc1BRcmhHSEFJWWlGTG45V1JsUEFwVnhjQTlOcUhGZjAwM2tUVEFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMjQyNDEyCWZpbGU6U3F1YWRIdWJfMC4xLjBfeDY0LXNldHVwLmV4ZQptZUhNLys2TjZkUUlFUWdQdTNaUUZpbERhTUpac2J6WXBOMWd1aHdtT0tTZk1CZmllMnZMbmUxZU9TT01zSkFaSkxnd1pmQnlqQmpibEhrMzdjSGhDdz09Cg==",
+      "url": "https://squadhub.in/downloads/app/SquadHub-Setup.exe"
+    }
+  }
+}
