@@ -13,8 +13,7 @@ export default function CompletedTab({
 }) {
   return (
     <RequestsTab
-      requests={requests.filter((r) => r._derivedStatus === 'done')}
-      filterStatus="done"
+      requests={requests.filter((r) => r._stage?.category === 'closed')}
       statuses={statuses}
       listByStatus={listByStatus}
     />

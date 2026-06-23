@@ -38,8 +38,10 @@ export default function DashboardTab({
       qc.invalidateQueries({ queryKey: ['folder-link-status', folderId] });
     },
   });
-  const active = useMemo(() => requests.filter((r) => r._derivedStatus !== 'done'), [requests]);
-  const inProgress = useMemo(() => requests.filter((r) => r._derivedStatus === 'progress'), [requests]);
+  // "Open" = anything not in the Closed stage; "in progress" = the active
+  // category (Line-up / Assigned / Work in Progress).
+  const active = useMemo(() => requests.filter((r) => r._stage?.category !== 'closed'), [requests]);
+  const inProgress = useMemo(() => requests.filter((r) => r._stage?.category === 'active'), [requests]);
 
   const remainingToday = Math.max(0, plan.dailyHours - plan.usedToday);
   const pctOfToday = plan.dailyHours

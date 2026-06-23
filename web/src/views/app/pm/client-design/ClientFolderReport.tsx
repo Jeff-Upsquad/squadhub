@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Folder } from '@squadhub/shared';
 import './design.css';
 import { useSpace } from '../../../../hooks/useSpaces';
+import { sortStages } from '../../../../lib/designSpaceLists';
 import { useFolderTasks } from '../../../../hooks/useFolderTasks';
 import { useClientDesignPlan } from '../../../../hooks/useClientDesignPlan';
 import { canAtLeast } from '../../../../lib/access';
@@ -341,7 +342,12 @@ function SpaceSummaryRow({
   onMetrics: (id: string, m: SpaceMetrics) => void;
   onClick: () => void;
 }) {
-  const { requests, byStatus } = useFolderTasks(space.id);
+  const { data: spaceData } = useSpace(space.space_id ?? null);
+  const sortedStatuses = useMemo(
+    () => sortStages((spaceData as any)?.space_statuses || spaceData?.statuses || []),
+    [spaceData],
+  );
+  const { requests, byStatus } = useFolderTasks(space.id, sortedStatuses);
   const plan = useClientDesignPlan(space.id);
 
   // Depend on the plan PRIMITIVES, not the plan object — useClientDesignPlan
