@@ -1,10 +1,10 @@
 {
   "version": "0.1.6",
-  "notes": "Automatic updates now run on launch only (plus the manual check in Settings).",
-  "pub_date": "2026-06-18T07:53:25Z",
+  "notes": "Renamed the app bundle to 'SquadHub Companion' so it no longer collides with the SquadHub desktop app in /Applications.",
+  "pub_date": "2026-06-23T22:29:59Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3hkWkxZOUNjdmFYbXA1d25FUUFUOWZvZFpnYUtDOG0yVERVVkFMWExJd3dOQnFGSlViY0cwN2JFcExETzd0bUJJQnFHREVwLzRwbkdzM3BKN3FQbUFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNzY5MTMyCWZpbGU6U3F1YWRIdWIuYXBwLnRhci5negpDU0ZNT0U0VHF1S1JTRzREeEE4QTlrVmM4TDNSdWl3dVprMmFEcFdxc1lwVTRDZ3BVRDdkN04wSnA0L3EwMjNZQzViK2VIbmYxTi90WmF6QVlWam1BQT09Cg==",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzFLUWVueG9WS0EvdjJqVVBGWWdSME93b09CWmVSUktONFcxZkw4TmU1OFRpek9pTG5sV2g5TnZKTVRHd3kzeGZ3aXlIQkl2WXNES0NhdkJiRTh2eHdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMjUzNzM2CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKWVVBcmVtbFNwbktxTEZ3VHIyS1dTTUc5MFdrbittdVJiM2pXS2FKWjI1N2EyM212NStJenY1NU9SS3NldHdOUWp2NU1TWjRBdjMvc2FPRml3a0RtQXc9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
