@@ -28,6 +28,9 @@ interface VersionManifest {
   release_notes: string;
   force_update: boolean;
   min_supported_version_code: number;
+  // Optional explicit publish time (ISO 8601). When absent, /version derives it
+  // from the manifest file's mtime, which the release flow bumps on every edit.
+  published_at?: string;
 }
 
 // Returned when the manifest file is missing/unreadable so the endpoint never
@@ -81,7 +84,20 @@ try {
 
 // GET /partner-app/version — public, no auth. App polls on launch + periodically.
 router.get('/version', (_req: Request, res: Response) => {
-  res.json({ success: true, data: cached ?? loadManifest() });
+  const manifest = cached ?? loadManifest();
+  // "Last updated" for the public download page. Prefer an explicit
+  // published_at in the manifest; otherwise fall back to the manifest file's
+  // mtime — the release flow rewrites this file on every publish, so its mtime
+  // tracks the latest release. The native updater ignores the extra field.
+  let published_at = manifest.published_at;
+  if (!published_at) {
+    try {
+      published_at = fs.statSync(manifestPath()).mtime.toISOString();
+    } catch {
+      /* ignore — omit published_at if the file can't be stat'd */
+    }
+  }
+  res.json({ success: true, data: { ...manifest, published_at } });
 });
 
 export default router;
