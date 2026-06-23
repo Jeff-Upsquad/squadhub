@@ -2,15 +2,16 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import { usePMStore } from '../stores/pmStore';
-import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useTabsStore } from '../stores/tabsStore';
+import { buildChatSnapshot, buildHomeSnapshot } from '../lib/tabSnapshots';
 import { avatarFor, chatTargetFor, type Notification } from '../views/app/InboxView';
-import type { HomeView } from '../layouts/MainLayout';
 
 /**
  * Floating notification panel — opened by the rail's inbox button. A compact
  * single-column feed (avatar / action / context / comment) anchored next to
- * the icon rail; clicking a row jumps to its source and closes the panel.
- * The full-page inbox stays reachable via the Home sidebar's Inbox item.
+ * the icon rail; clicking a row opens its source in a NEW in-app tab (so the
+ * user's current tab is preserved) and closes the panel. The full-page inbox
+ * stays reachable via the Home sidebar's Inbox item.
  */
 
 const ACTION_LABEL: Record<Notification['type'], string> = {
@@ -103,16 +104,9 @@ function Tab({ label, badge, active, onClick }: { label: string; badge?: number;
   );
 }
 
-export default function InboxSlider({
-  onClose,
-  setHomeView,
-}: {
-  onClose: () => void;
-  setHomeView: (v: HomeView) => void;
-}) {
+export default function InboxSlider({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const setActiveTask = usePMStore((s) => s.setActiveTask);
-  const setActiveChannel = useWorkspaceStore((s) => s.setActiveChannel);
   const [tab, setTab] = useState<'inbox' | 'all'>('inbox');
 
   // Close on Escape
@@ -177,15 +171,24 @@ export default function InboxSlider({
 
   const onRowClick = (n: Notification) => {
     if (!n.is_read) markRead.mutate(n.id);
+
+    // Open the source in a NEW in-app tab so the user's current tab/context is
+    // preserved. openInNewTab dedupes — re-clicking a notification focuses the
+    // existing tab instead of piling up duplicates.
+    const { openInNewTab } = useTabsStore.getState();
+
     if (n.reference_type === 'task' && n.metadata?.task_id) {
+      // Tasks render as a global overlay, not a tab destination; back it with a
+      // My Tasks tab so closing the panel lands somewhere sensible.
+      openInNewTab(buildHomeSnapshot('my-tasks'));
       setActiveTask(n.metadata.task_id as string);
       onClose();
       return;
     }
+
     const target = chatTargetFor(n);
     if (target) {
-      setActiveChannel(target.id, target.kind);
-      setHomeView('chat');
+      openInNewTab(buildChatSnapshot(target.id, target.kind));
       onClose();
     }
   };
