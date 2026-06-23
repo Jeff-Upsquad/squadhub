@@ -1249,10 +1249,7 @@ export default function MainLayout() {
 
       {/* Inbox panel — floating feed opened by the rail's inbox button */}
       {inboxSliderOpen && (
-        <InboxSlider
-          onClose={() => setInboxSliderOpen(false)}
-          setHomeView={(v) => { setActiveSection('home'); setHomeView(v); }}
-        />
+        <InboxSlider onClose={() => setInboxSliderOpen(false)} />
       )}
 
       {/* Global task detail panel — opens from any view when activeTaskId is set */}
