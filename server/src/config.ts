@@ -51,6 +51,13 @@ export const config = {
   squadhireWebhookSecret: process.env.SQUADHIRE_WEBHOOK_SECRET || '',
   squadhireCallbackSecret: process.env.SQUADHIRE_CALLBACK_SECRET || '',
   squadhireAdminUrl: process.env.SQUADHIRE_ADMIN_URL || '',
+  // "Sign in with SquadHub" SSO into SquadHire's /staff portal. Comma-separated
+  // exact-match allowlist of SquadHire callback URLs we may redirect codes to
+  // (e.g. https://<squadhire-host>/api/staff-auth/sso/callback). Empty = SSO off.
+  squadhireSsoRedirectUris: (process.env.SQUADHIRE_SSO_REDIRECT_URIS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
 
   // Candidates mini app — instant env kill switch for the SquadHire proxy.
   // Set CANDIDATES_PROXY_ENABLED=false to make /candidates/* return 503 without

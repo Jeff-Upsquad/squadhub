@@ -96,6 +96,7 @@ import adminChatBroadcastsRoutes from './routes/admin/chat-broadcasts';
 import adminChatAppConfigRoutes from './routes/admin/chat-app-config';
 import squadhireCallbacksRoutes from './routes/integrations/squadhire-callbacks';
 import squadhireCategoriesRoutes from './routes/integrations/squadhire-categories';
+import ssoSquadhireRoutes from './routes/sso-squadhire';
 import subscriptionSquadhireProfilesAdminRoutes from './routes/subscription-squadhire-profiles-admin';
 import profileAccessRoutes from './routes/profile-access';
 import profileAccessAdminRoutes from './routes/profile-access-admin';
@@ -235,6 +236,8 @@ app.use('/admin/chat/app-config', adminChatAppConfigRoutes);
 app.use('/integrations/squadhire', squadhireCallbacksRoutes);
 // Admin-facing read-through proxy for SquadHire metadata (categories etc.)
 app.use('/admin/integrations/squadhire', squadhireCategoriesRoutes);
+// "Sign in with SquadHub" SSO: authorize (browser) + token/directory (server-to-server)
+app.use('/sso/squadhire', ssoSquadhireRoutes);
 
 // Profile Access — local mirror of SquadHire's talent_access_grants.
 app.use('/profile-access', profileAccessRoutes);

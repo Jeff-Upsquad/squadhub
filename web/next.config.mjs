@@ -20,6 +20,8 @@ const nextConfig = {
       // (no realtime messages, no presence) because io('/') has no route.
       { source: '/socket.io/:path*', destination: `${API_URL}/socket.io/:path*` },
       { source: '/auth/:path*', destination: `${API_URL}/auth/:path*` },
+      // "Sign in with SquadHub" SSO: the /launch/squadhire bridge posts here.
+      { source: '/sso/:path*', destination: `${API_URL}/sso/:path*` },
       { source: '/workspaces/:path*', destination: `${API_URL}/workspaces/:path*` },
       { source: '/channels/:path*', destination: `${API_URL}/channels/:path*` },
       { source: '/messages/:path*', destination: `${API_URL}/messages/:path*` },
