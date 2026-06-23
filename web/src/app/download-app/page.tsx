@@ -267,12 +267,21 @@ export default function DownloadDesktopPage() {
               {os === 'macos' ? (
                 <InstallNote heading="macOS — unsigned build">
                   <p className="text-[#404040]">
-                    macOS may say <em>“SquadHub is damaged and can’t be opened”</em> on first launch — that&apos;s
-                    expected for an unsigned app. Open <strong>Terminal</strong> and run:
+                    On first launch macOS may say <em>“Apple could not verify ‘SquadHub’ is free of
+                    malware”</em> (or that the app is <em>“damaged”</em>). That&apos;s expected for an
+                    unsigned app — not an actual problem. <strong>Don&apos;t click “Move to Trash.”</strong>
                   </p>
-                  <CodeBlock>xattr -d com.apple.quarantine /Applications/SquadHub.app</CodeBlock>
+                  <p className="mt-3 text-[#404040]">
+                    <strong>Quickest fix</strong> — open <strong>Terminal</strong> and paste:
+                  </p>
+                  <CodeBlock>xattr -dr com.apple.quarantine /Applications/SquadHub.app</CodeBlock>
+                  <p className="mt-3 text-[#404040]">
+                    <strong>No Terminal?</strong> Click <strong>Done</strong> on the dialog, then open{' '}
+                    <strong>System&nbsp;Settings → Privacy&nbsp;&amp;&nbsp;Security</strong>, scroll down, and
+                    click <strong>“Open Anyway”</strong> next to SquadHub.
+                  </p>
                   <p className="mt-3 text-[12px] text-[#A3A3A3]">
-                    Then open it from Applications. You only need to do this once — updates after that are automatic.
+                    You only need to do this once — updates after that are automatic.
                   </p>
                 </InstallNote>
               ) : (
@@ -349,10 +358,16 @@ export default function DownloadDesktopPage() {
               </h3>
               <InstallNote heading="macOS — unsigned build">
                 <p className="text-[#404040]">
-                  As with the desktop app, macOS may flag the companion as <em>“damaged”</em> on first launch.
-                  Open <strong>Terminal</strong> and run:
+                  As with the desktop app, macOS may say it <em>“could not verify”</em> the companion (or
+                  that it&apos;s <em>“damaged”</em>) on first launch. <strong>Don&apos;t click “Move to
+                  Trash.”</strong> Open <strong>Terminal</strong> and paste:
                 </p>
-                <CodeBlock>xattr -d com.apple.quarantine /Applications/SquadHub.app</CodeBlock>
+                <CodeBlock>xattr -dr com.apple.quarantine &quot;/Applications/SquadHub Companion.app&quot;</CodeBlock>
+                <p className="mt-3 text-[#404040]">
+                  <strong>No Terminal?</strong> Click <strong>Done</strong>, then open{' '}
+                  <strong>System&nbsp;Settings → Privacy&nbsp;&amp;&nbsp;Security</strong> and click{' '}
+                  <strong>“Open Anyway”</strong> next to SquadHub Companion.
+                </p>
                 <p className="mt-3 text-[12px] text-[#A3A3A3]">
                   Then launch it from Applications. Once running, look for the SquadHub icon in your menu bar.
                 </p>
