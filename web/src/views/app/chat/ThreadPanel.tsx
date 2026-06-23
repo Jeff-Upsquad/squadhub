@@ -44,18 +44,31 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
-    const handler = () => queryClient.invalidateQueries({ queryKey });
-    socket.on('new_message', handler);
-    socket.on('thread_reply', handler);
-    socket.on('new_reaction', handler);
-    socket.on('message_updated', handler);
-    socket.on('message_deleted', handler);
+    // A reply for this thread carries the whole row — append it immediately so it
+    // shows without a refetch round-trip, then reconcile in the background. Edits,
+    // deletes and reactions send partial payloads, so those just refetch.
+    const handleReply = (message?: Message) => {
+      if (message?.id && message.parent_message_id === parentId) {
+        queryClient.setQueryData<{ data?: { root: Message | null; replies: Message[] } }>(queryKey, (old) => {
+          if (!old?.data) return old;
+          if (old.data.replies?.some((m) => m.id === message.id)) return old;
+          return { ...old, data: { ...old.data, replies: [...(old.data.replies || []), message] } };
+        });
+      }
+      queryClient.invalidateQueries({ queryKey });
+    };
+    const handleMutated = () => queryClient.invalidateQueries({ queryKey });
+    socket.on('new_message', handleReply);
+    socket.on('thread_reply', handleReply);
+    socket.on('new_reaction', handleMutated);
+    socket.on('message_updated', handleMutated);
+    socket.on('message_deleted', handleMutated);
     return () => {
-      socket.off('new_message', handler);
-      socket.off('thread_reply', handler);
-      socket.off('new_reaction', handler);
-      socket.off('message_updated', handler);
-      socket.off('message_deleted', handler);
+      socket.off('new_message', handleReply);
+      socket.off('thread_reply', handleReply);
+      socket.off('new_reaction', handleMutated);
+      socket.off('message_updated', handleMutated);
+      socket.off('message_deleted', handleMutated);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parentId]);

@@ -178,7 +178,19 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
     const body = kind === 'dm' ? { dm_conversation_id: channelId } : { channel_id: channelId };
     api
       .post('/notifications/read-conversation', body)
-      .then(() => {
+      .then(async () => {
+        // The same new_notification that triggers this clear also makes
+        // useBrowserNotifications refetch the inbox list. That GET can be issued
+        // before the server marks the row read and resolve *after* the optimistic
+        // update below — and because it's already in flight, our invalidate
+        // dedupes into it rather than starting a fresh fetch. The stale (unread)
+        // response then clobbers the cache, so the bell stays unread even though
+        // the conversation is open. Cancel that in-flight fetch first so this
+        // clear is the authoritative last writer, then reconcile from the server.
+        await Promise.all([
+          queryClient.cancelQueries({ queryKey: ['notifications', 'list'] }),
+          queryClient.cancelQueries({ queryKey: ['notifications', 'unread-count'] }),
+        ]);
         queryClient.setQueryData<Notification[]>(['notifications', 'list'], (old) =>
           (old || []).map((n) =>
             !n.is_read && notifMatchesConversation(n, channelId, kind) ? { ...n, is_read: true } : n,
@@ -213,13 +225,26 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
 
     socket.emit('join_channel', channelId);
 
-    const handleNewMessage = () => {
+    // new_message / thread_reply carry the whole row (with its sender), so drop
+    // it straight into the cache instead of waiting on a refetch round-trip —
+    // that round-trip is why an incoming message lagged the notification banner
+    // by seconds. Still invalidate afterwards to backfill server-side enrichment
+    // (reply_count, thread participants, mention hydration).
+    const handleIncomingMessage = (message?: Message) => {
+      if (message?.id) {
+        queryClient.setQueryData<{ data?: Message[] }>(queryKey, (old) => {
+          if (!old?.data) return old;
+          if (old.data.some((m) => m.id === message.id)) return old;
+          return { ...old, data: [...old.data, message] };
+        });
+      }
       queryClient.invalidateQueries({ queryKey });
       // A message arriving in the conversation already on screen is read on
       // sight — keep the mobile app's read mark current.
       markChatRead();
     };
-    const handleReaction = () => {
+    // Edits/deletes/reactions send partial payloads, so reconcile via refetch.
+    const handleMessageMutated = () => {
       queryClient.invalidateQueries({ queryKey });
     };
     // A notification that lands for the conversation already on screen has, by
@@ -228,19 +253,19 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
       if (notifMatchesConversation(n, channelId, kind)) clearConversationNotifications();
     };
 
-    socket.on('new_message', handleNewMessage);
-    socket.on('new_reaction', handleReaction);
-    socket.on('thread_reply', handleNewMessage);
-    socket.on('message_updated', handleNewMessage);
-    socket.on('message_deleted', handleNewMessage);
+    socket.on('new_message', handleIncomingMessage);
+    socket.on('new_reaction', handleMessageMutated);
+    socket.on('thread_reply', handleIncomingMessage);
+    socket.on('message_updated', handleMessageMutated);
+    socket.on('message_deleted', handleMessageMutated);
     socket.on('new_notification', handleNotification);
     return () => {
       socket.emit('leave_channel', channelId);
-      socket.off('new_message', handleNewMessage);
-      socket.off('new_reaction', handleReaction);
-      socket.off('thread_reply', handleNewMessage);
-      socket.off('message_updated', handleNewMessage);
-      socket.off('message_deleted', handleNewMessage);
+      socket.off('new_message', handleIncomingMessage);
+      socket.off('new_reaction', handleMessageMutated);
+      socket.off('thread_reply', handleIncomingMessage);
+      socket.off('message_updated', handleMessageMutated);
+      socket.off('message_deleted', handleMessageMutated);
       socket.off('new_notification', handleNotification);
     };
   }, [channelId, kind, queryClient, queryKey, clearConversationNotifications, markChatRead]);
