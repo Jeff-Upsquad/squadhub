@@ -916,6 +916,19 @@ router.post('/folders/:id/share-link', async (req: Request, res: Response) => {
     const folderId = req.params.id as string;
     if (!(await requireFolderManager(req, res, folderId))) return;
 
+    // Public links live at the CLIENT-folder level (the folder that groups the
+    // design/video spaces). Refuse to attach one to a regular folder so internal
+    // project folders can't be exposed publicly by mistake.
+    const { data: folderRow } = await supabaseAdmin
+      .from('folders')
+      .select('folder_type')
+      .eq('id', folderId)
+      .maybeSingle();
+    if ((folderRow as any)?.folder_type !== 'client') {
+      res.status(400).json({ success: false, error: 'A public link can only be created on a client folder' });
+      return;
+    }
+
     const rotate = String(req.query.rotate || '') === '1' || req.query.rotate === 'true';
     if (rotate) {
       await supabaseAdmin.from('design_space_share_links').delete().eq('folder_id', folderId);

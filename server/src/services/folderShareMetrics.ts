@@ -2,8 +2,10 @@ import { supabaseAdmin } from '../supabase';
 import type {
   DesignShareDailyPoint,
   DesignSharePlan,
+  DesignShareSpace,
   DesignShareStatusLane,
   DesignShareTask,
+  TaskTypeField,
 } from '@squadhub/shared';
 
 // IST is the canonical timezone for this system's daily reporting (matches the
@@ -126,31 +128,123 @@ export async function getFolderPlanHours(folderId: string): Promise<DesignShareP
   return { daily_hours: daily, weekly_hours: weekly, monthly_hours: monthly };
 }
 
-export interface DesignShareSnapshot {
-  space: { name: string; template_slug: string | null; is_video: boolean };
-  tasks: DesignShareTask[];
-  plan: DesignSharePlan;
-  time_summary: DesignShareDailyPoint[];
+export interface DesignTaskTypeInfo {
+  id: string;
+  key: string;
+  fields: TaskTypeField[];
 }
 
 /**
- * Builds the full read-only payload for a design-space public share view:
- * space meta, the derived-lane task list (with assignee names/avatars), the
- * hours plan, and ~6 months of daily time totals.
+ * The design/video task type (id, key) and its brief field definitions for a
+ * space. Used by the public view to render the new-request form and by the
+ * public submit to validate field values + derive the category.
  */
-export async function buildDesignShareSnapshot(folderId: string): Promise<DesignShareSnapshot | null> {
-  const { data: folder } = await supabaseAdmin
-    .from('folders')
-    .select('id, name, lists(id, name, deleted_at), client_space_template:client_space_template_id(slug)')
-    .eq('id', folderId)
-    .is('deleted_at', null)
-    .single();
-  if (!folder) return null;
+export async function getDesignTaskType(isVideo: boolean): Promise<DesignTaskTypeInfo | null> {
+  const key = isVideo ? 'video_edit_task' : 'design_task';
+  const { data: type } = await supabaseAdmin
+    .from('task_types')
+    .select('id, key')
+    .eq('key', key)
+    .maybeSingle();
+  if (!type) return null;
+  const { data: fields } = await supabaseAdmin
+    .from('task_type_fields')
+    .select('*')
+    .eq('task_type_id', (type as any).id)
+    .order('position', { ascending: true });
+  return { id: (type as any).id, key: (type as any).key, fields: (fields || []) as TaskTypeField[] };
+}
 
-  const templateSlug = ((folder as any).client_space_template?.slug as string | undefined) ?? null;
+/**
+ * Sanitizes client-submitted custom design-field values against the task type's
+ * field definitions (this is a PUBLIC endpoint, so untrusted input must be
+ * whitelisted — no arbitrary metadata injection), and derives the `category`
+ * label the same way the internal New Design Task form does (first selected
+ * `brief_type` option). Output shape matches task.metadata.custom exactly so the
+ * internal task detail panel renders client briefs identically.
+ */
+export function sanitizeDesignCustom(
+  fields: TaskTypeField[],
+  raw: unknown,
+): { custom: Record<string, unknown>; category?: string } {
+  const out: Record<string, unknown> = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { custom: out };
+  const byKey = new Map(fields.map((f) => [f.key, f]));
+  const str = (v: unknown, max: number) => String(v).slice(0, max);
+
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (k.endsWith('_other')) {
+      const base = byKey.get(k.slice(0, -6));
+      if (base?.allow_other && typeof v === 'string' && v.trim()) out[k] = str(v.trim(), 200);
+      continue;
+    }
+    const f = byKey.get(k);
+    if (!f) continue;
+    const optionValues = new Set(f.options.map((o) => o.value));
+    switch (f.field_type) {
+      case 'multi_select': {
+        if (!Array.isArray(v)) break;
+        const arr = v
+          .filter((x): x is string => typeof x === 'string')
+          .filter((x) => optionValues.has(x) || (f.allow_other && x === '__other__'))
+          .slice(0, 50);
+        if (arr.length) out[k] = arr;
+        break;
+      }
+      case 'select': {
+        if (typeof v === 'string' && (optionValues.has(v) || (f.allow_other && v === '__other__'))) out[k] = v;
+        break;
+      }
+      case 'number': {
+        const n = typeof v === 'number' ? v : Number(v);
+        if (Number.isFinite(n)) out[k] = n;
+        break;
+      }
+      case 'checkbox': {
+        if (typeof v === 'boolean') out[k] = v;
+        break;
+      }
+      case 'date': {
+        if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) out[k] = str(v, 40);
+        break;
+      }
+      case 'textarea': {
+        if (typeof v === 'string' && v.trim()) out[k] = str(v, 4000);
+        break;
+      }
+      default: {
+        // text | url
+        if (typeof v === 'string' && v.trim()) out[k] = str(v, 1000);
+      }
+    }
+  }
+
+  // Category = label of the first selected brief_type option (mirrors TaskCreatePanel).
+  let category: string | undefined;
+  const briefField = byKey.get('brief_type');
+  const briefArr = (out['brief_type'] as string[] | undefined) || [];
+  if (briefField && briefArr.length) {
+    const first = briefArr[0];
+    category =
+      first === '__other__'
+        ? ((out['brief_type_other'] as string) || 'Other')
+        : briefField.options.find((o) => o.value === first)?.label || first;
+  }
+
+  return { custom: out, category };
+}
+
+/**
+ * Builds one space's read-only data from a template-folder row (which must
+ * already have its `lists` and `client_space_template(slug)` embedded): the
+ * derived-lane task list (with assignee names/avatars), the hours plan, ~6
+ * months of daily time totals, and the brief field definitions.
+ */
+async function buildSpaceData(folder: any): Promise<DesignShareSpace> {
+  const templateSlug = (folder.client_space_template?.slug as string | undefined) ?? null;
   const isVideo = templateSlug === 'video-editing-space';
 
-  const lists = ((folder as any).lists || []).filter((l: any) => !l.deleted_at) as {
+  const lists = (folder.lists || []).filter((l: any) => !l.deleted_at) as {
     id: string;
     name: string;
   }[];
@@ -204,13 +298,84 @@ export async function buildDesignShareSnapshot(folderId: string): Promise<Design
     });
   }
 
-  const plan = await getFolderPlanHours(folderId);
-  const time_summary = await aggregateFolderTimeSummary(folderId, istMonthStartISO(5), istTodayISO());
+  const plan = await getFolderPlanHours(folder.id);
+  const time_summary = await aggregateFolderTimeSummary(folder.id, istMonthStartISO(5), istTodayISO());
+  const designType = await getDesignTaskType(isVideo);
 
   return {
-    space: { name: (folder as any).name, template_slug: templateSlug, is_video: isVideo },
+    id: folder.id,
+    name: folder.name,
+    template_slug: templateSlug,
+    is_video: isVideo,
     tasks: shareTasks,
     plan,
     time_summary,
+    fields: designType?.fields || [],
+  };
+}
+
+export interface ClientShareSnapshot {
+  client: { name: string };
+  spaces: DesignShareSpace[];
+}
+
+/**
+ * Builds the full read-only payload for a CLIENT-folder public share view: the
+ * client name plus every design/video space (template sub-folder) under that
+ * client folder, each with its own dashboard data. Returns null if the client
+ * folder is missing/deleted.
+ */
+export async function buildClientShareSnapshot(
+  clientFolderId: string,
+): Promise<ClientShareSnapshot | null> {
+  const { data: clientFolder } = await supabaseAdmin
+    .from('folders')
+    .select('id, name, folder_type')
+    .eq('id', clientFolderId)
+    .is('deleted_at', null)
+    .single();
+  // Only ever render a client folder publicly — never a regular project folder,
+  // even if a stale link somehow points at one.
+  if (!clientFolder || (clientFolder as any).folder_type !== 'client') return null;
+
+  const { data: childFolders } = await supabaseAdmin
+    .from('folders')
+    .select(
+      'id, name, position, lists(id, name, deleted_at), client_space_template:client_space_template_id(slug)',
+    )
+    .eq('parent_folder_id', clientFolderId)
+    .not('client_space_template_id', 'is', null)
+    .is('deleted_at', null)
+    .order('position', { ascending: true });
+
+  const spaces: DesignShareSpace[] = [];
+  for (const f of childFolders || []) {
+    spaces.push(await buildSpaceData(f));
+  }
+
+  return { client: { name: (clientFolder as any).name }, spaces };
+}
+
+/**
+ * Verifies that `spaceFolderId` is a design/video space directly under
+ * `clientFolderId` (so a public submit/upload can only target the linked
+ * client's own spaces). Returns the space's template slug, or null if invalid.
+ */
+export async function getClientSpaceTemplate(
+  spaceFolderId: string,
+  clientFolderId: string,
+): Promise<{ template_slug: string | null; client_id: string | null } | null> {
+  const { data } = await supabaseAdmin
+    .from('folders')
+    .select('id, client_id, client_space_template:client_space_template_id(slug)')
+    .eq('id', spaceFolderId)
+    .eq('parent_folder_id', clientFolderId)
+    .not('client_space_template_id', 'is', null)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (!data) return null;
+  return {
+    template_slug: ((data as any).client_space_template?.slug as string | undefined) ?? null,
+    client_id: ((data as any).client_id as string | null) ?? null,
   };
 }
