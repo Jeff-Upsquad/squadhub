@@ -106,10 +106,12 @@ export default function TodayList() {
     let total = 0;
     for (const e of timeEntries ?? []) {
       if (toLocalDateKey(e.started_at) !== today) continue;
-      // Skip non-positive entries: a manual downward correction to a task's
-      // tracked total is stored as a negative entry (to reconcile daily
-      // summaries) and isn't "time worked today" — counting it would drag the
-      // header total negative (e.g. the "-18h 6m" badge).
+      // Only real timer sessions count as "worked today". Editing a task's
+      // "Time logged" field writes a manual delta entry (positive or negative)
+      // to reconcile the aggregate — that's not work done today, and counting
+      // it makes the header show phantom time (e.g. "11h 23m" / "-18h 6m") that
+      // doesn't match the task's logged total.
+      if (e.source === 'manual') continue;
       const dur = e.duration_seconds || 0;
       if (dur <= 0) continue;
       map.set(e.task_id, (map.get(e.task_id) || 0) + dur);

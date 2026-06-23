@@ -441,7 +441,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     // parents) so the Home list renders these rows identically to the focus list.
     const { data: recentEntries } = await supabaseAdmin
       .from('task_time_entries')
-      .select('task_id, started_at, duration_seconds')
+      .select('task_id, started_at, source')
       .eq('user_id', req.userId!)
       .order('started_at', { ascending: false })
       .limit(300);
@@ -449,11 +449,11 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     const seenWorked = new Set<string>();
     for (const e of recentEntries || []) {
       if (toTzDay((e as any).started_at) !== todayStr) continue;
-      // Only positive entries count as "worked today". A manual edit that lowers
-      // a task's tracked total is stored as a negative correction entry (to keep
-      // daily_time_summaries reconciled) — that's not real work, so it must not
-      // surface the task as in-progress.
-      if (((e as any).duration_seconds || 0) <= 0) continue;
+      // Only real timer sessions surface a task as "in progress today". Editing
+      // a task's "Time logged" field writes a manual delta entry (positive or
+      // negative) to reconcile the aggregate — that's not work done today and
+      // shouldn't pull the task into this section.
+      if ((e as any).source === 'manual') continue;
       const id = (e as any).task_id as string;
       if (seenWorked.has(id)) continue;
       seenWorked.add(id);
