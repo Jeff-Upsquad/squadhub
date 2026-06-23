@@ -48,6 +48,7 @@ const nextConfig = {
       { source: '/cashbook/:path*', destination: `${API_URL}/cashbook/:path*` },
       { source: '/partner-app/:path+', destination: `${API_URL}/partner-app/:path+` },
       { source: '/notifications/:path*', destination: `${API_URL}/notifications/:path*` },
+      { source: '/push/:path*', destination: `${API_URL}/push/:path*` },
       { source: '/lms/:path*', destination: `${API_URL}/lms/:path*` },
       { source: '/meetings/:path*', destination: `${API_URL}/meetings/:path*` },
       { source: '/profile-access/:path*', destination: `${API_URL}/profile-access/:path*` },

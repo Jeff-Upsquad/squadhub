@@ -8,6 +8,7 @@ import InboxTaskDetail from './inbox/InboxTaskDetail';
 import InboxMessageDetail from './inbox/InboxMessageDetail';
 import ViewSearchInput from '../../components/pm/ViewSearchInput';
 import DesktopNotificationsBanner from '../../components/DesktopNotificationsBanner';
+import InstallPwaPrompt from '../../components/InstallPwaPrompt';
 import { formatDateHeader, toLocalDateKey } from '../../lib/formatDuration';
 
 export type Notification = {
@@ -254,6 +255,7 @@ export default function InboxView({
     <div className="sh-view inbox-view">
       <div className="inbox-list">
         <DesktopNotificationsBanner />
+        <InstallPwaPrompt />
         <div className="inbox-filter">
           <div className="pill" data-active={filter === 'unread'} onClick={() => setFilter('unread')}>
             Unread{unreadCount > 0 ? ` · ${unreadCount}` : ''}

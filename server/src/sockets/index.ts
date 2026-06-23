@@ -3,6 +3,7 @@ import { Server, Socket } from 'socket.io';
 import { config } from '../config';
 import { supabaseAdmin, supabaseAuth } from '../supabase';
 import { sendPartnerPush } from '../push/partnerPush';
+import { sendWebPush } from '../push/webPush';
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
@@ -220,11 +221,20 @@ export function setupSocketIO(httpServer: HttpServer) {
     if (!notification?.id || !notification.user_id) return;
     const room = `chat_user:${notification.user_id}`;
     const sockets = io.sockets.adapter.rooms.get(room);
+    const online = (sockets?.size ?? 0) > 0;
     console.log(`[socket] deliver -> ${room} (${sockets?.size || 0} clients): ${notification.title}`);
     io.to(room).emit('new_notification', notification as any);
     // Mirror to the native partner app via FCM (fire-and-forget; no-ops if FCM
     // is unconfigured or the user has no registered partner tokens).
     sendPartnerPush(notification as any).catch((e) => console.error('[socket] partner push error:', e));
+    // Browser Web Push for the installable PWA — ONLY when the user has no live
+    // socket. While a tab/PWA is open it's connected, and its in-app browser
+    // notification already fires, so gating on offline avoids a double toast.
+    // Mirrors the online-gating used for chat push. No-op without VAPID keys or
+    // any registered subscriptions.
+    if (!online) {
+      sendWebPush(notification as any).catch((e) => console.error('[socket] web push error:', e));
+    }
   };
 
   const POLL_INTERVAL_MS = 2_000;

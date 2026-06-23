@@ -5,12 +5,20 @@ import Providers from './providers';
 export const metadata: Metadata = {
   title: 'SquadHub',
   description: 'Team collaboration and project management',
+  manifest: '/manifest.json',
+  applicationName: 'SquadHub',
+  appleWebApp: { capable: true, statusBarStyle: 'default', title: 'SquadHub' },
+  icons: {
+    icon: '/icon-192.png',
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  themeColor: '#6366f1',
 };
 
 export default function RootLayout({
