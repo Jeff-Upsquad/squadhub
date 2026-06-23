@@ -529,6 +529,55 @@ async function uploadVoiceNote(token: string, taskId: string, file: File): Promi
   if (!cd.success) throw new Error(cd.error || 'confirm failed');
 }
 
+// Files/photos the client can pick from their gallery or files app. Mirrors the
+// voice-note flow (presign → direct PUT to R2 → confirm) but for general files;
+// each lands as a task_attachment so the team sees it on the internal task.
+const ATTACH_ACCEPT =
+  'image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip';
+const ATTACH_MAX_BYTES = 50 * 1024 * 1024; // 50 MB per file — matches the server cap
+
+async function uploadAttachment(token: string, taskId: string, file: File): Promise<void> {
+  const contentType = file.type || 'application/octet-stream';
+  const pres = await fetch(`/design-share/${token}/attachment/presign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      task_id: taskId,
+      filename: file.name,
+      content_type: contentType,
+      file_size: file.size,
+    }),
+  });
+  const pd = await pres.json();
+  if (!pd.success) throw new Error(pd.error || 'presign failed');
+
+  const put = await fetch(pd.data.upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: file,
+  });
+  if (!put.ok) throw new Error('upload failed');
+
+  const conf = await fetch(`/design-share/${token}/attachment/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      task_id: taskId,
+      object_key: pd.data.key,
+      file_name: file.name,
+      mime_type: contentType,
+    }),
+  });
+  const cd = await conf.json();
+  if (!cd.success) throw new Error(cd.error || 'confirm failed');
+}
+
+function formatFileSize(bytes: number): string {
+  const kb = bytes / 1024;
+  if (kb >= 1024) return `${(kb / 1024).toFixed(kb >= 10 * 1024 ? 0 : 1)} MB`;
+  return `${Math.max(1, Math.round(kb))} KB`;
+}
+
 // In-browser voice recorder (MediaRecorder), mirroring the internal New Design
 // Task form's recorder. Records one note; supports preview + remove/re-record.
 function VoiceRecorder({ file, onChange }: { file: File | null; onChange: (f: File | null) => void }) {
@@ -631,6 +680,96 @@ function VoiceRecorder({ file, onChange }: { file: File | null; onChange: (f: Fi
   );
 }
 
+// Lets the client attach reference files/photos to a request. Tapping the button
+// opens the native picker (gallery + files) allowing multiple selections; picked
+// items are previewed and can be removed before sending.
+function FileAttacher({ files, onChange }: { files: File[]; onChange: (f: File[]) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [err, setErr] = useState('');
+
+  const add = (list: FileList | null) => {
+    if (!list || list.length === 0) return;
+    setErr('');
+    const incoming = Array.from(list);
+    const oversized = incoming.find((f) => f.size > ATTACH_MAX_BYTES);
+    if (oversized) setErr(`"${oversized.name}" is over 50 MB and was skipped.`);
+    const sized = incoming.filter((f) => f.size <= ATTACH_MAX_BYTES);
+    // De-dupe by name + size so re-picking the same file doesn't double it up.
+    const seen = new Set(files.map((f) => `${f.name}:${f.size}`));
+    const merged = [...files, ...sized.filter((f) => !seen.has(`${f.name}:${f.size}`))];
+    onChange(merged);
+    if (inputRef.current) inputRef.current.value = '';
+  };
+
+  return (
+    <div className="ds-field">
+      <label className="ds-field-label">
+        Attachments <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span>
+      </label>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ATTACH_ACCEPT}
+        multiple
+        hidden
+        onChange={(e) => add(e.currentTarget.files)}
+      />
+      <button type="button" className="ds-attach-btn" onClick={() => inputRef.current?.click()}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+        </svg>
+        Attach files or photos
+      </button>
+      {files.length > 0 && (
+        <div className="ds-attach-list">
+          {files.map((f, i) => (
+            <AttachItem
+              key={`${f.name}:${f.size}:${i}`}
+              file={f}
+              onRemove={() => onChange(files.filter((_, idx) => idx !== i))}
+            />
+          ))}
+        </div>
+      )}
+      {err && <p className="ds-voice-err">{err}</p>}
+    </div>
+  );
+}
+
+function AttachItem({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const [thumb, setThumb] = useState<string | null>(null);
+  const isImage = file.type.startsWith('image/');
+
+  useEffect(() => {
+    if (!isImage) return;
+    const url = URL.createObjectURL(file);
+    setThumb(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file, isImage]);
+
+  return (
+    <div className="ds-attach-item">
+      {isImage && thumb ? (
+        <span className="ds-attach-thumb" style={{ backgroundImage: `url(${thumb})` }} />
+      ) : (
+        <span className="ds-attach-thumb ds-attach-thumb-file">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+            <path d="M14 2v6h6" />
+          </svg>
+        </span>
+      )}
+      <span className="ds-attach-meta">
+        <span className="ds-attach-name">{file.name}</span>
+        <span className="ds-attach-size">{formatFileSize(file.size)}</span>
+      </span>
+      <button type="button" className="ds-attach-del" onClick={onRemove} aria-label={`Remove ${file.name}`}>
+        ✕
+      </button>
+    </div>
+  );
+}
+
 function RequestSheet({
   token,
   space,
@@ -650,9 +789,11 @@ function RequestSheet({
   const [dueDate, setDueDate] = useState('');
   const [custom, setCustom] = useState<Record<string, unknown>>({});
   const [voiceFile, setVoiceFile] = useState<File | null>(null);
+  const [attachFiles, setAttachFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [voiceFailed, setVoiceFailed] = useState(false);
+  const [attachFailed, setAttachFailed] = useState(false);
   const [error, setError] = useState('');
 
   // Mirrors the internal form: drop empty values so they don't persist.
@@ -725,6 +866,20 @@ function RequestSheet({
           setVoiceFailed(true);
         }
       }
+      // Attachments are best-effort too — upload each, flagging if any fail so
+      // the success screen can tell the client which extras didn't go through.
+      if (taskId && attachFiles.length > 0) {
+        let anyFailed = false;
+        for (const f of attachFiles) {
+          try {
+            await uploadAttachment(token, taskId, f);
+          } catch (e) {
+            console.error('Attachment upload failed:', e);
+            anyFailed = true;
+          }
+        }
+        if (anyFailed) setAttachFailed(true);
+      }
       setDone(true);
     } catch {
       setError('Failed to submit. Please try again.');
@@ -750,6 +905,12 @@ function RequestSheet({
               <p className="ds-voice-warn">
                 Your request was sent, but the voice note couldn&apos;t be attached. You can mention
                 the details in the brief instead.
+              </p>
+            )}
+            {attachFailed && (
+              <p className="ds-voice-warn">
+                Your request was sent, but one or more files couldn&apos;t be uploaded. You can try
+                again or share them with the team another way.
               </p>
             )}
             <button className="ds-btn-primary" onClick={onSubmitted}>Done</button>
@@ -785,6 +946,8 @@ function RequestSheet({
             />
 
             <VoiceRecorder file={voiceFile} onChange={setVoiceFile} />
+
+            <FileAttacher files={attachFiles} onChange={setAttachFiles} />
 
             {fields.map((f) => (
               <DesignFieldInput
@@ -1148,6 +1311,17 @@ const styles = `
 .ds-voice-del:hover { border-color: #d4351c; color: #d4351c; }
 .ds-voice-err { color: #b91c1c; font-size: 12px; margin-top: 6px; }
 .ds-voice-warn { color: #8a6d00; background: #fffdf0; border: 1px solid #FFFF99; border-radius: 12px; padding: 10px 12px; font-size: 12.5px; margin-top: 12px; line-height: 1.45; }
+.ds-attach-btn { display: inline-flex; align-items: center; gap: 8px; background: #fff; border: 1px solid rgba(0,0,0,0.12); color: #0A0A0A; border-radius: 999px; padding: 11px 18px; font-size: 14px; font-weight: 600; cursor: pointer; transition: border-color .15s, color .15s, box-shadow .15s; box-shadow: 0 2px 10px rgba(0,0,0,0.04); }
+.ds-attach-btn:hover { border-color: rgba(0,0,0,0.28); }
+.ds-attach-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.ds-attach-item { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 8px; border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; background: #fff; }
+.ds-attach-thumb { flex-shrink: 0; width: 40px; height: 40px; border-radius: 9px; background-color: #F0F0EE; background-size: cover; background-position: center; display: inline-flex; align-items: center; justify-content: center; color: #A3A3A3; }
+.ds-attach-thumb-file { border: 1px solid rgba(0,0,0,0.06); }
+.ds-attach-meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.ds-attach-name { font-size: 13px; font-weight: 500; color: #0A0A0A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ds-attach-size { font-size: 11.5px; color: #A3A3A3; font-variant-numeric: tabular-nums; }
+.ds-attach-del { flex-shrink: 0; width: 32px; height: 32px; border-radius: 999px; border: 1px solid rgba(0,0,0,0.12); background: #fff; color: #A3A3A3; cursor: pointer; font-size: 12px; }
+.ds-attach-del:hover { border-color: #d4351c; color: #d4351c; }
 select.ds-input { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A3A3A3' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; padding-right: 36px; }
 .ds-input {
   width: 100%; border: 1px solid rgba(0,0,0,0.12); border-radius: 14px; padding: 13px 14px;

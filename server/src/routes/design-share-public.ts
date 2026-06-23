@@ -48,7 +48,11 @@ function makeRateLimiter(max: number, windowMs: number) {
 }
 
 const readLimit = makeRateLimiter(60, 60_000); // 60 reads/min/IP
-const writeLimit = makeRateLimiter(5, 60_000); // 5 submissions/min/IP
+const writeLimit = makeRateLimiter(5, 60_000); // 5 task submissions/min/IP
+// Uploads (voice note + attachments) are presign + confirm PAIRS and a single
+// request can carry several files, so they get a much higher ceiling than the
+// task-creation write limit. Still ownership-gated (taskAcceptsShareUpload).
+const uploadLimit = makeRateLimiter(60, 60_000); // ~30 file uploads/min/IP
 
 // ============================================================
 // GET /design-share/:token — read-only design-space view (no auth).
@@ -293,7 +297,7 @@ const voicePresignSchema = z.object({
   file_size: z.number().int().positive(),
 });
 
-router.post('/:token/voice-note/presign', writeLimit, async (req: Request, res: Response) => {
+router.post('/:token/voice-note/presign', uploadLimit, async (req: Request, res: Response) => {
   try {
     const link = await loadActiveLink(String(req.params.token || ''));
     if (!link) {
@@ -336,7 +340,7 @@ const voiceConfirmSchema = z.object({
   mime_type: z.string().min(1).max(255),
 });
 
-router.post('/:token/voice-note/confirm', writeLimit, async (req: Request, res: Response) => {
+router.post('/:token/voice-note/confirm', uploadLimit, async (req: Request, res: Response) => {
   try {
     const link = await loadActiveLink(String(req.params.token || ''));
     if (!link) {
@@ -401,6 +405,155 @@ router.post('/:token/voice-note/confirm', writeLimit, async (req: Request, res: 
       return;
     }
     console.error('Public voice-note confirm error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// Attachments — a client can attach reference files/photos to their request.
+// Same token-gated, direct browser → R2 flow and task-ownership checks as voice
+// notes, but accepts a broader (safe) set of file types. Stored as
+// task_attachments so the team sees them on the internal task alongside any
+// voice note.
+// ============================================================
+const ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024; // 50 MB per file
+
+// Allow images / video / audio / common documents, but NEVER a type the R2
+// public domain would serve as ACTIVE content (HTML / SVG / XML / JS can carry
+// script). Everything allowed is served as an inert download or a plain image.
+function isAllowedAttachmentType(ct: string): boolean {
+  const t = (ct || '').toLowerCase().split(';')[0].trim();
+  if (t === 'image/svg+xml') return false; // scriptable "image"
+  if (t.startsWith('image/') || t.startsWith('video/') || t.startsWith('audio/')) return true;
+  return new Set([
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain',
+    'text/csv',
+    'application/zip',
+    'application/x-zip-compressed',
+    'application/octet-stream',
+  ]).has(t);
+}
+
+const attachPresignSchema = z.object({
+  task_id: z.string().uuid(),
+  filename: z.string().min(1).max(255),
+  content_type: z.string().min(1).max(255),
+  file_size: z.number().int().positive(),
+});
+
+router.post('/:token/attachment/presign', uploadLimit, async (req: Request, res: Response) => {
+  try {
+    const link = await loadActiveLink(String(req.params.token || ''));
+    if (!link) {
+      res.status(404).json({ success: false, error: 'Link not found' });
+      return;
+    }
+    const body = attachPresignSchema.parse(req.body);
+    if (!isAllowedAttachmentType(body.content_type)) {
+      res.status(400).json({ success: false, error: 'This file type is not allowed' });
+      return;
+    }
+    if (body.file_size > ATTACHMENT_MAX_BYTES) {
+      res.status(400).json({ success: false, error: 'File too large (max 50 MB)' });
+      return;
+    }
+    if (!(await taskAcceptsShareUpload(body.task_id, link.folder_id))) {
+      res.status(403).json({ success: false, error: 'Not allowed' });
+      return;
+    }
+    const { uploadUrl, objectKey } = await generateTaskUploadUrl(
+      body.task_id,
+      body.filename,
+      body.content_type,
+    );
+    res.json({ success: true, data: { upload_url: uploadUrl, key: objectKey } });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Public attachment presign error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+const attachConfirmSchema = z.object({
+  task_id: z.string().uuid(),
+  object_key: z.string().min(1),
+  file_name: z.string().min(1).max(255),
+  mime_type: z.string().min(1).max(255),
+});
+
+router.post('/:token/attachment/confirm', uploadLimit, async (req: Request, res: Response) => {
+  try {
+    const link = await loadActiveLink(String(req.params.token || ''));
+    if (!link) {
+      res.status(404).json({ success: false, error: 'Link not found' });
+      return;
+    }
+    const body = attachConfirmSchema.parse(req.body);
+    // Server-generated keys live under tasks/<task_id>/ — reject anything else.
+    if (!body.object_key.startsWith(`tasks/${body.task_id}/`)) {
+      res.status(400).json({ success: false, error: 'Invalid object key' });
+      return;
+    }
+    if (!(await taskAcceptsShareUpload(body.task_id, link.folder_id))) {
+      res.status(403).json({ success: false, error: 'Not allowed' });
+      return;
+    }
+    const head = await headR2Object(body.object_key);
+    if (!head) {
+      res.status(400).json({ success: false, error: 'Upload not found in storage' });
+      return;
+    }
+    if (head.contentLength > ATTACHMENT_MAX_BYTES) {
+      void deleteR2Object(body.object_key).catch((e) => console.error('R2 cleanup after oversize:', e));
+      res.status(400).json({ success: false, error: 'File too large (max 50 MB)' });
+      return;
+    }
+    // R2 does not enforce that the PUT's Content-Type matches the presigned one,
+    // so validate the ACTUAL stored content type — never the client-claimed one.
+    // Prevents uploading e.g. an HTML file through this presign and having R2
+    // serve it as active content from the public domain.
+    const storedType = head.contentType || 'application/octet-stream';
+    if (!isAllowedAttachmentType(storedType)) {
+      void deleteR2Object(body.object_key).catch((e) => console.error('R2 cleanup after bad type:', e));
+      res.status(400).json({ success: false, error: 'This file type is not allowed' });
+      return;
+    }
+    const mimeType = isAllowedAttachmentType(body.mime_type) ? body.mime_type : storedType;
+    const fileUrl = `${config.r2PublicUrl}/${body.object_key}`;
+    const { data, error } = await supabaseAdmin
+      .from('task_attachments')
+      .insert({
+        task_id: body.task_id,
+        object_key: body.object_key,
+        file_url: fileUrl,
+        file_name: body.file_name,
+        file_size: head.contentLength,
+        mime_type: mimeType,
+        uploaded_by: link.created_by,
+      })
+      .select('id')
+      .single();
+    if (error || !data) {
+      res.status(500).json({ success: false, error: error?.message || 'Failed to save attachment' });
+      return;
+    }
+    res.status(201).json({ success: true, data: { id: data.id } });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Public attachment confirm error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
