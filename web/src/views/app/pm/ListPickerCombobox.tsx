@@ -50,6 +50,8 @@ export default function ListPickerCombobox({
   initialSpaceId,
   onChange,
   renderTrigger,
+  open: openProp,
+  onOpenChange,
 }: {
   workspaceId: string;
   selectedListId: string | null;
@@ -58,9 +60,20 @@ export default function ListPickerCombobox({
   initialSpaceId?: string | null;
   onChange: (listId: string, spaceId: string) => void;
   renderTrigger?: (props: { open: boolean; toggle: () => void }) => React.ReactNode;
+  /** Controlled open state. When provided, the parent owns open/close (e.g. the
+   *  task panel opens the picker from its ⋯ menu); otherwise the trigger toggles
+   *  an internal state. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const { data: spaces } = useSpaces(workspaceId);
-  const [open, setOpen] = useState(false);
+  const [openInternal, setOpenInternal] = useState(false);
+  const open = openProp !== undefined ? openProp : openInternal;
+  const setOpen = (next: boolean | ((prev: boolean) => boolean)) => {
+    const value = typeof next === 'function' ? next(open) : next;
+    onOpenChange?.(value);
+    if (openProp === undefined) setOpenInternal(value);
+  };
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};

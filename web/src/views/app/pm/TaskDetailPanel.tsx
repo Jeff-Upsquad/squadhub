@@ -165,6 +165,7 @@ export default function TaskDetailPanel({
   spaceName,
   spaceColor,
   spaceId,
+  folderId,
   folderName,
   listName,
   taskIdOverride,
@@ -176,6 +177,7 @@ export default function TaskDetailPanel({
   spaceName?: string;
   spaceColor?: string | null;
   spaceId?: string | null;
+  folderId?: string | null;
   folderName?: string | null;
   listName?: string | null;
   /** When set, this panel renders the given task instead of the global active task.
@@ -242,6 +244,7 @@ export default function TaskDetailPanel({
   const [editingLogged, setEditingLogged] = useState(false);
   const [timerElapsed, setTimerElapsed] = useState(0);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [movePickerOpen, setMovePickerOpen] = useState(false);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
   const [priorityAnchor, setPriorityAnchor] = useState<DOMRect | null>(null);
@@ -547,6 +550,28 @@ export default function TaskDetailPanel({
     } catch { /* noop */ }
   };
 
+  // Breadcrumb navigation — clicking a path segment navigates the underlying
+  // view to that space / folder / list and closes this task panel. Mirrors the
+  // SpaceTree click handlers (set the PM store selection; MainLayout's effects
+  // switch the section/view to show it).
+  const goToSpace = () => {
+    if (!spaceId) return;
+    pmStore.setActiveSpace(spaceId);
+    pmStore.setActiveSpacePage(spaceId);
+    setActiveTask(null);
+  };
+  const goToFolder = () => {
+    if (!spaceId || !folderId) return;
+    pmStore.setActiveSpace(spaceId);
+    pmStore.setActiveFolder(folderId);
+    setActiveTask(null);
+  };
+  const goToList = () => {
+    if (spaceId) pmStore.setActiveSpace(spaceId);
+    pmStore.setActiveList(listId);
+    setActiveTask(null);
+  };
+
   const priorityLabel = task ? PRIORITY_LABEL[(task.priority || 'none') as TaskPriority] : null;
   const assignees = task?.assignees || [];
   const due = formatDueRelative(task?.due_date);
@@ -630,68 +655,55 @@ export default function TaskDetailPanel({
               <path d="M13 17l5-5-5-5M6 17l5-5-5-5" />
             </svg>
           </button>
-          {spaceName && (
-            workspaceId && canEdit ? (
-              <ListPickerCombobox
-                workspaceId={workspaceId}
-                selectedListId={listId}
-                selectedListName={listName ?? null}
-                initialSpaceId={spaceId ?? null}
-                onChange={(newListId) => {
-                  if (task && newListId !== listId) {
-                    updateTask.mutate({ id: task.id, list_id: newListId });
-                  }
-                }}
-                renderTrigger={({ toggle }) => (
-                  <button
-                    type="button"
-                    onClick={toggle}
-                    className="td-bcrumb td-focus"
-                    title="Move to another list"
-                  >
-                    <span className="emblem" style={{ background: spaceColor || 'var(--sh-ink)' }}>
-                      {initialOf(spaceName)[0]}
-                    </span>
-                    <span className="name">{spaceName}</span>
-                    {folderName && (
-                      <>
-                        <span className="sep">›</span>
-                        <span className="name">{folderName}</span>
-                      </>
-                    )}
-                    {listName && (
-                      <>
-                        <span className="sep">›</span>
-                        <span className="name">{listName}</span>
-                      </>
-                    )}
-                    <svg className="chev" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                      <path d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                )}
-              />
-            ) : (
+          {spaceName && (() => {
+            // Clickable breadcrumb — each segment navigates the underlying view
+            // to that space / folder / list (see goToSpace/goToFolder/goToList).
+            const crumb = (
               <span className="td-bcrumb">
-                <span className="emblem" style={{ background: spaceColor || 'var(--sh-ink)' }}>
-                  {initialOf(spaceName)[0]}
-                </span>
-                <span className="name">{spaceName}</span>
+                <button type="button" className="td-bcrumb-part" onClick={goToSpace} title={`Go to ${spaceName}`}>
+                  <span className="emblem" style={{ background: spaceColor || 'var(--sh-ink)' }}>
+                    {initialOf(spaceName)[0]}
+                  </span>
+                  <span className="name">{spaceName}</span>
+                </button>
                 {folderName && (
                   <>
                     <span className="sep">›</span>
-                    <span className="name">{folderName}</span>
+                    <button type="button" className="td-bcrumb-part" onClick={goToFolder} title={`Go to ${folderName}`}>
+                      <span className="name">{folderName}</span>
+                    </button>
                   </>
                 )}
                 {listName && (
                   <>
                     <span className="sep">›</span>
-                    <span className="name">{listName}</span>
+                    <button type="button" className="td-bcrumb-part" onClick={goToList} title={`Go to ${listName}`}>
+                      <span className="name">{listName}</span>
+                    </button>
                   </>
                 )}
               </span>
-            )
-          )}
+            );
+            // For editors, wrap the breadcrumb in the list picker so the "Move to
+            // another list" action (now in the ⋯ menu) can anchor its dropdown
+            // here. The picker is opened via movePickerOpen, not by the crumb.
+            return workspaceId && canEdit ? (
+              <ListPickerCombobox
+                workspaceId={workspaceId}
+                selectedListId={listId}
+                selectedListName={listName ?? null}
+                initialSpaceId={spaceId ?? null}
+                open={movePickerOpen}
+                onOpenChange={setMovePickerOpen}
+                onChange={(newListId) => {
+                  if (task && newListId !== listId) {
+                    updateTask.mutate({ id: task.id, list_id: newListId });
+                  }
+                }}
+                renderTrigger={() => crumb}
+              />
+            ) : crumb;
+          })()}
           <div className="flex-1" />
           {task && (
             <button
@@ -726,6 +738,20 @@ export default function TaskDetailPanel({
                   className="absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border shadow-lg"
                   style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
                 >
+                  {canEdit && workspaceId && (
+                    <button
+                      onClick={() => { setMoreMenuOpen(false); setMovePickerOpen(true); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[color:var(--sh-hair-3)]"
+                      style={{ color: 'var(--sh-ink)' }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[color:var(--sh-ink-4)]">
+                        <path d="M5 9l-3 3 3 3" />
+                        <path d="M2 12h13" />
+                        <path d="M22 5v14a2 2 0 01-2 2h-6" />
+                      </svg>
+                      Move to another list
+                    </button>
+                  )}
                   {canEdit && (
                     <button
                       onClick={() => { handleDelete(); setMoreMenuOpen(false); }}

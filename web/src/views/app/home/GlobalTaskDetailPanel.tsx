@@ -59,6 +59,7 @@ export default function GlobalTaskDetailPanel() {
       spaceName={spaceData?.name || listData?.name}
       spaceColor={spaceData?.color || null}
       spaceId={spaceId ?? null}
+      folderId={folderId ?? null}
       folderName={folderData?.name || null}
       listName={listData?.name || null}
     />
