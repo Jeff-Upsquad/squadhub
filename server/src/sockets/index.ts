@@ -209,23 +209,15 @@ export function setupSocketIO(httpServer: HttpServer) {
 
   // Bridge: notifications table → Socket.IO.
   // Notifications are created by PostgreSQL triggers (not app code), so the
-  // server can't emit at creation time. Two delivery paths feed one dedup'd
-  // sink so each notification fans out exactly once:
-  //   1. Supabase Realtime (postgres_changes INSERT) — near-instant, the common
-  //      case. The `notifications` table is already in the supabase_realtime
-  //      publication, and the service-role client receives every row.
-  //   2. A 10s table poll — backstop that guarantees delivery (and the mobile
-  //      FCM push) even if the Realtime socket drops or misses an event.
-  const emittedIds = new Set<string>();
+  // server can't emit at creation time — it polls for new rows and fans them
+  // out. Supabase Realtime (postgres_changes) would be the instant option, but
+  // this project's service key is the new sb_secret_* format, which the pinned
+  // supabase-js can't use as a realtime access token — the subscription just
+  // times out. So we poll, but fast: 2s keeps the banner near-instant while
+  // staying cheap thanks to the index on notifications(created_at) that the
+  // `created_at > watermark` scan rides.
   const deliver = (notification: { id?: string; user_id?: string; title?: string } | null) => {
     if (!notification?.id || !notification.user_id) return;
-    if (emittedIds.has(notification.id)) return;
-    emittedIds.add(notification.id);
-    // Bound memory — the poll watermark below already guards against
-    // re-delivering rows older than the current window, so dropping the set
-    // only risks a rare duplicate banner, never a missed one.
-    if (emittedIds.size > 5_000) emittedIds.clear();
-
     const room = `chat_user:${notification.user_id}`;
     const sockets = io.sockets.adapter.rooms.get(room);
     console.log(`[socket] deliver -> ${room} (${sockets?.size || 0} clients): ${notification.title}`);
@@ -235,18 +227,7 @@ export function setupSocketIO(httpServer: HttpServer) {
     sendPartnerPush(notification as any).catch((e) => console.error('[socket] partner push error:', e));
   };
 
-  // Path 1: Supabase Realtime — instant fan-out on insert.
-  supabaseAdmin
-    .channel('notifications-stream')
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'notifications' },
-      (payload) => deliver(payload.new as any),
-    )
-    .subscribe((status) => console.log('[socket] notifications realtime:', status));
-
-  // Path 2: poll backstop.
-  const POLL_INTERVAL_MS = 10_000;
+  const POLL_INTERVAL_MS = 2_000;
   let lastPollTime = new Date().toISOString();
   let pollCount = 0;
 
@@ -276,14 +257,13 @@ export function setupSocketIO(httpServer: HttpServer) {
         return;
       }
 
-      // Log every 6th poll (once per minute at 10s interval) to confirm it's running
-      if (pollCount % 6 === 0) {
+      // Heartbeat roughly once a minute (every 30th poll at 2s) to confirm it's alive.
+      if (pollCount % 30 === 0) {
         console.log(`[socket] poll #${pollCount} — watching from ${lastPollTime}, found ${newNotifications?.length || 0}`);
       }
 
       if (newNotifications && newNotifications.length > 0) {
         lastPollTime = newNotifications[newNotifications.length - 1].created_at;
-        // deliver() dedupes anything Realtime already sent.
         for (const notification of newNotifications) deliver(notification);
       }
     } catch (e) {
@@ -291,7 +271,7 @@ export function setupSocketIO(httpServer: HttpServer) {
     }
   }, POLL_INTERVAL_MS);
 
-  console.log(`[socket] Notification bridge active (realtime + ${POLL_INTERVAL_MS / 1000}s poll backstop)`);
+  console.log(`[socket] Notification bridge active (${POLL_INTERVAL_MS / 1000}s poll)`);
 
   return io;
 }
