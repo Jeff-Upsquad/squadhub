@@ -273,6 +273,8 @@ export interface Space {
   client_id?: string | null;
   /** 'personal' = a private per-user space backing the My Tasks view, hidden from the normal Spaces sidebar. */
   kind?: 'normal' | 'personal';
+  /** When true, this space's tasks collapse into one "Grouped tasks under {name}" row on Home. */
+  group_tasks?: boolean;
   my_access_level?: AccessLevel;
   // Joined
   statuses?: SpaceStatus[];
@@ -309,6 +311,8 @@ export interface Folder {
   client_space_template_version?: number | null;
   parent_folder_id?: string | null;
   folder_type?: string | null;
+  /** When true, this folder's tasks collapse into one "Grouped tasks under {name}" row on Home. */
+  group_tasks?: boolean;
   // Joined
   lists?: List[];
   profile?: CustomProfile;
@@ -332,6 +336,8 @@ export interface List {
   my_access_level?: AccessLevel;
   profile_id?: string | null;
   profile_version?: number | null;
+  /** When true, this list's tasks collapse into one "Grouped tasks under {name}" row on Home. */
+  group_tasks?: boolean;
   // Joined
   task_count?: number;
   profile?: CustomProfile;
@@ -562,6 +568,10 @@ export interface Task {
   list?: { id: string; name: string } | null;
   folder?: { id: string; name: string } | null;
   space?: { id: string; name: string } | null;
+  // Resolved by hydrateLists: the nearest ancestor container (list → folder →
+  // space) with group_tasks ON, used to collapse this task into a single
+  // "Grouped tasks under {name}" row on Home. Null when no ancestor is grouped.
+  group_container?: { type: 'list' | 'folder' | 'space'; id: string; name: string } | null;
   parent_task?: { id: string; title: string } | null;
   // Hydrated on GET /pm/tasks/:id for spawned routine copies.
   routine_template?: { id: string; title: string; recurrence: TaskRecurrence | null } | null;

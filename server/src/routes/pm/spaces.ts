@@ -259,6 +259,7 @@ router.put('/spaces/:id', async (req: Request, res: Response) => {
     if (req.body.color) updates.color = req.body.color;
     if (req.body.icon) updates.icon = req.body.icon;
     if (req.body.description !== undefined) updates.description = req.body.description;
+    if (typeof req.body.group_tasks === 'boolean') updates.group_tasks = req.body.group_tasks;
 
     const { data, error } = await supabaseAdmin
       .from('spaces')

@@ -6,7 +6,8 @@ import { useCreateTaskTimeEntry, useMyTimeEntries } from '../../../hooks/useTask
 import { usePMStore, type FocusBucket } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
 import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
-import { groupTasks, isFutureDay, isTaskFocused, type GroupBy } from '../../../lib/taskGrouping';
+import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, type GroupBy } from '../../../lib/taskGrouping';
+import GroupedTaskRow from './GroupedTaskRow';
 import DayCalendar from '../day-planner/DayCalendar';
 import { planDateKey } from '../../../hooks/useDayPlanner';
 
@@ -24,10 +25,25 @@ export default function TodayList() {
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
   const focusBuckets = usePMStore((s) => s.focusBuckets);
+  const groupedExpanded = usePMStore((s) => s.groupedExpanded);
+  const toggleGroupedExpanded = usePMStore((s) => s.toggleGroupedExpanded);
+  const setActiveSpace = usePMStore((s) => s.setActiveSpace);
+  const setActiveSpacePage = usePMStore((s) => s.setActiveSpacePage);
+  const setActiveList = usePMStore((s) => s.setActiveList);
+  const setActiveFolder = usePMStore((s) => s.setActiveFolder);
 
   const openTask = (id: string) => {
     setActiveDashboardTab(null);
     setActiveTask(id);
+  };
+
+  // Open a grouped container in the PM module. Setting the active id triggers
+  // MainLayout's nav effects, which switch the view to that list/folder/space.
+  const openContainer = (c: { type: 'list' | 'folder' | 'space'; id: string }) => {
+    setActiveDashboardTab(null);
+    if (c.type === 'list') setActiveList(c.id);
+    else if (c.type === 'folder') setActiveFolder(c.id);
+    else { setActiveSpace(c.id); setActiveSpacePage(c.id); }
   };
 
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
@@ -128,6 +144,27 @@ export default function TodayList() {
     [mainTasks, groupBy, tz, fadingTaskIds],
   );
   const currentLabel = GROUP_OPTIONS.find((o) => o.value === groupBy)?.label ?? 'None';
+
+  // Render a section's rows, collapsing any tasks whose container has Group Tasks
+  // ON into one expandable "Grouped tasks under {name}" row. Plain tasks render
+  // as normal TodayRows. (The "In progress today" section opts out — see below.)
+  const renderTaskRows = (list: Task[]) =>
+    collapseGroupedTasks(list).map((item) =>
+      isGroupedRow(item) ? (
+        <GroupedTaskRow
+          key={`grp:${item.key}`}
+          row={item}
+          expanded={!!groupedExpanded[item.key]}
+          onToggle={() => toggleGroupedExpanded(item.key)}
+          onOpenContainer={openContainer}
+          renderChild={(t) => (
+            <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} />
+          )}
+        />
+      ) : (
+        <TodayRow key={item.id} task={item} onOpen={openTask} secondsToday={secondsTodayByTask.get(item.id) || 0} />
+      ),
+    );
 
   return (
     <>
@@ -266,9 +303,7 @@ export default function TodayList() {
           {!isLoading && !isError && mainTasks.length > 0 && (
             groupBy === 'none' ? (
               <div className="hm-list">
-                {mainTasks.map((t) => (
-                  <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} />
-                ))}
+                {renderTaskRows(mainTasks)}
               </div>
             ) : (
               groups.map((g) => (
@@ -278,9 +313,7 @@ export default function TodayList() {
                     <span className="count">· {g.tasks.length}</span>
                   </div>
                   <div className="hm-list" style={{ paddingTop: 0 }}>
-                    {g.tasks.map((t) => (
-                      <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} />
-                    ))}
+                    {renderTaskRows(g.tasks)}
                   </div>
                 </div>
               ))
@@ -299,9 +332,7 @@ export default function TodayList() {
             <span className="hm-bucket-hint">after 3 PM</span>
           </div>
           <div className="hm-list">
-            {eveningTasks.map((t) => (
-              <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} />
-            ))}
+            {renderTaskRows(eveningTasks)}
           </div>
         </div>
       )}
@@ -314,9 +345,7 @@ export default function TodayList() {
             <span className="hm-bucket-hint">after 7 PM</span>
           </div>
           <div className="hm-list">
-            {nightTasks.map((t) => (
-              <TodayRow key={t.id} task={t} onOpen={openTask} secondsToday={secondsTodayByTask.get(t.id) || 0} />
-            ))}
+            {renderTaskRows(nightTasks)}
           </div>
         </div>
       )}

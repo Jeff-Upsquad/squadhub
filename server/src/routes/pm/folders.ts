@@ -434,6 +434,7 @@ router.put('/folders/:id', async (req: Request, res: Response) => {
     const updates: Record<string, unknown> = {};
     if (req.body.name !== undefined) updates.name = req.body.name;
     if (req.body.space_id !== undefined) updates.space_id = req.body.space_id;
+    if (typeof req.body.group_tasks === 'boolean') updates.group_tasks = req.body.group_tasks;
 
     // If moving to a new space, validate destination access + lock, then
     // cascade the space_id change to this folder's child lists so the

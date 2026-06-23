@@ -103,6 +103,48 @@ export const PRIORITY_LABELS: Record<string, string> = {
 
 export type Group = { key: string; label: string; sort: number | string; tasks: Task[] };
 
+// A synthetic "Grouped tasks under {name}" row. Produced by collapseGroupedTasks
+// when a task's server-resolved `group_container` is non-null (the nearest
+// ancestor container with Group Tasks ON). Carries the child tasks so the row can
+// expand inline, plus their count for the badge.
+export type GroupedRow = {
+  __grouped: true;
+  key: string; // container id
+  container: NonNullable<Task['group_container']>;
+  count: number;
+  tasks: Task[];
+};
+
+export function isGroupedRow(x: Task | GroupedRow): x is GroupedRow {
+  return (x as GroupedRow).__grouped === true;
+}
+
+// Collapse tasks belonging to a grouped container into one GroupedRow each,
+// leaving ungrouped tasks untouched. Each grouped row is placed at the index of
+// its first member so it slots naturally among the plain rows. Because the server
+// resolves each task to exactly one container (innermost-first), distinct grouped
+// containers yield distinct rows and no task is ever counted twice.
+export function collapseGroupedTasks(tasks: Task[]): (Task | GroupedRow)[] {
+  const out: (Task | GroupedRow)[] = [];
+  const rowByContainer = new Map<string, GroupedRow>();
+  for (const t of tasks) {
+    const gc = t.group_container;
+    if (!gc) {
+      out.push(t);
+      continue;
+    }
+    let row = rowByContainer.get(gc.id);
+    if (!row) {
+      row = { __grouped: true, key: gc.id, container: gc, count: 0, tasks: [] };
+      rowByContainer.set(gc.id, row);
+      out.push(row);
+    }
+    row.tasks.push(t);
+    row.count += 1;
+  }
+  return out;
+}
+
 export function isTaskCompleted(t: Task): boolean {
   const s = (t as unknown as { status?: { category?: string } | string | null }).status;
   if (s && typeof s === 'object') {

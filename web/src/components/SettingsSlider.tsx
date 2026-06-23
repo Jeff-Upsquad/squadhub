@@ -18,6 +18,7 @@ type SettingsSliderProps = {
   description?: string | null;
   spaceId?: string | null;
   folderId?: string | null;
+  groupTasks?: boolean;
   myAccess?: AccessLevel | null;
   onClose: () => void;
   onDeleted?: () => void;
@@ -37,7 +38,7 @@ const ACCESS_ITEM_LABELS: Record<AccessLevel, string> = {
   viewer: 'Viewer',
 };
 
-export default function SettingsSlider({ type, id, name, description, spaceId, folderId, myAccess, onClose, onDeleted }: SettingsSliderProps) {
+export default function SettingsSlider({ type, id, name, description, spaceId, folderId, groupTasks, myAccess, onClose, onDeleted }: SettingsSliderProps) {
   const qc = useQueryClient();
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const currentUserId = useAuthStore((s) => s.user?.id);
@@ -46,6 +47,7 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
   const [editDesc, setEditDesc] = useState(description || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [groupTasksOn, setGroupTasksOn] = useState(!!groupTasks);
   const [showInvite, setShowInvite] = useState(false);
   const [showMove, setShowMove] = useState(false);
   const { data: members } = useMemberships(type, id);
@@ -94,6 +96,19 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
       setError(err.response?.data?.error || 'Failed to save');
     },
   });
+
+  // "Group Tasks" toggle — collapses this container's tasks into one row on Home.
+  // Only spaces, folders, and lists carry the flag. Optimistic: flip locally,
+  // persist via the same PUT; revert on error. Re-sync if the parent re-renders
+  // with a fresh value after the query invalidation.
+  const supportsGroupTasks = type === 'space' || type === 'folder' || type === 'list';
+  useEffect(() => { setGroupTasksOn(!!groupTasks); }, [groupTasks]);
+  const toggleGroupTasks = () => {
+    if (!supportsGroupTasks || updateMutation.isPending) return;
+    const next = !groupTasksOn;
+    setGroupTasksOn(next);
+    updateMutation.mutate({ group_tasks: next }, { onError: () => setGroupTasksOn(!next) });
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
@@ -182,6 +197,28 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
             {isFavorited ? 'Remove from favorites' : 'Add to favorites'}
           </span>
         </button>
+
+        {/* Group Tasks — collapse this container's tasks into one Home row */}
+        {supportsGroupTasks && canManage && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={groupTasksOn}
+            onClick={toggleGroupTasks}
+            disabled={updateMutation.isPending}
+            className="flex w-full items-center justify-between gap-3 rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-left text-xs font-medium text-[#0F172B] transition hover:bg-[#F1F5F9] disabled:opacity-50"
+          >
+            <span className="flex flex-col">
+              <span>Group tasks on Home</span>
+              <span className="mt-0.5 text-[10px] font-normal text-[#999999]">
+                Collapse this {type}'s tasks into one row
+              </span>
+            </span>
+            <span className={`relative h-5 w-9 shrink-0 rounded-full transition ${groupTasksOn ? 'bg-[#0F172B]' : 'bg-[#CAD5E2]'}`}>
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${groupTasksOn ? 'left-[18px]' : 'left-0.5'}`} />
+            </span>
+          </button>
+        )}
 
         {/* Move — lists and folders only */}
         {(type === 'list' || type === 'folder') && canManage && spaceId && (

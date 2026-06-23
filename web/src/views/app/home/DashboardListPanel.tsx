@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useMyTasksSummary } from '../../../hooks/useMyTasksSummary';
-import { GROUP_BY_OPTIONS, groupTasks, type GroupBy } from '../../../lib/taskGrouping';
+import { GROUP_BY_OPTIONS, groupTasks, collapseGroupedTasks, isGroupedRow, type GroupBy } from '../../../lib/taskGrouping';
 import DashboardTaskRow from './DashboardTaskRow';
+import GroupedTaskRow from './GroupedTaskRow';
 
 const TAB_LABELS: Record<'today' | 'overdue' | 'tomorrow' | 'all', string> = {
   today: 'Today',
@@ -34,6 +36,37 @@ export default function DashboardListPanel() {
   const groupByScope = usePMStore((s) => s.groupByScope);
   const setScopedGroupBy = usePMStore((s) => s.setScopedGroupBy);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
+  const groupedExpanded = usePMStore((s) => s.groupedExpanded);
+  const toggleGroupedExpanded = usePMStore((s) => s.toggleGroupedExpanded);
+  const setActiveSpace = usePMStore((s) => s.setActiveSpace);
+  const setActiveSpacePage = usePMStore((s) => s.setActiveSpacePage);
+  const setActiveList = usePMStore((s) => s.setActiveList);
+  const setActiveFolder = usePMStore((s) => s.setActiveFolder);
+
+  // Open a grouped container in PM; closing this panel first. Setting the active
+  // id triggers MainLayout's nav effects to switch to that list/folder/space.
+  const openContainer = (c: { type: 'list' | 'folder' | 'space'; id: string }) => {
+    setActiveDashboardTab(null);
+    if (c.type === 'list') setActiveList(c.id);
+    else if (c.type === 'folder') setActiveFolder(c.id);
+    else { setActiveSpace(c.id); setActiveSpacePage(c.id); }
+  };
+
+  const renderTaskRows = (list: Task[]) =>
+    collapseGroupedTasks(list).map((item) =>
+      isGroupedRow(item) ? (
+        <GroupedTaskRow
+          key={`grp:${item.key}`}
+          row={item}
+          expanded={!!groupedExpanded[item.key]}
+          onToggle={() => toggleGroupedExpanded(item.key)}
+          onOpenContainer={openContainer}
+          renderChild={(t) => <DashboardTaskRow key={t.id} task={t} />}
+        />
+      ) : (
+        <DashboardTaskRow key={item.id} task={item} />
+      ),
+    );
   const dashScopeKey = activeDashboardTab ? `dashboard:${activeDashboardTab}` : '';
   const groupBy = (dashScopeKey && groupByScope[dashScopeKey]) || 'none';
 
@@ -200,9 +233,7 @@ export default function DashboardListPanel() {
             </div>
           ) : groupBy === 'none' ? (
             <div className="hmp-list">
-              {tasks.map((t) => (
-                <DashboardTaskRow key={t.id} task={t} />
-              ))}
+              {renderTaskRows(tasks)}
             </div>
           ) : (
             groups.map((g) => (
@@ -212,9 +243,7 @@ export default function DashboardListPanel() {
                   <span className="count">· {g.tasks.length}</span>
                 </div>
                 <div className="hmp-list" style={{ paddingTop: 0 }}>
-                  {g.tasks.map((t) => (
-                    <DashboardTaskRow key={t.id} task={t} />
-                  ))}
+                  {renderTaskRows(g.tasks)}
                 </div>
               </div>
             ))

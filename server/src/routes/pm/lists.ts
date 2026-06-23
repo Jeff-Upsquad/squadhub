@@ -294,6 +294,7 @@ router.put('/lists/:id', async (req: Request, res: Response) => {
     if (req.body.default_view) updates.default_view = req.body.default_view;
     if (req.body.folder_id !== undefined) updates.folder_id = req.body.folder_id;
     if (req.body.space_id !== undefined) updates.space_id = req.body.space_id;
+    if (typeof req.body.group_tasks === 'boolean') updates.group_tasks = req.body.group_tasks;
 
     // Validate destination when moving (space_id or folder_id changed)
     if ('space_id' in updates || 'folder_id' in updates) {
