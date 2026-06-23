@@ -90,7 +90,12 @@ export default function TodayList() {
     let total = 0;
     for (const e of timeEntries ?? []) {
       if (toLocalDateKey(e.started_at) !== today) continue;
+      // Skip non-positive entries: a manual downward correction to a task's
+      // tracked total is stored as a negative entry (to reconcile daily
+      // summaries) and isn't "time worked today" — counting it would drag the
+      // header total negative (e.g. the "-18h 6m" badge).
       const dur = e.duration_seconds || 0;
+      if (dur <= 0) continue;
       map.set(e.task_id, (map.get(e.task_id) || 0) + dur);
       total += dur;
     }
