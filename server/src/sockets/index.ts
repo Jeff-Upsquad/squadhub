@@ -207,11 +207,45 @@ export function setupSocketIO(httpServer: HttpServer) {
     });
   });
 
-  // Bridge: Poll notifications table → Socket.IO.
-  // Notifications are created by PostgreSQL triggers (not app code), so we
-  // poll for new rows and fan out via Socket.IO. Interval is 10s to keep
-  // DB request volume manageable on the nano Supabase instance; trade-off is
-  // up to ~10s of notification latency.
+  // Bridge: notifications table → Socket.IO.
+  // Notifications are created by PostgreSQL triggers (not app code), so the
+  // server can't emit at creation time. Two delivery paths feed one dedup'd
+  // sink so each notification fans out exactly once:
+  //   1. Supabase Realtime (postgres_changes INSERT) — near-instant, the common
+  //      case. The `notifications` table is already in the supabase_realtime
+  //      publication, and the service-role client receives every row.
+  //   2. A 10s table poll — backstop that guarantees delivery (and the mobile
+  //      FCM push) even if the Realtime socket drops or misses an event.
+  const emittedIds = new Set<string>();
+  const deliver = (notification: { id?: string; user_id?: string; title?: string } | null) => {
+    if (!notification?.id || !notification.user_id) return;
+    if (emittedIds.has(notification.id)) return;
+    emittedIds.add(notification.id);
+    // Bound memory — the poll watermark below already guards against
+    // re-delivering rows older than the current window, so dropping the set
+    // only risks a rare duplicate banner, never a missed one.
+    if (emittedIds.size > 5_000) emittedIds.clear();
+
+    const room = `chat_user:${notification.user_id}`;
+    const sockets = io.sockets.adapter.rooms.get(room);
+    console.log(`[socket] deliver -> ${room} (${sockets?.size || 0} clients): ${notification.title}`);
+    io.to(room).emit('new_notification', notification as any);
+    // Mirror to the native partner app via FCM (fire-and-forget; no-ops if FCM
+    // is unconfigured or the user has no registered partner tokens).
+    sendPartnerPush(notification as any).catch((e) => console.error('[socket] partner push error:', e));
+  };
+
+  // Path 1: Supabase Realtime — instant fan-out on insert.
+  supabaseAdmin
+    .channel('notifications-stream')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'notifications' },
+      (payload) => deliver(payload.new as any),
+    )
+    .subscribe((status) => console.log('[socket] notifications realtime:', status));
+
+  // Path 2: poll backstop.
   const POLL_INTERVAL_MS = 10_000;
   let lastPollTime = new Date().toISOString();
   let pollCount = 0;
@@ -248,24 +282,16 @@ export function setupSocketIO(httpServer: HttpServer) {
       }
 
       if (newNotifications && newNotifications.length > 0) {
-        console.log(`[socket] poll found ${newNotifications.length} new notification(s)`);
         lastPollTime = newNotifications[newNotifications.length - 1].created_at;
-        for (const notification of newNotifications) {
-          const room = `chat_user:${notification.user_id}`;
-          const sockets = io.sockets.adapter.rooms.get(room);
-          console.log(`[socket] emitting to ${room} (${sockets?.size || 0} clients): ${notification.title}`);
-          io.to(room).emit('new_notification', notification);
-          // Mirror to the native partner app via FCM (fire-and-forget; no-ops
-          // if FCM is unconfigured or the user has no registered partner tokens).
-          sendPartnerPush(notification).catch((e) => console.error('[socket] partner push error:', e));
-        }
+        // deliver() dedupes anything Realtime already sent.
+        for (const notification of newNotifications) deliver(notification);
       }
     } catch (e) {
       console.error('[socket] notification poll error:', e);
     }
   }, POLL_INTERVAL_MS);
 
-  console.log(`[socket] Notification polling bridge active (${POLL_INTERVAL_MS / 1000}s interval)`);
+  console.log(`[socket] Notification bridge active (realtime + ${POLL_INTERVAL_MS / 1000}s poll backstop)`);
 
   return io;
 }
