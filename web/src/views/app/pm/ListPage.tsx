@@ -362,6 +362,7 @@ export default function ListPage({
             id={activeListId}
             name={listData?.name || ''}
             spaceId={activeSpaceId}
+            groupTasks={listData?.group_tasks}
             myAccess={myAccess}
             onClose={() => setShowSettings(false)}
             onDeleted={() => {
