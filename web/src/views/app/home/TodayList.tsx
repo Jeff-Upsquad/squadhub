@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
 import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
 import { useCreateTaskTimeEntry, useMyTimeEntries } from '../../../hooks/useTaskTimeEntries';
-import { usePMStore, type FocusBucket } from '../../../stores/pmStore';
+import { usePMStore, todayKey, type FocusBucket } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
 import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
 import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, type GroupBy } from '../../../lib/taskGrouping';
@@ -27,6 +27,8 @@ export default function TodayList() {
   const focusBuckets = usePMStore((s) => s.focusBuckets);
   const groupedExpanded = usePMStore((s) => s.groupedExpanded);
   const toggleGroupedExpanded = usePMStore((s) => s.toggleGroupedExpanded);
+  const focusBucketCollapsed = usePMStore((s) => s.focusBucketCollapsed);
+  const setFocusBucketCollapsed = usePMStore((s) => s.setFocusBucketCollapsed);
   const setActiveSpace = usePMStore((s) => s.setActiveSpace);
   const setActiveSpacePage = usePMStore((s) => s.setActiveSpacePage);
   const setActiveList = usePMStore((s) => s.setActiveList);
@@ -140,6 +142,29 @@ export default function TodayList() {
       document.removeEventListener('keydown', onKey);
     };
   }, [menuOpen]);
+
+  // Auto-expand the Evening / Night buckets once their time of day arrives
+  // (Evening ≥ 3 PM, Night ≥ 7 PM). Fires at most once per local day per bucket
+  // — autoOpenFocusBucket stamps focusBucketAutoOpenedDate — so a user who
+  // re-collapses a section after its threshold isn't fought by the next tick.
+  // Reads from getState() inside the interval to avoid stale closures, so the
+  // interval is set up only once.
+  useEffect(() => {
+    const THRESHOLDS: [FocusBucket, number][] = [['evening', 15], ['night', 19]];
+    const check = () => {
+      const hour = new Date().getHours();
+      const dateKey = todayKey();
+      const st = usePMStore.getState();
+      for (const [bucket, startHour] of THRESHOLDS) {
+        if (hour >= startHour && st.focusBucketAutoOpenedDate[bucket] !== dateKey) {
+          st.autoOpenFocusBucket(bucket, dateKey);
+        }
+      }
+    };
+    check();
+    const id = setInterval(check, 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const groups = useMemo(
     () => (groupBy === 'none' ? [] : groupTasks(mainTasks, groupBy, tz, fadingTaskIds)),
@@ -327,31 +352,73 @@ export default function TodayList() {
     </div>
 
       {view === 'list' && !isLoading && !isError && eveningTasks.length > 0 && (
-        <div className="hm-card hm-bucket-card">
-          <div className="hm-card-head">
-            <h3>Evening</h3>
-            <span className="hm-count">· {eveningTasks.length}</span>
-            <span className="hm-bucket-hint">after 3 PM</span>
-          </div>
-          <div className="hm-list">
-            {renderTaskRows(eveningTasks)}
-          </div>
-        </div>
+        <BucketSection
+          title="Evening"
+          hint="after 3 PM"
+          tasks={eveningTasks}
+          collapsed={!!focusBucketCollapsed.evening}
+          onToggle={() => setFocusBucketCollapsed('evening', !focusBucketCollapsed.evening)}
+          renderRows={renderTaskRows}
+        />
       )}
 
       {view === 'list' && !isLoading && !isError && nightTasks.length > 0 && (
-        <div className="hm-card hm-bucket-card">
-          <div className="hm-card-head">
-            <h3>Night</h3>
-            <span className="hm-count">· {nightTasks.length}</span>
-            <span className="hm-bucket-hint">after 7 PM</span>
-          </div>
-          <div className="hm-list">
-            {renderTaskRows(nightTasks)}
-          </div>
-        </div>
+        <BucketSection
+          title="Night"
+          hint="after 7 PM"
+          tasks={nightTasks}
+          collapsed={!!focusBucketCollapsed.night}
+          onToggle={() => setFocusBucketCollapsed('night', !focusBucketCollapsed.night)}
+          renderRows={renderTaskRows}
+        />
       )}
     </>
+  );
+}
+
+// A collapsible "later today" bucket card (Evening / Night) on the Focus list.
+// The whole header toggles the section; the chevron rotates and the rows hide
+// when collapsed. Auto-expands at its time of day — see the effect in TodayList.
+function BucketSection({
+  title,
+  hint,
+  tasks,
+  collapsed,
+  onToggle,
+  renderRows,
+}: {
+  title: string;
+  hint: string;
+  tasks: Task[];
+  collapsed: boolean;
+  onToggle: () => void;
+  renderRows: (list: Task[]) => React.ReactNode;
+}) {
+  return (
+    <div className="hm-card hm-bucket-card" data-collapsed={collapsed || undefined}>
+      <div
+        className="hm-card-head hm-bucket-head"
+        role="button"
+        tabIndex={0}
+        aria-expanded={!collapsed}
+        onClick={onToggle}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+      >
+        <span className="hm-bucket-chevron" data-expanded={!collapsed || undefined} aria-hidden="true">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </span>
+        <h3>{title}</h3>
+        <span className="hm-count">· {tasks.length}</span>
+        <span className="hm-bucket-hint">{hint}</span>
+      </div>
+      {!collapsed && (
+        <div className="hm-list">
+          {renderRows(tasks)}
+        </div>
+      )}
+    </div>
   );
 }
 

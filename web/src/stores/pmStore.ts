@@ -51,6 +51,13 @@ interface PMState {
   // Per-container expand state for Home's "Grouped tasks under {name}" rows
   // (keyed by container id). Default (absent) = collapsed.
   groupedExpanded: Record<string, boolean>;
+  // Collapse state for Home's Evening / Night Focus-list buckets (keyed by
+  // bucket). Default (absent) = expanded. Each bucket auto-expands once when its
+  // time of day arrives; focusBucketAutoOpenedDate records the local date that
+  // last happened, so the auto-open fires once per day and doesn't override a
+  // user who deliberately re-collapses the section afterward.
+  focusBucketCollapsed: Partial<Record<FocusBucket, boolean>>;
+  focusBucketAutoOpenedDate: Partial<Record<FocusBucket, string>>;
   selectedTasks: string[];
   // Map of task IDs currently animating out → their pre-fade raw status string.
   // The snapshot lets grouping functions (groupTasksByStatus, groupByStatus) keep
@@ -113,6 +120,8 @@ interface PMState {
   setTodayListGroupBy: (value: GroupBy) => void;
   setTodayListView: (value: TodayListView) => void;
   toggleGroupedExpanded: (containerId: string) => void;
+  setFocusBucketCollapsed: (bucket: FocusBucket, collapsed: boolean) => void;
+  autoOpenFocusBucket: (bucket: FocusBucket, dateKey: string) => void;
   setCalendarMode: (value: CalendarMode) => void;
   setCalendarWeekStart: (value: number) => void;
   setLastView: (section: string, homeView: string) => void;
@@ -157,6 +166,8 @@ export const usePMStore = create<PMState>()(
       myTasksOnly: false,
       collapsedGroups: {},
       groupedExpanded: {},
+      focusBucketCollapsed: {},
+      focusBucketAutoOpenedDate: {},
       selectedTasks: [],
       fadingTaskIds: new Map<string, string>(),
       peekTaskId: null,
@@ -213,6 +224,18 @@ export const usePMStore = create<PMState>()(
             ...state.groupedExpanded,
             [containerId]: !state.groupedExpanded[containerId],
           },
+        })),
+      setFocusBucketCollapsed: (bucket, collapsed) =>
+        set((state) => ({
+          focusBucketCollapsed: { ...state.focusBucketCollapsed, [bucket]: collapsed },
+        })),
+      // Mark a bucket's time-of-day threshold as reached for `dateKey` and expand
+      // it if collapsed. Stamping the date makes this a once-per-day event, so a
+      // user re-collapsing the section afterward isn't overridden on the next tick.
+      autoOpenFocusBucket: (bucket, dateKey) =>
+        set((state) => ({
+          focusBucketCollapsed: { ...state.focusBucketCollapsed, [bucket]: false },
+          focusBucketAutoOpenedDate: { ...state.focusBucketAutoOpenedDate, [bucket]: dateKey },
         })),
       toggleTaskSelection: (taskId) =>
         set((state) => ({
@@ -391,7 +414,7 @@ export const usePMStore = create<PMState>()(
           focusBuckets: s.focusBuckets,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',
@@ -418,6 +441,8 @@ export const usePMStore = create<PMState>()(
         todayListGroupBy: state.todayListGroupBy,
         todayListView: state.todayListView,
         groupedExpanded: state.groupedExpanded,
+        focusBucketCollapsed: state.focusBucketCollapsed,
+        focusBucketAutoOpenedDate: state.focusBucketAutoOpenedDate,
         calendarMode: state.calendarMode,
         calendarWeekStart: state.calendarWeekStart,
         lastActiveSection: state.lastActiveSection,

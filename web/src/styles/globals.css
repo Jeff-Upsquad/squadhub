@@ -6744,6 +6744,14 @@ ol.sqc-list {
 .hm-home .hm-group-head .count { color: color-mix(in srgb, var(--sh-ink) 40%, transparent); }
 .hm-home .hm-card-head .hm-bucket-hint { font-size: 11px; font-weight: 500; color: color-mix(in srgb, var(--sh-ink) 38%, transparent); }
 
+/* Collapsible Evening / Night bucket headers */
+.hm-home .hm-bucket-head { cursor: pointer; user-select: none; transition: background 0.12s ease; }
+.hm-home .hm-bucket-head:hover { background: var(--sh-hair-3); }
+.hm-home .hm-bucket-head:focus-visible { outline: 2px solid var(--hm-accent); outline-offset: -2px; }
+.hm-home .hm-bucket-card[data-collapsed] .hm-card-head { border-bottom-color: transparent; }
+.hm-home .hm-bucket-chevron { display: grid; place-items: center; width: 16px; height: 16px; flex: none; margin-left: -2px; color: var(--sh-ink-4); transition: transform 0.15s ease; }
+.hm-home .hm-bucket-chevron[data-expanded] { transform: rotate(90deg); }
+
 /* Loading / error / empty */
 .hm-home .hm-skel { height: 34px; border-radius: 8px; margin: 5px 0; background: var(--sh-hair-3); animation: hm-pulse 1.5s ease-in-out infinite; }
 @keyframes hm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
