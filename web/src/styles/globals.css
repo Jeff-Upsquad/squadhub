@@ -4391,6 +4391,28 @@ input.td-title-hero {
 }
 button.td-bcrumb { cursor: pointer; }
 button.td-bcrumb:hover .name { color: var(--sh-ink); }
+/* Individual clickable path segment (space / folder / list) inside the
+   breadcrumb. Each navigates to its target; hover underlines for affordance. */
+.td-bcrumb-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.td-bcrumb-part .name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: color .12s ease;
+}
+.td-bcrumb-part:hover .name { color: var(--sh-ink); text-decoration: underline; }
 .td-bcrumb .emblem {
   width: 14px;
   height: 14px;

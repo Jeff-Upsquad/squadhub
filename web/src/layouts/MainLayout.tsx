@@ -387,22 +387,24 @@ export default function MainLayout() {
   // 'tasks' and clobber the homeView we just restored from the PM store.
   const navRestoringRef = useRef(true);
 
-  // Auto-switch to tasks view when a list is selected
+  // Auto-switch to the home/tasks view when a list is selected. The section is
+  // forced to 'home' too so selecting from a non-home surface (e.g. the global
+  // task panel's breadcrumb opened over Calendar/Apps) actually lands on the list.
   useEffect(() => {
     if (navRestoringRef.current) return;
-    if (activeListId) { setHomeView('tasks'); setMobileDrawerOpen(false); }
+    if (activeListId) { setActiveSection('home'); setHomeView('tasks'); setMobileDrawerOpen(false); }
   }, [activeListId]);
 
-  // Auto-switch to tasks view when a folder is selected
+  // Auto-switch to the home/tasks view when a folder is selected
   useEffect(() => {
     if (navRestoringRef.current) return;
-    if (activeFolderId) { setHomeView('tasks'); setMobileDrawerOpen(false); }
+    if (activeFolderId) { setActiveSection('home'); setHomeView('tasks'); setMobileDrawerOpen(false); }
   }, [activeFolderId]);
 
-  // Auto-switch to tasks view when a space is opened (space page)
+  // Auto-switch to the home/tasks view when a space is opened (space page)
   useEffect(() => {
     if (navRestoringRef.current) return;
-    if (activeSpacePageId) { setHomeView('tasks'); setMobileDrawerOpen(false); }
+    if (activeSpacePageId) { setActiveSection('home'); setHomeView('tasks'); setMobileDrawerOpen(false); }
   }, [activeSpacePageId]);
 
   // Auto-switch to tasks view when a client opens a design folder
