@@ -1,0 +1,13 @@
+{
+  "identifier": "default",
+  "description": "Capabilities granted to the SquadHub web platform loaded in the main window.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["https://squadhub.in", "https://*.squadhub.in"]
+  },
+  "permissions": [
+    "core:default",
+    "notification:default",
+    "shell:allow-open"
+  ]
+}

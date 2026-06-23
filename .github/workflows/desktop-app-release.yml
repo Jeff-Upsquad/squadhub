@@ -1,0 +1,76 @@
+name: SquadHub Desktop (build & release)
+
+# Builds the downloadable desktop wrapper (desktop-app/) for macOS (universal:
+# Intel + Apple Silicon) and Windows, signs the updater artifacts with the
+# shared minisign key, and publishes a DRAFT GitHub release with the installers
+# + latest.json. Windows can't be cross-compiled from a Mac, so this is the only
+# way to produce the .exe. Trigger manually (Actions tab → Run workflow) or by
+# pushing a tag like `desktop-app-v0.1.0`.
+#
+# Required repo secrets:
+#   TAURI_SIGNING_PRIVATE_KEY           contents of ~/.tauri/squadhub-updater.key
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  (empty string for this key)
+#
+# After the run: grab the macOS .dmg / .app.tar.gz(.sig) and Windows
+# .exe / .nsis.zip(.sig) from the draft release, drop them in
+# web/public/downloads/app/, and assemble web/public/downloads/app/latest.json
+# (the updater endpoint in tauri.conf.json), then deploy.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'desktop-app-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin
+          - platform: windows-latest
+            rust_targets: ''
+            args: ''
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop-app/src-tauri -> target
+
+      - name: Install desktop-app deps
+        run: npm install
+        working-directory: desktop-app
+
+      - name: Build & publish (draft release)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: desktop-app
+          tagName: desktop-app-v__VERSION__
+          releaseName: SquadHub Desktop v__VERSION__
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}
