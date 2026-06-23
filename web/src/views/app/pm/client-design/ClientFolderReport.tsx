@@ -4,7 +4,9 @@ import './design.css';
 import { useSpace } from '../../../../hooks/useSpaces';
 import { useFolderTasks } from '../../../../hooks/useFolderTasks';
 import { useClientDesignPlan } from '../../../../hooks/useClientDesignPlan';
+import { canAtLeast } from '../../../../lib/access';
 import ClientDesignDashboard from './ClientDesignDashboard';
+import PublicClientLink from './PublicClientLink';
 
 // Per-space numbers the overview rolls up into client-level totals. Kept to
 // plain primitives so the lift-up to the parent can be equality-compared cheaply
@@ -59,6 +61,8 @@ export default function ClientFolderReport({ folder }: { folder: Folder }) {
   );
 
   const [activeTab, setActiveTab] = useState<string>('all'); // 'all' | <spaceId>
+  const [showLink, setShowLink] = useState(false);
+  const isManager = canAtLeast((folder as { my_access_level?: string }).my_access_level as never, 'manager');
 
   // If the open space tab disappears (space deleted while viewing), fall back to
   // the overview so we never render a dashboard for a missing folder.
@@ -80,6 +84,19 @@ export default function ClientFolderReport({ folder }: { folder: Folder }) {
           <span className="lv-bc-sep">/</span>
           <span className="lv-bc-current">{folder.name}</span>
         </div>
+        {isManager && (
+          <button
+            onClick={() => setShowLink(true)}
+            className="lv-icon-btn"
+            title="Public client link"
+            aria-label="Public client link"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 13a5 5 0 007.07 0l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 00-7.07 0l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Space tabs: All Spaces overview + one per child space */}
@@ -114,6 +131,10 @@ export default function ClientFolderReport({ folder }: { folder: Folder }) {
           <ClientDesignDashboard folderId={activeTab} />
         )}
       </div>
+
+      {showLink && (
+        <PublicClientLink folderId={folder.id} folderName={folder.name} onClose={() => setShowLink(false)} />
+      )}
     </div>
   );
 }

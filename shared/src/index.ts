@@ -1764,18 +1764,45 @@ export interface DesignShareDailyPoint {
   total_work_seconds: number;
 }
 
-/** Payload returned by GET /design-share/:token. */
+/**
+ * One space (a design/video sub-folder) under the shared client folder, with
+ * its own dashboard data. The public view shows a dropdown to switch spaces.
+ */
+export interface DesignShareSpace {
+  id: string; // the space (child folder) id — also the POST /request target
+  name: string;
+  template_slug: string | null;
+  is_video: boolean;
+  tasks: DesignShareTask[];
+  plan: DesignSharePlan;
+  time_summary: DesignShareDailyPoint[];
+  // Design/video brief field definitions, so the public "new request" form can
+  // mirror the internal New Design Task form. Same shape the internal form uses.
+  fields: TaskTypeField[];
+}
+
+/**
+ * Payload returned by GET /design-share/:token. The link lives at the CLIENT
+ * FOLDER level, so it exposes the client name plus every design/video space
+ * under that folder.
+ */
 export interface DesignSharePayload {
   valid: boolean; // false → token unknown / deleted
   disabled?: boolean; // token exists but link is disabled
-  space?: {
-    name: string;
-    template_slug: string | null;
-    is_video: boolean;
-  };
-  tasks?: DesignShareTask[];
-  plan?: DesignSharePlan;
-  time_summary?: DesignShareDailyPoint[];
+  client?: { name: string }; // = the client folder's name
+  spaces?: DesignShareSpace[]; // ordered; empty if the client has no spaces yet
+}
+
+/** Body for POST /design-share/:token/request (client submits a brief). */
+export interface DesignShareRequestInput {
+  space_id: string; // which space (child folder) the request is for
+  title: string;
+  description: string;
+  priority?: TaskPriority;
+  due_date?: string | null;
+  // Custom design-field values keyed by field.key (+ `${key}_other`), exactly
+  // as the internal form writes to task.metadata.custom.
+  custom?: Record<string, unknown>;
 }
 
 /**

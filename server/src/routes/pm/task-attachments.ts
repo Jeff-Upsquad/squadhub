@@ -154,6 +154,25 @@ router.post('/task-attachments/confirm', async (req: Request, res: Response) => 
       return;
     }
 
+    // R2 presigned PUTs don't enforce that the upload's Content-Type matches the
+    // one signed at presign, so the client-claimed `mime_type` isn't trustworthy.
+    // Trust the ACTUAL stored content type instead, and reject a bait-and-switch
+    // where its top-level family differs from what the client claimed (e.g.
+    // presign image/*, then upload text/html — which would then be served inline
+    // from the public R2 domain). All in-app uploaders set the PUT Content-Type
+    // to the same value they confirm, so legitimate uploads always match.
+    const claimedFamily = body.mime_type.split('/')[0].toLowerCase();
+    const actualType = head.contentType || null;
+    const actualFamily = actualType ? actualType.split('/')[0].toLowerCase() : null;
+    if (actualFamily && actualFamily !== claimedFamily) {
+      void deleteR2Object(body.object_key).catch((e) => console.error('R2 cleanup after type mismatch:', e));
+      res.status(400).json({ success: false, error: 'Uploaded file type does not match the requested type' });
+      return;
+    }
+    // Source of truth = what R2 will actually serve (falls back to the claimed
+    // type only when R2 doesn't report one).
+    const storedMimeType = actualType || body.mime_type;
+
     const fileUrl = `${config.r2PublicUrl}/${body.object_key}`;
 
     const { data, error } = await supabaseAdmin
@@ -164,7 +183,7 @@ router.post('/task-attachments/confirm', async (req: Request, res: Response) => 
         file_url: fileUrl,
         file_name: body.file_name,
         file_size: head.contentLength,
-        mime_type: body.mime_type,
+        mime_type: storedMimeType,
         uploaded_by: req.userId!,
       })
       .select('*')

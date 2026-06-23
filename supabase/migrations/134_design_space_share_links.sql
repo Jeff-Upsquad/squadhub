@@ -47,7 +47,7 @@ BEGIN
    WHERE folder_id = p_folder
      AND deleted_at IS NULL
      AND lower(name) IN ('briefs', 'queued', 'queue')
-   ORDER BY position, created_at
+   ORDER BY position
    LIMIT 1;
   IF v_id IS NOT NULL THEN
     RETURN v_id;
