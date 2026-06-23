@@ -68,6 +68,7 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
   const parentTitle = task.parent_task?.title || null;
   const whenText = formatWhen(task.due_date);
   const isOverdue = whenText.startsWith('Overdue');
+  const taskPath = [task.space?.name, task.folder?.name, task.list?.name].filter(Boolean).join(' › ');
 
   const onOpen = () => {
     if (isMobile) {
@@ -127,7 +128,7 @@ export default function DashboardTaskRow({ task }: { task: Task }) {
           {priorityLabel && (
             <span className="pri" data-urgent={task.priority === 'urgent' || undefined}>{priorityLabel}</span>
           )}
-          {firstAssignee?.display_name && <span>{firstAssignee.display_name}</span>}
+          {taskPath && <span className="path" title={taskPath}>{taskPath}</span>}
         </div>
       </div>
       <div className="hm-ava" style={{ background: color }} title={firstAssignee?.display_name || firstAssignee?.email || 'Unassigned'}>

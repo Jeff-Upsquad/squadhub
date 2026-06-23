@@ -6832,6 +6832,7 @@ ol.sqc-list {
 .hm-home .hmp-task .meta .when[data-overdue="true"] { color: var(--hm-red); }
 .hm-home .hmp-task .meta .pri { font-family: 'Inter', sans-serif; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; }
 .hm-home .hmp-task .meta .pri[data-urgent="true"] { color: var(--hm-red); }
+.hm-home .hmp-task .meta .path { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
 .hm-home .hmp-task .open-ind { color: var(--sh-ink-4); opacity: 0; transform: translateX(-3px); transition: opacity 0.13s ease, transform 0.2s ease; }
 .hm-home .hmp-task:hover .open-ind { opacity: 1; transform: none; }
 .hm-home .hmp-task[data-fading="true"] { opacity: 0; transform: translateX(200px); pointer-events: none; max-height: 0; min-height: 0; padding-block: 0; overflow: hidden; }
