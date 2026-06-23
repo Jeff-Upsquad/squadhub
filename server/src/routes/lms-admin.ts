@@ -687,6 +687,141 @@ router.get('/items/:id/assignments', async (req: Request, res: Response) => {
   }
 });
 
+// ------------------------------------------------------------
+// Move posts into a course
+//
+// "Adds" one or more standalone posts as lessons of a course. A post is an
+// item with exactly one lesson; moving it is a re-parent — the lesson row's
+// item_id flips from the post to the course (blocks, quiz questions and the
+// lesson-level audience all reference lesson_id, so they travel with it). The
+// now-empty post shell is then deleted.
+//
+// Only DRAFT posts can be moved: deleting a published post would drop its
+// existing assignments (and learners' progress), so we require the admin to
+// unpublish first.
+// ------------------------------------------------------------
+
+const importPostsSchema = z.object({
+  post_ids: z.array(z.string().uuid()).min(1),
+});
+
+// POST /admin/lms/courses/:id/import-posts
+router.post('/courses/:id/import-posts', async (req: Request, res: Response) => {
+  try {
+    const courseId = req.params.id;
+    const { post_ids } = importPostsSchema.parse(req.body);
+
+    // 1. Target must be a course.
+    const { data: course, error: courseErr } = await supabaseAdmin
+      .from('lms_items')
+      .select('id, kind')
+      .eq('id', courseId)
+      .single();
+    if (courseErr || !course) {
+      res.status(404).json({ success: false, error: 'Course not found' });
+      return;
+    }
+    if ((course as any).kind !== 'course') {
+      res.status(400).json({ success: false, error: 'Target item is not a course' });
+      return;
+    }
+
+    // 2. Load + validate the source posts (all must be draft posts).
+    const { data: posts, error: postsErr } = await supabaseAdmin
+      .from('lms_items')
+      .select('id, kind, status, title')
+      .in('id', post_ids);
+    if (postsErr) {
+      res.status(500).json({ success: false, error: postsErr.message });
+      return;
+    }
+
+    const postMap = new Map((posts || []).map((p: any) => [p.id, p]));
+    const missing = post_ids.filter((id) => !postMap.has(id));
+    if (missing.length) {
+      res.status(404).json({ success: false, error: 'One or more posts no longer exist' });
+      return;
+    }
+    const notPosts = (posts || []).filter((p: any) => p.kind !== 'post');
+    if (notPosts.length) {
+      res.status(400).json({ success: false, error: 'Only posts can be added as lessons to a course' });
+      return;
+    }
+    const published = (posts || []).filter((p: any) => p.status !== 'draft');
+    if (published.length) {
+      res.status(400).json({
+        success: false,
+        error: `Unpublish before moving into a course: ${published.map((p: any) => p.title).join(', ')}`,
+      });
+      return;
+    }
+
+    // 3. Append after the course's existing lessons.
+    const { data: maxRow } = await supabaseAdmin
+      .from('lms_lessons')
+      .select('position')
+      .eq('item_id', courseId)
+      .order('position', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let nextPos = ((maxRow as any)?.position ?? -1) + 1;
+
+    // 4. Re-parent each post's lesson(s) into the course, then delete the post
+    //    shell. Order follows post_ids so the admin's selection order is kept.
+    let movedLessons = 0;
+    for (const postId of post_ids) {
+      const { data: lessons, error: lessonsErr } = await supabaseAdmin
+        .from('lms_lessons')
+        .select('id')
+        .eq('item_id', postId)
+        .order('position', { ascending: true });
+      if (lessonsErr) {
+        res.status(500).json({ success: false, error: lessonsErr.message });
+        return;
+      }
+
+      for (const lesson of lessons || []) {
+        const { error: upErr } = await supabaseAdmin
+          .from('lms_lessons')
+          .update({ item_id: courseId, position: nextPos, is_active: true })
+          .eq('id', (lesson as any).id);
+        if (upErr) {
+          res.status(500).json({ success: false, error: upErr.message });
+          return;
+        }
+        nextPos += 1;
+        movedLessons += 1;
+      }
+
+      // Lessons are already re-parented, so this only removes the empty post
+      // shell (and its item-level audience/assignments via cascade).
+      const { error: delErr } = await supabaseAdmin.from('lms_items').delete().eq('id', postId);
+      if (delErr) {
+        res.status(500).json({ success: false, error: delErr.message });
+        return;
+      }
+    }
+
+    // 5. Bump the course so it reflects the change (and bubbles to the top).
+    await supabaseAdmin
+      .from('lms_items')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', courseId);
+
+    res.json({
+      success: true,
+      data: { course_id: courseId, moved_posts: post_ids.length, moved_lessons: movedLessons },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Import posts into course error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // ============================================================
 // Lessons
 // ============================================================

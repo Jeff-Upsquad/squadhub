@@ -27,6 +27,11 @@ export default function AdminLmsLibrary() {
   const [trackFilter, setTrackFilter] = useState<LmsTrack | ''>('');
   const [showGen, setShowGen] = useState(false);
   const [selectedSpec, setSelectedSpec] = useState('');
+  // Bulk "add posts to a course" selection. Only draft posts are selectable —
+  // moving a post into a course deletes the standalone post, which would drop a
+  // published post's assignments, so those must be unpublished first.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showAddToCourse, setShowAddToCourse] = useState(false);
 
   const queryParams = new URLSearchParams();
   if (kindFilter) queryParams.set('kind', kindFilter);
@@ -39,6 +44,28 @@ export default function AdminLmsLibrary() {
     queryFn: () => api.get(`/admin/lms/items?${queryParams.toString()}`).then((r) => r.data),
   });
   const items: LmsItem[] = itemsRes?.data || [];
+
+  // A post can be moved into a course only while it's a draft (see note above).
+  const isSelectable = (item: LmsItem) => item.kind === 'post' && item.status === 'draft';
+  const selectableIds = items.filter(isSelectable).map((i) => i.id);
+  const selectedCount = selectedIds.size;
+  const allSelectableChecked = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+
+  function toggleOne(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelectedIds((prev) => {
+      if (selectableIds.length > 0 && selectableIds.every((id) => prev.has(id))) return new Set();
+      return new Set(selectableIds);
+    });
+  }
 
   const { data: catRes } = useQuery({
     queryKey: ['lms-categories'],
@@ -185,6 +212,17 @@ export default function AdminLmsLibrary() {
           <table className="w-full text-sm">
             <thead className="bg-surface-alt">
               <tr>
+                <th className="w-1 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={allSelectableChecked}
+                    onChange={toggleAll}
+                    disabled={selectableIds.length === 0}
+                    title="Select all draft posts"
+                    aria-label="Select all draft posts"
+                    className="h-4 w-4 rounded border-divider-strong accent-[#0F172B] disabled:opacity-40"
+                  />
+                </th>
                 <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Title</th>
                 <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Kind</th>
                 <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Status</th>
@@ -196,7 +234,24 @@ export default function AdminLmsLibrary() {
             </thead>
             <tbody className="divide-y divide-divider">
               {items.map((item) => (
-                <tr key={item.id} className="hover:bg-surface-alt">
+                <tr key={item.id} className={selectedIds.has(item.id) ? 'bg-indigo-50/60' : 'hover:bg-surface-alt'}>
+                  <td className="px-4 py-3 align-top">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(item.id)}
+                      onChange={() => toggleOne(item.id)}
+                      disabled={!isSelectable(item)}
+                      title={
+                        item.kind !== 'post'
+                          ? 'Only posts can be added to a course'
+                          : item.status !== 'draft'
+                            ? 'Unpublish this post to move it into a course'
+                            : 'Select to add to a course'
+                      }
+                      aria-label={`Select ${item.title}`}
+                      className="mt-0.5 h-4 w-4 rounded border-divider-strong accent-[#0F172B] disabled:opacity-30"
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <Link href={`/admin/learning/${item.id}`} className="block">
                       <div className="flex items-center gap-1.5 font-medium text-foreground">
@@ -285,6 +340,174 @@ export default function AdminLmsLibrary() {
           </div>
         </div>
       )}
+
+      {/* Bulk action bar — appears once draft posts are selected */}
+      {selectedCount > 0 && (
+        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-full border border-divider bg-surface px-4 py-2.5 shadow-xl">
+          <span className="text-sm text-foreground">
+            <span className="font-semibold">{selectedCount}</span> post{selectedCount > 1 ? 's' : ''} selected
+          </span>
+          <button
+            onClick={() => setShowAddToCourse(true)}
+            className="rounded-lg bg-ink px-4 py-1.5 text-sm font-medium text-white hover:bg-ink-hover"
+          >
+            Add to course →
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-[13px] text-foreground-muted hover:text-foreground"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      {showAddToCourse && (
+        <AddToCourseModal
+          postIds={Array.from(selectedIds)}
+          onClose={() => setShowAddToCourse(false)}
+          onDone={(courseId) => {
+            setShowAddToCourse(false);
+            setSelectedIds(new Set());
+            qc.invalidateQueries({ queryKey: ['lms-items'] });
+            router.push(`/admin/learning/${courseId}`);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Modal: pick (or create) a course, then move the selected posts into it as
+// lessons. The move re-parents each post's lesson and deletes the standalone
+// post — see the server route for details.
+function AddToCourseModal({
+  postIds,
+  onClose,
+  onDone,
+}: {
+  postIds: string[];
+  onClose: () => void;
+  onDone: (courseId: string) => void;
+}) {
+  const [mode, setMode] = useState<'existing' | 'new'>('existing');
+  const [courseId, setCourseId] = useState('');
+  const [newTitle, setNewTitle] = useState('');
+
+  const { data: coursesRes } = useQuery({
+    queryKey: ['lms-items', 'course'],
+    queryFn: () => api.get('/admin/lms/items?kind=course').then((r) => r.data),
+  });
+  const courses: LmsItem[] = coursesRes?.data || [];
+
+  // Default to "create new" when there are no courses to pick from yet.
+  const effectiveMode = courses.length === 0 ? 'new' : mode;
+
+  const move = useMutation({
+    mutationFn: async () => {
+      let targetId = courseId;
+      if (effectiveMode === 'new') {
+        const created = await api
+          .post('/admin/lms/items', { kind: 'course', title: newTitle.trim() })
+          .then((r) => r.data);
+        targetId = created?.data?.id;
+        if (!targetId) throw new Error('Failed to create course');
+      }
+      await api.post(`/admin/lms/courses/${targetId}/import-posts`, { post_ids: postIds });
+      return targetId;
+    },
+    onSuccess: (targetId) => onDone(targetId),
+    onError: (e: any) => alert(e?.response?.data?.error || e?.message || 'Failed to add to course'),
+  });
+
+  const canSubmit =
+    !move.isPending &&
+    (effectiveMode === 'new' ? newTitle.trim().length > 0 : courseId.length > 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !move.isPending && onClose()}>
+      <div className="w-full max-w-md rounded-xl border border-divider bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-bold text-foreground">Add {postIds.length} post{postIds.length > 1 ? 's' : ''} to a course</h2>
+        <p className="mt-1 text-[13px] text-foreground-muted">
+          Each post becomes a lesson at the end of the course. The standalone post is removed from the library.
+        </p>
+
+        {courses.length > 0 && (
+          <div className="mt-4 flex gap-2 rounded-lg bg-canvas p-1 text-[13px]">
+            <button
+              onClick={() => setMode('existing')}
+              className={`flex-1 rounded-md px-3 py-1.5 font-medium transition ${
+                effectiveMode === 'existing' ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted'
+              }`}
+            >
+              Existing course
+            </button>
+            <button
+              onClick={() => setMode('new')}
+              className={`flex-1 rounded-md px-3 py-1.5 font-medium transition ${
+                effectiveMode === 'new' ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-muted'
+              }`}
+            >
+              New course
+            </button>
+          </div>
+        )}
+
+        {effectiveMode === 'existing' ? (
+          <div className="mt-3 max-h-64 space-y-1 overflow-y-auto">
+            {courses.map((c) => (
+              <label
+                key={c.id}
+                className={`flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 ${
+                  courseId === c.id ? 'border-ink bg-canvas' : 'border-divider hover:bg-surface-alt'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="course"
+                  checked={courseId === c.id}
+                  onChange={() => setCourseId(c.id)}
+                  className="h-4 w-4 accent-[#0F172B]"
+                />
+                <span className="flex-1 truncate text-sm font-medium text-foreground">{c.title}</span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                  c.status === 'published' ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-foreground-muted'
+                }`}>
+                  {c.status}
+                </span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4">
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-foreground-dim">New course title</label>
+            <input
+              autoFocus
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="e.g. Onboarding 101"
+              className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm placeholder-foreground-dim focus:border-ink focus:outline-none"
+            />
+          </div>
+        )}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            disabled={move.isPending}
+            className="rounded-lg border border-divider bg-surface px-4 py-2 text-sm text-foreground-muted hover:bg-surface-alt disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => move.mutate()}
+            disabled={!canSubmit}
+            className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover disabled:opacity-50"
+          >
+            {move.isPending ? 'Adding…' : effectiveMode === 'new' ? 'Create & add' : 'Add to course'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
