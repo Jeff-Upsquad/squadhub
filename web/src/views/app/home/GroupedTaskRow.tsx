@@ -4,7 +4,9 @@ import type { GroupedRow } from '../../../lib/taskGrouping';
 
 // A single collapsed "Grouped tasks under {name}" row on Home. Renders like a
 // task row (so it sits naturally in a .hm-list) with a chevron that expands the
-// child task rows inline. The title opens the underlying container in PM.
+// child task rows inline. Clicking anywhere on the row — including the title —
+// toggles the dropdown. The group icon (when onOpenContainer is provided) is the
+// separate affordance that opens the underlying container in PM.
 //
 // Generic over `renderChild` so both Home surfaces reuse it: the Focus list
 // passes <TodayRow>, the dashboard panel passes <DashboardTaskRow>.
@@ -39,29 +41,31 @@ export default function GroupedTaskRow({
             <path d="m9 18 6-6-6-6" />
           </svg>
         </span>
-        <span className="hm-grouped-icon" aria-hidden="true">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <span
+          className="hm-grouped-icon"
+          role={onOpenContainer ? 'button' : undefined}
+          tabIndex={onOpenContainer ? 0 : undefined}
+          aria-hidden={onOpenContainer ? undefined : 'true'}
+          aria-label={onOpenContainer ? `Open ${row.container.name}` : undefined}
+          title={onOpenContainer ? `Open ${row.container.name}` : undefined}
+          onClick={(e) => {
+            if (!onOpenContainer) return;
+            e.stopPropagation();
+            onOpenContainer(row.container);
+          }}
+          onKeyDown={(e) => {
+            if (!onOpenContainer) return;
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onOpenContainer(row.container); }
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="m12 2 9 4.5-9 4.5-9-4.5L12 2Z" />
             <path d="m3 12 9 4.5 9-4.5" />
             <path d="m3 17 9 4.5 9-4.5" />
           </svg>
         </span>
         <div className="t">
-          <span
-            className="title hm-grouped-title"
-            role={onOpenContainer ? 'link' : undefined}
-            tabIndex={onOpenContainer ? 0 : undefined}
-            title={onOpenContainer ? `Open ${row.container.name}` : undefined}
-            onClick={(e) => {
-              if (!onOpenContainer) return;
-              e.stopPropagation();
-              onOpenContainer(row.container);
-            }}
-            onKeyDown={(e) => {
-              if (!onOpenContainer) return;
-              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onOpenContainer(row.container); }
-            }}
-          >
+          <span className="title hm-grouped-title">
             Grouped tasks under {row.container.name}
           </span>
         </div>
