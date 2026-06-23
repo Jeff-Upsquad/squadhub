@@ -9,7 +9,29 @@ type Manifest = {
   version_name: string;
   apk_url: string;
   release_notes?: string;
+  published_at?: string; // ISO 8601 — when the current build was published
 };
+
+// "Last updated 21 Jun 2026, 9:08 PM IST" — releases are managed from India, so
+// the date is shown in IST regardless of the visitor's timezone.
+function formatUpdated(iso?: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const date = new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  }).format(d);
+  const time = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Kolkata',
+  }).format(d);
+  return `Last updated ${date}, ${time} IST`;
+}
 
 const FEATURES = [
   {
@@ -153,7 +175,8 @@ export default function PartnerAppLanding() {
                 </div>
 
                 <p className="mt-4 text-[12px] leading-relaxed text-[#A3A3A3]">
-                  Signed build — the app keeps itself up to date after install.
+                  {formatUpdated(manifest!.published_at) ??
+                    'Signed build — the app keeps itself up to date after install.'}
                 </p>
               </>
             ) : (
