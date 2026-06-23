@@ -350,7 +350,18 @@ export async function buildClientShareSnapshot(
 
   const spaces: DesignShareSpace[] = [];
   for (const f of childFolders || []) {
-    spaces.push(await buildSpaceData(f));
+    const built = await buildSpaceData(f);
+    // Only surface a space to the client if it actually exists as a working
+    // space: it has at least one task, OR it's been set up with a real workflow
+    // (more than a single backing list — a freshly instantiated space seeds
+    // multiple stage lists). This keeps empty stub spaces — e.g. a Video Editing
+    // Space folder that was created but never used — out of the client's space
+    // switcher, while still showing a newly set-up space so they can submit a
+    // first request.
+    const activeLists = (((f as any).lists as any[]) || []).filter((l) => !l.deleted_at);
+    if (built.tasks.length > 0 || activeLists.length > 1) {
+      spaces.push(built);
+    }
   }
 
   return { client: { name: (clientFolder as any).name }, spaces };
