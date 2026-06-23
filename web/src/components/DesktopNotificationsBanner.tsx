@@ -9,6 +9,7 @@ import {
   setBrowserNotificationsEnabled,
   showTestBrowserNotification,
 } from '../services/browserNotifications';
+import { subscribeToWebPush } from '../services/pushSubscription';
 
 const DISMISS_KEY = 'squadhub-desktop-notif-banner-dismissed';
 
@@ -56,6 +57,7 @@ export default function DesktopNotificationsBanner() {
         return;
       }
       setBrowserNotificationsEnabled(true);
+      void subscribeToWebPush();
       showTestBrowserNotification();
       window.dispatchEvent(new Event('squadhub:desktop-notifications-changed'));
       setVisible(false);

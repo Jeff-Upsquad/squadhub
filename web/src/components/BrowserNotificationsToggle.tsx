@@ -9,6 +9,7 @@ import {
   setBrowserNotificationsEnabled,
   showTestBrowserNotification,
 } from '../services/browserNotifications';
+import { subscribeToWebPush, unsubscribeFromWebPush } from '../services/pushSubscription';
 
 export default function BrowserNotificationsToggle({
   onCloseMenu,
@@ -37,6 +38,7 @@ export default function BrowserNotificationsToggle({
       if (enabled) {
         setBrowserNotificationsEnabled(false);
         setEnabled(false);
+        void unsubscribeFromWebPush();
         window.dispatchEvent(new Event('squadhub:desktop-notifications-changed'));
         onCloseMenu?.();
         return;
@@ -55,6 +57,7 @@ export default function BrowserNotificationsToggle({
 
       setBrowserNotificationsEnabled(true);
       setEnabled(true);
+      void subscribeToWebPush();
       showTestBrowserNotification();
       window.dispatchEvent(new Event('squadhub:desktop-notifications-changed'));
       onCloseMenu?.();

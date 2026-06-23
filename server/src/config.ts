@@ -72,6 +72,13 @@ export const config = {
   // Anthropic — used by the cash book receipt analyzer. When unset the
   // /cashbook/analyze-receipts endpoint returns 503 instead of crashing.
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+
+  // Web Push (browser notifications for the installable PWA). When the VAPID
+  // keypair is unset, sendWebPush no-ops (like FCM) so dev boxes boot without it.
+  // Generate a keypair with: npx web-push generate-vapid-keys
+  webPushVapidPublicKey: process.env.WEB_PUSH_VAPID_PUBLIC_KEY || '',
+  webPushVapidPrivateKey: process.env.WEB_PUSH_VAPID_PRIVATE_KEY || '',
+  webPushVapidSubject: process.env.WEB_PUSH_VAPID_SUBJECT || 'mailto:support@squadhub.in',
 } as const;
 
 // Validate required env vars at startup
