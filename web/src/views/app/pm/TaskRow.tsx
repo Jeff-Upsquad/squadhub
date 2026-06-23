@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Task, SpaceStatus, TaskPriority } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
+import { useAuthStore } from '../../../stores/authStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
@@ -8,6 +9,7 @@ import { useActiveWorkBlockRun, useRecordWorkBlockCompletion } from '../../../ho
 import { isTaskFocused } from '../../../lib/taskGrouping';
 import { avatarColor, initialOf, formatWhen, nextQuickDate } from './taskHelpers';
 import AssigneePicker from './AssigneePicker';
+import NoAssigneeCompleteDialog from './NoAssigneeCompleteDialog';
 import DatePicker from './DatePicker';
 import PriorityPicker, { PRIORITY_META } from './PriorityPicker';
 
@@ -82,6 +84,13 @@ export default function TaskRow({
   const [workDateAnchor, setWorkDateAnchor] = useState<DOMRect | null>(null);
   const [dueDateAnchor, setDueDateAnchor] = useState<DOMRect | null>(null);
 
+  // Completion-time "no assignee" prompt. Both anchored to the checkbox.
+  // `noAssigneePrompt` shows the choose-what-to-do popover; `assignCompleteAnchor`
+  // shows the people picker for the "assign to someone else" path.
+  const [noAssigneePrompt, setNoAssigneePrompt] = useState<DOMRect | null>(null);
+  const [assignCompleteAnchor, setAssignCompleteAnchor] = useState<DOMRect | null>(null);
+  const currentUser = useAuthStore((s) => s.user);
+
   const hasSubtasks = !!(task.subtasks && task.subtasks.length > 0);
   const isActive = activeTaskId === task.id;
   const isSelected = selectedTasks.includes(task.id);
@@ -97,26 +106,43 @@ export default function TaskRow({
   const assignees = task.assignees || [];
 
   const recordCompletion = useRecordWorkBlockCompletion();
+
+  // Mark this task done, optionally assigning people in the same write. Handles
+  // the fade animation snapshot and the active work-block completion log.
+  const completeTask = (assigneeIds?: string[]) => {
+    // Snapshot the pre-fade status so status-grouping pipelines keep the row
+    // in this bucket while the slide animation plays — see pmStore.ts and
+    // groupTasksByStatus / groupByStatus for the read side.
+    markFading(task.id, statusCategory ?? '');
+    // If a work-block run is active for the caller (and this task isn't
+    // itself the work block), log this completion against the run. Same
+    // hook the detail panel uses — idempotent on the server.
+    if (activeWB && activeWB.task.id !== task.id) {
+      recordCompletion.mutate({ run_id: activeWB.run.id, completed_task_id: task.id });
+    }
+    const payload: Record<string, unknown> = { id: task.id, status: 'done' };
+    if (assigneeIds) {
+      payload.assignee_ids = assigneeIds;
+      payload.list_id = effectiveListId || undefined;
+    }
+    updateTask.mutate(payload as any, { onError: () => { unmarkFading(task.id); } });
+  };
+
   const handleGlyphClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!canEdit) return;
-    const next = isDone ? 'todo' : 'done';
-    if (!isDone) {
-      // Snapshot the pre-fade status so status-grouping pipelines keep the row
-      // in this bucket while the slide animation plays — see pmStore.ts and
-      // groupTasksByStatus / groupByStatus for the read side.
-      markFading(task.id, statusCategory ?? '');
-      // If a work-block run is active for the caller (and this task isn't
-      // itself the work block), log this completion against the run. Same
-      // hook the detail panel uses — idempotent on the server.
-      if (activeWB && activeWB.task.id !== task.id) {
-        recordCompletion.mutate({ run_id: activeWB.run.id, completed_task_id: task.id });
-      }
+    // Re-opening a completed task: flip straight back to todo, no prompt.
+    if (isDone) {
+      updateTask.mutate({ id: task.id, status: 'todo' } as any);
+      return;
     }
-    updateTask.mutate(
-      { id: task.id, status: next } as any,
-      { onError: () => { unmarkFading(task.id); } },
-    );
+    // Completing a task with nobody assigned: ask first (assign to me / someone
+    // else / complete as-is) instead of silently closing it unassigned.
+    if (assignees.length === 0) {
+      setNoAssigneePrompt((e.currentTarget as HTMLElement).getBoundingClientRect());
+      return;
+    }
+    completeTask();
   };
 
   const handleRowTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
@@ -467,6 +493,42 @@ export default function TaskRow({
           anchorRect={assigneeAnchor}
           onChange={(ids) => updateTask.mutate({ id: task.id, assignee_ids: ids, list_id: effectiveListId || undefined } as any)}
           onClose={() => setAssigneeAnchor(null)}
+        />
+      )}
+
+      {noAssigneePrompt && (
+        <NoAssigneeCompleteDialog
+          anchorRect={noAssigneePrompt}
+          canAssignToMe={!!currentUser?.id}
+          onAssignToMe={() => {
+            if (currentUser?.id) completeTask([currentUser.id]);
+            else completeTask();
+            setNoAssigneePrompt(null);
+          }}
+          onAssignOther={() => {
+            setAssignCompleteAnchor(noAssigneePrompt);
+            setNoAssigneePrompt(null);
+          }}
+          onCompleteAnyway={() => {
+            completeTask();
+            setNoAssigneePrompt(null);
+          }}
+          onClose={() => setNoAssigneePrompt(null)}
+        />
+      )}
+
+      {assignCompleteAnchor && (
+        <AssigneePicker
+          taskId={task.id}
+          currentAssigneeIds={[]}
+          anchorRect={assignCompleteAnchor}
+          onChange={(ids) => {
+            // Picking someone assigns them and completes in one write. An empty
+            // selection (Unassign all) just completes unassigned.
+            completeTask(ids);
+            setAssignCompleteAnchor(null);
+          }}
+          onClose={() => setAssignCompleteAnchor(null)}
         />
       )}
 

@@ -1030,6 +1030,20 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       }
     }
 
+    // Capture the prior estimate so we can append an authorship audit row when
+    // it actually changes — see task_estimate_changes (migration 134).
+    let priorEstimate: number | null | undefined;
+    let estimateListId: string | null | undefined;
+    if (body.time_estimate !== undefined) {
+      const { data: prior } = await supabaseAdmin
+        .from('tasks')
+        .select('time_estimate, list_id')
+        .eq('id', id)
+        .single();
+      priorEstimate = (prior as any)?.time_estimate ?? null;
+      estimateListId = (prior as any)?.list_id ?? null;
+    }
+
     const updatePayload: Record<string, any> = { ...body, last_modified_by: req.userId! };
     if (body.recurrence !== undefined) {
       if (body.recurrence) {
@@ -1062,6 +1076,31 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     if (body.recurrence && !(data as any).recurrence_paused
       && taskRecurrenceOccursOn(body.recurrence as TaskRecurrence, todayIST())) {
       await spawnRoutineInstance(data, todayIST());
+    }
+
+    // Record who changed the time estimate (only when the value actually moved).
+    // Best-effort and isolated: an audit failure must never fail the task update.
+    if (body.time_estimate !== undefined && (body.time_estimate ?? null) !== (priorEstimate ?? null)) {
+      try {
+        let workspaceId: string | null = null;
+        if (estimateListId) {
+          const { data: list } = await supabaseAdmin
+            .from('lists').select('space_id').eq('id', estimateListId).single();
+          const { data: space } = (list as any)?.space_id
+            ? await supabaseAdmin.from('spaces').select('workspace_id').eq('id', (list as any).space_id).single()
+            : { data: null as any };
+          workspaceId = (space as any)?.workspace_id ?? null;
+        }
+        await supabaseAdmin.from('task_estimate_changes').insert({
+          task_id: id,
+          user_id: req.userId!,
+          workspace_id: workspaceId,
+          old_estimate: priorEstimate ?? null,
+          new_estimate: body.time_estimate ?? null,
+        });
+      } catch (auditErr) {
+        console.error('Estimate-change audit insert failed:', auditErr);
+      }
     }
 
     const [hydratedTask] = await hydrateAssignees([data]);
