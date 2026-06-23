@@ -1719,6 +1719,65 @@ export interface CardShareLinkValidation {
   prefill?: CardSharePrefill;
 }
 
+// ---------------------------------------------------------------------------
+// Design Space public share links
+//
+// A persistent, unguessable tokenized link that lets a CLIENT view a design
+// space (Dashboard / Reports / Completed) without logging in, and optionally
+// submit a new request. Managed by a manager: enable / disable / delete.
+// Backed by `design_space_share_links`. Mirrors the card-share pattern but is
+// persistent (no expiry / single-use) and toggleable.
+// ---------------------------------------------------------------------------
+
+/** Derived design-space status lane (matches web's RequestStatus). */
+export type DesignShareStatusLane = 'queued' | 'progress' | 'review' | 'done';
+
+export interface DesignSpaceShareLink {
+  token: string; // = design_space_share_links.id (the UUID token)
+  url: string; // absolute public URL — /space/:token
+  enabled: boolean;
+}
+
+/** A single task as exposed on the public design-space view (read-only). */
+export interface DesignShareTask {
+  id: string;
+  title: string;
+  status: DesignShareStatusLane; // derived lane
+  time_tracked: number; // seconds
+  priority: TaskPriority;
+  due_date: string | null;
+  category: string | null; // from metadata.category
+  list_name: string | null;
+  display_number: number | null;
+  created_at: string;
+  assignees: { display_name: string | null; avatar_url: string | null }[];
+}
+
+export interface DesignSharePlan {
+  daily_hours: number | null;
+  weekly_hours: number | null;
+  monthly_hours: number | null;
+}
+
+export interface DesignShareDailyPoint {
+  date: string; // YYYY-MM-DD (IST)
+  total_work_seconds: number;
+}
+
+/** Payload returned by GET /design-share/:token. */
+export interface DesignSharePayload {
+  valid: boolean; // false → token unknown / deleted
+  disabled?: boolean; // token exists but link is disabled
+  space?: {
+    name: string;
+    template_slug: string | null;
+    is_video: boolean;
+  };
+  tasks?: DesignShareTask[];
+  plan?: DesignSharePlan;
+  time_summary?: DesignShareDailyPoint[];
+}
+
 /**
  * A SquadHire category as seen by the SquadHub admin UI. Served by
  * /admin/integrations/squadhire/categories (a signed read-through to

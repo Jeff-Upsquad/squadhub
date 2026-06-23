@@ -5,8 +5,28 @@ import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { requirePermission, checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
+import { aggregateFolderTimeSummary } from '../../services/folderShareMetrics';
 
 const router = Router();
+
+// Absolute public URL for a design-space share link. Mirrors buildCardShareUrl
+// in subscription-cards-admin-requests.ts.
+function buildSpaceShareUrl(token: string): string {
+  const base =
+    process.env.WEB_APP_URL ||
+    (process.env.NODE_ENV === 'production' ? 'https://squadhub.in' : 'http://localhost:3000');
+  return `${base.replace(/\/$/, '')}/space/${token}`;
+}
+
+// Require manager access on a folder before mutating its share link.
+async function requireFolderManager(req: Request, res: Response, folderId: string): Promise<boolean> {
+  const level = await checkResourceAccess(req.userId!, 'folder', folderId);
+  if (!level || !meetsAccessLevel(level, 'manager')) {
+    res.status(403).json({ success: false, error: 'Manager access required' });
+    return false;
+  }
+  return true;
+}
 router.use(requireAuth);
 router.use(requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_staff'));
 
@@ -848,64 +868,135 @@ router.get('/folders/:id/time-summary', async (req: Request, res: Response) => {
       return;
     }
 
-    const { data: lists } = await supabaseAdmin
-      .from('lists')
-      .select('id')
-      .eq('folder_id', id)
-      .is('deleted_at', null);
-    const listIds = (lists || []).map((l: any) => l.id);
-    if (listIds.length === 0) {
-      res.json({ success: true, data: [] });
-      return;
+    // Aggregation (lists → tasks → task_time_entries, IST-bucketed) is shared
+    // with the public design-space share view via this helper.
+    const data = await aggregateFolderTimeSummary(id, from, to);
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Get folder time summary error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// Design-space PUBLIC share link management (manager only).
+// Backed by `design_space_share_links` (migration 134). Persistent: a link
+// can be enabled, disabled, or deleted. At most one row per folder.
+// The public, unauthenticated read/submit surface lives in
+// routes/design-share-public.ts.
+// ============================================================
+
+function shareLinkPayload(row: { id: string; enabled: boolean }) {
+  return { token: row.id, url: buildSpaceShareUrl(row.id), enabled: row.enabled };
+}
+
+// GET /pm/folders/:id/share-link — current link for this design space, or null.
+router.get('/folders/:id/share-link', async (req: Request, res: Response) => {
+  try {
+    const folderId = req.params.id as string;
+    if (!(await requireFolderManager(req, res, folderId))) return;
+
+    const { data } = await supabaseAdmin
+      .from('design_space_share_links')
+      .select('id, enabled')
+      .eq('folder_id', folderId)
+      .maybeSingle();
+
+    res.json({ success: true, data: data ? shareLinkPayload(data) : null });
+  } catch (err) {
+    console.error('Get design share link error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /pm/folders/:id/share-link — create the link if absent (else return the
+// existing one). `?rotate=1` deletes the current link and issues a fresh token.
+router.post('/folders/:id/share-link', async (req: Request, res: Response) => {
+  try {
+    const folderId = req.params.id as string;
+    if (!(await requireFolderManager(req, res, folderId))) return;
+
+    const rotate = String(req.query.rotate || '') === '1' || req.query.rotate === 'true';
+    if (rotate) {
+      await supabaseAdmin.from('design_space_share_links').delete().eq('folder_id', folderId);
+    } else {
+      const { data: existing } = await supabaseAdmin
+        .from('design_space_share_links')
+        .select('id, enabled')
+        .eq('folder_id', folderId)
+        .maybeSingle();
+      if (existing) {
+        res.json({ success: true, data: shareLinkPayload(existing) });
+        return;
+      }
     }
 
-    // NOTE: `tasks` has no `deleted_at` column (tasks are hard-deleted, unlike
-    // folders/lists). Filtering on it makes PostgREST error and silently return
-    // no rows, which zeroed out the design-space time reports. Don't filter it.
-    const { data: tasks } = await supabaseAdmin
-      .from('tasks')
-      .select('id')
-      .in('list_id', listIds);
-    const taskIds = (tasks || []).map((t: any) => t.id);
-    if (taskIds.length === 0) {
-      res.json({ success: true, data: [] });
+    const { data, error } = await supabaseAdmin
+      .from('design_space_share_links')
+      .insert({ folder_id: folderId, created_by: req.userId! })
+      .select('id, enabled')
+      .single();
+    if (error || !data) {
+      res.status(500).json({ success: false, error: error?.message || 'Failed to generate link' });
       return;
     }
+    res.json({ success: true, data: shareLinkPayload(data) });
+  } catch (err) {
+    console.error('Generate design share link error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
 
-    const fromStartUtc = new Date(`${from}T00:00:00+05:30`).toISOString();
-    const toEndUtc = new Date(`${to}T23:59:59.999+05:30`).toISOString();
+// PATCH /pm/folders/:id/share-link — toggle enabled on/off.
+const shareLinkPatchSchema = z.object({ enabled: z.boolean() });
+router.patch('/folders/:id/share-link', async (req: Request, res: Response) => {
+  try {
+    const folderId = req.params.id as string;
+    if (!(await requireFolderManager(req, res, folderId))) return;
+    const { enabled } = shareLinkPatchSchema.parse(req.body);
 
-    const { data: entries, error } = await supabaseAdmin
-      .from('task_time_entries')
-      .select('started_at, duration_seconds')
-      .in('task_id', taskIds)
-      .gte('started_at', fromStartUtc)
-      .lte('started_at', toEndUtc)
-      .not('duration_seconds', 'is', null);
-
+    const { data, error } = await supabaseAdmin
+      .from('design_space_share_links')
+      .update({ enabled, updated_at: new Date().toISOString() })
+      .eq('folder_id', folderId)
+      .select('id, enabled')
+      .maybeSingle();
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
-
-    const buckets: Record<string, number> = {};
-    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
-    for (const e of entries || []) {
-      const ist = new Date(new Date((e as any).started_at).getTime() + IST_OFFSET);
-      const y = ist.getUTCFullYear();
-      const m = String(ist.getUTCMonth() + 1).padStart(2, '0');
-      const d = String(ist.getUTCDate()).padStart(2, '0');
-      const key = `${y}-${m}-${d}`;
-      buckets[key] = (buckets[key] || 0) + Number((e as any).duration_seconds || 0);
+    if (!data) {
+      res.status(404).json({ success: false, error: 'No share link to update' });
+      return;
     }
-
-    const data = Object.entries(buckets)
-      .map(([date, total_work_seconds]) => ({ date, total_work_seconds }))
-      .sort((a, b) => (a.date < b.date ? -1 : 1));
-
-    res.json({ success: true, data });
+    res.json({ success: true, data: shareLinkPayload(data) });
   } catch (err) {
-    console.error('Get folder time summary error:', err);
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Update design share link error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /pm/folders/:id/share-link — remove the link entirely.
+router.delete('/folders/:id/share-link', async (req: Request, res: Response) => {
+  try {
+    const folderId = req.params.id as string;
+    if (!(await requireFolderManager(req, res, folderId))) return;
+
+    const { error } = await supabaseAdmin
+      .from('design_space_share_links')
+      .delete()
+      .eq('folder_id', folderId);
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data: null });
+  } catch (err) {
+    console.error('Delete design share link error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
