@@ -28,6 +28,8 @@ import { nextQuickDate, groupDesignFields } from './taskHelpers';
 import EmergencyConfirm from './EmergencyConfirm';
 import TaskStatusPicker from './TaskStatusPicker';
 import ListPickerCombobox from './ListPickerCombobox';
+import LabelPicker from './LabelPicker';
+import { useDetachLabel } from '../../../hooks/useLabels';
 import TaskAttachments, { type TaskAttachmentsHandle } from './TaskAttachments';
 import { useTaskAttachments, useDeleteTaskAttachment } from '../../../hooks/useTaskAttachments';
 import { usePanelFileDrop } from './usePanelFileDrop';
@@ -204,6 +206,7 @@ export default function TaskDetailPanel({
   const { data: taskTypes } = useTaskTypes();
   const { data: checklists } = useChecklists(effectiveTaskId);
   const updateTask = useUpdateTask(listId);
+  const detachLabel = useDetachLabel(effectiveTaskId ?? '');
 
   const attachmentsRef = useRef<TaskAttachmentsHandle>(null);
   const { dragActive: panelDragActive, panelHandlers } = usePanelFileDrop((files) => {
@@ -251,6 +254,8 @@ export default function TaskDetailPanel({
   const [pendingEmergency, setPendingEmergency] = useState(false);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   const [assigneeAnchorRect, setAssigneeAnchorRect] = useState<DOMRect | null>(null);
+  const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [labelAnchorRect, setLabelAnchorRect] = useState<DOMRect | null>(null);
   const [workDateOpen, setWorkDateOpen] = useState(false);
   const [workDateAnchor, setWorkDateAnchor] = useState<DOMRect | null>(null);
   const [startDateOpen, setStartDateOpen] = useState(false);
@@ -1305,12 +1310,39 @@ export default function TaskDetailPanel({
                 </div>
 
                 {/* Labels */}
-                <div className="td-settings-row" data-half="true">
+                <div
+                  className="td-settings-row"
+                  data-half="true"
+                  role={canEdit ? 'button' : undefined}
+                  tabIndex={canEdit ? 0 : undefined}
+                  onClick={canEdit ? (e) => {
+                    setLabelAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
+                    setLabelPickerOpen((v) => !v);
+                  } : undefined}
+                  style={canEdit ? { cursor: 'pointer' } : undefined}
+                >
                   <span className="k">{META_ICONS.Labels}Labels</span>
                   <span className="v" style={{ flexWrap: 'wrap', gap: 6 }}>
                     {task.tags && task.tags.length > 0 ? (
                       task.tags.map((t) => (
-                        <span key={t.id} className="td-hashtag">#{t.name}</span>
+                        <span
+                          key={t.id}
+                          className="td-hashtag"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        >
+                          <span style={{ width: 8, height: 8, borderRadius: 9999, background: t.color || '#6b7280', display: 'inline-block' }} aria-hidden />
+                          {t.name}
+                          {canEdit && (
+                            <span
+                              role="button"
+                              aria-label={`Remove ${t.name}`}
+                              onClick={(e) => { e.stopPropagation(); if (task) detachLabel.mutate(t.id); }}
+                              style={{ cursor: 'pointer', opacity: 0.6, paddingLeft: 2 }}
+                            >
+                              ×
+                            </span>
+                          )}
+                        </span>
                       ))
                     ) : (
                       <span className="td-prop-empty">+ Add label</span>
@@ -1793,6 +1825,15 @@ export default function TaskDetailPanel({
           anchorRect={assigneeAnchorRect}
           onChange={(ids) => updateTask.mutate({ id: task.id, assignee_ids: ids })}
           onClose={() => setAssigneePickerOpen(false)}
+        />
+      )}
+
+      {labelPickerOpen && task && (
+        <LabelPicker
+          taskId={task.id}
+          attachedTagIds={(task.tags || []).map((t) => t.id)}
+          anchorRect={labelAnchorRect}
+          onClose={() => setLabelPickerOpen(false)}
         />
       )}
 

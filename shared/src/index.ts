@@ -628,11 +628,89 @@ export interface TaskTimeEntry {
   };
 }
 
+// A "Label" in product terms. Physical table is `task_tags` (see migration 135).
 export interface TaskTag {
   id: string;
   workspace_id: string;
+  group_id: string;
   name: string;
   color: string;
+  // Joined on some endpoints (e.g. admin label list / picker).
+  group?: Pick<LabelGroup, 'id' | 'name' | 'is_default'> | null;
+}
+
+// ---- Labels (groups, gating, requests) ----
+// A named bucket of labels. The per-workspace default group is "General"
+// (`is_default = true`) and is visible to everyone; every other group is
+// visible only to admins and the roles/users assigned to it.
+export interface LabelGroup {
+  id: string;
+  workspace_id: string;
+  name: string;
+  is_default: boolean;
+  position: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LabelGroupRoleAccess {
+  id: string;
+  group_id: string;
+  role_id: string;
+  created_at: string;
+  role?: Pick<Role, 'id' | 'name' | 'color'> | null;
+}
+
+export interface LabelGroupUserAccess {
+  id: string;
+  group_id: string;
+  user_id: string;
+  created_at: string;
+  user?: Pick<User, 'id' | 'display_name' | 'email'> | null;
+}
+
+// Admin view of a group with its visibility-gating access rows and its labels.
+export interface LabelGroupWithAccess extends LabelGroup {
+  role_access: LabelGroupRoleAccess[];
+  user_access: LabelGroupUserAccess[];
+  labels: TaskTag[];
+}
+
+// Who (besides admins) may create labels — workspace-scoped grants.
+export interface LabelCreateAccess {
+  roles: Array<{ id: string; role_id: string; role?: Pick<Role, 'id' | 'name' | 'color'> | null }>;
+  users: Array<{ id: string; user_id: string; user?: Pick<User, 'id' | 'display_name' | 'email'> | null }>;
+}
+
+export type LabelRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface LabelRequest {
+  id: string;
+  workspace_id: string;
+  requested_by: string | null;
+  name: string;
+  suggested_group_id: string | null;
+  note: string | null;
+  status: LabelRequestStatus;
+  resolved_by: string | null;
+  resolved_label_id: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined for the admin inbox.
+  requester?: Pick<User, 'id' | 'display_name' | 'email'> | null;
+  suggested_group?: Pick<LabelGroup, 'id' | 'name'> | null;
+}
+
+// Shape returned by GET /pm/labels — the Task Details picker payload.
+export interface LabelPickerGroup {
+  group: Pick<LabelGroup, 'id' | 'name' | 'is_default'>;
+  labels: TaskTag[];
+}
+
+export interface LabelPickerData {
+  groups: LabelPickerGroup[];
+  can_create: boolean;
 }
 
 export interface TaskComment {
