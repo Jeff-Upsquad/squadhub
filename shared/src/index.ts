@@ -1290,7 +1290,7 @@ export interface PartnerClientAssignment {
 
 // ---- Clients Mini-App ----
 export type SubscriptionPlan = 'Starter' | 'Basic' | 'Plus' | 'Pro' | 'Personal';
-export type SubscriptionTier = 'Junior' | 'Pro' | 'Elite' | 'Top Talents';
+export type SubscriptionTier = 'Junior' | 'Pro' | 'Top Talents';
 export type SubscriptionSlug = 'designer' | 'video_editor' | 'accountant';
 export type DeliverableKind = 'hours' | 'item';
 export type CurrencyCode = 'INR' | 'USD';
@@ -1619,16 +1619,15 @@ export interface ClientSubmissionSubscription {
 
 // ---- Subscription Cards ----
 // Partners have their own tier including 'Custom'. subscription_plans.tier
-// stays (Junior|Pro|Elite|Top Talents) — do not conflate them.
-// 'Elite' is being renamed to 'Top Talents' (Phase 1: both values are accepted;
-// Phase 2 backfills data; Phase 3 drops 'Elite'). isTopTalentsTier() normalises
-// legacy values from both repos (Squad Hub 'Elite' + Profiles 'elite') so callers
-// don't have to repeat that tolerance everywhere.
-export type PartnerTier = 'Junior' | 'Pro' | 'Elite' | 'Top Talents' | 'Custom';
-export const PARTNER_TIERS: PartnerTier[] = ['Junior', 'Pro', 'Elite', 'Top Talents', 'Custom'];
+// stays (Junior|Pro|Top Talents) — do not conflate them.
+// The 'Elite' -> 'Top Talents' rename is complete: data is backfilled and the
+// CHECK constraints no longer accept 'Elite'. isTopTalentsTier() is kept as a
+// helper so callers don't hardcode the top-bracket literal everywhere.
+export type PartnerTier = 'Junior' | 'Pro' | 'Top Talents' | 'Custom';
+export const PARTNER_TIERS: PartnerTier[] = ['Junior', 'Pro', 'Top Talents', 'Custom'];
 
 export function isTopTalentsTier(t: string | null | undefined): boolean {
-  return t === 'Top Talents' || t === 'Elite' || t === 'elite';
+  return t === 'Top Talents';
 }
 
 export type SubscriptionCardState = 'draft' | 'published' | 'assigned' | 'closed';

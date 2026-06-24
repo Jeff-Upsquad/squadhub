@@ -14,7 +14,7 @@ import { formatPrice, formatDeliverableCadence } from '@squadhub/shared';
 import ConfirmRemoveDialog from '../../../components/ConfirmRemoveDialog';
 
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
-const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Elite', 'Top Talents'];
+const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Top Talents'];
 
 type Props = {
   submissionId: string;

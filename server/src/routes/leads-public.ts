@@ -349,7 +349,7 @@ const submissionSchema = z.object({
         // the client's stated monthly budget. tiers are enum-guarded so they
         // can't trip the subscription_cards.target_tiers CHECK.
         tiers: z
-          .array(z.enum(['Junior', 'Pro', 'Elite', 'Top Talents', 'Custom']))
+          .array(z.enum(['Junior', 'Pro', 'Top Talents', 'Custom']))
           .max(5)
           .optional(),
         plan: z.string().trim().max(50).optional(),
@@ -802,7 +802,7 @@ const cardSubmitSchema = z.object({
   // Subscription choices — the client's own selections. tiers enum-guarded so
   // they can't trip the subscription_cards.target_tiers CHECK; budget > 0 maps
   // to proposed_price (0 / omitted = "not stated" → leaves it null).
-  tiers: z.array(z.enum(['Junior', 'Pro', 'Elite', 'Top Talents', 'Custom'])).max(5).optional().default([]),
+  tiers: z.array(z.enum(['Junior', 'Pro', 'Top Talents', 'Custom'])).max(5).optional().default([]),
   plan: z.string().trim().max(50).optional().or(z.literal('')),
   // Per-tier monthly budget (the client's proposed price for that level),
   // keyed by tier. Stored into tier_pricing so the multi-tier publish/fan-out

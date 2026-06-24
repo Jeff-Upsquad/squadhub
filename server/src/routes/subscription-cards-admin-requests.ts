@@ -21,18 +21,12 @@ router.use(requireAuth);
 router.use(requireAdmin);
 
 // Map upsquad's tier vocabulary to SquadHub's enum
-// (Junior/Pro/Elite/Top Talents/Custom). Unknown values are dropped.
-// 'Elite' is being renamed to 'Top Talents' — Phase 1 accepts both old and
-// new tokens from upsquad (since both sides deploy independently). Once
-// upsquad has fully cut over, the legacy `elite`/`elites` keys can be
-// removed in Phase 3.
+// (Junior/Pro/Top Talents/Custom). Unknown values are dropped.
 const TIER_MAP: Record<string, string> = {
   juniors: 'Junior',
   junior: 'Junior',
   pros: 'Pro',
   pro: 'Pro',
-  elites: 'Elite',
-  elite: 'Elite',
   'top talents': 'Top Talents',
   'top_talents': 'Top Talents',
   toptalents: 'Top Talents',
@@ -390,7 +384,7 @@ const clientBriefSchema = z.object({
   // client's stated monthly budget. Enum-guarded so target_tiers can't trip
   // the subscription_cards CHECK constraint.
   target_tiers: z
-    .array(z.enum(['Junior', 'Pro', 'Elite', 'Top Talents', 'Custom']))
+    .array(z.enum(['Junior', 'Pro', 'Top Talents', 'Custom']))
     .optional()
     .default([]),
   plan_name: z.string().optional(),

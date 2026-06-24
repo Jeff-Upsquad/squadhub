@@ -294,7 +294,7 @@ export async function buildSquadhirePayloadForCard(
 
       if (subRow?.id) {
         // Disambiguate by tier. plan_name (Starter/Basic/Plus/Pro/Personal)
-        // exists for multiple tiers (Junior/Pro/Elite) — without a tier
+        // exists for multiple tiers (Junior/Pro/Top Talents) — without a tier
         // filter the lookup hits 3 rows and `.maybeSingle()` returns null,
         // dropping us into the PLAN_HOURS fallback. The card's target_tiers
         // controls which tier the talent will be drawn from; pick the first
@@ -363,7 +363,7 @@ export async function buildSquadhirePayloadForCard(
     const [{ data: sub }, { data: plan }, { data: submission }, { data: planDelivs }, { data: delivTypes }] = await Promise.all([
       supabaseAdmin.from('subscriptions').select('name').eq('id', staged.subscription_id).maybeSingle(),
       // subscription_plans has columns `plan` (Starter/Basic/Plus/Pro/Personal)
-      // and `tier` (Junior/Pro/Elite). The earlier `select('name')` was a typo
+      // and `tier` (Junior/Pro/Top Talents). The earlier `select('name')` was a typo
       // — there's no `name` column, so plan_name was always null on Profiles.
       supabaseAdmin.from('subscription_plans').select('plan, tier').eq('id', staged.plan_id).maybeSingle(),
       supabaseAdmin
@@ -671,9 +671,9 @@ export async function buildSquadhirePayloadForCard(
     notes: contentSource.notes ?? null,
     subscription_name: subscriptionName,
     plan_name: planName,
-    // Tier is the partner-skill bracket (Junior/Pro/Elite). Sent as a
+    // Tier is the partner-skill bracket (Junior/Pro/Top Talents). Sent as a
     // separate field so SquadHire can show it next to plan_name on the
-    // business dashboard ("Pro · Elite") without parsing a combined string.
+    // business dashboard ("Pro · Top Talents") without parsing a combined string.
     plan_tier: planTier,
     custom_deliverables: (() => {
       const cardDelivs: any[] = Array.isArray(contentSource.custom_deliverables)
