@@ -495,6 +495,20 @@ export default function AdminPublishedCardRecipientsView({
     (card.recipient_counts?.partners?.rejected ?? 0);
   const talentTotal = allRecipients.filter((r) => r.type === 'talent').length;
   const talentRespondedCount = allRecipients.filter((r) => r.type === 'talent' && r.responded_at).length;
+  // A talent has actually had the card delivered only when SquadHire has it
+  // live for them: manual cards stamp notified_at when the admin releases the
+  // queue (or the talent already responded); broadcast cards ship the whole
+  // pool the moment needs_broadcast clears. Everything else is still staged —
+  // sitting in the "Pending Broadcast" queue below, NOT sent. Counting those
+  // as "Sent" is the ambiguity this splits apart.
+  const talentIsDelivered = (r: UnifiedRecipient) =>
+    isManual ? (!!r.notified_at || !!r.responded_at) : !card.needs_broadcast;
+  const talentSentCount = allRecipients.filter((r) => r.type === 'talent' && talentIsDelivered(r)).length;
+  const talentQueuedCount = talentTotal - talentSentCount;
+  // Partners are broadcast as a pool too — so the verb has to track the stage.
+  // Manual cards hand-pick (share), broadcast cards stage at publish and only
+  // go out once needs_broadcast clears. Mirrors the lifecycle pill above.
+  const partnerVerb = isManual ? 'Shared with' : card.needs_broadcast ? 'Staged for' : 'Broadcasted to';
 
   return (
     <div className="flex h-full flex-col">
@@ -738,15 +752,25 @@ export default function AdminPublishedCardRecipientsView({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 001.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 010 3.46" />
               </svg>
               <span className="text-xs text-[var(--color-sh-ink-muted)]">
-                Broadcasted to <span className="font-bold text-[var(--color-sh-ink)]">{partnerCount} partner{partnerCount !== 1 ? 's' : ''}</span>
+                {partnerVerb} <span className="font-bold text-[var(--color-sh-ink)]">{partnerCount} partner{partnerCount !== 1 ? 's' : ''}</span>
               </span>
               {hasSquadHireCategories && (
                 <>
                   <span className="text-xs text-[var(--color-sh-ink-faint)]">·</span>
-                  <span className="text-xs text-[var(--color-sh-ink-muted)]">
-                    Sent to <span className="font-bold text-[var(--color-sh-ink)]">{talentTotal} talent{talentTotal !== 1 ? 's' : ''}</span> via SquadHire
-                    {talentTotal > 0 && <> ({talentRespondedCount} responded)</>}
-                  </span>
+                  {talentSentCount > 0 ? (
+                    <span className="text-xs text-[var(--color-sh-ink-muted)]">
+                      Sent to <span className="font-bold text-[var(--color-sh-ink)]">{talentSentCount} talent{talentSentCount !== 1 ? 's' : ''}</span> via SquadHire ({talentRespondedCount} responded)
+                      {talentQueuedCount > 0 && (
+                        <> · <span className="font-semibold text-[#92400E]">{talentQueuedCount} queued</span></>
+                      )}
+                    </span>
+                  ) : talentQueuedCount > 0 ? (
+                    <span className="text-xs text-[var(--color-sh-ink-muted)]">
+                      <span className="font-bold text-[#92400E]">{talentQueuedCount} talent{talentQueuedCount !== 1 ? 's' : ''}</span> queued on SquadHire — not broadcast yet
+                    </span>
+                  ) : (
+                    <span className="text-xs text-[var(--color-sh-ink-muted)]">No talents matched on SquadHire yet</span>
+                  )}
                 </>
               )}
               {!hasSquadHireCategories && (
