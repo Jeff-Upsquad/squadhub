@@ -192,7 +192,7 @@ body {
 
 /* Today list (legacy — used by DashboardListPanel slide-out) */
 .sh-view .today-list { padding: 4px 0 6px; }
-.sh-view .today-item { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; padding: 10px 18px; gap: 12px; border-top: 1px solid var(--sh-hair-3); cursor: pointer; transition: background 120ms ease, opacity .6s ease-in .35s, transform .6s cubic-bezier(0.4, 0, 0.7, 0.1) .35s, max-height .6s ease-in .5s, min-height .6s ease-in .5s, padding-block .6s ease-in .5s, border-top-width .6s ease-in .5s; }
+.sh-view .today-item { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; padding: 10px 18px; gap: 12px; border-top: 1px solid var(--sh-hair-3); cursor: pointer; max-height: 200px; transition: background 120ms ease, opacity .6s ease-in .35s, transform .6s cubic-bezier(0.4, 0, 0.7, 0.1) .35s, max-height .6s ease-in .5s, min-height .6s ease-in .5s, padding-block .6s ease-in .5s, border-top-width .6s ease-in .5s; }
 .sh-view .today-item:first-child { border-top: none; }
 .sh-view .today-item:hover { background: var(--sh-hair-3); }
 .sh-view .checkbox { width: 16px; height: 16px; border-radius: 5px; border: 1.5px solid var(--sh-hair-2); background: var(--surface); display: grid; place-items: center; cursor: pointer; flex: none; transition: border-color .12s, background .12s, scale .12s; }
@@ -208,7 +208,7 @@ body {
 
 /* Home task list (matches sidebar nav-item style) */
 .sh-view .home-task-list { padding: 6px 8px 10px; display: flex; flex-direction: column; gap: 1px; }
-.sh-view .home-task-item { display: flex; align-items: center; gap: 9px; padding: 5px 8px; border-radius: 6px; font-size: 13px; color: var(--sh-ink-2); cursor: pointer; transition: background 120ms ease, color 120ms ease, opacity .6s ease-in .35s, transform .6s cubic-bezier(0.4, 0, 0.7, 0.1) .35s, max-height .6s ease-in .5s, min-height .6s ease-in .5s, padding-block .6s ease-in .5s; }
+.sh-view .home-task-item { display: flex; align-items: center; gap: 9px; padding: 5px 8px; border-radius: 6px; font-size: 13px; color: var(--sh-ink-2); cursor: pointer; max-height: 200px; transition: background 120ms ease, color 120ms ease, opacity .6s ease-in .35s, transform .6s cubic-bezier(0.4, 0, 0.7, 0.1) .35s, max-height .6s ease-in .5s, min-height .6s ease-in .5s, padding-block .6s ease-in .5s; }
 .sh-view .home-task-item:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
 .sh-view .home-task-item[data-active="true"] { background: var(--surface); color: var(--sh-ink); font-weight: 500; box-shadow: var(--sh-shadow-sm); border: 1px solid var(--sh-hair); }
 .sh-view .home-task-item .checkbox { width: 14px; height: 14px; border-radius: 4px; }
@@ -1633,6 +1633,10 @@ body {
   padding: 10px 20px;
   border-top: 1px solid var(--sh-hair-3);
   cursor: pointer;
+  /* Explicit upper bound so the fade's `max-height: 0` interpolates. A
+     `none → 0` transition is NOT animatable, so without this the row would
+     clip to zero height instantly and the slide-out would never be seen. */
+  max-height: 200px;
   transition:
     background 120ms ease,
     opacity .6s ease-in .35s,
@@ -3441,7 +3445,20 @@ body {
 .lv-canvas .lv-row {
   padding: 14px 24px !important;
   border-top: 1px solid var(--sq-gray-100) !important;
-  transition: background .14s ease, box-shadow .14s ease !important;
+  /* Upper bound so the fade's `max-height: 0` interpolates (none→0 won't). */
+  max-height: 200px !important;
+  /* This rule's transition WINS (later + !important) over the base .lv-row, so
+     the slide-out properties must be listed HERE or they jump instantly and no
+     completion animation is seen. */
+  transition:
+    background .14s ease,
+    box-shadow .14s ease,
+    opacity .6s ease-in .35s,
+    transform .6s cubic-bezier(0.4, 0, 0.7, 0.1) .35s,
+    max-height .6s ease-in .5s,
+    min-height .6s ease-in .5s,
+    padding-block .6s ease-in .5s,
+    border-top-width .6s ease-in .5s !important;
 }
 .lv-canvas .lv-group-body > .lv-row:first-child { border-top: 0 !important; }
 .lv-canvas .lv-row:hover { background: var(--sq-gray-50) !important; }
@@ -6820,7 +6837,7 @@ ol.sqc-list {
 .hm-home .hmp-center { display: grid; place-items: center; height: 100%; }
 .hm-home .hmp-list { padding: 6px 8px; }
 @keyframes hmp-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.hm-home .hmp-task { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 11px; padding: 9px 10px; border-radius: 10px; cursor: pointer; animation: hmp-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) backwards; transition: background 120ms ease, opacity 0.6s ease-in 0.35s, transform 0.6s cubic-bezier(0.4, 0, 0.7, 0.1) 0.35s, max-height 0.6s ease-in 0.5s, min-height 0.6s ease-in 0.5s, padding-block 0.6s ease-in 0.5s; }
+.hm-home .hmp-task { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 11px; padding: 9px 10px; border-radius: 10px; cursor: pointer; max-height: 200px; animation: hmp-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) backwards; transition: background 120ms ease, opacity 0.6s ease-in 0.35s, transform 0.6s cubic-bezier(0.4, 0, 0.7, 0.1) 0.35s, max-height 0.6s ease-in 0.5s, min-height 0.6s ease-in 0.5s, padding-block 0.6s ease-in 0.5s; }
 .hm-home .hmp-task:nth-child(1) { animation-delay: 0.02s; }
 .hm-home .hmp-task:nth-child(2) { animation-delay: 0.05s; }
 .hm-home .hmp-task:nth-child(3) { animation-delay: 0.08s; }
