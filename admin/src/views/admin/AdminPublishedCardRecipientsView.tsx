@@ -834,6 +834,13 @@ export default function AdminPublishedCardRecipientsView({
                 const statusCfg = STATUS_PILL[r.status];
                 const rowKey = `${r.type}-${r.id}`;
                 const showCheckbox = canAssign && r.status === 'accepted';
+                // A talent is only "pending a response" once the card has
+                // actually been broadcast to them. Before that they're just a
+                // matched candidate in the queue — show "queued", not the
+                // response-status pill (which implies we asked and they haven't
+                // answered). Uses the same delivery signal as the banner.
+                const isQueuedTalent =
+                  r.type === 'talent' && r.status === 'pending' && !talentIsDelivered(r);
                 return (
                   <div key={rowKey} className="sh-card flex items-center gap-3 px-4 py-3">
                     {showCheckbox && (
@@ -851,15 +858,23 @@ export default function AdminPublishedCardRecipientsView({
                       <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">{r.name}</p>
                       {r.responded_at ? (
                         <p className="text-[11px] text-[var(--color-sh-ink-faint)]">Responded {formatRelative(r.responded_at)}</p>
+                      ) : isQueuedTalent ? (
+                        <p className="text-[11px] text-[var(--color-sh-ink-faint)]">Awaiting broadcast</p>
                       ) : r.status === 'pending' ? (
                         <p className="text-[11px] text-[var(--color-sh-ink-faint)]">Awaiting response</p>
                       ) : null}
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                       {activeTab === 'all' && (
-                        <span className="sh-status-pill" style={{ backgroundColor: statusCfg.bg, color: statusCfg.color }}>
-                          {r.status}
-                        </span>
+                        isQueuedTalent ? (
+                          <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
+                            queued
+                          </span>
+                        ) : (
+                          <span className="sh-status-pill" style={{ backgroundColor: statusCfg.bg, color: statusCfg.color }}>
+                            {r.status}
+                          </span>
+                        )
                       )}
                       <span
                         className="sh-status-pill"
