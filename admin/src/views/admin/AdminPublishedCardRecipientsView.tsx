@@ -977,7 +977,7 @@ export default function AdminPublishedCardRecipientsView({
 
                   {gAutoAccepted.length > 0 && (
                     <section>
-                      <h3 className="sh-section-heading mb-3" style={{ color: '#065F46' }}>
+                      <h3 className="sh-section-heading mb-3 text-emerald-800 dark:text-emerald-400">
                         Accepted on their behalf ({gAutoAccepted.length})
                       </h3>
                       <div className="space-y-2">
@@ -995,7 +995,7 @@ export default function AdminPublishedCardRecipientsView({
                       </div>
                       <div
                         className="sh-card p-3 space-y-2"
-                        style={{ background: '#FEF8E6', borderColor: '#FCD9B6' }}
+                        style={{ background: 'var(--color-sh-lime-soft)', borderColor: 'var(--color-sh-warm-border)' }}
                       >
                         {gPending.map(renderRow)}
                       </div>

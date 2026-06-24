@@ -447,4 +447,9 @@ body {
 .dark .sh-btn-violet { background: rgba(147, 51, 234, 0.18); color: #C08CF0; border-color: rgba(147, 51, 234, 0.32); }
 .dark .sh-btn-violet:hover:not(:disabled) { background: rgba(147, 51, 234, 0.28); }
 
+/* Primary stays bright lime in dark mode (brand accent — --sh-lime doesn't
+ * flip), so its ink text must stay dark. The global ink var flips light and
+ * would vanish on the yellow fill otherwise. */
+.dark .sh-btn-primary { color: #0a0a0a; }
+
 } /* end @layer components */
