@@ -65,7 +65,7 @@ import { usePendingTips } from '../hooks/usePendingTips';
 import { featureTipStore } from '../stores/featureTipStore';
 import TabBar from '../components/TabBar';
 import { useTabsStore } from '../stores/tabsStore';
-import { canonicalKey, buildHomeSnapshot } from '../lib/tabSnapshots';
+import { canonicalKey, buildHomeSnapshot, type TabSnapshot } from '../lib/tabSnapshots';
 
 // ---- Types ----
 export type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
@@ -222,13 +222,6 @@ function RailBtn({
   );
 }
 
-// Origin of the embedded Squad Clips mini-app — used to validate its postMessage
-// PiP notifications (see the clips keep-alive below). Mirrors ClipsView.tsx.
-const CLIPS_ORIGIN = new URL(
-  process.env.NEXT_PUBLIC_CLIPS_URL ||
-    (process.env.NODE_ENV === 'production' ? 'https://clips.squadhub.in' : 'http://localhost:3200'),
-).origin;
-
 export default function MainLayout() {
   const { currentWorkspace, activeChannelId, activeChannelKind, dmConversations, setWorkspace, setChannels, setActiveChannel } = useWorkspaceStore();
   const user = useAuthStore((s) => s.user);
@@ -244,6 +237,32 @@ export default function MainLayout() {
   const newTaskFabVisible = usePMStore((s) => s.newTaskFabVisible);
   // The tab strip only shows with ≥2 tabs; the top-right "+" sits below it when so.
   const tabStripVisible = useTabsStore((s) => s.tabs.length > 1);
+  // The full tab list + active id drive the multi-pane content area: every open
+  // tab is rendered from its OWN snapshot and kept mounted, so switching tabs
+  // preserves each one's state (scroll, inputs, media) instead of remounting.
+  const tabs = useTabsStore((s) => s.tabs);
+  const activeTabId = useTabsStore((s) => s.activeTabId);
+  // Tabs are lazy-mounted: a tab's pane is created the first time it becomes
+  // active, then kept alive until the tab is closed. This set tracks which tabs
+  // have been opened (so we don't eagerly mount every persisted tab on load).
+  const [mountedTabIds, setMountedTabIds] = useState<Set<string>>(() => {
+    const id = useTabsStore.getState().activeTabId;
+    return new Set(id ? [id] : []);
+  });
+  useEffect(() => {
+    setMountedTabIds((prev) => {
+      const valid = new Set(tabs.map((t) => t.id));
+      const next = new Set<string>();
+      for (const id of prev) if (valid.has(id)) next.add(id); // drop closed tabs
+      if (activeTabId && valid.has(activeTabId)) next.add(activeTabId);
+      if (next.size === prev.size) {
+        let same = true;
+        for (const id of next) if (!prev.has(id)) { same = false; break; }
+        if (same) return prev; // no change — avoid a needless re-render
+      }
+      return next;
+    });
+  }, [tabs, activeTabId]);
   const userType = useUserType();
   const isPartner = useIsPartner();
   // SquadNotes is a gated mini app — the Documents rail icon only shows for
@@ -281,11 +300,6 @@ export default function MainLayout() {
   const [inboxSliderOpen, setInboxSliderOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  // Squad Clips keep-alive: once the mini-app has been opened, keep it mounted
-  // while a clip is in Picture-in-Picture so a popped-out clip keeps playing as
-  // the user navigates around Squad Hub (the iframe would otherwise unmount).
-  const [clipsPipActive, setClipsPipActive] = useState(false);
-  const [clipsEverOpened, setClipsEverOpened] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -300,28 +314,6 @@ export default function MainLayout() {
   }, [profileOpen]);
 
   useEffect(() => { loadViewPreferences(); }, []);
-
-  // Mark the clips mini-app as "opened" the first time it's the active view, so
-  // we can keep it mounted afterward without eagerly loading it on app start.
-  useEffect(() => {
-    if (homeView === 'clips') setClipsEverOpened(true);
-  }, [homeView]);
-
-  // Listen for the clips iframe's PiP state. While a clip is popped out we keep
-  // ClipsView mounted even when the user navigates elsewhere in Squad Hub.
-  useEffect(() => {
-    const onMessage = (e: MessageEvent) => {
-      if (e.origin !== CLIPS_ORIGIN) return;
-      if (e.data?.type === 'squadclips:pip') setClipsPipActive(!!e.data.active);
-    };
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, []);
-
-  // True when clips is the view currently displayed (matches the inline render
-  // conditions replaced by the persistent keep-alive instance below).
-  const clipsActive =
-    homeView === 'clips' && (activeSection === 'apps' || activeSection === 'home');
 
   // Lock body scroll while the mobile drawer is open so the underlying
   // page doesn't move behind the overlay.
@@ -725,8 +717,6 @@ export default function MainLayout() {
     );
   }
 
-  const activeChannel = channels.find((c) => c.id === activeChannelId);
-
   // The global top-bar "+" creates a SquadHub task. Hide it where the current
   // surface already owns the top-right create affordance, so it doesn't stack a
   // redundant button on top of theirs:
@@ -744,6 +734,203 @@ export default function MainLayout() {
   const onCalendar = activeSection === 'cal';
   const hideGlobalCreateBtn =
     newTaskFabVisible || activeSection === 'apps' || EMBEDDED_APP_VIEWS.includes(homeView) || onDayPlanner || onCalendar;
+
+  // ---- Per-tab pane rendering ----------------------------------------------
+  // Each open tab is rendered from its OWN snapshot rather than the single
+  // global "live view", so every tab keeps its own mounted component tree (and
+  // therefore its scroll position, in-progress input and media playback — e.g.
+  // a Squad Clip resumes instead of restarting). Only the active tab is shown;
+  // the rest are kept mounted but display:none. Navigation/mutations still flow
+  // through the global stores, which always mirror the active tab.
+  const renderChat = (snap: TabSnapshot) => {
+    const channelId = snap.channelId;
+    const kind = snap.channelKind;
+    const isDm = kind === 'dm';
+    const channel = channels.find((c) => c.id === channelId);
+    const activeDm = isDm ? dmConversations.find((d) => d.id === channelId) : null;
+    const meId = user?.id;
+    const otherParticipants = (activeDm?.participants || []).filter((p) => p.id !== meId);
+    const dmTitle = isDm
+      ? (otherParticipants.length === 0
+          ? 'Note to self'
+          : otherParticipants.length === 1
+            ? otherParticipants[0].display_name
+            : `${otherParticipants[0].display_name} +${otherParticipants.length - 1}`)
+      : null;
+    const headerName = isDm ? dmTitle : channel?.name;
+    const memberCount = isDm ? (activeDm?.participants?.length || 0) : null;
+    // For a note-to-self DM there are no "others" — show the user's own avatar.
+    const firstOther = otherParticipants[0] || activeDm?.participants?.[0];
+    const dmOnline = !!firstOther && onlineUserIds.has(firstOther.id);
+    const avatarGradient = (id: string) => {
+      let h = 0;
+      for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
+      return `linear-gradient(135deg, hsl(${h} 70% 55%), hsl(${(h + 40) % 360} 65% 45%))`;
+    };
+    return (
+      // min-h-0 is load-bearing: without it this flex child's automatic
+      // minimum is its content height, so a long conversation overflows
+      // the viewport and clips the composer instead of scrolling.
+      <div className="squadhub-chat flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
+        {channelId && (
+          <div className="sqc-header">
+            <div className="sqc-header__title" title={isDm ? 'Conversation' : 'Channel details'}>
+              {isDm ? (
+                <span
+                  className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-[6px] text-[11px] font-bold text-white"
+                  style={{ background: firstOther?.avatar_url ? undefined : avatarGradient(firstOther?.id || 'x') }}
+                >
+                  {firstOther?.avatar_url ? (
+                    <img src={firstOther.avatar_url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    (firstOther?.display_name?.[0] || '?').toUpperCase()
+                  )}
+                </span>
+              ) : (
+                <span className="text-[18px] font-black leading-none text-[var(--sh-text-2)]">#</span>
+              )}
+              <span>{headerName}</span>
+              {isDm && otherParticipants.length === 1 && (
+                <span
+                  className={`sqc-presence${dmOnline ? ' is-online' : ''}`}
+                  title={dmOnline ? 'Active' : 'Away'}
+                />
+              )}
+              <svg className="h-3.5 w-3.5 text-[var(--sh-text-2)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+            {!isDm && channel?.description && (
+              <button type="button" className="sqc-header__topic" title="Set channel topic">
+                {channel.description}
+              </button>
+            )}
+            <div className="sqc-header__actions">
+              {isDm && memberCount != null && memberCount > 0 && (
+                <span className="sqc-pill" title={`${memberCount} ${memberCount === 1 ? 'member' : 'members'}`}>
+                  <span className="sqc-pill__avatars">
+                    {(activeDm?.participants || []).slice(0, 3).map((p) => (
+                      <span
+                        key={p.id}
+                        style={{ background: p.avatar_url ? undefined : avatarGradient(p.id) }}
+                        className="overflow-hidden"
+                      >
+                        {p.avatar_url ? (
+                          <img src={p.avatar_url} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          (p.display_name?.[0] || '?').toUpperCase()
+                        )}
+                      </span>
+                    ))}
+                  </span>
+                  <span>{memberCount}</span>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowChannelSettings(!showChannelSettings)}
+                className={`sqc-pill ${showChannelSettings ? 'bg-[var(--sh-bg-hover)]' : ''}`}
+                title="Settings"
+              >
+                <svg className="h-4 w-4 text-[var(--sh-text-2)]" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zm0 6a.75.75 0 110-1.5.75.75 0 010 1.5zm0 6a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="flex flex-1 overflow-hidden">
+          {channelId ? (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <ChatPanel channelId={channelId} kind={kind} />
+            </div>
+          ) : (
+            <div className="flex flex-1 items-center justify-center text-sm text-foreground-dim">
+              Select a channel to start chatting
+            </div>
+          )}
+          {showChannelSettings && channelId && (() => {
+            const ch = channels.find((c) => c.id === channelId);
+            return ch ? (
+              <SettingsSlider
+                type="channel"
+                id={ch.id}
+                name={ch.name}
+                description={ch.description}
+                onClose={() => setShowChannelSettings(false)}
+                onDeleted={() => {
+                  setShowChannelSettings(false);
+                  setActiveChannel(null);
+                }}
+              />
+            ) : null;
+          })()}
+        </div>
+      </div>
+    );
+  };
+
+  const renderPane = (snap: TabSnapshot, active = true) => {
+    const { section, homeView: hv } = snap;
+    if (section === 'learning') return <LearningShell />;
+    if (section === 'docs') return <NotesShell />;
+    if (section === 'cal') return <CalendarView />;
+    if (section === 'apps') {
+      // Apps module — render the app opened from the Apps sidebar, or an empty
+      // state. App views reuse the same components as the home section.
+      if (hv === 'checkin') return <CheckInWidget title="Daily Check-In Teammates" context="teammates" />;
+      if (hv === 'checkin-partners') return <CheckInWidget title="Daily Check-In Partners" context="partners" />;
+      if (hv === 'check-ins') return <CheckInsPage />;
+      if (hv === 'candidates') return <CandidatesPage />;
+      if (hv === 'time-management') return <TimeManagementPage />;
+      if (hv === 'sales-leads') return <SalesLeadsPage />;
+      if (hv === 'clips') return <ClipsView />;
+      if (hv === 'cashbook' && isPartner) return <PartnerCashBook />;
+      if (hv === 'cashbook' && (userType === 'client' || userType === 'client_staff')) return <ClientCashBook />;
+      return (
+        <div className="sh-view flex flex-1 flex-col items-center justify-center">
+          <div className="mb-4 opacity-20 text-[var(--sh-ink-3)]">{ICON.apps}</div>
+          <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>Apps</h3>
+          <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Select an app from the list to open it here</p>
+        </div>
+      );
+    }
+    if (section !== 'home') {
+      // teams / more — placeholder sections.
+      return (
+        <div className="sh-view flex flex-1 flex-col items-center justify-center">
+          <div className="mb-4 opacity-20 text-[var(--sh-ink-3)]">{ICON[section as keyof typeof ICON]}</div>
+          <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>{SECTION_TITLES[section]}</h3>
+          <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Coming soon</p>
+        </div>
+      );
+    }
+    // Home section views.
+    if (hv === 'inbox') return <InboxView setHomeView={setHomeView} />;
+    if (hv === 'my-tasks') return <MyTasksView />;
+    if (hv === 'day-planner') return <DayPlannerView />;
+    if (hv === 'routines') return <RoutinesView />;
+    if (hv === 'chat') return renderChat(snap);
+    if (hv === 'tasks') {
+      if (snap.designFolderId) return <ClientDesignDashboard folderId={snap.designFolderId} />;
+      if (snap.folderId && !snap.listId) return <FolderPage folderId={snap.folderId} />;
+      if (snap.spacePageId && !snap.listId && !snap.folderId) return <SpacePage spacePageId={snap.spacePageId} />;
+      return <ListPage listId={snap.listId ?? undefined} spaceId={snap.spaceId ?? undefined} active={active} />;
+    }
+    if (hv === 'checkin') return <CheckInWidget title="Daily Check-In Teammates" context="teammates" />;
+    if (hv === 'checkin-partners') return <CheckInWidget title="Daily Check-In Partners" context="partners" />;
+    if (hv === 'check-ins') return <CheckInsPage />;
+    if (hv === 'candidates') return <CandidatesPage />;
+    if (hv === 'time-management') return <TimeManagementPage />;
+    if (hv === 'sales-leads') return <SalesLeadsPage />;
+    if (hv === 'clips') return <ClipsView />;
+    if (hv === 'hub' && (userType === 'client' || userType === 'client_staff')) return <ClientDashboard />;
+    if (hv === 'cashbook' && isPartner) return <PartnerCashBook />;
+    if (hv === 'cashbook' && (userType === 'client' || userType === 'client_staff')) return <ClientCashBook />;
+    if (hv === 'published-cards' && (userType === 'client' || userType === 'client_staff')) return <ClientPublishedCards />;
+    if (hv === 'opportunities' && isPartner) return <PartnerOpportunities />;
+    return <Home onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} />;
+  };
 
   return (
     <div className="flex h-[100dvh] bg-[var(--sidebar)] text-foreground">
@@ -1013,238 +1200,32 @@ export default function MainLayout() {
         )}
         <EmergencyBanner />
         <ActiveTimer />
-        {activeSection === 'learning' ? (
-          <LearningShell />
-        ) : activeSection === 'docs' ? (
-          <NotesShell />
-        ) : activeSection === 'cal' ? (
-          <CalendarView />
-        ) : activeSection === 'apps' ? (
-          // Apps module — render the app opened from the Apps sidebar, or an
-          // empty state prompting a selection. App views reuse the same
-          // components as the home section.
-          homeView === 'checkin' ? (
-            <CheckInWidget title="Daily Check-In Teammates" context="teammates" />
-          ) : homeView === 'checkin-partners' ? (
-            <CheckInWidget title="Daily Check-In Partners" context="partners" />
-          ) : homeView === 'check-ins' ? (
-            <CheckInsPage />
-          ) : homeView === 'candidates' ? (
-            <CandidatesPage />
-          ) : homeView === 'time-management' ? (
-            <TimeManagementPage />
-          ) : homeView === 'sales-leads' ? (
-            <SalesLeadsPage />
-          ) : homeView === 'clips' ? (
-            // Rendered by the persistent keep-alive instance below.
-            null
-          ) : homeView === 'cashbook' && isPartner ? (
-            <PartnerCashBook />
-          ) : homeView === 'cashbook' && (userType === 'client' || userType === 'client_staff') ? (
-            <ClientCashBook />
-          ) : (
-            <div className="sh-view flex flex-1 flex-col items-center justify-center">
-              <div className="mb-4 opacity-20 text-[var(--sh-ink-3)]">{ICON.apps}</div>
-              <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>Apps</h3>
-              <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Select an app from the list to open it here</p>
-            </div>
-          )
-        ) : activeSection !== 'home' ? (
-          <div className="sh-view flex flex-1 flex-col items-center justify-center">
-            <div className="mb-4 opacity-20 text-[var(--sh-ink-3)]">{ICON[activeSection as keyof typeof ICON]}</div>
-            <h3 className="serif text-[40px] text-[var(--sh-ink)]" style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}>{SECTION_TITLES[activeSection]}</h3>
-            <p className="mt-1 text-[12.5px] text-[var(--sh-ink-3)]">Coming soon</p>
+        {/* Fallback for the brief window before the tab strip is seeded (a brand
+            new user with empty persisted tabs): render the live view from global
+            state so the content area is never blank. */}
+        {tabs.length === 0 && (
+          <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
+            {renderPane(navSnapshot)}
           </div>
-        ) : homeView === 'inbox' ? (
-          <InboxView setHomeView={setHomeView} />
-        ) : homeView === 'my-tasks' ? (
-          <MyTasksView />
-        ) : homeView === 'day-planner' ? (
-          <DayPlannerView />
-        ) : homeView === 'routines' ? (
-          <RoutinesView />
-        ) : (
-          homeView === 'chat' ? (
-            // min-h-0 is load-bearing: without it this flex child's automatic
-            // minimum is its content height, so a long conversation overflows
-            // the viewport and clips the composer instead of scrolling.
-            <div className="squadhub-chat flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
-              {activeChannelId && (() => {
-                const isDm = activeChannelKind === 'dm';
-                const activeDm = isDm ? dmConversations.find((d) => d.id === activeChannelId) : null;
-                const meId = user?.id;
-                const otherParticipants = (activeDm?.participants || []).filter((p) => p.id !== meId);
-                const dmTitle = isDm
-                  ? (otherParticipants.length === 0
-                      ? 'Note to self'
-                      : otherParticipants.length === 1
-                        ? otherParticipants[0].display_name
-                        : `${otherParticipants[0].display_name} +${otherParticipants.length - 1}`)
-                  : null;
-                const headerName = isDm ? dmTitle : activeChannel?.name;
-                const memberCount = isDm
-                  ? (activeDm?.participants?.length || 0)
-                  : null;
-                // For a note-to-self DM there are no "others" — show the user's own avatar.
-                const firstOther = otherParticipants[0] || activeDm?.participants?.[0];
-                const dmOnline = !!firstOther && onlineUserIds.has(firstOther.id);
-                const avatarGradient = (id: string) => {
-                  let h = 0;
-                  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
-                  return `linear-gradient(135deg, hsl(${h} 70% 55%), hsl(${(h + 40) % 360} 65% 45%))`;
-                };
-                return (
-                  <div className="sqc-header">
-                    <div className="sqc-header__title" title={isDm ? 'Conversation' : 'Channel details'}>
-                      {isDm ? (
-                        <span
-                          className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-[6px] text-[11px] font-bold text-white"
-                          style={{ background: firstOther?.avatar_url ? undefined : avatarGradient(firstOther?.id || 'x') }}
-                        >
-                          {firstOther?.avatar_url ? (
-                            <img src={firstOther.avatar_url} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            (firstOther?.display_name?.[0] || '?').toUpperCase()
-                          )}
-                        </span>
-                      ) : (
-                        <span className="text-[18px] font-black leading-none text-[var(--sh-text-2)]">#</span>
-                      )}
-                      <span>{headerName}</span>
-                      {isDm && otherParticipants.length === 1 && (
-                        <span
-                          className={`sqc-presence${dmOnline ? ' is-online' : ''}`}
-                          title={dmOnline ? 'Active' : 'Away'}
-                        />
-                      )}
-                      <svg className="h-3.5 w-3.5 text-[var(--sh-text-2)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                    {!isDm && activeChannel?.description && (
-                      <button type="button" className="sqc-header__topic" title="Set channel topic">
-                        {activeChannel.description}
-                      </button>
-                    )}
-                    <div className="sqc-header__actions">
-                      {isDm && memberCount != null && memberCount > 0 && (
-                        <span className="sqc-pill" title={`${memberCount} ${memberCount === 1 ? 'member' : 'members'}`}>
-                          <span className="sqc-pill__avatars">
-                            {(activeDm?.participants || []).slice(0, 3).map((p) => (
-                              <span
-                                key={p.id}
-                                style={{ background: p.avatar_url ? undefined : avatarGradient(p.id) }}
-                                className="overflow-hidden"
-                              >
-                                {p.avatar_url ? (
-                                  <img src={p.avatar_url} alt="" className="h-full w-full object-cover" />
-                                ) : (
-                                  (p.display_name?.[0] || '?').toUpperCase()
-                                )}
-                              </span>
-                            ))}
-                          </span>
-                          <span>{memberCount}</span>
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setShowChannelSettings(!showChannelSettings)}
-                        className={`sqc-pill ${showChannelSettings ? 'bg-[var(--sh-bg-hover)]' : ''}`}
-                        title="Settings"
-                      >
-                        <svg className="h-4 w-4 text-[var(--sh-text-2)]" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zm0 6a.75.75 0 110-1.5.75.75 0 010 1.5zm0 6a.75.75 0 110-1.5.75.75 0 010 1.5z" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
-              <div className="flex flex-1 overflow-hidden">
-                {activeChannelId ? (
-                  <div className="flex-1 flex flex-col overflow-hidden">
-                    <ChatPanel channelId={activeChannelId} kind={activeChannelKind} />
-                  </div>
-                ) : (
-                  <div className="flex flex-1 items-center justify-center text-sm text-foreground-dim">
-                    Select a channel to start chatting
-                  </div>
-                )}
-                {showChannelSettings && activeChannelId && (() => {
-                  const ch = channels.find((c) => c.id === activeChannelId);
-                  return ch ? (
-                    <SettingsSlider
-                      type="channel"
-                      id={ch.id}
-                      name={ch.name}
-                      description={ch.description}
-                      onClose={() => setShowChannelSettings(false)}
-                      onDeleted={() => {
-                        setShowChannelSettings(false);
-                        setActiveChannel(null);
-                      }}
-                    />
-                  ) : null;
-                })()}
+        )}
+        {tabs
+          .filter((t) => mountedTabIds.has(t.id) || t.id === activeTabId)
+          .map((t) => {
+            const isActive = t.id === activeTabId;
+            // Inactive tabs stay mounted (display:none) so returning to them is
+            // instant and their state survives. display:none is set inline because
+            // an author `display:flex` class would otherwise beat the [hidden] UA rule.
+            return (
+              <div
+                key={t.id}
+                className="flex flex-1 flex-col min-h-0 overflow-hidden"
+                style={isActive ? undefined : { display: 'none' }}
+                aria-hidden={!isActive}
+              >
+                {renderPane(t.snapshot, isActive)}
               </div>
-            </div>
-          ) : homeView === 'tasks' ? (
-            activeDesignFolderId ? (
-              <ClientDesignDashboard folderId={activeDesignFolderId} />
-            ) : activeFolderId && !activeListId ? (
-              <FolderPage />
-            ) : activeSpacePageId && !activeListId && !activeFolderId ? (
-              <SpacePage />
-            ) : (
-              <ListPage />
-            )
-          ) : homeView === 'checkin' ? (
-            <CheckInWidget title="Daily Check-In Teammates" context="teammates" />
-          ) : homeView === 'checkin-partners' ? (
-            <CheckInWidget title="Daily Check-In Partners" context="partners" />
-          ) : homeView === 'check-ins' ? (
-            <CheckInsPage />
-          ) : homeView === 'candidates' ? (
-            <CandidatesPage />
-          ) : homeView === 'time-management' ? (
-            <TimeManagementPage />
-          ) : homeView === 'sales-leads' ? (
-            <SalesLeadsPage />
-          ) : homeView === 'clips' ? (
-            // Rendered by the persistent keep-alive instance below.
-            null
-          ) : homeView === 'hub' && (userType === 'client' || userType === 'client_staff') ? (
-            <ClientDashboard />
-          ) : homeView === 'cashbook' && isPartner ? (
-            <PartnerCashBook />
-          ) : homeView === 'cashbook' && (userType === 'client' || userType === 'client_staff') ? (
-            <ClientCashBook />
-          ) : homeView === 'published-cards' && (userType === 'client' || userType === 'client_staff') ? (
-            <ClientPublishedCards />
-          ) : homeView === 'opportunities' && isPartner ? (
-            <PartnerOpportunities />
-          ) : (
-            <Home onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} />
-          )
-        )}
-        {/* Persistent Squad Clips instance. Shown in-flow when clips is the
-            active view; parked off-screen (still mounted) while a clip is in a
-            PiP window, so a popped-out clip keeps playing as the user moves
-            around Squad Hub. Unmounts only once PiP closes and you've left. */}
-        {clipsEverOpened && (clipsActive || clipsPipActive) && (
-          <div
-            className={clipsActive ? 'flex flex-1 flex-col min-h-0' : ''}
-            style={
-              clipsActive
-                ? undefined
-                : { position: 'absolute', width: 1, height: 1, left: -99999, top: 0, overflow: 'hidden', pointerEvents: 'none' }
-            }
-            aria-hidden={!clipsActive}
-          >
-            <ClipsView />
-          </div>
-        )}
+            );
+          })}
       </div>
 
       {/* Inbox panel — floating feed opened by the rail's inbox button */}

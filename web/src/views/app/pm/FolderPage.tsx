@@ -20,8 +20,12 @@ import {
 
 type FolderWithLists = Folder & { lists?: List[] };
 
-export default function FolderPage() {
-  const activeFolderId = usePMStore((s) => s.activeFolderId);
+export default function FolderPage({ folderId: propFolderId }: { folderId?: string } = {}) {
+  // When a folderId is passed (the tab strip renders each open tab from its own
+  // snapshot), it overrides the global store so sibling tabs can show different
+  // folders at once. Falls back to the store for normal single-view navigation.
+  const storeFolderId = usePMStore((s) => s.activeFolderId);
+  const activeFolderId = propFolderId ?? storeFolderId;
   const setContextListId = usePMStore((s) => s.setContextListId);
   const filtersByScope = usePMStore((s) => s.filtersByScope);
   const setScopeFilters = usePMStore((s) => s.setScopeFilters);

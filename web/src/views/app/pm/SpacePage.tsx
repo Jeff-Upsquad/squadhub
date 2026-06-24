@@ -23,8 +23,12 @@ type ListWithFolder = List & { folder?: { id: string; name: string } | null };
 
 const NO_FOLDER_KEY = '__none__';
 
-export default function SpacePage() {
-  const activeSpacePageId = usePMStore((s) => s.activeSpacePageId);
+export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageId?: string } = {}) {
+  // When a spacePageId is passed (the tab strip renders each open tab from its
+  // own snapshot), it overrides the global store so sibling tabs can show
+  // different spaces at once. Falls back to the store for normal navigation.
+  const storeSpacePageId = usePMStore((s) => s.activeSpacePageId);
+  const activeSpacePageId = propSpacePageId ?? storeSpacePageId;
   const setContextListId = usePMStore((s) => s.setContextListId);
   const filtersByScope = usePMStore((s) => s.filtersByScope);
   const setScopeFilters = usePMStore((s) => s.setScopeFilters);

@@ -29,7 +29,8 @@ export default function ListPage({
   listId: propListId,
   spaceId: propSpaceId,
   embedded = false,
-}: { listId?: string; spaceId?: string; embedded?: boolean } = {}) {
+  active = true,
+}: { listId?: string; spaceId?: string; embedded?: boolean; active?: boolean } = {}) {
   const {
     activeSpaceId: storeSpaceId,
     activeListId: storeListId,
@@ -122,10 +123,13 @@ export default function ListPage({
   // so the two create affordances don't both appear at once.
   const showNewTaskFab = !!activeListId && canEdit;
   const setNewTaskFabVisible = usePMStore((s) => s.setNewTaskFabVisible);
+  // Only the active tab drives the global FAB flag — otherwise a background list
+  // tab (now kept mounted by the tab strip) would clobber it for the active view.
   useEffect(() => {
+    if (!active) return;
     setNewTaskFabVisible(showNewTaskFab);
     return () => setNewTaskFabVisible(false);
-  }, [showNewTaskFab, setNewTaskFabVisible]);
+  }, [active, showNewTaskFab, setNewTaskFabVisible]);
 
   if (!activeListId) {
     return (
