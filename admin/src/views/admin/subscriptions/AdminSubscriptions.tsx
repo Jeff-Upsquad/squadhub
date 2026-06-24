@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import SquadHireProfilesPanel from './SquadHireProfilesPanel';
@@ -396,29 +396,15 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
             </select>
           </div>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-3">
           {TIERS.map((tier) => (
-            <div key={tier}>
-              <div className="mb-2 flex items-center gap-2">
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${TIER_COLOR[tier]}`}>{tier}</span>
-                <span className="text-[11px] text-foreground-dim">{plansByTier[tier].length} plan{plansByTier[tier].length === 1 ? '' : 's'}</span>
-              </div>
-              <div className="space-y-2">
-                {plansByTier[tier].length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-divider-strong bg-surface px-4 py-3 text-xs text-foreground-dim">
-                    No plans at {tier} tier yet. Run migration 027 to seed them.
-                  </p>
-                ) : plansByTier[tier].map((p) => (
-                  <PlanRow
-                    key={p.id}
-                    subscriptionId={subscription.id}
-                    plan={p}
-                    deliverableTypes={subscription.deliverable_types || []}
-                    selectedCountry={selectedCountry}
-                  />
-                ))}
-              </div>
-            </div>
+            <TierSection
+              key={tier}
+              tier={tier}
+              plans={plansByTier[tier]}
+              subscription={subscription}
+              selectedCountry={selectedCountry}
+            />
           ))}
         </div>
       </section>
@@ -433,16 +419,218 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
 }
 
 // ============================================================
+// Tier Section: prominent, collapsible group of plans per tier
+// ============================================================
+
+// A pending edit to one plan's pricing, held while a tier is in edit mode.
+type PriceDraft = { price: string; marginValue: string; marginType: 'fixed' | 'percent' };
+
+function draftFromRow(row: SubscriptionPlanPricing | null | undefined): PriceDraft {
+  return {
+    price: row?.price == null ? '' : String(row.price),
+    marginValue: row?.margin_value == null ? '0' : String(row.margin_value),
+    marginType: row?.margin_type || 'fixed',
+  };
+}
+
+function TierSection({
+  tier, plans, subscription, selectedCountry,
+}: {
+  tier: SubscriptionTier;
+  plans: SubscriptionPlanRow[];
+  subscription: Subscription;
+  selectedCountry: Country | null;
+}) {
+  const queryClient = useQueryClient();
+  const [collapsed, setCollapsed] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [drafts, setDrafts] = useState<Record<string, PriceDraft>>({});
+
+  const rowFor = (p: SubscriptionPlanRow) =>
+    selectedCountry ? p.pricing?.find((r) => r.country_id === selectedCountry.id) || null : null;
+
+  // Switching country (or losing it) discards any in-progress edit, so drafts
+  // can never be saved against the wrong country.
+  useEffect(() => {
+    setEditing(false);
+    setDrafts({});
+  }, [selectedCountry?.id]);
+
+  const upsert = useMutation({
+    mutationFn: ({ planId, body }: { planId: string; body: { country_id: string; price: number; margin_value: number; margin_type: 'fixed' | 'percent' } }) =>
+      api.post(`/admin/subscriptions/plans/${planId}/pricing`, body),
+  });
+  const removeRow = useMutation({
+    mutationFn: ({ planId, countryId }: { planId: string; countryId: string }) =>
+      api.delete(`/admin/subscriptions/plans/${planId}/pricing/${countryId}`),
+  });
+
+  function startEdit() {
+    const d: Record<string, PriceDraft> = {};
+    plans.forEach((p) => { d[p.id] = draftFromRow(rowFor(p)); });
+    setDrafts(d);
+    setCollapsed(false);
+    setEditing(true);
+  }
+  function cancelEdit() {
+    setEditing(false);
+    setDrafts({});
+  }
+
+  // Persist every changed (or cleared) plan in this tier, then leave edit mode.
+  async function save() {
+    if (!selectedCountry) return;
+    setSaving(true);
+    try {
+      for (const p of plans) {
+        const d = drafts[p.id];
+        if (!d) continue;
+        const cur = rowFor(p);
+        if (d.price.trim() === '') {
+          if (cur) await removeRow.mutateAsync({ planId: p.id, countryId: selectedCountry.id });
+          continue;
+        }
+        const price = parseInt(d.price, 10);
+        if (isNaN(price) || price < 0) continue;
+        const m = parseInt(d.marginValue, 10);
+        const mm = isNaN(m) || m < 0 ? 0 : m;
+        if (cur && cur.price === price && cur.margin_value === mm && cur.margin_type === d.marginType) continue;
+        await upsert.mutateAsync({
+          planId: p.id,
+          body: { country_id: selectedCountry.id, price, margin_value: mm, margin_type: d.marginType },
+        });
+      }
+      await queryClient.invalidateQueries({ queryKey: ['admin-subs-catalog'] });
+      setEditing(false);
+      setDrafts({});
+    } catch (err: any) {
+      alert(err?.response?.data?.error || err?.message || 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Customer-price range across this tier's plans for the selected country,
+  // shown in the header so it stays useful when the section is collapsed.
+  const prices = selectedCountry
+    ? plans
+        .map((p) => p.pricing?.find((r) => r.country_id === selectedCountry.id)?.price)
+        .filter((v): v is number => typeof v === 'number')
+    : [];
+  const sym = currencySymbol(selectedCountry?.currency);
+  const locale = selectedCountry?.currency === 'USD' ? 'en-US' : 'en-IN';
+  const lo = prices.length ? Math.min(...prices) : null;
+  const hi = prices.length ? Math.max(...prices) : null;
+  const range =
+    lo == null
+      ? null
+      : lo === hi
+        ? `${sym}${lo.toLocaleString(locale)}`
+        : `${sym}${lo.toLocaleString(locale)} – ${sym}${hi!.toLocaleString(locale)}`;
+
+  const canEdit = plans.length > 0 && !!selectedCountry;
+
+  return (
+    <div className={`overflow-hidden rounded-xl border bg-surface ${editing ? 'border-accent' : 'border-divider-strong'}`}>
+      <div className="flex w-full items-center gap-3 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-expanded={!collapsed}
+          className="flex flex-1 items-center gap-3 text-left"
+        >
+          <svg
+            className={`h-4 w-4 shrink-0 text-foreground-dim transition-transform ${collapsed ? '' : 'rotate-90'}`}
+            fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          <span className={`rounded-md px-3 py-1 text-sm font-bold ${TIER_COLOR[tier]}`}>{tier}</span>
+          <span className="text-xs font-medium text-foreground-dim">
+            {plans.length} plan{plans.length === 1 ? '' : 's'}
+          </span>
+          {range && (
+            <span className="ml-auto mr-2 text-xs">
+              <span className="font-semibold text-foreground">{range}</span>
+              <span className="text-foreground-dim"> / mo</span>
+            </span>
+          )}
+        </button>
+
+        {canEdit && (editing ? (
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={cancelEdit}
+              disabled={saving}
+              className="rounded-md border border-divider px-3 py-1 text-xs font-medium text-foreground-muted hover:bg-canvas disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className="rounded-md bg-ink px-3 py-1 text-xs font-medium text-white hover:bg-ink-hover disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={startEdit}
+            className="flex shrink-0 items-center gap-1.5 rounded-md border border-divider px-3 py-1 text-xs font-medium text-foreground hover:bg-canvas"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+            </svg>
+            Edit
+          </button>
+        ))}
+      </div>
+
+      {!collapsed && (
+        <div className="space-y-2 border-t border-divider bg-surface-alt p-3">
+          {plans.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-divider-strong bg-surface px-4 py-3 text-xs text-foreground-dim">
+              No plans at {tier} tier yet. Run migration 027 to seed them.
+            </p>
+          ) : (
+            plans.map((p) => (
+              <PlanRow
+                key={p.id}
+                subscriptionId={subscription.id}
+                plan={p}
+                deliverableTypes={subscription.deliverable_types || []}
+                selectedCountry={selectedCountry}
+                editing={editing}
+                draft={drafts[p.id]}
+                onDraftChange={(next) => setDrafts((prev) => ({ ...prev, [p.id]: next }))}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
 // Plan Row: tier tag + inline price input for the selected country
 // ============================================================
 
 function PlanRow({
-  subscriptionId, plan, deliverableTypes, selectedCountry,
+  subscriptionId, plan, deliverableTypes, selectedCountry, editing, draft, onDraftChange,
 }: {
   subscriptionId: string;
   plan: SubscriptionPlanRow;
   deliverableTypes: SubscriptionDeliverableType[];
   selectedCountry: Country | null;
+  editing: boolean;
+  draft: PriceDraft | undefined;
+  onDraftChange: (next: PriceDraft) => void;
 }) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
@@ -454,13 +642,15 @@ function PlanRow({
   });
 
   const delivs = plan.deliverables || [];
-  const pricing = plan.pricing || [];
   const currentPriceRow = selectedCountry
-    ? pricing.find((p) => p.country_id === selectedCountry.id) || null
+    ? (plan.pricing || []).find((p) => p.country_id === selectedCountry.id) || null
     : null;
 
+  // Show the draft while this tier is being edited; otherwise the saved row.
+  const value = editing && draft ? draft : draftFromRow(currentPriceRow);
+
   return (
-    <div className={`rounded-lg border border-divider bg-surface ${plan.is_active ? '' : 'opacity-60'}`}>
+    <div className={`rounded-lg border bg-surface ${editing ? 'border-accent/50' : 'border-divider'} ${plan.is_active ? '' : 'opacity-60'}`}>
       <div className="flex items-center gap-3 px-4 py-3">
         <button
           onClick={() => setExpanded((v) => !v)}
@@ -478,11 +668,7 @@ function PlanRow({
           {plan.tier || 'Junior'}
         </span>
 
-        <PricingAndMarginInput
-          planId={plan.id}
-          country={selectedCountry}
-          current={currentPriceRow}
-        />
+        <PlanHours plan={plan} />
 
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-foreground-dim">{delivs.length} deliverable{delivs.length === 1 ? '' : 's'}</span>
@@ -497,6 +683,16 @@ function PlanRow({
             {plan.is_active ? 'Active' : 'Inactive'}
           </button>
         </div>
+      </div>
+
+      {/* Pricing strip — read-only until the tier is in edit mode */}
+      <div className="border-t border-divider px-4 py-3">
+        <PlanPricingStrip
+          editing={editing}
+          value={value}
+          country={selectedCountry}
+          onChange={onDraftChange}
+        />
       </div>
 
       {expanded && (
@@ -515,153 +711,199 @@ function PlanRow({
 }
 
 // ============================================================
-// Min price + margin (₹/%) per (plan × country)
-// Partner price is derived at use time as proposed - margin.
+// Plan Pricing Strip: controlled customer price + margin (₹/%).
+// Read-only until its tier is in edit mode; edits flow up as draft changes and
+// are only persisted when the tier's Save is pressed.
 // ============================================================
 
-function PricingAndMarginInput({
-  planId, country, current,
+function PlanPricingStrip({
+  editing, value, country, onChange,
 }: {
-  planId: string;
+  editing: boolean;
+  value: PriceDraft;
   country: Country | null;
-  current: SubscriptionPlanPricing | null;
+  onChange: (next: PriceDraft) => void;
 }) {
-  const queryClient = useQueryClient();
-  const [price, setPrice] = useState<string>(current?.price == null ? '' : String(current.price));
-  const [marginValue, setMarginValue] = useState<string>(
-    current?.margin_value == null ? '0' : String(current.margin_value),
-  );
-  const [marginType, setMarginType] = useState<'fixed' | 'percent'>(current?.margin_type || 'fixed');
+  const { price, marginValue, marginType } = value;
+  const patch = (p: Partial<PriceDraft>) => onChange({ ...value, ...p });
 
-  useEffect(() => {
-    setPrice(current?.price == null ? '' : String(current.price));
-    setMarginValue(current?.margin_value == null ? '0' : String(current.margin_value));
-    setMarginType(current?.margin_type || 'fixed');
-  }, [current?.id, country?.id]);
-
-  const upsert = useMutation({
-    mutationFn: (body: { country_id: string; price: number; margin_value: number; margin_type: 'fixed' | 'percent' }) =>
-      api.post(`/admin/subscriptions/plans/${planId}/pricing`, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-subs-catalog'] }),
-    onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed'),
-  });
-
-  const removeRow = useMutation({
-    mutationFn: (countryId: string) =>
-      api.delete(`/admin/subscriptions/plans/${planId}/pricing/${countryId}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-subs-catalog'] }),
-  });
-
-  function commitPrice() {
-    if (!country) return;
-    if (price.trim() === '') {
-      if (current) removeRow.mutate(country.id);
-      return;
-    }
-    const n = parseInt(price, 10);
-    if (isNaN(n) || n < 0) return;
-    const m = parseInt(marginValue, 10);
-    if (current && current.price === n && current.margin_value === (isNaN(m) ? 0 : m) && current.margin_type === marginType) return;
-    upsert.mutate({
-      country_id: country.id,
-      price: n,
-      margin_value: isNaN(m) ? 0 : m,
-      margin_type: marginType,
-    });
-  }
-
-  function commitMargin(nextType?: 'fixed' | 'percent') {
-    if (!country) return;
-    const m = parseInt(marginValue, 10);
-    const t = nextType ?? marginType;
-    if (isNaN(m) || m < 0) return;
-    // When no pricing row exists yet, default price to 0 so the row can be
-    // created from a margin-only edit. Admin can fill in the min price later.
-    const n = price.trim() === '' ? 0 : parseInt(price, 10);
-    if (isNaN(n) || n < 0) return;
-    if (current && current.price === n && current.margin_value === m && current.margin_type === t) return;
-    upsert.mutate({ country_id: country.id, price: n, margin_value: m, margin_type: t });
-  }
-
-  // Live partner-price preview using min price as the example basis.
-  const minPriceN = parseInt(price, 10);
+  // Live figures derived from the current draft (or saved row when not editing).
+  const priceN = parseInt(price, 10);
   const marginN = parseInt(marginValue, 10);
-  const partnerPreview =
-    !isNaN(minPriceN) && !isNaN(marginN)
-      ? marginType === 'percent'
-        ? Math.max(0, Math.round(minPriceN - (minPriceN * marginN) / 100))
-        : Math.max(0, minPriceN - marginN)
-      : null;
+  const hasPrice = price.trim() !== '' && !isNaN(priceN) && priceN >= 0;
+  const hasMargin = !isNaN(marginN) && marginN >= 0;
+  const marginAmount = hasMargin
+    ? marginType === 'percent'
+      ? Math.round(((hasPrice ? priceN : 0) * marginN) / 100)
+      : marginN
+    : null;
+  const marginPct =
+    marginType === 'percent'
+      ? hasMargin
+        ? marginN
+        : null
+      : hasPrice && priceN > 0 && marginAmount != null
+        ? Math.round((marginAmount / priceN) * 1000) / 10
+        : null;
+  const partner = hasPrice && marginAmount != null ? Math.max(0, priceN - marginAmount) : null;
+  const sym = currencySymbol(country?.currency);
+  const locale = country?.currency === 'USD' ? 'en-US' : 'en-IN';
+  const fmt = (n: number) => `${sym}${n.toLocaleString(locale)}`;
+
+  // Read-only display — shown whenever the tier is not in edit mode.
+  if (!editing) {
+    return (
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+        <PriceField label="Customer price">
+          {hasPrice ? (
+            <>
+              <span className="text-sm font-medium text-foreground">{fmt(priceN)}</span>
+              <span className="text-[11px] text-foreground-dim">/ mo</span>
+            </>
+          ) : (
+            <span className="text-sm text-foreground-dim">—</span>
+          )}
+        </PriceField>
+        <PriceField label="Margin">
+          <span className="text-sm font-medium text-foreground">{marginAmount == null ? '—' : fmt(marginAmount)}</span>
+          {marginPct != null && <span className="text-[11px] text-foreground-dim">· {marginPct}%</span>}
+        </PriceField>
+        <PriceField label="Partner price">
+          <span className="text-sm font-semibold text-emerald-600">{partner == null ? '—' : fmt(partner)}</span>
+        </PriceField>
+      </div>
+    );
+  }
+
+  // Editing mode — both margin figures shown; the toggle picks the editable one,
+  // the other is auto-calculated. Preserves the rupee amount across switches.
+  const amountFieldValue = marginType === 'fixed' ? marginValue : marginAmount == null ? '' : String(marginAmount);
+  const percentFieldValue =
+    marginType === 'percent'
+      ? marginValue
+      : marginPct == null
+        ? ''
+        : Number.isInteger(marginPct) ? String(marginPct) : marginPct.toFixed(1);
+  const useFixed = () => { if (marginType !== 'fixed') patch({ marginType: 'fixed', marginValue: String(marginAmount ?? 0) }); };
+  const usePercent = () => { if (marginType !== 'percent') patch({ marginType: 'percent', marginValue: String(marginPct == null ? 0 : Math.round(marginPct)) }); };
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex items-center gap-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground-dim">Min</span>
-        <span className="text-[11px] text-foreground-dim">{currencySymbol(country?.currency)}</span>
+    <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+      {/* Customer price (minimum monthly) */}
+      <PriceField label="Customer price">
+        <span className="text-xs text-foreground-dim">{sym}</span>
         <input
           type="number"
           min={0}
           value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          onBlur={commitPrice}
+          onChange={(e) => patch({ price: e.target.value })}
           placeholder="—"
-          disabled={!country}
-          className="w-20 rounded-md border border-divider px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:bg-surface-alt"
+          className="w-24 rounded-md border border-divider px-2 py-1 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         />
-        <span className="text-[10px] text-foreground-dim">/ mo</span>
-      </div>
+        <span className="text-[11px] text-foreground-dim">/ mo</span>
+      </PriceField>
 
-      <div className="flex flex-col items-start gap-0.5">
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground-dim">Margin</span>
+      {/* Margin — rupee amount and percent shown together; toggle picks which is editable */}
+      <PriceField label="Margin">
+        {/* Amount (₹) */}
+        <label
+          className={`flex items-center gap-1 rounded-md border px-2 py-1 ${marginType === 'fixed' ? 'border-accent bg-surface' : 'border-divider bg-surface-alt'}`}
+          title={marginType === 'fixed' ? 'Editable — margin as a rupee amount' : 'Auto-calculated from the percentage'}
+        >
+          <span className="text-xs text-foreground-dim">{sym}</span>
           <input
             type="number"
             min={0}
-            value={marginValue}
-            onChange={(e) => setMarginValue(e.target.value)}
-            onBlur={() => commitMargin()}
+            step={1}
+            value={amountFieldValue}
+            onChange={(e) => { if (marginType === 'fixed') patch({ marginValue: e.target.value }); }}
+            readOnly={marginType !== 'fixed'}
             placeholder="0"
-            disabled={!country}
-            className="w-16 rounded-md border border-divider px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:bg-surface-alt"
+            className={`w-16 bg-transparent text-sm focus:outline-none ${marginType === 'fixed' ? 'text-foreground' : 'cursor-default text-foreground-muted'}`}
           />
-        </div>
-        <div className="flex items-center gap-1 pl-[3.25rem]">
-          <button
-            type="button"
-            onClick={() => {
-              if (marginType === 'fixed') return;
-              setMarginType('fixed');
-              commitMargin('fixed');
-            }}
-            disabled={!country}
-            className={`text-[10px] font-medium ${marginType === 'fixed' ? 'text-foreground' : 'text-foreground-dim'} hover:underline disabled:cursor-not-allowed disabled:opacity-50`}
-          >
-            flat ({currencySymbol(country?.currency)})
-          </button>
-          <span className="text-[10px] text-foreground-dim">|</span>
-          <button
-            type="button"
-            onClick={() => {
-              if (marginType === 'percent') return;
-              setMarginType('percent');
-              commitMargin('percent');
-            }}
-            disabled={!country}
-            className={`text-[10px] font-medium ${marginType === 'percent' ? 'text-foreground' : 'text-foreground-dim'} hover:underline disabled:cursor-not-allowed disabled:opacity-50`}
-          >
-            percent (%)
-          </button>
-        </div>
-      </div>
+        </label>
 
-      {partnerPreview != null && current && (
-        <span
-          className="text-[10px] text-[#10B981] font-medium"
-          title="Partner price at min subscription price (= min − margin). Live partner price uses the customer's proposed price."
+        {/* Percent (%) */}
+        <label
+          className={`flex items-center gap-1 rounded-md border px-2 py-1 ${marginType === 'percent' ? 'border-accent bg-surface' : 'border-divider bg-surface-alt'}`}
+          title={marginType === 'percent' ? 'Editable — margin as a percentage of the customer price' : 'Auto-calculated from the rupee amount'}
         >
-          → Partner {currencySymbol(country?.currency)}{partnerPreview.toLocaleString()}
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={percentFieldValue}
+            onChange={(e) => { if (marginType === 'percent') patch({ marginValue: e.target.value }); }}
+            readOnly={marginType !== 'percent'}
+            placeholder="0"
+            className={`w-14 bg-transparent text-sm focus:outline-none ${marginType === 'percent' ? 'text-foreground' : 'cursor-default text-foreground-muted'}`}
+          />
+          <span className="text-xs text-foreground-dim">%</span>
+        </label>
+
+        {/* Mode toggle — chooses the editable figure */}
+        <div className="ml-0.5 inline-flex overflow-hidden rounded-md border border-divider">
+          <button
+            type="button"
+            onClick={useFixed}
+            title="Drive margin by rupee amount"
+            className={`px-2 py-1 text-[11px] font-medium transition-colors ${marginType === 'fixed' ? 'bg-ink text-white' : 'bg-surface text-foreground-muted hover:bg-canvas'}`}
+          >
+            {sym}
+          </button>
+          <button
+            type="button"
+            onClick={usePercent}
+            title="Drive margin by percentage"
+            className={`border-l border-divider px-2 py-1 text-[11px] font-medium transition-colors ${marginType === 'percent' ? 'bg-ink text-white' : 'bg-surface text-foreground-muted hover:bg-canvas'}`}
+          >
+            %
+          </button>
+        </div>
+      </PriceField>
+
+      {/* Partner price (computed = customer − margin) */}
+      <PriceField label="Partner price">
+        <span
+          className="text-sm font-semibold text-emerald-600"
+          title="What the partner is paid = customer price − margin"
+        >
+          {partner == null ? '—' : fmt(partner)}
         </span>
-      )}
+      </PriceField>
+    </div>
+  );
+}
+
+// Label-on-top field cell used across the pricing strip so inputs and computed
+// values share a baseline and never collide.
+function PriceField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground-dim">{label}</span>
+      <div className="flex h-7 items-center gap-1">{children}</div>
+    </div>
+  );
+}
+
+// Compact read-only daily / weekly / monthly hours shown on every plan row so
+// the commitment is visible without expanding the deliverables section.
+function PlanHours({ plan }: { plan: SubscriptionPlanRow }) {
+  const fmt = (v: number | null | undefined) => {
+    if (v == null) return '—';
+    const n = Number(v);
+    return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
+  };
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] text-foreground-muted" title="Hours — daily / weekly / monthly">
+      <svg className="h-3.5 w-3.5 text-foreground-dim" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span><span className="font-semibold text-foreground">{fmt(plan.daily_hours)}</span><span className="text-foreground-dim">/d</span></span>
+      <span className="text-divider-strong">·</span>
+      <span><span className="font-semibold text-foreground">{fmt(plan.weekly_hours)}</span><span className="text-foreground-dim">/w</span></span>
+      <span className="text-divider-strong">·</span>
+      <span><span className="font-semibold text-foreground">{fmt(plan.monthly_hours)}</span><span className="text-foreground-dim">/m</span></span>
     </div>
   );
 }
