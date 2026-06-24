@@ -884,6 +884,52 @@ export async function deliverCardToSquadhire(
 }
 
 // ------------------------------------------------------------
+// Public: fetch the talent recipient list SquadHire holds for a card.
+// SquadHire matches talents to a card by category on ingest and exposes them
+// via /cards/recipients — including matched candidates who haven't responded
+// (or been broadcast to) yet. Soft-failing: returns [] when the integration
+// is unconfigured or SquadHire is unreachable, so callers degrade gracefully.
+// ------------------------------------------------------------
+
+export interface SquadhireRecipient {
+  talent_user_id: string;
+  talent_name: string | null;
+  status: 'pending' | 'accepted' | 'rejected';
+  responded_at: string | null;
+  created_at: string | null;
+  email: string | null;
+}
+
+export async function fetchSquadhireRecipients(cardId: string): Promise<SquadhireRecipient[]> {
+  const baseUrl = config.squadhireWebhookUrl;
+  if (!baseUrl || !config.squadhireWebhookSecret) return [];
+
+  // The webhook URL points to /api/webhooks/squadhub/cards — derive recipients URL.
+  const recipientsUrl = baseUrl.replace(/\/cards\/?$/, '/cards/recipients');
+  try {
+    const response = await fetch(recipientsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify({ external_id: cardId }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      console.error(`[squadhire-webhook] recipients fetch failed: ${response.status} ${text}`);
+      return [];
+    }
+    const result = (await response.json()) as { data?: SquadhireRecipient[] };
+    return result.data || [];
+  } catch (err: any) {
+    console.error('[squadhire-webhook] recipients fetch errored', err?.message || err);
+    return [];
+  }
+}
+
+// ------------------------------------------------------------
 // Public: background sweeper — retries published cards that never synced.
 // Bounded by SWEEPER_BATCH_SIZE per tick and MAX_SYNC_ATTEMPTS per card.
 // ------------------------------------------------------------

@@ -7,6 +7,7 @@ import { hydrateCard, matchPartnersForCard } from '../utils/subscriptionCards';
 import {
   buildSquadhirePayloadForCard,
   deliverCardToSquadhire,
+  fetchSquadhireRecipients,
   notifySquadhireOfCardRecall,
   notifySquadhireOfManualAssignment,
 } from '../utils/squadhireWebhook';
@@ -15,7 +16,6 @@ import {
   findExistingClientForSubmission,
   transitionSubmissionStatus,
 } from '../utils/submissionPipeline';
-import { config } from '../config';
 
 const router = Router();
 
@@ -548,42 +548,64 @@ router.get('/:id/squadhire-recipients', async (req: Request, res: Response) => {
       .maybeSingle();
     if (!card) return res.status(404).json({ success: false, error: 'Card not found' });
 
-    const baseUrl = config.squadhireWebhookUrl;
-    if (!baseUrl || !config.squadhireWebhookSecret) {
-      return res.json({ success: true, data: [], note: 'SquadHire integration not configured' });
-    }
-
-    // The webhook URL points to /api/webhooks/squadhub/cards — derive the recipients URL
-    const recipientsUrl = baseUrl.replace(/\/cards\/?$/, '/cards/recipients');
-
-    const response = await fetch(recipientsUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-SquadHub-Signature': config.squadhireWebhookSecret,
-      },
-      body: JSON.stringify({ external_id: cardId }),
-      signal: AbortSignal.timeout(10000),
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      console.error(`SquadHire recipients fetch failed: ${response.status} ${text}`);
-      return res.json({ success: true, data: [], note: `SquadHire returned ${response.status}` });
-    }
-
-    // SquadHire's response now includes `email` per talent (added in Profiles
+    // SquadHire's response includes `email` per talent (added in Profiles
     // 1424f61). The admin UI uses it to call /auto-accept-talent for any
-    // pending row whose email matches a SquadHub user. Pass the payload
-    // through unchanged.
-    const result = (await response.json()) as { data?: any[] };
-    res.json({ success: true, data: result.data || [] });
+    // pending row whose email matches a SquadHub user. fetchSquadhireRecipients
+    // soft-fails to [] when unconfigured/unreachable so the UI still works.
+    const data = await fetchSquadhireRecipients(cardId);
+    res.json({ success: true, data });
   } catch (err: any) {
     console.error('Admin get SquadHire recipients error:', err);
     // Non-fatal: return empty list so the UI still works
     res.json({ success: true, data: [], note: err?.message || 'Failed to reach SquadHire' });
   }
 });
+
+// ============================================================
+// Ensure a local recipient row exists for every talent SquadHire has matched
+// to this card but that we haven't recorded yet. Soft-published cards live on
+// SquadHire as matched candidates with no local row until they respond or are
+// broadcast; this materializes the pending ones as queued (notified_at NULL,
+// not hand-picked) rows so the broadcast release can notify them and the UI can
+// later move them into a "Sent" batch. Already-known talents (responded, or
+// previously released) are skipped via the (card, system, recipient) conflict
+// key. Soft-failing: if SquadHire is unreachable the match list comes back
+// empty and we simply fall back to whatever local rows already exist.
+// ============================================================
+async function materializeSquadhireMatchesAsQueued(cardId: string): Promise<void> {
+  const matches = await fetchSquadhireRecipients(cardId);
+  const pendingMatches = matches.filter((m) => m.status === 'pending');
+  if (pendingMatches.length === 0) return;
+
+  const { data: existing } = await supabaseAdmin
+    .from('subscription_card_external_recipients')
+    .select('external_user_id')
+    .eq('card_id', cardId);
+  const known = new Set((existing || []).map((r: any) => r.external_user_id as string));
+
+  const rows = pendingMatches
+    .filter((m) => !known.has(m.talent_user_id))
+    .map((m) => ({
+      card_id: cardId,
+      external_system: 'squadhire',
+      external_recipient_id: m.talent_user_id,
+      external_user_id: m.talent_user_id,
+      talent_name: m.talent_name ?? null,
+      email: m.email ?? null,
+      status: 'pending' as const,
+      responded_at: null,
+      assigned_manually: false,
+      notified_at: null,
+    }));
+  if (rows.length === 0) return;
+
+  const { error } = await supabaseAdmin
+    .from('subscription_card_external_recipients')
+    .upsert(rows, { onConflict: 'card_id,external_system,external_recipient_id', ignoreDuplicates: true });
+  if (error) {
+    console.error('[broadcast] failed to materialize SquadHire matches as queued rows', error);
+  }
+}
 
 // ============================================================
 // POST /admin/subscription-cards/:id/broadcast-pending
@@ -622,20 +644,6 @@ router.post('/:id/broadcast-pending', async (req: Request, res: Response) => {
       return;
     }
 
-    const { data: queued, error: qErr } = await supabaseAdmin
-      .from('subscription_card_external_recipients')
-      .select('id, external_user_id')
-      .eq('card_id', cardId)
-      .is('notified_at', null);
-    if (qErr) {
-      res.status(500).json({ success: false, error: qErr.message });
-      return;
-    }
-    if (!queued || queued.length === 0) {
-      res.status(409).json({ success: false, error: 'No queued talents to broadcast' });
-      return;
-    }
-
     const categoryIds = Array.isArray(card.squadhire_category_ids)
       ? (card.squadhire_category_ids as string[])
       : [];
@@ -665,6 +673,30 @@ router.post('/:id/broadcast-pending', async (req: Request, res: Response) => {
         success: false,
         error: 'Card could not be synced to SquadHire. Try again in a few minutes.',
       });
+      return;
+    }
+
+    // The queue the admin sees under "Pending Broadcast" is the union of locally
+    // hand-picked rows (assign-talent, notified_at NULL) AND talents SquadHire
+    // matched to the card by category — which have NO local row until they
+    // respond or are broadcast. Materialize those matches as queued rows so the
+    // release below notifies them too. Without this, a soft-published card whose
+    // queue is entirely SquadHire-side matches shows N in the UI but finds 0
+    // here ("No queued talents to broadcast"). Runs after the sync recheck so
+    // SquadHire definitely has the card before we ask it for its match list.
+    await materializeSquadhireMatchesAsQueued(cardId);
+
+    const { data: queued, error: qErr } = await supabaseAdmin
+      .from('subscription_card_external_recipients')
+      .select('id, external_user_id')
+      .eq('card_id', cardId)
+      .is('notified_at', null);
+    if (qErr) {
+      res.status(500).json({ success: false, error: qErr.message });
+      return;
+    }
+    if (!queued || queued.length === 0) {
+      res.status(409).json({ success: false, error: 'No queued talents to broadcast' });
       return;
     }
 
