@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import type { User, TaskRecurrence } from '@squadhub/shared';
+import type { User, TaskRecurrence, TaskTag } from '@squadhub/shared';
 import { taskRecurrenceOccursOn } from '@squadhub/shared';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
@@ -86,6 +86,43 @@ export async function hydrateAssignees<T extends { assignee_ids?: string[] | nul
       .map(id => byId.get(id))
       .filter((u): u is User => !!u),
   }));
+}
+
+// Attach hydrated labels (`tags: TaskTag[]`) to one or more task rows from the
+// task_tag_assignments join. Attached labels always render on the task (read),
+// regardless of the viewer's group visibility — visibility only gates the
+// picker (GET /pm/labels), not labels already on a task.
+export async function hydrateLabels<T extends { id: string }>(
+  tasks: T[],
+): Promise<(T & { tags: TaskTag[] })[]> {
+  const taskIds = tasks.map(t => t.id);
+  if (taskIds.length === 0) return tasks.map(t => ({ ...t, tags: [] as TaskTag[] }));
+
+  const { data: assigns } = await supabaseAdmin
+    .from('task_tag_assignments')
+    .select('task_id, tag_id')
+    .in('task_id', taskIds);
+
+  const tagIds = Array.from(new Set((assigns || []).map((a: any) => a.tag_id)));
+  const tagsById = new Map<string, TaskTag>();
+  if (tagIds.length) {
+    const { data: tags } = await supabaseAdmin
+      .from('task_tags')
+      .select('id, workspace_id, group_id, name, color')
+      .in('id', tagIds);
+    (tags || []).forEach((t: any) => tagsById.set(t.id, t as TaskTag));
+  }
+
+  const byTask = new Map<string, TaskTag[]>();
+  for (const a of assigns || []) {
+    const tag = tagsById.get((a as any).tag_id);
+    if (!tag) continue;
+    const arr = byTask.get((a as any).task_id) || [];
+    arr.push(tag);
+    byTask.set((a as any).task_id, arr);
+  }
+
+  return tasks.map(t => ({ ...t, tags: byTask.get(t.id) || [] }));
 }
 
 // Attach `list: { id, name }`, `folder: { id, name }`, and `space: { id, name }`
@@ -834,7 +871,9 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
     const [withAssignees] = await hydrateAssignees([task]);
     // Attach `parent_task: { id, title } | null` so the detail panel can show
     // (and link to) the parent when this task is a subtask.
-    const [hydratedTask] = await hydrateParents([withAssignees]);
+    const [withParent] = await hydrateParents([withAssignees]);
+    // Attach `tags: TaskTag[]` (Labels) so the detail panel renders them.
+    const [hydratedTask] = await hydrateLabels([withParent]);
     const hydratedSubtasks = await hydrateAssignees(subtasks || []);
 
     // Spawned routine copies link back to their template so the detail
