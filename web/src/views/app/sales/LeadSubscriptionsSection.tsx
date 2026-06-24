@@ -15,7 +15,7 @@ import ConfirmRemoveDialog from '../../../components/ConfirmRemoveDialog';
 import SubscriptionCardDrawer from './SubscriptionCardDrawer';
 
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
-const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Elite', 'Top Talents'];
+const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Top Talents'];
 
 type Props = {
   leadId: string;

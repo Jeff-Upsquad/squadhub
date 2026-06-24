@@ -18,11 +18,10 @@ import type {
 } from '@squadhub/shared';
 
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
-const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Elite', 'Top Talents'];
+const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Top Talents'];
 const TIER_COLOR: Record<SubscriptionTier, string> = {
   Junior: 'bg-canvas text-foreground-muted',
   Pro: 'bg-indigo-100 text-indigo-700',
-  Elite: 'bg-yellow-100 text-yellow-700',
   'Top Talents': 'bg-yellow-100 text-yellow-700',
 };
 
@@ -319,7 +318,7 @@ function SubscriptionDetail({ subscription, countries }: { subscription: Subscri
   });
 
   const plans: SubscriptionPlanRow[] = subscription.plans || [];
-  const plansByTier: Record<SubscriptionTier, SubscriptionPlanRow[]> = { Junior: [], Pro: [], Elite: [], 'Top Talents': [] };
+  const plansByTier: Record<SubscriptionTier, SubscriptionPlanRow[]> = { Junior: [], Pro: [], 'Top Talents': [] };
   plans.forEach((p) => {
     const tier: SubscriptionTier = p.tier && plansByTier[p.tier] ? p.tier : 'Junior';
     plansByTier[tier].push(p);

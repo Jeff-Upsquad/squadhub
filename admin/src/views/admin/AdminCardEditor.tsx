@@ -104,12 +104,12 @@ interface Deliverable {
 }
 
 const VALID_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const VALID_TIERS = ['Junior', 'Pro', 'Elite', 'Top Talents', 'Custom'];
+const VALID_TIERS = ['Junior', 'Pro', 'Top Talents', 'Custom'];
 // Display order for the per-tier deliverables + pricing blocks: highest tier
-// first (Top Talents → Pro → Junior). Independent of selection order. 'Elite'
-// is the legacy name for 'Top Talents'; Custom sorts last.
+// first (Top Talents → Pro → Junior). Independent of selection order.
+// Custom sorts last.
 const TIER_DISPLAY_RANK: Record<string, number> = {
-  'top talents': 0, elite: 0, pro: 1, junior: 2, custom: 3,
+  'top talents': 0, pro: 1, junior: 2, custom: 3,
 };
 const VALID_PLANS = ['starter', 'basic', 'plus', 'pro', 'personal'];
 const SERVICE_TYPES = ['Designers', 'Editors', 'Designer plus Editor', 'Accountants'];

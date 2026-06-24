@@ -939,7 +939,6 @@ function CountChip({
 const TIER_RANK: Record<string, number> = {
   junior: 0,
   pro: 1,
-  elite: 2,
   'top talents': 2,
 };
 
