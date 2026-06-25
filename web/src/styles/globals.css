@@ -6744,6 +6744,7 @@ ol.sqc-list {
 .hm-bucket-menu-item:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
 .hm-bucket-menu-item[data-active="true"] { color: var(--sh-ink); font-weight: 600; }
 .hm-bucket-menu-item .dim { font-size: 11px; font-weight: 450; color: var(--sh-ink-4); }
+.hm-bucket-menu-sep { height: 1px; margin: 4px 6px; background: var(--sh-hair); }
 
 /* Grouped tasks row ("Grouped tasks under {name}") — a collapsed container */
 .hm-home .hm-task.hm-grouped { gap: 8px; }
