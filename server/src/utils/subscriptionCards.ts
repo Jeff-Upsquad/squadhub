@@ -54,7 +54,7 @@ export async function hydrateCard(card: any, parentCardId?: string): Promise<any
   let talentsQueued = 0;
   (talentRecipients || []).forEach((r: any) => {
     if (r.status in talents) (talents as any)[r.status]++;
-    if (!r.notified_at) talentsQueued++;
+    if (r.status === 'pending' && !r.notified_at) talentsQueued++;
   });
 
   // "Needs broadcast" — a published card still holding recipients that haven't
