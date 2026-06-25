@@ -588,7 +588,13 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
 
   const onRowTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
-    if (e.propertyName === 'transform' && isFading) { setIsHidden(true); unmarkFading(t.id); }
+    // Clean up when the slide (transform) OR the fade (opacity) finishes. Under
+    // prefers-reduced-motion the transform transition is disabled, so without the
+    // opacity fallback the row would stay retained (invisible) forever.
+    if ((e.propertyName === 'transform' || e.propertyName === 'opacity') && isFading) {
+      setIsHidden(true);
+      unmarkFading(t.id);
+    }
   };
 
   if (isHidden) return null;
