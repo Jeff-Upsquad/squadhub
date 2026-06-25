@@ -20,6 +20,50 @@ const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'list', label: 'List' },
 ];
 
+// Hold rows that are mid-completion-animation in the list until their slide-out
+// finishes. The My Home task lists come from a query that DROPS done tasks, and
+// completing a task triggers a refetch that would otherwise unmount the row
+// before its (.35s-delayed) slide can play — so no animation is ever seen.
+// Given the fresh server list and the set of fading task ids, this re-inserts
+// any fading task the refetch already dropped — at its previous position so it
+// doesn't jump — until the row's transitionend clears it via unmarkFading.
+function useRetainFading(fresh: Task[], fadingTaskIds: ReadonlyMap<string, string>): Task[] {
+  const cacheRef = useRef(new Map<string, Task>());
+  const orderRef = useRef<string[]>([]);
+  return useMemo(() => {
+    const cache = cacheRef.current;
+    for (const t of fresh) cache.set(t.id, t);
+    const freshIds = new Set(fresh.map((t) => t.id));
+    const dropped = [...fadingTaskIds.keys()].filter((id) => !freshIds.has(id) && cache.has(id));
+
+    let result: Task[];
+    if (dropped.length === 0) {
+      result = fresh;
+    } else {
+      const byId = new Map<string, Task>(fresh.map((t) => [t.id, t] as const));
+      for (const id of dropped) byId.set(id, cache.get(id)!);
+      const ordered: Task[] = [];
+      const used = new Set<string>();
+      // Previous render's order keeps the retained (fading) rows in their slot.
+      for (const id of orderRef.current) {
+        const t = byId.get(id);
+        if (t && !used.has(id)) { ordered.push(t); used.add(id); }
+      }
+      // Any genuinely new task not seen last render lands at the end.
+      for (const t of fresh) if (!used.has(t.id)) { ordered.push(t); used.add(t.id); }
+      result = ordered;
+    }
+
+    orderRef.current = result.map((t) => t.id);
+    // Forget tasks that are neither present nor animating so the cache can't
+    // grow without bound across a long session.
+    for (const id of [...cache.keys()]) {
+      if (!freshIds.has(id) && !fadingTaskIds.has(id)) cache.delete(id);
+    }
+    return result;
+  }, [fresh, fadingTaskIds]);
+}
+
 export default function TodayList() {
   const { data, isLoading, isError, refetch } = useMyTasks();
   const setActiveTask = usePMStore((s) => s.setActiveTask);
@@ -33,6 +77,7 @@ export default function TodayList() {
   const setActiveSpacePage = usePMStore((s) => s.setActiveSpacePage);
   const setActiveList = usePMStore((s) => s.setActiveList);
   const setActiveFolder = usePMStore((s) => s.setActiveFolder);
+  const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
 
   const openTask = (id: string) => {
     setActiveDashboardTab(null);
@@ -56,19 +101,27 @@ export default function TodayList() {
   // off here, then comes back when its work date is today). The server-side
   // `focused` bucket carries starred tasks regardless of date so they're always
   // candidates here. (done/closed tasks are filtered out server-side.)
-  const tasks: Task[] = useMemo(() => {
+  const rawTasks: Task[] = useMemo(() => {
     if (!data) return [];
     const merged = [...data.overdue, ...data.today, ...(data.focused ?? [])];
     const seen = new Set<string>();
     const unique = merged.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
     return unique.filter((t) => isTaskFocused(t) && !isFutureDay(t.work_date, tz));
   }, [data, tz]);
+  // Keep just-completed rows rendered until their slide-out finishes. The
+  // my-tasks query DROPS done tasks, and completing one triggers a refetch —
+  // without this the row unmounts (~250ms) before the .35s-delayed slide even
+  // starts, so no animation is ever seen. useRetainFading re-inserts a task
+  // that's mid-fade but already gone from the server data, at its prior slot,
+  // until the row's transitionend clears it via unmarkFading. See TodayRow.
+  const tasks = useRetainFading(rawTasks, fadingTaskIds);
 
   // "In progress today" — tasks the user has logged time on today (computed
   // server-side, full task objects, most-recently-worked first). These render
   // as their own section ABOVE the focus list and are pulled out of the focus
   // sections below so a worked task never shows up twice.
-  const inProgressTasks: Task[] = useMemo(() => data?.in_progress_today ?? [], [data]);
+  const rawInProgress: Task[] = useMemo(() => data?.in_progress_today ?? [], [data]);
+  const inProgressTasks = useRetainFading(rawInProgress, fadingTaskIds);
   const inProgressIds = useMemo(() => new Set(inProgressTasks.map((t) => t.id)), [inProgressTasks]);
 
   // Split the focus list into the main list plus the manual Evening / Night
@@ -81,7 +134,6 @@ export default function TodayList() {
 
   const groupBy = usePMStore((s) => s.todayListGroupBy);
   const setTodayListGroupBy = usePMStore((s) => s.setTodayListGroupBy);
-  const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
   const view = usePMStore((s) => s.todayListView);
   const setTodayListView = usePMStore((s) => s.setTodayListView);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -426,6 +478,9 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
   const updateTask = useUpdateTask(null);
   const setFocusBucket = usePMStore((s) => s.setFocusBucket);
   const bucket = usePMStore((s) => s.focusBuckets[t.id]);
+  const markFading = usePMStore((s) => s.markFading);
+  const unmarkFading = usePMStore((s) => s.unmarkFading);
+  const isFading = usePMStore((s) => s.fadingTaskIds.has(t.id));
   const timer = usePMStore((s) => s.timer);
   const startTimer = usePMStore((s) => s.startTimer);
   const stopTimer = usePMStore((s) => s.stopTimer);
@@ -460,7 +515,6 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
     const prev = startTimer(t.id, t.title, t.list_id || '', t.time_tracked || 0);
     if (prev) await saveSession(prev.taskId, prev.startedAt);
   };
-  const [isFadingOut, setIsFadingOut] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   // Fixed-viewport coordinates for the bucket menu (null = closed). The menu is
   // portaled to <body> and positioned via getBoundingClientRect so it can't be
@@ -517,21 +571,24 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
   const parentTitle = t.parent_task?.title || null;
   const status = (t as any).status as string | undefined;
   const isDone = status === 'done' || status === 'closed';
-  const displayDone = isDone || isFadingOut;
+  const displayDone = isDone || isFading;
 
   const onToggleDone = (e: React.MouseEvent) => {
     e.stopPropagation();
     const next = isDone ? 'todo' : 'done';
-    if (!isDone) setIsFadingOut(true);
+    // markFading both celebrates this row and keeps it rendered (via the parent's
+    // useRetainFading) through the slide, even after the completion refetch drops
+    // the now-done task from the my-tasks list.
+    if (!isDone) markFading(t.id, status ?? '');
     updateTask.mutate(
       { id: t.id, status: next } as any,
-      { onError: () => { setIsFadingOut(false); setIsHidden(false); } },
+      { onError: () => { unmarkFading(t.id); setIsHidden(false); } },
     );
   };
 
   const onRowTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
-    if (e.propertyName === 'transform' && isFadingOut) setIsHidden(true);
+    if (e.propertyName === 'transform' && isFading) { setIsHidden(true); unmarkFading(t.id); }
   };
 
   if (isHidden) return null;
@@ -540,7 +597,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
     <div
       className="hm-task"
       data-done={displayDone}
-      data-fading={isFadingOut}
+      data-fading={isFading}
       data-subtask={isSubtask || undefined}
       data-tracking={isTracking || undefined}
       onClick={() => onOpen(t.id)}
@@ -553,7 +610,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
       <div
         className="checkbox"
         data-done={displayDone}
-        data-celebrating={isFadingOut}
+        data-celebrating={isFading}
         role="button"
         aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
         onClick={onToggleDone}
