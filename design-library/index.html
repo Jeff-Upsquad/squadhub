@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design Library</title>
+<style>
+  :root {
+    --paper: #FAF9F7;
+    --card: #FFFFFF;
+    --ink: #1A1A1A;
+    --ink-2: #6B6B6B;
+    --ink-3: #9C9C9C;
+    --line: #E6E3DD;
+    --line-strong: #D5D1C8;
+    --accent: #2D45FF;
+    --accent-soft: #EDEFFF;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: var(--sans); font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased; min-height: 100vh;
+  }
+  ::selection { background: var(--accent-soft); color: var(--accent); }
+
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 0 32px 90px; }
+
+  header.masthead { padding: 64px 0 0; }
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); display: flex; align-items: center; gap: 10px; }
+  .kicker::before { content: ""; width: 22px; height: 1px; background: var(--ink-3); }
+  h1 { font-size: clamp(40px, 6vw, 64px); font-weight: 800; letter-spacing: -.04em; line-height: 1.02; margin: 18px 0 14px; }
+  h1 em { font-style: normal; color: var(--ink-3); }
+  .standfirst { color: var(--ink-2); max-width: 560px; font-size: 16px; }
+  .standfirst code { font-family: var(--mono); font-size: 12.5px; background: var(--card); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; white-space: nowrap; }
+
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 44px 0 26px; padding-bottom: 22px; border-bottom: 1px solid var(--line-strong); }
+  .chips { display: flex; gap: 6px; }
+  .chip {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase;
+    border: 1px solid var(--line-strong); background: transparent; color: var(--ink-2);
+    padding: 7px 14px; border-radius: 999px; cursor: pointer; transition: all .15s ease;
+  }
+  .chip:hover { border-color: var(--ink); color: var(--ink); }
+  .chip.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+  #q {
+    margin-left: auto; min-width: 240px; flex: 0 1 300px;
+    font: inherit; font-size: 14px; color: var(--ink);
+    background: var(--card); border: 1px solid var(--line-strong); border-radius: 10px;
+    padding: 9px 14px; outline: none; transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  #q:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  #q::placeholder { color: var(--ink-3); }
+  .count { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 22px; }
+
+  .src {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    overflow: hidden; cursor: pointer; text-decoration: none; color: inherit;
+    display: flex; flex-direction: column;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  }
+  .src:hover { transform: translateY(-4px); border-color: var(--line-strong); box-shadow: 0 18px 44px rgba(26,26,26,.09); }
+  .palette { display: flex; height: 64px; }
+  .palette i { flex: 1; }
+  .src-body { padding: 20px 22px 18px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+  .src-head { display: flex; align-items: baseline; gap: 10px; }
+  .src-name { font-size: 21px; font-weight: 750; letter-spacing: -.02em; }
+  .src-num { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+  .src-url { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+  .src-desc { color: var(--ink-2); font-size: 13.5px; line-height: 1.5; }
+  .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+  .badge {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+    padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line);
+    color: var(--ink-2); background: var(--paper);
+  }
+  .badge.plat { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .badge.plat.mobile { background: var(--accent); border-color: var(--accent); }
+  .fonts { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); line-height: 1.7; }
+  .fonts b { color: var(--ink); font-weight: 600; }
+  .src-foot {
+    margin-top: auto; display: flex; align-items: center; gap: 14px;
+    padding-top: 14px; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11px; color: var(--ink-3);
+  }
+  .src-foot .open { margin-left: auto; color: var(--ink); font-weight: 600; display: inline-flex; align-items: center; gap: 5px; transition: gap .15s ease; }
+  .src:hover .open { gap: 9px; color: var(--accent); }
+
+  .add {
+    border: 1.5px dashed var(--line-strong); border-radius: 16px; background: transparent;
+    display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+    gap: 12px; padding: 30px 26px; min-height: 240px; color: var(--ink-2);
+  }
+  .add .plus { width: 34px; height: 34px; border-radius: 999px; border: 1.5px dashed var(--line-strong); display: flex; align-items: center; justify-content: center; font-size: 19px; color: var(--ink-3); }
+  .add b { color: var(--ink); font-size: 15px; }
+  .add p { font-size: 13px; line-height: 1.6; }
+  .add code { font-family: var(--mono); font-size: 11.5px; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; display: block; margin-top: 4px; color: var(--ink); }
+
+  .empty { grid-column: 1 / -1; text-align: center; padding: 60px 0; color: var(--ink-3); font-family: var(--mono); font-size: 12px; }
+
+  footer.colophon { margin-top: 70px; padding-top: 24px; border-top: 1px solid var(--line-strong); display: flex; gap: 24px; flex-wrap: wrap; color: var(--ink-3); font-family: var(--mono); font-size: 11px; letter-spacing: .03em; }
+  footer.colophon span b { color: var(--ink-2); font-weight: 600; }
+
+  @media (max-width: 640px) {
+    .wrap { padding: 0 18px 60px; }
+    header.masthead { padding-top: 40px; }
+    #q { margin-left: 0; flex: 1 1 100%; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="masthead">
+      <div class="kicker">Reference Archive · Jeff</div>
+      <h1>Design Library<em>.</em></h1>
+      <p class="standfirst">Design systems captured from sites worth stealing from — tokens, type, icons, and components, extracted from production CSS. Browse a source, then tell Claude <code>implement &lt;source&gt;'s &lt;element&gt; in &lt;project&gt;</code>.</p>
+    </header>
+
+    <div class="toolbar">
+      <div class="chips" id="chips">
+        <button class="chip on" data-plat="all">All</button>
+        <button class="chip" data-plat="web">Web</button>
+        <button class="chip" data-plat="mobile">Mobile</button>
+      </div>
+      <input id="q" type="search" placeholder="Search sources, tags, fonts…">
+      <span class="count" id="count"></span>
+    </div>
+
+    <div class="grid" id="grid"></div>
+
+    <footer class="colophon">
+      <span><b>Location</b> ~/squadhub/design-library/</span>
+      <span><b>Registry</b> sources.json</span>
+      <span><b>Add a source</b> tell Claude: “Add &lt;url&gt; to the design library”</span>
+    </footer>
+  </div>
+
+<script>
+  const grid = document.getElementById('grid');
+  const q = document.getElementById('q');
+  const count = document.getElementById('count');
+  let sources = [], plat = 'all';
+
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  function card(s, i) {
+    const a = document.createElement('a');
+    a.className = 'src';
+    a.href = s.path.endsWith('/') ? s.path + 'index.html' : s.path;
+    a.dataset.plat = (s.platform || []).join(' ');
+    a.dataset.hay = [s.name, s.description, (s.tags||[]).join(' '), (s.fonts||[]).join(' '), s.url].join(' ').toLowerCase();
+    const stats = s.stats || {};
+    a.innerHTML = `
+      <div class="palette">${(s.colors||[]).map(c => `<i style="background:${esc(c)}" title="${esc(c)}"></i>`).join('')}</div>
+      <div class="src-body">
+        <div class="src-head">
+          <span class="src-num">${String(i+1).padStart(2,'0')}</span>
+          <span class="src-name">${esc(s.name)}</span>
+          <span class="src-url">${esc((s.url||'').replace(/^https?:\/\//,''))}</span>
+        </div>
+        <div class="badges">
+          ${(s.platform||[]).map(p => `<span class="badge plat ${p}">${esc(p)}</span>`).join('')}
+          ${(s.tags||[]).slice(0,4).map(t => `<span class="badge">${esc(t)}</span>`).join('')}
+        </div>
+        <div class="src-desc">${esc(s.description||'')}</div>
+        <div class="fonts">${(s.fonts||[]).map(f => `<b>${esc(f)}</b>`).join(' · ')}</div>
+        <div class="src-foot">
+          <span>captured ${esc(s.captured||'—')}</span>
+          ${stats.tokens ? `<span>${stats.tokens} tokens</span>` : ''}
+          ${stats.icons ? `<span>${stats.icons} icons</span>` : ''}
+          <span class="open">Open guide <span>→</span></span>
+        </div>
+      </div>`;
+    return a;
+  }
+
+  function addCard() {
+    const d = document.createElement('div');
+    d.className = 'add';
+    d.innerHTML = `
+      <div class="plus">+</div>
+      <b>Add the next source</b>
+      <p>Found a site (or app) with designs worth keeping? Paste the URL into a Claude Code session in <span style="font-family:var(--mono);font-size:11.5px">~/squadhub</span>:</p>
+      <code>Add https://example.com to the design library</code>
+      <p style="font-size:12px">Claude crawls it, extracts tokens/type/icons/components into a new folder, and registers it here — tagged web or mobile.</p>`;
+    return d;
+  }
+
+  function render() {
+    const needle = q.value.trim().toLowerCase();
+    grid.innerHTML = '';
+    let shown = 0;
+    sources.forEach((s, i) => {
+      const matchPlat = plat === 'all' || (s.platform || []).includes(plat);
+      const matchQ = !needle || [s.name, s.description, (s.tags||[]).join(' '), (s.fonts||[]).join(' '), s.url].join(' ').toLowerCase().includes(needle);
+      if (matchPlat && matchQ) { grid.appendChild(card(s, i)); shown++; }
+    });
+    if (!shown) {
+      const e = document.createElement('div');
+      e.className = 'empty';
+      e.textContent = 'no sources match — clear the filter, or capture a new one';
+      grid.appendChild(e);
+    }
+    if (plat === 'all' && !needle) grid.appendChild(addCard());
+    count.textContent = shown + ' of ' + sources.length + ' source' + (sources.length === 1 ? '' : 's');
+  }
+
+  document.getElementById('chips').addEventListener('click', e => {
+    const b = e.target.closest('.chip'); if (!b) return;
+    document.querySelectorAll('.chip').forEach(c => c.classList.remove('on'));
+    b.classList.add('on'); plat = b.dataset.plat; render();
+  });
+  q.addEventListener('input', render);
+
+  fetch('sources.json')
+    .then(r => r.json())
+    .then(d => { sources = d.sources || []; render(); })
+    .catch(() => {
+      grid.innerHTML = '<div class="empty">could not load sources.json — serve this folder over HTTP (python3 -m http.server)</div>';
+    });
+</script>
+</body>
+</html>

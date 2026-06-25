@@ -1,0 +1,36 @@
+-- Batch 1: Pin search_path on all 33 flagged functions (security hardening, zero behavior change)
+-- Advisor: function_search_path_mutable
+-- https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable
+ALTER FUNCTION public.auto_add_creator_as_manager() SET search_path = public, pg_temp;
+ALTER FUNCTION public.auto_create_space_statuses() SET search_path = public, pg_temp;
+ALTER FUNCTION public.chat_dm_validate_pair() SET search_path = public, pg_temp;
+ALTER FUNCTION public.chat_messages_bump_conv() SET search_path = public, pg_temp;
+ALTER FUNCTION public.create_share_link(p_profile_id uuid, p_token text, p_expires_at timestamp with time zone, p_created_by uuid) SET search_path = public, pg_temp;
+ALTER FUNCTION public.crm_bump_failed_template(p_lead_id uuid) SET search_path = public, pg_temp;
+ALTER FUNCTION public.crm_bump_unread(p_lead_id uuid) SET search_path = public, pg_temp;
+ALTER FUNCTION public.crm_claim_due_reminders(p_now timestamp with time zone, p_min_due timestamp with time zone, p_limit integer) SET search_path = public, pg_temp;
+ALTER FUNCTION public.crm_last_messages_for_leads(p_workspace_id uuid, p_lead_ids uuid[]) SET search_path = public, pg_temp;
+ALTER FUNCTION public.crm_seed_default_pipelines(ws_id uuid) SET search_path = public, pg_temp;
+ALTER FUNCTION public.crm_seed_default_stages(ws_id uuid) SET search_path = public, pg_temp;
+ALTER FUNCTION public.crm_set_updated_at() SET search_path = public, pg_temp;
+ALTER FUNCTION public.crm_sync_lead_pipeline() SET search_path = public, pg_temp;
+ALTER FUNCTION public.current_actor_id() SET search_path = public, pg_temp;
+ALTER FUNCTION public.find_existing_dm(p_workspace_id uuid, p_user_ids uuid[], p_count integer) SET search_path = public, pg_temp;
+ALTER FUNCTION public.get_profile_share_link_by_token(p_token text) SET search_path = public, pg_temp;
+ALTER FUNCTION public.get_share_links_by_profile(p_profile_id uuid) SET search_path = public, pg_temp;
+ALTER FUNCTION public.increment_client_task_counter(p_client_id uuid) SET search_path = public, pg_temp;
+ALTER FUNCTION public.is_admin() SET search_path = public, pg_temp;
+ALTER FUNCTION public.lms_auto_create_post_lesson() SET search_path = public, pg_temp;
+ALTER FUNCTION public.notify_chat_mention() SET search_path = public, pg_temp;
+ALTER FUNCTION public.notify_lms_assigned() SET search_path = public, pg_temp;
+ALTER FUNCTION public.notify_lms_updated() SET search_path = public, pg_temp;
+ALTER FUNCTION public.notify_message_mention() SET search_path = public, pg_temp;
+ALTER FUNCTION public.notify_task_assigned() SET search_path = public, pg_temp;
+ALTER FUNCTION public.notify_task_commented() SET search_path = public, pg_temp;
+ALTER FUNCTION public.notify_task_completed() SET search_path = public, pg_temp;
+ALTER FUNCTION public.seed_design_statuses() SET search_path = public, pg_temp;
+ALTER FUNCTION public.subscription_cards_reset_review_on_selection() SET search_path = public, pg_temp;
+ALTER FUNCTION public.sync_lead_primary_phone() SET search_path = public, pg_temp;
+ALTER FUNCTION public.update_client_space_templates_updated_at() SET search_path = public, pg_temp;
+ALTER FUNCTION public.update_updated_at() SET search_path = public, pg_temp;
+ALTER FUNCTION public.update_updated_at_column() SET search_path = public, pg_temp;
