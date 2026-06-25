@@ -11,7 +11,7 @@
       "description": "Our own design system. A monochrome editorial language — an ink scale over hairline borders, Instrument Serif display numerals, JetBrains Mono eyebrows, one blue accent with semantic color reserved for status. Three surfaces (Squad Hub / Web App / Admin), fully dark-mode aware. Icons harvested live from the web + admin source.",
       "colors": ["#0a0a0a", "#3A3A3A", "#62748E", "#E2E8F0", "#2962FF", "#E8E5DE"],
       "fonts": ["Inter", "Instrument Serif", "JetBrains Mono", "Plus Jakarta Sans", "Lato", "Space Grotesk"],
-      "stats": { "icons": 205 },
+      "stats": { "icons": 280 },
       "tags": ["internal", "product", "editorial", "monochrome", "dark-mode", "icon-library"]
     },
     {
