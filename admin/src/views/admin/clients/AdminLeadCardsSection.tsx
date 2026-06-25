@@ -6,13 +6,18 @@ type Props = {
   submissionId: string;
 };
 
-// State styling mirrors AdminPublishedCards so the pill colors match what the
-// user sees when they land on the detail page.
-const STATE_PILL: Record<string, { bg: string; fg: string; label: string }> = {
-  published: { bg: '#DCFCE7', fg: '#15803D', label: 'Published' },
-  assigned: { bg: '#D1FAE5', fg: '#065F46', label: 'Assigned' },
-  closed: { bg: '#EEF2F6', fg: '#475569', label: 'Cancelled' },
-};
+// Pill styling + label mirror the precedence-based `categorize()` in
+// AdminPublishedCards so this drawer matches what the user sees on the detail
+// page. A pinned `selected_recipient_id` means the card is "Assigned" even when
+// state='closed' — the Profiles webhook closes the card and pins the selected
+// talent together, so a state-only lookup would mislabel it as "Cancelled".
+function pillFor(card: PublishedCard): { bg: string; fg: string; label: string } {
+  if (card.selected_recipient_id) return { bg: '#D1FAE5', fg: '#065F46', label: 'Assigned' };
+  if (card.state === 'assigned') return { bg: '#E0F2FE', fg: '#075985', label: 'Selected' };
+  if (card.state === 'closed') return { bg: '#EEF2F6', fg: '#475569', label: 'Cancelled' };
+  if (card.state === 'published') return { bg: '#DCFCE7', fg: '#15803D', label: 'Published' };
+  return { bg: '#F1F5F9', fg: '#475569', label: card.state };
+}
 
 function formatPublishedAt(iso: string | null): string {
   if (!iso) return '';
@@ -76,7 +81,7 @@ export default function AdminLeadCardsSection({ submissionId }: Props) {
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     {(() => {
-                      const meta = STATE_PILL[card.state] || { bg: '#F1F5F9', fg: '#475569', label: card.state };
+                      const meta = pillFor(card);
                       return (
                         <span
                           className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
