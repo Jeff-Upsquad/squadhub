@@ -183,6 +183,129 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .sh-badge-ping { animation: none; opacity: 0; }
 }
+
+/* ── Far-left rail items — icon pill + small label underneath ─────────────
+   Used by every nav button (Home … More), the Timesheet trigger, and the
+   bottom theme/avatar cluster, so the whole rail reads as one premium set. */
+.sh-rail-item {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  width: 100%; padding: 0; border: 0; background: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.sh-rail-ic {
+  position: relative;
+  display: grid; place-items: center;
+  width: 42px; height: 32px; border-radius: 11px;
+  color: var(--sh-ink-3);
+  /* Colour used to "cut" interior detail out of the soft-solid glyphs — kept in
+     sync with whatever sits behind the icon so the cut reads as clean bg. */
+  --ic-cut: var(--icon-bar);
+  border: 1px solid transparent;
+  transition: background .16s ease, color .16s ease, border-color .16s ease,
+              box-shadow .16s ease, transform .1s ease;
+}
+.sh-rail-ic svg { transition: transform .16s cubic-bezier(0.22, 1, 0.36, 1); }
+.sh-rail-item:hover .sh-rail-ic { background: var(--sh-hair-3); color: var(--sh-ink); --ic-cut: var(--sh-hair-3); }
+.sh-rail-item:hover .sh-rail-ic svg { transform: translateY(-0.5px); }
+.sh-rail-item:active .sh-rail-ic { transform: translateY(0.5px); }
+.sh-rail-item[data-active="true"] .sh-rail-ic {
+  color: var(--sh-ink);
+  border-color: var(--sh-hair);
+  background: var(--surface);
+  --ic-cut: var(--surface);
+  box-shadow: var(--sh-shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.dark .sh-rail-item[data-active="true"] .sh-rail-ic {
+  box-shadow: var(--sh-shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.sh-rail-lb {
+  max-width: 56px;
+  font-family: 'Inter', sans-serif; font-size: 9px; font-weight: 500; line-height: 1;
+  letter-spacing: 0.01em; color: var(--sh-ink-4);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: color .16s ease;
+}
+.sh-rail-item:hover .sh-rail-lb { color: var(--sh-ink-3); }
+.sh-rail-item[data-active="true"] .sh-rail-lb { color: var(--sh-ink-2); font-weight: 600; }
+
+/* Bottom utility cluster (theme toggle + avatar) — share the label styling */
+.sh-rail-util { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+
+/* ── Live timer chip — pinned above the bottom cluster while a timer runs ── */
+.sh-rail-timer {
+  --rt-work: #3F8F66; --rt-break: #C68A2E; --rt-nowork: #64748B;
+  --rt-cur: var(--rt-work);
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  width: 48px; padding: 8px 0 7px; margin: 0 auto 4px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--rt-cur) 32%, transparent);
+  background:
+    radial-gradient(120% 75% at 50% 0%, color-mix(in srgb, var(--rt-cur) 22%, transparent), transparent 72%),
+    color-mix(in srgb, var(--rt-cur) 9%, var(--surface));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent),
+    0 6px 16px -9px color-mix(in srgb, var(--rt-cur) 70%, transparent);
+  cursor: pointer;
+  animation: sh-rt-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: transform .15s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.sh-rail-timer[data-state="break"] { --rt-cur: var(--rt-break); }
+.sh-rail-timer[data-state="no_work"] { --rt-cur: var(--rt-nowork); }
+.dark .sh-rail-timer { --rt-work: #4FA579; --rt-break: #D69B45; --rt-nowork: #7C8A9C; }
+.sh-rail-timer:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--rt-cur) 50%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent),
+    0 10px 22px -8px color-mix(in srgb, var(--rt-cur) 80%, transparent);
+}
+.sh-rail-timer:active { transform: translateY(0); }
+@keyframes sh-rt-in {
+  from { opacity: 0; transform: translateY(7px) scale(0.9); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Conic progress ring with a soft hole + pulsing core dot */
+.sh-rail-timer .rt-ring {
+  position: relative; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: conic-gradient(from -90deg,
+    var(--rt-cur) calc(var(--rt-pct, 0) * 1%),
+    color-mix(in srgb, var(--rt-cur) 18%, transparent) 0);
+  transition: background .8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.sh-rail-timer .rt-ring::before {
+  content: ""; position: absolute; inset: 3px; border-radius: 50%;
+  background: color-mix(in srgb, var(--rt-cur) 8%, var(--surface));
+}
+.sh-rail-timer .rt-core {
+  position: relative; z-index: 1;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--rt-cur);
+  animation: sh-rt-pulse 1.7s ease-out infinite;
+}
+@keyframes sh-rt-pulse {
+  0%        { box-shadow: 0 0 0 0 color-mix(in srgb, var(--rt-cur) 55%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 7px transparent; }
+}
+.sh-rail-timer .rt-time {
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  font-size: 9.5px; font-weight: 650; line-height: 1; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--rt-cur) 88%, var(--sh-ink));
+}
+.sh-rail-timer .rt-tag {
+  font-family: 'Inter', sans-serif; font-size: 7px; font-weight: 700; line-height: 1;
+  letter-spacing: 0.09em;
+  color: color-mix(in srgb, var(--rt-cur) 75%, var(--sh-ink-4));
+}
+@media (prefers-reduced-motion: reduce) {
+  .sh-rail-timer { animation: none; }
+  .sh-rail-timer .rt-core { animation: none; }
+}
+
 .sh-view .briefing h2 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-size: 26px; line-height: 1.22; margin: 10px 0 14px; max-width: 58ch; color: var(--sh-ink); letter-spacing: -0.005em; font-weight: 400; }
 .sh-view .briefing h2 mark { background: linear-gradient(transparent 62%, var(--sh-ink) 62%, var(--sh-ink) 96%, transparent 96%); color: inherit; padding: 0 2px; }
 .sh-view .briefing .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }

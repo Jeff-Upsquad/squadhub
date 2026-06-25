@@ -31,6 +31,7 @@ import { useHasMiniApp } from '../hooks/useMiniApps';
 import TimeManagementPage from '../views/app/time-management/TimeManagementPage';
 import SalesLeadsPage from '../views/app/sales/SalesLeadsPage';
 import ThemeToggle from '../components/ThemeToggle';
+import RailTimer from './RailTimer';
 import ActiveTimer from '../components/ActiveTimer';
 import TimeSheetPanel from '../components/TimeSheetPanel';
 import ClientDashboard from '../views/app/client/ClientDashboard';
@@ -86,69 +87,75 @@ type NavSnapshot = {
   designFolderId: string | null;
 };
 
-// ---- Rail icons (stroke-1.6, 18x18) ----
+// ---- Rail icons — soft-solid set (filled glyphs, 18×18) -------------------
+// Confident filled silhouettes; interior detail (envelope flap, checkmark,
+// fold, header, hourglass) is *cut* back out using stroke="var(--ic-cut)".
+// `--ic-cut` is driven by the rail CSS to match whatever sits behind the icon
+// — the rail bg when resting, the hover wash on hover, the pill when active —
+// so the cut always reads as clean negative space. fill = currentColor, so
+// the glyph is muted ink at rest and full ink (in the pill) when active.
 const ICON = {
   home: (
-    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1z" />
+    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <path d="M11.05 4.05a1.45 1.45 0 0 1 1.9 0l6.4 5.34c.32.27.5.66.5 1.08v8.05A1.7 1.7 0 0 1 18.15 20.2H15.5v-4.55a3.5 3.5 0 0 0-7 0v4.55H5.85A1.7 1.7 0 0 1 4.15 18.5v-8.03c0-.42.18-.81.5-1.08z" />
     </svg>
   ),
   inbox: (
-    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <path d="M3 13V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8" />
-      <path d="M3 13h5l2 3h4l2-3h5v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <path d="M5.8 4.4h12.4a2 2 0 0 1 2 2v11.2a2 2 0 0 1-2 2H5.8a2 2 0 0 1-2-2V6.4a2 2 0 0 1 2-2z" />
+      <path d="M4.6 7.4l6.6 4.7a1.4 1.4 0 0 0 1.6 0l6.6-4.7" fill="none" stroke="var(--ic-cut)" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
   tasks: (
-    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="9" />
-      <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <path d="M8.4 3.8h7.2a4.6 4.6 0 0 1 4.6 4.6v7.2a4.6 4.6 0 0 1-4.6 4.6H8.4a4.6 4.6 0 0 1-4.6-4.6V8.4a4.6 4.6 0 0 1 4.6-4.6z" />
+      <path d="m8.4 12.1 2.5 2.5 4.7-5.2" fill="none" stroke="var(--ic-cut)" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
   docs: (
-    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
-      <path d="M14 3v6h6M8 13h8M8 17h6" />
+    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <path d="M7.4 4.2h5.74a1 1 0 0 1 .71.3l4.06 4.06a1 1 0 0 1 .29.7v9.34A2.2 2.2 0 0 1 16 20.8H7.4A2.2 2.2 0 0 1 5.2 18.6V6.4A2.2 2.2 0 0 1 7.4 4.2z" />
+      <path d="M13.3 4.5v3.2a1.4 1.4 0 0 0 1.4 1.4h3.2" fill="none" stroke="var(--ic-cut)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8.7 13.4h6.6M8.7 16.4h4.4" fill="none" stroke="var(--ic-cut)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
   cal: (
-    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <rect x="3" y="5" width="18" height="16" rx="2" />
-      <path d="M3 10h18M8 3v4M16 3v4" />
+    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <rect x="4" y="5.4" width="16" height="14.6" rx="3" />
+      <path d="M8.5 3.3v3.2M15.5 3.3v3.2" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" />
+      <path d="M4.4 9.7h15.2" fill="none" stroke="var(--ic-cut)" strokeWidth={1.6} strokeLinecap="round" />
+      <g fill="var(--ic-cut)">
+        <circle cx="8.7" cy="13.7" r="1" /><circle cx="12" cy="13.7" r="1" /><circle cx="15.3" cy="13.7" r="1" />
+        <circle cx="8.7" cy="16.8" r="1" /><circle cx="12" cy="16.8" r="1" />
+      </g>
     </svg>
   ),
   apps: (
-    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <rect x="3" y="3" width="7" height="7" rx="1" />
-      <rect x="14" y="3" width="7" height="7" rx="1" />
-      <rect x="3" y="14" width="7" height="7" rx="1" />
-      <rect x="14" y="14" width="7" height="7" rx="1" />
+    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <circle cx="6" cy="6" r="1.7" /><circle cx="12" cy="6" r="1.7" /><circle cx="18" cy="6" r="1.7" />
+      <circle cx="6" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="18" cy="12" r="1.7" />
+      <circle cx="6" cy="18" r="1.7" /><circle cx="12" cy="18" r="1.7" /><circle cx="18" cy="18" r="1.7" />
     </svg>
   ),
   learning: (
-    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <path d="M12 5.4 2.5 9.3 12 13.2l9.5-3.9z" />
+      <path d="M6.9 11.7v2.9c0 1.2 2.28 2.2 5.1 2.2s5.1-1 5.1-2.2v-2.9" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M21.5 9.6v3.7" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+      <circle cx="21.5" cy="14" r="1.05" />
     </svg>
   ),
   timesheet: (
-    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
-    </svg>
-  ),
-  users: (
-    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <circle cx="9" cy="8" r="4" />
-      <path d="M2 21a7 7 0 0 1 14 0" />
-      <circle cx="17" cy="7" r="3" />
-      <path d="M22 18a5 5 0 0 0-7-4.6" />
+    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <path d="M8 5 16 5 12 11.2 16 19 8 19 12 11.2Z" />
+      <path d="M6.6 3.9h10.8M6.6 20.1h10.8" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" />
     </svg>
   ),
   more: (
-    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <circle cx="5" cy="12" r="1" />
-      <circle cx="12" cy="12" r="1" />
-      <circle cx="19" cy="12" r="1" />
+    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <circle cx="5.5" cy="12" r="1.5" />
+      <circle cx="12" cy="12" r="1.5" />
+      <circle cx="18.5" cy="12" r="1.5" />
     </svg>
   ),
 } as const;
@@ -191,33 +198,32 @@ function RailBtn({
       onClick={onClick}
       title={label}
       data-tip-anchor={anchorKey}
-      className={`relative grid h-10 w-10 place-items-center rounded-[9px] transition ${
-        active
-          ? 'border border-[var(--sh-hair)] bg-[var(--surface)] text-[var(--sh-ink)]'
-          : 'border border-transparent text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-      }`}
-      style={active ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+      data-active={active}
+      className="sh-rail-item"
     >
-      {icon}
-      {badge != null && badge > 0 && (
-        <span className="absolute top-[3px] right-[3px] grid place-items-center">
-          {badgeAlert && badgePulse && (
+      <span className="sh-rail-ic">
+        {icon}
+        {badge != null && badge > 0 && (
+          <span className="absolute top-[1px] right-[1px] grid place-items-center">
+            {badgeAlert && badgePulse && (
+              <span
+                aria-hidden
+                className="sh-badge-ping absolute inset-0 rounded-full"
+                style={{ background: 'var(--sh-badge-alert)' }}
+              />
+            )}
             <span
-              aria-hidden
-              className="sh-badge-ping absolute inset-0 rounded-full"
-              style={{ background: 'var(--sh-badge-alert)' }}
-            />
-          )}
-          <span
-            className={`relative grid min-w-[14px] h-[14px] place-items-center rounded-full text-[9px] font-semibold px-[3px] leading-none ${
-              badgeAlert ? 'text-white' : 'text-[var(--sidebar)]'
-            }`}
-            style={{ background: badgeAlert ? 'var(--sh-badge-alert)' : 'var(--sh-ink)' }}
-          >
-            {badge}
+              className={`relative grid min-w-[14px] h-[14px] place-items-center rounded-full text-[9px] font-semibold px-[3px] leading-none ${
+                badgeAlert ? 'text-white' : 'text-[var(--sidebar)]'
+              }`}
+              style={{ background: badgeAlert ? 'var(--sh-badge-alert)' : 'var(--sh-ink)' }}
+            >
+              {badge}
+            </span>
           </span>
-        </span>
-      )}
+        )}
+      </span>
+      <span className="sh-rail-lb">{label}</span>
     </button>
   );
 }
@@ -1003,7 +1009,7 @@ export default function MainLayout() {
         <div className="flex w-full flex-col items-center gap-[2px]">
           <RailBtn
             icon={ICON.home}
-            label="My Home"
+            label="Home"
             anchorKey="rail.home"
             active={activeSection === 'home' && homeView === 'hub'}
             onClick={() => { setActiveSection('home'); setHomeView('hub'); }}
@@ -1044,14 +1050,11 @@ export default function MainLayout() {
             }}
             title="Time sheet"
             data-tip-anchor="rail.timesheet"
-            className={`relative grid h-10 w-10 place-items-center rounded-[9px] transition ${
-              timesheetOpen
-                ? 'border border-[var(--sh-hair)] bg-[var(--surface)] text-[var(--sh-ink)]'
-                : 'border border-transparent text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-            }`}
-            style={timesheetOpen ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+            data-active={timesheetOpen}
+            className="sh-rail-item"
           >
-            {ICON.timesheet}
+            <span className="sh-rail-ic">{ICON.timesheet}</span>
+            <span className="sh-rail-lb">Timesheet</span>
           </button>
         </div>
 
@@ -1066,15 +1069,27 @@ export default function MainLayout() {
         {/* Spacer */}
         <div className="flex-1" />
 
+        {/* Live timer chip — only while a Work/Break/No-work timer is running.
+            Clicking it returns to My Home where the full controls live. */}
+        <RailTimer
+          onOpen={() => {
+            setActiveSection('home');
+            setHomeView('hub');
+            setMobileDrawerOpen(false);
+          }}
+        />
+
         {/* Bottom group: theme + avatar with profile popover */}
-        <div className="flex w-full flex-col items-center gap-[2px]">
-          <div className="grid h-10 w-10 place-items-center">
+        <div className="flex w-full flex-col items-center gap-[6px]">
+          <div className="sh-rail-util">
             <ThemeToggle />
+            <span className="sh-rail-lb">Theme</span>
           </div>
+          <div className="sh-rail-util">
           <div ref={profileRef} className="relative">
             <button
               onClick={() => setProfileOpen((v) => !v)}
-              className="mt-1 grid h-8 w-8 place-items-center rounded-full bg-[var(--sh-ink)] text-[var(--sidebar)] text-[11px] font-semibold relative cursor-pointer"
+              className="grid h-8 w-8 place-items-center rounded-full bg-[var(--sh-ink)] text-[var(--sidebar)] text-[11px] font-semibold relative cursor-pointer"
               style={{ border: '2px solid var(--icon-bar)' }}
               title={user?.display_name || user?.email || 'Me'}
             >
@@ -1112,6 +1127,10 @@ export default function MainLayout() {
                 </div>
               </div>
             )}
+          </div>
+            <span className="sh-rail-lb">
+              {(user?.display_name || user?.email || 'Me').split(/[ @]/)[0]}
+            </span>
           </div>
         </div>
       </div>
