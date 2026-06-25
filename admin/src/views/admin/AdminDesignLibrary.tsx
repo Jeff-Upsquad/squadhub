@@ -18,7 +18,7 @@ interface DesignSource {
 const LIB_BASE = '/design-library/';
 
 export default function AdminDesignLibrary() {
-  const [active, setActive] = useState<string>('hub');
+  const [active, setActive] = useState<string>('squadhub');
 
   const { data: sources, isLoading } = useQuery<DesignSource[]>({
     queryKey: ['design-library-sources'],
@@ -40,7 +40,7 @@ export default function AdminDesignLibrary() {
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Design Library</h1>
           <p className="mt-1 text-sm text-foreground-muted">
-            Design systems captured from other products — tokens, typography, icons and components, extracted from their production CSS.
+            Squad Hub&apos;s own design system, plus references captured from other products — tokens, typography, icons and components.
           </p>
         </div>
         <a

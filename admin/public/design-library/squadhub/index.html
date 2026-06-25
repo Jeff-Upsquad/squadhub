@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SquadHub — Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Lato:wght@400;700;900&family=Space+Grotesk:wght@500;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/ds.css" />
+</head>
+<body data-surface="webapp">
+
+<header class="topbar">
+  <div class="brand">
+    <span class="bm">SquadHub</span>
+    <span class="bt">Design <em>System</em></span>
+  </div>
+  <nav class="switcher" aria-label="Surface">
+    <button data-s="site"><span class="k">1</span>Squad Hub</button>
+    <button data-s="webapp"><span class="k">2</span>Web App</button>
+    <button data-s="admin"><span class="k">3</span>Admin Panel</button>
+  </nav>
+  <div class="top-right">
+    <button class="theme-toggle" id="theme-toggle" data-dark="false"><span class="dot"></span><span class="tl">light</span></button>
+    <span class="branch-tag">design-system · 2026-06</span>
+  </div>
+</header>
+
+<div class="frame">
+  <aside class="rail">
+    <p class="rail-h">Contents</p>
+    <div id="rail-links"></div>
+  </aside>
+
+  <main>
+
+  <!-- ════════════════════════ SQUAD HUB (public site) ════════════════════════ -->
+  <div class="surface" id="surface-site">
+    <div class="hero">
+      <div class="eyebrow"><span class="pulse"></span>squadhub.in · public site — connect, auth, downloads</div>
+      <h1>Warm paper,<br/><em>butter lime</em>.</h1>
+      <p class="sub">The public face of Squad Hub: the <b>/connect</b> brief form on warm cream paper with neo-brutalist lime CTAs and hard offset shadows, plus a cooler <b>slate-and-blue</b> system for login, signup and download pages.</p>
+      <div class="font-trio">
+        <span class="ft" style="font-family:var(--f-body)">Inter <span class="r">body & headings</span></span>
+        <span class="ft" style="font-family:var(--f-mono)">JetBrains Mono <span class="r">eyebrows</span></span>
+        <span class="ft" style="font-family:var(--f-serif)">Instrument Serif <span class="r">accents</span></span>
+      </div>
+      <div class="strip">
+        <div class="cell" style="background:#F8F6F0" data-hex="#F8F6F0" data-copy="#F8F6F0"></div>
+        <div class="cell" style="background:#FBFAF6" data-hex="#FBFAF6" data-copy="#FBFAF6"></div>
+        <div class="cell" style="background:#F2FCBC" data-hex="#F2FCBC" data-copy="#F2FCBC"></div>
+        <div class="cell" style="background:#FCF487" data-hex="#FCF487" data-copy="#FCF487"></div>
+        <div class="cell" style="background:#F0E660" data-hex="#F0E660" data-copy="#F0E660"></div>
+        <div class="cell" style="background:#D9D5C7" data-hex="#D9D5C7" data-copy="#D9D5C7"></div>
+        <div class="cell" style="background:#7A7568;--lbl:rgba(255,255,255,.75)" data-hex="#7A7568" data-copy="#7A7568"></div>
+        <div class="cell" style="background:#222222;--lbl:rgba(255,255,255,.7)" data-hex="#222222" data-copy="#222222"></div>
+        <div class="cell" style="background:#2962FF;--lbl:rgba(255,255,255,.8)" data-hex="#2962FF" data-copy="#2962FF"></div>
+      </div>
+    </div>
+
+    <section class="block" id="site-type">
+      <div class="block-head"><span class="idx">01</span><h2>Typography</h2><span class="note">Inter via Google Fonts<br/>globals.css:2</span></div>
+      <div class="spec"><div class="pane col" style="padding:8px 28px">
+        <div class="type-row"><div class="sample" style="font-family:var(--f-body);font-size:40px;font-weight:600;letter-spacing:-0.01em;line-height:1.05;color:#0F172B">Run your squad, not your inbox.</div><div class="spec-t"><b>Hero heading</b><br/>Inter · 40px · 600 · 1.05</div></div>
+        <div class="type-row"><div class="sample" style="font-family:var(--f-body);font-size:28px;font-weight:600;letter-spacing:-0.015em;color:#222">Tell us about your brand</div><div class="spec-t"><b>Page heading</b><br/>Inter · 24–28px · 600</div></div>
+        <div class="type-row"><div class="sample" style="font-family:var(--f-body);font-size:18px;font-weight:600;color:#222">Your working week</div><div class="spec-t"><b>Section heading</b><br/>Inter · 18px · 600</div></div>
+        <div class="type-row"><div class="sample" style="font-family:var(--f-mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:#7A7568">Step 02 — Availability</div><div class="spec-t"><b>Eyebrow label</b><br/>Mono · 11px · 600 · caps · 0.12em</div></div>
+        <div class="type-row"><div class="sample" style="font-size:16px;color:#222;line-height:1.55">Body copy runs at sixteen pixels on the connect form, with warm gray hints below each field.</div><div class="spec-t"><b>Body</b><br/>Inter · 16px · 400 · 1.55</div></div>
+        <div class="type-row"><div class="sample" style="font-size:14px;font-weight:600;color:#222">Field label <span style="color:#C13515">*</span></div><div class="spec-t"><b>Field label</b><br/>Inter · 14px · 600</div></div>
+        <div class="type-row"><div class="sample" style="font-size:12px;color:#7A7568">We’ll only use this to reach you about your brief.</div><div class="spec-t"><b>Hint / caption</b><br/>Inter · 12px · 400</div></div>
+      </div><div class="meta"><span class="cls">connect/page.tsx · LoginPage.tsx · partner-app/page.tsx</span><span>weights 400–700</span></div></div>
+    </section>
+
+    <section class="block" id="site-colors">
+      <div class="block-head"><span class="idx">02</span><h2>Colors</h2><span class="note">click any swatch to copy</span></div>
+      <div data-colors="site"></div>
+    </section>
+
+    <section class="block" id="site-icons">
+      <div class="block-head"><span class="idx">03</span><h2>Icons</h2><span class="note">inline SVG · stroke 1.8–2 · click to copy markup</span></div>
+      <div class="icons" data-icons="site"></div>
+    </section>
+
+    <section class="block" id="site-buttons">
+      <div class="block-head"><span class="idx">04</span><h2>Buttons</h2></div>
+      <div class="spec"><div class="pane canvas-site">
+        <span class="lab">Connect form — primary CTA · hover lifts shadow to 4px, press drops to 1px</span>
+        <button class="st-submit">Submit your brief →</button>
+        <button class="st-submit" disabled>Submit your brief →</button>
+      </div><div class="meta"><span class="cls">.connect-submit</span><span>connect/page.tsx:999</span></div></div>
+      <div class="spec"><div class="pane canvas-slate">
+        <span class="lab">Auth — primary · #2962FF → #1E4BD8</span>
+        <button class="st-login-btn">Sign in</button>
+      </div><div class="meta"><span class="cls">LoginPage button</span><span>LoginPage.tsx:83</span></div></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">Download page — indigo pair</span>
+        <button class="st-dl pri"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>Download for macOS</button>
+        <button class="st-dl sec">Download for Windows</button>
+      </div><div class="meta"><span class="cls">download-app buttons</span><span>download-app/page.tsx:65</span></div></div>
+    </section>
+
+    <section class="block" id="site-chips">
+      <div class="block-head"><span class="idx">05</span><h2>Pills &amp; Chips</h2></div>
+      <div class="spec"><div class="pane canvas-site">
+        <span class="lab">Role pills — 2px ink border when selected</span>
+        <button class="st-pill">Video editor</button>
+        <button class="st-pill on">Designer</button>
+        <button class="st-pill">Copywriter</button>
+        <span class="lab">Language / region chips — lime tint + inset ring when on</span>
+        <button class="st-chip">English</button>
+        <button class="st-chip on">हिन्दी</button>
+        <button class="st-chip">தமிழ்</button>
+        <span class="lab">Working-day cells — dashed border marks optional days</span>
+        <button class="st-day on">Mon</button>
+        <button class="st-day">Tue</button>
+        <button class="st-day">Wed</button>
+        <button class="st-day opt">Sat</button>
+      </div><div class="meta"><span class="cls">.connect-pill · .connect-chip · .connect-day</span><span>connect/page.tsx:1028–1123</span></div></div>
+    </section>
+
+    <section class="block" id="site-cards">
+      <div class="block-head"><span class="idx">06</span><h2>Cards &amp; Banners</h2></div>
+      <div class="spec"><div class="pane canvas-site">
+        <div class="st-section">
+          <div class="eb">Step 01 — About you</div>
+          <h4>Brand basics <span class="rq">*</span></h4>
+          <p class="hint">Tell us who you are and where you publish. Three short fields, nothing painful.</p>
+        </div>
+        <div class="st-banner-warn">We pre-filled this form from your last visit — review before submitting.</div>
+        <div class="st-banner-err">Something went wrong while submitting. Please check the highlighted fields.</div>
+      </div><div class="meta"><span class="cls">Section card · prefill banner · error banner</span><span>connect/page.tsx:437–558, 764</span></div></div>
+      <div class="spec"><div class="pane canvas-slate">
+        <div class="st-login-card">
+          <h4>Welcome back</h4>
+          <p>Sign in to your SquadHub workspace</p>
+        </div>
+        <div class="st-table">
+          <div class="gh">Instagram</div>
+          <div class="tr"><span>Feed post</span><span>1080 × 1350</span></div>
+          <div class="tr"><span>Story / Reel</span><span>1080 × 1920</span></div>
+          <div class="tr"><span>Profile photo</span><span>320 × 320</span></div>
+        </div>
+      </div><div class="meta"><span class="cls">login card · social-sizes table</span><span>LoginPage.tsx:46 · help/social-sizes:220</span></div></div>
+    </section>
+
+    <section class="block" id="site-inputs">
+      <div class="block-head"><span class="idx">07</span><h2>Inputs &amp; Forms</h2></div>
+      <div class="spec"><div class="pane canvas-site">
+        <span class="lab">Connect input — warm paper fill, ink focus ring · try focusing</span>
+        <input class="st-input" placeholder="Your brand name" />
+        <div class="st-phone">
+          <select><option>+91</option><option>+1</option><option>+44</option></select>
+          <div class="dv"></div>
+          <input placeholder="98765 43210" />
+        </div>
+      </div><div class="meta"><span class="cls">.connect-input · .connect-phone</span><span>connect/page.tsx:931–989</span></div></div>
+      <div class="spec"><div class="pane canvas-slate">
+        <span class="lab">Auth input — slate border, blue focus ring</span>
+        <input class="st-login-input" placeholder="you@company.com" />
+        <input class="st-login-input" type="password" value="hunter2hunter" />
+      </div><div class="meta"><span class="cls">login / signup inputs</span><span>LoginPage.tsx:61</span></div></div>
+    </section>
+
+    <section class="block" id="site-patterns">
+      <div class="block-head"><span class="idx">08</span><h2>Patterns</h2></div>
+      <div class="spec"><div class="pane canvas-site col">
+        <span class="lab">Offset-shadow physics — rest 3px · hover 4px · press 1px + translate(2px,2px)</span>
+        <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:center">
+          <span style="font-family:var(--f-mono);font-size:10px;color:#7A7568">box-shadow: 3px 3px 0 0 #0a0a0a → 4px 4px → 1px 1px</span>
+        </div>
+        <span class="lab">Background — layered radial gradients on #F8F6F0</span>
+        <div data-copy="radial-gradient(circle at 0% 0%, rgba(244,241,232,0.8) 0%, transparent 40%), radial-gradient(circle at 100% 100%, rgba(232,229,221,0.6) 0%, transparent 40%)" style="cursor:pointer;height:90px;border-radius:12px;border:1px solid #E8E5DD;background:#F8F6F0;background-image:radial-gradient(circle at 0% 0%, rgba(244,241,232,0.9) 0%, transparent 40%),radial-gradient(circle at 100% 100%, rgba(217,213,199,0.55) 0%, transparent 40%)"></div>
+      </div><div class="meta"><span class="cls">.connect-bg</span><span>connect/page.tsx:925</span></div></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">Radii</span>
+        <div class="radii">
+          <div class="rad" style="border-radius:8px">8</div>
+          <div class="rad" style="border-radius:10px">10</div>
+          <div class="rad" style="border-radius:12px">12</div>
+          <div class="rad" style="border-radius:16px">16</div>
+          <div class="rad" style="border-radius:999px">999</div>
+        </div>
+        <span class="lab">Shadows</span>
+        <div class="shadow-grid" style="width:100%">
+          <div class="shd" style="box-shadow:3px 3px 0 0 #0a0a0a"><div class="nm">Brutalist offset</div><div class="vv">3px 3px 0 0 #0a0a0a</div></div>
+          <div class="shd" style="box-shadow:0 0 0 3px rgba(58,58,58,0.08)"><div class="nm">Focus ring</div><div class="vv">0 0 0 3px rgba(58,58,58,.08)</div></div>
+          <div class="shd" style="box-shadow:0 4px 12px rgba(0,0,0,0.08)"><div class="nm">Card lift</div><div class="vv">0 4px 12px rgba(0,0,0,.08)</div></div>
+          <div class="shd" style="box-shadow:0 10px 30px -20px rgba(15,23,43,0.15),0 1px 0 rgba(15,23,43,0.02)"><div class="nm">Download card</div><div class="vv">0 10px 30px -20px rgba(15,23,43,.15)</div></div>
+        </div>
+      </div><div class="meta"><span class="cls">radius & elevation set</span><span></span></div></div>
+    </section>
+  </div>
+
+  <!-- ════════════════════════ WEB APP ════════════════════════ -->
+  <div class="surface" id="surface-webapp">
+    <div class="hero">
+      <div class="eyebrow"><span class="pulse"></span>squadhub.in/app · product — tasks, inbox, planner, chat</div>
+      <h1>Ink, hairlines &amp;<br/><em>Instrument Serif</em>.</h1>
+      <p class="sub">The product runs a <b>monochrome editorial language</b>: an ink scale over hairline borders, serif display numerals, JetBrains Mono eyebrows — with one blue accent and semantic color reserved for status. Fully dark-mode aware; flip the toggle in the top bar (or press <b>d</b>).</p>
+      <div class="font-trio">
+        <span class="ft" style="font-family:var(--f-body)">Inter <span class="r">body</span></span>
+        <span class="ft" style="font-family:var(--f-serif)">Instrument Serif <span class="r">display</span></span>
+        <span class="ft" style="font-family:var(--f-mono)">JetBrains Mono <span class="r">meta</span></span>
+        <span class="ft" style="font-family:var(--f-jak)">Plus Jakarta Sans <span class="r">group heads</span></span>
+        <span class="ft" style="font-family:'Lato',sans-serif">Lato <span class="r">squad chat</span></span>
+        <span class="ft" style="font-family:'Space Grotesk',sans-serif">Space Grotesk <span class="r">chat display</span></span>
+      </div>
+      <div class="strip">
+        <div class="cell" style="background:#0A0A0A;--lbl:rgba(255,255,255,.7)" data-hex="#0A0A0A" data-copy="#0A0A0A"></div>
+        <div class="cell" style="background:#2A2A2A;--lbl:rgba(255,255,255,.7)" data-hex="#2A2A2A" data-copy="#2A2A2A"></div>
+        <div class="cell" style="background:#6A6A6A;--lbl:rgba(255,255,255,.75)" data-hex="#6A6A6A" data-copy="#6A6A6A"></div>
+        <div class="cell" style="background:#A0A0A0" data-hex="#A0A0A0" data-copy="#A0A0A0"></div>
+        <div class="cell" style="background:#D0D0D0" data-hex="#D0D0D0" data-copy="#D0D0D0"></div>
+        <div class="cell" style="background:#E6E6E6" data-hex="#E6E6E6" data-copy="#E6E6E6"></div>
+        <div class="cell" style="background:#F0F0F0" data-hex="#F0F0F0" data-copy="#F0F0F0"></div>
+        <div class="cell" style="background:#F0F2F5" data-hex="#F0F2F5" data-copy="#F0F2F5"></div>
+        <div class="cell" style="background:#2962FF;--lbl:rgba(255,255,255,.8)" data-hex="#2962FF" data-copy="#2962FF"></div>
+        <div class="cell" style="background:#22C55E;--lbl:rgba(255,255,255,.8)" data-hex="#22C55E" data-copy="#22C55E"></div>
+      </div>
+    </div>
+
+    <section class="block" id="wa-type">
+      <div class="block-head"><span class="idx">01</span><h2>Typography</h2><span class="note">six families<br/>globals.css:2–3</span></div>
+      <div class="spec"><div class="pane col on-surface" style="padding:8px 28px">
+        <div class="type-row"><div class="sample"><span class="wa" style="font-family:var(--f-serif);font-size:40px;letter-spacing:-0.01em;line-height:1.1">My tasks</span></div><div class="spec-t"><b>Page title</b> · .tasks-head h1<br/>Instrument Serif · 40px · 400</div></div>
+        <div class="type-row"><div class="sample"><span class="wa" style="font-family:var(--f-serif);font-size:38px;line-height:1.1">128<span style="font-size:14px;font-family:var(--f-body);color:var(--sh-ink-3)"> open</span></span></div><div class="spec-t"><b>Stat numeral</b> · .stat .val<br/>Instrument Serif · 38px</div></div>
+        <div class="type-row"><div class="sample"><h3 class="wa-greeting">Good morning, <em>Jeff</em></h3></div><div class="spec-t"><b>Greeting</b> · .dash-hero .greeting<br/>Serif 28px + italic underline em</div></div>
+        <div class="type-row"><div class="sample"><span class="wa" style="font-family:var(--f-jak);font-size:18px;font-weight:600;letter-spacing:-0.012em">This week’s deliverables</span></div><div class="spec-t"><b>Group heading</b> · .lv-group-head<br/>Plus Jakarta Sans · 18px · 600</div></div>
+        <div class="type-row"><div class="sample"><span class="wa" style="font-size:14px;line-height:1.6;color:var(--sh-ink-2)">Body text sits at fourteen pixels with −0.011em tracking, on Inter, over the canvas token.</span></div><div class="spec-t"><b>Body</b><br/>Inter · 14px · 400 · 1.6</div></div>
+        <div class="type-row"><div class="sample"><span class="wa-eyebrow">Live briefing — Wednesday</span></div><div class="spec-t"><b>Eyebrow</b> · .eyebrow<br/>JetBrains Mono · 10.5px · caps · 0.1em</div></div>
+        <div class="type-row"><div class="sample"><span class="wa" style="font-family:var(--f-mono);font-size:11px;color:var(--sh-ink-3)">DUE FRI · SQH-214 · 11:30</span></div><div class="spec-t"><b>Meta / time</b><br/>JetBrains Mono · 10–11px</div></div>
+      </div><div class="meta"><span class="cls">globals.css — .sh-view type system</span><span>weights: Inter 400–700 · Serif 400</span></div></div>
+    </section>
+
+    <section class="block" id="wa-colors">
+      <div class="block-head"><span class="idx">02</span><h2>Colors</h2><span class="note">real token names · light & dark<br/>click to copy</span></div>
+      <div data-colors="webapp"></div>
+    </section>
+
+    <section class="block" id="wa-icons">
+      <div class="block-head"><span class="idx">03</span><h2>Icons</h2><span class="note">Icons.tsx atoms · 14px · stroke 1.6<br/>click to copy SVG</span></div>
+      <div class="icons" data-icons="webapp"></div>
+    </section>
+
+    <section class="block" id="wa-buttons">
+      <div class="block-head"><span class="idx">04</span><h2>Buttons &amp; Controls</h2></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">.td-btn — workhorse button · default / primary / pill</span>
+        <button class="wa-td-btn">Add subtask</button>
+        <button class="wa-td-btn primary">Save changes</button>
+        <button class="wa-td-btn pill primary">Mark complete</button>
+        <button class="wa-td-btn" disabled style="opacity:.5">Disabled</button>
+        <span class="lab">.top-btn — toolbar ghost · .send-btn — composer</span>
+        <button class="wa-top-btn">Filter</button>
+        <button class="wa-top-btn primary">New task</button>
+        <button class="wa-send-btn">Send ↵</button>
+      </div><div class="meta"><span class="cls">.td-btn · .top-btn · .send-btn</span><span>globals.css:286, 564–589</span></div></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">.td-cta-btn — drawer primary action + ghost</span>
+        <button class="wa-cta">Accept task</button>
+        <button class="wa-cta ghost">Snooze until tomorrow</button>
+      </div><div class="meta"><span class="cls">.td-cta-btn</span><span>globals.css:752</span></div></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">.checkbox — click the third one: pop + green glow celebration</span>
+        <button class="wa-checkbox"></button>
+        <button class="wa-checkbox" data-done="true"></button>
+        <button class="wa-checkbox demo" data-done="false" title="Click me"></button>
+        <span style="font-size:12px;color:var(--sh-ink-3);font-family:var(--f-body)">← interactive</span>
+      </div><div class="meta"><span class="cls">.checkbox / .td-checkbox + checkboxPop + checkGlow</span><span>globals.css:449, 1503–1517</span></div></div>
+    </section>
+
+    <section class="block" id="wa-chips">
+      <div class="block-head"><span class="idx">05</span><h2>Pills, Badges &amp; Tags</h2></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">.status-pill — task states</span>
+        <span class="wa-status todo">To do</span>
+        <span class="wa-status prog">In progress</span>
+        <span class="wa-status review">In review</span>
+        <span class="wa-status done">Done</span>
+        <span class="lab">.badge — due-date semantics</span>
+        <span class="wa-badge">Backlog</span>
+        <span class="wa-badge overdue">Overdue</span>
+        <span class="wa-badge today">Today</span>
+        <span class="wa-badge focus">Focus</span>
+        <span class="wa-badge starts">Starts Mon</span>
+        <span class="lab">.td-pri-chip — priority (EMG pulses)</span>
+        <span class="wa-pri p0">P0 · Urgent</span>
+        <span class="wa-pri p1">P1 · High</span>
+        <span class="wa-pri emg">EMERGENCY</span>
+        <span class="wa-prio p0"><span class="dots"><span class="d"></span><span class="d"></span><span class="d"></span></span>P0</span>
+        <span class="wa-prio p1"><span class="dots"><span class="d"></span><span class="d"></span><span class="d"></span></span>P1</span>
+        <span class="wa-prio p2"><span class="dots"><span class="d"></span><span class="d"></span><span class="d"></span></span>P2</span>
+      </div><div class="meta"><span class="cls">.status-pill · .badge · .td-pri-chip · .priority</span><span>globals.css:306–429, 1164</span></div></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">Chips — filter, host, time, day</span>
+        <span class="wa-chip">Design</span>
+        <span class="wa-chip solid">All projects</span>
+        <span class="wa-host-chip"><span class="logo">A</span>Acme Studio<span style="opacity:.5">▾</span></span>
+        <span class="wa-time-chip"><span class="l">Due</span>Fri 14 Jun</span>
+        <span class="wa-day-chip"><span class="wd">Wed</span><span class="dom">11</span></span>
+        <span class="wa-day-chip today"><span class="wd">Thu</span><span class="dom">12</span></span>
+        <span class="lab">Tags & labels</span>
+        <span class="wa-tag">Internal</span>
+        <span class="wa-tag client">Client</span>
+        <span class="wa-td-label">SQH-214</span>
+        <span class="wa-hashtag">#retainers</span>
+        <span class="wa-pill">Unread</span>
+        <span class="wa-pill on">All</span>
+      </div><div class="meta"><span class="cls">.chip · .td-host-chip · .td-time-chip · .dp-day-chip · .tag · .td-label · .td-hashtag · .pill</span><span>globals.css:176–343, 884</span></div></div>
+    </section>
+
+    <section class="block" id="wa-cards">
+      <div class="block-head"><span class="idx">06</span><h2>Cards &amp; Surfaces</h2></div>
+      <div class="spec"><div class="pane">
+        <div class="wa-card">
+          <div class="wa-card-head"><h5>Activity</h5><span class="lnk">View all</span></div>
+          <div class="wa-card-body">Hairline-bordered cards at 14px radius are the base surface. Headers carry a 13.5px semibold title and a quiet right-side link.</div>
+        </div>
+        <div class="wa-stat">
+          <div class="lbl">Open tasks</div>
+          <div class="val">37<span class="tiny">/52</span></div>
+          <div class="delta">+4 vs last week</div>
+        </div>
+        <div class="wa-td-card">
+          <div class="stamp"><span class="m">Jun</span><span class="d">14</span></div>
+          <div><div class="tl">Due Friday</div><div class="sb">2 days left</div></div>
+        </div>
+      </div><div class="meta"><span class="cls">.card · .stat · .td-card (date-stamp bento)</span><span>globals.css:143–164, 667</span></div></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">Avatars — hsl(hue, 60%, 78%) generated from name hash</span>
+        <div style="display:flex;gap:8px;align-items:center" data-avatars="sm"></div>
+        <span class="lab">Sizes 22 / 32 / 36 + overlap stack</span>
+        <div style="display:flex;gap:14px;align-items:center">
+          <span class="wa-ava xs" style="background:hsl(210,60%,78%);color:hsl(210,45%,30%)">JZ</span>
+          <span class="wa-ava sm" style="background:hsl(340,60%,78%);color:hsl(340,45%,30%)">AM</span>
+          <span class="wa-ava md" style="background:hsl(90,60%,78%);color:hsl(90,45%,30%)">RK</span>
+          <span class="wa-stack">
+            <span class="wa-ava xs" style="background:hsl(210,60%,78%);color:hsl(210,45%,30%)">JZ</span>
+            <span class="wa-ava xs" style="background:hsl(25,60%,78%);color:hsl(25,45%,30%)">PS</span>
+            <span class="wa-ava xs" style="background:hsl(150,60%,78%);color:hsl(150,45%,30%)">DV</span>
+            <span class="wa-ava xs" style="background:var(--sh-hair-3);color:var(--sh-ink-3)">+3</span>
+          </span>
+        </div>
+      </div><div class="meta"><span class="cls">.ava · .td-ava-xs/sm · hueFromString()</span><span>atoms/Avatar.tsx:15</span></div></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">Toasts — ink surface, slide-in spring · fire a live one →</span>
+        <span class="wa-toast-text"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l5 5 9-11"/></svg>Task completed</span>
+        <span class="wa-toast-card"><span class="well"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l5 5 9-11"/></svg></span><span><span class="ts">Inbox</span><br/><span class="tt">Maya replied on SQH-214</span></span></span>
+        <button class="wa-td-btn" id="fire-toast">Fire toast</button>
+      </div><div class="meta"><span class="cls">Toast.tsx — text + card variants · sh-toast-in/out</span><span>260ms cubic-bezier(0.32,0.72,0,1)</span></div></div>
+    </section>
+
+    <section class="block" id="wa-inputs">
+      <div class="block-head"><span class="idx">07</span><h2>Inputs &amp; Nav</h2></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">Search field · inline assignee input · reply composer</span>
+        <span class="wa-search"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input placeholder="Search tasks…" /></span>
+        <input class="wa-ap-input" placeholder="Assign someone…" />
+        <div class="wa-reply">
+          <textarea placeholder="Reply to thread…"></textarea>
+          <div class="acts"><span style="font-family:var(--f-mono);font-size:10.5px;color:var(--sh-ink-4)">⌘↵ to send</span><button class="wa-send-btn">Send</button></div>
+        </div>
+      </div><div class="meta"><span class="cls">.lv-search · .ap-input · .reply-card</span><span>globals.css:282, 1753, 2775</span></div></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">Tabs — underline & pill segmented</span>
+        <div class="wa-tabs-u">
+          <button class="wa-tab on">Overview</button>
+          <button class="wa-tab">Subtasks</button>
+          <button class="wa-tab">Activity</button>
+        </div>
+        <div class="wa-tabs-pill">
+          <button class="wa-tab-pill on">All</button>
+          <button class="wa-tab-pill">Mine</button>
+          <button class="wa-tab-pill">Delegated</button>
+        </div>
+      </div><div class="meta"><span class="cls">.td-tab · .td-tabs-pill</span><span>globals.css:513–525, 951–982</span></div></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">Sidebar nav — active row gets surface + hairline + shadow</span>
+        <nav class="wa-nav">
+          <div class="wa-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>Inbox<span class="mt">12</span></div>
+          <div class="wa-nav-item on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>Day planner</div>
+          <div class="wa-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>My tasks<span class="mt">37</span></div>
+          <div class="wa-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51L8.59 10.49"/></svg>Shared with me</div>
+        </nav>
+      </div><div class="meta"><span class="cls">.home-task-item / sidebar nav-item</span><span>globals.css:196–206</span></div></div>
+    </section>
+
+    <section class="block" id="wa-motion">
+      <div class="block-head"><span class="idx">08</span><h2>Patterns &amp; Motion</h2></div>
+      <div class="spec"><div class="pane col on-surface">
+        <span class="lab">Live pulse · serif mark highlight · italic-underline em</span>
+        <span class="wa-pulse-line"><span class="pulse"></span>Live briefing</span>
+        <h3 class="wa-briefing-h" style="margin-top:6px">Three deliverables land today — <mark>Acme review at 4pm</mark> is the one to protect.</h3>
+      </div><div class="meta"><span class="cls">.briefing .pulse · h2 mark · greeting em</span><span>globals.css:170–174</span></div></div>
+      <div class="spec"><div class="pane on-surface">
+        <span class="lab">Day-planner block + red now-line (.dp-block · .dp-now)</span>
+        <div class="wa-dp">
+          <span class="hl" style="top:30px">10:00</span><div class="hr" style="top:30px"></div>
+          <span class="hl" style="top:75px">11:00</span><div class="hr" style="top:75px"></div>
+          <span class="hl" style="top:120px">12:00</span><div class="hr" style="top:120px"></div>
+          <div class="wa-dp-block" style="top:34px;height:36px"><div class="bt">Edit hero cut — Acme</div><div class="bm">10:05 – 10:50</div></div>
+          <div class="wa-dp-block done" style="top:79px;height:32px"><div class="bt">Standup notes</div><div class="bm">11:05 – 11:35</div></div>
+          <div class="wa-now" style="top:96px"><span class="wa-now-chip">11:36</span></div>
+        </div>
+      </div><div class="meta"><span class="cls">.dp-block · .dp-now · .dp-now-chip</span><span>globals.css:357–381</span></div></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">Keyframe library</span>
+        <div class="shadow-grid" style="width:100%">
+          <div class="shd"><div class="nm">sh-pulse</div><div class="vv">scale .7→1.8 · fade out · 2s infinite — live dots</div></div>
+          <div class="shd"><div class="nm">checkboxPop + checkGlow</div><div class="vv">.88→1.12→1 squeeze · green 26px glow decay · 220ms/750ms</div></div>
+          <div class="shd"><div class="nm">td-emg-pulse</div><div class="vv">red ring 0→4px + opacity dip · 1.6s infinite — emergencies</div></div>
+          <div class="shd"><div class="nm">sh-toast-in / out</div><div class="vv">in: y14 scale.94 spring 260ms · out: slide right 2s</div></div>
+          <div class="shd"><div class="nm">row slide-off</div><div class="vv">completed rows fade + translateX(200px) + collapse · .6s delayed</div></div>
+          <div class="shd"><div class="nm">scrollbar / selection</div><div class="vv">6px thumb on divider token · selection rgba(41,98,255,.15)</div></div>
+        </div>
+      </div><div class="meta"><span class="cls">globals.css keyframes</span><span>1503–1531, 1213</span></div></div>
+    </section>
+  </div>
+
+  <!-- ════════════════════════ ADMIN PANEL ════════════════════════ -->
+  <div class="surface" id="surface-admin">
+    <div class="hero">
+      <div class="eyebrow"><span class="pulse"></span>admin.squadhub.in · ops console — invitations, leads, published cards</div>
+      <h1>Slate console,<br/><em>lime accents</em>.</h1>
+      <p class="sub">The admin panel is a <b>cool slate console</b> — Plus Jakarta Sans display over Inter body with Geist Mono table headers — that borrows <b>SquadHire’s warm lime neo-brutalism</b> (.sh-*) inside the Published Cards module.</p>
+      <div class="font-trio">
+        <span class="ft" style="font-family:var(--f-jak)">Plus Jakarta Sans <span class="r">display</span></span>
+        <span class="ft" style="font-family:var(--f-body)">Inter <span class="r">body</span></span>
+        <span class="ft" style="font-family:var(--f-geist)">Geist Mono <span class="r">tables & data</span></span>
+      </div>
+      <div class="strip">
+        <div class="cell" style="background:#020618;--lbl:rgba(255,255,255,.7)" data-hex="#020618" data-copy="#020618"></div>
+        <div class="cell" style="background:#0F172B;--lbl:rgba(255,255,255,.7)" data-hex="#0F172B" data-copy="#0F172B"></div>
+        <div class="cell" style="background:#62748E;--lbl:rgba(255,255,255,.8)" data-hex="#62748E" data-copy="#62748E"></div>
+        <div class="cell" style="background:#90A1B9" data-hex="#90A1B9" data-copy="#90A1B9"></div>
+        <div class="cell" style="background:#CAD5E2" data-hex="#CAD5E2" data-copy="#CAD5E2"></div>
+        <div class="cell" style="background:#E2E8F0" data-hex="#E2E8F0" data-copy="#E2E8F0"></div>
+        <div class="cell" style="background:#F1F5F9" data-hex="#F1F5F9" data-copy="#F1F5F9"></div>
+        <div class="cell" style="background:#2962FF;--lbl:rgba(255,255,255,.8)" data-hex="#2962FF" data-copy="#2962FF"></div>
+        <div class="cell" style="background:#FCF487" data-hex="#FCF487" data-copy="#FCF487"></div>
+        <div class="cell" style="background:#F7F6F3" data-hex="#F7F6F3" data-copy="#F7F6F3"></div>
+      </div>
+    </div>
+
+    <section class="block" id="ad-type">
+      <div class="block-head"><span class="idx">01</span><h2>Typography</h2><span class="note">next/font · layout.tsx:7–19</span></div>
+      <div class="spec"><div class="pane col" style="padding:8px 28px;background:#fff">
+        <div class="type-row"><div class="sample"><span class="ad-h1">Published Cards</span></div><div class="spec-t"><b>Page title</b> · sh-display<br/>Plus Jakarta Sans · 30–36px · 700 · −0.025em</div></div>
+        <div class="type-row"><div class="sample"><span class="ad-section-h">Squad metrics — this month</span></div><div class="spec-t"><b>Section heading</b><br/>Jakarta · 11px · 700 · caps · 0.08em</div></div>
+        <div class="type-row"><div class="sample"><span class="ad-th-sample">Invited · Role · Status · Sent</span></div><div class="spec-t"><b>Table header</b><br/>Geist Mono · 10px · caps · 0.12em</div></div>
+        <div class="type-row"><div class="sample"><span class="ad" style="font-size:14px;line-height:1.6">Body and table cells run Inter at fourteen pixels — #0F172B primary, #62748E secondary.</span></div><div class="spec-t"><b>Body / cell</b><br/>Inter · 14px · 400–500</div></div>
+        <div class="type-row"><div class="sample"><span class="ad" style="font-size:12px;color:#62748E">Invited 3 days ago · expires in 4 days</span></div><div class="spec-t"><b>Caption / meta</b><br/>Inter · 12px · #62748E</div></div>
+      </div><div class="meta"><span class="cls">--font-jakarta · --font-inter · --font-mono (Geist)</span><span>admin/src/app/layout.tsx</span></div></div>
+    </section>
+
+    <section class="block" id="ad-colors">
+      <div class="block-head"><span class="idx">02</span><h2>Colors</h2><span class="note">click any swatch to copy</span></div>
+      <div data-colors="admin"></div>
+    </section>
+
+    <section class="block" id="ad-icons">
+      <div class="block-head"><span class="idx">03</span><h2>Icons</h2><span class="note">heroicons outline · 16px · stroke 1.5<br/>click to copy SVG</span></div>
+      <div class="icons" data-icons="admin"></div>
+    </section>
+
+    <section class="block" id="ad-buttons">
+      <div class="block-head"><span class="idx">04</span><h2>Buttons</h2></div>
+      <div class="spec"><div class="pane canvas-admin">
+        <span class="lab">Console pair — slate ink primary · bordered secondary</span>
+        <button class="ad-btn-pri">Send invitation</button>
+        <button class="ad-btn-sec">Cancel</button>
+      </div><div class="meta"><span class="cls">bg-[#0F172B] / border-[#E2E8F0]</span><span>AdminInvitations.tsx:171 · ConfirmDialog.tsx:53</span></div></div>
+      <div class="spec"><div class="pane canvas-cream">
+        <span class="lab">SquadHire neo-brutalist — hover lifts −2px & deepens shadow to 6px, press inverts</span>
+        <button class="shx-btn-pri">Publish card</button>
+        <button class="shx-btn-ghost">Preview</button>
+      </div><div class="meta"><span class="cls">.sh-btn-primary · .sh-btn-ghost</span><span>admin globals.css:231–282</span></div></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">Semantic tint set</span>
+        <button class="ad-tint warn">Recall card</button>
+        <button class="ad-tint danger">Delete lead</button>
+        <button class="ad-tint success">Approve</button>
+        <button class="ad-tint info">Reassign</button>
+        <button class="ad-tint violet">Archive</button>
+      </div><div class="meta"><span class="cls">.sh-btn-warning/danger/success/info/violet</span><span>admin globals.css:286–339</span></div></div>
+    </section>
+
+    <section class="block" id="ad-badges">
+      <div class="block-head"><span class="idx">05</span><h2>Badges &amp; Status</h2></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">Invitation status · user type</span>
+        <span class="ad-badge accepted">Accepted</span>
+        <span class="ad-badge pending">Pending</span>
+        <span class="ad-badge expired">Expired</span>
+        <span class="ad-badge internal">Internal</span>
+        <span class="ad-badge client">Client</span>
+        <span class="ad-badge client_staff">Client staff</span>
+        <span class="ad-badge partner_emp">Partner employee</span>
+        <span class="ad-badge partner">Partner</span>
+        <span class="lab">Lead pipeline chips — tint = color + 15% alpha</span>
+        <span class="ad-lead" style="background:#3B82F626;color:#1d4ed8"><span class="dt" style="background:#3B82F6"></span>New</span>
+        <span class="ad-lead" style="background:#F59E0B26;color:#b45309"><span class="dt" style="background:#F59E0B"></span>In progress</span>
+        <span class="ad-lead" style="background:#8B5CF626;color:#6d28d9"><span class="dt" style="background:#8B5CF6"></span>Selection</span>
+        <span class="ad-lead" style="background:#10B98126;color:#047857"><span class="dt" style="background:#10B981"></span>Converted</span>
+        <span class="ad-lead" style="background:#6366F126;color:#4338ca"><span class="dt" style="background:#6366F1"></span>Onboarding</span>
+        <span class="ad-lead" style="background:#6B728026;color:#374151"><span class="dt" style="background:#6B7280"></span>Closed</span>
+      </div><div class="meta"><span class="cls">status badges · LeadStatusChips</span><span>AdminInvitations.tsx:82 · LeadStatusChips.tsx:4</span></div></div>
+      <div class="spec"><div class="pane canvas-cream">
+        <span class="lab">SquadHire eyebrow · card-state pills · partner count chip</span>
+        <span class="shx-eyebrow">✦ Published this week</span>
+        <span class="shx-status" style="background:#10B98118;color:#10B981"><span class="dt"></span>Active</span>
+        <span class="shx-status" style="background:#0EA5E918;color:#0EA5E9"><span class="dt"></span>Selected</span>
+        <span class="shx-status" style="background:#7C3AED18;color:#7C3AED"><span class="dt"></span>Archived</span>
+        <span class="shx-status" style="background:#DC2626;color:#fff">NEW</span>
+        <span class="ad-count"><b class="ok">✓ 4</b><b class="no">✗ 1</b><b class="wt">⌛ 2</b></span>
+      </div><div class="meta"><span class="cls">.sh-eyebrow · .sh-status-pill · count chips</span><span>AdminPublishedCards.tsx:480, 760</span></div></div>
+    </section>
+
+    <section class="block" id="ad-cards">
+      <div class="block-head"><span class="idx">06</span><h2>Cards &amp; Tables</h2></div>
+      <div class="spec"><div class="pane canvas-admin">
+        <div class="ad-table">
+          <div class="hd"><span>Invited</span><span>Role</span><span>Status</span><span>Sent</span></div>
+          <div class="rw"><span>maya@acme.in</span><span><span class="ad-badge internal">Internal</span></span><span><span class="ad-badge accepted">Accepted</span></span><span class="mut">2d ago</span></div>
+          <div class="rw"><span>ravi@partner.co</span><span><span class="ad-badge partner">Partner</span></span><span><span class="ad-badge pending">Pending</span></span><span class="mut">5h ago</span></div>
+          <div class="rw"><span>nina@client.com</span><span><span class="ad-badge client">Client</span></span><span><span class="ad-badge expired">Expired</span></span><span class="mut">9d ago</span></div>
+        </div>
+      </div><div class="meta"><span class="cls">table — Geist Mono headers on #F1F5F9</span><span>AdminInvitations.tsx:209–225</span></div></div>
+      <div class="spec"><div class="pane canvas-cream">
+        <div class="shx-card inter">
+          <span class="ad-section-h">Video editor — retainer</span>
+          <p class="ad" style="margin:8px 0 0;font-size:13px;color:#525252;line-height:1.5">.sh-card · 14px radius, warm border, lifts −1px with a soft 12px shadow on hover.</p>
+        </div>
+        <div class="ad-card">
+          <h5 class="ad" style="margin:0;font-size:16px;font-weight:600">Console card</h5>
+          <p class="ad" style="margin:6px 0 0;font-size:13px;color:#62748E;line-height:1.5">Standard container — #E2E8F0 border, 8px radius, p-5.</p>
+        </div>
+      </div><div class="meta"><span class="cls">.sh-card-interactive · container card</span><span>admin globals.css:116–127</span></div></div>
+      <div class="spec"><div class="pane canvas-admin">
+        <div class="ad-dialog">
+          <h5>Delete this invitation?</h5>
+          <p>ravi@partner.co will no longer be able to join with this link. This can’t be undone.</p>
+          <div class="row"><button class="ad-btn-sec">Cancel</button><button class="danger">Delete</button></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <span class="ad-toast" style="background:#0F172B"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l5 5 9-11"/></svg>Invitation sent</span>
+          <span class="ad-toast" style="background:#DC2626"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 18L18 6M6 6l12 12"/></svg>Could not save changes</span>
+        </div>
+      </div><div class="meta"><span class="cls">ConfirmDialog · Toast (success #0F172B / error #DC2626)</span><span>ConfirmDialog.tsx:41 · Toast.tsx:41</span></div></div>
+    </section>
+
+    <section class="block" id="ad-inputs">
+      <div class="block-head"><span class="idx">07</span><h2>Inputs &amp; Nav</h2></div>
+      <div class="spec"><div class="pane canvas-admin">
+        <span class="lab">Console input — blue ring · SquadHire input — ink ring</span>
+        <input class="ad-input" placeholder="Search users…" />
+        <input class="shx-input" placeholder="Card title" />
+      </div><div class="meta"><span class="cls">border-[#CAD5E2] focus #2962FF · .sh-input</span><span>AdminInvitations.tsx:121 · globals.css:201</span></div></div>
+      <div class="spec"><div class="pane canvas-cream">
+        <span class="lab">SquadHire tab bar — lime-soft active with inset ink ring</span>
+        <div class="ad-tabs">
+          <button class="ad-tab on">All cards</button>
+          <button class="ad-tab">Active</button>
+          <button class="ad-tab">Archived</button>
+        </div>
+      </div><div class="meta"><span class="cls">.sh-tab-bar · .sh-tab[data-active]</span><span>admin globals.css:170–198</span></div></div>
+      <div class="spec"><div class="pane canvas-admin">
+        <nav class="ad-nav">
+          <div class="sh">Platform</div>
+          <div class="ad-nav-item on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>Dashboard</div>
+          <div class="ad-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>Invitations</div>
+          <div class="ad-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>Users</div>
+          <div class="dvd"></div>
+          <div class="ad-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>Log out</div>
+        </nav>
+      </div><div class="meta"><span class="cls">sidebar nav-link + section heading + divider</span><span>MasterAdminLayout.tsx:15–115</span></div></div>
+    </section>
+
+    <section class="block" id="ad-patterns">
+      <div class="block-head"><span class="idx">08</span><h2>Patterns</h2></div>
+      <div class="spec"><div class="pane">
+        <span class="lab">Radii</span>
+        <div class="radii">
+          <div class="rad" style="border-radius:6px">6</div>
+          <div class="rad" style="border-radius:8px">8</div>
+          <div class="rad" style="border-radius:10px">10</div>
+          <div class="rad" style="border-radius:12px">12</div>
+          <div class="rad" style="border-radius:14px">14</div>
+          <div class="rad" style="border-radius:999px">999</div>
+        </div>
+        <span class="lab">Shadows & rings</span>
+        <div class="shadow-grid" style="width:100%">
+          <div class="shd" style="box-shadow:4px 4px 0 0 #000"><div class="nm">Brutalist 4px</div><div class="vv">4px 4px 0 0 #000 → hover 6px 6px</div></div>
+          <div class="shd" style="box-shadow:2px 2px 0 0 #000"><div class="nm">Eyebrow 2px</div><div class="vv">2px 2px 0 0 #000</div></div>
+          <div class="shd" style="box-shadow:0 4px 12px rgba(0,0,0,0.08)"><div class="nm">Card hover lift</div><div class="vv">0 4px 12px rgba(0,0,0,.08) + translateY(−1px)</div></div>
+          <div class="shd" style="box-shadow:0 0 0 1px #2962FF"><div class="nm">Input focus</div><div class="vv">border + ring 1px #2962FF</div></div>
+          <div class="shd" style="box-shadow:0 0 0 3px rgba(10,10,10,0.08)"><div class="nm">.sh-input focus</div><div class="vv">0 0 0 3px rgba(10,10,10,.08)</div></div>
+        </div>
+        <span class="lab">Tinting convention — backgrounds use the status color at ~8–15% alpha (color + '15'/'18'), text at full strength</span>
+      </div><div class="meta"><span class="cls">neo-brutalism · tint pattern · focus rings</span><span>admin globals.css · AdminInvitations.tsx:242</span></div></div>
+    </section>
+  </div>
+
+  <footer style="margin-top:96px;padding-top:18px;border-top:1px solid var(--hair);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <span style="font-family:var(--f-mono);font-size:10px;color:var(--ink-4)">Extracted from web/src/styles/globals.css · admin/src/styles/globals.css · connect/page.tsx · Icons.tsx</span>
+    <span style="font-family:var(--f-mono);font-size:10px;color:var(--ink-4)">keys: 1 · 2 · 3 switch surface — d toggles dark</span>
+  </footer>
+
+  </main>
+</div>
+
+<div id="copy-toast"><span class="sq"></span><span class="tx"></span></div>
+<div id="live-toast-zone"></div>
+
+<script src="assets/icons-data.js"></script>
+<script src="assets/ds.js"></script>
+</body>
+</html>
