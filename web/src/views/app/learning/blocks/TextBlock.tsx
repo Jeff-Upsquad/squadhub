@@ -8,7 +8,9 @@ import { useEffect } from 'react';
 export default function TextBlock({ content }: { content: unknown }) {
   const editor = useEditor({
     editable: false,
-    extensions: [StarterKit, Link.configure({ openOnClick: true }), Image],
+    // StarterKit bundles its own Link — disable it so the explicit
+    // Link.configure is the only registration (duplicates warn on mount).
+    extensions: [StarterKit.configure({ link: false }), Link.configure({ openOnClick: true }), Image],
     content: content || '',
     immediatelyRender: false,
   });

@@ -199,6 +199,10 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
         // We render @mentions via the markdown renderer, so the editor doesn't
         // need a mention extension. Code block and other defaults are fine.
         heading: { levels: [1, 2, 3] },
+        // StarterKit bundles its own Link; drop it so the explicit
+        // Link.configure below is the only registration (duplicate names
+        // make the winning config undefined and warn on every mount).
+        link: false,
       }),
       Link.configure({
         openOnClick: false,
