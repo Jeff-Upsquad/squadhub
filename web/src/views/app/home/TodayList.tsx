@@ -528,7 +528,7 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
     if (menuPos) { setMenuPos(null); return; }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const MENU_W = 188;
-    const MENU_H = 132;
+    const MENU_H = 184;
     const MARGIN = 6;
     const flipUp = rect.bottom + MARGIN + MENU_H > window.innerHeight;
     setMenuPos({
@@ -562,6 +562,25 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
     e.stopPropagation();
     setFocusBucket(t.id, next);
     setMenuPos(null);
+  };
+
+  // "Tomorrow" — push the task's work_date to tomorrow's local-midnight (mirrors
+  // taskHelpers.nextQuickDate). A future work_date drops the task from the focus
+  // list (see TodayList's `!isFutureDay` filter), so hide the row immediately for
+  // instant feedback; the refetch then unmounts it for good. Clear any
+  // Evening/Night bucket so it doesn't linger client-side if the task comes back.
+  const moveToTomorrow = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMenuPos(null);
+    if (bucket) setFocusBucket(t.id, null);
+    const tomorrow = new Date();
+    tomorrow.setHours(0, 0, 0, 0);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    setIsHidden(true);
+    updateTask.mutate(
+      { id: t.id, work_date: tomorrow.toISOString() } as any,
+      { onError: () => setIsHidden(false) },
+    );
   };
 
   const when = formatWhen(t.due_date);
@@ -698,6 +717,11 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
           <button type="button" role="menuitem" className="hm-bucket-menu-item" data-active={bucket === 'night'} onClick={(e) => moveTo(e, 'night')}>
             <span>Night</span>
             <span className="dim">after 7 PM</span>
+          </button>
+          <div className="hm-bucket-menu-sep" role="separator" />
+          <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={moveToTomorrow}>
+            <span>Tomorrow</span>
+            <span className="dim">moves work date</span>
           </button>
           {bucket && (
             <button type="button" role="menuitem" className="hm-bucket-menu-item" onClick={(e) => moveTo(e, null)}>
