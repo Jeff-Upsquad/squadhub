@@ -443,6 +443,13 @@ export default function TaskCreatePanel({
     && (!isDesignTask || draft.description.trim().length > 0);
 
   const handleClose = () => {
+    // A create is already in flight — block the close so we don't persist a
+    // draft of the task that's about to be saved. Otherwise a backdrop click /
+    // Esc / X during the network round-trip would stash a draft of the very
+    // task being created: it lands in the list AND shows up in Drafts, and
+    // resuming that draft creates a duplicate. The panel closes itself once
+    // the create resolves (handleSubmit -> onClose).
+    if (submitting) return;
     if (isDraftNonEmpty(draft)) {
       // If resuming an existing draft, remove the old version first
       if (initialDraft?._draftId) {
