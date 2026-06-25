@@ -124,6 +124,10 @@ export function isGroupedRow(x: Task | GroupedRow): x is GroupedRow {
 // its first member so it slots naturally among the plain rows. Because the server
 // resolves each task to exactly one container (innermost-first), distinct grouped
 // containers yield distinct rows and no task is ever counted twice.
+//
+// A container that ends up with a single task is NOT worth a collapsible row, so
+// it's unwrapped back into a plain TodayRow in place — the lone task already sits
+// at the grouped row's index, so ordering is preserved.
 export function collapseGroupedTasks(tasks: Task[]): (Task | GroupedRow)[] {
   const out: (Task | GroupedRow)[] = [];
   const rowByContainer = new Map<string, GroupedRow>();
@@ -142,7 +146,7 @@ export function collapseGroupedTasks(tasks: Task[]): (Task | GroupedRow)[] {
     row.tasks.push(t);
     row.count += 1;
   }
-  return out;
+  return out.map((item) => (isGroupedRow(item) && item.tasks.length === 1 ? item.tasks[0] : item));
 }
 
 export function isTaskCompleted(t: Task): boolean {
