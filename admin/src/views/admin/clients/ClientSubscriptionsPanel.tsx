@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import type {
   Client,
@@ -16,7 +16,6 @@ import type {
   DeliverableKind,
 } from '@squadhub/shared';
 import { resolveFinalizedPrice } from '@squadhub/shared';
-import SliderPanel from './SliderPanel';
 
 const PLAN_ORDER: SubscriptionPlan[] = ['Starter', 'Basic', 'Plus', 'Pro', 'Personal'];
 const TIERS: SubscriptionTier[] = ['Junior', 'Pro', 'Top Talents'];
@@ -26,285 +25,113 @@ const TIER_COLOR: Record<SubscriptionTier, string> = {
   'Top Talents': 'bg-yellow-100 text-yellow-700',
 };
 
-type InnerTab = 'active' | 'inactive';
-
-export default function ClientSubscriptionsModule() {
-  const [innerTab, setInnerTab] = useState<InnerTab>('active');
-  const [search, setSearch] = useState('');
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-
-  const { data: clientsRes, isLoading } = useQuery({
-    queryKey: ['admin-clients'],
-    queryFn: () => api.get('/admin/clients').then((r) => r.data),
-  });
-
-  const { data: countriesRes } = useQuery({
-    queryKey: ['admin-countries'],
-    queryFn: () => api.get('/admin/countries').then((r) => r.data),
-  });
-
-  const clients: Client[] = clientsRes?.data || [];
-  const countries: Country[] = countriesRes?.data || [];
-  const countryById = new Map<string, Country>();
-  countries.forEach((c) => countryById.set(c.id, c));
-
-  const filtered = useMemo(() => {
-    return clients
-      .filter((c) => innerTab === 'active' ? c.status === 'active' : c.status !== 'active')
-      .filter((c) =>
-        c.business_name.toLowerCase().includes(search.toLowerCase()) ||
-        c.contact_person.toLowerCase().includes(search.toLowerCase())
-      );
-  }, [clients, innerTab, search]);
-
-  const activeCount = clients.filter((c) => c.status === 'active').length;
-  const inactiveCount = clients.filter((c) => c.status !== 'active').length;
+/**
+ * Presentational subscriptions manager for one client. The parent owns the
+ * client fetch (so the detail header and this tab share a single source of
+ * truth) and passes the loaded client down. Everything here — adding a
+ * subscription, per-subscription status, deliverable overrides and archiving —
+ * calls back through `onRefetch` so the parent re-pulls the client.
+ */
+export default function ClientSubscriptionsPanel({
+  client,
+  country,
+  catalog,
+  showArchived,
+  onToggleArchived,
+  onRefetch,
+}: {
+  client: Client;
+  country: Country | null;
+  catalog: Subscription[];
+  showArchived: boolean;
+  onToggleArchived: (v: boolean) => void;
+  onRefetch: () => void;
+}) {
+  const [addOpen, setAddOpen] = useState(false);
+  const assignedSubscriptionIds = new Set((client.subscriptions || []).map((cs) => cs.subscription_id));
+  const subs = client.subscriptions || [];
+  const linkedCards = (client as unknown as { linkedCards?: { id: string; state: string }[] }).linkedCards || [];
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Client Subscriptions</h1>
-        <p className="mt-1 text-sm text-foreground-muted">Assign subscriptions and manage deliverables per client</p>
-      </div>
-
-      <div className="mb-4 flex items-center gap-2 border-b border-divider">
-        {([
-          { id: 'active' as const, label: 'Active Clients', count: activeCount },
-          { id: 'inactive' as const, label: 'Inactive Clients', count: inactiveCount },
-        ]).map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setInnerTab(t.id)}
-            className={`relative border-b-2 px-4 py-2 text-sm font-medium transition ${
-              innerTab === t.id
-                ? 'border-accent text-foreground'
-                : 'border-transparent text-foreground-muted hover:text-foreground'
-            }`}
-          >
-            {t.label}
-            <span className="ml-2 rounded-full bg-canvas px-2 py-0.5 text-[10px] text-foreground-muted">{t.count}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Search clients..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full max-w-sm rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground placeholder-foreground-dim focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-        />
-      </div>
-
-      {isLoading ? (
-        <p className="py-8 text-center text-sm text-foreground-dim">Loading...</p>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-lg border border-divider bg-surface py-12 text-center">
-          <p className="text-sm text-foreground-dim">No clients in this view.</p>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Subscriptions</h4>
+          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground-muted">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => onToggleArchived(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-divider text-accent focus:ring-accent"
+            />
+            Show archived
+          </label>
         </div>
+        <button
+          onClick={() => setAddOpen((v) => !v)}
+          className="rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white transition hover:bg-ink-hover"
+        >
+          {addOpen ? 'Close' : '+ Add Subscription'}
+        </button>
+      </div>
+
+      {addOpen && (
+        <AddSubscriptionInline
+          clientId={client.id}
+          country={country}
+          catalog={catalog}
+          excludeSubscriptionIds={assignedSubscriptionIds}
+          onDone={() => {
+            setAddOpen(false);
+            onRefetch();
+          }}
+        />
+      )}
+
+      {subs.length === 0 ? (
+        <p className="rounded-lg border border-divider bg-surface py-8 text-center text-xs text-foreground-dim">
+          {showArchived ? 'No subscriptions yet.' : 'No active subscriptions. Click “+ Add Subscription” to assign one.'}
+        </p>
       ) : (
-        <div className="space-y-2">
-          {filtered.map((client) => (
-            <ClientRow
-              key={client.id}
-              client={client}
-              country={countryById.get(client.country_id) || null}
-              onOpen={() => setSelectedClient(client)}
+        <div className="space-y-3">
+          {subs.map((cs) => (
+            <ClientSubscriptionCard
+              key={cs.id}
+              clientId={client.id}
+              cs={cs}
+              country={country}
+              catalog={catalog}
+              onRefetch={onRefetch}
             />
           ))}
         </div>
       )}
 
-      <SliderPanel
-        open={!!selectedClient}
-        onClose={() => setSelectedClient(null)}
-        title={selectedClient?.business_name || 'Client'}
-        width="w-[640px]"
-      >
-        {selectedClient && (
-          <ClientSubscriptionsDetail
-            clientId={selectedClient.id}
-            onUpdated={(c) => setSelectedClient(c)}
-          />
-        )}
-      </SliderPanel>
-    </div>
-  );
-}
-
-// ============================================================
-// Client list row
-// ============================================================
-
-function ClientRow({
-  client, country, onOpen,
-}: { client: Client; country: Country | null; onOpen: () => void }) {
-  const activeSubs = (client.subscriptions || []).filter((cs) => cs.status === 'active').length;
-  const totalSubs = (client.subscriptions || []).length;
-
-  return (
-    <button
-      onClick={onOpen}
-      className="flex w-full items-center justify-between rounded-lg border border-divider bg-surface px-5 py-4 text-left transition hover:shadow-sm"
-    >
-      <div className="flex items-center gap-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-canvas text-sm font-semibold text-foreground-muted">
-          {client.business_name.charAt(0).toUpperCase()}
-        </div>
-        <div>
-          <p className="text-sm font-medium text-foreground">{client.business_name}</p>
-          <p className="mt-0.5 text-xs text-foreground-muted">{client.contact_person}</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-3">
-        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-          {country?.name || '—'}
-        </span>
-        <span className="text-xs text-foreground-dim">
-          {activeSubs}/{totalSubs} active
-        </span>
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${
-          client.status === 'active' ? 'bg-emerald-100 text-emerald-700'
-            : client.status === 'paused' ? 'bg-amber-100 text-amber-700'
-            : 'bg-red-100 text-red-700'
-        }`}>
-          {client.status}
-        </span>
-      </div>
-    </button>
-  );
-}
-
-// ============================================================
-// Detail slider
-// ============================================================
-
-function ClientSubscriptionsDetail({
-  clientId, onUpdated,
-}: {
-  clientId: string;
-  onUpdated: (c: Client) => void;
-}) {
-  const queryClient = useQueryClient();
-
-  const { data: clientRes, refetch } = useQuery({
-    queryKey: ['admin-client-detail', clientId],
-    queryFn: () => api.get(`/admin/clients/${clientId}`).then((r) => r.data),
-  });
-  const client: Client | null = clientRes?.data || null;
-
-  useEffect(() => {
-    if (client) onUpdated(client);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client?.id, client?.status, client?.subscriptions?.length]);
-
-  const { data: catalogRes } = useQuery({
-    queryKey: ['admin-subs-catalog'],
-    queryFn: () => api.get('/admin/subscriptions').then((r) => r.data),
-  });
-  const catalog: Subscription[] = catalogRes?.data || [];
-
-  const { data: countriesRes } = useQuery({
-    queryKey: ['admin-countries'],
-    queryFn: () => api.get('/admin/countries').then((r) => r.data),
-  });
-  const countries: Country[] = countriesRes?.data || [];
-
-  const statusMutation = useMutation({
-    mutationFn: (status: string) => api.put(`/admin/clients/${clientId}/status`, { status }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-clients'] });
-      refetch();
-    },
-  });
-
-  const [addOpen, setAddOpen] = useState(false);
-
-  if (!client) return <p className="text-sm text-foreground-dim">Loading...</p>;
-
-  const country = client.country || countries.find((c) => c.id === client.country_id) || null;
-  const assignedSubscriptionIds = new Set((client.subscriptions || []).map((cs) => cs.subscription_id));
-
-  return (
-    <div className="space-y-6">
-      {/* Summary */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-            {country?.name || '—'}
-          </span>
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${
-            client.status === 'active' ? 'bg-emerald-100 text-emerald-700'
-              : client.status === 'paused' ? 'bg-amber-100 text-amber-700'
-              : 'bg-red-100 text-red-700'
-          }`}>
-            {client.status}
-          </span>
-          <div className="ml-auto flex gap-1.5">
-            {client.status === 'active' && (
-              <>
-                <button onClick={() => statusMutation.mutate('paused')} className="rounded-md bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100">Pause All</button>
-                <button onClick={() => statusMutation.mutate('cancelled')} className="rounded-md bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel All</button>
-              </>
-            )}
-            {client.status === 'paused' && (
-              <>
-                <button onClick={() => statusMutation.mutate('active')} className="rounded-md bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Resume All</button>
-                <button onClick={() => statusMutation.mutate('cancelled')} className="rounded-md bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel All</button>
-              </>
-            )}
-            {client.status === 'cancelled' && (
-              <button onClick={() => statusMutation.mutate('active')} className="rounded-md bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Reactivate</button>
-            )}
-          </div>
-        </div>
-        <p className="text-xs text-foreground-muted">{client.contact_person} · {client.email}</p>
-      </div>
-
-      {/* Subscriptions */}
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Subscriptions</h4>
-          <button
-            onClick={() => setAddOpen((v) => !v)}
-            className="text-xs text-accent hover:underline"
-          >
-            {addOpen ? 'Close' : '+ Add Subscription'}
-          </button>
-        </div>
-
-        {addOpen && (
-          <AddSubscriptionInline
-            clientId={client.id}
-            country={country}
-            catalog={catalog}
-            excludeSubscriptionIds={assignedSubscriptionIds}
-            onDone={() => {
-              setAddOpen(false);
-              refetch();
-              queryClient.invalidateQueries({ queryKey: ['admin-clients'] });
-            }}
-          />
-        )}
-
-        {(!client.subscriptions || client.subscriptions.length === 0) ? (
-          <p className="py-4 text-center text-xs text-foreground-dim">No subscriptions assigned yet.</p>
-        ) : (
-          <div className="space-y-3">
-            {(client.subscriptions || []).map((cs) => (
-              <ClientSubscriptionCard
-                key={cs.id}
-                clientId={client.id}
-                cs={cs}
-                country={country}
-                catalog={catalog}
-                onRefetch={() => { refetch(); queryClient.invalidateQueries({ queryKey: ['admin-clients'] }); }}
-              />
+      {linkedCards.length > 0 && (
+        <div className="space-y-2 pt-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Other Cards</h4>
+          <div className="divide-y divide-divider rounded-lg border border-divider bg-surface">
+            {linkedCards.map((lc) => (
+              <div key={lc.id} className="flex items-center justify-between px-4 py-3">
+                <span className="text-sm text-foreground">Card</span>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] font-semibold capitalize text-foreground-muted">
+                    {lc.state}
+                  </span>
+                  <a
+                    href={`/admin/published-cards?card=${lc.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-strong"
+                  >
+                    View Card
+                  </a>
+                </div>
+              </div>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -324,9 +151,10 @@ function ClientSubscriptionCard({
 }) {
   const subscription = catalog.find((s) => s.id === cs.subscription_id);
   const deliverableTypes = subscription?.deliverable_types?.filter((t) => t.is_active) || [];
+  const isArchived = !!cs.archived_at;
 
   const pricing = cs.plan?.pricing?.find((p) => p.country_id === country?.id) || null;
-  const sym = country?.currency === 'USD' ? '$' : '\u20B9';
+  const sym = country?.currency === 'USD' ? '$' : '₹';
   const locale = country?.currency === 'USD' ? 'en-US' : 'en-IN';
   // Show the price the client is actually billed: the linked card's finalized
   // subscription price (or proposed price). Fall back to the plan's catalog
@@ -343,36 +171,24 @@ function ClientSubscriptionCard({
     onSuccess: () => onRefetch(),
   });
 
-  const removeMutation = useMutation({
+  const archiveMutation = useMutation({
     mutationFn: () => api.delete(`/admin/clients/${clientId}/subscriptions/${cs.id}`),
+    onSuccess: () => onRefetch(),
+  });
+
+  const unarchiveMutation = useMutation({
+    mutationFn: () => api.post(`/admin/clients/${clientId}/subscriptions/${cs.id}/unarchive`),
     onSuccess: () => onRefetch(),
   });
 
   const card = cs.card;
 
   async function copyCode(code: string) {
-    try {
-      await navigator.clipboard.writeText(code);
-    } catch {
-      // fallback
-    }
+    try { await navigator.clipboard.writeText(code); } catch { /* ignore */ }
   }
 
-  const { data: linkStatusRes, refetch: refetchLinkStatus } = useQuery({
-    queryKey: ['card-link-status', card?.id],
-    queryFn: () => api.get(`/admin/subscription-cards/${card?.id}/link-status`).then((r) => r.data),
-    enabled: !!card?.id,
-  });
-
-  const unlinkMutation = useMutation({
-    mutationFn: () => api.post(`/admin/subscription-cards/${card!.id}/unlink`),
-    onSuccess: () => { refetchLinkStatus(); onRefetch(); },
-  });
-
-  const linkedFolderName = linkStatusRes?.data?.linked_folder_name ?? null;
-
   return (
-    <div className={`rounded-lg border border-divider bg-surface p-4 ${cs.status === 'cancelled' ? 'opacity-60' : ''}`}>
+    <div className={`rounded-lg border border-divider bg-surface p-4 ${cs.status === 'cancelled' || isArchived ? 'opacity-60' : ''}`}>
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-medium text-foreground">{subscription?.name || 'Unknown'}</p>
@@ -385,14 +201,6 @@ function ClientSubscriptionCard({
             )}
             <span className="text-xs text-foreground-dim">· {priceLabel}</span>
           </div>
-          {linkedFolderName && (
-            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
-              <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-              </svg>
-              {linkedFolderName}
-            </span>
-          )}
         </div>
         <div className="flex items-center gap-2">
           {card?.card_code && (
@@ -407,6 +215,9 @@ function ClientSubscriptionCard({
               </svg>
             </button>
           )}
+          {isArchived && (
+            <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] font-medium text-foreground-muted">Archived</span>
+          )}
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${
             cs.status === 'active' ? 'bg-emerald-100 text-emerald-700'
               : cs.status === 'paused' ? 'bg-amber-100 text-amber-700'
@@ -418,39 +229,54 @@ function ClientSubscriptionCard({
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
-        {cs.status === 'active' && (
+        {card?.id && (
+          <a
+            href={`/admin/published-cards?card=${card.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-strong"
+          >
+            View card ↗
+          </a>
+        )}
+        {!isArchived && cs.status === 'active' && (
           <>
             <button onClick={() => statusMutation.mutate('paused')} className="rounded bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100">Pause</button>
             <button onClick={() => statusMutation.mutate('cancelled')} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
           </>
         )}
-        {cs.status === 'paused' && (
+        {!isArchived && cs.status === 'paused' && (
           <>
             <button onClick={() => statusMutation.mutate('active')} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Resume</button>
             <button onClick={() => statusMutation.mutate('cancelled')} className="rounded bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100">Cancel</button>
           </>
         )}
-        {cs.status === 'cancelled' && (
+        {!isArchived && cs.status === 'cancelled' && (
           <button onClick={() => statusMutation.mutate('active')} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100">Reactivate</button>
         )}
-        <button onClick={() => removeMutation.mutate()} className="rounded bg-canvas px-2 py-1 text-[10px] font-medium text-foreground-muted hover:bg-well">Remove</button>
-          {linkedFolderName && (
-            <button onClick={() => unlinkMutation.mutate()} className="rounded bg-rose-50 px-2 py-1 text-[10px] font-medium text-rose-700 hover:bg-rose-100" disabled={unlinkMutation.isPending}>
-              {unlinkMutation.isPending ? 'Unlinking…' : 'Unlink'}
-            </button>
-          )}
-        </div>
-
-      <div className="mt-3 border-t border-divider pt-3">
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-foreground-dim">Deliverables</p>
-        <ClientDeliverablesEditor
-          clientId={clientId}
-          csId={cs.id}
-          deliverables={cs.deliverables || []}
-          deliverableTypes={deliverableTypes}
-          onChange={onRefetch}
-        />
+        {isArchived ? (
+          <button onClick={() => unarchiveMutation.mutate()} className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100" disabled={unarchiveMutation.isPending}>
+            {unarchiveMutation.isPending ? 'Unarchiving…' : 'Unarchive'}
+          </button>
+        ) : (
+          <button onClick={() => archiveMutation.mutate()} className="rounded bg-canvas px-2 py-1 text-[10px] font-medium text-foreground-muted hover:bg-well" disabled={archiveMutation.isPending}>
+            Archive
+          </button>
+        )}
       </div>
+
+      {!isArchived && (
+        <div className="mt-3 border-t border-divider pt-3">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-foreground-dim">Deliverables</p>
+          <ClientDeliverablesEditor
+            clientId={clientId}
+            csId={cs.id}
+            deliverables={cs.deliverables || []}
+            deliverableTypes={deliverableTypes}
+            onChange={onRefetch}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -586,7 +412,6 @@ function DeliverableInlineRow({
     ? 'Hours'
     : (deliverableTypes.find((t) => t.id === deliverable.deliverable_type_id)?.name || 'Unknown type');
 
-  // Custom-row local state for value editing
   const [perDay, setPerDay] = useState(String(deliverable.per_day));
   const [perWeek, setPerWeek] = useState(String(deliverable.per_week));
   const [perMonth, setPerMonth] = useState(String(deliverable.per_month));
@@ -716,11 +541,11 @@ function AddSubscriptionInline({
     onError: (err: any) => alert(err?.response?.data?.error || err.message || 'Failed'),
   });
 
-  const sym = country?.currency === 'USD' ? '$' : '\u20B9';
+  const sym = country?.currency === 'USD' ? '$' : '₹';
   const locale = country?.currency === 'USD' ? 'en-US' : 'en-IN';
 
   return (
-    <div className="mb-3 space-y-2 rounded-lg border border-divider bg-surface-alt p-3">
+    <div className="space-y-2 rounded-lg border border-divider bg-surface-alt p-3">
       <div>
         <label className="mb-1 block text-xs font-medium text-foreground-muted">Subscription</label>
         <select
