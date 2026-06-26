@@ -160,12 +160,10 @@ export default function TodayList() {
     let total = 0;
     for (const e of timeEntries ?? []) {
       if (toLocalDateKey(e.started_at) !== today) continue;
-      // Only real timer sessions count as "worked today". Editing a task's
-      // "Time logged" field writes a manual delta entry (positive or negative)
-      // to reconcile the aggregate — that's not work done today, and counting
-      // it makes the header show phantom time (e.g. "11h 23m" / "-18h 6m") that
-      // doesn't match the task's logged total.
-      if (e.source === 'manual') continue;
+      // Any time tracked today counts — real timer sessions and manual
+      // "Time logged" edits alike — so every tracked task surfaces here. The
+      // dur <= 0 guard below still drops negative reconciliation deltas, so a
+      // manual reduction can't pull the header total into phantom negatives.
       const dur = e.duration_seconds || 0;
       if (dur <= 0) continue;
       map.set(e.task_id, (map.get(e.task_id) || 0) + dur);

@@ -473,7 +473,8 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     }
 
     // "In progress today" — tasks the caller has logged time on today (in their
-    // tz). Pulls recent time entries and keeps those whose started_at lands on
+    // tz), via ANY entry: real timer sessions or manual "Time logged" edits.
+    // Pulls recent time entries and keeps those whose started_at lands on
     // todayStr, most-recently-worked first. Full task objects (assignees, dates,
     // parents) so the Home list renders these rows identically to the focus list.
     const { data: recentEntries } = await supabaseAdmin
@@ -486,11 +487,6 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     const seenWorked = new Set<string>();
     for (const e of recentEntries || []) {
       if (toTzDay((e as any).started_at) !== todayStr) continue;
-      // Only real timer sessions surface a task as "in progress today". Editing
-      // a task's "Time logged" field writes a manual delta entry (positive or
-      // negative) to reconcile the aggregate — that's not work done today and
-      // shouldn't pull the task into this section.
-      if ((e as any).source === 'manual') continue;
       const id = (e as any).task_id as string;
       if (seenWorked.has(id)) continue;
       seenWorked.add(id);
