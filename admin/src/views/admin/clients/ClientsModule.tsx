@@ -2,7 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
+import { useAuthStore } from '../../../stores/authStore';
 import type { Client, ClientSubscription, Country, Subscription, ClientStatus, SalesPerson } from '@squadhub/shared';
+
+interface SquadBooksMatch {
+  found: boolean;
+  orgId?: string;
+  customerId?: string;
+  customerName?: string;
+  squadbooksUrl?: string;
+}
 import SliderPanel from './SliderPanel';
 import { PlanPicker } from './NewClientsModule';
 
@@ -103,6 +112,32 @@ export default function ClientsModule() {
     queryFn: () => api.get('/admin/onboarding-links/sales-people').then((r) => r.data),
   });
   const salesPeople: SalesPerson[] = peopleRes?.data || [];
+
+  // Cross-app link: does the open client also exist as a SquadBooks customer?
+  // When it does we deep-link into SquadBooks (via SSO) on the matched workspace;
+  // otherwise the button stays disabled ("blank").
+  const { data: booksMatch } = useQuery<SquadBooksMatch>({
+    queryKey: ['client-squadbooks-customer', selectedClient?.id],
+    queryFn: () =>
+      api
+        .get(`/admin/clients/${selectedClient!.id}/squadbooks-customer`)
+        .then((r) => r.data.data as SquadBooksMatch),
+    enabled: !!selectedClient?.id,
+  });
+
+  const openInSquadBooks = () => {
+    if (!booksMatch?.found || !booksMatch.squadbooksUrl) return;
+    const token = useAuthStore.getState().accessToken;
+    if (!token) {
+      alert('Your session expired — please sign in again to open SquadBooks.');
+      return;
+    }
+    const next = encodeURIComponent(`/customers?focus=${booksMatch.customerId}`);
+    const url =
+      `${booksMatch.squadbooksUrl}/sso#t=${encodeURIComponent(token)}` +
+      `&w=${encodeURIComponent(booksMatch.orgId || '')}&wn=&next=${next}`;
+    window.open(url, '_blank', 'noopener');
+  };
 
   const updateSpMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: any }) =>
@@ -387,6 +422,23 @@ export default function ClientsModule() {
                 </span>
               </div>
               <div className="flex gap-2">
+                {booksMatch?.found ? (
+                  <button
+                    onClick={openInSquadBooks}
+                    title="Open this customer in SquadBooks"
+                    className="rounded-md border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:bg-canvas"
+                  >
+                    Open in SquadBooks ↗
+                  </button>
+                ) : (
+                  <button
+                    disabled
+                    title="No matching customer in SquadBooks"
+                    className="cursor-not-allowed rounded-md border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-foreground-dim opacity-50"
+                  >
+                    Open in SquadBooks
+                  </button>
+                )}
                 {selectedClient.status === 'active' && (
                   <>
                     <button onClick={() => statusMutation.mutate({ id: selectedClient.id, status: 'paused' })} className="rounded-md bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100">Pause All</button>
