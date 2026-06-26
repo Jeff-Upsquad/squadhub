@@ -21,6 +21,7 @@ import api from '../../../services/api';
 import type { SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority, TaskStatusKey, TaskRecurrence } from '@squadhub/shared';
 import { getTaskStatusDef, describeTaskRecurrence } from '@squadhub/shared';
 import AssigneePicker from './AssigneePicker';
+import NoAssigneeCompleteDialog from './NoAssigneeCompleteDialog';
 import MentionPicker from '../../../components/MentionPicker';
 import DatePicker from './DatePicker';
 import RepeatPicker from './RepeatPicker';
@@ -270,6 +271,8 @@ export default function TaskDetailPanel({
   const [mounted, setMounted] = useState(false);
   const [mainCelebrating, setMainCelebrating] = useState(false);
   const [celebratingSubtaskId, setCelebratingSubtaskId] = useState<string | null>(null);
+  const [noAssigneePrompt, setNoAssigneePrompt] = useState<DOMRect | null>(null);
+  const [assignCompleteAnchor, setAssignCompleteAnchor] = useState<DOMRect | null>(null);
 
   useEffect(() => {
     if (!effectiveTaskId) { setMounted(false); return undefined; }
@@ -496,27 +499,49 @@ export default function TaskDetailPanel({
     );
   };
 
-  const handleToggleDone = () => {
-    if (!task || !canEdit) return;
+  // Apply the closing transition: fire the celebration, log against an active
+  // work-block run, and write the done status — optionally assigning people in
+  // the same write (used by the no-assignee prompt's "assign & complete").
+  const completeToDone = (assigneeIds?: string[]) => {
+    if (!task) return;
     let next: string;
     if (!isTaskType && statuses.length > 0) {
-      if (isDone) {
+      next = statuses.find((s) => s.category === 'closed')?.name || statuses.find((s) => s.category === 'done')?.name || statuses[statuses.length - 1].name;
+    } else {
+      next = 'closed';
+    }
+    setMainCelebrating(true);
+    setTimeout(() => setMainCelebrating(false), 650);
+    const active = activeWorkBlock.data;
+    if (active && active.task.id !== task.id) {
+      recordCompletion.mutate({ run_id: active.run.id, completed_task_id: task.id });
+    }
+    const payload: Record<string, unknown> = { id: task.id, status: next };
+    if (assigneeIds) payload.assignee_ids = assigneeIds;
+    updateTask.mutate(payload as any);
+  };
+
+  const handleToggleDone = (e?: React.MouseEvent) => {
+    if (!task || !canEdit) return;
+    // Re-opening a completed task: flip straight back, no prompt.
+    if (isDone) {
+      let next: string;
+      if (!isTaskType && statuses.length > 0) {
         next = statuses.find((s) => s.category === 'todo')?.name || statuses[0].name;
       } else {
-        next = statuses.find((s) => s.category === 'closed')?.name || statuses.find((s) => s.category === 'done')?.name || statuses[statuses.length - 1].name;
+        next = 'open';
       }
-    } else {
-      next = isDone ? 'open' : 'closed';
+      updateTask.mutate({ id: task.id, status: next } as any);
+      return;
     }
-    if (!isDone) {
-      setMainCelebrating(true);
-      setTimeout(() => setMainCelebrating(false), 650);
-      const active = activeWorkBlock.data;
-      if (active && active.task.id !== task.id) {
-        recordCompletion.mutate({ run_id: active.run.id, completed_task_id: task.id });
-      }
+    // Completing with nobody assigned: ask first (assign to me / someone else /
+    // complete as-is) instead of silently closing it unassigned. Mirrors the
+    // list-view checkbox in TaskRow.
+    if ((task.assignees || []).length === 0 && e) {
+      setNoAssigneePrompt((e.currentTarget as HTMLElement).getBoundingClientRect());
+      return;
     }
-    updateTask.mutate({ id: task.id, status: next } as any);
+    completeToDone();
   };
 
   const addSubtask = (rawTitle: string, keepInputOpen: boolean) => {
@@ -1825,6 +1850,42 @@ export default function TaskDetailPanel({
           anchorRect={assigneeAnchorRect}
           onChange={(ids) => updateTask.mutate({ id: task.id, assignee_ids: ids })}
           onClose={() => setAssigneePickerOpen(false)}
+        />
+      )}
+
+      {noAssigneePrompt && task && (
+        <NoAssigneeCompleteDialog
+          anchorRect={noAssigneePrompt}
+          canAssignToMe={!!currentUser?.id}
+          onAssignToMe={() => {
+            if (currentUser?.id) completeToDone([currentUser.id]);
+            else completeToDone();
+            setNoAssigneePrompt(null);
+          }}
+          onAssignOther={() => {
+            setAssignCompleteAnchor(noAssigneePrompt);
+            setNoAssigneePrompt(null);
+          }}
+          onCompleteAnyway={() => {
+            completeToDone();
+            setNoAssigneePrompt(null);
+          }}
+          onClose={() => setNoAssigneePrompt(null)}
+        />
+      )}
+
+      {assignCompleteAnchor && task && (
+        <AssigneePicker
+          taskId={task.id}
+          currentAssigneeIds={[]}
+          anchorRect={assignCompleteAnchor}
+          onChange={(ids) => {
+            // Picking someone assigns them and completes in one write. An empty
+            // selection (Unassign all) just completes unassigned.
+            completeToDone(ids);
+            setAssignCompleteAnchor(null);
+          }}
+          onClose={() => setAssignCompleteAnchor(null)}
         />
       )}
 
