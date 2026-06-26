@@ -150,8 +150,9 @@ router.get('/lookup-client', async (req: Request, res: Response) => {
   try {
     const email = String(req.query.email || '').trim();
     const phone = String(req.query.phone || '');
-    if (!email && !phone) {
-      res.status(400).json({ success: false, error: 'email or phone required' });
+    const name = String(req.query.name || '').trim();
+    if (!email && !phone && !name) {
+      res.status(400).json({ success: false, error: 'email, phone or name required' });
       return;
     }
 
@@ -167,7 +168,7 @@ router.get('/lookup-client', async (req: Request, res: Response) => {
         return;
       }
       if (data && data.length) {
-        res.json({ success: true, found: true, clientId: data[0].id });
+        res.json({ success: true, found: true, clientId: data[0].id, matchedBy: 'email' });
         return;
       }
     }
@@ -186,7 +187,27 @@ router.get('/lookup-client', async (req: Request, res: Response) => {
       }
       const hit = (data || []).find((c: any) => phoneKey(c.contact_number) === key);
       if (hit) {
-        res.json({ success: true, found: true, clientId: hit.id });
+        res.json({ success: true, found: true, clientId: hit.id, matchedBy: 'phone' });
+        return;
+      }
+    }
+
+    // Last resort: exact (case-insensitive) business-name match. Weaker than
+    // email/phone — names can collide — so the result is flagged matchedBy:name.
+    if (name) {
+      const esc = name.replace(/[\\%_]/g, '\\$&');
+      const { data, error } = await supabaseAdmin
+        .from('clients')
+        .select('id')
+        .ilike('business_name', esc)
+        .order('created_at', { ascending: true })
+        .limit(1);
+      if (error) {
+        res.status(500).json({ success: false, error: error.message });
+        return;
+      }
+      if (data && data.length) {
+        res.json({ success: true, found: true, clientId: data[0].id, matchedBy: 'name' });
         return;
       }
     }

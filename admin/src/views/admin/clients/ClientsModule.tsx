@@ -10,6 +10,7 @@ interface SquadBooksMatch {
   orgId?: string;
   customerId?: string;
   customerName?: string;
+  matchedBy?: string;
   squadbooksUrl?: string;
 }
 import SliderPanel from './SliderPanel';
@@ -425,10 +426,14 @@ export default function ClientsModule() {
                 {booksMatch?.found ? (
                   <button
                     onClick={openInSquadBooks}
-                    title="Open this customer in SquadBooks"
+                    title={
+                      booksMatch.matchedBy === 'name'
+                        ? 'Matched by name — open in SquadBooks (verify it is the same customer)'
+                        : 'Open this customer in SquadBooks'
+                    }
                     className="rounded-md border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:bg-canvas"
                   >
-                    Open in SquadBooks ↗
+                    Open in SquadBooks{booksMatch.matchedBy === 'name' ? ' (by name)' : ''} ↗
                   </button>
                 ) : (
                   <button
