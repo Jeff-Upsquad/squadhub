@@ -29,7 +29,14 @@ function fmtDateCell(iso?: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  const datePart = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const that = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const delta = Math.round((that - today) / 86_400_000);
+  let datePart = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  if (delta === 0) datePart = 'Today';
+  else if (delta === 1) datePart = 'Tomorrow';
+  else if (delta === -1) datePart = 'Yesterday';
   const hasTime = !(d.getHours() === 0 && d.getMinutes() === 0);
   if (!hasTime) return datePart;
   const timePart = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
