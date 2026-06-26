@@ -965,7 +965,7 @@ router.get('/:id/squadbooks-customer', async (req: Request, res: Response) => {
   try {
     const { data: client, error } = await supabaseAdmin
       .from('clients')
-      .select('email, contact_number')
+      .select('email, contact_number, business_name')
       .eq('id', req.params.id)
       .single();
     if (error || !client) {
@@ -976,6 +976,7 @@ router.get('/:id/squadbooks-customer', async (req: Request, res: Response) => {
     const qs = new URLSearchParams();
     if (client.email) qs.set('email', client.email);
     if (client.contact_number) qs.set('phone', client.contact_number);
+    if (client.business_name) qs.set('name', client.business_name);
     if (![...qs.keys()].length) {
       res.json({ success: true, data: { found: false } });
       return;
@@ -994,6 +995,7 @@ router.get('/:id/squadbooks-customer', async (req: Request, res: Response) => {
       orgId?: string;
       customerId?: string;
       customerName?: string;
+      matchedBy?: string;
     };
     if (!match.found || !match.orgId || !match.customerId) {
       res.json({ success: true, data: { found: false } });
@@ -1006,6 +1008,7 @@ router.get('/:id/squadbooks-customer', async (req: Request, res: Response) => {
         orgId: match.orgId,
         customerId: match.customerId,
         customerName: match.customerName || '',
+        matchedBy: match.matchedBy || 'email',
         squadbooksUrl: config.squadbooksUrl,
       },
     });
