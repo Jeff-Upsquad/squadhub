@@ -134,4 +134,68 @@ router.get('/subscriptions', async (_req: Request, res: Response) => {
   }
 });
 
+/** Last 10 digits of a phone number, ignoring spaces / punctuation / country code. */
+function phoneKey(raw: string | null | undefined): string {
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
+// GET /integrations/squadbooks/lookup-client?email=&phone=
+// Cross-app lookup the OTHER way: SquadBooks asks whether one of its customers
+// also exists as a SquadHub admin "client" (so the customer detail can deep-link
+// into the clients module). Matches by email first (case-insensitive), then by
+// phone (last 10 digits of contact_number). Clients are global, so no workspace
+// scoping. Returns only the matched client id.
+router.get('/lookup-client', async (req: Request, res: Response) => {
+  try {
+    const email = String(req.query.email || '').trim();
+    const phone = String(req.query.phone || '');
+    if (!email && !phone) {
+      res.status(400).json({ success: false, error: 'email or phone required' });
+      return;
+    }
+
+    if (email) {
+      const { data, error } = await supabaseAdmin
+        .from('clients')
+        .select('id')
+        .ilike('email', email)
+        .order('created_at', { ascending: true })
+        .limit(1);
+      if (error) {
+        res.status(500).json({ success: false, error: error.message });
+        return;
+      }
+      if (data && data.length) {
+        res.json({ success: true, found: true, clientId: data[0].id });
+        return;
+      }
+    }
+
+    const key = phoneKey(phone);
+    if (key.length >= 7) {
+      const { data, error } = await supabaseAdmin
+        .from('clients')
+        .select('id, contact_number')
+        .ilike('contact_number', `%${key}%`)
+        .order('created_at', { ascending: true })
+        .limit(50);
+      if (error) {
+        res.status(500).json({ success: false, error: error.message });
+        return;
+      }
+      const hit = (data || []).find((c: any) => phoneKey(c.contact_number) === key);
+      if (hit) {
+        res.json({ success: true, found: true, clientId: hit.id });
+        return;
+      }
+    }
+
+    res.json({ success: true, found: false });
+  } catch (err) {
+    console.error('SquadBooks lookup-client integration error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 export default router;

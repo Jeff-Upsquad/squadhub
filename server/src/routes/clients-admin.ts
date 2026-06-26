@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
+import { config } from '../config';
 import {
   PIPELINE_STATUSES,
   transitionSubmissionStatus,
@@ -947,6 +948,70 @@ router.get('/:id', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('Get client error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /admin/clients/:id/squadbooks-customer
+// Asks the sibling SquadBooks app whether this client also exists there as a
+// customer (matched by email then phone, across all workspaces). When it does,
+// returns the workspace + customer id so the admin can deep-link into SquadBooks
+// via SSO. Returns { found:false } when there's no match or the integration is
+// unconfigured/unreachable — the button just stays disabled in that case.
+router.get('/:id/squadbooks-customer', async (req: Request, res: Response) => {
+  if (!config.squadbooksUrl || !config.squadbooksAdminApiKey) {
+    res.json({ success: true, data: { found: false } });
+    return;
+  }
+  try {
+    const { data: client, error } = await supabaseAdmin
+      .from('clients')
+      .select('email, contact_number')
+      .eq('id', req.params.id)
+      .single();
+    if (error || !client) {
+      res.status(404).json({ success: false, error: 'Client not found' });
+      return;
+    }
+
+    const qs = new URLSearchParams();
+    if (client.email) qs.set('email', client.email);
+    if (client.contact_number) qs.set('phone', client.contact_number);
+    if (![...qs.keys()].length) {
+      res.json({ success: true, data: { found: false } });
+      return;
+    }
+
+    const r = await fetch(
+      `${config.squadbooksUrl}/api/integrations/squadbooks/customer-match?${qs.toString()}`,
+      { headers: { 'x-admin-key': config.squadbooksAdminApiKey } },
+    );
+    if (!r.ok) {
+      res.json({ success: true, data: { found: false } });
+      return;
+    }
+    const match = (await r.json()) as {
+      found?: boolean;
+      orgId?: string;
+      customerId?: string;
+      customerName?: string;
+    };
+    if (!match.found || !match.orgId || !match.customerId) {
+      res.json({ success: true, data: { found: false } });
+      return;
+    }
+    res.json({
+      success: true,
+      data: {
+        found: true,
+        orgId: match.orgId,
+        customerId: match.customerId,
+        customerName: match.customerName || '',
+        squadbooksUrl: config.squadbooksUrl,
+      },
+    });
+  } catch (err) {
+    console.error('GET /:id/squadbooks-customer error:', err);
+    res.json({ success: true, data: { found: false } });
   }
 });
 
