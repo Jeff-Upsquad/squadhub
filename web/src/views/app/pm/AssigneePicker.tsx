@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@squadhub/shared';
-import { useAssignableUsers, useAssignableUsersByList } from '../../../hooks/useAssignableUsers';
+import {
+  useAssignableUsers,
+  useAssignableUsersByList,
+  useAssignableUsersByFolder,
+  useAssignableUsersBySpace,
+} from '../../../hooks/useAssignableUsers';
 
 function hashHue(input: string): number {
   let h = 0;
@@ -24,6 +29,8 @@ function initialOf(name: string | undefined | null): string {
 export default function AssigneePicker({
   taskId,
   listId,
+  folderId,
+  spaceId,
   currentAssigneeIds,
   anchorRect,
   onChange,
@@ -32,16 +39,24 @@ export default function AssigneePicker({
   /** Scope the assignable-users query to an existing task. */
   taskId?: string;
   /** Scope the query directly to a list — used by the task-create slide
-   *  before any task exists. Exactly one of `taskId` or `listId` must be set. */
+   *  before any task exists. */
   listId?: string;
+  /** Scope to a folder's members — used by folder auto-assign settings. */
+  folderId?: string;
+  /** Scope to a space's members — used by space auto-assign settings. */
+  spaceId?: string;
+  /** Exactly one of taskId / listId / folderId / spaceId must be set. */
   currentAssigneeIds: string[];
   anchorRect: DOMRect | null;
   onChange: (ids: string[]) => void;
   onClose: () => void;
 }) {
   const byTask = useAssignableUsers(taskId ?? null);
-  const byList = useAssignableUsersByList(taskId ? null : (listId ?? null));
-  const { data: users = [], isLoading } = taskId ? byTask : byList;
+  const byList = useAssignableUsersByList(taskId || folderId || spaceId ? null : (listId ?? null));
+  const byFolder = useAssignableUsersByFolder(folderId ?? null);
+  const bySpace = useAssignableUsersBySpace(spaceId ?? null);
+  const active = taskId ? byTask : folderId ? byFolder : spaceId ? bySpace : byList;
+  const { data: users = [], isLoading } = active;
   const [query, setQuery] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);

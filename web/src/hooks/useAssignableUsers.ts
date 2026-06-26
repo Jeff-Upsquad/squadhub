@@ -23,3 +23,25 @@ export function useAssignableUsersByList(listId: string | null) {
     enabled: !!listId,
   });
 }
+
+export function useAssignableUsersByFolder(folderId: string | null) {
+  return useQuery<User[]>({
+    queryKey: ['assignable-users-by-folder', folderId],
+    queryFn: async () => {
+      const res = await api.get(`/pm/folders/${folderId}/assignable-users`);
+      return res.data.data;
+    },
+    enabled: !!folderId,
+  });
+}
+
+export function useAssignableUsersBySpace(spaceId: string | null) {
+  return useQuery<User[]>({
+    queryKey: ['assignable-users-by-space', spaceId],
+    queryFn: async () => {
+      const res = await api.get(`/pm/spaces/${spaceId}/assignable-users`);
+      return res.data.data;
+    },
+    enabled: !!spaceId,
+  });
+}

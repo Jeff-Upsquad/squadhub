@@ -920,17 +920,24 @@ router.post('/tasks', async (req: Request, res: Response) => {
     // If the list is under a client-tagged folder, assign a per-client
     // sequential display_number. Non-client tasks get null.
     let displayNumber: number | null = null;
+    // Auto-assign: gather each container level's configured members so we can
+    // pick the nearest non-empty going up the tree (list -> folder -> space).
+    let listAutoIds: string[] = [];
+    let folderAutoIds: string[] = [];
+    let spaceAutoIds: string[] = [];
     const { data: parentList } = await supabaseAdmin
       .from('lists')
-      .select('folder_id')
+      .select('folder_id, space_id, auto_assignee_ids')
       .eq('id', body.list_id)
       .single();
+    listAutoIds = (parentList?.auto_assignee_ids as string[] | null) || [];
     if (parentList?.folder_id) {
       const { data: parentFolder } = await supabaseAdmin
         .from('folders')
-        .select('client_id')
+        .select('client_id, auto_assignee_ids')
         .eq('id', parentList.folder_id)
         .single();
+      folderAutoIds = (parentFolder?.auto_assignee_ids as string[] | null) || [];
       if (parentFolder?.client_id) {
         const { data: n, error: nErr } = await supabaseAdmin.rpc(
           'increment_client_task_counter',
@@ -943,6 +950,21 @@ router.post('/tasks', async (req: Request, res: Response) => {
         }
       }
     }
+    if (parentList?.space_id) {
+      const { data: parentSpace } = await supabaseAdmin
+        .from('spaces')
+        .select('auto_assignee_ids')
+        .eq('id', parentList.space_id)
+        .single();
+      spaceAutoIds = (parentSpace?.auto_assignee_ids as string[] | null) || [];
+    }
+    // Nearest-wins down the tree, then merge with the creator's manual picks.
+    const inheritedAutoIds = listAutoIds.length ? listAutoIds
+      : folderAutoIds.length ? folderAutoIds
+      : spaceAutoIds;
+    const mergedAssigneeIds = Array.from(
+      new Set([...(body.assignee_ids || []), ...inheritedAutoIds]),
+    );
 
     // Resolve task_type_id + key: use supplied value or fall back to the default type
     let resolvedTypeId: string | null = body.task_type_id ?? null;
@@ -978,7 +1000,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
       start_date: body.start_date || null,
       task_type_id: resolvedTypeId,
       parent_task_id: body.parent_task_id || null,
-      assignee_ids: body.assignee_ids || [],
+      assignee_ids: mergedAssigneeIds,
       metadata: body.metadata || {},
       created_by: req.userId!,
     };

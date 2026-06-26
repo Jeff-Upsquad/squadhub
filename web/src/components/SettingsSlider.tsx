@@ -1,6 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
+import {
+  useAssignableUsersByList,
+  useAssignableUsersByFolder,
+  useAssignableUsersBySpace,
+} from '../hooks/useAssignableUsers';
+import AssigneePicker from '../views/app/pm/AssigneePicker';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useAuthStore } from '../stores/authStore';
 import { useMemberships, useUpdateMemberAccess, useRemoveMember } from '../hooks/useMemberships';
@@ -9,7 +16,7 @@ import { useIsAdmin } from '../hooks/usePermissions';
 import { canAtLeast } from '../lib/access';
 import ManageMembersModal from '../views/app/pm/ManageMembersModal';
 import MoveModal from '../views/app/pm/MoveModal';
-import type { ResourceType, AccessLevel, ResourceMembership } from '@squadhub/shared';
+import type { ResourceType, AccessLevel, ResourceMembership, User } from '@squadhub/shared';
 
 type SettingsSliderProps = {
   type: ResourceType;
@@ -19,6 +26,7 @@ type SettingsSliderProps = {
   spaceId?: string | null;
   folderId?: string | null;
   groupTasks?: boolean;
+  autoAssigneeIds?: string[];
   myAccess?: AccessLevel | null;
   onClose: () => void;
   onDeleted?: () => void;
@@ -38,7 +46,7 @@ const ACCESS_ITEM_LABELS: Record<AccessLevel, string> = {
   viewer: 'Viewer',
 };
 
-export default function SettingsSlider({ type, id, name, description, spaceId, folderId, groupTasks, myAccess, onClose, onDeleted }: SettingsSliderProps) {
+export default function SettingsSlider({ type, id, name, description, spaceId, folderId, groupTasks, autoAssigneeIds, myAccess, onClose, onDeleted }: SettingsSliderProps) {
   const qc = useQueryClient();
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const currentUserId = useAuthStore((s) => s.user?.id);
@@ -108,6 +116,17 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
     const next = !groupTasksOn;
     setGroupTasksOn(next);
     updateMutation.mutate({ group_tasks: next }, { onError: () => setGroupTasksOn(!next) });
+  };
+
+  // "Auto-assign" — members auto-added to any task created under this container.
+  // Same set of supported types as Group Tasks. Optimistic: update locally,
+  // persist via the same PUT; revert on error.
+  const [autoAssignIds, setAutoAssignIds] = useState<string[]>(autoAssigneeIds || []);
+  useEffect(() => { setAutoAssignIds(autoAssigneeIds || []); }, [autoAssigneeIds]);
+  const updateAutoAssign = (ids: string[]) => {
+    const prev = autoAssignIds;
+    setAutoAssignIds(ids);
+    updateMutation.mutate({ auto_assignee_ids: ids }, { onError: () => setAutoAssignIds(prev) });
   };
 
   const deleteMutation = useMutation({
@@ -218,6 +237,11 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
               <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${groupTasksOn ? 'left-[18px]' : 'left-0.5'}`} />
             </span>
           </button>
+        )}
+
+        {/* Auto-assign — members added to every task created under this container */}
+        {supportsGroupTasks && canManage && (type === 'list' || type === 'folder' || type === 'space') && (
+          <AutoAssignRow type={type} id={id} value={autoAssignIds} onChange={updateAutoAssign} />
         )}
 
         {/* Move — lists and folders only */}
@@ -395,6 +419,87 @@ export default function SettingsSlider({ type, id, name, description, spaceId, f
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+// Compact picker row for a container's auto-assign members. Resolves selected
+// ids to user records via the same scoped assignable-users query the popover
+// uses, then opens AssigneePicker (portaled) anchored to the row.
+function AutoAssignRow({
+  type,
+  id,
+  value,
+  onChange,
+}: {
+  type: 'list' | 'folder' | 'space';
+  id: string;
+  value: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  const byList = useAssignableUsersByList(type === 'list' ? id : null);
+  const byFolder = useAssignableUsersByFolder(type === 'folder' ? id : null);
+  const bySpace = useAssignableUsersBySpace(type === 'space' ? id : null);
+  const users: User[] =
+    (type === 'list' ? byList.data : type === 'folder' ? byFolder.data : bySpace.data) || [];
+  const byId = new Map(users.map((u) => [u.id, u]));
+  const selected = value.map((uid) => byId.get(uid)).filter((u): u is User => !!u);
+
+  const openPicker = () => {
+    if (btnRef.current) setAnchorRect(btnRef.current.getBoundingClientRect());
+    setOpen(true);
+  };
+
+  return (
+    <div>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={openPicker}
+        className="flex w-full items-center justify-between gap-3 rounded-md border border-[#CAD5E2] bg-white px-3 py-2 text-left text-xs font-medium text-[#0F172B] transition hover:bg-[#F1F5F9]"
+      >
+        <span className="flex flex-col">
+          <span>Auto-assign new tasks</span>
+          <span className="mt-0.5 text-[10px] font-normal text-[#999999]">
+            Add these members to every task created in this {type}
+          </span>
+        </span>
+        {value.length > 0 ? (
+          <span className="flex shrink-0 -space-x-1.5">
+            {selected.slice(0, 4).map((u) => (
+              <span
+                key={u.id}
+                className="flex h-6 w-6 items-center justify-center rounded-full border border-white bg-[#0F172B] text-[10px] font-bold text-white"
+                title={u.display_name || u.email}
+              >
+                {(u.display_name || u.email || '?')[0]?.toUpperCase()}
+              </span>
+            ))}
+            {value.length > 4 && (
+              <span className="flex h-6 w-6 items-center justify-center rounded-full border border-white bg-[#E2E8F0] text-[10px] font-bold text-[#666666]">
+                +{value.length - 4}
+              </span>
+            )}
+          </span>
+        ) : (
+          <span className="shrink-0 text-[#999999]">None</span>
+        )}
+      </button>
+      {open &&
+        createPortal(
+          <AssigneePicker
+            {...(type === 'list' ? { listId: id } : type === 'folder' ? { folderId: id } : { spaceId: id })}
+            currentAssigneeIds={value}
+            anchorRect={anchorRect}
+            onChange={onChange}
+            onClose={() => setOpen(false)}
+          />,
+          document.body,
+        )}
     </div>
   );
 }
