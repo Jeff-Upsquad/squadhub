@@ -5,6 +5,7 @@ import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { requirePermission, checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
+import type { User } from '@squadhub/shared';
 import { aggregateFolderTimeSummary } from '../../services/folderShareMetrics';
 
 const router = Router();
@@ -435,6 +436,63 @@ router.post('/folders', requirePermission('can_create_folders'), async (req: Req
 });
 
 // PUT /pm/folders/:id — requires manager access on folder
+// GET /pm/folders/:id/assignable-users — viewer+ members of the folder or its
+// parent space. Powers the auto-assign picker in folder settings.
+router.get('/folders/:id/assignable-users', async (req: Request, res: Response) => {
+  try {
+    const folderId = req.params.id as string;
+
+    const userLevel = await checkResourceAccess(req.userId!, 'folder', folderId);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this folder' });
+      return;
+    }
+
+    const resourceFilters: Array<{ type: string; id: string }> = [
+      { type: 'folder', id: folderId },
+    ];
+
+    const { data: folder } = await supabaseAdmin
+      .from('folders')
+      .select('space_id')
+      .eq('id', folderId)
+      .single();
+    if ((folder as any)?.space_id) {
+      resourceFilters.push({ type: 'space', id: (folder as any).space_id });
+    }
+
+    const orClauses = resourceFilters
+      .map(f => `and(resource_type.eq.${f.type},resource_id.eq.${f.id})`)
+      .join(',');
+
+    const { data: memberships, error } = await supabaseAdmin
+      .from('resource_memberships')
+      .select('user_id, users!resource_memberships_user_id_fkey(id, display_name, email, avatar_url, user_type, is_admin, status, created_at)')
+      .or(orClauses);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    const seen = new Set<string>();
+    const users: User[] = [];
+    for (const m of (memberships || []) as any[]) {
+      if (!m.users || seen.has(m.user_id)) continue;
+      if (m.users.status && m.users.status !== 'active') continue;
+      seen.add(m.user_id);
+      users.push(m.users as User);
+    }
+
+    users.sort((a, b) => (a.display_name || a.email).localeCompare(b.display_name || b.email));
+
+    res.json({ success: true, data: users });
+  } catch (err) {
+    console.error('Get folder assignable users error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 router.put('/folders/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
@@ -455,6 +513,7 @@ router.put('/folders/:id', async (req: Request, res: Response) => {
     if (req.body.name !== undefined) updates.name = req.body.name;
     if (req.body.space_id !== undefined) updates.space_id = req.body.space_id;
     if (typeof req.body.group_tasks === 'boolean') updates.group_tasks = req.body.group_tasks;
+    if (Array.isArray(req.body.auto_assignee_ids)) updates.auto_assignee_ids = req.body.auto_assignee_ids;
 
     // If moving to a new space, validate destination access + lock, then
     // cascade the space_id change to this folder's child lists so the

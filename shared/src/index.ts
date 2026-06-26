@@ -275,6 +275,8 @@ export interface Space {
   kind?: 'normal' | 'personal';
   /** When true, this space's tasks collapse into one "Grouped tasks under {name}" row on Home. */
   group_tasks?: boolean;
+  /** Members auto-added to any task created under this space (nearest-wins down the tree). */
+  auto_assignee_ids?: string[];
   my_access_level?: AccessLevel;
   // Joined
   statuses?: SpaceStatus[];
@@ -313,6 +315,8 @@ export interface Folder {
   folder_type?: string | null;
   /** When true, this folder's tasks collapse into one "Grouped tasks under {name}" row on Home. */
   group_tasks?: boolean;
+  /** Members auto-added to any task created under this folder (nearest-wins down the tree). */
+  auto_assignee_ids?: string[];
   // Joined
   lists?: List[];
   profile?: CustomProfile;
@@ -338,6 +342,8 @@ export interface List {
   profile_version?: number | null;
   /** When true, this list's tasks collapse into one "Grouped tasks under {name}" row on Home. */
   group_tasks?: boolean;
+  /** Members auto-added to any task created under this list. */
+  auto_assignee_ids?: string[];
   // Joined
   task_count?: number;
   profile?: CustomProfile;
