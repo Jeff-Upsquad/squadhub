@@ -3,8 +3,9 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
-import { requirePermission, isWorkspaceAdmin, checkResourceAccess, meetsAccessLevel, isResourceLocked } from '../../middleware/permissions';
+import { requirePermission, isWorkspaceAdmin, checkResourceAccess, meetsAccessLevel, isResourceLocked, getAccessibleDescendants, accessLevelRank } from '../../middleware/permissions';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
+import type { AccessLevel } from '@squadhub/shared';
 
 const router = Router();
 
@@ -107,11 +108,23 @@ router.get('/spaces/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
 
-    // Check access
-    const userLevel = await checkResourceAccess(req.userId!, 'space', id);
+    // Space-level access (member/manager/admin) sees the whole area. A partner
+    // who was granted only specific folders / design spaces inside this area has
+    // no space-level access — fall back to a descendant-scoped view so the shared
+    // client folder and its spaces still load, with tabs/lists filtered to what
+    // was actually shared with them.
+    let userLevel = await checkResourceAccess(req.userId!, 'space', id);
+    let scoped: { folderLevels: Map<string, AccessLevel>; listLevels: Map<string, AccessLevel> } | null = null;
     if (!userLevel) {
-      res.status(403).json({ success: false, error: 'You do not have access to this space' });
-      return;
+      const descendants = await getAccessibleDescendants(req.userId!, id);
+      if (descendants.folderLevels.size === 0 && descendants.listLevels.size === 0) {
+        res.status(403).json({ success: false, error: 'You do not have access to this space' });
+        return;
+      }
+      scoped = descendants;
+      // Report the highest descendant grant as the access level for this view.
+      const levels = [...descendants.folderLevels.values(), ...descendants.listLevels.values()];
+      userLevel = levels.reduce((best, lvl) => (accessLevelRank(lvl) > accessLevelRank(best) ? lvl : best), levels[0]);
     }
 
     const { data: space, error } = await supabaseAdmin
@@ -127,14 +140,19 @@ router.get('/spaces/:id', async (req: Request, res: Response) => {
 
     // Fetch non-deleted folders (client-tagged folders included — client
     // areas are regular spaces since the Clients/Areas merge).
-    const { data: folders } = await supabaseAdmin
+    const { data: allFolders } = await supabaseAdmin
       .from('folders')
       .select('*')
       .eq('space_id', id)
       .is('deleted_at', null)
       .order('position');
 
-    const visibleFolderIds = new Set((folders || []).map((f: any) => f.id));
+    // Descendant-scoped view only surfaces folders granted directly to the user.
+    const folders = scoped
+      ? (allFolders || []).filter((f: any) => scoped!.folderLevels.has(f.id))
+      : (allFolders || []);
+
+    const visibleFolderIds = new Set(folders.map((f: any) => f.id));
 
     // Fetch all non-deleted lists in this space, then drop lists whose folder was filtered
     const { data: allLists } = await supabaseAdmin
@@ -144,12 +162,16 @@ router.get('/spaces/:id', async (req: Request, res: Response) => {
       .is('deleted_at', null)
       .order('position');
 
-    const visibleLists = (allLists || []).filter(
-      (l: any) => !l.folder_id || visibleFolderIds.has(l.folder_id),
-    );
+    const visibleLists = (allLists || []).filter((l: any) => {
+      // Scoped view: lists inside a visible folder, plus any list shared directly.
+      if (scoped) {
+        return (l.folder_id && visibleFolderIds.has(l.folder_id)) || scoped.listLevels.has(l.id);
+      }
+      return !l.folder_id || visibleFolderIds.has(l.folder_id);
+    });
 
     // Attach lists to their folders
-    const foldersWithLists = (folders || []).map((f: any) => ({
+    const foldersWithLists = folders.map((f: any) => ({
       ...f,
       lists: visibleLists.filter((l: any) => l.folder_id === f.id),
     }));

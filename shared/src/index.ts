@@ -827,6 +827,16 @@ export interface SharedWithMeItem {
   created_at: string;
 }
 
+// ---- Shared Tree (partner-tier AREAS roots) ----
+// Enriched, navigable version of the shared-with-me items: folders/lists shared
+// with a partner (whose parent area isn't shared) returned as ready-to-render
+// roots. Client folders carry the design/video spaces individually granted.
+export interface SharedTree {
+  clientFolders: (Folder & { childSpaces: Folder[] })[];
+  folders: Folder[];
+  lists: List[];
+}
+
 // ---- Socket.io Events ----
 export interface ServerToClientEvents {
   new_message: (message: Message) => void;

@@ -568,8 +568,10 @@ export default function HomeSidebar({
           )}
         </div>
 
-        {/* Shared with me section — only show when there are shared items */}
-        {sharedItems && sharedItems.length > 0 && (
+        {/* Shared with me section — only show when there are shared items.
+            Hidden for partner-tier users: their shared client folders / spaces /
+            lists are surfaced as roots under AREAS (SpaceTree → PartnerSharedRoots). */}
+        {!isPartner && sharedItems && sharedItems.length > 0 && (
           <>
             {/* Divider */}
             <div className="mx-2 border-t border-[var(--sh-hair)]" />
