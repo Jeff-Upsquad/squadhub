@@ -4,17 +4,15 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import NewClientsModule from './NewClientsModule';
 import ClientsModule from './ClientsModule';
-import ClientAccessModule from './ClientAccessModule';
-import ClientSubscriptionsModule from './ClientSubscriptionsModule';
 import OnboardingLinksModule from './OnboardingLinksModule';
 
-type Tab = 'new-clients' | 'clients' | 'invite-links' | 'client-subscriptions' | 'client-access';
+type Tab = 'clients' | 'leads' | 'invite-links';
 
 export default function AdminClients() {
   // Deep-link query params: ?client=<id> lands on the Clients tab, ?submission=<id>
-  // lands on the New Leads tab. The downstream modules handle the actual row open.
+  // lands on the Leads tab. The downstream modules handle the actual row open.
   const searchParams = useSearchParams();
-  const initialTab: Tab = searchParams.get('client') ? 'clients' : 'new-clients';
+  const initialTab: Tab = searchParams.get('submission') ? 'leads' : 'clients';
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
   // Counts for badges
@@ -32,12 +30,10 @@ export default function AdminClients() {
   const pendingCount = subCountRes?.data?.count || 0;
   const clientCount = clientCountRes?.data?.count || 0;
 
-  const tabs: { id: Tab; label: string; count: number }[] = [
-    { id: 'new-clients', label: 'New Leads', count: pendingCount },
+  const tabs: { id: Tab; label: string; count: number; highlight?: boolean }[] = [
     { id: 'clients', label: 'Clients', count: clientCount },
+    { id: 'leads', label: 'Leads', count: pendingCount, highlight: true },
     { id: 'invite-links', label: 'Invite Links', count: 0 },
-    { id: 'client-subscriptions', label: 'Client Subscriptions', count: 0 },
-    { id: 'client-access', label: 'Client Access', count: 0 },
   ];
 
   return (
@@ -52,7 +48,7 @@ export default function AdminClients() {
             <h2 className="font-[family-name:var(--font-display)] text-sm font-bold text-foreground">Clients</h2>
           </div>
         </div>
-        <nav className="flex-1 p-2 space-y-0.5">
+        <nav className="flex-1 space-y-0.5 p-2">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -66,9 +62,7 @@ export default function AdminClients() {
               <span>{tab.label}</span>
               {tab.count > 0 && (
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                  tab.id === 'new-clients' && tab.count > 0
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-canvas text-foreground-muted'
+                  tab.highlight ? 'bg-blue-100 text-blue-700' : 'bg-canvas text-foreground-muted'
                 }`}>
                   {tab.count}
                 </span>
@@ -80,11 +74,9 @@ export default function AdminClients() {
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto bg-canvas p-6">
-        {activeTab === 'new-clients' && <NewClientsModule />}
         {activeTab === 'clients' && <ClientsModule />}
+        {activeTab === 'leads' && <NewClientsModule />}
         {activeTab === 'invite-links' && <OnboardingLinksModule />}
-        {activeTab === 'client-subscriptions' && <ClientSubscriptionsModule />}
-        {activeTab === 'client-access' && <ClientAccessModule />}
       </div>
     </div>
   );
