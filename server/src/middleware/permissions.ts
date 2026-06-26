@@ -335,3 +335,50 @@ export async function isResourceLocked(resourceType: string, resourceId: string)
 
   return false;
 }
+
+/**
+ * For a user with NO space-level access, compute which folders / lists *inside*
+ * a given space they can reach via direct resource_memberships. Used to scope
+ * the space-detail view and the partner shared-tree to only shared descendants
+ * (e.g. a partner who was granted specific client folders / design spaces but
+ * not the parent area). Membership inheritance flows folder→space and list→
+ * folder→space, so when the space itself isn't accessible only *direct*
+ * folder/list grants count — exactly the "only individually-shared" semantics.
+ */
+export async function getAccessibleDescendants(
+  userId: string,
+  spaceId: string,
+): Promise<{ folderLevels: Map<string, AccessLevel>; listLevels: Map<string, AccessLevel> }> {
+  const [{ data: folders }, { data: lists }] = await Promise.all([
+    supabaseAdmin.from('folders').select('id').eq('space_id', spaceId).is('deleted_at', null),
+    supabaseAdmin.from('lists').select('id').eq('space_id', spaceId).is('deleted_at', null),
+  ]);
+
+  const folderIds = (folders || []).map((f: any) => f.id);
+  const listIds = (lists || []).map((l: any) => l.id);
+
+  const folderLevels = new Map<string, AccessLevel>();
+  const listLevels = new Map<string, AccessLevel>();
+
+  if (folderIds.length > 0) {
+    const { data: fm } = await supabaseAdmin
+      .from('resource_memberships')
+      .select('resource_id, access_level')
+      .eq('resource_type', 'folder')
+      .eq('user_id', userId)
+      .in('resource_id', folderIds);
+    for (const m of fm || []) folderLevels.set(m.resource_id as string, m.access_level as AccessLevel);
+  }
+
+  if (listIds.length > 0) {
+    const { data: lm } = await supabaseAdmin
+      .from('resource_memberships')
+      .select('resource_id, access_level')
+      .eq('resource_type', 'list')
+      .eq('user_id', userId)
+      .in('resource_id', listIds);
+    for (const m of lm || []) listLevels.set(m.resource_id as string, m.access_level as AccessLevel);
+  }
+
+  return { folderLevels, listLevels };
+}

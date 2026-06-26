@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useSpaces, useSpace, useCreateList } from '../../../hooks/useSpaces';
+import { useSharedTree } from '../../../hooks/useSharedWithMe';
+import { useIsPartner } from '../../../hooks/useUserType';
 import { useHasPermission } from '../../../hooks/usePermissions';
 import { usePMStore } from '../../../stores/pmStore';
 import { useTabsStore } from '../../../stores/tabsStore';
@@ -665,9 +667,66 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
   );
 }
 
+// ---- Partner shared roots ----
+// Partner / partner-employee users have no space-level membership, so their
+// shared client folders, design spaces and lists are surfaced here as top-level
+// AREAS roots (flattened — the parent area they can't see is never shown).
+// Create/add affordances stay off: partners only ever view what was shared.
+function PartnerSharedRoots({ workspaceId }: { workspaceId: string }) {
+  const { data: tree } = useSharedTree(workspaceId, true);
+
+  if (!tree) return null;
+  const { clientFolders, folders, lists } = tree;
+  if (!clientFolders.length && !folders.length && !lists.length) return null;
+
+  return (
+    <div className="px-1.5">
+      {clientFolders.map((folder) => {
+        const isManager = canAtLeast(folder.my_access_level, 'manager');
+        return (
+          <ClientItem
+            key={folder.id}
+            folder={folder}
+            childSpaces={folder.childSpaces}
+            spaceId={folder.space_id}
+            canAddLists={false}
+            canAddSpaces={false}
+            canDelete={isManager}
+            isManager={isManager}
+            myAccess={folder.my_access_level}
+          />
+        );
+      })}
+      {folders.map((folder) => {
+        const isManager = canAtLeast(folder.my_access_level, 'manager');
+        return (
+          <FolderItem
+            key={folder.id}
+            folder={folder}
+            spaceId={folder.space_id}
+            canAdd={false}
+            canDelete={isManager}
+            isManager={isManager}
+            myAccess={folder.my_access_level}
+          />
+        );
+      })}
+      {lists.map((list) => (
+        <ListItem
+          key={list.id}
+          list={list}
+          isManager={canAtLeast(list.my_access_level, 'manager')}
+          myAccess={list.my_access_level}
+        />
+      ))}
+    </div>
+  );
+}
+
 // ---- Main SpaceTree ----
 export default function SpaceTree({ workspaceId, onRequestCreate }: { workspaceId: string; onRequestCreate?: () => void }) {
   const { data: spaces, isLoading } = useSpaces(workspaceId);
+  const isPartner = useIsPartner();
   const [showCreate, setShowCreate] = useState(false);
   const canCreateSpaces = useHasPermission('can_create_spaces');
 
@@ -682,7 +741,9 @@ export default function SpaceTree({ workspaceId, onRequestCreate }: { workspaceI
         {isLoading && (
           <p className="px-3 py-[5px] text-[11.5px] text-[var(--sh-ink-4)]">Loading…</p>
         )}
-        {spaces?.length === 0 && !isLoading && (
+        {/* Partners have no owned/member areas — their shared roots render below,
+            so suppress the internal "No areas yet / create" empty state for them. */}
+        {spaces?.length === 0 && !isLoading && !isPartner && (
           <div className="px-3 py-2 text-center">
             <p className="text-[11.5px] text-[var(--sh-ink-4)]">No areas yet</p>
             {canCreateSpaces && (
@@ -699,6 +760,8 @@ export default function SpaceTree({ workspaceId, onRequestCreate }: { workspaceI
           <SpaceItem key={space.id} spaceId={space.id} initial={space} />
         ))}
       </div>
+
+      {isPartner && <PartnerSharedRoots workspaceId={workspaceId} />}
 
       {showCreate && (
         <CreateSpaceModal workspaceId={workspaceId} onClose={() => setShowCreate(false)} />
