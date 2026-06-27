@@ -13,6 +13,9 @@ interface Props {
   itemId: string;
   lessonId: string;
   blocks: LmsContentBlock[];
+  // Notifies the parent editor so it can surface a "Saved" indicator for the
+  // otherwise-silent block autosaves.
+  onSaved?: () => void;
 }
 
 const BLOCK_LABELS: Record<LmsBlockType, string> = {
@@ -35,13 +38,14 @@ const BLOCK_ICONS: Record<LmsBlockType, string> = {
   quiz: '❓',
 };
 
-export default function BlockList({ itemId, lessonId, blocks }: Props) {
+export default function BlockList({ itemId, lessonId, blocks, onSaved }: Props) {
   const qc = useQueryClient();
   const [showPicker, setShowPicker] = useState(false);
 
   const addBlock = useMutation({
     mutationFn: (type: LmsBlockType) => api.post(`/admin/lms/lessons/${lessonId}/blocks`, { type }).then((r) => r.data),
     onSuccess: () => {
+      onSaved?.();
       qc.invalidateQueries({ queryKey: ['lms-item', itemId] });
       setShowPicker(false);
     },
@@ -49,18 +53,18 @@ export default function BlockList({ itemId, lessonId, blocks }: Props) {
 
   const updateBlock = useMutation({
     mutationFn: ({ id, ...body }: any) => api.patch(`/admin/lms/blocks/${id}`, body).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['lms-item', itemId] }),
+    onSuccess: () => { onSaved?.(); qc.invalidateQueries({ queryKey: ['lms-item', itemId] }); },
   });
 
   const deleteBlock = useMutation({
     mutationFn: (id: string) => api.delete(`/admin/lms/blocks/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['lms-item', itemId] }),
+    onSuccess: () => { onSaved?.(); qc.invalidateQueries({ queryKey: ['lms-item', itemId] }); },
   });
 
   const reorder = useMutation({
     mutationFn: (items: { id: string; position: number }[]) =>
       api.put(`/admin/lms/lessons/${lessonId}/blocks/reorder`, { items }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['lms-item', itemId] }),
+    onSuccess: () => { onSaved?.(); qc.invalidateQueries({ queryKey: ['lms-item', itemId] }); },
   });
 
   function moveBlock(index: number, direction: -1 | 1) {
@@ -115,6 +119,16 @@ export default function BlockList({ itemId, lessonId, blocks }: Props) {
           </div>
           <button type="button" onClick={() => setShowPicker(false)} className="mt-2 text-[12px] text-foreground-muted hover:text-foreground">Cancel</button>
         </div>
+      ) : blocks.length === 0 ? (
+        <button
+          type="button"
+          onClick={() => setShowPicker(true)}
+          className="flex w-full flex-col items-center gap-1 rounded-lg border border-dashed border-divider-strong bg-surface-alt py-7 text-center hover:border-ink"
+        >
+          <span className="text-xl">＋</span>
+          <span className="text-sm font-medium text-foreground">Add your first block</span>
+          <span className="text-[12px] text-foreground-dim">Text, image, video, PDF or quiz</span>
+        </button>
       ) : (
         <button
           type="button"
