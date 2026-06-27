@@ -260,8 +260,15 @@ export async function computeProgress(userId: string, date: string): Promise<Tim
 // ---- virtual office timing + tracked hours ----
 
 /**
- * Office window (from user_office_timing) + total tracked work seconds for the
- * given IST date (summed across the user's daily_time_summaries rows).
+ * Office window (from user_office_timing) + tracked OFFICE-AVAILABILITY seconds
+ * for the given IST date.
+ *
+ * "Tracked office hours" measures how long the person was checked in / available
+ * for work — the per-user check-in timer only (daily_time_summaries context
+ * 'teammates' | 'partners', written by RailTimer via routes/timer.ts). It
+ * deliberately EXCLUDES task-timer + work-block time (context 'default'), which
+ * is a different measure (time spent on specific tasks) surfaced in the Time
+ * Sheet / task "Logged" field / Reports — not availability.
  */
 export async function getOfficeAndTracked(
   userId: string,
@@ -278,7 +285,10 @@ export async function getOfficeAndTracked(
       .from('daily_time_summaries')
       .select('total_work_seconds')
       .eq('user_id', userId)
-      .eq('date', date),
+      .eq('date', date)
+      // Availability only — the check-in timer contexts. Excludes task/work-block
+      // time (context 'default'), which is not "office hours".
+      .in('context', ['teammates', 'partners']),
   ]);
 
   let office_timing: OfficeTimingSummary | null = null;
