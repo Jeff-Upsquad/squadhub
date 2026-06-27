@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
-import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useUpdateTaskTimeTracked } from '../../../hooks/useTasks';
+import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useUpdateTaskTimeTracked, useTaskLists, useAddTaskToLists, useRemoveTaskFromList } from '../../../hooks/useTasks';
 import { useTimeStats } from '../../../hooks/useTimer';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { isTaskFocused } from '../../../lib/taskGrouping';
@@ -208,6 +208,12 @@ export default function TaskDetailPanel({
   const { data: checklists } = useChecklists(effectiveTaskId);
   const updateTask = useUpdateTask(listId);
   const detachLabel = useDetachLabel(effectiveTaskId ?? '');
+  // Multi-homing: every list this task lives in (primary + added), plus the
+  // mutations to add/remove the added ones. taskLists[0] is the primary list.
+  const { data: taskLists } = useTaskLists(effectiveTaskId);
+  const addToLists = useAddTaskToLists(effectiveTaskId);
+  const removeFromList = useRemoveTaskFromList(effectiveTaskId);
+  const secondaryLists = (taskLists || []).filter((p) => !p.is_primary);
 
   const attachmentsRef = useRef<TaskAttachmentsHandle>(null);
   const { dragActive: panelDragActive, panelHandlers } = usePanelFileDrop((files) => {
@@ -249,6 +255,7 @@ export default function TaskDetailPanel({
   const [timerElapsed, setTimerElapsed] = useState(0);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [movePickerOpen, setMovePickerOpen] = useState(false);
+  const [addPickerOpen, setAddPickerOpen] = useState(false);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
   const [priorityAnchor, setPriorityAnchor] = useState<DOMRect | null>(null);
@@ -734,6 +741,25 @@ export default function TaskDetailPanel({
               />
             ) : crumb;
           })()}
+          {/* Invisible anchor for the "Add to list" picker (opened from the ⋯
+              menu). Multi-homing: each pick links the task into another list. */}
+          {workspaceId && canEdit && (
+            <ListPickerCombobox
+              workspaceId={workspaceId}
+              selectedListId={null}
+              selectedListName={null}
+              initialSpaceId={spaceId ?? null}
+              open={addPickerOpen}
+              onOpenChange={setAddPickerOpen}
+              onChange={(newListId) => {
+                if (!task) return;
+                if (newListId === listId) return; // already its primary list
+                if (secondaryLists.some((p) => p.list_id === newListId)) return; // already added
+                addToLists.mutate([newListId]);
+              }}
+              renderTrigger={() => <span aria-hidden className="block h-0 w-0" />}
+            />
+          )}
           <div className="flex-1" />
           {task && (
             <button
@@ -782,6 +808,21 @@ export default function TaskDetailPanel({
                       Move to another list
                     </button>
                   )}
+                  {canEdit && workspaceId && (
+                    <button
+                      onClick={() => { setMoreMenuOpen(false); setAddPickerOpen(true); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[color:var(--sh-hair-3)]"
+                      style={{ color: 'var(--sh-ink)' }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[color:var(--sh-ink-4)]">
+                        <path d="M9 11l3 3L22 4" />
+                        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+                        <line x1="19" y1="3" x2="19" y2="9" />
+                        <line x1="16" y1="6" x2="22" y2="6" />
+                      </svg>
+                      Add to list
+                    </button>
+                  )}
                   {canEdit && (
                     <button
                       onClick={() => { handleDelete(); setMoreMenuOpen(false); }}
@@ -815,6 +856,52 @@ export default function TaskDetailPanel({
             )
           )}
         </div>
+
+        {/* Secondary lists — the task also appears in these lists (multi-homing).
+            Rendered as paths below the primary breadcrumb; each removable. */}
+        {secondaryLists.length > 0 && (
+          <div className="td-also shrink-0">
+            <span className="td-also-label">Also in</span>
+            <div className="td-also-paths">
+              {secondaryLists.map((p) => (
+                <span key={p.list_id} className="td-also-path" title="Also appears in this list">
+                  {p.space_name && (
+                    <>
+                      <span
+                        className="td-also-emblem"
+                        style={{ background: p.space_color || 'var(--sh-ink)' }}
+                      >
+                        {initialOf(p.space_name)[0]}
+                      </span>
+                      <span className="td-also-seg">{p.space_name}</span>
+                    </>
+                  )}
+                  {p.folder_name && (
+                    <>
+                      <span className="td-also-sep">›</span>
+                      <span className="td-also-seg">{p.folder_name}</span>
+                    </>
+                  )}
+                  <span className="td-also-sep">›</span>
+                  <span className="td-also-seg td-also-list">{p.list_name}</span>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      className="td-also-remove"
+                      title="Remove from this list"
+                      aria-label={`Remove from ${p.list_name}`}
+                      onClick={() => removeFromList.mutate(p.list_id)}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Scrollable body */}
         <div className="td-scroll flex-1 overflow-y-auto px-6 pt-3 pb-8">

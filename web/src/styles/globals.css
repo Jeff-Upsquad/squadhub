@@ -4570,6 +4570,79 @@ button.td-bcrumb:hover .name { color: var(--sh-ink); }
 }
 .td-bcrumb .chev { opacity: 0.5; }
 
+/* Secondary-list strip — shown under the header when a task has been ADDED to
+   other lists (multi-homing). One removable path chip per added list. */
+.td-also {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 16px 8px;
+  border-bottom: 1px solid var(--sh-hair);
+}
+.td-also-label {
+  flex: none;
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sh-ink-4);
+}
+.td-also-paths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.td-also-path {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 4px 3px 7px;
+  border: 1px solid var(--sh-hair);
+  border-radius: 999px;
+  background: var(--sh-hair-3);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--sh-ink-3);
+  white-space: nowrap;
+}
+.td-also-emblem {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  color: white;
+  display: grid;
+  place-items: center;
+  font-size: 7.5px;
+  font-weight: 700;
+  flex: none;
+}
+.td-also-seg {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+.td-also-list { color: var(--sh-ink); font-weight: 600; }
+.td-also-sep { color: var(--sh-ink-5); font-weight: 400; }
+.td-also-remove {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 1px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--sh-ink-4);
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.td-also-remove:hover { background: var(--sh-hair); color: var(--sh-ink); }
+
 /* Parent-task reference chip — shown above the title when a task is a subtask */
 .td-parent-ref {
   display: inline-flex;
