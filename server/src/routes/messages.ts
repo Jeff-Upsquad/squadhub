@@ -97,10 +97,15 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
+    // `data` comes back newest-first (created_at desc). Derive the pagination
+    // cursor from the OLDEST row in this batch — i.e. its last element — BEFORE
+    // reversing, because reverse() mutates in place and would otherwise flip
+    // which end is the oldest (which made scroll-back re-fetch the newest page).
+    const rows = data || [];
+    const has_more = rows.length === limit;
+    const nextCursor = rows.length ? rows[rows.length - 1].created_at : null;
     // Reverse so messages are oldest-first for display
-    const messages = (data || []).reverse();
-    const has_more = data?.length === limit;
-    const nextCursor = data?.length ? data[data.length - 1].created_at : null;
+    const messages = rows.reverse();
 
     // Enrich parent messages with thread participants + last_reply_at so the
     // client can show the Slack-style "ML JT MO · 4 replies · Last reply ..." footer.

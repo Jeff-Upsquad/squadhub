@@ -311,7 +311,11 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
   // so the flattened timeline reads oldest → newest top to bottom.
   const messages: Message[] = useMemo(() => {
     const pages = (messagesRes?.pages || []) as { data?: Message[] }[];
-    return [...pages].reverse().flatMap((p) => p.data || []);
+    const flat = [...pages].reverse().flatMap((p) => p.data || []);
+    // Defensive de-dup: page boundaries can overlap if two messages share a
+    // created_at, so never let the same id render twice.
+    const seen = new Set<string>();
+    return flat.filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)));
   }, [messagesRes]);
 
   // Hide thread replies from the main timeline — they live in the thread panel.
