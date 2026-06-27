@@ -5822,6 +5822,14 @@ textarea.td-input-shell {
 }
 .sqc-msg-scroll::-webkit-scrollbar-track { background: transparent; }
 
+/* "Loading earlier messages…" pill shown at the top while scroll-back fetches */
+.sqc-msg-loadolder {
+  text-align: center;
+  padding: 10px 0;
+  font-size: 12px;
+  color: var(--sh-text-muted, #8a8f98);
+}
+
 /* Slack-style day divider: hairline across, floating pill with chevron */
 .sqc-day-divider {
   display: flex;

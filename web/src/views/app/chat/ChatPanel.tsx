@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { getSocket } from '../../../services/socket';
 import type { Message } from '@squadhub/shared';
@@ -162,11 +162,26 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
   const param = kind === 'dm' ? 'dm_conversation_id' : 'channel_id';
   const queryKey = useMemo(() => ['messages', kind, channelId], [kind, channelId]);
 
-  const { data: messagesRes } = useQuery({
+  const {
+    data: messagesRes,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey,
-    queryFn: () => api.get(`/messages?${param}=${channelId}`).then((r) => r.data),
+    queryFn: ({ pageParam }) =>
+      api
+        .get(
+          `/messages?${param}=${channelId}${pageParam ? `&cursor=${encodeURIComponent(pageParam as string)}` : ''}`,
+        )
+        .then((r) => r.data),
     enabled: !!channelId,
     refetchInterval: false,
+    initialPageParam: undefined as string | undefined,
+    // "Next page" means *older* messages: page N's cursor is the timestamp of
+    // its oldest row, which the server uses as the `created_at <` bound.
+    getNextPageParam: (lastPage: { has_more?: boolean; cursor?: string | null }) =>
+      lastPage?.has_more ? lastPage.cursor ?? undefined : undefined,
   });
 
   // Having a conversation on screen counts as reading its messages, so its
@@ -232,11 +247,20 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
     // (reply_count, thread participants, mention hydration).
     const handleIncomingMessage = (message?: Message) => {
       if (message?.id) {
-        queryClient.setQueryData<{ data?: Message[] }>(queryKey, (old) => {
-          if (!old?.data) return old;
-          if (old.data.some((m) => m.id === message.id)) return old;
-          return { ...old, data: [...old.data, message] };
-        });
+        queryClient.setQueryData<{ pages: { data?: Message[] }[]; pageParams: unknown[] }>(
+          queryKey,
+          (old) => {
+            if (!old?.pages?.length) return old;
+            // pages[0] holds the newest batch (oldest-first within the page); a
+            // freshly arrived message is the newest, so append it to that page.
+            const [first, ...rest] = old.pages;
+            if (first.data?.some((m) => m.id === message.id)) return old;
+            return {
+              ...old,
+              pages: [{ ...first, data: [...(first.data || []), message] }, ...rest],
+            };
+          },
+        );
       }
       queryClient.invalidateQueries({ queryKey });
       // A message arriving in the conversation already on screen is read on
@@ -282,7 +306,13 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
     clearConversationNotifications();
   }, [channelId, kind, queryClient, clearConversationNotifications, markChatRead]);
 
-  const messages: Message[] = messagesRes?.data || [];
+  // Each page is oldest-first, but pages arrive newest-batch-first (page 0 is the
+  // initial load, page 1 is the older batch behind it, …). Reverse the page order
+  // so the flattened timeline reads oldest → newest top to bottom.
+  const messages: Message[] = useMemo(() => {
+    const pages = (messagesRes?.pages || []) as { data?: Message[] }[];
+    return [...pages].reverse().flatMap((p) => p.data || []);
+  }, [messagesRes]);
 
   // Hide thread replies from the main timeline — they live in the thread panel.
   const topLevelMessages = useMemo(
@@ -335,9 +365,15 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
   // scrolled up to read history.
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastChannelRef = useRef<string | null>(null);
+  // scrollHeight captured just before an older-messages fetch, so we can keep the
+  // current messages visually fixed once the prepended batch grows the content.
+  const restoreScrollRef = useRef<number | null>(null);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || topLevelMessages.length === 0) return;
+    // A pending scroll restore means older messages were just prepended — never
+    // yank the view to the bottom in that case.
+    if (restoreScrollRef.current != null) return;
     const isNewConversation = lastChannelRef.current !== channelId;
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
     if (isNewConversation || nearBottom) {
@@ -345,6 +381,26 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
       lastChannelRef.current = channelId;
     }
   }, [channelId, topLevelMessages]);
+
+  // After an older batch is prepended, restore the prior scroll offset (before
+  // paint) so the messages the user was reading stay put instead of jumping.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el && restoreScrollRef.current != null) {
+      el.scrollTop = el.scrollHeight - restoreScrollRef.current;
+      restoreScrollRef.current = null;
+    }
+  }, [messages]);
+
+  // Pull older messages when the user scrolls near the top of the history.
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || !hasNextPage || isFetchingNextPage) return;
+    if (el.scrollTop < 120) {
+      restoreScrollRef.current = el.scrollHeight;
+      fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Tag a message as "grouped" when the prior visible message is from the
   // same author and within 5 minutes — matches the Slack-style stacking.
@@ -374,9 +430,17 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
           </div>
         )}
         {/* Scrollable messages area */}
-        <div className="sqc-msg-scroll" ref={scrollRef}>
-          {/* Slack-style intro at the start of history */}
-          {kind === 'dm' ? <DmIntro dmId={channelId} /> : <ChannelIntro channelId={channelId} />}
+        <div className="sqc-msg-scroll" ref={scrollRef} onScroll={handleScroll}>
+          {/* Spinner while older history loads in on scroll-up */}
+          {isFetchingNextPage && (
+            <div className="sqc-msg-loadolder" aria-live="polite">
+              Loading earlier messages…
+            </div>
+          )}
+          {/* Slack-style intro — only once the whole history is loaded, so it
+              doesn't flash above messages that haven't scrolled in yet. */}
+          {!hasNextPage &&
+            (kind === 'dm' ? <DmIntro dmId={channelId} /> : <ChannelIntro channelId={channelId} />)}
           {messagesWithDates.map((item, i) =>
             item.type === 'date' ? (
               <DateSeparator key={`date-${i}`} date={item.date!} />
