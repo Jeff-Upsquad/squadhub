@@ -266,12 +266,35 @@ router.get('/search', async (req: Request, res: Response) => {
       }
     }
 
+    // Resolve each task's status category by joining space_statuses (keyed by
+    // space_id + status name), mirroring the lib/taskGrouping.ts isTaskCompleted
+    // category check. Custom task types complete under a space-specific status
+    // name (e.g. "Delivered", "RESOLVED") whose category is 'done'/'closed' even
+    // though the name isn't literally that — the raw status string alone can't
+    // tell those apart from open work.
+    let statusCategoryByKey: Record<string, string> = {};
+    if (spaceIdsNeeded.length > 0) {
+      const { data: spaceStatuses } = await supabaseAdmin
+        .from('space_statuses')
+        .select('space_id, name, category')
+        .in('space_id', spaceIdsNeeded);
+      for (const s of (spaceStatuses || []) as any[]) {
+        statusCategoryByKey[`${s.space_id}::${s.name}`] = s.category;
+      }
+    }
+
     const enriched = (matches || []).map((t: any) => {
       const list = listInfoById[t.list_id];
+      const spaceId = list?.space_id || null;
+      const category =
+        spaceId && t.status != null
+          ? statusCategoryByKey[`${spaceId}::${t.status}`] ?? null
+          : null;
       return {
         id: t.id,
         title: t.title,
         status: t.status,
+        category,
         priority: t.priority,
         due_date: t.due_date,
         display_number: t.display_number ?? null,
@@ -279,8 +302,8 @@ router.get('/search', async (req: Request, res: Response) => {
         list_name: list?.name || null,
         folder_id: list?.folder_id || null,
         folder_name: list?.folder_id ? folderNameById[list.folder_id] || null : null,
-        space_id: list?.space_id || null,
-        space_name: list?.space_id ? spaceNameById[list.space_id] || null : null,
+        space_id: spaceId,
+        space_name: spaceId ? spaceNameById[spaceId] || null : null,
       };
     });
 

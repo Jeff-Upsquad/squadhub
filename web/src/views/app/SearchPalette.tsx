@@ -181,7 +181,12 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
     const doneTasks: TaskResult[] = [];
     for (const t of tasks) {
       const hint = [t.space_name, t.folder_name, t.list_name].filter(Boolean).join(' › ') || undefined;
-      const done = t.status === 'done' || t.status === 'closed';
+      // Mirror lib/taskGrouping.ts isTaskCompleted: prefer the space_status
+      // category (catches renamed done-category statuses like "RESOLVED"), and
+      // fall back to the raw status string for catalog types with no category.
+      const done = t.category
+        ? t.category === 'done' || t.category === 'closed'
+        : t.status === 'done' || t.status === 'closed';
       const tr: TaskResult = { key: `task:${t.id}`, kind: 'task', label: t.title, hint, task: t, done };
       (done ? doneTasks : openTasks).push(tr);
     }
