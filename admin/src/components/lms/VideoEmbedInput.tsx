@@ -38,7 +38,7 @@ export default function VideoEmbedInput({ url, onChange }: Props) {
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={apply}
-        placeholder="Paste YouTube / Vimeo / Loom URL"
+        placeholder="Paste YouTube / Vimeo / Loom / Squad Clips URL"
         className="flex-1 rounded-md border border-divider bg-surface px-3 py-2 text-sm placeholder-foreground-dim focus:border-ink focus:outline-none"
       />
       <button

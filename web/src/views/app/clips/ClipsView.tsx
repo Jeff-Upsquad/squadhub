@@ -1,82 +1,29 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAuthStore } from '../../../stores/authStore';
-import { getFreshAccessToken } from '../../../services/api';
+import { useEffect, useRef, useState } from 'react';
+import {
+  CLIPS_URL,
+  CLIPS_ORIGIN,
+  clipsCurrentTheme,
+  useClipsAuthBridge,
+} from '../../../hooks/useClipsAuthBridge';
 
 // Squad Clips is a separate app (own repo/deployment) embedded as a mini app.
-// This view hosts it in an iframe and answers its postMessage handshake with a
-// guaranteed-fresh ACCESS token — never the refresh token: Supabase refresh
-// tokens rotate, and concurrent use from two apps would invalidate this
-// session. Protocol details live in the squad-clips repo (src/lib/auth-bridge.ts).
-const CLIPS_URL =
-  process.env.NEXT_PUBLIC_CLIPS_URL ||
-  (process.env.NODE_ENV === 'production' ? 'https://clips.squadhub.in' : 'http://localhost:3200');
-const CLIPS_ORIGIN = new URL(CLIPS_URL).origin;
-
-function currentTheme(): 'light' | 'dark' {
-  return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-}
+// This view hosts it full-screen in an iframe; the parent-side auth handshake
+// (answering with a guaranteed-fresh access token, pushing rotations/logout) is
+// shared with login-gated learning embeds via useClipsAuthBridge.
 
 export default function ClipsView() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [connected, setConnected] = useState(false);
 
-  const sendAuth = useCallback(async () => {
-    const frame = iframeRef.current?.contentWindow;
-    if (!frame) return;
-    const token = await getFreshAccessToken();
-    const { user } = useAuthStore.getState();
-    if (!token || !user) return;
-    frame.postMessage(
-      {
-        type: 'squadclips:auth',
-        accessToken: token,
-        user: {
-          id: user.id,
-          email: user.email,
-          display_name: user.display_name,
-          avatar_url: user.avatar_url,
-        },
-        theme: currentTheme(),
-      },
-      CLIPS_ORIGIN,
-    );
-  }, []);
-
-  useEffect(() => {
-    const onMessage = (e: MessageEvent) => {
-      if (e.origin !== CLIPS_ORIGIN || e.source !== iframeRef.current?.contentWindow) return;
-      const type = e.data?.type;
-      if (type === 'squadclips:ready') {
-        setConnected(true);
-        void sendAuth();
-      } else if (type === 'squadclips:request-token') {
-        void sendAuth();
-      }
-    };
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [sendAuth]);
-
-  // Push rotated tokens and logout without waiting to be asked.
-  useEffect(() => {
-    return useAuthStore.subscribe((state, prev) => {
-      const frame = iframeRef.current?.contentWindow;
-      if (!frame) return;
-      if (state.accessToken && state.accessToken !== prev.accessToken) {
-        void sendAuth();
-      } else if (!state.isAuthenticated && prev.isAuthenticated) {
-        frame.postMessage({ type: 'squadclips:logout' }, CLIPS_ORIGIN);
-      }
-    });
-  }, [sendAuth]);
+  const { sendAuth } = useClipsAuthBridge(iframeRef, () => setConnected(true));
 
   // Keep the embedded app's theme in lockstep with the shell.
   useEffect(() => {
     const observer = new MutationObserver(() => {
       iframeRef.current?.contentWindow?.postMessage(
-        { type: 'squadclips:theme', dark: currentTheme() === 'dark' },
+        { type: 'squadclips:theme', dark: clipsCurrentTheme() === 'dark' },
         CLIPS_ORIGIN,
       );
     });
