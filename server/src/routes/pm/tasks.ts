@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import type { User, TaskRecurrence, TaskTag } from '@squadhub/shared';
+import type { User, TaskRecurrence, TaskTag, TaskListPath } from '@squadhub/shared';
 import { taskRecurrenceOccursOn } from '@squadhub/shared';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
@@ -317,12 +317,26 @@ router.get('/tasks', async (req: Request, res: Response) => {
       return;
     }
 
+    // Multi-homing: a list shows its own tasks (list_id = listId) PLUS any tasks
+    // ADDED into it from elsewhere (task_list_links). Fetch the linked task ids
+    // first, then OR them into the query.
+    const { data: linkRows } = await supabaseAdmin
+      .from('task_list_links')
+      .select('task_id')
+      .eq('list_id', listId);
+    const linkedIds = Array.from(new Set((linkRows || []).map((r: any) => r.task_id).filter(Boolean)));
+
     let query = supabaseAdmin
       .from('tasks')
       .select('*')
-      .eq('list_id', listId)
       // Routine templates never render in list views — only their spawned copies do.
       .is('recurrence', null);
+
+    if (linkedIds.length) {
+      query = query.or(`list_id.eq.${listId},id.in.(${linkedIds.join(',')})`);
+    } else {
+      query = query.eq('list_id', listId);
+    }
 
     // Filters
     if (req.query.status) query = query.eq('status', req.query.status as string);
@@ -352,7 +366,13 @@ router.get('/tasks', async (req: Request, res: Response) => {
 
     const withAssignees = await hydrateAssignees(data || []);
     const hydrated = await hydrateParents(withAssignees);
-    res.json({ success: true, data: hydrated });
+    // Flag rows that are only in this view because they were ADDED to this list
+    // (their primary list_id points elsewhere) so the UI can badge them.
+    const linkedSet = new Set(linkedIds);
+    const flagged = hydrated.map((t: any) =>
+      t.list_id !== listId && linkedSet.has(t.id) ? { ...t, linked_in_list: true } : t,
+    );
+    res.json({ success: true, data: flagged });
   } catch (err) {
     console.error('Get tasks error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -1128,6 +1148,16 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    // If the task was MOVED into a list it was also LINKED into, drop the now
+    // redundant link so it isn't double-counted (primary + link) in that list.
+    if (body.list_id && body.list_id !== listId) {
+      await supabaseAdmin
+        .from('task_list_links')
+        .delete()
+        .eq('task_id', id)
+        .eq('list_id', body.list_id);
+    }
+
     // Rule just set/changed and fires today → materialise today's copy now
     // (idempotent: skipped if today's instance already exists).
     if (body.recurrence && !(data as any).recurrence_paused
@@ -1168,6 +1198,196 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       return;
     }
     console.error('Update task error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Resolve space → folder → list display info for a set of lists. Used to render
+// the secondary-list breadcrumbs on the task detail panel.
+async function buildListPaths(
+  listIds: string[],
+): Promise<Map<string, Omit<TaskListPath, 'is_primary'>>> {
+  const ids = Array.from(new Set(listIds.filter(Boolean)));
+  const out = new Map<string, Omit<TaskListPath, 'is_primary'>>();
+  if (!ids.length) return out;
+  const { data: lists } = await supabaseAdmin
+    .from('lists')
+    .select('id, name, space_id, folder_id')
+    .in('id', ids);
+  const spaceIds = Array.from(new Set((lists || []).map((l: any) => l.space_id).filter(Boolean)));
+  const folderIds = Array.from(new Set((lists || []).map((l: any) => l.folder_id).filter(Boolean)));
+  const [{ data: spaces }, { data: folders }] = await Promise.all([
+    spaceIds.length
+      ? supabaseAdmin.from('spaces').select('id, name, color').in('id', spaceIds)
+      : Promise.resolve({ data: [] as any[] }),
+    folderIds.length
+      ? supabaseAdmin.from('folders').select('id, name').in('id', folderIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const spaceById = new Map((spaces || []).map((s: any) => [s.id, s]));
+  const folderById = new Map((folders || []).map((f: any) => [f.id, f]));
+  for (const l of lists || []) {
+    const s = (l as any).space_id ? spaceById.get((l as any).space_id) : null;
+    const f = (l as any).folder_id ? folderById.get((l as any).folder_id) : null;
+    out.set((l as any).id, {
+      list_id: (l as any).id,
+      list_name: (l as any).name,
+      folder_id: f ? (f as any).id : null,
+      folder_name: f ? (f as any).name : null,
+      space_id: s ? (s as any).id : null,
+      space_name: s ? (s as any).name : null,
+      space_color: s ? (s as any).color ?? null : null,
+    });
+  }
+  return out;
+}
+
+// GET /pm/tasks/:id/lists — every list this task belongs to, as resolved paths.
+// First entry is the primary list (tasks.list_id); the rest are added links.
+router.get('/tasks/:id/lists', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const primaryListId = await getTaskListId(id);
+    if (!primaryListId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    const userLevel = await checkResourceAccess(req.userId!, 'list', primaryListId);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'You do not have access to this task' });
+      return;
+    }
+
+    const { data: links } = await supabaseAdmin
+      .from('task_list_links')
+      .select('list_id, created_at')
+      .eq('task_id', id)
+      .order('created_at', { ascending: true });
+    const linkIds = (links || []).map((l: any) => l.list_id).filter((lid: string) => lid !== primaryListId);
+
+    const paths = await buildListPaths([primaryListId, ...linkIds]);
+    const primary = paths.get(primaryListId);
+    const result: TaskListPath[] = [];
+    if (primary) result.push({ ...primary, is_primary: true });
+    for (const lid of linkIds) {
+      const p = paths.get(lid);
+      if (p) result.push({ ...p, is_primary: false });
+    }
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('Get task lists error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /pm/tasks/:id/lists — add the task to one or more additional lists.
+// Body: { list_ids: string[] }. Requires member access on the task's primary
+// list AND on every target list. Skips the primary list and existing links.
+router.post('/tasks/:id/lists', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const parsed = z
+      .object({ list_ids: z.array(z.string().uuid()).min(1) })
+      .parse(req.body);
+
+    const primaryListId = await getTaskListId(id);
+    if (!primaryListId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    const userLevel = await checkResourceAccess(req.userId!, 'list', primaryListId);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required to add this task to lists' });
+      return;
+    }
+
+    const adminUser = await isWorkspaceAdmin(req.userId!);
+    const targets = Array.from(new Set(parsed.list_ids)).filter((lid) => lid !== primaryListId);
+
+    // Drop lists the task is already linked into.
+    const { data: existing } = await supabaseAdmin
+      .from('task_list_links')
+      .select('list_id')
+      .eq('task_id', id);
+    const existingIds = new Set((existing || []).map((r: any) => r.list_id));
+    const toAdd = targets.filter((lid) => !existingIds.has(lid));
+
+    const inserted: string[] = [];
+    for (const lid of toAdd) {
+      const { data: destList } = await supabaseAdmin
+        .from('lists')
+        .select('id, deleted_at')
+        .eq('id', lid)
+        .single();
+      if (!destList || (destList as any).deleted_at) {
+        res.status(400).json({ success: false, error: 'A destination list does not exist' });
+        return;
+      }
+      const destLevel = await checkResourceAccess(req.userId!, 'list', lid);
+      if (!destLevel || !meetsAccessLevel(destLevel, 'member')) {
+        res.status(403).json({ success: false, error: 'Member access required on a destination list' });
+        return;
+      }
+      if (!adminUser && await isResourceLocked('list', lid)) {
+        res.status(403).json({ success: false, error: 'A destination list is locked' });
+        return;
+      }
+      const { error: insErr } = await supabaseAdmin
+        .from('task_list_links')
+        .insert({ task_id: id, list_id: lid, created_by: req.userId! });
+      // Ignore unique-violation races; surface anything else.
+      if (insErr && (insErr as any).code !== '23505') {
+        res.status(500).json({ success: false, error: insErr.message });
+        return;
+      }
+      inserted.push(lid);
+    }
+
+    res.json({ success: true, data: { added: inserted } });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Add task to lists error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /pm/tasks/:id/lists/:listId — remove one added-list link. The primary
+// list cannot be removed this way (use "Move to another list" instead).
+router.delete('/tasks/:id/lists/:listId', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const listId = req.params.listId as string;
+
+    const primaryListId = await getTaskListId(id);
+    if (!primaryListId) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    if (listId === primaryListId) {
+      res.status(400).json({ success: false, error: 'Cannot remove the task from its primary list' });
+      return;
+    }
+    const userLevel = await checkResourceAccess(req.userId!, 'list', primaryListId);
+    if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
+      res.status(403).json({ success: false, error: 'Member access required to change this task' });
+      return;
+    }
+
+    const { error } = await supabaseAdmin
+      .from('task_list_links')
+      .delete()
+      .eq('task_id', id)
+      .eq('list_id', listId);
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Remove task from list error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

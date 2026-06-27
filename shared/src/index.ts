@@ -584,6 +584,25 @@ export interface Task {
   parent_task?: { id: string; title: string } | null;
   // Hydrated on GET /pm/tasks/:id for spawned routine copies.
   routine_template?: { id: string; title: string; recurrence: TaskRecurrence | null } | null;
+  // Multi-homing: when this task is rendered inside a list it was ADDED to
+  // (via task_list_links) rather than its primary list, this flags the row so
+  // the UI can mark it as linked. Set by GET /pm/tasks?list_id= for that view.
+  linked_in_list?: boolean;
+}
+
+// A resolved space → folder → list path for one of the lists a task belongs to.
+// Returned by GET /pm/tasks/:id/lists — the first entry is the task's primary
+// list (tasks.list_id), the rest are secondary lists from task_list_links.
+export interface TaskListPath {
+  list_id: string;
+  list_name: string;
+  folder_id: string | null;
+  folder_name: string | null;
+  space_id: string | null;
+  space_name: string | null;
+  space_color: string | null;
+  // True for the task's primary list (cannot be removed), false for added lists.
+  is_primary: boolean;
 }
 
 // Per-user, per-day calendar block placed on the Day Planner's hourly grid.

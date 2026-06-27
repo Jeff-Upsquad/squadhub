@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import api from '../services/api';
-import type { Task, SpaceStatus, TaskComment, TaskMetadata, TaskRecurrence, Space, List } from '@squadhub/shared';
+import type { Task, SpaceStatus, TaskComment, TaskMetadata, TaskRecurrence, Space, List, TaskListPath } from '@squadhub/shared';
 import { getTaskStatusCategory } from '@squadhub/shared';
 import { showToastCard } from '../components/Toast';
 import { usePMStore } from '../stores/pmStore';
@@ -279,6 +279,51 @@ export function useDeleteTask(listId: string | null) {
     onSuccess: (taskId) => {
       invalidateTaskLists(qc, listId);
       qc.removeQueries({ queryKey: ['task', taskId] });
+    },
+  });
+}
+
+// Every list a task belongs to: primary (is_primary) + added links, each as a
+// resolved space → folder → list path. Backs the secondary-list breadcrumbs and
+// the remove (×) controls on the task detail panel.
+export function useTaskLists(taskId: string | null) {
+  return useQuery<TaskListPath[]>({
+    queryKey: ['task-lists', taskId],
+    queryFn: async () => {
+      const res = await api.get(`/pm/tasks/${taskId}/lists`);
+      return res.data.data;
+    },
+    enabled: !!taskId,
+  });
+}
+
+// Add a task to one or more additional lists (multi-homing). Refreshes the
+// task's list-path strip and every newly-targeted list view.
+export function useAddTaskToLists(taskId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (listIds: string[]) => {
+      const res = await api.post(`/pm/tasks/${taskId}/lists`, { list_ids: listIds });
+      return res.data.data as { added: string[] };
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['task-lists', taskId] });
+      for (const lid of data?.added || []) invalidateTaskLists(qc, lid);
+    },
+  });
+}
+
+// Remove a task from one added list (its primary list can't be removed here).
+export function useRemoveTaskFromList(taskId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (listId: string) => {
+      await api.delete(`/pm/tasks/${taskId}/lists/${listId}`);
+      return listId;
+    },
+    onSuccess: (listId) => {
+      qc.invalidateQueries({ queryKey: ['task-lists', taskId] });
+      invalidateTaskLists(qc, listId);
     },
   });
 }
