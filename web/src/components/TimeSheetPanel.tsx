@@ -233,50 +233,106 @@ function EntryRow({
   if (!task) return null;
 
   const crumbs = [task.space?.name, task.folder?.name, task.list?.name].filter(Boolean).join(' · ');
+  const isBlock = entry.source === 'work_block';
+  const children = entry.children || [];
 
   return (
-    <div
-      className="flex cursor-pointer items-start gap-2 border-b border-[var(--sh-hair)] px-4 py-2.5 transition hover:bg-[var(--sh-hair-3)]"
-      onClick={() => onOpen(task.id)}
-    >
-      <div className="flex-1 min-w-0">
-        <div className="truncate text-[13px] font-medium text-[var(--sh-ink)]">{task.title}</div>
-        {crumbs && (
-          <div className="mt-0.5 truncate text-[11px] text-[var(--sh-ink-3)]">{crumbs}</div>
-        )}
-        {task.parent_task && (
-          <div className="mt-0.5 truncate text-[11px] text-[var(--sh-ink-3)]">
-            ↳ Parent: {task.parent_task.title}
-          </div>
-        )}
-        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--sh-ink-3)]">
-          {entry.source === 'manual' ? (
-            <span className="rounded-[4px] bg-[var(--sh-hair-3)] px-1.5 py-[1px] font-medium text-[var(--sh-ink-3)]">
-              Manual
-            </span>
-          ) : (
-            <span>{formatTimeRange(entry.started_at, entry.stopped_at)}</span>
-          )}
-          <span>·</span>
-          <span className={entry.duration_seconds < 0 ? 'text-red-500' : undefined}>
-            {formatTracked(entry.duration_seconds) || '—'}
-          </span>
-        </div>
-      </div>
-      <button
-        onClick={(e) => { e.stopPropagation(); onPlay(entry); }}
-        disabled={isRunningTask}
-        className={`grid h-7 w-7 shrink-0 place-items-center rounded-[6px] transition ${
-          isRunningTask
-            ? 'cursor-not-allowed text-[var(--sh-ink-3)] opacity-50'
-            : 'text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair)] hover:text-emerald-600'
-        }`}
-        title={isRunningTask ? 'Timer already running on this task' : 'Restart timer'}
+    <div className="border-b border-[var(--sh-hair)]">
+      <div
+        className="flex cursor-pointer items-start gap-2 px-4 py-2.5 transition hover:bg-[var(--sh-hair-3)]"
+        onClick={() => onOpen(task.id)}
       >
-        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M8 5v14l11-7z" />
-        </svg>
-      </button>
+        {isBlock && (
+          <span
+            className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-[5px]"
+            style={{ backgroundColor: 'rgba(139,92,246,0.14)', color: '#8b5cf6' }}
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+          </span>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-[13px] font-medium text-[var(--sh-ink)]">{task.title}</span>
+            {isBlock && (
+              <span
+                className="shrink-0 rounded-[4px] px-1.5 py-[1px] text-[10px] font-semibold uppercase tracking-wide"
+                style={{ backgroundColor: 'rgba(139,92,246,0.14)', color: '#8b5cf6' }}
+              >
+                Work block
+              </span>
+            )}
+          </div>
+          {crumbs && (
+            <div className="mt-0.5 truncate text-[11px] text-[var(--sh-ink-3)]">{crumbs}</div>
+          )}
+          {task.parent_task && (
+            <div className="mt-0.5 truncate text-[11px] text-[var(--sh-ink-3)]">
+              ↳ Parent: {task.parent_task.title}
+            </div>
+          )}
+          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--sh-ink-3)]">
+            {entry.source === 'manual' ? (
+              <span className="rounded-[4px] bg-[var(--sh-hair-3)] px-1.5 py-[1px] font-medium text-[var(--sh-ink-3)]">
+                Manual
+              </span>
+            ) : (
+              <span>{formatTimeRange(entry.started_at, entry.stopped_at)}</span>
+            )}
+            <span>·</span>
+            <span className={entry.duration_seconds < 0 ? 'text-red-500' : undefined}>
+              {formatTracked(entry.duration_seconds) || '—'}
+            </span>
+          </div>
+        </div>
+        {!isBlock && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onPlay(entry); }}
+            disabled={isRunningTask}
+            className={`grid h-7 w-7 shrink-0 place-items-center rounded-[6px] transition ${
+              isRunningTask
+                ? 'cursor-not-allowed text-[var(--sh-ink-3)] opacity-50'
+                : 'text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair)] hover:text-emerald-600'
+            }`}
+            title={isRunningTask ? 'Timer already running on this task' : 'Restart timer'}
+          >
+            <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {/* Work-block sub-items: tasks worked on / completed during the run */}
+      {isBlock && children.length > 0 && (
+        <div className="border-t border-[var(--sh-hair)] bg-[var(--sh-hair-3)]/40 py-1 pl-11 pr-4">
+          {children.map((c) => (
+            <div key={c.task_id} className="flex items-center gap-2 py-1">
+              <button
+                onClick={(e) => { e.stopPropagation(); onOpen(c.task_id); }}
+                className="min-w-0 flex-1 truncate text-left text-[12px] text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)]"
+              >
+                {c.title}
+              </button>
+              {c.completed && (
+                <span className="inline-flex shrink-0 items-center gap-0.5 rounded-[4px] bg-emerald-50 px-1.5 py-[1px] text-[10px] font-medium text-emerald-700">
+                  <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <path d="M5 13l4 4L19 7" />
+                  </svg>
+                  Done
+                </span>
+              )}
+              {c.seconds > 0 && (
+                <span className="shrink-0 font-mono text-[11px] tabular-nums text-[var(--sh-ink-3)]">
+                  {formatTracked(c.seconds)}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
