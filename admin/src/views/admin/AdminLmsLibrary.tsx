@@ -20,7 +20,7 @@ const KIND_LABELS: Record<LmsItemKind, string> = {
 export default function AdminLmsLibrary() {
   const router = useRouter();
   const qc = useQueryClient();
-  const [showNewMenu, setShowNewMenu] = useState(false);
+  const [showNew, setShowNew] = useState(false);
   const [kindFilter, setKindFilter] = useState<LmsItemKind | ''>('');
   const [statusFilter, setStatusFilter] = useState<LmsItemStatus | ''>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
@@ -98,7 +98,7 @@ export default function AdminLmsLibrary() {
     mutationFn: (body: any) => api.post('/admin/lms/items', body).then((r) => r.data),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['lms-items'] });
-      setShowNewMenu(false);
+      setShowNew(false);
       if (res?.data?.id) router.push(`/admin/learning/${res.data.id}`);
     },
     onError: (e: any) => alert(e?.response?.data?.error || 'Failed to create'),
@@ -108,13 +108,6 @@ export default function AdminLmsLibrary() {
     mutationFn: (id: string) => api.delete(`/admin/lms/items/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['lms-items'] }),
   });
-
-  function onNew(kind: LmsItemKind, track: LmsTrack = 'learning') {
-    const label = track === 'sop' ? 'guide' : kind;
-    const title = prompt(`New ${label} title`);
-    if (!title) return;
-    createItem.mutate({ kind, track, title });
-  }
 
   return (
     <div>
@@ -137,40 +130,12 @@ export default function AdminLmsLibrary() {
           >
             ✨ Auto-generate
           </button>
-          <div className="relative">
-            <button
-              onClick={() => setShowNewMenu((v) => !v)}
-              className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover"
-            >
-              + New content
-            </button>
-            {showNewMenu && (
-              <div className="absolute right-0 top-full z-10 mt-1 w-52 rounded-lg border border-divider bg-surface shadow-lg">
-                <button
-                  onClick={() => onNew('post')}
-                  className="flex w-full flex-col px-3 py-2 text-left hover:bg-surface-alt"
-                >
-                  <span className="text-sm font-medium text-foreground">Post</span>
-                  <span className="text-[11px] text-foreground-muted">Self-contained update</span>
-                </button>
-                <button
-                  onClick={() => onNew('course')}
-                  className="flex w-full flex-col px-3 py-2 text-left hover:bg-surface-alt"
-                >
-                  <span className="text-sm font-medium text-foreground">Course</span>
-                  <span className="text-[11px] text-foreground-muted">Multi-lesson journey</span>
-                </button>
-                <div className="my-1 border-t border-divider" />
-                <button
-                  onClick={() => onNew('post', 'sop')}
-                  className="flex w-full flex-col px-3 py-2 text-left hover:bg-surface-alt"
-                >
-                  <span className="text-sm font-medium text-foreground">SOP / Guide</span>
-                  <span className="text-[11px] text-foreground-muted">Systems &amp; Processes how-to</span>
-                </button>
-              </div>
-            )}
-          </div>
+          <button
+            onClick={() => setShowNew(true)}
+            className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover"
+          >
+            + New content
+          </button>
         </div>
       </div>
 
@@ -341,6 +306,14 @@ export default function AdminLmsLibrary() {
         </div>
       )}
 
+      {showNew && (
+        <NewContentModal
+          creating={createItem.isPending}
+          onCreate={(body) => createItem.mutate(body)}
+          onClose={() => !createItem.isPending && setShowNew(false)}
+        />
+      )}
+
       {/* Bulk action bar — appears once draft posts are selected */}
       {selectedCount > 0 && (
         <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-full border border-divider bg-surface px-4 py-2.5 shadow-xl">
@@ -505,6 +478,90 @@ function AddToCourseModal({
             className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover disabled:opacity-50"
           >
             {move.isPending ? 'Adding…' : effectiveMode === 'new' ? 'Create & add' : 'Add to course'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Create-content modal: choose a type (with side-by-side descriptions), name it,
+// and go straight into the editor. Replaces the old dropdown + window.prompt.
+const CONTENT_TYPES: {
+  key: string;
+  kind: LmsItemKind;
+  track: LmsTrack;
+  icon: string;
+  title: string;
+  desc: string;
+  placeholder: string;
+}[] = [
+  { key: 'post', kind: 'post', track: 'learning', icon: '📄', title: 'Post', desc: 'A single self-contained update or article.', placeholder: 'e.g. Q3 product update' },
+  { key: 'course', kind: 'course', track: 'learning', icon: '📚', title: 'Course', desc: 'A multi-lesson journey learners work through.', placeholder: 'e.g. Onboarding 101' },
+  { key: 'sop', kind: 'post', track: 'sop', icon: '🧭', title: 'SOP / Guide', desc: 'A how-to under Systems & Procedures.', placeholder: 'e.g. How to submit an expense' },
+];
+
+function NewContentModal({
+  creating,
+  onCreate,
+  onClose,
+}: {
+  creating: boolean;
+  onCreate: (body: { kind: LmsItemKind; track: LmsTrack; title: string }) => void;
+  onClose: () => void;
+}) {
+  const [typeKey, setTypeKey] = useState('post');
+  const [title, setTitle] = useState('');
+  const type = CONTENT_TYPES.find((t) => t.key === typeKey)!;
+  const canCreate = title.trim().length > 0 && !creating;
+
+  function submit() {
+    if (!canCreate) return;
+    onCreate({ kind: type.kind, track: type.track, title: title.trim() });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-xl border border-divider bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-bold text-foreground">Create new content</h2>
+        <p className="mt-1 text-[13px] text-foreground-muted">Pick a type to get started — you can fill in the details next.</p>
+
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {CONTENT_TYPES.map((t) => {
+            const active = t.key === typeKey;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTypeKey(t.key)}
+                className={`flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition ${
+                  active ? 'border-ink bg-canvas ring-1 ring-ink' : 'border-divider bg-surface hover:bg-surface-alt'
+                }`}
+              >
+                <span className="text-xl">{t.icon}</span>
+                <span className="text-sm font-semibold text-foreground">{t.title}</span>
+                <span className="text-[11px] leading-snug text-foreground-muted">{t.desc}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <label className="mt-4 block text-[11px] font-medium uppercase tracking-wider text-foreground-dim">Title</label>
+        <input
+          autoFocus
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+          placeholder={type.placeholder}
+          className="mt-1 w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm placeholder-foreground-dim focus:border-ink focus:outline-none"
+        />
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} disabled={creating} className="rounded-lg border border-divider bg-surface px-4 py-2 text-sm text-foreground-muted hover:bg-surface-alt disabled:opacity-50">
+            Cancel
+          </button>
+          <button onClick={submit} disabled={!canCreate} className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover disabled:opacity-50">
+            {creating ? 'Creating…' : `Create ${type.title}`}
           </button>
         </div>
       </div>

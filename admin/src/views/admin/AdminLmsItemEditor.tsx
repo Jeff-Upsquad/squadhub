@@ -18,8 +18,8 @@ type ItemDetail = LmsItem & {
   audience_user_ids: string[];
 };
 
-// All audience user types — used by the SOP "Everyone" quick-set, since
-// guides are normally shared with the whole org (no audience = nobody sees it).
+// All audience user types — used by the "Everyone" quick-set, since guides are
+// normally shared with the whole org (no audience = nobody sees it).
 const ALL_USER_TYPES: UserType[] = ['internal', 'client', 'client_staff', 'partner', 'partner_employee'];
 
 export default function AdminLmsItemEditor({ itemId }: Props) {
@@ -27,6 +27,18 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [publishBusy, setPublishBusy] = useState(false);
   const [showLessonAudience, setShowLessonAudience] = useState(false);
+
+  // Lightweight autosave indicator. Every tracked mutation calls markSaved() on
+  // success so authors get explicit "Saving…/Saved" feedback for the otherwise
+  // silent on-blur writes.
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [, forceTick] = useState(0);
+  const markSaved = () => setSavedAt(Date.now());
+  // Re-render every 30s so the "Saved · Xm ago" label stays current.
+  useEffect(() => {
+    const t = setInterval(() => forceTick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   const { data: itemRes, isLoading } = useQuery({
     queryKey: ['lms-item', itemId],
@@ -48,12 +60,12 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
 
   const patchItem = useMutation({
     mutationFn: (body: any) => api.patch(`/admin/lms/items/${itemId}`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['lms-item', itemId] }),
+    onSuccess: () => { markSaved(); qc.invalidateQueries({ queryKey: ['lms-item', itemId] }); },
   });
 
   const setAudience = useMutation({
     mutationFn: (body: any) => api.put(`/admin/lms/items/${itemId}/audience`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['lms-item', itemId] }),
+    onSuccess: () => { markSaved(); qc.invalidateQueries({ queryKey: ['lms-item', itemId] }); },
   });
 
   const publish = useMutation({
@@ -81,6 +93,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   const addLesson = useMutation({
     mutationFn: () => api.post(`/admin/lms/items/${itemId}/lessons`, {}).then((r) => r.data),
     onSuccess: (res) => {
+      markSaved();
       qc.invalidateQueries({ queryKey: ['lms-item', itemId] });
       if (res?.data?.id) setActiveLessonId(res.data.id);
     },
@@ -88,12 +101,13 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
 
   const patchLesson = useMutation({
     mutationFn: ({ id, ...body }: any) => api.patch(`/admin/lms/lessons/${id}`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['lms-item', itemId] }),
+    onSuccess: () => { markSaved(); qc.invalidateQueries({ queryKey: ['lms-item', itemId] }); },
   });
 
   const deleteLesson = useMutation({
     mutationFn: (id: string) => api.delete(`/admin/lms/lessons/${id}`),
     onSuccess: () => {
+      markSaved();
       qc.invalidateQueries({ queryKey: ['lms-item', itemId] });
       setActiveLessonId(null);
     },
@@ -101,7 +115,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
 
   const setLessonAudience = useMutation({
     mutationFn: ({ id, ...body }: any) => api.put(`/admin/lms/lessons/${id}/audience`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['lms-item', itemId] }),
+    onSuccess: () => { markSaved(); qc.invalidateQueries({ queryKey: ['lms-item', itemId] }); },
   });
 
   if (isLoading || !item) {
@@ -110,79 +124,116 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
 
   const activeLesson = item.lessons.find((l) => l.id === activeLessonId) || item.lessons[0];
   const isCourse = item.kind === 'course';
+  const isSop = item.track === 'sop';
   const lessonAudTypes: UserType[] = (activeLesson?.audience_types as UserType[]) || [];
   const lessonAudUsers: string[] = activeLesson?.audience_user_ids || [];
   const lessonRestricted = lessonAudTypes.length > 0 || lessonAudUsers.length > 0;
 
+  const isSaving =
+    patchItem.isPending || setAudience.isPending || patchLesson.isPending ||
+    setLessonAudience.isPending || addLesson.isPending || deleteLesson.isPending;
+
+  // --- Publish readiness -------------------------------------------------
+  const blockCount = item.lessons.reduce((n, l) => n + (l.blocks?.length ?? 0), 0);
+  const hasContent = isCourse
+    ? item.lessons.some((l) => (l.is_active ?? true) && (l.blocks?.length ?? 0) > 0)
+    : (item.lessons[0]?.blocks?.length ?? 0) > 0;
+  const hasAudience = (item.audience_types?.length ?? 0) + (item.audience_user_ids?.length ?? 0) > 0;
+  const hasTitle = !!item.title?.trim();
+  const readyToPublish = hasContent && hasAudience && hasTitle;
+
+  const checklist = [
+    { ok: hasTitle, label: 'Has a title' },
+    {
+      ok: hasContent,
+      label: isCourse ? 'At least one active lesson with content' : 'At least one content block',
+    },
+    { ok: hasAudience, label: 'Audience selected', hint: 'Empty audience = nobody can see it' },
+  ];
+
+  function onPublish() {
+    if (!readyToPublish) {
+      const missing: string[] = [];
+      if (!hasContent) missing.push('• It has no content yet.');
+      if (!hasAudience) missing.push('• No audience is selected — nobody will see it.');
+      if (!confirm(`This isn't fully ready:\n\n${missing.join('\n')}\n\nPublish anyway?`)) return;
+    }
+    setPublishBusy(true);
+    publish.mutate(undefined, { onSettled: () => setPublishBusy(false) });
+  }
+
+  const kindLabel = isSop ? 'Guide' : isCourse ? 'Course' : 'Post';
+
   return (
     <div>
-      {/* Header */}
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Link href="/admin/learning" className="mb-2 inline-flex items-center gap-1 text-[12px] text-foreground-muted hover:text-foreground">
-            ← Learning Library
-          </Link>
-          <div className="flex items-center gap-2">
+      {/* Sticky action header */}
+      <div className="sticky top-0 z-20 -mx-1 mb-6 border-b border-divider bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur">
+        <Link href="/admin/learning" className="mb-2 inline-flex items-center gap-1 text-[12px] text-foreground-muted hover:text-foreground">
+          ← Learning Library
+        </Link>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          {/* Editable title — group hover makes the affordance obvious */}
+          <div className="group relative min-w-[12rem] flex-1">
             <input
               defaultValue={item.title}
-              onBlur={(e) => { if (e.target.value !== item.title) patchItem.mutate({ title: e.target.value }); }}
-              className="min-w-0 flex-1 border-none bg-transparent font-[family-name:var(--font-display)] text-xl font-bold text-foreground outline-none"
+              onBlur={(e) => { if (e.target.value.trim() && e.target.value !== item.title) patchItem.mutate({ title: e.target.value.trim() }); }}
+              placeholder="Untitled…"
+              aria-label="Title"
+              className="w-full min-w-0 rounded-md border border-transparent bg-transparent px-1.5 py-0.5 font-[family-name:var(--font-display)] text-xl font-bold text-foreground outline-none transition group-hover:border-divider focus:border-ink focus:bg-surface"
             />
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-              item.status === 'published' ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-foreground-muted'
-            }`}>
-              {item.status}
-            </span>
-            {item.track === 'sop' ? (
-              <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700">
-                SOP / Guide
-              </span>
+            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-foreground-dim opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-0">✎</span>
+          </div>
+          <StatusBadge status={item.status} />
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${isSop ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'}`}>
+            {isSop ? 'SOP / Guide' : item.kind}
+          </span>
+
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <SaveStatus saving={isSaving} savedAt={savedAt} />
+            <Link
+              href={`/admin/learning/${itemId}/assignments`}
+              className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt"
+            >
+              View roster ({item.assignment_count ?? 0})
+            </Link>
+            {item.status === 'published' && (
+              <button
+                onClick={() => resync.mutate()}
+                className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt"
+                title="Assign to any new users who joined the audience after publish"
+              >
+                Resync audience
+              </button>
+            )}
+            {item.status === 'published' ? (
+              <button
+                onClick={() => { if (confirm('Unpublish this content? Users will keep their assignments.')) unpublish.mutate(); }}
+                className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
+              >
+                Unpublish
+              </button>
             ) : (
-              <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
-                {item.kind}
-              </span>
+              <button
+                onClick={onPublish}
+                disabled={publishBusy || publish.isPending}
+                title={readyToPublish ? 'Publish to the selected audience' : 'Not fully ready — you can still publish'}
+                className={`rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50 ${readyToPublish ? 'bg-ink hover:bg-ink-hover' : 'bg-foreground-muted hover:bg-foreground-dim'}`}
+              >
+                {publishBusy || publish.isPending ? 'Publishing…' : 'Publish'}
+              </button>
             )}
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/admin/learning/${itemId}/assignments`}
-            className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt"
-          >
-            View roster ({item.assignment_count ?? 0})
-          </Link>
-          {item.status === 'published' && (
-            <button
-              onClick={() => resync.mutate()}
-              className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt"
-              title="Assign to any new users who joined the audience after publish"
-            >
-              Resync audience
-            </button>
-          )}
-          {item.status === 'published' ? (
-            <button
-              onClick={() => { if (confirm('Unpublish this content? Users will keep their assignments.')) unpublish.mutate(); }}
-              className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
-            >
-              Unpublish
-            </button>
-          ) : (
-            <button
-              onClick={() => { setPublishBusy(true); publish.mutate(undefined, { onSettled: () => setPublishBusy(false) }); }}
-              disabled={publishBusy || publish.isPending}
-              className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-ink-hover disabled:opacity-50"
-            >
-              {publishBusy || publish.isPending ? 'Publishing…' : 'Publish'}
-            </button>
-          )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
-        {/* Left: metadata + audience */}
+        {/* Left: readiness + metadata + audience */}
         <aside className="space-y-6">
-          <Section title="Overview">
+          {item.status === 'draft' && (
+            <ReadinessCard checklist={checklist} ready={readyToPublish} kindLabel={kindLabel} />
+          )}
+
+          <Section title="Details" hint="Shown to learners on cards and at the top of the page.">
             <Field label="Summary">
               <textarea
                 defaultValue={item.summary || ''}
@@ -198,9 +249,10 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                 onChange={(e) => patchItem.mutate({ category_id: e.target.value || null })}
                 className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm focus:border-ink focus:outline-none"
               >
-                <option value="">— None —</option>
+                <option value="">— No category —</option>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+              <p className="mt-1 text-[11px] text-foreground-dim">Groups this under a heading in the left menu.</p>
             </Field>
             <Field label="Cover image">
               {item.lessons[0] ? (
@@ -217,17 +269,27 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                     <img src={item.cover_image_url} alt="" className="mt-2 h-32 w-full rounded-md object-cover" />
                   )}
                 </>
-              ) : <p className="text-[12px] text-foreground-dim">Add a lesson first</p>}
+              ) : (
+                <button
+                  onClick={() => addLesson.mutate()}
+                  className="w-full rounded-md border border-dashed border-divider-strong bg-surface px-3 py-3 text-[12px] text-foreground-muted hover:border-ink hover:text-foreground"
+                >
+                  Add a section first to enable a cover image
+                </button>
+              )}
             </Field>
           </Section>
 
-          <Section title="Audience">
-            {item.track === 'sop' && (
-              <div className="mb-2.5 flex items-center justify-between gap-2 rounded-md bg-indigo-50 px-2.5 py-2 text-[11.5px] leading-snug text-indigo-800">
-                <span>Guides are usually shared with everyone. No audience = nobody sees it.</span>
+          <Section
+            title="Audience"
+            hint="Who this is shared with. Anyone matching sees it once published."
+          >
+            {!hasAudience && (
+              <div className="mb-2.5 flex items-center justify-between gap-2 rounded-md bg-amber-50 px-2.5 py-2 text-[11.5px] leading-snug text-amber-800">
+                <span>No audience yet — nobody will see this.</span>
                 <button
                   onClick={() => setAudience.mutate({ user_types: ALL_USER_TYPES, user_ids: item.audience_user_ids || [] })}
-                  className="shrink-0 rounded border border-indigo-300 bg-white px-2 py-0.5 font-medium text-indigo-700 hover:bg-indigo-100"
+                  className="shrink-0 rounded border border-amber-300 bg-white px-2 py-0.5 font-medium text-amber-800 hover:bg-amber-100"
                 >
                   Everyone
                 </button>
@@ -246,7 +308,10 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
           {isCourse && (
             <div className="rounded-xl border border-divider bg-surface">
               <div className="flex items-center justify-between border-b border-divider px-4 py-2.5">
-                <h3 className="text-[13px] font-semibold text-foreground">Lessons</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-[13px] font-semibold text-foreground">Lessons</h3>
+                  <span className="rounded-full bg-canvas px-1.5 py-0.5 text-[11px] text-foreground-muted">{item.lessons.length}</span>
+                </div>
                 <button
                   onClick={() => addLesson.mutate()}
                   className="rounded-md border border-divider bg-surface px-2.5 py-1 text-[12px] text-foreground-muted hover:bg-surface-alt"
@@ -257,6 +322,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
               <ul className="p-2">
                 {item.lessons.map((lesson, i) => {
                   const inactive = lesson.is_active === false;
+                  const empty = (lesson.blocks?.length ?? 0) === 0;
                   return (
                     <li key={lesson.id}>
                       <button
@@ -267,6 +333,9 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                       >
                         <span className="w-5 text-right font-mono text-[11px] text-foreground-dim">{i + 1}.</span>
                         <span className={`flex-1 truncate font-medium ${inactive ? 'text-foreground-dim line-through decoration-[#CAD5E2]' : ''}`}>{lesson.title}</span>
+                        {empty && !inactive && (
+                          <span className="shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700" title="No content yet">Empty</span>
+                        )}
                         {inactive && (
                           <span className="shrink-0 rounded-full bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted">Inactive</span>
                         )}
@@ -371,10 +440,20 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                   )}
                 </div>
               )}
+
+              {/* Content header for posts/SOPs (courses get the lesson header above) */}
+              {!isCourse && (
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-[13px] font-semibold text-foreground">Content</h3>
+                  <span className="text-[11px] text-foreground-dim">{blockCount} block{blockCount === 1 ? '' : 's'}</span>
+                </div>
+              )}
+
               <BlockList
                 itemId={item.id}
                 lessonId={activeLesson.id}
                 blocks={activeLesson.blocks || []}
+                onSaved={markSaved}
               />
             </div>
           )}
@@ -384,11 +463,85 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function StatusBadge({ status }: { status: string }) {
+  const styles =
+    status === 'published' ? 'bg-emerald-50 text-emerald-700'
+    : status === 'archived' ? 'bg-amber-50 text-amber-700'
+    : 'bg-canvas text-foreground-muted';
+  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${styles}`}>{status}</span>;
+}
+
+function SaveStatus({ saving, savedAt }: { saving: boolean; savedAt: number | null }) {
+  if (saving) {
+    return (
+      <span className="flex items-center gap-1.5 text-[12px] text-foreground-muted">
+        <span className="h-3 w-3 animate-spin rounded-full border-2 border-divider-strong border-t-foreground-muted" />
+        Saving…
+      </span>
+    );
+  }
+  if (savedAt) {
+    return (
+      <span className="flex items-center gap-1 text-[12px] text-emerald-600" title="Changes save automatically">
+        <span className="text-[13px] leading-none">✓</span> Saved {relativeTime(savedAt)}
+      </span>
+    );
+  }
+  return <span className="text-[12px] text-foreground-dim" title="Edits save automatically as you go">Auto-saves</span>;
+}
+
+function relativeTime(ts: number) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 5) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  return `${Math.floor(m / 60)}h ago`;
+}
+
+function ReadinessCard({
+  checklist,
+  ready,
+  kindLabel,
+}: {
+  checklist: { ok: boolean; label: string; hint?: string }[];
+  ready: boolean;
+  kindLabel: string;
+}) {
+  return (
+    <div className={`rounded-xl border p-4 ${ready ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-divider bg-surface'}`}>
+      <div className="mb-2.5 flex items-center gap-2">
+        <h3 className="text-[13px] font-semibold text-foreground">
+          {ready ? 'Ready to publish' : 'Before you publish'}
+        </h3>
+        {ready && <span className="text-[13px] leading-none text-emerald-500">✓</span>}
+      </div>
+      <ul className="space-y-1.5">
+        {checklist.map((c) => (
+          <li key={c.label} className="flex items-start gap-2 text-[12.5px]">
+            <span className={`mt-px grid h-4 w-4 shrink-0 place-items-center rounded-full text-[9px] ${c.ok ? 'bg-emerald-500 text-white' : 'border border-divider-strong text-transparent'}`}>✓</span>
+            <span className="flex-1">
+              <span className={c.ok ? 'text-foreground-muted' : 'text-foreground'}>{c.label}</span>
+              {!c.ok && c.hint && <span className="block text-[11px] text-foreground-dim">{c.hint}</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {!ready && (
+        <p className="mt-2.5 text-[11px] leading-snug text-foreground-dim">
+          You can still publish a {kindLabel.toLowerCase()} that isn&apos;t complete — we&apos;ll just double-check first.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-divider bg-surface p-4">
-      <h3 className="mb-3 text-[13px] font-semibold text-foreground">{title}</h3>
-      <div className="space-y-4">{children}</div>
+      <h3 className="text-[13px] font-semibold text-foreground">{title}</h3>
+      {hint && <p className="mb-3 mt-0.5 text-[11.5px] leading-snug text-foreground-dim">{hint}</p>}
+      <div className={`space-y-4 ${hint ? '' : 'mt-3'}`}>{children}</div>
     </div>
   );
 }
