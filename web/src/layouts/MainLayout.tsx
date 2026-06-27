@@ -166,7 +166,7 @@ const SECTION_TITLES: Record<ActiveSection, string> = {
   docs: 'Documents',
   teams: 'Teams',
   apps: 'Apps',
-  learning: 'Learning',
+  learning: 'Resources',
   more: 'More',
 };
 
@@ -1042,7 +1042,7 @@ export default function MainLayout() {
           )}
           <RailBtn icon={ICON.cal}  label="Cal"  anchorKey="rail.cal"  active={activeSection === 'cal'}  onClick={() => setActiveSection('cal')} />
           <RailBtn icon={ICON.apps} label="Apps" anchorKey="rail.apps" active={activeSection === 'apps'} onClick={() => setActiveSection('apps')} />
-          <RailBtn icon={ICON.learning} label="Learning" anchorKey="rail.learning" active={activeSection === 'learning'} onClick={() => setActiveSection('learning')} />
+          <RailBtn icon={ICON.learning} label="Resources" anchorKey="rail.learning" active={activeSection === 'learning'} onClick={() => setActiveSection('learning')} />
           <button
             onClick={(e) => {
               setTimesheetAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());

@@ -1,45 +1,38 @@
 'use client';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useMyLearning, type MyLearningEntry } from '../../../hooks/useLms';
 
-// Content-panel landing shown when no learning item is selected. Gives an
-// at-a-glance summary plus quick entry points, so the panel never sits empty.
+// Content-panel landing shown when no item is selected. Gives an at-a-glance
+// summary plus quick entry points, and a search field (top) for finding any
+// course or procedure shared with the user.
 export default function LearningOverview({ onSelectItem }: { onSelectItem: (id: string) => void }) {
   const { data: assignments, isLoading } = useMyLearning();
+  const [query, setQuery] = useState('');
   const all = assignments || [];
 
-  // SOPs ("Systems & Processes") are reference docs — keep them out of the
-  // progress stats and surface them as their own quick-links section.
-  const { inProgress, assigned, completed, sops } = useMemo(() => {
+  // Courses are track 'learning' (the active ones, i.e. not completed, drive the
+  // "Courses" list); Systems and Procedures are track 'sop' reference docs.
+  const { inProgress, assigned, completed, activeCourses, sops } = useMemo(() => {
     const learning = all.filter((a) => a.item.track !== 'sop');
     return {
       inProgress: learning.filter((a) => a.status === 'in_progress'),
       assigned: learning.filter((a) => a.status === 'not_started'),
       completed: learning.filter((a) => a.status === 'completed'),
+      activeCourses: learning.filter((a) => a.status !== 'completed'),
       sops: all.filter((a) => a.item.track === 'sop'),
     };
   }, [all]);
+
+  const q = query.trim().toLowerCase();
+  const matches = (a: MyLearningEntry) =>
+    !q || a.item.title.toLowerCase().includes(q) || (a.item.summary || '').toLowerCase().includes(q);
+  const visibleCourses = useMemo(() => activeCourses.filter(matches), [activeCourses, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  const visibleSops = useMemo(() => sops.filter(matches), [sops, q]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasLearning = inProgress.length + assigned.length + completed.length > 0;
 
   if (isLoading) {
     return <div className="flex h-full items-center justify-center text-sm text-[var(--sh-ink-3)]">Loading…</div>;
-  }
-
-  if (all.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-        <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-[var(--sh-hair-3)]">
-          <svg className="h-6 w-6 text-[var(--sh-ink-3)]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-          </svg>
-        </div>
-        <h3 className="font-[family-name:var(--font-display)] text-[15px] font-semibold text-[var(--sh-ink)]">No learning yet</h3>
-        <p className="mt-1 max-w-sm text-[13px] text-[var(--sh-ink-3)]">
-          Training and updates shared with you will appear here.
-        </p>
-      </div>
-    );
   }
 
   return (
@@ -51,12 +44,36 @@ export default function LearningOverview({ onSelectItem }: { onSelectItem: (id: 
             className="serif text-[36px] leading-tight text-[var(--sh-ink)]"
             style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', letterSpacing: '-0.01em' }}
           >
-            Learning
+            Resources
           </h1>
-          <p className="mt-1 text-[13px] text-[var(--sh-ink-3)]">Training, guides and updates shared with you.</p>
+          <p className="mt-1 text-[13px] text-[var(--sh-ink-3)]">
+            Courses, systems, procedures and learnings shared with you.
+          </p>
+
+          {/* Search — searches across everything in this section. */}
+          <div className="relative mt-5">
+            <svg
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--sh-ink-3)]"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.3-4.3" />
+            </svg>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search courses, systems and procedures…"
+              className="w-full rounded-[10px] border border-[var(--sh-hair)] bg-[var(--surface)] py-[10px] pl-10 pr-3 text-[13.5px] text-[var(--sh-ink)] placeholder:text-[var(--sh-ink-3)] focus:border-[var(--sh-ink)] focus:outline-none"
+            />
+          </div>
 
           {/* Stat strip — only relevant when there's course/post learning. */}
-          {hasLearning && (
+          {hasLearning && !q && (
             <div className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-[var(--sh-hair)] bg-[var(--sh-hair)]">
               <Stat label="In progress" value={inProgress.length} />
               <Stat label="Assigned" value={assigned.length} />
@@ -65,14 +82,25 @@ export default function LearningOverview({ onSelectItem }: { onSelectItem: (id: 
           )}
         </header>
 
-        {inProgress.length > 0 && (
-          <Section title="Continue where you left off" entries={inProgress} onSelectItem={onSelectItem} />
+        {visibleCourses.length > 0 && (
+          <Section title="Courses" entries={visibleCourses} onSelectItem={onSelectItem} />
         )}
-        {assigned.length > 0 && <Section title="Assigned to you" entries={assigned} onSelectItem={onSelectItem} />}
-        {sops.length > 0 && <Section title="Systems & Processes" entries={sops} onSelectItem={onSelectItem} />}
-        {!hasLearning && sops.length === 0 && (
+        {visibleSops.length > 0 && (
+          <Section title="Systems and Procedures" entries={visibleSops} onSelectItem={onSelectItem} />
+        )}
+
+        {/* Empty / no-match states */}
+        {q && visibleCourses.length === 0 && visibleSops.length === 0 && (
+          <p className="mt-10 text-center text-[13px] text-[var(--sh-ink-3)]">No matches for “{query.trim()}”.</p>
+        )}
+        {!q && all.length === 0 && (
           <p className="mt-10 text-center text-[13px] text-[var(--sh-ink-3)]">
-            🎉 You&apos;re all caught up. Pick anything from the list to revisit it.
+            Courses, systems and procedures shared with you will appear here.
+          </p>
+        )}
+        {!q && all.length > 0 && visibleCourses.length === 0 && visibleSops.length === 0 && (
+          <p className="mt-10 text-center text-[13px] text-[var(--sh-ink-3)]">
+            🎉 You&apos;re all caught up. Search above to revisit anything shared with you.
           </p>
         )}
       </div>
