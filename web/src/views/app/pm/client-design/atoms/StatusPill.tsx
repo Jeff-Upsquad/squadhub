@@ -20,7 +20,8 @@ export function resolveStatus(taskStatus: string | undefined, statuses: SpaceSta
   if (!taskStatus) return { name: '—', color: '#9ca3af' };
   const match = statuses.find((s) => s.name === taskStatus);
   if (match) return { name: match.name, color: match.color };
-  const legacyColor: Record<string, string> = { todo: '#6b7280', active: '#3b82f6', done: '#22c55e', closed: '#6b7280' };
+  // 'done' is purple (#7c3aed) to match the app-wide completed-task color scheme.
+  const legacyColor: Record<string, string> = { todo: '#6b7280', active: '#3b82f6', done: '#7c3aed', closed: '#6b7280' };
   const legacyName: Record<string, string> = { todo: 'To Do', active: 'Active', done: 'Done', closed: 'Closed' };
   if (taskStatus in legacyColor) return { name: legacyName[taskStatus], color: legacyColor[taskStatus] };
   return { name: taskStatus, color: '#6b7280' };

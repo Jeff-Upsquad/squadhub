@@ -30,6 +30,7 @@ interface ListResult extends ResultBase {
 interface TaskResult extends ResultBase {
   kind: 'task';
   task: SearchTask;
+  done: boolean;
 }
 interface ChannelResult extends ResultBase {
   kind: 'channel';
@@ -98,17 +99,35 @@ function CategoryIcon({ kind }: { kind: ResultKind }) {
   }
 }
 
-const CATEGORY_LABEL: Record<ResultKind, string> = {
+// A section is a result kind, with completed tasks split out into their own
+// "Completed" group rather than being mixed in with open tasks.
+type SectionKey = ResultKind | 'task-completed';
+
+const SECTION_LABEL: Record<SectionKey, string> = {
   space: 'Spaces',
   folder: 'Folders',
   list: 'Lists',
   task: 'Tasks',
+  'task-completed': 'Completed',
   channel: 'Channels',
   member: 'People',
 };
 
+function sectionKeyFor(r: Result): SectionKey {
+  return r.kind === 'task' && r.done ? 'task-completed' : r.kind;
+}
+
+// Remember the last query for the lifetime of the session so reopening the
+// palette (e.g. after jumping to a task) restores the previous search instead
+// of starting blank.
+let lastQuery = '';
+
 export default function SearchPalette({ workspaceId, onClose, setHomeView }: SearchPaletteProps) {
-  const [query, setQuery] = useState('');
+  const [query, setQueryState] = useState(lastQuery);
+  const setQuery = (v: string) => {
+    lastQuery = v;
+    setQueryState(v);
+  };
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -156,16 +175,17 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
         listId: l.id,
       });
     }
+    // Open tasks first, then completed ones — so completed tasks render as a
+    // distinct "Completed" group below the open results.
+    const openTasks: TaskResult[] = [];
+    const doneTasks: TaskResult[] = [];
     for (const t of tasks) {
       const hint = [t.space_name, t.folder_name, t.list_name].filter(Boolean).join(' › ') || undefined;
-      out.push({
-        key: `task:${t.id}`,
-        kind: 'task',
-        label: t.title,
-        hint,
-        task: t,
-      });
+      const done = t.status === 'done' || t.status === 'closed';
+      const tr: TaskResult = { key: `task:${t.id}`, kind: 'task', label: t.title, hint, task: t, done };
+      (done ? doneTasks : openTasks).push(tr);
     }
+    out.push(...openTasks, ...doneTasks);
     for (const c of channels) {
       out.push({ key: `channel:${c.id}`, kind: 'channel', label: `#${c.name}`, channelId: c.id });
     }
@@ -253,17 +273,19 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
     }
   };
 
-  // Group flat results back by category for rendered headings (but keep the same indices)
-  const groupedSections: { kind: ResultKind; items: { result: Result; index: number }[] }[] = useMemo(() => {
-    const order: ResultKind[] = ['space', 'folder', 'list', 'task', 'channel', 'member'];
-    const map = new Map<ResultKind, { result: Result; index: number }[]>();
+  // Group flat results back by section for rendered headings (but keep the same
+  // indices). Completed tasks form a distinct "Completed" section after open tasks.
+  const groupedSections: { section: SectionKey; items: { result: Result; index: number }[] }[] = useMemo(() => {
+    const order: SectionKey[] = ['space', 'folder', 'list', 'task', 'task-completed', 'channel', 'member'];
+    const map = new Map<SectionKey, { result: Result; index: number }[]>();
     flatResults.forEach((r, idx) => {
-      if (!map.has(r.kind)) map.set(r.kind, []);
-      map.get(r.kind)!.push({ result: r, index: idx });
+      const sk = sectionKeyFor(r);
+      if (!map.has(sk)) map.set(sk, []);
+      map.get(sk)!.push({ result: r, index: idx });
     });
     return order
       .filter((k) => (map.get(k)?.length ?? 0) > 0)
-      .map((k) => ({ kind: k, items: map.get(k)! }));
+      .map((k) => ({ section: k, items: map.get(k)! }));
   }, [flatResults]);
 
   const hasResults = flatResults.length > 0;
@@ -322,40 +344,49 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
             </div>
           )}
 
-          {groupedSections.map(({ kind, items }) => (
-            <div key={kind} className="pb-1.5">
-              <div className="px-3 pb-1 pt-2 text-[10.5px] font-medium uppercase tracking-[0.06em] text-[var(--sh-ink-4)]">
-                {CATEGORY_LABEL[kind]}
-              </div>
-              {items.map(({ result, index }) => {
-                const isActive = index === activeIndex;
-                return (
-                  <button
-                    type="button"
-                    key={result.key}
-                    data-result-index={index}
-                    onMouseEnter={() => setActiveIndex(index)}
-                    onClick={() => handleSelect(result)}
-                    className={`flex w-full items-center gap-2.5 px-3 py-[7px] text-left text-[13px] transition ${
-                      isActive
-                        ? 'bg-[var(--sh-hair-3)] text-[var(--sh-ink)]'
-                        : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)]'
-                    }`}
-                  >
-                    <span className={isActive ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}>
-                      <CategoryIcon kind={kind} />
-                    </span>
-                    <span className="truncate">{result.label}</span>
-                    {result.hint && (
-                      <span className="ml-auto truncate pl-3 text-[11.5px] text-[var(--sh-ink-4)]">
-                        {result.hint}
+          {groupedSections.map(({ section, items }) => {
+            const iconKind: ResultKind = section === 'task-completed' ? 'task' : section;
+            const isCompletedSection = section === 'task-completed';
+            return (
+              <div key={section} className="pb-1.5">
+                <div className="px-3 pb-1 pt-2 text-[10.5px] font-medium uppercase tracking-[0.06em] text-[var(--sh-ink-4)]">
+                  {SECTION_LABEL[section]}
+                </div>
+                {items.map(({ result, index }) => {
+                  const isActive = index === activeIndex;
+                  return (
+                    <button
+                      type="button"
+                      key={result.key}
+                      data-result-index={index}
+                      onMouseEnter={() => setActiveIndex(index)}
+                      onClick={() => handleSelect(result)}
+                      className={`flex w-full items-center gap-2.5 px-3 py-[7px] text-left text-[13px] transition ${
+                        isActive
+                          ? 'bg-[var(--sh-hair-3)] text-[var(--sh-ink)]'
+                          : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)]'
+                      }`}
+                    >
+                      <span
+                        className={isActive ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}
+                        style={isCompletedSection ? { color: 'var(--sh-done, #7c3aed)' } : undefined}
+                      >
+                        <CategoryIcon kind={iconKind} />
                       </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+                      <span className={`truncate${isCompletedSection ? ' line-through opacity-70' : ''}`}>
+                        {result.label}
+                      </span>
+                      {result.hint && (
+                        <span className="ml-auto truncate pl-3 text-[11.5px] text-[var(--sh-ink-4)]">
+                          {result.hint}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
 
         {/* Footer hint */}

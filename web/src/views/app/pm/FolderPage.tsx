@@ -289,7 +289,7 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
               <TaskGroupCard
                 groupKey="fl-completed"
                 label="Completed"
-                dotColor="#10b981"
+                dotColor="#7c3aed"
                 tasks={completedTasks}
                 allStatuses={spaceStatuses}
                 listId={null}

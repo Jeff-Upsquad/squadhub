@@ -413,8 +413,8 @@ function ActivityRowItem({ row }: { row: ActivityRow }) {
         <span
           className="shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
           style={{
-            background: 'color-mix(in oklch, #10b981 14%, transparent)',
-            color: '#047857',
+            background: 'color-mix(in oklch, #7c3aed 14%, transparent)',
+            color: '#5b21b6',
           }}
         >
           Completed

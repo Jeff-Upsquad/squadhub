@@ -373,7 +373,7 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
               <TaskGroupCard
                 groupKey="sp-completed"
                 label="Completed"
-                dotColor="#10b981"
+                dotColor="#7c3aed"
                 tasks={completedTasks}
                 allStatuses={spaceStatuses}
                 listId={null}
