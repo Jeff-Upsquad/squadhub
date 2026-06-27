@@ -87,6 +87,7 @@ import notificationsRoutes from './routes/notifications';
 import partnerAppRoutes from './routes/partner-app';
 import lmsRoutes from './routes/lms';
 import lmsAdminRoutes from './routes/lms-admin';
+import clipsRecoveryRoutes from './routes/clips-recovery';
 import chatAppRoutes from './routes/chat/app';
 import chatGroupsRoutes from './routes/chat/groups';
 import chatMessagesRoutes from './routes/chat/messages';
@@ -227,6 +228,7 @@ app.use('/push', partnerPushRoutes);
 app.use('/partner-app', partnerAppRoutes);
 app.use('/lms', lmsRoutes);
 app.use('/admin/lms', lmsAdminRoutes);
+app.use('/admin/clips-recovery', clipsRecoveryRoutes);
 app.use('/meetings', meetingsRoutes);
 app.use('/meeting-events', meetingEventsRoutes);
 
