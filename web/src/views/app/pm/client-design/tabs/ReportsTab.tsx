@@ -92,8 +92,6 @@ export default function ReportsTab({
   plan: DesignPlan;
   folderId: string;
 }) {
-  const history = useClientDesignTimeHistory(folderId, plan);
-
   // ---- Completed tasks ------------------------------------------------------
   const done = useMemo(
     () => requests.filter((r) => r._derivedStatus === 'done'),
@@ -121,56 +119,7 @@ export default function ReportsTab({
     return ts ? new Date(ts) : null;
   };
 
-  const counts = useMemo(() => {
-    let thisWeek = 0, lastWeek = 0, thisMonth = 0, lastMonth = 0;
-    for (const r of done) {
-      const d = completedAt(r);
-      if (!d) continue;
-      if (d >= weekStart) thisWeek++;
-      else if (d >= lastWeekStart) lastWeek++;
-      if (d >= monthStart) thisMonth++;
-      else if (d >= lastMonthStart && d < monthStart) lastMonth++;
-    }
-    return { thisWeek, lastWeek, thisMonth, lastMonth, total: done.length };
-  }, [done, weekStart, lastWeekStart, monthStart, lastMonthStart]);
-
-  // ---- Completed tasks grouped by completion week --------------------------
-  const weekGroups = useMemo(() => {
-    const groups = new Map<string, RequestRowData[]>();
-    for (const r of done) {
-      const d = completedAt(r);
-      if (!d) continue;
-      const key = toISODate(startOfWeek(d));
-      const arr = groups.get(key) || [];
-      arr.push(r);
-      groups.set(key, arr);
-    }
-    const thisKey = toISODate(weekStart);
-    const lastKey = toISODate(lastWeekStart);
-    return Array.from(groups.entries())
-      .sort((a, b) => (a[0] < b[0] ? 1 : -1)) // most recent first
-      .map(([key, tasks]) => {
-        const ws = new Date(`${key}T00:00:00`);
-        const we = new Date(ws);
-        we.setDate(we.getDate() + 6);
-        const label =
-          key === thisKey ? 'This week' : key === lastKey ? 'Last week' : `${shortDate(ws)} – ${shortDate(we)}`;
-        const sorted = [...tasks].sort(
-          (a, b) => +(completedAt(b) ?? 0) - +(completedAt(a) ?? 0),
-        );
-        const actualHours = sorted.reduce((s, t) => s + (t.time_tracked || 0) / 3600, 0);
-        return { key, label, range: `${shortDate(ws)} – ${shortDate(we)}`, tasks: sorted, actualHours };
-      });
-  }, [done, weekStart, lastWeekStart]);
-
-  const [openWeeks, setOpenWeeks] = useState<Record<string, boolean>>({});
-  const isOpen = (key: string, index: number) =>
-    openWeeks[key] ?? index < 2; // current + last week open by default
-
-  // ---- Derived time figures -------------------------------------------------
-  const weekRemaining = Math.max(0, plan.weeklyHours - plan.usedWeek);
-
-  // ---- Period selector (drives the month column + its task count) -----------
+  // ---- Period selector (drives every section below) -------------------------
   const todayISO = toISODate(now);
   const [period, setPeriod] = useState<PeriodKey>('this_month');
   const [customFrom, setCustomFrom] = useState(() => toISODate(monthStart));
@@ -203,6 +152,67 @@ export default function ReportsTab({
       allot: plan.monthlyHours as number | null, isCurrent: true,
     };
   }, [period, customFrom, customTo, now, monthStart, todayISO, plan.monthlyHours]);
+
+  // Daily / weekly / monthly history follow the selected period; the default
+  // "This month" view keeps its rolling-window overview (last 14d / 10w / 6m).
+  const history = useClientDesignTimeHistory(folderId, plan, {
+    from: periodRange.from,
+    to: periodRange.to,
+    isCurrent: periodRange.isCurrent,
+  });
+
+  const counts = useMemo(() => {
+    let thisWeek = 0, lastWeek = 0, thisMonth = 0, lastMonth = 0;
+    for (const r of done) {
+      const d = completedAt(r);
+      if (!d) continue;
+      if (d >= weekStart) thisWeek++;
+      else if (d >= lastWeekStart) lastWeek++;
+      if (d >= monthStart) thisMonth++;
+      else if (d >= lastMonthStart && d < monthStart) lastMonth++;
+    }
+    return { thisWeek, lastWeek, thisMonth, lastMonth, total: done.length };
+  }, [done, weekStart, lastWeekStart, monthStart, lastMonthStart]);
+
+  // ---- Completed tasks grouped by completion week --------------------------
+  const weekGroups = useMemo(() => {
+    const groups = new Map<string, RequestRowData[]>();
+    // Non-current periods restrict the grouped list to tasks completed in range.
+    const pf = periodRange.isCurrent ? null : new Date(`${periodRange.from}T00:00:00`);
+    const pt = periodRange.isCurrent ? null : new Date(`${periodRange.to}T23:59:59`);
+    for (const r of done) {
+      const d = completedAt(r);
+      if (!d) continue;
+      if (pf && pt && (d < pf || d > pt)) continue;
+      const key = toISODate(startOfWeek(d));
+      const arr = groups.get(key) || [];
+      arr.push(r);
+      groups.set(key, arr);
+    }
+    const thisKey = toISODate(weekStart);
+    const lastKey = toISODate(lastWeekStart);
+    return Array.from(groups.entries())
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1)) // most recent first
+      .map(([key, tasks]) => {
+        const ws = new Date(`${key}T00:00:00`);
+        const we = new Date(ws);
+        we.setDate(we.getDate() + 6);
+        const label =
+          key === thisKey ? 'This week' : key === lastKey ? 'Last week' : `${shortDate(ws)} – ${shortDate(we)}`;
+        const sorted = [...tasks].sort(
+          (a, b) => +(completedAt(b) ?? 0) - +(completedAt(a) ?? 0),
+        );
+        const actualHours = sorted.reduce((s, t) => s + (t.time_tracked || 0) / 3600, 0);
+        return { key, label, range: `${shortDate(ws)} – ${shortDate(we)}`, tasks: sorted, actualHours };
+      });
+  }, [done, weekStart, lastWeekStart, periodRange]);
+
+  const [openWeeks, setOpenWeeks] = useState<Record<string, boolean>>({});
+  const isOpen = (key: string, index: number) =>
+    openWeeks[key] ?? index < 2; // current + last week open by default
+
+  // ---- Derived time figures -------------------------------------------------
+  const weekRemaining = Math.max(0, plan.weeklyHours - plan.usedWeek);
 
   const { data: periodData } = useQuery({
     queryKey: ['folder-time-period', folderId, periodRange.from, periodRange.to],
@@ -477,7 +487,9 @@ export default function ReportsTab({
         <div className="cd-rep2-section-head" style={{ marginBottom: 4 }}>
           <div>
             <div className="cd-rep-label">Daily time spent</div>
-            <div className="cd-rep-sub">Hours logged per day · last 14 days</div>
+            <div className="cd-rep-sub">
+              Hours logged per day · {periodRange.isCurrent ? 'last 14 days' : periodRange.label}
+            </div>
           </div>
         </div>
         <div className="cd-tl-head">
@@ -508,7 +520,7 @@ export default function ReportsTab({
       <div className="cd-rep-grid">
         <HistoryCard
           title="Weekly history"
-          subtitle="Hours per week · last 10 weeks"
+          subtitle={`Hours per week · ${periodRange.isCurrent ? 'last 10 weeks' : periodRange.label}`}
           rows={history.weeks.map((w: WeekPoint) => ({
             key: w.key,
             label: w.label,
@@ -520,7 +532,7 @@ export default function ReportsTab({
         />
         <HistoryCard
           title="Monthly history"
-          subtitle="Hours per month · last 6 months"
+          subtitle={`Hours per month · ${periodRange.isCurrent ? 'last 6 months' : periodRange.label}`}
           rows={history.months.map((m: MonthPoint) => ({
             key: m.key,
             label: m.label,
@@ -543,7 +555,9 @@ export default function ReportsTab({
         </div>
 
         {weekGroups.length === 0 && (
-          <div className="cd-rep2-empty">No completed tasks yet.</div>
+          <div className="cd-rep2-empty">
+            {periodRange.isCurrent ? 'No completed tasks yet.' : `No completed tasks in ${periodRange.label}.`}
+          </div>
         )}
 
         {weekGroups.map((g, gi) => {

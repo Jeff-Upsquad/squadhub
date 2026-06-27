@@ -101,11 +101,27 @@ function shortDate(d: Date): string {
  * via the existing /time-summary endpoint) and rolls it up into day / week /
  * month buckets with the plan's allotments attached. No backend change needed.
  */
-export function useClientDesignTimeHistory(folderId: string | undefined, plan: DesignPlan): TimeHistory {
+export interface HistoryPeriod {
+  from: string; // YYYY-MM-DD
+  to: string; // YYYY-MM-DD
+  isCurrent: boolean;
+}
+
+export function useClientDesignTimeHistory(
+  folderId: string | undefined,
+  plan: DesignPlan,
+  period?: HistoryPeriod,
+): TimeHistory {
   const today = startOfDay(new Date());
   const earliestMonth = new Date(today.getFullYear(), today.getMonth() - (MONTHS_BACK - 1), 1);
-  const fromISO = toISODate(earliestMonth);
-  const toISO = toISODate(today);
+  const defFromISO = toISODate(earliestMonth);
+  const defToISO = toISODate(today);
+  // A non-current period (Previous month / custom range) scopes every bucket to
+  // its own dates. Fetch a window wide enough to cover both the default rolling
+  // view and the selected range.
+  const scoped = period && !period.isCurrent ? period : null;
+  const fromISO = scoped && scoped.from < defFromISO ? scoped.from : defFromISO;
+  const toISO = scoped && scoped.to > defToISO ? scoped.to : defToISO;
 
   const { data, isLoading } = useQuery({
     queryKey: ['folder-time-history', folderId, fromISO, toISO],
@@ -128,6 +144,92 @@ export function useClientDesignTimeHistory(folderId: string | undefined, plan: D
 
     const todayISO = toISODate(today);
     const yesterdayISO = toISODate(addDays(today, -1));
+
+    // ---- Period-scoped view (Previous month / custom range) ----------------
+    // Every section follows the selected dates instead of the rolling windows.
+    if (scoped) {
+      const start = startOfDay(new Date(`${scoped.from}T00:00:00`));
+      const end = startOfDay(new Date(`${scoped.to}T00:00:00`));
+      const inRange = (d: Date) => d >= start && d <= end;
+
+      // Days — every day in the range, most-recent first.
+      const sDays: DayPoint[] = [];
+      for (let d = new Date(end); d >= start; d = addDays(d, -1)) {
+        const iso = toISODate(d);
+        const weekend = d.getDay() === 0 || d.getDay() === 6;
+        const isToday = iso === todayISO;
+        const label = isToday
+          ? 'Today'
+          : iso === yesterdayISO
+            ? 'Yesterday'
+            : `${DAY_LABELS[d.getDay()]} ${shortDate(d)}`;
+        sDays.push({
+          date: iso,
+          label,
+          actualHours: (map.get(iso) || 0) / 3600,
+          elapsedHours: 0,
+          allotHours: weekend ? 0 : plan.dailyHours,
+          today: isToday,
+          weekend,
+        });
+      }
+
+      // Weeks — every week overlapping the range, oldest first. Partial boundary
+      // weeks sum only their in-range days, and labels clamp to the period so
+      // e.g. "Previous month" never spills into a neighbouring month.
+      const sWeeks: WeekPoint[] = [];
+      for (let cur = startOfWeek(start); cur <= end; cur = addDays(cur, 7)) {
+        const ws = new Date(cur);
+        const we = addDays(ws, 6);
+        let secs = 0;
+        for (let k = 0; k < 7; k++) {
+          const dd = addDays(ws, k);
+          if (inRange(dd)) secs += map.get(toISODate(dd)) || 0;
+        }
+        const anchor = ws < start ? start : ws;
+        const dispEnd = we > end ? end : we;
+        sWeeks.push({
+          key: toISODate(ws),
+          label: `${shortDate(anchor)} – ${shortDate(dispEnd)}`,
+          start: ws,
+          end: we,
+          actualHours: secs / 3600,
+          elapsedHours: 0,
+          allotHours: plan.weeklyHours,
+          current: today >= ws && today <= we && inRange(today),
+        });
+      }
+
+      // Months — every month overlapping the range, oldest first.
+      const sMonths: MonthPoint[] = [];
+      const lastM = new Date(end.getFullYear(), end.getMonth(), 1);
+      for (
+        let m = new Date(start.getFullYear(), start.getMonth(), 1);
+        m <= lastM;
+        m = new Date(m.getFullYear(), m.getMonth() + 1, 1)
+      ) {
+        const daysInMonth = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
+        let secs = 0;
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dd = new Date(m.getFullYear(), m.getMonth(), day);
+          if (inRange(dd)) secs += map.get(toISODate(dd)) || 0;
+        }
+        sMonths.push({
+          key: `${m.getFullYear()}-${m.getMonth() + 1}`,
+          label: `${MONTH_LABELS[m.getMonth()]} ${m.getFullYear()}`,
+          start: new Date(m),
+          actualHours: secs / 3600,
+          elapsedHours: 0,
+          allotHours: plan.monthlyHours,
+          current:
+            m.getFullYear() === today.getFullYear() &&
+            m.getMonth() === today.getMonth() &&
+            inRange(today),
+        });
+      }
+
+      return { days: sDays, weeks: sWeeks, months: sMonths, loading: isLoading };
+    }
 
     // ---- Daily (last N days, most-recent first) ----
     const days: DayPoint[] = [];
@@ -202,5 +304,5 @@ export function useClientDesignTimeHistory(folderId: string | undefined, plan: D
 
     return { days, weeks, months, loading: isLoading };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, isLoading, plan.dailyHours, plan.weeklyHours, plan.monthlyHours]);
+  }, [data, isLoading, plan.dailyHours, plan.weeklyHours, plan.monthlyHours, scoped?.from, scoped?.to]);
 }
