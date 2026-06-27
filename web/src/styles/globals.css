@@ -7201,7 +7201,8 @@ ol.sqc-list {
 .wb-flow .react-flow__edge.selected .react-flow__edge-path { stroke: var(--sh-ink-2); }
 .wb-flow .react-flow__node.selected .wb-sticky,
 .wb-flow .react-flow__node.selected .wb-textnode,
-.wb-flow .react-flow__node.selected .wb-shape {
+.wb-flow .react-flow__node.selected .wb-shape,
+.wb-flow .react-flow__node.selected .wb-taskcard {
   outline: 2px solid var(--sh-ink);
   outline-offset: 2px;
 }
@@ -7385,6 +7386,12 @@ ol.sqc-list {
   font-size: 9.5px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
   color: #7c3aed;
 }
+.wb-taskcard-num {
+  font-size: 10.5px; font-weight: 700; color: var(--sh-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+/* "Open" affordance: hidden until the card is hovered (or selected), so a
+   resting card stays clean and the action reveals on intent. */
 .wb-taskcard-open {
   margin-left: auto;
   display: inline-flex; align-items: center; gap: 3px;
@@ -7392,8 +7399,10 @@ ol.sqc-list {
   border: none; border-radius: 999px;
   background: var(--sh-hair-3); color: var(--sh-ink-2);
   font-size: 10.5px; font-weight: 700; cursor: pointer;
-  font-variant-numeric: tabular-nums;
+  opacity: 0; transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
+.wb-taskcard:hover .wb-taskcard-open,
+.react-flow__node.selected .wb-taskcard-open { opacity: 1; }
 .wb-taskcard-open:hover { background: rgba(124,58,237,0.14); color: #7c3aed; }
 .wb-taskcard-title {
   flex: 1 1 auto; min-height: 0;
@@ -7406,7 +7415,18 @@ ol.sqc-list {
 }
 .wb-taskcard-loc svg { flex-shrink: 0; opacity: 0.75; }
 .wb-taskcard-loc span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Completed task card — a visibly distinct "done" state, not just a strike:
+   green accent rail + soft green wash, a green-filled check, a "Done" tag, and
+   a muted title. Reads as resolved at a glance among open cards. */
+.wb-taskcard-done {
+  border-left-color: #16a34a;
+  background: linear-gradient(0deg, rgba(22,163,74,0.07), rgba(22,163,74,0.07)), var(--surface);
+  box-shadow: 0 4px 14px rgba(22,163,74,0.12);
+}
+.wb-taskcard-done .wb-taskcard-check[aria-checked="true"] { background: #16a34a; border-color: #16a34a; }
+.wb-taskcard-done .wb-taskcard-tag { color: #16a34a; }
 .wb-taskcard-done .wb-taskcard-title { text-decoration: line-through; color: var(--sh-ink-3); }
+.wb-taskcard-done .wb-taskcard-num { color: #16a34a; }
 
 /* Completed task element: strike + dim the text. */
 .wb-done { text-decoration: line-through; opacity: 0.55; }

@@ -580,9 +580,10 @@ function TaskCardNode({ id, data, selected }: NodeProps<WBNode>) {
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
           )}
         </button>
-        <span className="wb-taskcard-tag">Task</span>
+        <span className="wb-taskcard-tag">{done ? 'Done' : 'Task'}</span>
+        {data.taskNumber != null && <span className="wb-taskcard-num">#{data.taskNumber}</span>}
         <button type="button" className="wb-taskcard-open nodrag" title="Open task" onClick={(e) => { e.stopPropagation(); if (data.taskId) openTask(data.taskId); }}>
-          {data.taskNumber != null ? `#${data.taskNumber}` : 'Open'}
+          Open
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7M17 7H8M17 7v9" /></svg>
         </button>
       </div>
