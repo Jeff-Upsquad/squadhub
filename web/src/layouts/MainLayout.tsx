@@ -26,6 +26,8 @@ import SettingsSlider from '../components/SettingsSlider';
 import CheckInWidget from '../views/app/checkin/CheckInWidget';
 import CheckInsPage from '../views/app/check-ins/CheckInsPage';
 import CandidatesPage from '../views/app/candidates/CandidatesPage';
+import MeetingsView from '../views/app/meetings/MeetingsView';
+import GlobalMeetingPanel from '../views/app/meetings/GlobalMeetingPanel';
 import NotesShell from '../views/app/notes/NotesShell';
 import { useHasMiniApp } from '../hooks/useMiniApps';
 import TimeManagementPage from '../views/app/time-management/TimeManagementPage';
@@ -70,7 +72,7 @@ import { canonicalKey, buildHomeSnapshot, type TabSnapshot } from '../lib/tabSna
 
 // ---- Types ----
 export type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner' | 'routines' | 'clips';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner' | 'routines' | 'clips' | 'meetings';
 
 // One entry in the in-app navigation history: everything needed to bring the
 // user back to a view. Views switch via local state rather than URLs, so the
@@ -891,6 +893,7 @@ export default function MainLayout() {
       if (hv === 'time-management') return <TimeManagementPage />;
       if (hv === 'sales-leads') return <SalesLeadsPage />;
       if (hv === 'clips') return <ClipsView />;
+      if (hv === 'meetings') return <MeetingsView />;
       if (hv === 'cashbook' && isPartner) return <PartnerCashBook />;
       if (hv === 'cashbook' && (userType === 'client' || userType === 'client_staff')) return <ClientCashBook />;
       return (
@@ -930,6 +933,7 @@ export default function MainLayout() {
     if (hv === 'time-management') return <TimeManagementPage />;
     if (hv === 'sales-leads') return <SalesLeadsPage />;
     if (hv === 'clips') return <ClipsView />;
+    if (hv === 'meetings') return <MeetingsView />;
     if (hv === 'hub' && (userType === 'client' || userType === 'client_staff')) return <ClientDashboard />;
     if (hv === 'cashbook' && isPartner) return <PartnerCashBook />;
     if (hv === 'cashbook' && (userType === 'client' || userType === 'client_staff')) return <ClientCashBook />;
@@ -1290,6 +1294,9 @@ export default function MainLayout() {
           inListContext={activeSection === 'home' && homeView === 'tasks'}
         />
       )}
+
+      {/* Meeting creation slide-over — opened from anywhere via the store */}
+      <GlobalMeetingPanel />
 
       {/* Floating draft tasks widget */}
       <DraftTasksWidget

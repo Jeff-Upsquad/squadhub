@@ -3,6 +3,7 @@ import { useCreateTask } from '../../../hooks/useTasks';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { useAssignableUsersByList } from '../../../hooks/useAssignableUsers';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
+import { useMeetingPanelStore } from '../../../stores/meetingPanelStore';
 import { useSpace } from '../../../hooks/useSpaces';
 import { useAuthStore } from '../../../stores/authStore';
 import type { SpaceStatus, Task, TaskPriority, TaskStatusKey, TaskTypeField, TaskRecurrence } from '@squadhub/shared';
@@ -326,6 +327,7 @@ export default function TaskCreatePanel({
     return m;
   }, [assignableUsers]);
   const { data: taskTypes } = useTaskTypes();
+  const openMeetingPanel = useMeetingPanelStore((s) => s.openMeetingPanel);
   const currentUser = useAuthStore((s) => s.user);
 
   const designType = useMemo(
@@ -1794,16 +1796,24 @@ export default function TaskCreatePanel({
             }}
           >
             {(taskTypes || [])
-              // Mirror types (Course/Meeting) + Routine are system-managed — set
-              // automatically on materialised/recurring tasks, never hand-picked.
-              .filter((t) => !['course', 'meeting', 'routine'].includes(t.key))
+              // Course + Routine are system-managed (set automatically on
+              // materialised/recurring tasks). "Meeting" IS selectable here: it
+              // swaps the panel into the meeting creation flow.
+              .filter((t) => !['course', 'routine'].includes(t.key))
               .map((t) => (
               <button
                 key={t.id}
                 type="button"
                 onClick={() => {
-                  setDraft((d) => ({ ...d, task_type_id: t.id }));
                   setTypeMenuOpen(false);
+                  if (t.key === 'meeting') {
+                    // Switching the type to "Meeting" hands off to the meeting
+                    // creation slide-over, seeded with whatever title was typed.
+                    openMeetingPanel({ initialTitle: draft.title, listId: effectiveListId });
+                    onClose();
+                    return;
+                  }
+                  setDraft((d) => ({ ...d, task_type_id: t.id }));
                 }}
                 className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[color:var(--sh-hair-3)] ${
                   currentType?.id === t.id ? 'bg-[color:var(--sh-hair-3)]' : ''

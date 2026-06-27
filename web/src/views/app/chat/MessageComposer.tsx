@@ -8,6 +8,7 @@ import api from '../../../services/api';
 import { getSocket } from '../../../services/socket';
 import { useUploadAttachment } from '../../../hooks/useUploadAttachment';
 import type { ChatKind } from '../../../stores/workspaceStore';
+import { useMeetingPanelStore } from '../../../stores/meetingPanelStore';
 import type { MentionUser } from '../../../components/MentionPicker';
 import EmojiPicker from './EmojiPicker';
 import VoiceRecorder from './VoiceRecorder';
@@ -185,6 +186,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
   const composerBoxRef = useRef<HTMLDivElement>(null);
 
   const { upload, uploading, progress } = useUploadAttachment(kind, channelId);
+  const openMeetingPanel = useMeetingPanelStore((s) => s.openMeetingPanel);
   const scheduleMutation = useScheduleMessage(kind, channelId);
   const idField = kind === 'dm' ? 'dm_conversation_id' : 'channel_id';
 
@@ -695,6 +697,11 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
                   </ToolBtn>
                 )}
                 <Divider />
+                <ToolBtn title="Create meeting" onClick={() => openMeetingPanel({ channelId, channelKind: kind })}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </ToolBtn>
                 <ToolBtn title="Record voice note" onClick={() => setRecording(true)}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
@@ -737,6 +744,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
       {showSchedule && (
         <ScheduleSendModal onPick={scheduleMessage} onClose={() => setShowSchedule(false)} />
       )}
+
 
       {/* @-mention typeahead — portaled out so it isn't clipped by the composer's overflow */}
       {mentionMenuOpen && composerRect &&

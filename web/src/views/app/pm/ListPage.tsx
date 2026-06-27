@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
+import { useMeetingPanelStore } from '../../../stores/meetingPanelStore';
 import { useIsAdmin } from '../../../hooks/usePermissions';
 import { useTasks } from '../../../hooks/useTasks';
 import { canAtLeast } from '../../../lib/access';
@@ -56,6 +57,8 @@ export default function ListPage({
   const [showShare, setShowShare] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreatePanel, setShowCreatePanel] = useState(false);
+  const [showNewMenu, setShowNewMenu] = useState(false);
+  const openMeetingPanel = useMeetingPanelStore((s) => s.openMeetingPanel);
   const sortByScope = usePMStore((s) => s.sortByScope);
   const setScopedSortBy = usePMStore((s) => s.setScopedSortBy);
   const focusTodayScope = usePMStore((s) => s.focusTodayScope);
@@ -389,17 +392,58 @@ export default function ListPage({
       {/* Floating "New task" action — anchored bottom-right of the list view.
           While this shows, the global top-bar "+" hides (see showNewTaskFab). */}
       {showNewTaskFab && (
-        <button
-          onClick={() => setShowCreatePanel(true)}
-          className="lv-newtask-fab"
-          aria-label="New task"
-          title="New task"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          New task
-        </button>
+        <div className="lv-newtask-fab-wrap" style={{ position: 'fixed', right: 24, bottom: 24, zIndex: 40 }}>
+          {showNewMenu && (
+            <>
+              <div className="fixed inset-0 z-[1]" onClick={() => setShowNewMenu(false)} />
+              <div
+                className="absolute bottom-[calc(100%+8px)] right-0 z-[2] w-52 overflow-hidden rounded-xl border shadow-lg"
+                style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
+              >
+                <button
+                  onClick={() => { setShowNewMenu(false); setShowCreatePanel(true); }}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] text-[color:var(--sh-ink)] hover:bg-[color:var(--sh-hair-3)]"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M9 11l3 3 8-8M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9" /></svg>
+                  New Task
+                </button>
+                <button
+                  onClick={() => { setShowNewMenu(false); openMeetingPanel({ listId: activeListId }); }}
+                  className="flex w-full items-center gap-2 border-t px-3 py-2.5 text-left text-[13px] text-[color:var(--sh-ink)] hover:bg-[color:var(--sh-hair-3)]"
+                  style={{ borderColor: 'var(--sh-hair)' }}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0a7d55" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                  Create New Meeting
+                </button>
+              </div>
+            </>
+          )}
+          <div className="flex items-stretch">
+            <button
+              onClick={() => setShowCreatePanel(true)}
+              className="lv-newtask-fab"
+              style={{ position: 'static', borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+              aria-label="New task"
+              title="New task"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              New task
+            </button>
+            <button
+              onClick={() => setShowNewMenu((v) => !v)}
+              className="lv-newtask-fab"
+              style={{ position: 'static', borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: '1px solid rgba(255,255,255,0.25)', paddingLeft: 8, paddingRight: 8 }}
+              aria-label="More create options"
+              title="More options"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+          </div>
+        </div>
       )}
 
       {showCreatePanel && activeListId && canEdit && (

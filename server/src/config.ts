@@ -79,6 +79,19 @@ export const config = {
   webPushVapidPublicKey: process.env.WEB_PUSH_VAPID_PUBLIC_KEY || '',
   webPushVapidPrivateKey: process.env.WEB_PUSH_VAPID_PRIVATE_KEY || '',
   webPushVapidSubject: process.env.WEB_PUSH_VAPID_SUBJECT || 'mailto:support@squadhub.in',
+
+  // Meeting-link providers for the Meetings mini app. Jitsi needs no secret
+  // (deterministic room URL) and is always available. Google Meet and Zoom are
+  // optional adapters — each appears in the "Select Meeting App" dropdown only
+  // when its secrets are present; otherwise it is silently hidden.
+  jitsiBaseUrl: process.env.JITSI_BASE_URL || 'https://meet.jit.si',
+  googleMeetClientId: process.env.GOOGLE_MEET_CLIENT_ID || '',
+  googleMeetClientSecret: process.env.GOOGLE_MEET_CLIENT_SECRET || '',
+  googleMeetRefreshToken: process.env.GOOGLE_MEET_REFRESH_TOKEN || '',
+  googleMeetCalendarId: process.env.GOOGLE_MEET_CALENDAR_ID || 'primary',
+  zoomAccountId: process.env.ZOOM_ACCOUNT_ID || '',
+  zoomClientId: process.env.ZOOM_CLIENT_ID || '',
+  zoomClientSecret: process.env.ZOOM_CLIENT_SECRET || '',
 } as const;
 
 // Validate required env vars at startup
