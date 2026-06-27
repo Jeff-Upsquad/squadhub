@@ -171,7 +171,7 @@ export default function ListView({
               <TaskGroupCard
                 groupKey="completed"
                 label="Completed"
-                dotColor="#10b981"
+                dotColor="#7c3aed"
                 tasks={completedTasks}
                 allStatuses={statuses}
                 listId={listId}
@@ -202,7 +202,7 @@ export default function ListView({
               <TaskGroupCard
                 groupKey="completed"
                 label="Completed"
-                dotColor="#10b981"
+                dotColor="#7c3aed"
                 tasks={completedTasks}
                 allStatuses={statuses}
                 listId={listId}
