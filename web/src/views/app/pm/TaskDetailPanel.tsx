@@ -609,6 +609,26 @@ export default function TaskDetailPanel({
     setActiveTask(null);
   };
 
+  // Same navigation as the primary breadcrumb, but driven by an explicit path —
+  // used by the "Also in" secondary-list chips, which carry their own ids.
+  const goToPathSpace = (p: { space_id: string | null }) => {
+    if (!p.space_id) return;
+    pmStore.setActiveSpace(p.space_id);
+    pmStore.setActiveSpacePage(p.space_id);
+    setActiveTask(null);
+  };
+  const goToPathFolder = (p: { space_id: string | null; folder_id: string | null }) => {
+    if (!p.space_id || !p.folder_id) return;
+    pmStore.setActiveSpace(p.space_id);
+    pmStore.setActiveFolder(p.folder_id);
+    setActiveTask(null);
+  };
+  const goToPathList = (p: { space_id: string | null; list_id: string }) => {
+    if (p.space_id) pmStore.setActiveSpace(p.space_id);
+    pmStore.setActiveList(p.list_id);
+    setActiveTask(null);
+  };
+
   const priorityLabel = task ? PRIORITY_LABEL[(task.priority || 'none') as TaskPriority] : null;
   const assignees = task?.assignees || [];
   const due = formatDueRelative(task?.due_date);
@@ -864,26 +884,47 @@ export default function TaskDetailPanel({
             <span className="td-also-label">Also in</span>
             <div className="td-also-paths">
               {secondaryLists.map((p) => (
-                <span key={p.list_id} className="td-also-path" title="Also appears in this list">
+                <span key={p.list_id} className="td-also-path" title="Also appears in this list — click to open">
                   {p.space_name && (
                     <>
-                      <span
-                        className="td-also-emblem"
-                        style={{ background: p.space_color || 'var(--sh-ink)' }}
+                      <button
+                        type="button"
+                        className="td-also-seg"
+                        onClick={() => goToPathSpace(p)}
+                        title={`Go to ${p.space_name}`}
                       >
-                        {initialOf(p.space_name)[0]}
-                      </span>
-                      <span className="td-also-seg">{p.space_name}</span>
+                        <span
+                          className="td-also-emblem"
+                          style={{ background: p.space_color || 'var(--sh-ink)' }}
+                        >
+                          {initialOf(p.space_name)[0]}
+                        </span>
+                        {p.space_name}
+                      </button>
                     </>
                   )}
                   {p.folder_name && (
                     <>
                       <span className="td-also-sep">›</span>
-                      <span className="td-also-seg">{p.folder_name}</span>
+                      <button
+                        type="button"
+                        className="td-also-seg"
+                        onClick={() => goToPathFolder(p)}
+                        title={`Go to ${p.folder_name}`}
+                      >
+                        {p.folder_name}
+                      </button>
                     </>
                   )}
                   <span className="td-also-sep">›</span>
-                  <span className="td-also-seg td-also-list">{p.list_name}</span>
+                  <button
+                    type="button"
+                    className="td-also-seg td-also-list"
+                    onClick={() => goToPathList(p)}
+                    title={`Go to ${p.list_name}`}
+                  >
+                    {p.list_name}
+                  </button>
                   {canEdit && (
                     <button
                       type="button"
