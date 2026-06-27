@@ -106,6 +106,7 @@ import profileAccessRoutes from './routes/profile-access';
 import profileAccessAdminRoutes from './routes/profile-access-admin';
 import viewPreferencesRoutes from './routes/view-preferences';
 import meetingsRoutes from './routes/meetings';
+import meetingEventsRoutes from './routes/meetings_events';
 import featureTipsRoutes from './routes/feature-tips';
 import adminFeatureTipsRoutes from './routes/admin/feature-tips';
 import { startCheckInCron } from './cron/checkin-cron';
@@ -227,6 +228,7 @@ app.use('/partner-app', partnerAppRoutes);
 app.use('/lms', lmsRoutes);
 app.use('/admin/lms', lmsAdminRoutes);
 app.use('/meetings', meetingsRoutes);
+app.use('/meeting-events', meetingEventsRoutes);
 
 // Squad Chat
 app.use('/chat/app', chatAppRoutes);

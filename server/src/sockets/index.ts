@@ -105,6 +105,15 @@ export function setupSocketIO(httpServer: HttpServer) {
     socket.on('leave_channel', (channelId: string) => {
       socket.leave(channelId);
     });
+    // Meeting poll cards + the mini-app detail view subscribe to live vote /
+    // suggestion / status updates. The route handlers emit meeting_event_updated
+    // to this room after any mutation.
+    socket.on('join_meeting', (meetingEventId: string) => {
+      if (meetingEventId) socket.join(`meeting:${meetingEventId}`);
+    });
+    socket.on('leave_meeting', (meetingEventId: string) => {
+      if (meetingEventId) socket.leave(`meeting:${meetingEventId}`);
+    });
     socket.on('typing', (data) => {
       const room = data.channel_id || data.dm_conversation_id;
       if (room) {

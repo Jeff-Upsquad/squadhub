@@ -98,6 +98,9 @@ export interface Message {
   mentions?: string[];
   unfurl?: MessageUnfurl | null;
   reply_count?: number;
+  // When set, this message is an interactive meeting poll card — MessageBubble
+  // renders <MeetingPollCard> instead of text content (see migration 139).
+  meeting_event_id?: string | null;
   created_at: string;
   updated_at: string;
   is_deleted: boolean;
@@ -781,7 +784,12 @@ export type NotificationType =
   | 'task_commented'
   | 'task_due_soon'
   | 'mention'
-  | 'reaction_added';
+  | 'reaction_added'
+  | 'meeting_invited'
+  | 'meeting_suggestion'
+  | 'meeting_suggestion_resolved'
+  | 'meeting_confirmed'
+  | 'meeting_cancelled';
 
 export interface Notification {
   id: string;
@@ -843,6 +851,102 @@ export interface SharedTree {
   lists: List[];
 }
 
+// ---- Meeting / Event scheduler (migration 139) ----
+export type MeetingKind = 'virtual' | 'in_person' | 'event';
+export type MeetingEventStatus = 'open' | 'confirmed' | 'cancelled';
+export type MeetingLinkProviderId = 'jitsi' | 'google_meet' | 'zoom';
+export type MeetingVoteValue = 'yes' | 'no' | 'maybe';
+export type MeetingSuggestionStatus = 'pending' | 'accepted' | 'rejected';
+export type MeetingSuggestionResponse = 'confirm' | 'reject';
+
+export interface MeetingEvent {
+  id: string;
+  title: string;
+  kind: MeetingKind;
+  agenda: string | null;
+  duration_min: number | null; // null => a "dates only" meeting
+  timezone: string;
+  status: MeetingEventStatus;
+  link_provider: MeetingLinkProviderId | null;
+  link_url: string | null;
+  link_meta: Record<string, unknown>;
+  origin_channel_id: string | null;
+  origin_dm_conversation_id: string | null;
+  confirmed_slot_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MeetingSlot {
+  id: string;
+  meeting_event_id: string;
+  slot_date: string;          // YYYY-MM-DD (meeting-local)
+  start_min: number | null;   // minute-of-day 0..1439; null => dates-only
+  end_min: number | null;
+  is_suggestion: boolean;
+  suggested_by: string | null;
+  suggestion_status: MeetingSuggestionStatus | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface MeetingGuest {
+  meeting_event_id: string;
+  user_id: string;
+  role: 'host' | 'guest';
+  responded: boolean;
+  invited_at: string;
+  user?: User; // joined by API
+}
+
+export interface MeetingEventAttachment {
+  id: string;
+  meeting_event_id: string;
+  file_url: string;
+  file_name: string | null;
+  file_size: number | null;
+  file_mime: string | null;
+  uploaded_by: string | null;
+  uploaded_at: string;
+}
+
+// Lightweight reference used for vote-count hover tooltips & guest rows.
+export interface MeetingVoterRef {
+  user_id: string;
+  display_name: string | null;
+  avatar_url?: string | null;
+}
+
+// Per-slot aggregate the card/detail UI renders directly.
+export interface MeetingSlotSummary {
+  slot: MeetingSlot;
+  counts: { yes: number; no: number; maybe: number };
+  voters: { yes: MeetingVoterRef[]; no: MeetingVoterRef[]; maybe: MeetingVoterRef[] };
+  my_vote: MeetingVoteValue | null;
+  // Present only for is_suggestion slots.
+  suggestion?: {
+    status: MeetingSuggestionStatus;
+    suggested_by: MeetingVoterRef | null;
+    confirms: MeetingVoterRef[];
+    rejects: MeetingVoterRef[];
+    my_response: MeetingSuggestionResponse | null;
+  };
+}
+
+// Full payload from GET /meeting-events/:id and the meeting_event_updated socket push.
+export interface MeetingEventDetail {
+  event: MeetingEvent;
+  slots: MeetingSlotSummary[];
+  guests: MeetingGuest[];
+  attachments: MeetingEventAttachment[];
+}
+
+export interface MeetingLinkProviderInfo {
+  id: MeetingLinkProviderId;
+  label: string;
+}
+
 // ---- Socket.io Events ----
 export interface ServerToClientEvents {
   new_message: (message: Message) => void;
@@ -859,6 +963,9 @@ export interface ServerToClientEvents {
   // Content-free nudge: an admin triggered/edited a Feature Tip — clients
   // re-fetch GET /feature-tips/pending. No payload (no per-user fan-out).
   feature_tips_changed: () => void;
+  // Live meeting state (votes/suggestions/status) pushed to everyone in the
+  // meeting:{id} room — keeps the mini-app detail and every in-chat card synced.
+  meeting_event_updated: (detail: MeetingEventDetail) => void;
 }
 
 export interface ClientToServerEvents {
@@ -868,6 +975,9 @@ export interface ClientToServerEvents {
   send_message: (data: { channel_id?: string; dm_conversation_id?: string; content: string; type: MessageType; file_url?: string }) => void;
   typing: (data: { channel_id?: string; dm_conversation_id?: string }) => void;
   stop_typing: (data: { channel_id?: string; dm_conversation_id?: string }) => void;
+  // A meeting detail view or in-chat poll card subscribes/unsubscribes to live updates.
+  join_meeting: (meeting_event_id: string) => void;
+  leave_meeting: (meeting_event_id: string) => void;
 }
 
 // ---- API Response Types ----

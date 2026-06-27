@@ -51,6 +51,7 @@ const nextConfig = {
       { source: '/push/:path*', destination: `${API_URL}/push/:path*` },
       { source: '/lms/:path*', destination: `${API_URL}/lms/:path*` },
       { source: '/meetings/:path*', destination: `${API_URL}/meetings/:path*` },
+      { source: '/meeting-events/:path*', destination: `${API_URL}/meeting-events/:path*` },
       { source: '/profile-access/:path*', destination: `${API_URL}/profile-access/:path*` },
       { source: '/view-preferences/:path*', destination: `${API_URL}/view-preferences/:path*` },
       { source: '/feature-tips/:path*', destination: `${API_URL}/feature-tips/:path*` },

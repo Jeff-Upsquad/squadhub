@@ -5,6 +5,7 @@ import api from '../../../services/api';
 import { useAuthStore } from '../../../stores/authStore';
 import EmojiPicker from './EmojiPicker';
 import LinkUnfurlCard from './LinkUnfurlCard';
+import MeetingPollCard from './MeetingPollCard';
 import { URL_PATTERN, URL_TEST, splitTrailingPunct, toHref } from '../../../lib/urlPattern';
 
 // ---- Markdown rendering ----
@@ -885,6 +886,7 @@ export default function MessageBubble({ message, onOpenThread, inThread, grouped
         )}
         {actionError && !editing && <div className="sqc-msg__edit-error">{actionError}</div>}
 
+        {message.meeting_event_id && <MeetingPollCard meetingEventId={message.meeting_event_id} />}
         {message.unfurl && <LinkUnfurlCard unfurl={message.unfurl} />}
         <AttachmentBlock message={message} />
 
