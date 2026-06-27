@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
+import { logTaskTimeEntry } from '../../utils/taskTime';
 
 const router = Router();
 router.use(requireAuth);
@@ -257,6 +258,69 @@ router.delete('/work-blocks/:task_id', async (req: Request, res: Response) => {
 // Runs: start / stop / current
 // =====================================================================
 
+// Close a run: stop any open per-task overlaps, stamp ended_at/duration, and
+// log the run's wall-clock as a task_time_entry on the block task so block time
+// shows up in the same places as a normal per-task timer (rail Time Sheet, the
+// task "Logged" field, the daily timesheet total + design Reports).
+async function closeRun(
+  run: { id: string; task_id: string; user_id: string; started_at: string },
+  endedAt: Date,
+): Promise<{ ended_at: string; duration_seconds: number } | null> {
+  const duration = Math.max(
+    1,
+    Math.floor((endedAt.getTime() - new Date(run.started_at).getTime()) / 1000),
+  );
+
+  // Close any open per-task overlap rows for this run first so the partial
+  // unique index frees up.
+  const { data: openTimes } = await supabaseAdmin
+    .from('work_block_task_times')
+    .select('id, started_at')
+    .eq('run_id', run.id)
+    .is('ended_at', null);
+  if (openTimes && openTimes.length > 0) {
+    await Promise.all(
+      (openTimes as any[]).map((row) => {
+        const d = Math.max(
+          1,
+          Math.floor((endedAt.getTime() - new Date(row.started_at).getTime()) / 1000),
+        );
+        return supabaseAdmin
+          .from('work_block_task_times')
+          .update({ ended_at: endedAt.toISOString(), duration_seconds: d })
+          .eq('id', row.id);
+      }),
+    );
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('work_block_runs')
+    .update({ ended_at: endedAt.toISOString(), duration_seconds: duration })
+    .eq('id', run.id)
+    .select('ended_at, duration_seconds')
+    .single();
+  if (error) {
+    console.error('[workBlocks closeRun] run update error:', error);
+    return null;
+  }
+
+  // Mirror the run as task time on the block task. Best-effort — a logging
+  // failure shouldn't fail the stop itself.
+  const logged = await logTaskTimeEntry({
+    taskId: run.task_id,
+    userId: run.user_id,
+    startedAt: run.started_at,
+    durationSeconds: duration,
+    source: 'work_block',
+    workBlockRunId: run.id,
+  });
+  if (!logged.ok) {
+    console.error('[workBlocks closeRun] failed to log block time:', logged.error);
+  }
+
+  return data as any;
+}
+
 // POST /pm/work-blocks/:task_id/runs — start a run for the current user.
 router.post('/work-blocks/:task_id/runs', async (req: Request, res: Response) => {
   try {
@@ -272,19 +336,13 @@ router.post('/work-blocks/:task_id/runs', async (req: Request, res: Response) =>
     const startedAt = new Date();
     const { data: existing } = await supabaseAdmin
       .from('work_block_runs')
-      .select('id, started_at')
+      .select('id, task_id, user_id, started_at')
       .eq('user_id', req.userId!)
       .is('ended_at', null)
       .maybeSingle();
     if (existing) {
-      const prevDur = Math.max(
-        1,
-        Math.floor((startedAt.getTime() - new Date((existing as any).started_at).getTime()) / 1000),
-      );
-      await supabaseAdmin
-        .from('work_block_runs')
-        .update({ ended_at: startedAt.toISOString(), duration_seconds: prevDur })
-        .eq('id', (existing as any).id);
+      // Closing the prior run also logs its block time + closes its overlaps.
+      await closeRun(existing as any, startedAt);
     }
 
     const { data, error } = await supabaseAdmin
@@ -328,45 +386,13 @@ router.patch('/work-blocks/runs/:run_id', async (req: Request, res: Response) =>
       res.json({ success: true, data: existing });
       return;
     }
-    const endedAt = new Date();
-    const duration = Math.max(
-      1,
-      Math.floor((endedAt.getTime() - new Date((existing as any).started_at).getTime()) / 1000),
-    );
 
-    // Close any open per-task overlap rows for this run before closing the
-    // run itself. Compute duration per row so the partial unique index frees up.
-    const { data: openTimes } = await supabaseAdmin
-      .from('work_block_task_times')
-      .select('id, started_at')
-      .eq('run_id', runId)
-      .is('ended_at', null);
-    if (openTimes && openTimes.length > 0) {
-      await Promise.all(
-        (openTimes as any[]).map((row) => {
-          const d = Math.max(
-            1,
-            Math.floor((endedAt.getTime() - new Date(row.started_at).getTime()) / 1000),
-          );
-          return supabaseAdmin
-            .from('work_block_task_times')
-            .update({ ended_at: endedAt.toISOString(), duration_seconds: d })
-            .eq('id', row.id);
-        }),
-      );
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('work_block_runs')
-      .update({ ended_at: endedAt.toISOString(), duration_seconds: duration })
-      .eq('id', runId)
-      .select('*')
-      .single();
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
+    const closed = await closeRun(existing as any, new Date());
+    if (!closed) {
+      res.status(500).json({ success: false, error: 'Failed to stop run' });
       return;
     }
-    res.json({ success: true, data });
+    res.json({ success: true, data: { ...(existing as any), ...closed } });
   } catch (err) {
     console.error('[workBlocks runs PATCH] error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });

@@ -10,6 +10,7 @@ import { getUserRoleIds } from '../../utils/roles';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { spawnRoutineInstance } from '../../services/routineSpawner';
 import { todayIST } from '../../utils/ist';
+import { logTaskTimeEntry } from '../../utils/taskTime';
 
 const router = Router();
 router.use(requireAuth);
@@ -703,9 +704,64 @@ router.get('/tasks/my-time-entries', async (req: Request, res: Response) => {
     const hydratedTasks = await hydrateParents(await hydrateLists(tasks || []));
     const taskById = new Map<string, any>(hydratedTasks.map((t: any) => [t.id, t]));
 
+    // Work-block entries carry a sub-breakdown: the tasks worked on / completed
+    // during the run, shown nested under the block in the Time Sheet.
+    const runIds = Array.from(new Set(
+      rows
+        .filter((e: any) => e.source === 'work_block' && e.work_block_run_id)
+        .map((e: any) => e.work_block_run_id as string),
+    ));
+    const childrenByRun = new Map<string, { task_id: string; title: string; seconds: number; completed: boolean }[]>();
+    if (runIds.length > 0) {
+      const [{ data: times }, { data: comps }] = await Promise.all([
+        supabaseAdmin
+          .from('work_block_task_times')
+          .select('run_id, task_id, duration_seconds')
+          .in('run_id', runIds),
+        supabaseAdmin
+          .from('work_block_completions')
+          .select('run_id, completed_task_id')
+          .in('run_id', runIds),
+      ]);
+
+      // Aggregate seconds per (run, task); union in completed-without-timer tasks.
+      const perRun = new Map<string, Map<string, { seconds: number; completed: boolean }>>();
+      const ensure = (runId: string, taskId: string) => {
+        let m = perRun.get(runId);
+        if (!m) { m = new Map(); perRun.set(runId, m); }
+        let a = m.get(taskId);
+        if (!a) { a = { seconds: 0, completed: false }; m.set(taskId, a); }
+        return a;
+      };
+      for (const t of (times || []) as any[]) ensure(t.run_id, t.task_id).seconds += t.duration_seconds || 0;
+      for (const c of (comps || []) as any[]) ensure(c.run_id, c.completed_task_id).completed = true;
+
+      const childTaskIds = Array.from(new Set(
+        Array.from(perRun.values()).flatMap((m) => Array.from(m.keys())),
+      ));
+      const { data: childTasks } = childTaskIds.length
+        ? await supabaseAdmin.from('tasks').select('id, title').in('id', childTaskIds)
+        : { data: [] as any[] };
+      const titleById = new Map((childTasks || []).map((t: any) => [t.id, t.title as string]));
+
+      for (const [runId, m] of perRun.entries()) {
+        childrenByRun.set(runId, Array.from(m.entries())
+          .map(([taskId, a]) => ({
+            task_id: taskId,
+            title: titleById.get(taskId) || 'Task',
+            seconds: a.seconds,
+            completed: a.completed,
+          }))
+          .sort((x, y) => y.seconds - x.seconds));
+      }
+    }
+
     const data = rows.map((e: any) => ({
       ...e,
       task: taskById.get(e.task_id) || null,
+      children: e.source === 'work_block' && e.work_block_run_id
+        ? (childrenByRun.get(e.work_block_run_id) || [])
+        : undefined,
     }));
     res.json({ success: true, data });
   } catch (err) {
@@ -727,10 +783,10 @@ router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
     const taskId = req.params.id as string;
     const { started_at, duration_seconds } = createTimeEntrySchema.parse(req.body);
 
-    // Resolve list → space → workspace for the entry's workspace_id
+    // Access control: caller must have access to the task's list.
     const { data: task } = await supabaseAdmin
       .from('tasks')
-      .select('id, list_id, time_tracked')
+      .select('id, list_id')
       .eq('id', taskId)
       .single();
     if (!task) {
@@ -744,84 +800,45 @@ router.post('/tasks/:id/time-entries', async (req: Request, res: Response) => {
       return;
     }
 
-    const { data: list } = await supabaseAdmin
-      .from('lists').select('space_id').eq('id', (task as any).list_id).single();
-    const { data: space } = list?.space_id
-      ? await supabaseAdmin.from('spaces').select('workspace_id').eq('id', (list as any).space_id).single()
-      : { data: null as any };
-    const workspaceId = (space as any)?.workspace_id;
-    if (!workspaceId) {
-      res.status(500).json({ success: false, error: 'Cannot resolve workspace for task' });
-      return;
-    }
-
+    // If this timer overlapped a work-block run, the block already counts this
+    // wall-clock toward the daily total — log the entry (per-task history +
+    // "Logged" field) but skip the daily aggregate so we don't double-count.
     const stoppedAt = new Date(new Date(started_at).getTime() + duration_seconds * 1000).toISOString();
+    const { data: activeRun } = await supabaseAdmin
+      .from('work_block_runs')
+      .select('id')
+      .eq('user_id', req.userId!)
+      .is('ended_at', null)
+      .lte('started_at', stoppedAt)
+      .limit(1);
+    let withinBlock = !!(activeRun && activeRun.length);
+    if (!withinBlock) {
+      const { data: closedRun } = await supabaseAdmin
+        .from('work_block_runs')
+        .select('id')
+        .eq('user_id', req.userId!)
+        .not('ended_at', 'is', null)
+        .lte('started_at', stoppedAt)
+        .gte('ended_at', started_at)
+        .limit(1);
+      withinBlock = !!(closedRun && closedRun.length);
+    }
 
-    const { data: entry, error: insertErr } = await supabaseAdmin
-      .from('task_time_entries')
-      .insert({
-        task_id: taskId,
-        user_id: req.userId!,
-        workspace_id: workspaceId,
-        started_at,
-        stopped_at: stoppedAt,
-        duration_seconds,
-      })
-      .select()
-      .single();
-
-    if (insertErr) {
-      res.status(500).json({ success: false, error: insertErr.message });
+    const result = await logTaskTimeEntry({
+      taskId,
+      userId: req.userId!,
+      startedAt: started_at,
+      durationSeconds: duration_seconds,
+      source: 'timer',
+      skipDailySummary: withinBlock,
+    });
+    if (!result.ok) {
+      res.status(result.error === 'Task not found' ? 404 : 500)
+        .json({ success: false, error: result.error });
       return;
     }
 
-    // Bump aggregate cache on the task
-    const newTotal = ((task as any).time_tracked || 0) + duration_seconds;
-    await supabaseAdmin
-      .from('tasks')
-      .update({ time_tracked: newTotal })
-      .eq('id', taskId);
-
-    // Also update daily_time_summaries so the space dashboard reflects this time
-    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
-    const startedIst = new Date(new Date(started_at).getTime() + IST_OFFSET);
-    const entryDate = `${startedIst.getUTCFullYear()}-${String(startedIst.getUTCMonth() + 1).padStart(2, '0')}-${String(startedIst.getUTCDate()).padStart(2, '0')}`;
-
-    const { data: existingSummary } = await supabaseAdmin
-      .from('daily_time_summaries')
-      .select('id, total_work_seconds')
-      .eq('user_id', req.userId!)
-      .eq('workspace_id', workspaceId)
-      .eq('date', entryDate)
-      .eq('context', 'default')
-      .maybeSingle();
-
-    if (existingSummary) {
-      await supabaseAdmin
-        .from('daily_time_summaries')
-        .update({
-          total_work_seconds: existingSummary.total_work_seconds + duration_seconds,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existingSummary.id);
-    } else {
-      await supabaseAdmin
-        .from('daily_time_summaries')
-        .insert({
-          user_id: req.userId!,
-          workspace_id: workspaceId,
-          context: 'default',
-          date: entryDate,
-          total_work_seconds: duration_seconds,
-          total_break_seconds: 0,
-          total_no_work_seconds: 0,
-          session_count: 1,
-          first_start: stoppedAt,
-          last_stop: stoppedAt,
-        });
-    }
-
-    res.json({ success: true, data: entry });
+    res.json({ success: true, data: result.entry });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });

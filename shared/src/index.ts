@@ -637,6 +637,15 @@ export interface TaskDayPlan {
   };
 }
 
+// A sub-item of a work-block time entry: a task worked on and/or completed
+// during the run, shown nested under the block in the Time Sheet.
+export interface WorkBlockChildEntry {
+  task_id: string;
+  title: string;
+  seconds: number;
+  completed: boolean;
+}
+
 export interface TaskTimeEntry {
   id: string;
   task_id: string;
@@ -645,7 +654,9 @@ export interface TaskTimeEntry {
   started_at: string;
   stopped_at: string;
   duration_seconds: number;
-  source: 'timer' | 'manual';
+  source: 'timer' | 'manual' | 'work_block';
+  // Set for source='work_block' — links the entry back to its work_block_run.
+  work_block_run_id?: string | null;
   created_at: string;
   // Joined — task + its list/folder/space + parent (for UI breadcrumbs)
   task?: Pick<Task, 'id' | 'title' | 'list_id' | 'time_tracked'> & {
@@ -654,6 +665,8 @@ export interface TaskTimeEntry {
     space?: { id: string; name: string } | null;
     parent_task?: { id: string; title: string } | null;
   };
+  // For source='work_block': tasks worked on / completed during the run.
+  children?: WorkBlockChildEntry[];
 }
 
 // A "Label" in product terms. Physical table is `task_tags` (see migration 135).
