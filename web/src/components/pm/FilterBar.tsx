@@ -165,9 +165,9 @@ export default function FilterBar({ filters, onChange, statuses, assigneeOptions
             )}
           </Section>
 
-          <Section title="Tags">
+          <Section title="Labels">
             {tagOptions.length === 0 ? (
-              <EmptyHint text="No tags on visible tasks" />
+              <EmptyHint text="No labels on visible tasks" />
             ) : (
               tagOptions.map((t) => (
                 <CheckRow
