@@ -23,7 +23,7 @@ const VIEW_LABELS: Record<string, string> = {
 const SECTION_LABELS: Record<string, string> = {
   cal: 'Calendar',
   docs: 'Documents',
-  learning: 'Learning',
+  learning: 'Resources',
   teams: 'Teams',
   more: 'More',
 };

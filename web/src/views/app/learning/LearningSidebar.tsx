@@ -2,30 +2,22 @@
 import { useMemo, useState } from 'react';
 import { useMyLearning, type MyLearningEntry } from '../../../hooks/useLms';
 
-// Module side menu for the Learning section. Mirrors AppsSidebar conventions:
-// a header, a search field, a status filter, and a scrollable list of items
-// grouped by category. Clicking a row opens the item in the content panel.
+// Module side menu for the Resources section. Mirrors AppsSidebar conventions:
+// a header, a search field, and a scrollable list of items grouped by category.
+// Clicking a row opens the item in the content panel.
 //
-// Items split into two tracks (see LmsTrack / migration 118):
-//  - 'learning' — courses/posts that participate in the Continue/Assigned/Done
-//    progress tabs and counts.
-//  - 'sop' — "Systems & Processes" reference docs (e.g. "How to use Inbox").
-//    These live in their own always-visible section, ignore the progress tabs,
-//    and render without progress chrome.
-
-type Tab = 'continue' | 'assigned' | 'completed' | 'catalog';
+// The list is split into two clearly-labelled sections (see LmsTrack /
+// migration 118):
+//  - "Courses" — track 'learning' items the user is actively working through.
+//    Only active courses (in progress / assigned) are listed; once a course is
+//    completed it drops out of this section.
+//  - "Systems and Procedures" — track 'sop' reference docs (e.g. "How to use
+//    Inbox"). These never carry progress chrome.
 
 interface LearningSidebarProps {
   activeItemId: string | null;
   onSelectItem: (id: string) => void;
 }
-
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'continue', label: 'Continue' },
-  { key: 'assigned', label: 'Assigned' },
-  { key: 'completed', label: 'Done' },
-  { key: 'catalog', label: 'All' },
-];
 
 const UNCATEGORIZED = '__none__';
 
@@ -37,9 +29,9 @@ interface Group {
 }
 
 // Group a set of entries by their item's category, preserving a stable
-// (alphabetical, uncategorized-last) order. keyPrefix keeps the learning and
-// SOP collapse-state namespaces from colliding when the same category id
-// appears in both tracks.
+// (alphabetical, uncategorized-last) order. keyPrefix keeps the Courses and
+// Systems-and-Procedures collapse-state namespaces from colliding when the same
+// category id appears in both tracks.
 function groupByCategory(entries: MyLearningEntry[], keyPrefix = ''): Group[] {
   const map = new Map<string, Group>();
   for (const entry of entries) {
@@ -61,52 +53,31 @@ function groupByCategory(entries: MyLearningEntry[], keyPrefix = ''): Group[] {
 
 export default function LearningSidebar({ activeItemId, onSelectItem }: LearningSidebarProps) {
   const { data: assignments, isLoading } = useMyLearning();
-  const [tab, setTab] = useState<Tab>('continue');
   const [query, setQuery] = useState('');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const all = assignments || [];
 
-  // Split the two tracks. SOPs are reference docs and don't count toward the
-  // Continue/Assigned/Done tabs.
-  const learning = useMemo(() => all.filter((a) => a.item.track !== 'sop'), [all]);
-  const sops = useMemo(() => all.filter((a) => a.item.track === 'sop'), [all]);
-
-  const counts = useMemo(
-    () => ({
-      continue: learning.filter((a) => a.status === 'in_progress').length,
-      assigned: learning.filter((a) => a.status === 'not_started').length,
-      completed: learning.filter((a) => a.status === 'completed').length,
-      catalog: learning.length,
-    }),
-    [learning]
-  );
-
   const q = query.trim().toLowerCase();
   const matchesQuery = (a: MyLearningEntry) =>
     !q || a.item.title.toLowerCase().includes(q) || (a.item.summary || '').toLowerCase().includes(q);
 
-  // Learning items: filtered by the active status tab, then the search query.
-  const learningVisible = useMemo(() => {
-    return learning
-      .filter((a) => {
-        if (tab === 'continue') return a.status === 'in_progress';
-        if (tab === 'assigned') return a.status === 'not_started';
-        if (tab === 'completed') return a.status === 'completed';
-        return true;
-      })
-      .filter(matchesQuery);
+  // Courses: active items only (anything not yet completed), search-filtered.
+  // Completed courses drop out of the list.
+  const courseVisible = useMemo(
+    () => all.filter((a) => a.item.track !== 'sop' && a.status !== 'completed').filter(matchesQuery),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [learning, tab, q]);
+    [all, q]
+  );
 
-  // SOPs: search-filtered only — always shown regardless of the active tab.
+  // Systems and Procedures: every SOP, search-filtered.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sopVisible = useMemo(() => sops.filter(matchesQuery), [sops, q]);
+  const sopVisible = useMemo(() => all.filter((a) => a.item.track === 'sop').filter(matchesQuery), [all, q]);
 
-  const learningGroups = useMemo(() => groupByCategory(learningVisible), [learningVisible]);
+  const courseGroups = useMemo(() => groupByCategory(courseVisible), [courseVisible]);
   const sopGroups = useMemo(() => groupByCategory(sopVisible, 'sop::'), [sopVisible]);
 
-  const nothing = learningVisible.length === 0 && sopVisible.length === 0;
+  const nothing = courseVisible.length === 0 && sopVisible.length === 0;
 
   return (
     <div className="flex h-full w-full flex-col text-[var(--sh-ink-2)]">
@@ -116,9 +87,9 @@ export default function LearningSidebar({ activeItemId, onSelectItem }: Learning
           className="grid h-[22px] w-[22px] place-items-center rounded-[6px] bg-[var(--sh-ink)] text-[var(--sidebar)]"
           style={{ fontFamily: 'var(--font-serif, Plus Jakarta Sans, sans-serif)', fontSize: 12, fontWeight: 700 }}
         >
-          L
+          R
         </span>
-        <span className="text-[13.5px] font-semibold text-[var(--sh-ink)]">Learning</span>
+        <span className="text-[13.5px] font-semibold text-[var(--sh-ink)]">Resources</span>
       </div>
 
       {/* Search */}
@@ -139,61 +110,54 @@ export default function LearningSidebar({ activeItemId, onSelectItem }: Learning
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search learning…"
+            placeholder="Search resources…"
             className="w-full rounded-[8px] border border-[var(--sh-hair)] bg-[var(--surface)] py-[6px] pl-8 pr-2.5 text-[12.5px] text-[var(--sh-ink)] placeholder:text-[var(--sh-ink-3)] focus:border-[var(--sh-ink)] focus:outline-none"
           />
         </div>
       </div>
 
-      {/* Status filter */}
-      <div className="flex items-center gap-1 px-3 pt-2.5 pb-1">
-        {TABS.map((t) => {
-          const active = tab === t.key;
-          return (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`flex items-center gap-1 rounded-full px-2.5 py-[3px] text-[11.5px] transition ${
-                active
-                  ? 'bg-[var(--sh-ink)] font-medium text-[var(--sidebar)]'
-                  : 'text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-              }`}
-            >
-              {t.label}
-              <span className={`text-[10px] ${active ? 'opacity-70' : 'opacity-60'}`}>{counts[t.key]}</span>
-            </button>
-          );
-        })}
-      </div>
-
       {/* Item list */}
-      <div className="flex-1 overflow-y-auto px-2 py-1">
+      <div className="flex-1 overflow-y-auto px-2 py-2">
         {isLoading ? (
           <p className="px-2 py-6 text-center text-[12px] text-[var(--sh-ink-3)]">Loading…</p>
         ) : nothing ? (
           <p className="px-3 py-6 text-center text-[12px] leading-relaxed text-[var(--sh-ink-3)]">
-            {q ? 'No matches.' : emptyCopy(tab)}
+            {q ? 'No matches.' : 'Nothing shared with you yet.'}
           </p>
         ) : (
           <>
-            {/* Learning (course/post catalog, tab-filtered) */}
-            <GroupList
-              groups={learningGroups}
-              collapsed={collapsed}
-              setCollapsed={setCollapsed}
-              activeItemId={activeItemId}
-              onSelectItem={onSelectItem}
-            />
+            {/* Courses — active learning items, tab-free */}
+            {courseGroups.length > 0 && (
+              <Section
+                icon={
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                  </svg>
+                }
+                title="Courses"
+              >
+                <GroupList
+                  groups={courseGroups}
+                  collapsed={collapsed}
+                  setCollapsed={setCollapsed}
+                  activeItemId={activeItemId}
+                  onSelectItem={onSelectItem}
+                />
+              </Section>
+            )}
 
-            {/* Systems & Processes (reference docs, always visible) */}
+            {/* Systems and Procedures — reference docs */}
             {sopGroups.length > 0 && (
-              <div className={learningGroups.length > 0 ? 'mt-2 border-t border-[var(--sh-hair)] pt-2' : ''}>
-                <div className="flex items-center gap-1.5 px-2 pb-0.5 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--sh-ink-3)]">
+              <Section
+                className={courseGroups.length > 0 ? 'mt-3 border-t border-[var(--sh-hair)] pt-3' : ''}
+                icon={
                   <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                     <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2-2 2.6-2.6z" />
                   </svg>
-                  <span>Systems &amp; Processes</span>
-                </div>
+                }
+                title="Systems and Procedures"
+              >
                 <GroupList
                   groups={sopGroups}
                   collapsed={collapsed}
@@ -201,11 +165,34 @@ export default function LearningSidebar({ activeItemId, onSelectItem }: Learning
                   activeItemId={activeItemId}
                   onSelectItem={onSelectItem}
                 />
-              </div>
+              </Section>
             )}
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// A labelled section block (Courses / Systems and Procedures) with an icon header.
+function Section({
+  icon,
+  title,
+  className,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={className}>
+      <div className="flex items-center gap-1.5 px-2 pb-1 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--sh-ink-3)]">
+        {icon}
+        <span>{title}</span>
+      </div>
+      {children}
     </div>
   );
 }
@@ -233,7 +220,7 @@ function GroupList({
             {showGroupHeaders && (
               <button
                 onClick={() => setCollapsed((c) => ({ ...c, [group.key]: !c[group.key] }))}
-                className="flex w-full items-center gap-1.5 px-2 pt-3 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--sh-ink-3)] transition-colors hover:text-[var(--sh-ink)]"
+                className="flex w-full items-center gap-1.5 px-2 pt-2 pb-1 text-[10px] font-medium uppercase tracking-[0.06em] text-[var(--sh-ink-3)] transition-colors hover:text-[var(--sh-ink)]"
               >
                 <svg className={`h-3 w-3 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} viewBox="0 0 18 18" fill="currentColor">
                   <path d="M5 7h8L9 11z" />
@@ -308,17 +295,4 @@ function ItemRow({ entry, active, onClick }: { entry: MyLearningEntry; active: b
       </span>
     </button>
   );
-}
-
-function emptyCopy(tab: Tab) {
-  switch (tab) {
-    case 'continue':
-      return 'Nothing in progress yet.';
-    case 'assigned':
-      return "You're all caught up.";
-    case 'completed':
-      return 'Nothing completed yet.';
-    default:
-      return 'No learning shared with you yet.';
-  }
 }
