@@ -27,6 +27,13 @@ export type SearchTask = {
   id: string;
   title: string;
   status: string | null;
+  // space_status category for the task's status ('todo' | 'active' | 'done' |
+  // 'closed'), resolved server-side by joining space_statuses. Null when the
+  // status has no matching space_status row (e.g. catalog 'task' types whose
+  // status is already a plain 'done'/'closed' string). Prefer this over `status`
+  // for completion checks — a renamed done-category status (name !== 'done')
+  // only reads as completed via its category.
+  category: string | null;
   priority: string | null;
   due_date: string | null;
   display_number: number | null;
