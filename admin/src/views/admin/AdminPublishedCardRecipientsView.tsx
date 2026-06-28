@@ -105,7 +105,12 @@ export default function AdminPublishedCardRecipientsView({
       api.get(`/admin/subscription-cards/${card.id}/squadhire-recipients`).then((r) => r.data?.data as SquadHireTalent[]),
     enabled: hasSquadHireCategories,
   });
-  const squadhireTalents: SquadHireTalent[] = shRecipientsRes || [];
+  // Memoize the fallback so an empty result stays the SAME array reference across
+  // renders. A bare `shRecipientsRes || []` minted a fresh [] every render, which
+  // re-ran the allRecipients memo, which re-fired the pre-check effect's
+  // setCheckedIds → "Maximum update depth exceeded" infinite re-render loop on any
+  // card with no SquadHire matches.
+  const squadhireTalents: SquadHireTalent[] = useMemo(() => shRecipientsRes || [], [shRecipientsRes]);
 
   const allRecipients = useMemo<UnifiedRecipient[]>(() => {
     if (!data) return [];
@@ -781,22 +786,35 @@ export default function AdminPublishedCardRecipientsView({
               )}
             </div>
 
-            {/* Stat cards */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* Response stats — a compact segmented strip (clickable filters).
+                Zero counts stay muted; only real responses take their status
+                color, so the numbers that matter read at a glance. Mirrors the
+                signal-over-noise treatment of the list view's count chips. */}
+            <div className="sh-card flex divide-x divide-[var(--color-sh-warm-border)] overflow-hidden">
               {(['accepted', 'rejected', 'pending'] as const).map((status) => {
                 const isActive = activeTab === status;
+                const val = counts[status];
                 return (
                   <button
                     key={status}
                     onClick={() => setActiveTab(status)}
-                    className="sh-card sh-card-interactive p-5 text-left"
-                    style={isActive ? { boxShadow: 'inset 0 0 0 1.5px var(--color-sh-ink), 0 4px 12px rgba(0,0,0,0.08)' } : undefined}
+                    className="relative flex-1 px-4 py-3 text-left transition hover:bg-[var(--color-sh-cream)]"
+                    style={isActive ? { background: 'var(--color-sh-cream)' } : undefined}
                   >
+                    {isActive && (
+                      <span
+                        className="absolute inset-x-0 top-0 h-[2.5px]"
+                        style={{ background: STATUS_NUMBER[status] }}
+                      />
+                    )}
                     <p className="sh-section-heading">
                       {status.charAt(0).toUpperCase() + status.slice(1)}
                     </p>
-                    <p className="sh-display text-3xl mt-1.5" style={{ color: STATUS_NUMBER[status] }}>
-                      {counts[status]}
+                    <p
+                      className="sh-display mt-1 text-2xl tabular-nums"
+                      style={{ color: val > 0 ? STATUS_NUMBER[status] : 'var(--color-sh-ink-faint)' }}
+                    >
+                      {val}
                     </p>
                   </button>
                 );
@@ -806,6 +824,18 @@ export default function AdminPublishedCardRecipientsView({
             {/* Per-tier tabs (multi-tier briefs) — switching loads that tier's
                 recipients into the counts + list below. */}
             {tierTabs}
+
+            {/* Recipients section header — hairline rule matches the list view's
+                section dividers, giving the lower half a clear title. */}
+            <div className="flex items-center gap-3 pt-1">
+              <span className="text-xs font-bold uppercase tracking-[0.04em] text-[var(--color-sh-ink)]">
+                Recipients
+              </span>
+              <span className="text-xs font-semibold tabular-nums text-[var(--color-sh-ink-faint)]">
+                {counts.total}
+              </span>
+              <div className="h-px flex-1 bg-[var(--color-sh-warm-border)]" />
+            </div>
 
             {/* Tab bar */}
             <div className="overflow-x-auto">

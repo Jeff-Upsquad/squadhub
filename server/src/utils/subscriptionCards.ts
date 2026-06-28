@@ -86,6 +86,125 @@ export async function hydrateCard(card: any, parentCardId?: string): Promise<any
 }
 
 /**
+ * Batch variant of {@link hydrateCard} for the admin list endpoint. Hydrating a
+ * list one card at a time fired 4 queries PER card (target countries/regions +
+ * partner/talent recipients) — an N+1 that made Published Cards crawl as the org
+ * grew. This pulls the same four relations for the WHOLE list in 4 queries total
+ * and aggregates per card in memory.
+ *
+ * Equivalent to calling {@link hydrateCard} on each card, including the parent
+ * targeting rule: target countries/regions resolve via parent_card_id ?? id, so
+ * secondary cards (which inherit targeting from their parent) hydrate correctly
+ * too. Recipient counts always key off the card's own id.
+ *
+ * Returns a Map keyed by card id holding ONLY the derived fields — callers spread
+ * it over the raw card row (mirrors `{ ...card, ...derived }`).
+ */
+export async function hydrateCardsBatch(
+  cards: any[],
+): Promise<Map<string, {
+  target_country_ids: string[];
+  target_regions: { country_id: string; region: string }[];
+  recipient_counts: {
+    partners: { pending: number; accepted: number; rejected: number; staged: number };
+    talents: { accepted: number; rejected: number; queued: number };
+  };
+  needs_broadcast: boolean;
+}>> {
+  const sentinel = ['00000000-0000-0000-0000-000000000000'];
+  // Recipient counts key off the card's own id; targeting rows key off
+  // parent_card_id ?? id (secondaries inherit their parent's targeting).
+  const ownIds = cards.map((c) => c.id).filter(Boolean);
+  const targetingIdByCard = new Map<string, string>();
+  cards.forEach((c) => { if (c.id) targetingIdByCard.set(c.id, c.parent_card_id ?? c.id); });
+  const targetingIds = Array.from(new Set(targetingIdByCard.values()));
+  const inOwn = ownIds.length ? ownIds : sentinel;
+  const inTargeting = targetingIds.length ? targetingIds : sentinel;
+
+  const [
+    { data: countries },
+    { data: regions },
+    { data: partnerRecipients },
+    { data: talentRecipients },
+  ] = await Promise.all([
+    supabaseAdmin
+      .from('subscription_card_target_countries')
+      .select('card_id, country_id')
+      .in('card_id', inTargeting),
+    supabaseAdmin
+      .from('subscription_card_target_regions')
+      .select('card_id, country_id, region')
+      .in('card_id', inTargeting),
+    supabaseAdmin
+      .from('subscription_card_recipients')
+      .select('card_id, status, broadcast_at')
+      .in('card_id', inOwn)
+      .is('archived_at', null),
+    supabaseAdmin
+      .from('subscription_card_external_recipients')
+      .select('card_id, status, notified_at')
+      .in('card_id', inOwn)
+      .is('archived_at', null),
+  ]);
+
+  const countriesByCard = new Map<string, string[]>();
+  (countries || []).forEach((r: any) => {
+    const arr = countriesByCard.get(r.card_id) || [];
+    arr.push(r.country_id);
+    countriesByCard.set(r.card_id, arr);
+  });
+  const regionsByCard = new Map<string, { country_id: string; region: string }[]>();
+  (regions || []).forEach((r: any) => {
+    const arr = regionsByCard.get(r.card_id) || [];
+    arr.push({ country_id: r.country_id, region: r.region });
+    regionsByCard.set(r.card_id, arr);
+  });
+  type PCount = { pending: number; accepted: number; rejected: number; staged: number };
+  const partnersByCard = new Map<string, PCount>();
+  (partnerRecipients || []).forEach((r: any) => {
+    const p = partnersByCard.get(r.card_id) || { pending: 0, accepted: 0, rejected: 0, staged: 0 };
+    if (r.status in p) (p as any)[r.status]++;
+    if (r.status === 'pending' && !r.broadcast_at) p.staged++;
+    partnersByCard.set(r.card_id, p);
+  });
+  type TCount = { accepted: number; rejected: number; queued: number };
+  const talentsByCard = new Map<string, TCount>();
+  (talentRecipients || []).forEach((r: any) => {
+    const t = talentsByCard.get(r.card_id) || { accepted: 0, rejected: 0, queued: 0 };
+    if (r.status in t) (t as any)[r.status]++;
+    if (r.status === 'pending' && !r.notified_at) t.queued++;
+    talentsByCard.set(r.card_id, t);
+  });
+
+  const out = new Map<string, any>();
+  for (const card of cards) {
+    const partners = partnersByCard.get(card.id) || { pending: 0, accepted: 0, rejected: 0, staged: 0 };
+    const talents = talentsByCard.get(card.id) || { accepted: 0, rejected: 0, queued: 0 };
+
+    const isLivePublished = card.state === 'published' && !card.archived_at;
+    const broadcastTalentPending =
+      card.distribution === 'broadcast' &&
+      Array.isArray(card.publish_targets) && card.publish_targets.includes('talent') &&
+      Array.isArray(card.squadhire_category_ids) && card.squadhire_category_ids.length > 0 &&
+      !card.squadhire_synced_at;
+    const needs_broadcast =
+      isLivePublished && (partners.staged > 0 || talents.queued > 0 || broadcastTalentPending);
+
+    const targetingId = targetingIdByCard.get(card.id) ?? card.id;
+    out.set(card.id, {
+      target_country_ids: countriesByCard.get(targetingId) || [],
+      target_regions: regionsByCard.get(targetingId) || [],
+      recipient_counts: {
+        partners: { pending: partners.pending, accepted: partners.accepted, rejected: partners.rejected, staged: partners.staged },
+        talents: { accepted: talents.accepted, rejected: talents.rejected, queued: talents.queued },
+      },
+      needs_broadcast,
+    });
+  }
+  return out;
+}
+
+/**
  * Fetch (and create if missing) the draft subscription_card for a staged
  * subscription row. Returns the hydrated card. Called from
  * GET /subscription-cards/by-submission-sub/:id.

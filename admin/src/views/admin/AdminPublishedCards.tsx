@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { resolveFinalizedPrice } from '@squadhub/shared';
 import api from '@/services/api';
 import AdminPublishedCardRecipientsPanel from './AdminPublishedCardRecipientsPanel';
@@ -247,6 +247,13 @@ export default function AdminPublishedCards() {
   const [stateFilter, setStateFilter] = useState<StateFilter>('all');
   const [publishedBy, setPublishedBy] = useState<string>('');
   const [search, setSearch] = useState<string>('');
+  // Debounced copy of `search` — the query keys off this so each keystroke
+  // doesn't refire the (server-hydrated) list fetch. The input stays instant.
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
   const [groupBy, setGroupBy] = useState<GroupBy>('status');
   const [showPanel, setShowPanel] = useState(false);
   const [showBriefSlider, setShowBriefSlider] = useState(false);
@@ -272,17 +279,22 @@ export default function AdminPublishedCards() {
 
   // Server returns all states for the current tab; state filtering happens
   // client-side so the secondary tabs can show accurate counts.
-  const { data: cardsRes, isLoading } = useQuery({
-    queryKey: ['admin-published-cards', publishedBy, search, isArchiveTab ? 'archived' : 'active', selectedCardId],
+  const { data: cardsRes, isLoading, isFetching } = useQuery({
+    queryKey: ['admin-published-cards', publishedBy, debouncedSearch, isArchiveTab ? 'archived' : 'active', selectedCardId],
     queryFn: () => {
       const params: Record<string, string> = {};
       if (publishedBy) params.published_by = publishedBy;
-      if (search.trim()) params.search = search.trim();
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
       if (isArchiveTab) params.archived = 'true';
       if (selectedCardId) params.card_id = selectedCardId;
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
     enabled: activeTab === 'published' || activeTab === 'archive',
+    // Keep showing the prior list while a new filter/search refetches, so the
+    // view never blanks to a loading state mid-typing.
+    placeholderData: keepPreviousData,
+    // Re-opening the tab within 30s reuses cached cards instantly.
+    staleTime: 30_000,
   });
   const cards: PublishedCard[] = cardsRes?.data || [];
 
@@ -403,44 +415,46 @@ export default function AdminPublishedCards() {
     }
   }, [pathname, router, searchParams]);
 
+  // Header copy per tab — computed once instead of inline-nested ternaries.
+  // `count` is the small metric chip beside the title; for Published/Archive it's
+  // a live card count, otherwise a short descriptor.
+  const headerMeta = activeTab === 'archive'
+    ? { title: 'Archived Cards', count: `${cards.length} archived`, subtitle: 'Hidden from talent feeds and the default Published list. Republish or delete from here.' }
+    : activeTab === 'requests'
+      ? { title: 'New Deals', count: 'Inbound queue', subtitle: 'Incoming briefs and drafts. Fill in the details, save as a draft, then publish.' }
+      : activeTab === 'custom'
+        ? { title: 'Custom Cards', count: 'Admin-created', subtitle: 'Cards created from scratch by admins (not from a request or submission).' }
+        : { title: 'Published Cards', count: `${cards.length} published`, subtitle: 'All subscription cards published across the org.' };
+
   return (
     <div className="flex h-full flex-col sh-surface">
       {!showDetailView && (
-        <div className="px-6 pt-6 pb-4 space-y-5">
-          {/* Hero card */}
-          <div className="sh-card p-6 sm:p-7">
-            <div className="space-y-3">
-              <span className="sh-eyebrow">
-                <span className="sh-eyebrow-dot" />
-                {activeTab === 'archive'
-                  ? `${cards.length} archived card${cards.length === 1 ? '' : 's'}`
-                  : activeTab === 'requests'
-                    ? 'Inbound queue'
-                    : activeTab === 'custom'
-                      ? 'Admin-created'
-                      : `${cards.length} published card${cards.length === 1 ? '' : 's'}`}
-              </span>
-              <h1 className="sh-display text-3xl sm:text-4xl">
-                {activeTab === 'archive' ? 'Archived Cards' : activeTab === 'requests' ? 'New Deals' : activeTab === 'custom' ? 'Custom Cards' : 'Published Cards'}
-              </h1>
-              <p className="text-sm text-[var(--color-sh-ink-muted)] max-w-xl">
-                {activeTab === 'archive'
-                  ? 'Hidden from talent feeds and the default Published list. Republish or delete from here.'
-                  : activeTab === 'requests'
-                    ? 'Incoming briefs and drafts. Fill in the details, save as a draft, then publish.'
-                    : activeTab === 'custom'
-                      ? 'Cards created from scratch by admins (not from a request or submission).'
-                      : 'All subscription cards published across the org.'}
+        <div className="px-6 pt-6 pb-4 space-y-4">
+          {/* Header — compact, functional. Title + live count on one row, CTA
+              aligned right; reclaims the vertical space the old masthead card ate. */}
+          <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 border-b border-[var(--color-sh-warm-border)] pb-4">
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-2.5">
+                <h1 className="sh-display text-2xl leading-none sm:text-[28px]">
+                  {headerMeta.title}
+                </h1>
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--color-sh-warm-border)] bg-[var(--color-surface)] px-2.5 py-1 text-xs font-bold text-[var(--color-sh-ink)]">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--color-sh-lime)' }} />
+                  {headerMeta.count}
+                </span>
+              </div>
+              <p className="max-w-xl text-[13px] text-[var(--color-sh-ink-muted)]">
+                {headerMeta.subtitle}
               </p>
             </div>
             <button
               type="button"
               onClick={() => setShowBriefSlider(true)}
-              className="sh-btn-primary sh-btn-primary-sm mt-5"
+              className="sh-btn-primary sh-btn-primary-sm shrink-0"
             >
               + Create client brief form
             </button>
-          </div>
+          </header>
 
           {/* Primary tabs */}
           <div className="overflow-x-auto">
@@ -535,8 +549,20 @@ export default function AdminPublishedCards() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search business…"
-                  className="sh-input sh-input-sm pl-8"
+                  className="sh-input sh-input-sm pl-8 pr-8"
                 />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    aria-label="Clear search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full text-[var(--color-sh-ink-faint)] transition hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)]"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
               </div>
               <select
                 value={groupBy}
@@ -565,14 +591,14 @@ export default function AdminPublishedCards() {
         />
       ) : activeTab === 'published' ? (
         <div className="flex-1 overflow-y-auto px-6 pb-8">
+          <RefreshingBar show={isFetching && !isLoading} />
           {isLoading ? (
-            <div className="sh-card py-16 text-center">
-              <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading…</p>
-            </div>
+            <CardListSkeleton />
           ) : filteredCards.length === 0 ? (
-            <div className="sh-card py-16 text-center">
-              <p className="text-sm text-[var(--color-sh-ink-subtle)]">No cards match your filters.</p>
-            </div>
+            <EmptyState
+              title={debouncedSearch || publishedBy || stateFilter !== 'all' ? 'No cards match your filters' : 'No published cards yet'}
+              hint={debouncedSearch || publishedBy || stateFilter !== 'all' ? 'Try clearing the search or filters above.' : 'Cards published across the org will appear here.'}
+            />
           ) : stateFilter !== 'all' ? (
             // Single-state view: flat list, no group headers.
             <CardList items={filteredCards} onOpen={setSelectedCardId} canShowCancelled />
@@ -614,14 +640,14 @@ export default function AdminPublishedCards() {
         </div>
       ) : activeTab === 'archive' ? (
         <div className="flex-1 overflow-y-auto px-6 pb-8">
+          <RefreshingBar show={isFetching && !isLoading} />
           {isLoading ? (
-            <div className="sh-card py-16 text-center">
-              <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading…</p>
-            </div>
+            <CardListSkeleton />
           ) : filteredCards.length === 0 ? (
-            <div className="sh-card py-16 text-center">
-              <p className="text-sm text-[var(--color-sh-ink-subtle)]">No archived cards yet.</p>
-            </div>
+            <EmptyState
+              title="No archived cards yet"
+              hint="Cards you archive are hidden from talent feeds and the default list — they show up here."
+            />
           ) : (
             <CardGroup label="Archived" color="#7C3AED" items={filteredCards} onOpen={setSelectedCardId} showCancelledTag={false} showArchivedTag />
           )}
@@ -679,6 +705,58 @@ export default function AdminPublishedCards() {
   );
 }
 
+// Thin top-of-list indicator shown while a filter/search refetch is in flight
+// but prior results are still on screen (keepPreviousData). Avoids the jarring
+// blank-then-repaint the old "Loading…" card caused on every keystroke.
+function RefreshingBar({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <div className="mb-3 flex items-center gap-2 text-[11px] font-medium text-[var(--color-sh-ink-faint)]">
+      <span className="inline-flex h-3 w-3 animate-spin rounded-full border-[1.5px] border-current border-t-transparent" />
+      Updating…
+    </div>
+  );
+}
+
+// Skeleton placeholder rows shown on the very first load (no cached data yet),
+// matching the real PublishedCardRow layout so the list doesn't jump when data
+// arrives.
+function CardListSkeleton() {
+  return (
+    <div className="space-y-2" aria-hidden="true">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="sh-card flex items-center justify-between px-5 py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="h-10 w-10 shrink-0 animate-pulse rounded-full bg-[var(--color-sh-cream)]" />
+            <div className="space-y-2">
+              <div className="h-3.5 w-40 animate-pulse rounded bg-[var(--color-sh-cream)]" />
+              <div className="h-3 w-24 animate-pulse rounded bg-[var(--color-sh-cream)]" />
+            </div>
+          </div>
+          <div className="hidden items-center gap-2 sm:flex">
+            <div className="h-6 w-20 animate-pulse rounded-full bg-[var(--color-sh-cream)]" />
+            <div className="h-6 w-20 animate-pulse rounded-full bg-[var(--color-sh-cream)]" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div className="sh-card flex flex-col items-center gap-2 px-6 py-16 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-sh-cream)] text-[var(--color-sh-ink-faint)]">
+        <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-6h6v6m-9 4h12a2 2 0 002-2V7a2 2 0 00-2-2h-5l-2-2H6a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+      </div>
+      <p className="text-sm font-semibold text-[var(--color-sh-ink)]">{title}</p>
+      <p className="max-w-xs text-xs text-[var(--color-sh-ink-muted)]">{hint}</p>
+    </div>
+  );
+}
+
 function CardGroup({
   label, color, items, onOpen, showCancelledTag, showArchivedTag,
 }: {
@@ -691,14 +769,19 @@ function CardGroup({
 }) {
   return (
     <div>
-      <div className="mb-3 flex items-center gap-2">
-        <span
-          className="sh-status-pill"
-          style={{ backgroundColor: `${color}1F`, color }}
-        >
-          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
-          {label} · {items.length}
-        </span>
+      {/* Section header — colored dot + label + count, then a hairline rule that
+          carries the eye across the row. Reads as a real list section, not a pill. */}
+      <div className="mb-3 flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+          <span className="text-xs font-bold uppercase tracking-[0.04em] text-[var(--color-sh-ink)]">
+            {label}
+          </span>
+          <span className="text-xs font-semibold text-[var(--color-sh-ink-faint)] tabular-nums">
+            {items.length}
+          </span>
+        </div>
+        <div className="h-px flex-1 bg-[var(--color-sh-warm-border)]" />
       </div>
       <CardList
         items={items}
@@ -764,14 +847,11 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
               {priceLabel}
             </p>
           )}
-          {card.published_at && (
-            <p className="mt-0.5 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
-              {formatPublishedAt(card.published_at)}
-            </p>
-          )}
-          {publisherLabel && (
-            <p className="truncate text-[11px] text-[var(--color-sh-ink-faint)]">
-              by {publisherLabel}
+          {(card.published_at || publisherLabel) && (
+            <p className="mt-1 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
+              {card.published_at ? formatPublishedAt(card.published_at) : ''}
+              {card.published_at && publisherLabel ? ' · ' : ''}
+              {publisherLabel ? `by ${publisherLabel}` : ''}
             </p>
           )}
         </div>
@@ -914,19 +994,29 @@ function CountChip({
   rejected: number;
   pending?: number;
 }) {
+  // Signal over noise: when nothing has happened, the chip reads "Partners —"
+  // instead of a row of colored zeros. Only non-zero counts get color/weight,
+  // so a busy card's real numbers pop out of the list at a glance.
+  const total = accepted + rejected + (pending ?? 0);
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full bg-[var(--color-sh-cream)] border border-[var(--color-sh-warm-border)] px-2.5 py-0.5 text-[11px] font-medium"
+      className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-sh-warm-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[11px]"
       title={
         pending != null
           ? `${label}: ${accepted} accepted, ${rejected} rejected, ${pending} pending`
           : `${label}: ${accepted} accepted, ${rejected} rejected`
       }
     >
-      <span className="text-[var(--color-sh-ink-subtle)]">{label}</span>
-      <span className="text-emerald-700 font-semibold">{accepted}✓</span>
-      <span className="text-red-600 font-semibold">{rejected}✗</span>
-      {pending != null && <span className="text-amber-700 font-semibold">{pending}⌛</span>}
+      <span className="font-medium text-[var(--color-sh-ink-subtle)]">{label}</span>
+      {total === 0 ? (
+        <span className="text-[var(--color-sh-ink-faint)]">—</span>
+      ) : (
+        <span className="inline-flex items-center gap-1 tabular-nums">
+          {accepted > 0 && <span className="font-semibold text-emerald-600">{accepted}✓</span>}
+          {rejected > 0 && <span className="font-semibold text-red-500">{rejected}✗</span>}
+          {pending != null && pending > 0 && <span className="font-semibold text-amber-600">{pending}⌛</span>}
+        </span>
+      )}
     </span>
   );
 }
@@ -1081,13 +1171,12 @@ function GroupedPublishedCard({ cards, onOpen }: {
           {subtitle && (
             <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">{subtitle}</p>
           )}
-          {rep.published_at && (
-            <p className="mt-0.5 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
-              {formatPublishedAt(rep.published_at)}
+          {(rep.published_at || publisherLabel) && (
+            <p className="mt-1 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
+              {rep.published_at ? formatPublishedAt(rep.published_at) : ''}
+              {rep.published_at && publisherLabel ? ' · ' : ''}
+              {publisherLabel ? `by ${publisherLabel}` : ''}
             </p>
-          )}
-          {publisherLabel && (
-            <p className="truncate text-[11px] text-[var(--color-sh-ink-faint)]">by {publisherLabel}</p>
           )}
         </div>
       </div>
@@ -1132,7 +1221,7 @@ function DetailTierTabs({ cards, activeId, onSelect }: {
             data-active={isActive}
             className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
               isActive
-                ? 'border-transparent bg-[var(--color-sh-ink)] text-white'
+                ? 'border-transparent bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] shadow-[inset_0_0_0_1px_var(--color-sh-ink)]'
                 : 'border-[var(--color-sh-warm-border)] bg-surface text-[var(--color-sh-ink-muted)] hover:text-[var(--color-sh-ink)]'
             }`}
           >
