@@ -45,6 +45,8 @@ import ClientDesignDashboard from '../views/app/pm/client-design/ClientDesignDas
 import Home from '../views/app/home/Home';
 import GlobalTaskDetailPanel from '../views/app/home/GlobalTaskDetailPanel';
 import GlobalTaskPeekPanel from '../views/app/home/GlobalTaskPeekPanel';
+import ChatSidePanel from '../views/app/chat/ChatSidePanel';
+import ChannelContainerLink from '../views/app/chat/ChannelContainerLink';
 import GroupRunDetailPanel from '../views/app/pm/GroupRunDetailPanel';
 import EmergencyBanner from '../views/app/pm/EmergencyBanner';
 import InboxView from '../views/app/InboxView';
@@ -642,6 +644,24 @@ export default function MainLayout() {
     setMobileDrawerOpen(false);
   }, [setActiveChannel]);
 
+  // Navigate from a linked channel back to its PM container (the reverse of the
+  // container header's "Chat" button). Raw setState mirrors applySnapshot so the
+  // per-id setters don't clear the selection we're restoring.
+  const openLinkedContainer = useCallback((type: 'space' | 'folder' | 'list', id: string) => {
+    setActiveSection('home');
+    setHomeView('tasks');
+    usePMStore.setState({
+      activeSpaceId: null,
+      activeListId: type === 'list' ? id : null,
+      activeFolderId: type === 'folder' ? id : null,
+      activeSpacePageId: type === 'space' ? id : null,
+      activeDesignFolderId: null,
+      contextListId: type === 'list' ? id : null,
+      selectedTasks: [],
+    });
+    setMobileDrawerOpen(false);
+  }, []);
+
   // Identity of the live view for the tab strip (mini-apps keyed per-app, unlike
   // navKey). Kept in refs so the once-mounted tab subscriber reads current values.
   const tabKey = useMemo(() => canonicalKey(navSnapshot), [navSnapshot]);
@@ -835,6 +855,7 @@ export default function MainLayout() {
                   <span>{memberCount}</span>
                 </span>
               )}
+              {!isDm && <ChannelContainerLink channel={channel} onOpen={openLinkedContainer} />}
               <button
                 type="button"
                 onClick={() => setShowChannelSettings(!showChannelSettings)}
@@ -1259,6 +1280,10 @@ export default function MainLayout() {
 
       {/* Global task detail panel — opens from any view when activeTaskId is set */}
       <GlobalTaskDetailPanel />
+
+      {/* Container chat side panel — wide slide-over opened by a list/folder/space
+          header's "Chat" button, hosting that container's linked channel. */}
+      <ChatSidePanel />
 
       {/* Grouped-task ("Grouped tasks under …") detail panel — work-block-style
           view opened by clicking a grouped row's name. */}
