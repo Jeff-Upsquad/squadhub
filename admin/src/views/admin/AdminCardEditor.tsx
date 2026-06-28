@@ -1405,7 +1405,7 @@ function PillCheckbox({ active, disabled, onClick, label }: { active: boolean; d
       style={
         active
           ? { background: 'var(--color-sh-lime-soft)', color: 'var(--color-sh-ink)', borderColor: 'var(--color-sh-ink)' }
-          : { background: '#fff', color: 'var(--color-sh-ink)', borderColor: 'var(--color-sh-warm-border)' }
+          : { background: 'var(--color-surface)', color: 'var(--color-sh-ink)', borderColor: 'var(--color-sh-warm-border)' }
       }
     >
       {active && <span className="mr-1">✓</span>}{label}
