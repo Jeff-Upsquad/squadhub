@@ -4,6 +4,10 @@ import { z } from 'zod';
 import { config } from '../../config';
 import { supabaseAdmin } from '../../supabase';
 import { logCardEvent } from '../../utils/cardEvents';
+import {
+  ensureActiveAssignmentTerm,
+  endActiveAssignmentTermsForCard,
+} from '../../utils/assignmentTerms';
 
 /**
  * Inbound callbacks from SquadHire.
@@ -205,6 +209,18 @@ router.post(
         })
         .eq('id', card.id);
 
+      // Open the billing ledger term so this engagement shows in the Active
+      // Subscriptions view (payments + hours). The card is "closed" only in the
+      // sense of being removed from the open offer pool — the talent is now the
+      // chosen recipient, so the term starts active. Best-effort (non-fatal).
+      await ensureActiveAssignmentTerm({
+        cardId: card.id,
+        recipientType: 'talent',
+        recipientId: body.talent_user_id,
+        recipientName: body.talent_name ?? null,
+        assignedDate: now,
+      });
+
       res.json({ success: true });
     } catch (err: any) {
       if (err instanceof z.ZodError) {
@@ -274,6 +290,10 @@ router.post(
           selected_recipient_id: null,
         })
         .eq('id', card.id);
+
+      // The selection was reversed — close any open ledger term so we stop
+      // counting it as an active (billable) engagement.
+      await endActiveAssignmentTermsForCard(card.id);
 
       res.json({ success: true });
     } catch (err: any) {
@@ -363,6 +383,9 @@ router.post(
           squadhire_activation_notify_error: null,
         })
         .eq('id', card.id);
+
+      // Unassigned — close any open ledger term for this card.
+      await endActiveAssignmentTermsForCard(card.id);
 
       res.json({ success: true });
     } catch (err: any) {
