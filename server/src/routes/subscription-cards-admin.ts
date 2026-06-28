@@ -1082,11 +1082,11 @@ router.post('/:id/close-secondary', async (req: Request, res: Response) => {
 
 // ============================================================
 // POST /admin/subscription-cards/:id/recall
-// Recall any card (primary or secondary). With acceptances the card
-// becomes terminal+recalled (acceptees keep seeing it with the
-// "Recalled" tag); without acceptances primary cards return to draft
-// for re-publish, while secondary cards become terminal+recalled
-// (no draft state for secondaries).
+// Recall any card (primary or secondary). Primary cards ALWAYS return to
+// an editable draft for re-publish — pulled back from everyone, including
+// any acceptees (use Cancel to terminate-but-keep-visible instead).
+// Secondary cards have no draft state, so they become terminal+recalled
+// (acceptees keep seeing them with the "Recalled" tag when accepted).
 // ============================================================
 router.post('/:id/recall', async (req: Request, res: Response) => {
   try {
@@ -1120,26 +1120,40 @@ router.post('/:id/recall', async (req: Request, res: Response) => {
     ]);
     const hasAcceptances = (acceptedPartners || 0) + (acceptedTalents || 0) > 0;
     const isSecondary = !!card.parent_card_id;
+    // Primary cards ALWAYS return to an editable draft on recall — pulled back
+    // from everyone (including acceptees) and re-publishable from the sales
+    // side. Use Cancel to terminate-but-keep-visible instead. Secondaries have
+    // no draft state, so they go terminal (+ recalled_at when accepted).
+    const returnsToDraft = !isSecondary;
 
-    // Drop only pending recipients.
-    await supabaseAdmin
-      .from('subscription_card_recipients')
-      .delete()
-      .eq('card_id', cardId)
-      .eq('status', 'pending');
-    await supabaseAdmin
-      .from('subscription_card_external_recipients')
-      .delete()
-      .eq('card_id', cardId)
-      .eq('status', 'pending');
+    if (returnsToDraft) {
+      // Pull from EVERYONE so a re-publish rebuilds a fresh recipient list.
+      await supabaseAdmin
+        .from('subscription_card_recipients')
+        .delete()
+        .eq('card_id', cardId);
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .delete()
+        .eq('card_id', cardId);
+    } else {
+      // Secondary recall is terminal — drop only pending recipients; accepted
+      // acceptees keep seeing the card with the "Recalled" tag.
+      await supabaseAdmin
+        .from('subscription_card_recipients')
+        .delete()
+        .eq('card_id', cardId)
+        .eq('status', 'pending');
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .delete()
+        .eq('card_id', cardId)
+        .eq('status', 'pending');
+    }
 
     const now = new Date().toISOString();
-    // Primary, no acceptances → draft (re-publishable from sales side).
-    // Secondary, no acceptances → closed (no draft state for secondaries).
-    // Either, with acceptances → closed + recalled_at (acceptees keep
-    // seeing it with the "Recalled" tag).
     let updatePayload: Record<string, unknown>;
-    if (!hasAcceptances && !isSecondary) {
+    if (returnsToDraft) {
       updatePayload = {
         state: 'draft' as const,
         published_at: null,
@@ -1179,8 +1193,10 @@ router.post('/:id/recall', async (req: Request, res: Response) => {
       .then((payload) => payload && deliverCardToSquadhire(updated.id, payload))
       .catch((err) => console.error('[admin-recall] squadhire delivery error', err));
 
-    // Only drop SquadHire mirror rows on a clean recall (no acceptances).
-    if (!hasAcceptances) {
+    // Drop SquadHire mirror rows whenever the card is fully pulled — a primary
+    // returning to draft (now including ones that had acceptances), or a clean
+    // secondary recall with no acceptances.
+    if (returnsToDraft || !hasAcceptances) {
       notifySquadhireOfCardRecall(updated.id).catch((err) => {
         console.error('[admin-recall] squadhire recall notification error', err);
       });
