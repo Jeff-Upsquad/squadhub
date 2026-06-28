@@ -9,9 +9,14 @@ import type { AccessLevel, User } from '@squadhub/shared';
 
 const router = Router();
 
-// All PM routes require auth and internal/partner-tier user type
+// Auth for everything this router sees. NOTE: this router is mounted at `/pm`
+// (ahead of the folders/lists/shared-with-me routers), so a path-less
+// requireUserType here would gate the WHOLE /pm namespace — which previously
+// 403'd client users out of folders/shared-with-me before they reached those
+// routers. Scope the internal/partner-only gate to the /spaces paths this file
+// actually owns so other /pm routers (which allow clients) can handle their own.
 router.use(requireAuth);
-router.use(requireUserType('internal', ...PARTNER_USER_TYPES));
+router.use('/spaces', requireUserType('internal', ...PARTNER_USER_TYPES));
 
 const createSchema = z.object({
   workspace_id: z.string().uuid(),
