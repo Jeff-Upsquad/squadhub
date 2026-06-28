@@ -1209,9 +1209,129 @@ export default function AdminCardEditor({
             </div>
           </Section>
 
+          {/* Activity — chronological lifecycle feed */}
+          <Section title="Activity">
+            <CardActivityFeed cardId={cardId} />
+          </Section>
+
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Activity feed ───────────────────────────────────────────────────────────
+
+interface CardEvent {
+  id: string;
+  event_type: string;
+  actor_id: string | null;
+  actor_type: 'admin' | 'partner' | 'talent' | 'system' | null;
+  actor_label: string | null;
+  metadata: Record<string, any> | null;
+  created_at: string;
+}
+
+// event_type → { dot color, human label }. Unknown types fall back to the raw key.
+const EVENT_META: Record<string, { color: string; label: string }> = {
+  created: { color: '#9ca3af', label: 'Card created' },
+  draft_saved: { color: '#9ca3af', label: 'Saved as draft' },
+  published: { color: '#22c55e', label: 'Published (broadcast)' },
+  soft_published: { color: '#84cc16', label: 'Soft-published (hand-pick)' },
+  broadcast: { color: '#3b82f6', label: 'Broadcast' },
+  recipient_accepted: { color: '#22c55e', label: 'Accepted' },
+  recipient_declined: { color: '#ef4444', label: 'Declined' },
+  recalled: { color: '#f59e0b', label: 'Recalled' },
+  cancelled: { color: '#ef4444', label: 'Cancelled' },
+  archived: { color: '#6b7280', label: 'Archived' },
+  republished: { color: '#22c55e', label: 'Republished' },
+  assigned: { color: '#a855f7', label: 'Assigned' },
+};
+
+function formatEventTime(iso: string): string {
+  const d = new Date(iso);
+  const diffMs = Date.now() - d.getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function eventActorLine(e: CardEvent): string | null {
+  if (e.actor_label) {
+    const role = e.actor_type && e.actor_type !== 'admin' ? ` (${e.actor_type})` : '';
+    return `${e.actor_label}${role}`;
+  }
+  if (e.actor_type === 'talent') return 'Talent';
+  if (e.actor_type === 'partner') return 'Partner';
+  if (e.actor_type === 'system') return 'System';
+  return null;
+}
+
+function CardActivityFeed({ cardId }: { cardId: string }) {
+  const { data: events, isLoading } = useQuery({
+    queryKey: ['admin-card-events', cardId],
+    queryFn: async (): Promise<CardEvent[]> => {
+      const r = await api.get(`/admin/subscription-cards/${cardId}/events`);
+      return r.data?.data || [];
+    },
+    enabled: !!cardId,
+  });
+
+  if (isLoading) {
+    return <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading activity…</p>;
+  }
+  if (!events || events.length === 0) {
+    return (
+      <p className="text-sm text-[var(--color-sh-ink-faint)]">
+        No activity recorded yet. Lifecycle events (publish, broadcast, accept, recall…) will appear here going forward.
+      </p>
+    );
+  }
+
+  // Newest first in the feed.
+  const ordered = [...events].reverse();
+
+  return (
+    <ol className="relative space-y-4 pl-4">
+      {ordered.map((e, i) => {
+        const meta = EVENT_META[e.event_type] || { color: '#9ca3af', label: e.event_type };
+        const actor = eventActorLine(e);
+        return (
+          <li key={e.id} className="relative pl-4">
+            {/* connector line */}
+            {i < ordered.length - 1 && (
+              <span
+                className="absolute left-[3px] top-3 h-full w-px bg-[var(--color-sh-warm-border)]"
+                aria-hidden
+              />
+            )}
+            {/* dot */}
+            <span
+              className="absolute left-0 top-1.5 h-[7px] w-[7px] rounded-full"
+              style={{ backgroundColor: meta.color }}
+              aria-hidden
+            />
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-sm font-medium text-[var(--color-sh-ink)]">{meta.label}</span>
+              <span
+                className="shrink-0 text-xs text-[var(--color-sh-ink-faint)]"
+                title={new Date(e.created_at).toLocaleString()}
+              >
+                {formatEventTime(e.created_at)}
+              </span>
+            </div>
+            {actor && (
+              <span className="text-xs text-[var(--color-sh-ink-muted)]">by {actor}</span>
+            )}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 

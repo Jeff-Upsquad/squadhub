@@ -5,6 +5,7 @@ import { requireUserType } from '../middleware/userType';
 import { supabaseAdmin } from '../supabase';
 import { hydrateStagedSubscriptions } from '../utils/stagedSubscriptions';
 import { sharePartnerWithCardClient } from '../utils/sharePartnerWithClient';
+import { logCardEvent } from '../utils/cardEvents';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 
 const router = Router();
@@ -299,6 +300,15 @@ async function respond(
     if (newStatus === 'accepted') {
       await sharePartnerWithCardClient(req.userId!, existing.card_id);
     }
+
+    await logCardEvent({
+      cardId: existing.card_id,
+      eventType: newStatus === 'accepted' ? 'recipient_accepted' : 'recipient_declined',
+      actorId: req.userId ?? null,
+      actorType: 'partner',
+      actorLabel: (req as any).userName ?? null,
+      metadata: { channel: 'partner' },
+    });
 
     res.json({ success: true, data: updated });
   } catch (err: any) {

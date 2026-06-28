@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'crypto';
 import { z } from 'zod';
 import { config } from '../../config';
 import { supabaseAdmin } from '../../supabase';
+import { logCardEvent } from '../../utils/cardEvents';
 
 /**
  * Inbound callbacks from SquadHire.
@@ -111,6 +112,15 @@ router.post(
         .eq('card_id', card.id)
         .eq('external_user_id', body.talent_user_id)
         .neq('external_recipient_id', body.recipient_id);
+
+      await logCardEvent({
+        cardId: card.id,
+        eventType: status === 'accepted' ? 'recipient_accepted' : 'recipient_declined',
+        actorId: body.talent_user_id,
+        actorType: 'talent',
+        actorLabel: body.talent_name ?? null,
+        metadata: { channel: 'talent' },
+      });
 
       res.json({ success: true });
     } catch (err: any) {

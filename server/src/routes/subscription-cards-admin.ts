@@ -16,6 +16,7 @@ import {
   findExistingClientForSubmission,
   transitionSubmissionStatus,
 } from '../utils/submissionPipeline';
+import { logCardEvent } from '../utils/cardEvents';
 
 const router = Router();
 
@@ -917,9 +918,41 @@ router.post('/:id/broadcast-now', async (req: Request, res: Response) => {
       }
     }
 
+    await logCardEvent({
+      cardId,
+      eventType: 'broadcast',
+      actorId: (req as any).userId ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: { partners_released: partnersReleased, talents },
+    });
+
     res.json({ success: true, partners_released: partnersReleased, talents });
   } catch (err: any) {
     console.error('Admin broadcast-now error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// GET /admin/subscription-cards/:id/events
+// Chronological activity feed for a card (oldest → newest).
+// ============================================================
+router.get('/:id/events', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const { data, error } = await supabaseAdmin
+      .from('subscription_card_events')
+      .select('id, event_type, actor_id, actor_type, actor_label, metadata, created_at')
+      .eq('card_id', cardId)
+      .order('created_at', { ascending: true });
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data: data || [] });
+  } catch (err: any) {
+    console.error('Admin card events error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
@@ -1233,6 +1266,15 @@ router.post('/:id/recall', async (req: Request, res: Response) => {
       }
     }
 
+    await logCardEvent({
+      cardId,
+      eventType: 'recalled',
+      actorId: (req as any).userId ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: { returned_to_draft: returnsToDraft, had_acceptances: hasAcceptances, is_secondary: isSecondary },
+    });
+
     res.json({ success: true, data: await hydrateCard(updated) });
   } catch (err: any) {
     console.error('Admin recall card error:', err);
@@ -1355,6 +1397,15 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
       }
     }
 
+    await logCardEvent({
+      cardId,
+      eventType: 'cancelled',
+      actorId: (req as any).userId ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: { had_acceptances: hasAcceptances, is_secondary: isSecondary },
+    });
+
     res.json({ success: true, data: await hydrateCard(updated) });
   } catch (err: any) {
     console.error('Admin cancel card error:', err);
@@ -1417,6 +1468,14 @@ router.post('/:id/archive', async (req: Request, res: Response) => {
     // doesn't re-surface stale pending offers to the same talents.
     notifySquadhireOfCardRecall(updated.id).catch((err) => {
       console.error('[admin-archive] squadhire mirror drop error', err);
+    });
+
+    await logCardEvent({
+      cardId,
+      eventType: 'archived',
+      actorId: (req as any).userId ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
     });
 
     res.json({ success: true, data: await hydrateCard(updated) });
@@ -1498,6 +1557,14 @@ router.post('/:id/republish', async (req: Request, res: Response) => {
           .then((payload) => payload && deliverCardToSquadhire(updated.id, payload))
           .catch((err) => console.error('[admin-republish] squadhire delivery error', err));
       });
+
+    await logCardEvent({
+      cardId,
+      eventType: 'republished',
+      actorId: (req as any).userId ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+    });
 
     res.json({ success: true, data: await hydrateCard(updated) });
   } catch (err: any) {
