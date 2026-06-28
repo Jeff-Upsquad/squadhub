@@ -12,7 +12,7 @@ COPY shared/package.json shared/
 COPY server/package.json server/
 COPY web/package.json web/
 COPY admin/package.json admin/
-COPY desktop/package.json desktop/
+COPY ["desktop companion app/package.json", "desktop companion app/"]
 
 # Full install to ensure workspace symlinks are created
 RUN npm install
