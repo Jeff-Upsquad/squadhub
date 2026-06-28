@@ -77,6 +77,10 @@ export interface Channel {
   is_private: boolean;
   created_by: string;
   created_at: string;
+  // When set, this channel is linked to a PM container (space/folder/list) — the
+  // container header opens it in a side panel, and the channel links back to it.
+  linked_resource_type?: 'space' | 'folder' | 'list' | null;
+  linked_resource_id?: string | null;
 }
 
 // ---- Messages ----

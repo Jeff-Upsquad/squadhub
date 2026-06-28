@@ -10,6 +10,7 @@ import { useSpace } from '../../../../hooks/useSpaces';
 import { usePMStore } from '../../../../stores/pmStore';
 import { canAtLeast } from '../../../../lib/access';
 import { sortStages } from '../../../../lib/designSpaceLists';
+import ContainerChatButton from '../../../../components/pm/ContainerChatButton';
 import DashboardTab from './tabs/DashboardTab';
 import BoardTab from './tabs/BoardTab';
 import ReportsTab from './tabs/ReportsTab';
@@ -224,6 +225,13 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
             )}
           </button>
         ))}
+        <ContainerChatButton
+          resourceType="folder"
+          resourceId={folderId}
+          name={folder?.name || 'Workspace'}
+          accessLevel={folder?.my_access_level}
+          style={{ marginLeft: 'auto' }}
+        />
       </div>
 
       {/* Content area */}

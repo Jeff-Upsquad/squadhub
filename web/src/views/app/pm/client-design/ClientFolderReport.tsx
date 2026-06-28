@@ -8,6 +8,7 @@ import { useClientDesignPlan } from '../../../../hooks/useClientDesignPlan';
 import { canAtLeast } from '../../../../lib/access';
 import ClientDesignDashboard from './ClientDesignDashboard';
 import PublicClientLink from './PublicClientLink';
+import ContainerChatButton from '../../../../components/pm/ContainerChatButton';
 
 // Per-space numbers the overview rolls up into client-level totals. Kept to
 // plain primitives so the lift-up to the parent can be equality-compared cheaply
@@ -117,6 +118,13 @@ export default function ClientFolderReport({ folder }: { folder: Folder }) {
             {s.name}
           </button>
         ))}
+        <ContainerChatButton
+          resourceType="folder"
+          resourceId={folder.id}
+          name={folder.name}
+          accessLevel={(folder as { my_access_level?: string }).my_access_level}
+          style={{ marginLeft: 'auto' }}
+        />
       </div>
 
       {/* Only the active tab's dashboard mounts — keeps its global key listeners

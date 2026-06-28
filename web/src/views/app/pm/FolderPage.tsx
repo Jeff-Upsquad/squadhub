@@ -9,6 +9,7 @@ import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGro
 import FilterBar from '../../../components/pm/FilterBar';
 import GroupByDropdown from '../../../components/pm/GroupByDropdown';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
+import ContainerChatButton from '../../../components/pm/ContainerChatButton';
 import ClientFolderReport from './client-design/ClientFolderReport';
 import {
   EMPTY_FILTER,
@@ -157,7 +158,17 @@ export default function FolderPage({ folderId: propFolderId }: { folderId?: stri
           <span className="text-sm font-medium text-[var(--sh-ink)]">{folder?.name || 'Folder'}</span>
           <span className="text-xs text-[var(--sh-ink-3)]">· {totalCount} task{totalCount === 1 ? '' : 's'}</span>
         </div>
-        <ViewSearchInput value={searchQuery} onChange={setSearchQuery} />
+        <div className="flex items-center gap-2">
+          <ViewSearchInput value={searchQuery} onChange={setSearchQuery} />
+          {activeFolderId && (
+            <ContainerChatButton
+              resourceType="folder"
+              resourceId={activeFolderId}
+              name={folder?.name || 'Folder'}
+              accessLevel={(folder as { my_access_level?: string } | undefined)?.my_access_level}
+            />
+          )}
+        </div>
       </div>
 
       {/* List filter pills + Filter */}

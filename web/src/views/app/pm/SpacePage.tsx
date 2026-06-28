@@ -9,6 +9,7 @@ import { GROUP_BY_OPTIONS, groupTasks, partitionByCompletion, buildFocusTodayGro
 import FilterBar from '../../../components/pm/FilterBar';
 import GroupByDropdown from '../../../components/pm/GroupByDropdown';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
+import ContainerChatButton from '../../../components/pm/ContainerChatButton';
 import {
   EMPTY_FILTER,
   countActiveFilters,
@@ -186,7 +187,17 @@ export default function SpacePage({ spacePageId: propSpacePageId }: { spacePageI
           <span className="text-sm font-medium text-[var(--sh-ink)]">{space?.name || 'Space'}</span>
           <span className="text-xs text-[var(--sh-ink-3)]">· {totalCount} task{totalCount === 1 ? '' : 's'}</span>
         </div>
-        <ViewSearchInput value={searchQuery} onChange={setSearchQuery} />
+        <div className="flex items-center gap-2">
+          <ViewSearchInput value={searchQuery} onChange={setSearchQuery} />
+          {activeSpacePageId && (
+            <ContainerChatButton
+              resourceType="space"
+              resourceId={activeSpacePageId}
+              name={space?.name || 'Space'}
+              accessLevel={space?.my_access_level}
+            />
+          )}
+        </div>
       </div>
 
       {/* Folders filter pills */}

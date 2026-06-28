@@ -16,6 +16,7 @@ import TaskCreatePanel from './TaskCreatePanel';
 import FilterBar from '../../../components/pm/FilterBar';
 import GroupByDropdown from '../../../components/pm/GroupByDropdown';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
+import ContainerChatButton from '../../../components/pm/ContainerChatButton';
 import { LIST_GROUP_BY_OPTIONS, SORT_BY_OPTIONS, type SortBy } from '../../../lib/taskGrouping';
 import { EMPTY_FILTER, deriveAssigneeOptions, deriveTagOptions } from '../../../lib/filters';
 import { useIsMobile } from '../../../hooks/useIsMobile';
@@ -261,6 +262,15 @@ export default function ListPage({
           </svg>
           Timeline
         </button>
+        {activeListId && (
+          <ContainerChatButton
+            resourceType="list"
+            resourceId={activeListId}
+            name={listData?.name || 'List'}
+            accessLevel={myAccess}
+            style={{ marginLeft: 'auto' }}
+          />
+        )}
       </div>
 
       {/* Group by dropdown + Filter + Sort + Focus today + My tasks toggle (List view only) */}
