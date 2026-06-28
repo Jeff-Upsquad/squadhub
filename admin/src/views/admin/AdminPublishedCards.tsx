@@ -472,9 +472,12 @@ export default function AdminPublishedCards() {
                     <span
                       className="ml-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none"
                       style={{
+                        // Lime fill doesn't flip between themes, so pin the
+                        // ink dark — the global --sh-ink flips light in dark
+                        // mode and would vanish on the yellow badge.
                         background: 'var(--color-sh-lime)',
-                        color: 'var(--color-sh-ink)',
-                        boxShadow: 'inset 0 0 0 1px var(--color-sh-ink)',
+                        color: '#0a0a0a',
+                        boxShadow: 'inset 0 0 0 1px #0a0a0a',
                       }}
                       title={`${pendingRequestCount} pending review`}
                     >
