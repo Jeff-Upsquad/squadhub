@@ -25,6 +25,17 @@ interface TimerState {
   baseTracked: number;
 }
 
+// Target for the grouped-task detail panel (the work-block-style view opened by
+// clicking a "Grouped tasks under …" row's name). A group is virtual, so we
+// carry its stable run key, label, a list-id hint for time attribution, and a
+// lightweight snapshot of its child tasks for the "Tasks in this group" list.
+export interface GroupRunPanelTarget {
+  key: string;
+  label: string;
+  listId: string | null;
+  tasks: { id: string; title: string }[];
+}
+
 interface PMState {
   activeSpaceId: string | null;
   activeListId: string | null;
@@ -69,6 +80,10 @@ interface PMState {
   // (e.g. from the work-block "Activity during this run" section) and wants
   // to view it without losing the host panel's context.
   peekTaskId: string | null;
+  // The grouped-task ("Grouped tasks under …") detail panel target, opened by
+  // clicking the grouped row's name. Mirrors the work-block task type view but
+  // for a virtual group (no task row). Not persisted.
+  groupRunPanel: GroupRunPanelTarget | null;
   timer: TimerState | null;
   filtersByScope: Record<string, TaskFilterState>;
   focusedTodayIds: string[];
@@ -94,6 +109,7 @@ interface PMState {
   setActiveSpacePage: (id: string | null) => void;
   setActiveTask: (id: string | null) => void;
   setPeekTask: (id: string | null) => void;
+  setGroupRunPanel: (target: GroupRunPanelTarget | null) => void;
   setActiveDesignFolder: (id: string | null) => void;
   setContextListId: (id: string | null) => void;
   setActiveDashboardTab: (tab: DashboardTab | null) => void;
@@ -171,6 +187,7 @@ export const usePMStore = create<PMState>()(
       selectedTasks: [],
       fadingTaskIds: new Map<string, string>(),
       peekTaskId: null,
+      groupRunPanel: null,
       timer: null,
       filtersByScope: {},
       focusedTodayIds: [],
@@ -194,6 +211,7 @@ export const usePMStore = create<PMState>()(
       // track of which is which.
       setActiveTask: (id) => set({ activeTaskId: id, peekTaskId: null }),
       setPeekTask: (id) => set({ peekTaskId: id }),
+      setGroupRunPanel: (target) => set({ groupRunPanel: target }),
       setActiveDesignFolder: (id) => set({ activeDesignFolderId: id, activeListId: null, activeFolderId: null, activeSpacePageId: null, contextListId: null, selectedTasks: [] }),
       setContextListId: (id) => set({ contextListId: id }),
       setActiveDashboardTab: (tab) => set({ activeDashboardTab: tab }),
@@ -414,7 +432,7 @@ export const usePMStore = create<PMState>()(
           focusBuckets: s.focusBuckets,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',

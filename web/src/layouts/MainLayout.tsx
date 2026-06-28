@@ -45,6 +45,7 @@ import ClientDesignDashboard from '../views/app/pm/client-design/ClientDesignDas
 import Home from '../views/app/home/Home';
 import GlobalTaskDetailPanel from '../views/app/home/GlobalTaskDetailPanel';
 import GlobalTaskPeekPanel from '../views/app/home/GlobalTaskPeekPanel';
+import GroupRunDetailPanel from '../views/app/pm/GroupRunDetailPanel';
 import EmergencyBanner from '../views/app/pm/EmergencyBanner';
 import InboxView from '../views/app/InboxView';
 import InboxSlider from '../components/InboxSlider';
@@ -1258,6 +1259,10 @@ export default function MainLayout() {
 
       {/* Global task detail panel — opens from any view when activeTaskId is set */}
       <GlobalTaskDetailPanel />
+
+      {/* Grouped-task ("Grouped tasks under …") detail panel — work-block-style
+          view opened by clicking a grouped row's name. */}
+      <GroupRunDetailPanel />
 
       {/* Side-by-side peek — opens when a task is clicked inside another
           task's panel (e.g. work-block activity rows). Renders the full
