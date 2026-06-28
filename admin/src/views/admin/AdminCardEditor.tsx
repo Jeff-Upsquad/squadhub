@@ -5,6 +5,8 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import api from '@/services/api';
 import { STATES_BY_COUNTRY_NAME, LANGUAGE_OPTIONS } from './locationLanguageOptions';
 import ShareCardLinkModal from './ShareCardLinkModal';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { showToast } from '@/components/Toast';
 
 // Map the upsquad-style service_type label to the subscriptions catalog slug.
 const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
@@ -494,7 +496,7 @@ export default function AdminCardEditor({
     },
     onError: (err: any) => {
       const msg = err?.response?.data?.error || err?.message || 'Unknown error';
-      alert(`Archive failed: ${msg}`);
+      showToast(`Archive failed: ${msg}`, 'error');
     },
   });
 
@@ -521,6 +523,7 @@ export default function AdminCardEditor({
   };
 
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
 
   const isDraft = card?.state === 'draft';
   // A freshly-submitted New Deal. Editable like a draft, but the shareable link
@@ -586,11 +589,7 @@ export default function AdminCardEditor({
                 </button>
               )}
               <button
-                onClick={() => {
-                  if (window.confirm('Archive this card? It will move to the Archive tab where you can republish or delete it later.')) {
-                    archiveMutation.mutate();
-                  }
-                }}
+                onClick={() => setShowArchiveConfirm(true)}
                 disabled={archiveMutation.isPending}
                 className="sh-btn-violet"
               >
@@ -636,6 +635,21 @@ export default function AdminCardEditor({
       {showShareModal && (
         <ShareCardLinkModal cardId={card.id} onClose={() => setShowShareModal(false)} />
       )}
+
+      <ConfirmDialog
+        open={showArchiveConfirm}
+        title="Archive this card?"
+        description="It will move to the Archive tab where you can republish or delete it later."
+        confirmLabel="Archive"
+        pendingLabel="Archiving…"
+        variant="warning"
+        isPending={archiveMutation.isPending}
+        onCancel={() => setShowArchiveConfirm(false)}
+        onConfirm={() => {
+          setShowArchiveConfirm(false);
+          archiveMutation.mutate();
+        }}
+      />
 
       {/* Form */}
       <div className="flex-1 overflow-y-auto px-6 pb-10">
