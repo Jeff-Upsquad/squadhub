@@ -7,7 +7,7 @@
     "server",
     "web",
     "admin",
-    "desktop"
+    "desktop companion app"
   ],
   "scripts": {
     "dev": "concurrently -n server,web,admin -c blue,green,yellow \"npm run dev -w server\" \"npm run dev -w web\" \"npm run dev -w admin\"",

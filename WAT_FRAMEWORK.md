@@ -38,7 +38,7 @@ squadhub/
 ├── server/               # Backend server
 ├── shared/               # Shared code
 ├── mobile/               # Mobile app
-├── desktop/              # Desktop app
+├── desktop companion app/ # Desktop notifications companion (menu-bar)
 └── supabase/             # Database migrations
 ```
 
