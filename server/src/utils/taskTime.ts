@@ -91,6 +91,30 @@ export async function logTaskTimeEntry(params: LogTaskTimeParams): Promise<LogTa
 }
 
 /**
+ * Public wrapper: add wall-clock to the user's daily timesheet total + design
+ * Reports (daily_time_summaries, context='default') without recording a
+ * task_time_entry. Used by group runs, which have no task row of their own to
+ * attribute a per-session time entry to but should still feed the daily total.
+ */
+export async function addDailyWorkSeconds(params: {
+  userId: string;
+  workspaceId: string;
+  startedAt: string;
+  durationSeconds: number;
+}): Promise<void> {
+  const stoppedAt = new Date(
+    new Date(params.startedAt).getTime() + params.durationSeconds * 1000,
+  ).toISOString();
+  await upsertDailySummary(
+    params.userId,
+    params.workspaceId,
+    params.startedAt,
+    stoppedAt,
+    params.durationSeconds,
+  );
+}
+
+/**
  * Add `durationSeconds` to the user's daily_time_summaries row for the IST date
  * of `startedAt` (context='default'), creating the row if needed. This is the
  * aggregate the daily timesheet total and design Reports read.

@@ -6,6 +6,7 @@ import { useUpdateTask } from '../../../hooks/useTasks';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useActiveWorkBlockRun, useRecordWorkBlockCompletion } from '../../../hooks/useWorkBlocks';
+import { useActiveGroupRun, useRecordGroupRunCompletion } from '../../../hooks/useGroupRuns';
 import { isTaskFocused } from '../../../lib/taskGrouping';
 import { avatarColor, initialOf, formatWhen, nextQuickDate } from './taskHelpers';
 import AssigneePicker from './AssigneePicker';
@@ -106,6 +107,8 @@ export default function TaskRow({
   const assignees = task.assignees || [];
 
   const recordCompletion = useRecordWorkBlockCompletion();
+  const { data: activeGroupRun } = useActiveGroupRun();
+  const recordGroupCompletion = useRecordGroupRunCompletion();
 
   // Mark this task done, optionally assigning people in the same write. Handles
   // the fade animation snapshot and the active work-block completion log.
@@ -119,6 +122,11 @@ export default function TaskRow({
     // hook the detail panel uses — idempotent on the server.
     if (activeWB && activeWB.task.id !== task.id) {
       recordCompletion.mutate({ run_id: activeWB.run.id, completed_task_id: task.id });
+    }
+    // Same idea for an active group-run session — any task finished while the
+    // group's focus session is running is auto-logged against that run.
+    if (activeGroupRun?.run && !activeGroupRun.run.ended_at) {
+      recordGroupCompletion.mutate({ run_id: activeGroupRun.run.id, completed_task_id: task.id });
     }
     const payload: Record<string, unknown> = { id: task.id, status: 'done' };
     if (assigneeIds) {

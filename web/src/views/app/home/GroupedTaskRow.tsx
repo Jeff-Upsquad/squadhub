@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react';
 import type { Task } from '@squadhub/shared';
 import type { GroupedRow } from '../../../lib/taskGrouping';
+import { usePMStore } from '../../../stores/pmStore';
 
 // A single collapsed "Grouped tasks under {name}" row on Home. Renders like a
-// task row (so it sits naturally in a .hm-list) with a chevron that expands the
-// child task rows inline. Clicking anywhere on the row — including the title —
-// toggles the dropdown. The group icon (when onOpenContainer is provided) is the
-// separate affordance that opens the underlying container in PM.
+// task row (so it sits naturally in a .hm-list). Three affordances:
+//   - the chevron toggles the inline child task list,
+//   - the group icon opens the underlying container in PM (onOpenContainer),
+//   - clicking the name/row opens the work-block-style group detail panel,
+//     where you can run a focus session on the whole group.
 //
 // Generic over `renderChild` so both Home surfaces reuse it: the Focus list
 // passes <TodayRow>, the dashboard panel passes <DashboardTaskRow>.
@@ -23,20 +25,42 @@ export default function GroupedTaskRow({
   onOpenContainer?: (container: GroupedRow['container']) => void;
   renderChild: (task: Task) => ReactNode;
 }) {
+  const setGroupRunPanel = usePMStore((s) => s.setGroupRunPanel);
+
+  const openPanel = () => {
+    setGroupRunPanel({
+      key: `group-container:${row.container.type}:${row.container.id}`,
+      label: `Grouped tasks under ${row.container.name}`,
+      listId: row.container.type === 'list' ? row.container.id : null,
+      tasks: row.tasks.map((t) => ({ id: t.id, title: t.title })),
+    });
+  };
+
   return (
     <>
       <div
         className="hm-task hm-grouped"
         data-expanded={expanded || undefined}
-        onClick={onToggle}
+        onClick={openPanel}
         role="button"
         tabIndex={0}
-        aria-expanded={expanded}
+        aria-label={`Open ${row.container.name} group session`}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); }
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPanel(); }
         }}
       >
-        <span className="hm-grouped-chevron" data-expanded={expanded || undefined} aria-hidden="true">
+        <span
+          className="hm-grouped-chevron"
+          data-expanded={expanded || undefined}
+          role="button"
+          tabIndex={0}
+          aria-label={expanded ? 'Collapse' : 'Expand'}
+          title={expanded ? 'Collapse' : 'Expand'}
+          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onToggle(); }
+          }}
+        >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="m9 18 6-6-6-6" />
           </svg>

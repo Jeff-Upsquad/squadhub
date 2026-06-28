@@ -44,6 +44,11 @@ import {
   useOpenWorkBlockTaskTime,
   useCloseWorkBlockTaskTime,
 } from '../../../hooks/useWorkBlocks';
+import {
+  useActiveGroupRun,
+  useOpenGroupRunTaskTime,
+  useCloseGroupRunTaskTime,
+} from '../../../hooks/useGroupRuns';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -340,6 +345,12 @@ export default function TaskDetailPanel({
   const recordCompletion = useRecordWorkBlockCompletion();
   const openTaskTime = useOpenWorkBlockTaskTime();
   const closeTaskTime = useCloseWorkBlockTaskTime();
+  // Group-run overlaps: a per-task timer running while a group focus session is
+  // active is bracketed into the group run too, so the group can show what was
+  // worked on inside it.
+  const activeGroupRun = useActiveGroupRun();
+  const openGroupTaskTime = useOpenGroupRunTaskTime();
+  const closeGroupTaskTime = useCloseGroupRunTaskTime();
 
   // Two independent "is running for this task?" predicates: the per-task
   // timer (regular tasks) and the work-block run (work-block tasks). They
@@ -390,12 +401,16 @@ export default function TaskDetailPanel({
     // block run is active) bracket the overlap with task-time rows.
     const prev = globalStartTimer(task.id, task.title, listId, task.time_tracked || 0);
     const active = activeWorkBlock.data;
+    const gRun = activeGroupRun.data?.run && !activeGroupRun.data.run.ended_at ? activeGroupRun.data.run : null;
     if (prev) {
       const elapsedSecs = Math.floor((Date.now() - prev.startedAt) / 1000);
       // Close the prev task's overlap row first — any new row for the same
       // (run, task) would otherwise hit the partial unique index.
       if (active && prev.taskId !== task.id) {
         closeTaskTime.mutate({ run_id: active.run.id, task_id: prev.taskId });
+      }
+      if (gRun && prev.taskId !== task.id) {
+        closeGroupTaskTime.mutate({ run_id: gRun.id, task_id: prev.taskId });
       }
       if (elapsedSecs >= 1) {
         try {
@@ -414,6 +429,9 @@ export default function TaskDetailPanel({
     }
     if (active) {
       openTaskTime.mutate({ run_id: active.run.id, task_id: task.id });
+    }
+    if (gRun) {
+      openGroupTaskTime.mutate({ run_id: gRun.id, task_id: task.id });
     }
   };
 
@@ -438,6 +456,10 @@ export default function TaskDetailPanel({
     const active = activeWorkBlock.data;
     if (active) {
       closeTaskTime.mutate({ run_id: active.run.id, task_id: stopped.taskId });
+    }
+    const gRun = activeGroupRun.data?.run && !activeGroupRun.data.run.ended_at ? activeGroupRun.data.run : null;
+    if (gRun) {
+      closeGroupTaskTime.mutate({ run_id: gRun.id, task_id: stopped.taskId });
     }
     const elapsedSecs = Math.floor((Date.now() - stopped.startedAt) / 1000);
     if (elapsedSecs < 1) return;
