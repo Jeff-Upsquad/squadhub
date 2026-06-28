@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
-import { hydrateCard, matchPartnersForCard } from '../utils/subscriptionCards';
+import { hydrateCard, hydrateCardsBatch, matchPartnersForCard } from '../utils/subscriptionCards';
 import {
   buildSquadhirePayloadForCard,
   deliverCardToSquadhire,
@@ -346,7 +346,12 @@ router.get('/', async (req: Request, res: Response) => {
       }));
     };
 
-    let hydrated = await Promise.all(list.map(async (card: any) => {
+    // Hydrate target countries/regions + recipient counts for the WHOLE list in
+    // 4 queries (not 4 per card). All rows here are primary cards
+    // (parent_card_id IS NULL), so batch hydration is valid — see hydrateCardsBatch.
+    const batchHydrated = await hydrateCardsBatch(list);
+
+    let hydrated = list.map((card: any) => {
       const staged = stagedById[card.submission_subscription_id] || null;
       const submission = staged ? submissionById[staged.submission_id] || null : null;
       const country = submission ? countryById[submission.country_id] || null : null;
@@ -398,8 +403,9 @@ router.get('/', async (req: Request, res: Response) => {
           : plan
         : null;
 
-      const base = await hydrateCard(card);
+      const base = batchHydrated.get(card.id) ?? {};
       return {
+        ...card,
         ...base,
         submission: submission ? { ...submission, country } : null,
         submission_subscription: staged
@@ -425,7 +431,7 @@ router.get('/', async (req: Request, res: Response) => {
           : null,
         plan_default_deliverables: planDefaults,
       };
-    }));
+    });
 
     // Attach secondary card counts to each primary card.
     const cardIds = list.map((c: any) => c.id);
