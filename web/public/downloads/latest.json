@@ -1,10 +1,10 @@
 {
-  "version": "0.1.6",
-  "notes": "Renamed the app bundle to 'SquadHub Companion' so it no longer collides with the SquadHub desktop app in /Applications.",
-  "pub_date": "2026-06-23T22:29:59Z",
+  "version": "0.1.7",
+  "notes": "Quick-add panel now appears over apps running in full-screen mode (macOS).",
+  "pub_date": "2026-06-28T16:11:00Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzFLUWVueG9WS0EvdjJqVVBGWWdSME93b09CWmVSUktONFcxZkw4TmU1OFRpek9pTG5sV2g5TnZKTVRHd3kzeGZ3aXlIQkl2WXNES0NhdkJiRTh2eHdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMjUzNzM2CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKWVVBcmVtbFNwbktxTEZ3VHIyS1dTTUc5MFdrbittdVJiM2pXS2FKWjI1N2EyM212NStJenY1NU9SS3NldHdOUWp2NU1TWjRBdjMvc2FPRml3a0RtQXc9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdytjSTErYTJaOENnbkZNejB5Wkpmem1uNm1SRWJwcTRLSlkzNi9QbTJkcjBPUFdyaVVYU21RRDQwcmRqenVGMVFPdmdYWW0yTkc3TFBPNkt5dWR5MmdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNjYzMDE5CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKR3duUWxTRlkwTldVU0FYTHZjR0dxV3RORG5zY0dyS2pzUXRWRm1wK2FoOXVoR1FyaTFLRmZrWUhDZy9tUXZEUE1xQUhRVXgrVmRSVElTK3hYc3FyRHc9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
