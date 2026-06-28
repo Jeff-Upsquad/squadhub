@@ -50,8 +50,12 @@ fn show_quick_add(app: &tauri::AppHandle) {
     {
         use tauri_nspanel::ManagerExt;
         if let Ok(panel) = app.get_webview_panel("quickadd") {
+            // show() already does orderFrontRegardless + makeKeyWindow, which is
+            // what lets a non-activating panel surface over ANOTHER app's
+            // full-screen Space. Do NOT add makeKeyAndOrderFront: here — that
+            // call activates ordering in a way that bounces us out of the
+            // full-screen Space instead of floating over it.
             panel.show();
-            panel.make_key_and_order_front(None);
             qa_log("showed quick-add panel");
             return;
         }
@@ -91,6 +95,15 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![notif::send_notification, set_quick_add_shortcut])
         .setup(|app| {
+            // Run as a menu-bar/tray companion (no Dock icon, no app-switcher
+            // entry). REQUIRED for the quick-add panel to float over another
+            // app's full-screen Space: a .Regular app owns its own Space and
+            // macOS won't let its windows intrude on a full-screen Space, so the
+            // panel silently fails to appear. Accessory has no managed Space, so
+            // the CanJoinAllSpaces | FullScreenAuxiliary panel surfaces correctly.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             // Set up UNUserNotificationCenter delegate for click handling
             notif::setup();
 
