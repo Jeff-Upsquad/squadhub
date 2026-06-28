@@ -12,6 +12,7 @@ import {
   deliverCardToSquadhire,
 } from '../utils/squadhireWebhook';
 import { stageSubscriptionsFromAssignedCards } from '../utils/submissionPipeline';
+import { logCardEvent } from '../utils/cardEvents';
 import crypto from 'crypto';
 
 const router = Router();
@@ -187,6 +188,19 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
     // Notify SquadHire. Fire-and-forget.
     notifySquadhireOfSelection(cardId, talent_ids, now).catch((err) => {
       console.error('[assign] notify squadhire failed', err);
+    });
+
+    await logCardEvent({
+      cardId,
+      eventType: 'assigned',
+      actorId: (req as any).userId ?? adminId ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: {
+        partner_count: partner_ids.length,
+        talent_count: talent_ids.length,
+        first_assign: isFirstAssign,
+      },
     });
 
     res.json({ success: true, data: { card_code: isFirstAssign ? card.card_code : undefined } });

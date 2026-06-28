@@ -14,6 +14,7 @@ import {
   updateSubscriptionRequestStatus,
 } from '../utils/upsquadApi';
 import { config } from '../config';
+import { logCardEvent } from '../utils/cardEvents';
 
 const router = Router();
 
@@ -299,6 +300,15 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
     // Mark request as in_review (fire-and-forget)
     updateSubscriptionRequestStatus(subscription_request_id, 'in_review').catch(() => {});
 
+    await logCardEvent({
+      cardId: (card as any).id,
+      eventType: 'created',
+      actorId: (req as any).userId ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: { source: 'request', subscription_request_id },
+    });
+
     const hydrated = await hydrateCard(card);
     res.json({ success: true, data: hydrated });
   } catch (err: any) {
@@ -350,6 +360,15 @@ router.post('/subscription-cards/custom', async (req: Request, res: Response) =>
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    await logCardEvent({
+      cardId: (card as any).id,
+      eventType: 'created',
+      actorId: (req as any).userId ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: { source: 'custom' },
+    });
 
     const hydrated = await hydrateCard(card);
     res.json({ success: true, data: hydrated });
@@ -487,6 +506,15 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
           );
       }
     }
+
+    await logCardEvent({
+      cardId: (card as any).id,
+      eventType: 'created',
+      actorId: (req as any).userId ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: { source: 'internal_brief' },
+    });
 
     const hydrated = await hydrateCard(card);
     res.json({ success: true, data: hydrated });
@@ -662,6 +690,15 @@ router.patch('/subscription-cards/:id/edit', async (req: Request, res: Response)
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    await logCardEvent({
+      cardId,
+      eventType: 'draft_saved',
+      actorId: (req as any).userId ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: { promoted_from_new: card.state === 'new' },
+    });
 
     const hydrated = await hydrateCard(updated);
     res.json({ success: true, data: hydrated });
@@ -864,6 +901,20 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
       .select('*')
       .eq('id', cardId)
       .single();
+
+    await logCardEvent({
+      cardId,
+      eventType: distribution === 'manual' ? 'soft_published' : 'published',
+      actorId: (req as any).userId ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: {
+        distribution,
+        publish_targets: publishTargets,
+        child_card_ids: cardIds.slice(1),
+      },
+    });
+
     const hydrated = await hydrateCard(updated);
     res.json({
       success: true,
@@ -935,6 +986,15 @@ router.post('/subscription-cards/:id/broadcast', async (req: Request, res: Respo
           console.error('[broadcast-card] squadhire delivery error', err),
         );
     }
+
+    await logCardEvent({
+      cardId,
+      eventType: 'broadcast',
+      actorId: (req as any).userId ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: { upgraded_from: 'manual', publish_targets: publishTargets },
+    });
 
     const hydrated = await hydrateCard(updated);
     res.json({ success: true, data: hydrated });
