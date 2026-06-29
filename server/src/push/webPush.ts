@@ -54,12 +54,21 @@ export async function sendWebPush(notification: WebPushNotification): Promise<vo
 
   if (!subs || subs.length === 0) return;
 
+  // Current unread total so the service worker can set the Dock/taskbar badge
+  // while the window is closed. Mirrors GET /notifications/unread-count.
+  const { count: unreadCount } = await supabaseAdmin
+    .from('notifications')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', notification.user_id)
+    .eq('is_read', false);
+
   const payload = JSON.stringify({
     title: notification.title || 'SquadHub',
     body: notification.body || '',
     tag: notification.id, // collapse/replace duplicates of the same notification
     type: notification.type || '',
     url: deepLink(notification),
+    unreadCount: unreadCount ?? 0,
   });
 
   const stale: string[] = [];
