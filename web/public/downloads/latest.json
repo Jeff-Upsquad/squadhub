@@ -1,10 +1,10 @@
 {
-  "version": "0.1.9",
-  "notes": "Quick-add (⌘⇧T) now has an \"Add a Task\" button and supports drag-and-drop image attachments.",
-  "pub_date": "2026-06-29T09:20:01Z",
+  "version": "0.1.10",
+  "notes": "Quick-add image attachments now upload reliably; plus the \"Add a Task\" button and drag-and-drop from 0.1.9.",
+  "pub_date": "2026-06-29T09:54:40Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzFXSEJ3RHpHSzVVSmRQZERlQ3ArblNNK2w2YTVOT2l2VEd3ZEo0Z1hUeHE1QkRSWGRscld5S3lKYU1qY3QveUFqREE1bXE5N2wyUHNUR3FTYTZDM2dzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzI0NzQ0CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKS2Iyd2QrSlNHZVpTSU1CSTMyTHA2bmFOeHhyaXdwMGtVVjIzUE9yUGlJVCtpVUVWWXJCYmNqUWN6T3gwNkExT0Q2UG50MThCVTdHL2txTjFMeFJYQWc9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzRCb1lnZjJlQStsQ2UzL0hyOXI2MXU5QUVBeUdxVW5rS1FjYlZTbURJTDEzbTdDUkZmT0JxRnVoYlROdkUvTEZoV2gwdktDZ1FCRS9uemxJa3dNV0FrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzI2ODUyCWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKOXNQcS9XOTBLNURZWSswQ1I4cURMTTdGQng0Q05QT05YOVU1MXdJazhNVGxacStUR3N6RWZnVXF6d2J1cHYyZkg5c1RYdThub3MrMlJvaXZUZDNEQVE9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
