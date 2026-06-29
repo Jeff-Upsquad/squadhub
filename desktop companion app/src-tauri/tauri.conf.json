@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoc/tauri-docs/main/references/config.schema.json",
   "productName": "SquadHub Companion",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "identifier": "in.squadhub.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -12,10 +12,6 @@
   "app": {
     "withGlobalTauri": true,
     "macOSPrivateApi": true,
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": true
-    },
     "windows": [
       {
         "label": "main",

@@ -1,10 +1,10 @@
 {
-  "version": "0.1.10",
-  "notes": "Quick-add image attachments now upload reliably; plus the \"Add a Task\" button and drag-and-drop from 0.1.9.",
-  "pub_date": "2026-06-29T09:54:40Z",
+  "version": "0.1.11",
+  "notes": "Menu-bar icon now shows the SquadHub mark instead of a blank square.",
+  "pub_date": "2026-06-29T21:56:02Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzRCb1lnZjJlQStsQ2UzL0hyOXI2MXU5QUVBeUdxVW5rS1FjYlZTbURJTDEzbTdDUkZmT0JxRnVoYlROdkUvTEZoV2gwdktDZ1FCRS9uemxJa3dNV0FrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzI2ODUyCWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKOXNQcS9XOTBLNURZWSswQ1I4cURMTTdGQng0Q05QT05YOVU1MXdJazhNVGxacStUR3N6RWZnVXF6d2J1cHYyZkg5c1RYdThub3MrMlJvaXZUZDNEQVE9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3l6T054Y2kxaFlGcG1wa2hLakdjMzVYbmNJbHpaQkJtTTdFOGpvcGhCcytwVXliTjU5QXFuY2xJNG13MXFOTjExcHpnQ3FhWnpSemEyK3M3eUd6RUFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzcwMTMyCWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKTTdDVUVKWXpERFA5S2E1Zjkzb1hUWDhMcU5HOHp2TXNicEdoQ3dmV3licWJSWkh0NG5hN0tnYmNxNkVKVXNYZWk3azNNY1ZzaTlETk9uRmJxRHByQUE9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }

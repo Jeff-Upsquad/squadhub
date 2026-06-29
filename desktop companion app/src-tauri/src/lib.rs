@@ -126,6 +126,11 @@ pub fn run() {
             let menu = Menu::with_items(app, &[&quick_add_i, &settings_i, &quit_i])?;
 
             let _tray = TrayIconBuilder::new()
+                // Menu-bar glyph: a monochrome template image so macOS tints it
+                // automatically for light/dark menu bars. Without an explicit icon
+                // the tray falls back to the app icon (a solid square).
+                .icon(tauri::include_image!("icons/icon.png"))
+                .icon_as_template(true)
                 .menu(&menu)
                 .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| match event.id.as_ref() {
