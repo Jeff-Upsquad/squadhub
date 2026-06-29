@@ -1,3 +1,4 @@
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { useAuthStore } from '../stores/authStore';
 import { refreshTokens } from './auth';
 
@@ -171,10 +172,15 @@ export async function uploadTaskAttachment(taskId: string, file: File): Promise<
     }),
   });
 
-  const put = await fetch(presign.upload_url, {
+  // Use Tauri's native HTTP client (reqwest) rather than the webview's fetch:
+  // the direct-to-R2 PUT is cross-origin and R2's bucket CORS doesn't allow the
+  // desktop webview origin, so a browser fetch is blocked by the preflight.
+  // The native client isn't subject to CORS and sends exactly the headers we set.
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const put = await tauriFetch(presign.upload_url, {
     method: 'PUT',
     headers: { 'Content-Type': contentType },
-    body: file,
+    body: bytes,
   });
   if (!put.ok) {
     throw new Error(`Upload failed (${put.status})`);
