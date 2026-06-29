@@ -256,11 +256,29 @@ router.get('/folders/:id', async (req: Request, res: Response) => {
     // Filter out soft-deleted lists
     const lists = (folder.lists || []).filter((l: any) => !l.deleted_at);
 
+    // Child folders ("spaces" within a client folder). Access does NOT cascade
+    // from a parent folder, so we return only the sub-folders the caller can
+    // actually reach (via their own membership / space access). This lets the
+    // mobile Home render a shared client folder as a section listing its spaces.
+    const { data: childRows } = await supabaseAdmin
+      .from('folders')
+      .select('id, name, position, status, space_id, client_id, client_space_template:client_space_template_id(id, slug, name, icon)')
+      .eq('parent_folder_id', id)
+      .is('deleted_at', null)
+      .eq('status', 'active')
+      .order('position');
+    const subfolders: any[] = [];
+    for (const c of childRows || []) {
+      const lvl = await checkResourceAccess(req.userId!, 'folder', c.id);
+      if (lvl) subfolders.push({ ...c, my_access_level: lvl });
+    }
+
     res.json({
       success: true,
       data: {
         ...folder,
         lists: lists.sort((a: any, b: any) => (a.position || 0) - (b.position || 0)),
+        subfolders,
         profile: folder.custom_profiles,
         custom_profiles: undefined,
         my_access_level: userLevel,
