@@ -130,20 +130,19 @@ export function isGroupedRow(x: Task | GroupedRow): x is GroupedRow {
 // to the single `group_container`.
 //
 // A container that ends up with a single task is NOT worth a collapsible row, so
-// it's unwrapped back into a plain TodayRow in place — but only when that lone
-// task isn't multi-homed, otherwise unwrapping would strand a duplicate plain row
-// alongside the task's other group.
+// it's always unwrapped back into a plain TodayRow in place. Plain rows are
+// de-duped by task id so a task that's the lone member of more than one group
+// (or already shown ungrouped) is emitted only once at the top level — while it
+// still appears as a child inside any multi-task group it also belongs to.
 export function collapseGroupedTasks(tasks: Task[]): (Task | GroupedRow)[] {
   const out: (Task | GroupedRow)[] = [];
   const rowByContainer = new Map<string, GroupedRow>();
-  const containerCountByTask = new Map<string, number>();
   for (const t of tasks) {
     const containers = t.group_containers ?? (t.group_container ? [t.group_container] : []);
     if (containers.length === 0) {
       out.push(t);
       continue;
     }
-    containerCountByTask.set(t.id, containers.length);
     for (const gc of containers) {
       let row = rowByContainer.get(gc.id);
       if (!row) {
@@ -155,11 +154,20 @@ export function collapseGroupedTasks(tasks: Task[]): (Task | GroupedRow)[] {
       row.count += 1;
     }
   }
-  return out.map((item) =>
-    isGroupedRow(item) && item.tasks.length === 1 && (containerCountByTask.get(item.tasks[0].id) ?? 1) === 1
-      ? item.tasks[0]
-      : item,
-  );
+  const emittedPlain = new Set<string>();
+  const result: (Task | GroupedRow)[] = [];
+  for (const item of out) {
+    // Multi-task group → keep collapsed. Single-task group → unwrap its lone task.
+    const plain = isGroupedRow(item) ? (item.tasks.length === 1 ? item.tasks[0] : null) : item;
+    if (plain) {
+      if (emittedPlain.has(plain.id)) continue; // already shown as a plain row elsewhere
+      emittedPlain.add(plain.id);
+      result.push(plain);
+    } else {
+      result.push(item);
+    }
+  }
+  return result;
 }
 
 export function isTaskCompleted(t: Task): boolean {
