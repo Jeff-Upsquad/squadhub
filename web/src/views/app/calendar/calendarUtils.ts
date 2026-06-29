@@ -1,7 +1,10 @@
 import type { DragEvent } from 'react';
+import type { QueryClient } from '@tanstack/react-query';
 import type { Task } from '@squadhub/shared';
 import type { MyTasksBuckets } from '../../../hooks/useTasks';
+import type { GroupRunPanelTarget } from '../../../stores/pmStore';
 import { planDateKey } from '../../../hooks/useDayPlanner';
+import { collapseGroupedTasks, isGroupedRow } from '../../../lib/taskGrouping';
 
 // Drag MIME keys — identical to the Day Planner's so a palette row can be
 // dropped onto the month/week grids AND onto the embedded DayCalendar's hour
@@ -15,6 +18,32 @@ export const DND_GROUP_CONTAINER_ID = 'application/x-group-container-id';
 export const DND_GROUP_CONTAINER_TYPE = 'application/x-group-container-type';
 export const DND_GROUP_CONTAINER_NAME = 'application/x-group-container-name';
 export const DND_GROUP_ESTIMATE_TOTAL = 'application/x-group-estimate-total';
+
+// Build the group-run panel target for a calendar group block. The block only
+// carries the container, so we recover its member tasks from the day-planner
+// tasks cache (same source the palette collapses into the "Grouped tasks under
+// …" row) and shape a target whose `key` MATCHES the palette row's — so the
+// block and the row open the exact same session + history.
+export function groupRunTargetFromContainer(
+  qc: QueryClient,
+  container: { type: 'list' | 'folder' | 'space'; id: string; name: string },
+): GroupRunPanelTarget {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const tasks = qc.getQueryData<Task[]>(['day-planner', 'tasks', tz]) ?? [];
+  let members: { id: string; title: string }[] = [];
+  for (const item of collapseGroupedTasks(tasks)) {
+    if (isGroupedRow(item) && item.container.id === container.id) {
+      members = item.tasks.map((t) => ({ id: t.id, title: t.title }));
+      break;
+    }
+  }
+  return {
+    key: `group-container:${container.type}:${container.id}`,
+    label: `Grouped tasks under ${container.name}`,
+    listId: container.type === 'list' ? container.id : null,
+    tasks: members,
+  };
+}
 
 // YYYY-MM-DD for the local-midnight of a calendar cell.
 export function cellKey(d: Date): string {

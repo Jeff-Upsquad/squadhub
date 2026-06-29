@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { getTaskStatusCategory } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
@@ -22,6 +23,7 @@ import {
   DND_GROUP_ESTIMATE_TOTAL,
   dayToWorkDateISO,
   slotToWorkDateISO,
+  groupRunTargetFromContainer,
   priorityLevel,
   setSlimDragImage,
 } from './calendarUtils';
@@ -161,6 +163,8 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
   const unscheduleGroup = useUnscheduleGroup();
   const updateTask = useUpdateTask(null);
   const setActiveTask = usePMStore((s) => s.setActiveTask);
+  const setGroupRunPanel = usePMStore((s) => s.setGroupRunPanel);
+  const qc = useQueryClient();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -330,7 +334,9 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
             duration_minutes: origin.duration,
           });
         }
-      } else if (!origin.isGroup) {
+      } else if (origin.isGroup && origin.container) {
+        setGroupRunPanel(groupRunTargetFromContainer(qc, origin.container)); // open the group session panel
+      } else {
         setActiveTask(origin.taskId); // click (or no-net-move drag) → open the task
       }
     };
