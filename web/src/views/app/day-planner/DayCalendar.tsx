@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getTaskStatusCategory } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
+import { useUpdateTask } from '../../../hooks/useTasks';
 import {
   planDateKey,
   useDayPlans,
@@ -8,6 +9,7 @@ import {
   useUnscheduleTask,
   useUpdateDayPlan,
 } from '../../../hooks/useDayPlanner';
+import { dayToWorkDateISO, slotToWorkDateISO } from '../calendar/calendarUtils';
 
 const HOURS = 24;
 const PX_PER_MIN = 1; // each hour row is 60px tall
@@ -101,9 +103,11 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
   const schedule = useScheduleTaskOnDay();
   const unschedule = useUnscheduleTask();
   const updatePlan = useUpdateDayPlan();
+  const updateTask = useUpdateTask(null);
   const setActiveTask = usePMStore((s) => s.setActiveTask);
 
   const [dragOverHour, setDragOverHour] = useState<number | null>(null);
+  const [allDayOver, setAllDayOver] = useState(false);
   // Block being moved via mousedown drag — drives the live preview position.
   const [moving, setMoving] = useState<{
     planId: string;
@@ -190,6 +194,20 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
       start_minute,
       duration_minutes: Math.min(duration, 1440 - start_minute),
     });
+    // Mirror the slot onto the task: its work date AND time now reflect where
+    // it sits on the calendar (the day-plan block above carries the duration).
+    updateTask.mutate({ id: taskId, work_date: slotToWorkDateISO(date, start_minute) });
+  };
+
+  // Drop on the all-day strip → set work_date (date-only) for the viewed day,
+  // overwriting any existing work date+time (drops the time-of-day).
+  const handleAllDayDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setAllDayOver(false);
+    const taskId = e.dataTransfer.getData('application/x-task-id');
+    if (!taskId) return;
+    const [y, m, d] = date.split('-').map(Number);
+    updateTask.mutate({ id: taskId, work_date: dayToWorkDateISO(new Date(y, m - 1, d)) });
   };
 
   // Mousedown-based block move (instead of HTML5 drag). Same pattern as the
@@ -373,10 +391,15 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
             <span className="dom">{dayOfMonth}</span>
           </div>
         </div>
-        {allDayPlans.length > 0 && (
-          <>
+        <>
             <div className="dp-allday-label">All-day</div>
-            <div className="dp-allday-items">
+            <div
+              className="dp-allday-items"
+              data-dragover={allDayOver || undefined}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setAllDayOver(true); }}
+              onDragLeave={() => setAllDayOver(false)}
+              onDrop={handleAllDayDrop}
+            >
               {allDayPlans.map((p) => {
                 const isWb = p.task?.task_type_key === 'work_block';
                 const wbColor = p.task?.task_type_color || '#8b5cf6';
@@ -409,7 +432,6 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
               })}
             </div>
           </>
-        )}
       </div>
 
       {/* Hour grid */}

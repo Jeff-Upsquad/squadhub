@@ -22,6 +22,15 @@ export function dayToWorkDateISO(d: Date): string {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
 }
 
+// Local-time ISO timestamp for a specific calendar slot (day key + minute-of-
+// day). A *timed* drop writes this into the task's work_date so the task itself
+// carries both the day AND the time it was scheduled for — not just the separate
+// day-plan block. `minute` is the snapped start-of-block minute on the grid.
+export function slotToWorkDateISO(dayKey: string, minute: number): string {
+  const [y, m, d] = dayKey.split('-').map(Number);
+  return new Date(y, m - 1, d, Math.floor(minute / 60), minute % 60, 0, 0).toISOString();
+}
+
 // Which calendar day a task lands on: its work_date if set, otherwise its
 // due_date. Returns null when the task has neither (it only shows in the
 // unscheduled palette). `source` tells the chip whether it can be unscheduled

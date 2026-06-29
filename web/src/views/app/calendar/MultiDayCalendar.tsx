@@ -9,7 +9,7 @@ import {
   useUpdateDayPlan,
   useUnscheduleTask,
 } from '../../../hooks/useDayPlanner';
-import { DND_TASK_ID, DND_TASK_ESTIMATE, dayToWorkDateISO, priorityLevel, setSlimDragImage } from './calendarUtils';
+import { DND_TASK_ID, DND_TASK_ESTIMATE, dayToWorkDateISO, slotToWorkDateISO, priorityLevel, setSlimDragImage } from './calendarUtils';
 
 const HOURS = 24;
 const PX_PER_MIN = 1; // 60px per hour row
@@ -184,8 +184,6 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
     return { allDayByDate: ad, timedByDate: td };
   }, [plansByDate, days]);
 
-  const hasAllDay = days.some((d) => (allDayByDate[d]?.length ?? 0) > 0);
-
   // Map a pointer position to the (day, minute) it's over.
   const pointToDayMinute = (clientX: number, clientY: number): { date: string; minute: number } | null => {
     const grid = gridRef.current;
@@ -214,9 +212,13 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
       start_minute: start,
       duration_minutes: Math.min(duration, 1440 - start),
     });
+    // Mirror the slot onto the task: its work date AND time now reflect where
+    // it sits on the calendar (the day-plan block above carries the duration).
+    updateTask.mutate({ id: taskId, work_date: slotToWorkDateISO(date, start) });
   };
 
-  // Drop on the all-day strip → set work_date (date-only) for that day.
+  // Drop on the all-day strip → set work_date (date-only) for that day. This
+  // overwrites any existing work date+time, dropping the time component.
   const handleAllDayDrop = (date: string, e: React.DragEvent) => {
     e.preventDefault();
     setAllDayOver(null);
@@ -327,9 +329,9 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
         })}
       </div>
 
-      {/* All-day strip (only when something lands there) */}
-      {hasAllDay && (
-        <div className="cal-tt-allday">
+      {/* All-day strip — always rendered so it's a drop target even when empty
+          (drop here to set the task's work date with no time-of-day). */}
+      <div className="cal-tt-allday">
           <div className="cal-tt-allday-lbl">all-day</div>
           {days.map((day) => (
             <div
@@ -362,8 +364,7 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
               ))}
             </div>
           ))}
-        </div>
-      )}
+      </div>
 
       {/* Scrollable timed grid */}
       <div className="cal-tt-scroll" ref={scrollRef}>
