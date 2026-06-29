@@ -48,8 +48,20 @@ fn set_quick_add_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<
 fn show_quick_add(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     {
+        use cocoa::appkit::NSWindowCollectionBehavior;
         use tauri_nspanel::ManagerExt;
         if let Ok(panel) = app.get_webview_panel("quickadd") {
+            // Re-assert the over-full-screen behaviour on EVERY show. After Space
+            // transitions macOS can quietly drop a non-activating panel back onto
+            // our home Space (so ⌘⇧T surfaces it on the desktop *behind* the
+            // full-screen app, i.e. "nothing happened"). Re-applying these each
+            // time keeps it floating over the active full-screen Space.
+            panel.set_collection_behaviour(
+                NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+                    | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                    | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary,
+            );
+            panel.set_level(25);
             // show() already does orderFrontRegardless + makeKeyWindow, which is
             // what lets a non-activating panel surface over ANOTHER app's
             // full-screen Space. Do NOT add makeKeyAndOrderFront: here — that
@@ -174,6 +186,16 @@ pub fn run() {
                             );
                             // NSMainMenuWindowLevel + 1: above full-screen content.
                             panel.set_level(25);
+                            // NSPanel defaults hidesOnDeactivate = YES. Our app is
+                            // .Accessory and this panel is non-activating, so the app
+                            // is NEVER the active app — with the default, AppKit races
+                            // to hide the panel right after we order it front. On the
+                            // plain desktop there's no deactivation event at show-time
+                            // so it sticks; entering/over another app's full-screen
+                            // Space generates activation churn that triggers the hide,
+                            // which is why ⌘⇧T only *sometimes* surfaced over a
+                            // full-screen app. Keep it visible regardless.
+                            panel.set_hides_on_deactivate(false);
                             qa_log("converted quick-add window to NSPanel");
                         }
                         Err(e) => qa_log(&format!("to_panel() failed: {e:?}")),

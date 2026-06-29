@@ -1,10 +1,10 @@
 {
-  "version": "0.1.7",
-  "notes": "Quick-add panel now appears over apps running in full-screen mode (macOS).",
-  "pub_date": "2026-06-28T16:11:00Z",
+  "version": "0.1.8",
+  "notes": "Quick-add panel (⌘⇧T) now reliably appears over apps running in full-screen mode (macOS).",
+  "pub_date": "2026-06-29T08:44:09Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdytjSTErYTJaOENnbkZNejB5Wkpmem1uNm1SRWJwcTRLSlkzNi9QbTJkcjBPUFdyaVVYU21RRDQwcmRqenVGMVFPdmdYWW0yTkc3TFBPNkt5dWR5MmdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNjYzMDE5CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKR3duUWxTRlkwTldVU0FYTHZjR0dxV3RORG5zY0dyS2pzUXRWRm1wK2FoOXVoR1FyaTFLRmZrWUhDZy9tUXZEUE1xQUhRVXgrVmRSVElTK3hYc3FyRHc9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3dzc3lrYnZhSUNKMldrcWpTQWR4NWZMcGRpSHJBeEJyMHR3Y0dSSVByNU1yQSt4ZHdOaURRZEVjTURTTHFUbEZLR2lRd0RmcjhNby8xVGQwb0tNOEFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzIyNjA1CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKUHFYMDArd0lRUFdhQ3pacmMyNUNyLzlrTlNvczlvQ09XMUtPSTBjOW5NN0ExUk1KOTFuNTF2SlRoV0c0T2pLOTltZkI0ZGR3b093UlUvOHBkZVJmQUE9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
