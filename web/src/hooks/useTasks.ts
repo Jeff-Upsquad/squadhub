@@ -243,6 +243,7 @@ export function useUpdateTask(listId: string | null) {
         qc.invalidateQueries({ queryKey: ['list', vars.list_id] });
       }
       qc.invalidateQueries({ queryKey: ['task', vars.id] });
+      qc.invalidateQueries({ queryKey: ['task-activity', vars.id] });
       qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
       qc.invalidateQueries({ queryKey: ['notifications', 'list'] });
       // Keep My Home's "New Tasks" review queue in sync — completing/closing a task
@@ -339,6 +340,31 @@ export function useTaskComments(taskId: string | null) {
   });
 }
 
+// One entry in a task's unified Activity feed (GET /pm/tasks/:id/activity).
+export interface TaskActivityEntry {
+  id: string;
+  event_type: string;
+  field: string | null;
+  old_value: unknown;
+  new_value: unknown;
+  created_at: string;
+  user_id: string | null;
+  user: { id: string; display_name: string | null; email: string | null; avatar_url: string | null } | null;
+}
+
+// Activity is collapsed by default in the detail panel, so the query only runs
+// once the section is opened (pass `enabled`).
+export function useTaskActivity(taskId: string | null, enabled = true) {
+  return useQuery<TaskActivityEntry[]>({
+    queryKey: ['task-activity', taskId],
+    queryFn: async () => {
+      const res = await api.get(`/pm/tasks/${taskId}/activity`);
+      return res.data.data;
+    },
+    enabled: !!taskId && enabled,
+  });
+}
+
 export function useAddComment(taskId: string | null) {
   const qc = useQueryClient();
   return useMutation({
@@ -349,6 +375,7 @@ export function useAddComment(taskId: string | null) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['task-comments', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
       qc.invalidateQueries({ queryKey: ['notifications', 'list'] });

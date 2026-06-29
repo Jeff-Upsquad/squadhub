@@ -11,6 +11,7 @@ import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { spawnRoutineInstance } from '../../services/routineSpawner';
 import { todayIST } from '../../utils/ist';
 import { logTaskTimeEntry } from '../../utils/taskTime';
+import { logTaskActivity, type TaskActivityEvent } from '../../utils/taskActivity';
 
 const router = Router();
 router.use(requireAuth);
@@ -1136,6 +1137,16 @@ router.post('/tasks', async (req: Request, res: Response) => {
       await spawnRoutineInstance(task, todayIST());
     }
 
+    // Activity: the task's own "created" event, plus a "subtask_added" event on
+    // the parent when this is a subtask (so the parent's feed shows it too).
+    await logTaskActivity((task as any).id, req.userId!, [{ event_type: 'created' }]);
+    if ((task as any).parent_task_id) {
+      await logTaskActivity((task as any).parent_task_id, req.userId!, [{
+        event_type: 'subtask_added',
+        new_value: { id: (task as any).id, title: (task as any).title },
+      }]);
+    }
+
     const [hydratedTask] = await hydrateAssignees([task]);
     res.status(201).json({ success: true, data: hydratedTask });
   } catch (err) {
@@ -1193,19 +1204,16 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       }
     }
 
-    // Capture the prior estimate so we can append an authorship audit row when
-    // it actually changes — see task_estimate_changes (migration 134).
-    let priorEstimate: number | null | undefined;
-    let estimateListId: string | null | undefined;
-    if (body.time_estimate !== undefined) {
-      const { data: prior } = await supabaseAdmin
-        .from('tasks')
-        .select('time_estimate, list_id')
-        .eq('id', id)
-        .single();
-      priorEstimate = (prior as any)?.time_estimate ?? null;
-      estimateListId = (prior as any)?.list_id ?? null;
-    }
+    // Snapshot the prior row before updating so we can diff what actually moved
+    // for both the estimate audit (task_estimate_changes, migration 134) and the
+    // activity feed (task_activity, migration 147). One lightweight read.
+    const { data: prior } = await supabaseAdmin
+      .from('tasks')
+      .select('time_estimate, list_id, title, description, status, priority, due_date, work_date, start_date, task_type_id, assignee_ids')
+      .eq('id', id)
+      .single();
+    const priorEstimate: number | null = (prior as any)?.time_estimate ?? null;
+    const estimateListId: string | null = (prior as any)?.list_id ?? null;
 
     const updatePayload: Record<string, any> = { ...body, last_modified_by: req.userId! };
     if (body.recurrence !== undefined) {
@@ -1274,6 +1282,74 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       } catch (auditErr) {
         console.error('Estimate-change audit insert failed:', auditErr);
       }
+    }
+
+    // Activity feed: append one event per tracked field that actually changed.
+    // Best-effort — name lookups and the insert must never fail the update.
+    try {
+      const events: TaskActivityEvent[] = [];
+      const p: any = prior || {};
+
+      // Scalar fields. time_estimate is audited separately (folded in at read
+      // time); time_tracked is timer noise — both intentionally excluded.
+      const SCALAR_FIELDS = ['title', 'description', 'status', 'priority', 'due_date', 'work_date', 'start_date'] as const;
+      for (const f of SCALAR_FIELDS) {
+        if ((body as any)[f] === undefined) continue;
+        const oldV = p[f] ?? null;
+        const newV = (body as any)[f] ?? null;
+        if (oldV === newV) continue;
+        events.push({ event_type: 'field_change', field: f, old_value: oldV, new_value: newV });
+      }
+
+      // Task type change → snapshot {id, name} both sides.
+      if (body.task_type_id !== undefined && (body.task_type_id ?? null) !== (p.task_type_id ?? null)) {
+        const ids = [p.task_type_id, body.task_type_id].filter(Boolean) as string[];
+        const nameById = new Map<string, string>();
+        if (ids.length) {
+          const { data: types } = await supabaseAdmin.from('task_types').select('id, name').in('id', ids);
+          for (const t of (types || []) as any[]) nameById.set(t.id, t.name);
+        }
+        events.push({
+          event_type: 'field_change', field: 'task_type_id',
+          old_value: p.task_type_id ? { id: p.task_type_id, name: nameById.get(p.task_type_id) ?? null } : null,
+          new_value: body.task_type_id ? { id: body.task_type_id, name: nameById.get(body.task_type_id) ?? null } : null,
+        });
+      }
+
+      // Moved to another list → snapshot {id, name} both sides.
+      if (body.list_id && body.list_id !== estimateListId) {
+        const ids = [estimateListId, body.list_id].filter(Boolean) as string[];
+        const nameById = new Map<string, string>();
+        if (ids.length) {
+          const { data: lists } = await supabaseAdmin.from('lists').select('id, name').in('id', ids);
+          for (const l of (lists || []) as any[]) nameById.set(l.id, l.name);
+        }
+        events.push({
+          event_type: 'moved',
+          old_value: estimateListId ? { id: estimateListId, name: nameById.get(estimateListId) ?? null } : null,
+          new_value: { id: body.list_id, name: nameById.get(body.list_id) ?? null },
+        });
+      }
+
+      // Assignees → one added/removed event per person.
+      if (body.assignee_ids !== undefined) {
+        const before = new Set<string>((p.assignee_ids as string[] | null) || []);
+        const after = new Set<string>(body.assignee_ids || []);
+        const added = [...after].filter((x) => !before.has(x));
+        const removed = [...before].filter((x) => !after.has(x));
+        if (added.length || removed.length) {
+          const nameById = new Map<string, string>();
+          const { data: users } = await supabaseAdmin
+            .from('users').select('id, display_name, email').in('id', [...added, ...removed]);
+          for (const u of (users || []) as any[]) nameById.set(u.id, u.display_name || u.email);
+          for (const uid of added) events.push({ event_type: 'assignee_added', new_value: { id: uid, name: nameById.get(uid) ?? null } });
+          for (const uid of removed) events.push({ event_type: 'assignee_removed', old_value: { id: uid, name: nameById.get(uid) ?? null } });
+        }
+      }
+
+      await logTaskActivity(id, req.userId!, events);
+    } catch (activityErr) {
+      console.error('Activity diff logging failed:', activityErr);
     }
 
     const [hydratedTask] = await hydrateAssignees([data]);
@@ -1746,6 +1822,103 @@ router.get('/tasks/:id/comments', async (req: Request, res: Response) => {
     res.json({ success: true, data: comments });
   } catch (err) {
     console.error('Get comments error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /pm/tasks/:id/activity — the unified change history for a task (viewer
+// access). Merges three sources, newest-first:
+//   1. task_activity rows (field changes, assignees, labels, move, attachments…)
+//   2. task_comments (each surfaced as an event_type='comment')
+//   3. task_estimate_changes (folded in as field_change/time_estimate so legacy
+//      estimate history pre-dating task_activity still appears)
+// Actor display names are resolved here so the client renders without extra
+// lookups.
+router.get('/tasks/:id/activity', async (req: Request, res: Response) => {
+  try {
+    const taskId = req.params.id as string;
+
+    const listId = await getTaskListId(taskId);
+    if (listId) {
+      const userLevel = await checkResourceAccess(req.userId!, 'list', listId);
+      if (!userLevel) {
+        res.status(403).json({ success: false, error: 'You do not have access to this task' });
+        return;
+      }
+    }
+
+    const [activityRes, commentRes, estimateRes, taskRes] = await Promise.all([
+      supabaseAdmin
+        .from('task_activity')
+        .select('id, user_id, event_type, field, old_value, new_value, created_at')
+        .eq('task_id', taskId)
+        .order('created_at', { ascending: false }),
+      supabaseAdmin
+        .from('task_comments')
+        .select('id, user_id, created_at')
+        .eq('task_id', taskId)
+        .order('created_at', { ascending: false }),
+      supabaseAdmin
+        .from('task_estimate_changes')
+        .select('id, user_id, old_estimate, new_estimate, created_at')
+        .eq('task_id', taskId)
+        .order('created_at', { ascending: false }),
+      supabaseAdmin
+        .from('tasks')
+        .select('created_by, created_at')
+        .eq('id', taskId)
+        .maybeSingle(),
+    ]);
+
+    type FeedItem = {
+      id: string;
+      event_type: string;
+      field: string | null;
+      old_value: unknown;
+      new_value: unknown;
+      created_at: string;
+      user_id: string | null;
+    };
+    const items: FeedItem[] = [];
+
+    for (const a of (activityRes.data || []) as any[]) {
+      items.push({
+        id: a.id, event_type: a.event_type, field: a.field ?? null,
+        old_value: a.old_value, new_value: a.new_value,
+        created_at: a.created_at, user_id: a.user_id ?? null,
+      });
+    }
+    for (const c of (commentRes.data || []) as any[]) {
+      items.push({
+        id: c.id, event_type: 'comment', field: null,
+        old_value: null, new_value: null,
+        created_at: c.created_at, user_id: c.user_id ?? null,
+      });
+    }
+    for (const e of (estimateRes.data || []) as any[]) {
+      items.push({
+        id: e.id, event_type: 'field_change', field: 'time_estimate',
+        old_value: e.old_estimate ?? null, new_value: e.new_estimate ?? null,
+        created_at: e.created_at, user_id: e.user_id ?? null,
+      });
+    }
+
+    // Resolve actor display names in one query.
+    const userIds = Array.from(new Set(items.map((i) => i.user_id).filter(Boolean) as string[]));
+    const userById = new Map<string, { id: string; display_name: string | null; email: string | null; avatar_url: string | null }>();
+    if (userIds.length) {
+      const { data: users } = await supabaseAdmin
+        .from('users').select('id, display_name, email, avatar_url').in('id', userIds);
+      for (const u of (users || []) as any[]) userById.set(u.id, u);
+    }
+
+    const feed = items
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
+      .map((i) => ({ ...i, user: i.user_id ? userById.get(i.user_id) ?? null : null }));
+
+    res.json({ success: true, data: feed });
+  } catch (err) {
+    console.error('Get activity error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

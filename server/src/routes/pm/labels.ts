@@ -6,6 +6,7 @@ import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
+import { logTaskActivity } from '../../utils/taskActivity';
 import {
   getWorkspaceIdForTask,
   visibleGroupIds,
@@ -239,6 +240,14 @@ router.post('/tasks/:id/labels', async (req: Request, res: Response) => {
       return;
     }
 
+    // Activity: only log a real attach (code 23505 = already attached, no-op).
+    if (!error) {
+      await logTaskActivity(taskId, req.userId!, [{
+        event_type: 'label_added',
+        new_value: { id: body.tag_id, name: (label as any).name },
+      }]);
+    }
+
     res.json({ success: true, data: label });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -265,6 +274,10 @@ router.delete('/tasks/:id/labels/:tagId', async (req: Request, res: Response) =>
       return;
     }
 
+    // Snapshot the label name before detaching so the activity feed can show it.
+    const { data: removedLabel } = await supabaseAdmin
+      .from('task_tags').select('id, name').eq('id', req.params.tagId).maybeSingle();
+
     const { error } = await supabaseAdmin
       .from('task_tag_assignments')
       .delete()
@@ -274,6 +287,12 @@ router.delete('/tasks/:id/labels/:tagId', async (req: Request, res: Response) =>
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    await logTaskActivity(taskId, req.userId!, [{
+      event_type: 'label_removed',
+      old_value: { id: req.params.tagId, name: (removedLabel as any)?.name ?? null },
+    }]);
+
     res.json({ success: true, message: 'Label removed' });
   } catch (err) {
     console.error('Detach label error:', err);
