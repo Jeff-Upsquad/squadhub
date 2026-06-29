@@ -121,32 +121,45 @@ export function isGroupedRow(x: Task | GroupedRow): x is GroupedRow {
 
 // Collapse tasks belonging to a grouped container into one GroupedRow each,
 // leaving ungrouped tasks untouched. Each grouped row is placed at the index of
-// its first member so it slots naturally among the plain rows. Because the server
-// resolves each task to exactly one container (innermost-first), distinct grouped
-// containers yield distinct rows and no task is ever counted twice.
+// its first member so it slots naturally among the plain rows.
+//
+// Multi-homing: a task is added to EVERY grouped container it belongs to — its
+// primary list chain plus any secondary "ALSO IN" list (server-resolved into
+// `group_containers`). So the same task can appear inside two distinct "Grouped
+// tasks under X" rows. Endpoints that don't compute `group_containers` fall back
+// to the single `group_container`.
 //
 // A container that ends up with a single task is NOT worth a collapsible row, so
-// it's unwrapped back into a plain TodayRow in place — the lone task already sits
-// at the grouped row's index, so ordering is preserved.
+// it's unwrapped back into a plain TodayRow in place — but only when that lone
+// task isn't multi-homed, otherwise unwrapping would strand a duplicate plain row
+// alongside the task's other group.
 export function collapseGroupedTasks(tasks: Task[]): (Task | GroupedRow)[] {
   const out: (Task | GroupedRow)[] = [];
   const rowByContainer = new Map<string, GroupedRow>();
+  const containerCountByTask = new Map<string, number>();
   for (const t of tasks) {
-    const gc = t.group_container;
-    if (!gc) {
+    const containers = t.group_containers ?? (t.group_container ? [t.group_container] : []);
+    if (containers.length === 0) {
       out.push(t);
       continue;
     }
-    let row = rowByContainer.get(gc.id);
-    if (!row) {
-      row = { __grouped: true, key: gc.id, container: gc, count: 0, tasks: [] };
-      rowByContainer.set(gc.id, row);
-      out.push(row);
+    containerCountByTask.set(t.id, containers.length);
+    for (const gc of containers) {
+      let row = rowByContainer.get(gc.id);
+      if (!row) {
+        row = { __grouped: true, key: gc.id, container: gc, count: 0, tasks: [] };
+        rowByContainer.set(gc.id, row);
+        out.push(row);
+      }
+      row.tasks.push(t);
+      row.count += 1;
     }
-    row.tasks.push(t);
-    row.count += 1;
   }
-  return out.map((item) => (isGroupedRow(item) && item.tasks.length === 1 ? item.tasks[0] : item));
+  return out.map((item) =>
+    isGroupedRow(item) && item.tasks.length === 1 && (containerCountByTask.get(item.tasks[0].id) ?? 1) === 1
+      ? item.tasks[0]
+      : item,
+  );
 }
 
 export function isTaskCompleted(t: Task): boolean {
