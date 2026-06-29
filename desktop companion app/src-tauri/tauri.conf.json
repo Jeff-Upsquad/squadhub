@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoc/tauri-docs/main/references/config.schema.json",
   "productName": "SquadHub Companion",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "identifier": "in.squadhub.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -38,7 +38,8 @@
         "visible": false,
         "decorations": false,
         "alwaysOnTop": true,
-        "skipTaskbar": true
+        "skipTaskbar": true,
+        "dragDropEnabled": false
       }
     ]
   },

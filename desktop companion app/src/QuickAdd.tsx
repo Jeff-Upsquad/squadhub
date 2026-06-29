@@ -9,6 +9,7 @@ import {
   fetchAssignableUsers,
   createTask,
   setTaskFocus,
+  uploadTaskAttachment,
   type AssignableUser,
   type ListLite,
   type TaskPriority,
@@ -19,9 +20,15 @@ import { getRecentLists, pushRecentList, type RecentList } from './services/rece
 // the personal list / list tree once per app run.
 let cachedPersonal: { id: string; name: string } | null = null;
 
-type Phase = 'idle' | 'saving' | 'done' | 'error';
+type Phase = 'idle' | 'saving' | 'uploading' | 'done' | 'error';
 type MenuKey = 'list' | 'assignee' | 'priority' | 'date' | null;
 type SelectedList = { id: string; name: string };
+
+// A file the user has dropped onto the panel, queued to upload once the task
+// itself is created. `previewUrl` is an object URL for images (revoked on
+// removal/reset) and null for everything else.
+type PendingAttachment = { id: string; file: File; previewUrl: string | null };
+let attachmentSeq = 0;
 
 const PRIORITIES: { value: TaskPriority; label: string; color: string }[] = [
   { value: 'emergency', label: 'Emergency', color: '#dc2626' },
@@ -109,6 +116,33 @@ export default function QuickAdd() {
   const [openMenu, setOpenMenu] = useState<MenuKey>(null);
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState('');
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+
+  // Once the task is created we keep its id so a retry (e.g. after an attachment
+  // upload fails) re-uses it instead of creating a duplicate task.
+  const createdTaskRef = useRef<{ id: string } | null>(null);
+  // dragenter/dragleave fire per-child; count depth so we only clear the drop
+  // highlight when the cursor truly leaves the panel.
+  const dragDepthRef = useRef(0);
+  // True while a drag is hovering the panel — used to suppress the dismiss-on-
+  // blur behaviour, since dragging a file in from another app blurs us first.
+  const draggingRef = useRef(false);
+  const hideTimerRef = useRef<number | null>(null);
+
+  const cancelPendingHide = () => {
+    if (hideTimerRef.current != null) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  };
+
+  const clearAttachments = () => {
+    setAttachments((cur) => {
+      for (const a of cur) if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+      return [];
+    });
+  };
 
   const reset = () => {
     setTitle('');
@@ -120,6 +154,11 @@ export default function QuickAdd() {
     setOpenMenu(null);
     setPhase('idle');
     setError('');
+    clearAttachments();
+    createdTaskRef.current = null;
+    dragDepthRef.current = 0;
+    draggingRef.current = false;
+    setDragOver(false);
     const self = useAuthStore.getState().userId;
     setAssigneeIds(self ? [self] : []);
     if (defaultListRef.current) setSelectedList(defaultListRef.current);
@@ -149,16 +188,26 @@ export default function QuickAdd() {
 
     const unlisten = win.onFocusChanged(({ payload: isFocused }) => {
       if (isFocused) {
+        cancelPendingHide();
         useAuthStore.getState().hydrate();
         void resolvePersonal();
         reset();
       } else {
-        // Spotlight behaviour: dismiss when focus is lost.
-        void win.hide();
+        // Spotlight behaviour: dismiss when focus is lost — but defer briefly.
+        // Starting a file-drag from another app (Finder, a browser) blurs this
+        // panel a moment before the drag actually enters it; the grace window
+        // lets that drag arrive (which sets draggingRef) so we don't vanish
+        // mid-drag.
+        cancelPendingHide();
+        hideTimerRef.current = window.setTimeout(() => {
+          hideTimerRef.current = null;
+          if (!draggingRef.current) void win.hide();
+        }, 200);
       }
     });
 
     return () => {
+      cancelPendingHide();
       void unlisten.then((fn) => fn());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -192,7 +241,7 @@ export default function QuickAdd() {
 
   const submit = async () => {
     const trimmed = title.trim();
-    if (!trimmed || phase === 'saving') return;
+    if (!trimmed || phase === 'saving' || phase === 'uploading') return;
 
     if (!useAuthStore.getState().accessToken) {
       setPhase('error');
@@ -218,24 +267,55 @@ export default function QuickAdd() {
     setPhase('saving');
     setError('');
     try {
-      const task = await createTask({
-        list_id: list.id,
-        title: trimmed,
-        description: description.trim() || undefined,
-        priority: priority === 'none' ? undefined : priority,
-        work_date: workDate || undefined,
-        assignee_ids: assigneeIds.length ? assigneeIds : undefined,
-      });
-      if (focused) {
-        try {
-          await setTaskFocus(task.id, true);
-        } catch {
-          /* focus is a nice-to-have; don't fail the whole add */
+      // Re-use the already-created task on a retry (e.g. an attachment upload
+      // failed last time) so we never create a duplicate.
+      let task = createdTaskRef.current;
+      if (!task) {
+        task = await createTask({
+          list_id: list.id,
+          title: trimmed,
+          description: description.trim() || undefined,
+          priority: priority === 'none' ? undefined : priority,
+          work_date: workDate || undefined,
+          assignee_ids: assigneeIds.length ? assigneeIds : undefined,
+        });
+        createdTaskRef.current = task;
+        if (focused) {
+          try {
+            await setTaskFocus(task.id, true);
+          } catch {
+            /* focus is a nice-to-have; don't fail the whole add */
+          }
+        }
+        if (!cachedPersonal || list.id !== cachedPersonal.id) {
+          void pushRecentList({ id: list.id, name: list.name });
         }
       }
-      if (!cachedPersonal || list.id !== cachedPersonal.id) {
-        void pushRecentList({ id: list.id, name: list.name });
+
+      // Upload any dropped files; keep the ones that fail queued so the next
+      // Enter / Add retries only those (the task already exists).
+      if (attachments.length) {
+        setPhase('uploading');
+        const failed: PendingAttachment[] = [];
+        for (const a of attachments) {
+          try {
+            await uploadTaskAttachment(task.id, a.file);
+            if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+          } catch {
+            failed.push(a);
+          }
+        }
+        if (failed.length) {
+          setAttachments(failed);
+          setPhase('error');
+          setError(
+            `Task added, but ${failed.length} ${failed.length === 1 ? 'file' : 'files'} failed to upload — press Enter to retry.`,
+          );
+          return;
+        }
+        setAttachments([]);
       }
+
       setPhase('done');
       setTimeout(() => {
         void win.hide();
@@ -276,6 +356,58 @@ export default function QuickAdd() {
   const toggleAssignee = (id: string) =>
     setAssigneeIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
 
+  // ── dropped-file attachments ───────────────────────────────────────────────
+  const queueFiles = (files: FileList | File[]) => {
+    const next: PendingAttachment[] = [];
+    for (const file of Array.from(files)) {
+      if (!file) continue;
+      next.push({
+        id: `att-${attachmentSeq++}`,
+        file,
+        previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+      });
+    }
+    if (next.length) setAttachments((cur) => [...cur, ...next]);
+  };
+
+  const removeAttachment = (id: string) =>
+    setAttachments((cur) => {
+      const hit = cur.find((a) => a.id === id);
+      if (hit?.previewUrl) URL.revokeObjectURL(hit.previewUrl);
+      return cur.filter((a) => a.id !== id);
+    });
+
+  const onDragEnter = (e: React.DragEvent) => {
+    if (!Array.from(e.dataTransfer.types).includes('Files')) return;
+    e.preventDefault();
+    dragDepthRef.current += 1;
+    draggingRef.current = true;
+    cancelPendingHide();
+    setDragOver(true);
+  };
+  const onDragOver = (e: React.DragEvent) => {
+    if (!Array.from(e.dataTransfer.types).includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    draggingRef.current = true;
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    if (!Array.from(e.dataTransfer.types).includes('Files')) return;
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) {
+      draggingRef.current = false;
+      setDragOver(false);
+    }
+  };
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    draggingRef.current = false;
+    setDragOver(false);
+    if (e.dataTransfer.files?.length) queueFiles(e.dataTransfer.files);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
   // ── chips: My Tasks + up to 3 recents (+ current selection if off-list) ─────
   const personalId = cachedPersonal?.id;
   const chips: SelectedList[] = [];
@@ -300,8 +432,16 @@ export default function QuickAdd() {
         : `${assigneeIds.length} assignees`;
 
   return (
-    <div className="qa-scroll" onKeyDown={onContainerKeyDown}>
-      <div className="qa">
+    <div
+      className="qa-scroll"
+      onKeyDown={onContainerKeyDown}
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      <div className={`qa${dragOver ? ' qa-drop-active' : ''}`}>
+        {dragOver && <div className="qa-drop-overlay">Drop image to attach</div>}
       <div className="qa-row">
         <span className="qa-icon">+</span>
         <input
@@ -475,15 +615,50 @@ export default function QuickAdd() {
         </div>
       )}
 
-      <div className="qa-hint">
-        {phase === 'saving' && <span>Adding…</span>}
-        {phase === 'done' && <span className="qa-ok">Added ✓</span>}
-        {phase === 'error' && <span className="qa-err">{error}</span>}
-        {phase === 'idle' && (
-          <span>
-            <b>Enter</b> to add · <b>Esc</b> to dismiss
-          </span>
-        )}
+      {attachments.length > 0 && (
+        <div className="qa-attachments">
+          {attachments.map((a) => (
+            <div key={a.id} className="qa-att" title={a.file.name}>
+              {a.previewUrl ? (
+                <img className="qa-att-thumb" src={a.previewUrl} alt={a.file.name} />
+              ) : (
+                <div className="qa-att-thumb qa-att-file">📎</div>
+              )}
+              <span className="qa-att-name">{a.file.name}</span>
+              <button
+                type="button"
+                className="qa-att-remove"
+                onClick={() => removeAttachment(a.id)}
+                title="Remove"
+                aria-label={`Remove ${a.file.name}`}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="qa-footer">
+        <div className="qa-hint">
+          {phase === 'saving' && <span>Adding…</span>}
+          {phase === 'uploading' && <span>Uploading attachment…</span>}
+          {phase === 'done' && <span className="qa-ok">Added ✓</span>}
+          {phase === 'error' && <span className="qa-err">{error}</span>}
+          {phase === 'idle' && (
+            <span>
+              <b>Enter</b> to add · <b>Esc</b> to dismiss
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          className="qa-add-btn"
+          onClick={() => void submit()}
+          disabled={!title.trim() || phase === 'saving' || phase === 'uploading'}
+        >
+          Add a Task
+        </button>
       </div>
       </div>
     </div>

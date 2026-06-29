@@ -142,3 +142,51 @@ export async function setTaskFocus(taskId: string, focused: boolean): Promise<vo
     body: JSON.stringify({ focused }),
   });
 }
+
+interface PresignResponse {
+  upload_url: string;
+  public_url: string;
+  key: string;
+  expires_in: number;
+}
+
+/**
+ * Attach a file to an existing task, mirroring the web app's direct-to-R2 flow:
+ *   1. presign  → server hands back a short-lived R2 PUT URL,
+ *   2. PUT       → upload the raw bytes straight to R2 (NOT via apiFetch — no
+ *                  auth header, and the Content-Type must match what was signed),
+ *   3. confirm   → server HEAD-validates the object and writes the DB row.
+ * Throws on any step so the caller can surface a per-file failure.
+ */
+export async function uploadTaskAttachment(taskId: string, file: File): Promise<void> {
+  const contentType = file.type || 'application/octet-stream';
+
+  const presign = await apiJson<PresignResponse>('/pm/task-attachments/presign', {
+    method: 'POST',
+    body: JSON.stringify({
+      task_id: taskId,
+      filename: file.name,
+      content_type: contentType,
+      file_size: file.size,
+    }),
+  });
+
+  const put = await fetch(presign.upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: file,
+  });
+  if (!put.ok) {
+    throw new Error(`Upload failed (${put.status})`);
+  }
+
+  await apiJson('/pm/task-attachments/confirm', {
+    method: 'POST',
+    body: JSON.stringify({
+      task_id: taskId,
+      object_key: presign.key,
+      file_name: file.name,
+      mime_type: contentType,
+    }),
+  });
+}
