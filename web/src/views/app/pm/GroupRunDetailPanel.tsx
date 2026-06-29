@@ -6,7 +6,17 @@ import {
   useStopGroupRun,
   useGroupRunHistory,
 } from '../../../hooks/useGroupRuns';
+import { useUpdateTask } from '../../../hooks/useTasks';
+import DatePicker from './DatePicker';
 import { formatClock, formatDuration, formatRunDate, mergeActivity, ActivityRowItem } from './groupRunActivity';
+
+// Short, human work-date label for the panel's "Work date" row.
+function formatWorkDate(value: string | null): string {
+  if (!value) return 'Set date';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return 'Set date';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 // The work-block-style detail view for a "Grouped tasks under …" row, opened by
 // clicking the grouped row's name. A group is virtual (no task row), so this is
@@ -40,6 +50,12 @@ export default function GroupRunDetailPanel() {
   const start = useStartGroupRun();
   const stop = useStopGroupRun();
   const history = useGroupRunHistory(target?.key, !!target);
+
+  // "Work date for all tasks" — opens the shared DatePicker anchored to the
+  // row's button and writes the chosen date onto every task in the group.
+  const updateTask = useUpdateTask(null);
+  const [dateAnchor, setDateAnchor] = useState<DOMRect | null>(null);
+  const [appliedDate, setAppliedDate] = useState<string | null>(null);
 
   const isRunningHere = !!active?.run && active.run.group_key === target?.key && !active.run.ended_at;
   const runHere = isRunningHere ? active!.run : null;
@@ -80,6 +96,13 @@ export default function GroupRunDetailPanel() {
     else start.mutate({ group_key: target.key, group_label: target.label, list_id: target.listId });
   };
   const busy = start.isPending || stop.isPending;
+
+  const applyWorkDate = (next: string | null) => {
+    setAppliedDate(next);
+    for (const t of target.tasks) {
+      updateTask.mutate({ id: t.id, work_date: next } as any);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[90]">
@@ -154,6 +177,32 @@ export default function GroupRunDetailPanel() {
             )}
           </div>
 
+          {/* Work date — applies to every task in the group */}
+          <div className="flex items-center gap-3 rounded-xl border border-[color:var(--sh-hair-3)] bg-[color:var(--surface-alt)] px-4 py-3">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full" style={{ background: 'color-mix(in oklch, #8b5cf6 12%, transparent)', color: '#8b5cf6' }}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </span>
+            <div className="flex flex-col">
+              <span className="text-[13px] font-semibold text-[color:var(--sh-ink)]">Work date</span>
+              <span className="text-[11px] text-[color:var(--sh-ink-3)]">Sets the work date for all {target.tasks.length} tasks</span>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => setDateAnchor(e.currentTarget.getBoundingClientRect())}
+              className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sh-hair-2)] px-3 py-1.5 text-[12px] font-medium text-[color:var(--sh-ink)] transition hover:bg-[color:var(--sh-hair-3)]"
+              title="Set work date for all tasks in this group"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              {formatWorkDate(appliedDate)}
+            </button>
+          </div>
+
           {/* Live activity */}
           {isRunningHere && (
             <section>
@@ -225,6 +274,15 @@ export default function GroupRunDetailPanel() {
           </section>
         </div>
       </aside>
+      {dateAnchor && (
+        <DatePicker
+          anchorRect={dateAnchor}
+          value={appliedDate}
+          mode="datetime"
+          onChange={applyWorkDate}
+          onClose={() => setDateAnchor(null)}
+        />
+      )}
     </div>
   );
 }
