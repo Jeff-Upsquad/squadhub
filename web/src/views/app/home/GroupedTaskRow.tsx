@@ -283,14 +283,15 @@ export default function GroupedTaskRow({
         </div>,
         document.body,
       )}
-      {dateAnchor && (
+      {dateAnchor && createPortal(
         <DatePicker
           anchorRect={dateAnchor}
           value={row.tasks[0]?.work_date ?? null}
           mode="datetime"
           onChange={applyWorkDate}
           onClose={() => setDateAnchor(null)}
-        />
+        />,
+        document.body,
       )}
       {expanded && (
         <div className="hm-list hm-grouped-children" style={{ paddingTop: 0 }}>
