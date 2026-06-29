@@ -12,6 +12,7 @@ import {
   deleteR2Object,
 } from '../../r2';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
+import { logTaskActivity } from '../../utils/taskActivity';
 
 const router = Router();
 router.use(requireAuth);
@@ -193,6 +194,11 @@ router.post('/task-attachments/confirm', async (req: Request, res: Response) => 
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    await logTaskActivity(body.task_id, req.userId!, [{
+      event_type: 'attachment_added',
+      new_value: { name: body.file_name },
+    }]);
 
     res.json({ success: true, data });
   } catch (err) {

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
-import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useUpdateTaskTimeTracked, useTaskLists, useAddTaskToLists, useRemoveTaskFromList } from '../../../hooks/useTasks';
+import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useUpdateTaskTimeTracked, useTaskLists, useAddTaskToLists, useRemoveTaskFromList, useTaskActivity } from '../../../hooks/useTasks';
 import { useTimeStats } from '../../../hooks/useTimer';
 import { useFocusTask } from '../../../hooks/useDayPlanner';
 import { isTaskFocused } from '../../../lib/taskGrouping';
@@ -166,6 +166,85 @@ function formatDueRelative(iso: string | null | undefined): { text: string; acce
   return { text, accent: delta <= 0 };
 }
 
+// ── Activity feed rendering ────────────────────────────────────────────────
+const ACTIVITY_FIELD_LABEL: Record<string, string> = {
+  due_date: 'due date', work_date: 'work date', start_date: 'start date',
+};
+
+function fmtEstimate(m: unknown): string {
+  if (m == null) return 'none';
+  const mins = Number(m);
+  if (!Number.isFinite(mins)) return String(m);
+  const h = Math.floor(mins / 60);
+  const min = mins % 60;
+  return h ? (min ? `${h}h ${min}m` : `${h}h`) : `${min}m`;
+}
+
+function fmtDateValue(v: unknown): string {
+  if (!v) return 'none';
+  const { text } = formatDueRelative(String(v));
+  return text;
+}
+
+// Entity events carry {id, name} (assignee/label/list/type) or {id, title}
+// (subtask), or {name} (attachment). Pull a display string from any of them.
+function entityName(v: unknown): string {
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    return (o.name as string) || (o.title as string) || '—';
+  }
+  return v == null ? 'none' : String(v);
+}
+
+type ActivityForRender = {
+  event_type: string;
+  field: string | null;
+  old_value: unknown;
+  new_value: unknown;
+  user: { display_name: string | null; email: string | null } | null;
+};
+
+// Map one activity entry to a feed icon + sentence. Bold actor + the changed value.
+function renderActivity(e: ActivityForRender): { icon: string; body: React.ReactNode } {
+  const actor = <b>{e.user?.display_name || e.user?.email || 'Someone'}</b>;
+  const dim = (s: React.ReactNode) => <span className="text-[color:var(--sh-ink-3)]">{s}</span>;
+  const line = (verb: React.ReactNode, val?: React.ReactNode): React.ReactNode => (
+    <>{actor} {dim(verb)}{val != null ? <> <b>{val}</b></> : null}</>
+  );
+
+  switch (e.event_type) {
+    case 'created': return { icon: '○', body: line('created the task') };
+    case 'comment': return { icon: '○', body: line('commented') };
+    case 'subtask_added': return { icon: '◇', body: line('added subtask', entityName(e.new_value)) };
+    case 'assignee_added': return { icon: '◉', body: line('assigned', entityName(e.new_value)) };
+    case 'assignee_removed': return { icon: '◎', body: line('unassigned', entityName(e.old_value)) };
+    case 'label_added': return { icon: '◆', body: line('added label', entityName(e.new_value)) };
+    case 'label_removed': return { icon: '◇', body: line('removed label', entityName(e.old_value)) };
+    case 'attachment_added': return { icon: '▣', body: line('attached', entityName(e.new_value)) };
+    case 'moved': return { icon: '→', body: line('moved to', entityName(e.new_value)) };
+    case 'field_change': {
+      const f = e.field || '';
+      if (f === 'status') return { icon: '●', body: line('set status to', String(e.new_value ?? 'none')) };
+      if (f === 'priority') {
+        const key = (e.new_value ?? 'none') as TaskPriority;
+        return { icon: '◆', body: line('changed priority to', PRIORITY_LABEL[key] || String(key)) };
+      }
+      if (f === 'title') return { icon: '○', body: line('renamed to', String(e.new_value ?? '')) };
+      if (f === 'description') return { icon: '○', body: line('updated the description') };
+      if (f === 'task_type_id') return { icon: '○', body: line('changed task type to', entityName(e.new_value)) };
+      if (f === 'time_estimate') return { icon: '○', body: line('set estimate to', fmtEstimate(e.new_value)) };
+      if (f in ACTIVITY_FIELD_LABEL) {
+        const label = ACTIVITY_FIELD_LABEL[f];
+        return e.new_value == null
+          ? { icon: '○', body: line(`cleared ${label}`) }
+          : { icon: '○', body: line(`set ${label} to`, fmtDateValue(e.new_value)) };
+      }
+      return { icon: '○', body: line(`changed ${f}`) };
+    }
+    default: return { icon: '○', body: line('updated the task') };
+  }
+}
+
 export default function TaskDetailPanel({
   statuses,
   listId,
@@ -251,6 +330,8 @@ export default function TaskDetailPanel({
   const [commentText, setCommentText] = useState('');
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [showActivity, setShowActivity] = useState(false);
+  // Activity is fetched only once its (collapsed-by-default) section is opened.
+  const { data: activityFeed } = useTaskActivity(effectiveTaskId, showActivity);
   const [commentFocus, setCommentFocus] = useState(false);
   const [estimateInput, setEstimateInput] = useState('');
   const [editingEstimate, setEditingEstimate] = useState(false);
@@ -661,23 +742,13 @@ export default function TaskDetailPanel({
   const subtasks = task?.subtasks || [];
   const subtaskDone = subtasks.filter((s: any) => s.status === 'done' || s.status === 'closed').length;
 
-  const activityItems: { icon: string; body: React.ReactNode; t: string }[] = task ? [
-    ...(comments || []).map((c) => ({
-      icon: '○',
-      body: <><b>{c.user?.display_name || c.user?.email}</b> <span className="text-[color:var(--sh-ink-3)]">commented</span></>,
-      t: c.created_at,
-    })),
-    ...(status ? [{
-      icon: '●',
-      body: <><span className="text-[color:var(--sh-ink-3)]">status is</span> <b>{status.name}</b></>,
-      t: task.updated_at,
-    }] : []),
-    {
-      icon: '○',
-      body: <><b>{task.creator?.display_name || task.creator?.email || 'Someone'}</b> <span className="text-[color:var(--sh-ink-3)]">created the task</span></>,
-      t: task.created_at,
-    },
-  ] : [];
+  // Real change history from the server (field changes, assignees, labels,
+  // comments, attachments, move, creation…), already merged + sorted newest-first.
+  const activityItems: { icon: string; body: React.ReactNode; t: string }[] =
+    (activityFeed || []).map((e) => {
+      const { icon, body } = renderActivity(e);
+      return { icon, body, t: e.created_at };
+    });
 
   return (
     <div className="fixed inset-0 z-[90]">
@@ -1976,7 +2047,9 @@ export default function TaskDetailPanel({
               </button>
               {showActivity && (
                 <div className="flex flex-col gap-3 mt-2 pl-1">
-                  {activityItems.map((a, i) => (
+                  {activityItems.length === 0 ? (
+                    <div className="text-[12.5px] text-[color:var(--sh-ink-4)]">No activity yet.</div>
+                  ) : activityItems.map((a, i) => (
                     <div key={i} className="td-act-item grid items-baseline" style={{ gridTemplateColumns: 'auto 1fr auto', gap: 12 }}>
                       <div className="text-[color:var(--sh-ink-3)] text-[10px] w-3 text-center">{a.icon}</div>
                       <div className="text-[13px] text-[color:var(--sh-ink-2)]">{a.body}</div>

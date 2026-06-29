@@ -1,5 +1,6 @@
 'use client';
 import { forwardRef, useImperativeHandle, useRef, useState, useCallback, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import type { TaskAttachment } from '@squadhub/shared';
 import { useTaskAttachments, useDeleteTaskAttachment } from '../../../hooks/useTaskAttachments';
@@ -48,6 +49,7 @@ const TaskAttachments = forwardRef<TaskAttachmentsHandle, Props>(function TaskAt
   const [dragOver, setDragOver] = useState(false);
   const [previewId, setPreviewId] = useState<string | null>(null);
 
+  const qc = useQueryClient();
   const { data: allAttachments = [], refetch } = useTaskAttachments(taskId);
   const attachments = excludeAudio ? allAttachments.filter((a) => !isAudioMime(a.mime_type)) : allAttachments;
   const deleteMut = useDeleteTaskAttachment(taskId);
@@ -114,6 +116,7 @@ const TaskAttachments = forwardRef<TaskAttachmentsHandle, Props>(function TaskAt
 
       removeInFlight(id);
       refetch();
+      qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error ||
@@ -121,7 +124,7 @@ const TaskAttachments = forwardRef<TaskAttachmentsHandle, Props>(function TaskAt
         'Upload failed';
       updateInFlight(id, { error: msg, xhr: undefined });
     }
-  }, [taskId, updateInFlight, removeInFlight, refetch]);
+  }, [taskId, updateInFlight, removeInFlight, refetch, qc]);
 
   const handleFiles = useCallback((files: FileList | File[]) => {
     Array.from(files).forEach((f) => uploadOne(f));

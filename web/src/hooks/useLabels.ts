@@ -29,6 +29,7 @@ export function useAttachLabel(taskId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['label-picker', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
     },
   });
 }
@@ -42,6 +43,7 @@ export function useDetachLabel(taskId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['label-picker', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-activity', taskId] });
     },
   });
 }
