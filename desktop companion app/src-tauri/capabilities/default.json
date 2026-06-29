@@ -23,6 +23,10 @@
     "store:allow-delete",
     "store:allow-clear",
     "store:allow-keys",
-    "store:allow-has"
+    "store:allow-has",
+    {
+      "identifier": "http:default",
+      "allow": [{ "url": "https://*.r2.cloudflarestorage.com/*" }]
+    }
   ]
 }

@@ -105,6 +105,7 @@ pub fn run() {
         .plugin(tauri_nspanel::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_http::init())
         .invoke_handler(tauri::generate_handler![notif::send_notification, set_quick_add_shortcut])
         .setup(|app| {
             // Run as a menu-bar/tray companion (no Dock icon, no app-switcher
