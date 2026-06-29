@@ -585,6 +585,11 @@ export interface Task {
   // space) with group_tasks ON, used to collapse this task into a single
   // "Grouped tasks under {name}" row on Home. Null when no ancestor is grouped.
   group_container?: { type: 'list' | 'folder' | 'space'; id: string; name: string } | null;
+  // Every grouped container this task belongs to — its PRIMARY list chain plus
+  // any secondary "ALSO IN" list (task_list_links) whose chain has group_tasks ON.
+  // Set by GET /pm/tasks/my so Home can collapse a multi-homed task into each of
+  // its groups. Falls back to [group_container] for endpoints that don't compute it.
+  group_containers?: { type: 'list' | 'folder' | 'space'; id: string; name: string }[];
   parent_task?: { id: string; title: string } | null;
   // Hydrated on GET /pm/tasks/:id for spawned routine copies.
   routine_template?: { id: string; title: string; recurrence: TaskRecurrence | null } | null;

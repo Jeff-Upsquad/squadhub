@@ -131,18 +131,25 @@ export async function hydrateLabels<T extends { id: string }>(
 // without a second round-trip.
 type GroupContainer = { type: 'list' | 'folder' | 'space'; id: string; name: string } | null;
 
-export async function hydrateLists<T extends { list_id: string }>(
-  tasks: T[],
-): Promise<(T & {
-  list: { id: string; name: string } | null;
+// For each given list id, resolve its full list/folder/space chain plus the
+// nearest ancestor with Group Tasks ON (innermost-first: list → folder → space).
+// Shared by hydrateLists (a task's primary list) and hydrateMultiHomeGroups
+// (a task's secondary "ALSO IN" lists).
+async function resolveListContainers(
+  listIds: string[],
+): Promise<Map<string, {
+  list: { id: string; name: string };
   folder: { id: string; name: string } | null;
   space: { id: string; name: string } | null;
   group_container: GroupContainer;
-})[]> {
-  const listIds = Array.from(new Set(tasks.map(t => t.list_id).filter(Boolean)));
-  if (listIds.length === 0) {
-    return tasks.map(t => ({ ...t, list: null, folder: null, space: null, group_container: null }));
-  }
+}>> {
+  const out = new Map<string, {
+    list: { id: string; name: string };
+    folder: { id: string; name: string } | null;
+    space: { id: string; name: string } | null;
+    group_container: GroupContainer;
+  }>();
+  if (listIds.length === 0) return out;
   const { data: lists } = await supabaseAdmin
     .from('lists')
     .select('id, name, space_id, folder_id, group_tasks')
@@ -157,37 +164,96 @@ export async function hydrateLists<T extends { list_id: string }>(
       ? supabaseAdmin.from('folders').select('id, name, group_tasks').in('id', folderIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
-  const listById = new Map<string, { id: string; name: string; space_id: string | null; folder_id: string | null; group_tasks?: boolean }>(
-    (lists || []).map((l: any) => [l.id, l]),
-  );
   const spaceById = new Map<string, { id: string; name: string; group_tasks?: boolean }>(
     (spaces || []).map((s: any) => [s.id, s]),
   );
   const folderById = new Map<string, { id: string; name: string; group_tasks?: boolean }>(
     (folders || []).map((f: any) => [f.id, f]),
   );
-  return tasks.map(t => {
-    const l = listById.get(t.list_id);
-    const s = l?.space_id ? spaceById.get(l.space_id) : null;
-    const f = l?.folder_id ? folderById.get(l.folder_id) : null;
-    // Innermost-first: a task collapses under the nearest ancestor with grouping
-    // ON (its own list, else folder, else space). Each task resolves to exactly
-    // one container, so a grouped list + grouped parent folder yield two distinct
-    // rows on Home without ever double-counting a task.
-    const group_container: GroupContainer = l?.group_tasks
+  for (const l of lists || []) {
+    const s = l.space_id ? spaceById.get(l.space_id) : null;
+    const f = l.folder_id ? folderById.get(l.folder_id) : null;
+    const group_container: GroupContainer = l.group_tasks
       ? { type: 'list', id: l.id, name: l.name }
       : f?.group_tasks
         ? { type: 'folder', id: f.id, name: f.name }
         : s?.group_tasks
           ? { type: 'space', id: s.id, name: s.name }
           : null;
-    return {
-      ...t,
-      list: l ? { id: l.id, name: l.name } : null,
+    out.set(l.id, {
+      list: { id: l.id, name: l.name },
       folder: f ? { id: f.id, name: f.name } : null,
       space: s ? { id: s.id, name: s.name } : null,
       group_container,
+    });
+  }
+  return out;
+}
+
+export async function hydrateLists<T extends { list_id: string }>(
+  tasks: T[],
+): Promise<(T & {
+  list: { id: string; name: string } | null;
+  folder: { id: string; name: string } | null;
+  space: { id: string; name: string } | null;
+  group_container: GroupContainer;
+})[]> {
+  const listIds = Array.from(new Set(tasks.map(t => t.list_id).filter(Boolean)));
+  if (listIds.length === 0) {
+    return tasks.map(t => ({ ...t, list: null, folder: null, space: null, group_container: null }));
+  }
+  const byList = await resolveListContainers(listIds);
+  return tasks.map(t => {
+    const c = byList.get(t.list_id);
+    // Innermost-first: a task collapses under the nearest ancestor with grouping
+    // ON (its own list, else folder, else space).
+    return {
+      ...t,
+      list: c?.list ?? null,
+      folder: c?.folder ?? null,
+      space: c?.space ?? null,
+      group_container: c?.group_container ?? null,
     };
+  });
+}
+
+// Multi-homing: augment each already-list-hydrated task with `group_containers`,
+// the deduped set of grouped containers it belongs to — its PRIMARY list chain
+// (group_container) PLUS any secondary "ALSO IN" list (task_list_links) whose
+// chain has Group Tasks ON. Home renders the task inside EACH of these groups.
+// Only used by GET /pm/tasks/my; other endpoints leave group_containers undefined
+// and the frontend falls back to [group_container].
+export async function hydrateMultiHomeGroups<T extends { id: string; group_container: GroupContainer }>(
+  tasks: T[],
+): Promise<(T & { group_containers: NonNullable<GroupContainer>[] })[]> {
+  const taskIds = Array.from(new Set(tasks.map(t => t.id).filter(Boolean)));
+  if (taskIds.length === 0) {
+    return tasks.map(t => ({ ...t, group_containers: t.group_container ? [t.group_container] : [] }));
+  }
+  const { data: links } = await supabaseAdmin
+    .from('task_list_links')
+    .select('task_id, list_id')
+    .in('task_id', taskIds);
+  const secondaryListIds = Array.from(new Set((links || []).map((r: any) => r.list_id).filter(Boolean)));
+  const byList = await resolveListContainers(secondaryListIds);
+  const secondaryByTask = new Map<string, GroupContainer[]>();
+  for (const r of links || []) {
+    const gc = byList.get((r as any).list_id)?.group_container;
+    if (!gc) continue;
+    const arr = secondaryByTask.get((r as any).task_id) || [];
+    arr.push(gc);
+    secondaryByTask.set((r as any).task_id, arr);
+  }
+  return tasks.map(t => {
+    const containers: NonNullable<GroupContainer>[] = [];
+    const seen = new Set<string>();
+    for (const gc of [t.group_container, ...(secondaryByTask.get(t.id) || [])]) {
+      if (gc && !seen.has(gc.id)) {
+        seen.add(gc.id);
+        containers.push(gc);
+      }
+    }
+    return { ...t, group_containers: containers };
   });
 }
 
@@ -408,7 +474,10 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
 
     const withAssignees = await hydrateAssignees(data || []);
     const withLists = await hydrateLists(withAssignees);
-    const tasks = await hydrateParents(withLists);
+    // Multi-home grouping: a task also collapses into any secondary "ALSO IN"
+    // list whose chain has Group Tasks ON, not just its primary list chain.
+    const withGroups = await hydrateMultiHomeGroups(withLists);
+    const tasks = await hydrateParents(withGroups);
 
     // Compute day boundaries in user's timezone
     const fmt = new Intl.DateTimeFormat('en-CA', {
