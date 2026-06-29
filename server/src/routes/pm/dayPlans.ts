@@ -78,6 +78,16 @@ const updateSchema = z.object({
   duration_minutes: z.number().int().min(1).max(1440).optional(),
 });
 
+// Group blocks schedule a whole container (multi-home group) as one combined
+// block. Stored in group_day_plans, keyed by (container, user, date).
+const groupCreateSchema = z.object({
+  container_type: z.enum(['list', 'folder', 'space']),
+  container_id: z.string().uuid(),
+  plan_date: z.string().regex(dateRe),
+  start_minute: z.number().int().min(0).max(1439),
+  duration_minutes: z.number().int().min(1).max(1440),
+});
+
 // Join each plan row with a minimal task summary so the calendar block can
 // render title + duration without an extra round-trip.
 async function hydrate(plans: any[]): Promise<any[]> {
@@ -118,6 +128,48 @@ async function hydrate(plans: any[]): Promise<any[]> {
       task: t ? { ...t, list: l ? { id: l.id, name: l.name } : null } : null,
     };
   });
+}
+
+// Container-level group blocks for the caller on a date. Each is ONE combined
+// block standing in for a whole multi-home group; its display name is resolved
+// from the container's own table (lists / folders / spaces). Shaped like a
+// TaskDayPlan with kind='group_block', task=null, and a `container`.
+async function loadGroupBlocks(userId: string, date: string): Promise<any[]> {
+  const { data: rows, error } = await supabaseAdmin
+    .from('group_day_plans')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('plan_date', date);
+  if (error) {
+    console.error('[dayPlans] group blocks lookup failed:', error);
+    return [];
+  }
+  if (!rows || rows.length === 0) return [];
+
+  const tableFor = { list: 'lists', folder: 'folders', space: 'spaces' } as const;
+  const idsByType: Record<'list' | 'folder' | 'space', string[]> = { list: [], folder: [], space: [] };
+  for (const r of rows as any[]) {
+    const ct = r.container_type as 'list' | 'folder' | 'space';
+    if (idsByType[ct]) idsByType[ct].push(r.container_id);
+  }
+  const nameMap = new Map<string, string>(); // `${type}:${id}` -> name
+  for (const type of ['list', 'folder', 'space'] as const) {
+    const ids = Array.from(new Set(idsByType[type]));
+    if (!ids.length) continue;
+    const { data: named } = await supabaseAdmin.from(tableFor[type]).select('id, name').in('id', ids);
+    for (const n of (named || []) as any[]) nameMap.set(`${type}:${n.id}`, n.name);
+  }
+
+  return (rows as any[]).map((r) => ({
+    ...r,
+    kind: 'group_block',
+    task: null,
+    container: {
+      type: r.container_type,
+      id: r.container_id,
+      name: nameMap.get(`${r.container_type}:${r.container_id}`) ?? 'Group',
+    },
+  }));
 }
 
 // GET /pm/day-plans?date=YYYY-MM-DD&tz=Area/City — caller's plan blocks for
@@ -252,7 +304,8 @@ router.get('/day-plans', async (req: Request, res: Response) => {
       (a, b) => (a.start_minute || 0) - (b.start_minute || 0),
     );
     const hydrated = await hydrate(merged);
-    res.json({ success: true, data: hydrated });
+    const groupBlocks = await loadGroupBlocks(req.userId!, date);
+    res.json({ success: true, data: [...hydrated, ...groupBlocks] });
   } catch (err) {
     console.error('Get day plans error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -379,6 +432,75 @@ router.delete('/day-plans', async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (err) {
     console.error('Delete day plan by task error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /pm/group-day-plans — upsert a combined block for a whole group
+// (container) on a day. Dragging the same group to another time overwrites,
+// same as the per-task POST above.
+router.post('/group-day-plans', async (req: Request, res: Response) => {
+  try {
+    const parsed = groupCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.message });
+      return;
+    }
+    const { container_type, container_id, plan_date, start_minute, duration_minutes } = parsed.data;
+    const { data, error } = await supabaseAdmin
+      .from('group_day_plans')
+      .upsert(
+        {
+          container_type,
+          container_id,
+          user_id: req.userId!,
+          plan_date,
+          start_minute,
+          duration_minutes,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'container_type,container_id,user_id,plan_date' },
+      )
+      .select('*')
+      .single();
+    if (error) {
+      console.error('[groupDayPlans POST] supabase error:', error);
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data: { ...data, kind: 'group_block' } });
+  } catch (err) {
+    console.error('Create group day plan error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /pm/group-day-plans?container_type=&container_id=&plan_date= — remove a
+// group's block from a day. Keyed by container (not row id) to dodge the same
+// optimistic-id race as the task × button.
+router.delete('/group-day-plans', async (req: Request, res: Response) => {
+  try {
+    const container_type = req.query.container_type as string | undefined;
+    const container_id = req.query.container_id as string | undefined;
+    const plan_date = req.query.plan_date as string | undefined;
+    if (!container_type || !container_id || !plan_date || !dateRe.test(plan_date)) {
+      res.status(400).json({ success: false, error: 'container_type, container_id and plan_date=YYYY-MM-DD are required' });
+      return;
+    }
+    const { error } = await supabaseAdmin
+      .from('group_day_plans')
+      .delete()
+      .eq('container_type', container_type)
+      .eq('container_id', container_id)
+      .eq('plan_date', plan_date)
+      .eq('user_id', req.userId!);
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete group day plan error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

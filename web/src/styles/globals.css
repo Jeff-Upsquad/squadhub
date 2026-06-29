@@ -554,6 +554,10 @@ body {
 .sh-view .dp-hour .slot[data-dragover="true"] { background: var(--sh-hair-3); }
 .sh-view .dp-block { position: absolute; left: 70px; right: 22px; border-radius: 4px; background: #fef9c3; color: #422006; padding: 0; font-size: 12.5px; line-height: 1.3; border: none; border-left: 4px solid #ca8a04; overflow: hidden; transition: background 0.12s, opacity 0.12s; display: flex; flex-direction: column; }
 .sh-view .dp-block:hover { background: #fef08a; }
+/* Group block — one combined block for a whole "Grouped tasks under …" group
+   (indigo, distinct from amber task blocks). */
+.sh-view .dp-block[data-type="group_block"] { background: color-mix(in oklch, #6366f1 16%, transparent); color: #312e81; border-left: 4px solid #6366f1; }
+.sh-view .dp-block[data-type="group_block"]:hover { background: color-mix(in oklch, #6366f1 24%, transparent); }
 .sh-view .dp-block[data-moving="true"] { box-shadow: 0 6px 16px rgba(0,0,0,0.18); z-index: 5; }
 .sh-view .dp-block[data-done="true"] { background: var(--sh-hair-3); border-left-color: var(--sh-ink-4); color: var(--sh-ink-3); }
 .sh-view .dp-block[data-done="true"]:hover { background: var(--sh-hair); }
@@ -719,6 +723,8 @@ body {
 .cal-tt-block[data-level="p2"] { background: #dbeafe; border-left-color: #3b82f6; color: #1e3a8a; }
 .cal-tt-block[data-done="true"] { background: var(--sh-hair-3); border-left-color: var(--sh-ink-4); color: var(--sh-ink-3); }
 .cal-tt-block[data-done="true"] .cal-tt-block-title { text-decoration: line-through; }
+/* Group block — combined block for a whole group (indigo). */
+.cal-tt-block[data-type="group_block"] { background: color-mix(in oklch, #6366f1 16%, transparent); color: #312e81; border-left: 3px solid #6366f1; }
 .cal-tt-block[data-virtual="true"] { opacity: 0.82; }
 .cal-tt-block[data-hidden="true"] { visibility: hidden; }
 .cal-tt-block-body { flex: 1; min-height: 0; padding: 2px 6px; cursor: grab; position: relative; overflow: hidden; }

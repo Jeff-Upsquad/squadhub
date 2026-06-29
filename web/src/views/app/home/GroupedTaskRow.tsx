@@ -2,6 +2,12 @@ import type { ReactNode } from 'react';
 import type { Task } from '@squadhub/shared';
 import type { GroupedRow } from '../../../lib/taskGrouping';
 import { usePMStore } from '../../../stores/pmStore';
+import {
+  DND_GROUP_CONTAINER_ID,
+  DND_GROUP_CONTAINER_TYPE,
+  DND_GROUP_CONTAINER_NAME,
+  DND_GROUP_ESTIMATE_TOTAL,
+} from '../calendar/calendarUtils';
 
 // A single collapsed "Grouped tasks under {name}" row on Home. Renders like a
 // task row (so it sits naturally in a .hm-list). Three affordances:
@@ -18,12 +24,16 @@ export default function GroupedTaskRow({
   onToggle,
   onOpenContainer,
   renderChild,
+  draggable = false,
 }: {
   row: GroupedRow;
   expanded: boolean;
   onToggle: () => void;
   onOpenContainer?: (container: GroupedRow['container']) => void;
   renderChild: (task: Task) => ReactNode;
+  // When true (Day Planner), the collapsed header is draggable onto the
+  // calendar, where it becomes ONE combined block sized to the summed estimate.
+  draggable?: boolean;
 }) {
   const setGroupRunPanel = usePMStore((s) => s.setGroupRunPanel);
 
@@ -41,6 +51,19 @@ export default function GroupedTaskRow({
       <div
         className="hm-task hm-grouped"
         data-expanded={expanded || undefined}
+        draggable={draggable || undefined}
+        onDragStart={
+          draggable
+            ? (e) => {
+                const total = row.tasks.reduce((s, t) => s + (t.time_estimate ?? 30), 0);
+                e.dataTransfer.setData(DND_GROUP_CONTAINER_ID, row.container.id);
+                e.dataTransfer.setData(DND_GROUP_CONTAINER_TYPE, row.container.type);
+                e.dataTransfer.setData(DND_GROUP_CONTAINER_NAME, row.container.name);
+                e.dataTransfer.setData(DND_GROUP_ESTIMATE_TOTAL, String(total));
+                e.dataTransfer.effectAllowed = 'copyMove';
+              }
+            : undefined
+        }
         onClick={openPanel}
         role="button"
         tabIndex={0}

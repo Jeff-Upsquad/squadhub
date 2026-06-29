@@ -97,6 +97,12 @@ export default function TodayList() {
     () => new Set(todayPlans.filter((p) => !p.all_day).map((p) => p.task_id)),
     [todayPlans],
   );
+  // Containers already dropped as a combined group block today — hide those
+  // grouped rows from the palette (mirrors how a scheduled single task vanishes).
+  const scheduledContainerIds = useMemo(
+    () => new Set(todayPlans.filter((p) => p.kind === 'group_block' && p.container).map((p) => p.container!.id)),
+    [todayPlans],
+  );
   const visibleTasks = useMemo(
     () => tasks.filter((t) => !scheduledTaskIds.has(t.id)),
     [tasks, scheduledTaskIds],
@@ -212,20 +218,24 @@ export default function TodayList() {
   // Collapse multi-homed tasks into one expandable "Grouped tasks under {name}"
   // row (same as Home); plain tasks render as normal draggable rows.
   const renderRows = (list: Task[]) =>
-    collapseGroupedTasks(list).map((item) =>
-      isGroupedRow(item) ? (
-        <GroupedTaskRow
-          key={`grp:${item.key}`}
-          row={item}
-          expanded={!!groupedExpanded[item.key]}
-          onToggle={() => toggleGroupedExpanded(item.key)}
-          onOpenContainer={openContainer}
-          renderChild={renderRow}
-        />
-      ) : (
-        renderRow(item)
-      ),
-    );
+    collapseGroupedTasks(list)
+      // Hide a group whose combined block is already on today's calendar.
+      .filter((item) => !(isGroupedRow(item) && scheduledContainerIds.has(item.container.id)))
+      .map((item) =>
+        isGroupedRow(item) ? (
+          <GroupedTaskRow
+            key={`grp:${item.key}`}
+            row={item}
+            expanded={!!groupedExpanded[item.key]}
+            onToggle={() => toggleGroupedExpanded(item.key)}
+            onOpenContainer={openContainer}
+            renderChild={renderRow}
+            draggable
+          />
+        ) : (
+          renderRow(item)
+        ),
+      );
 
   const currentLabel = GROUP_OPTIONS.find((o) => o.value === groupBy)?.label ?? 'None';
 
