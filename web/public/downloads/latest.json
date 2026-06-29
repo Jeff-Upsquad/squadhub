@@ -1,10 +1,10 @@
 {
-  "version": "0.1.8",
-  "notes": "Quick-add panel (⌘⇧T) now reliably appears over apps running in full-screen mode (macOS).",
-  "pub_date": "2026-06-29T08:44:09Z",
+  "version": "0.1.9",
+  "notes": "Quick-add (⌘⇧T) now has an \"Add a Task\" button and supports drag-and-drop image attachments.",
+  "pub_date": "2026-06-29T09:20:01Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3dzc3lrYnZhSUNKMldrcWpTQWR4NWZMcGRpSHJBeEJyMHR3Y0dSSVByNU1yQSt4ZHdOaURRZEVjTURTTHFUbEZLR2lRd0RmcjhNby8xVGQwb0tNOEFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzIyNjA1CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKUHFYMDArd0lRUFdhQ3pacmMyNUNyLzlrTlNvczlvQ09XMUtPSTBjOW5NN0ExUk1KOTFuNTF2SlRoV0c0T2pLOTltZkI0ZGR3b093UlUvOHBkZVJmQUE9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzFXSEJ3RHpHSzVVSmRQZERlQ3ArblNNK2w2YTVOT2l2VEd3ZEo0Z1hUeHE1QkRSWGRscld5S3lKYU1qY3QveUFqREE1bXE5N2wyUHNUR3FTYTZDM2dzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzI0NzQ0CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKS2Iyd2QrSlNHZVpTSU1CSTMyTHA2bmFOeHhyaXdwMGtVVjIzUE9yUGlJVCtpVUVWWXJCYmNqUWN6T3gwNkExT0Q2UG50MThCVTdHL2txTjFMeFJYQWc9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
