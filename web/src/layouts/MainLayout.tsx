@@ -62,6 +62,7 @@ import { launchApp, type AppDef } from '../config/apps';
 import { useUserType, useIsPartner } from '../hooks/useUserType';
 import { useNavHistory } from '../hooks/useNavHistory';
 import { useUnreadCount } from '../hooks/useUnreadCount';
+import { useAppBadge } from '../hooks/useAppBadge';
 import { useNotificationFreshness } from '../hooks/useNotificationFreshness';
 import { useBrowserNotifications } from '../hooks/useBrowserNotifications';
 import BrowserNotificationsToggle from '../components/BrowserNotificationsToggle';
@@ -294,6 +295,8 @@ export default function MainLayout() {
   const onlineUserIds = usePresenceStore((s) => s.onlineUserIds);
   const { data: unreadData } = useUnreadCount();
   const unreadCount = unreadData ?? 0;
+  // Mirror Inbox unread onto the installed-PWA Dock/taskbar icon badge.
+  useAppBadge(unreadCount);
   // Drive the notification badge's red/pulse states from changes in the count.
   const { alert: inboxAlert, pulse: inboxPulse } = useNotificationFreshness(unreadData);
   useBrowserNotifications(currentWorkspace?.id);

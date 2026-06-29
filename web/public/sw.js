@@ -33,7 +33,19 @@ self.addEventListener('push', (event) => {
     data: { url: payload.url || '/' },
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  // Update the Dock/taskbar icon badge from the server-supplied unread count so
+  // it stays current even while the app window is closed. (When the window is
+  // open the client's useAppBadge hook owns this and re-syncs on focus.)
+  const updateBadge = () => {
+    const count = typeof payload.unreadCount === 'number' ? payload.unreadCount : null;
+    if (count === null || !self.navigator || !self.navigator.setAppBadge) {
+      return Promise.resolve();
+    }
+    const p = count > 0 ? self.navigator.setAppBadge(count) : self.navigator.clearAppBadge();
+    return p && p.catch ? p.catch(() => {}) : Promise.resolve();
+  };
+
+  event.waitUntil(Promise.all([self.registration.showNotification(title, options), updateBadge()]));
 });
 
 // Click → focus an existing SquadHub window (and route it in-app) or open one.
