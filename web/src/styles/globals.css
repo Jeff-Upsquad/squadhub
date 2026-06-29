@@ -556,8 +556,8 @@ body {
 .sh-view .dp-block:hover { background: #fef08a; }
 /* Group block — one combined block for a whole "Grouped tasks under …" group
    (indigo, distinct from amber task blocks). */
-.sh-view .dp-block[data-type="group_block"] { background: color-mix(in oklch, #6366f1 16%, transparent); color: #312e81; border-left: 4px solid #6366f1; }
-.sh-view .dp-block[data-type="group_block"]:hover { background: color-mix(in oklch, #6366f1 24%, transparent); }
+.sh-view .dp-block[data-type="group_block"] { background: #e0e7ff; color: #312e81; border-left: 4px solid #6366f1; }
+.sh-view .dp-block[data-type="group_block"]:hover { background: #c7d2fe; }
 .sh-view .dp-block[data-moving="true"] { box-shadow: 0 6px 16px rgba(0,0,0,0.18); z-index: 5; }
 .sh-view .dp-block[data-done="true"] { background: var(--sh-hair-3); border-left-color: var(--sh-ink-4); color: var(--sh-ink-3); }
 .sh-view .dp-block[data-done="true"]:hover { background: var(--sh-hair); }
@@ -724,7 +724,7 @@ body {
 .cal-tt-block[data-done="true"] { background: var(--sh-hair-3); border-left-color: var(--sh-ink-4); color: var(--sh-ink-3); }
 .cal-tt-block[data-done="true"] .cal-tt-block-title { text-decoration: line-through; }
 /* Group block — combined block for a whole group (indigo). */
-.cal-tt-block[data-type="group_block"] { background: color-mix(in oklch, #6366f1 16%, transparent); color: #312e81; border-left: 3px solid #6366f1; }
+.cal-tt-block[data-type="group_block"] { background: #e0e7ff; color: #312e81; border-left: 3px solid #6366f1; }
 .cal-tt-block[data-virtual="true"] { opacity: 0.82; }
 .cal-tt-block[data-hidden="true"] { visibility: hidden; }
 .cal-tt-block-body { flex: 1; min-height: 0; padding: 2px 6px; cursor: grab; position: relative; overflow: hidden; }
