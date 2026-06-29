@@ -9,6 +9,13 @@ import { planDateKey } from '../../../hooks/useDayPlanner';
 export const DND_TASK_ID = 'application/x-task-id';
 export const DND_TASK_ESTIMATE = 'application/x-task-estimate';
 
+// Group ("Grouped tasks under …") drag payload — dropping it creates ONE
+// combined block sized to the summed estimate (DND_GROUP_ESTIMATE_TOTAL).
+export const DND_GROUP_CONTAINER_ID = 'application/x-group-container-id';
+export const DND_GROUP_CONTAINER_TYPE = 'application/x-group-container-type';
+export const DND_GROUP_CONTAINER_NAME = 'application/x-group-container-name';
+export const DND_GROUP_ESTIMATE_TOTAL = 'application/x-group-estimate-total';
+
 // YYYY-MM-DD for the local-midnight of a calendar cell.
 export function cellKey(d: Date): string {
   return planDateKey(d);

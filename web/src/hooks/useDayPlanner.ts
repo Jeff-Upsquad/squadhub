@@ -538,3 +538,204 @@ export function useUnscheduleTask() {
     },
   });
 }
+
+// ---------- group blocks ----------
+// A "group block" schedules a whole multi-home group (container) as ONE combined
+// block sized to the sum of its tasks' estimates. Stored in group_day_plans
+// (keyed by container, not task) and surfaced in the same ['day-plans', date]
+// cache as TaskDayPlan rows with kind='group_block' + a `container`. These
+// hooks mirror the per-task ones but match cache rows by container identity.
+
+type GroupContainerType = 'list' | 'folder' | 'space';
+
+function isGroupBlockFor(p: TaskDayPlan, type: GroupContainerType, id: string): boolean {
+  return p.kind === 'group_block' && p.container?.id === id && p.container?.type === type;
+}
+
+export function useScheduleGroupOnDay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: {
+      container_type: GroupContainerType;
+      container_id: string;
+      container_name: string;
+      plan_date: string;
+      start_minute: number;
+      duration_minutes: number;
+    }) => {
+      const { container_type, container_id, plan_date, start_minute, duration_minutes } = vars;
+      const res = await api.post('/pm/group-day-plans', {
+        container_type, container_id, plan_date, start_minute, duration_minutes,
+      });
+      return res.data?.data as TaskDayPlan;
+    },
+    onMutate: async (vars) => {
+      const queryKey = ['day-plans', vars.plan_date] as const;
+      await qc.cancelQueries({ queryKey });
+      const prev = qc.getQueryData<TaskDayPlan[]>(queryKey);
+      const tempId = `optimistic-grp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const optimistic: TaskDayPlan = {
+        id: tempId,
+        task_id: '',
+        user_id: '',
+        plan_date: vars.plan_date,
+        start_minute: vars.start_minute,
+        duration_minutes: vars.duration_minutes,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        kind: 'group_block',
+        container: { type: vars.container_type, id: vars.container_id, name: vars.container_name },
+      };
+      qc.setQueryData<TaskDayPlan[]>(queryKey, (old) => [...(old || []), optimistic]);
+      return { prev, queryKey, tempId };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx) qc.setQueryData(ctx.queryKey, ctx.prev);
+    },
+    onSuccess: (data, vars, ctx) => {
+      if (!ctx || !data) return;
+      // Server row has no resolved container name; keep the one we dragged in.
+      qc.setQueryData<TaskDayPlan[]>(ctx.queryKey, (old) =>
+        (old || []).map((p) =>
+          p.id === ctx.tempId
+            ? { ...data, kind: 'group_block', container: { type: vars.container_type, id: vars.container_id, name: vars.container_name } }
+            : p,
+        ),
+      );
+    },
+    onSettled: (_data, _err, vars) => {
+      qc.invalidateQueries({ queryKey: ['day-plans', vars.plan_date] });
+      qc.invalidateQueries({ queryKey: ['day-planner'] });
+    },
+  });
+}
+
+// Same-day move / resize of a group block (POST upsert on the container key).
+export function useUpdateGroupDayPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: {
+      container_type: GroupContainerType;
+      container_id: string;
+      plan_date: string;
+      start_minute: number;
+      duration_minutes: number;
+    }) => {
+      const res = await api.post('/pm/group-day-plans', vars);
+      return res.data?.data as TaskDayPlan;
+    },
+    onMutate: async ({ container_type, container_id, plan_date, start_minute, duration_minutes }) => {
+      await qc.cancelQueries({ queryKey: ['day-plans', plan_date] });
+      const prev = qc.getQueryData<TaskDayPlan[]>(['day-plans', plan_date]);
+      qc.setQueryData<TaskDayPlan[]>(['day-plans', plan_date], (old) =>
+        (old || []).map((p) =>
+          isGroupBlockFor(p, container_type, container_id) ? { ...p, start_minute, duration_minutes } : p,
+        ),
+      );
+      return { prev, plan_date };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx) qc.setQueryData(['day-plans', ctx.plan_date], ctx.prev);
+    },
+    onSettled: (_data, _err, vars) => {
+      qc.invalidateQueries({ queryKey: ['day-plans', vars.plan_date] });
+    },
+  });
+}
+
+// Cross-day move of a group block (delete old + upsert new), mirroring
+// useMoveDayPlan. Same day → single upsert.
+export function useMoveGroupDayPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: {
+      container_type: GroupContainerType;
+      container_id: string;
+      from_date: string;
+      to_date: string;
+      start_minute: number;
+      duration_minutes: number;
+    }) => {
+      if (vars.from_date !== vars.to_date) {
+        const params = new URLSearchParams({
+          container_type: vars.container_type, container_id: vars.container_id, plan_date: vars.from_date,
+        });
+        await api.delete(`/pm/group-day-plans?${params.toString()}`);
+      }
+      const res = await api.post('/pm/group-day-plans', {
+        container_type: vars.container_type,
+        container_id: vars.container_id,
+        plan_date: vars.to_date,
+        start_minute: vars.start_minute,
+        duration_minutes: vars.duration_minutes,
+      });
+      return res.data?.data as TaskDayPlan;
+    },
+    onMutate: async (vars) => {
+      const fromKey = ['day-plans', vars.from_date] as const;
+      const toKey = ['day-plans', vars.to_date] as const;
+      const cross = vars.from_date !== vars.to_date;
+      await qc.cancelQueries({ queryKey: fromKey });
+      if (cross) await qc.cancelQueries({ queryKey: toKey });
+      const prevFrom = qc.getQueryData<TaskDayPlan[]>(fromKey);
+      const prevTo = qc.getQueryData<TaskDayPlan[]>(toKey);
+      const isThis = (p: TaskDayPlan) => isGroupBlockFor(p, vars.container_type, vars.container_id);
+      const moving = (prevFrom || []).find(isThis);
+      if (!cross) {
+        qc.setQueryData<TaskDayPlan[]>(fromKey, (old) =>
+          (old || []).map((p) =>
+            isThis(p) ? { ...p, start_minute: vars.start_minute, duration_minutes: vars.duration_minutes } : p,
+          ),
+        );
+      } else {
+        qc.setQueryData<TaskDayPlan[]>(fromKey, (old) => (old || []).filter((p) => !isThis(p)));
+        qc.setQueryData<TaskDayPlan[]>(toKey, (old) => {
+          const base = (old || []).filter((p) => !isThis(p));
+          if (!moving) return base;
+          return [
+            ...base,
+            { ...moving, plan_date: vars.to_date, start_minute: vars.start_minute, duration_minutes: vars.duration_minutes },
+          ];
+        });
+      }
+      return { fromKey, toKey, prevFrom, prevTo, cross };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (!ctx) return;
+      qc.setQueryData(ctx.fromKey, ctx.prevFrom);
+      if (ctx.cross) qc.setQueryData(ctx.toKey, ctx.prevTo);
+    },
+    onSettled: (_data, _err, vars) => {
+      qc.invalidateQueries({ queryKey: ['day-plans', vars.from_date] });
+      if (vars.to_date !== vars.from_date) qc.invalidateQueries({ queryKey: ['day-plans', vars.to_date] });
+      qc.invalidateQueries({ queryKey: ['day-planner'] });
+    },
+  });
+}
+
+export function useUnscheduleGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ container_type, container_id, plan_date }: {
+      container_type: GroupContainerType; container_id: string; plan_date: string;
+    }) => {
+      const params = new URLSearchParams({ container_type, container_id, plan_date });
+      await api.delete(`/pm/group-day-plans?${params.toString()}`);
+    },
+    onMutate: async ({ container_type, container_id, plan_date }) => {
+      await qc.cancelQueries({ queryKey: ['day-plans', plan_date] });
+      const prev = qc.getQueryData<TaskDayPlan[]>(['day-plans', plan_date]);
+      qc.setQueryData<TaskDayPlan[]>(['day-plans', plan_date], (old) =>
+        (old || []).filter((p) => !isGroupBlockFor(p, container_type, container_id)),
+      );
+      return { prev, plan_date };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx) qc.setQueryData(['day-plans', ctx.plan_date], ctx.prev);
+    },
+    onSettled: (_data, _err, vars) => {
+      qc.invalidateQueries({ queryKey: ['day-plans', vars.plan_date] });
+      qc.invalidateQueries({ queryKey: ['day-planner'] });
+    },
+  });
+}

@@ -8,8 +8,20 @@ import {
   useScheduleTaskOnDay,
   useUnscheduleTask,
   useUpdateDayPlan,
+  useScheduleGroupOnDay,
+  useUpdateGroupDayPlan,
+  useUnscheduleGroup,
 } from '../../../hooks/useDayPlanner';
-import { dayToWorkDateISO, slotToWorkDateISO } from '../calendar/calendarUtils';
+import {
+  dayToWorkDateISO,
+  slotToWorkDateISO,
+  DND_GROUP_CONTAINER_ID,
+  DND_GROUP_CONTAINER_TYPE,
+  DND_GROUP_CONTAINER_NAME,
+  DND_GROUP_ESTIMATE_TOTAL,
+} from '../calendar/calendarUtils';
+
+type GroupContainer = { type: 'list' | 'folder' | 'space'; id: string; name: string };
 
 const HOURS = 24;
 const PX_PER_MIN = 1; // each hour row is 60px tall
@@ -103,6 +115,9 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
   const schedule = useScheduleTaskOnDay();
   const unschedule = useUnscheduleTask();
   const updatePlan = useUpdateDayPlan();
+  const scheduleGroup = useScheduleGroupOnDay();
+  const updateGroupPlan = useUpdateGroupDayPlan();
+  const unscheduleGroup = useUnscheduleGroup();
   const updateTask = useUpdateTask(null);
   const setActiveTask = usePMStore((s) => s.setActiveTask);
 
@@ -175,14 +190,30 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
     e.preventDefault();
     setDragOverHour(null);
 
-    const taskId = e.dataTransfer.getData('application/x-task-id');
-    if (!taskId) return;
-
     const target = e.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
     const offsetY = e.clientY - rect.top;
     const minuteInHour = (offsetY / rect.height) * 60;
     const start_minute = snap(hour * 60 + minuteInHour);
+
+    // Group drop → ONE combined block sized to the summed estimate.
+    const containerId = e.dataTransfer.getData(DND_GROUP_CONTAINER_ID);
+    if (containerId) {
+      const totalEst = Number(e.dataTransfer.getData(DND_GROUP_ESTIMATE_TOTAL));
+      const dur = Number.isFinite(totalEst) && totalEst > 0 ? totalEst : 30;
+      scheduleGroup.mutate({
+        container_type: e.dataTransfer.getData(DND_GROUP_CONTAINER_TYPE) as GroupContainer['type'],
+        container_id: containerId,
+        container_name: e.dataTransfer.getData(DND_GROUP_CONTAINER_NAME),
+        plan_date: date,
+        start_minute,
+        duration_minutes: Math.min(dur, 1440 - start_minute),
+      });
+      return;
+    }
+
+    const taskId = e.dataTransfer.getData('application/x-task-id');
+    if (!taskId) return;
 
     const estStr = e.dataTransfer.getData('application/x-task-estimate');
     const estimate = Number(estStr);
@@ -220,6 +251,8 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
     task_id: string;
     start_minute: number;
     duration_minutes: number;
+    kind?: 'group_block';
+    container?: GroupContainer;
   }) => (e: React.MouseEvent) => {
     if (e.button !== 0) return; // left mouse only
     // Don't preventDefault yet — let click happen if the user doesn't drag.
@@ -229,6 +262,8 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
       taskId: plan.task_id,
       duration: plan.duration_minutes,
       originStart: plan.start_minute,
+      kind: plan.kind,
+      container: plan.container,
     };
 
     const onMove = (ev: MouseEvent) => {
@@ -255,14 +290,25 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
       document.removeEventListener('mouseup', onUp);
       setMoving((cur) => {
         if (cur && cur.threshold && cur.previewStart !== origin.originStart) {
-          updatePlan.mutate({
-            task_id: cur.taskId,
-            plan_date: date,
-            start_minute: cur.previewStart,
-            duration_minutes: cur.duration,
-          });
-        } else if (!cur || !cur.threshold) {
-          // No real drag → treat as a click to open the task.
+          if (origin.kind === 'group_block' && origin.container) {
+            updateGroupPlan.mutate({
+              container_type: origin.container.type,
+              container_id: origin.container.id,
+              plan_date: date,
+              start_minute: cur.previewStart,
+              duration_minutes: cur.duration,
+            });
+          } else {
+            updatePlan.mutate({
+              task_id: cur.taskId,
+              plan_date: date,
+              start_minute: cur.previewStart,
+              duration_minutes: cur.duration,
+            });
+          }
+        } else if ((!cur || !cur.threshold) && origin.kind !== 'group_block') {
+          // No real drag → treat as a click to open the task (group blocks have
+          // no single task to open).
           setActiveTask(origin.taskId);
         }
         return null;
@@ -276,7 +322,7 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
   // Resize via top/bottom handle. Tracks the drag on document so the cursor can
   // leave the block; commits on mouseup via useUpdateDayPlan (optimistic).
   const startResize = (
-    plan: { id: string; task_id: string; start_minute: number; duration_minutes: number },
+    plan: { id: string; task_id: string; start_minute: number; duration_minutes: number; kind?: 'group_block'; container?: GroupContainer },
     edge: 'top' | 'bottom',
   ) => (e: React.MouseEvent) => {
     e.preventDefault();
@@ -314,12 +360,22 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
       document.removeEventListener('mouseup', onUp);
       setResizing((cur) => {
         if (cur && (cur.previewStart !== origin.start || cur.previewDur !== origin.dur)) {
-          updatePlan.mutate({
-            task_id: plan.task_id,
-            plan_date: date,
-            start_minute: cur.previewStart,
-            duration_minutes: cur.previewDur,
-          });
+          if (plan.kind === 'group_block' && plan.container) {
+            updateGroupPlan.mutate({
+              container_type: plan.container.type,
+              container_id: plan.container.id,
+              plan_date: date,
+              start_minute: cur.previewStart,
+              duration_minutes: cur.previewDur,
+            });
+          } else {
+            updatePlan.mutate({
+              task_id: plan.task_id,
+              plan_date: date,
+              start_minute: cur.previewStart,
+              duration_minutes: cur.previewDur,
+            });
+          }
         }
         return null;
       });
@@ -466,6 +522,8 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
           const isWorkBlock = (p.task as any)?.task_type_key === 'work_block';
           const wbColor = (p.task as any)?.task_type_color || '#8b5cf6';
           const isVirtual = (p as any).virtual === true;
+          const isGroup = p.kind === 'group_block';
+          const groupName = p.container?.name ?? 'Group';
           const wbStyle = isWorkBlock
             ? {
                 background: `color-mix(in oklch, ${wbColor} 18%, transparent)`,
@@ -478,7 +536,7 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
               className="dp-block"
               data-moving={isMoving ? 'true' : undefined}
               data-done={isDone ? 'true' : undefined}
-              data-type={isWorkBlock ? 'work_block' : undefined}
+              data-type={isGroup ? 'group_block' : isWorkBlock ? 'work_block' : undefined}
               data-virtual={isVirtual ? 'true' : undefined}
               style={{
                 top,
@@ -488,25 +546,32 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
                 right: 'auto',
                 ...(wbStyle || {}),
               }}
-              title={`${p.task?.title ?? 'Task'} · ${fmtMinAsClock(renderStart)}${isWorkBlock ? ' · Work block' : ''}`}
+              title={`${isGroup ? `Grouped tasks under ${groupName}` : p.task?.title ?? 'Task'} · ${fmtMinAsClock(renderStart)}${isWorkBlock ? ' · Work block' : ''}`}
             >
               {/* Top resize handle — drag to extend earlier */}
               <div
                 className="dp-block-handle top"
-                onMouseDown={startResize({ id: p.id, task_id: p.task_id, start_minute: p.start_minute, duration_minutes: p.duration_minutes }, 'top')}
+                onMouseDown={startResize({ id: p.id, task_id: p.task_id, start_minute: p.start_minute, duration_minutes: p.duration_minutes, kind: p.kind, container: p.container }, 'top')}
                 title="Drag to change start time"
               />
 
               {/* Body — mousedown drag to move (or click to open the task) */}
               <div
                 className="dp-block-body"
-                onMouseDown={startMove({ id: p.id, task_id: p.task_id, start_minute: p.start_minute, duration_minutes: p.duration_minutes })}
+                onMouseDown={startMove({ id: p.id, task_id: p.task_id, start_minute: p.start_minute, duration_minutes: p.duration_minutes, kind: p.kind, container: p.container })}
               >
                 {!isVirtual && (
                   <button
                     type="button"
                     className="remove"
-                    onClick={(e) => { e.stopPropagation(); unschedule.mutate({ task_id: p.task_id, plan_date: date }); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isGroup && p.container) {
+                        unscheduleGroup.mutate({ container_type: p.container.type, container_id: p.container.id, plan_date: date });
+                      } else {
+                        unschedule.mutate({ task_id: p.task_id, plan_date: date });
+                      }
+                    }}
                     onMouseDown={(e) => e.stopPropagation()}
                     aria-label="Remove from calendar"
                   >
@@ -515,21 +580,23 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
                     </svg>
                   </button>
                 )}
-                <div className="b-title">{p.task?.title ?? 'Task'}</div>
+                <div className="b-title">{isGroup ? `Grouped tasks under ${groupName}` : p.task?.title ?? 'Task'}</div>
                 <div className="b-meta">
                   <svg className="b-clock" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="9" />
                     <path d="M12 7v5l3 2" />
                   </svg>
                   {fmtTimeRange(renderStart, renderDur)}
-                  {p.date_field && <span className="b-src">{dateFieldLabel(p.date_field)}</span>}
+                  {isGroup
+                    ? <span className="b-src">Group</span>
+                    : p.date_field && <span className="b-src">{dateFieldLabel(p.date_field)}</span>}
                 </div>
               </div>
 
               {/* Bottom resize handle — drag to extend later */}
               <div
                 className="dp-block-handle bottom"
-                onMouseDown={startResize({ id: p.id, task_id: p.task_id, start_minute: p.start_minute, duration_minutes: p.duration_minutes }, 'bottom')}
+                onMouseDown={startResize({ id: p.id, task_id: p.task_id, start_minute: p.start_minute, duration_minutes: p.duration_minutes, kind: p.kind, container: p.container }, 'bottom')}
                 title="Drag to change end time"
               />
             </div>
@@ -556,6 +623,8 @@ interface Positioned {
   cols: number;
   virtual?: boolean;
   date_field?: 'work' | 'due' | 'start';
+  kind?: 'group_block';
+  container?: GroupContainer;
 }
 
 // "Completed" covers both the catalog 'closed' key and the legacy 'done'/'closed'
@@ -608,6 +677,8 @@ function positionBlocks(plans: any[]): Positioned[] {
         : undefined,
       virtual: p.virtual === true,
       date_field: p.date_field,
+      kind: p.kind === 'group_block' ? 'group_block' : undefined,
+      container: p.container,
       col,
       cols: 1,
     });

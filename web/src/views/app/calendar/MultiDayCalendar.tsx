@@ -8,8 +8,25 @@ import {
   useMoveDayPlan,
   useUpdateDayPlan,
   useUnscheduleTask,
+  useScheduleGroupOnDay,
+  useUpdateGroupDayPlan,
+  useMoveGroupDayPlan,
+  useUnscheduleGroup,
 } from '../../../hooks/useDayPlanner';
-import { DND_TASK_ID, DND_TASK_ESTIMATE, dayToWorkDateISO, slotToWorkDateISO, priorityLevel, setSlimDragImage } from './calendarUtils';
+import {
+  DND_TASK_ID,
+  DND_TASK_ESTIMATE,
+  DND_GROUP_CONTAINER_ID,
+  DND_GROUP_CONTAINER_TYPE,
+  DND_GROUP_CONTAINER_NAME,
+  DND_GROUP_ESTIMATE_TOTAL,
+  dayToWorkDateISO,
+  slotToWorkDateISO,
+  priorityLevel,
+  setSlimDragImage,
+} from './calendarUtils';
+
+type GroupContainer = { type: 'list' | 'folder' | 'space'; id: string; name: string };
 
 const HOURS = 24;
 const PX_PER_MIN = 1; // 60px per hour row
@@ -32,6 +49,8 @@ interface Plan {
   all_day?: boolean;
   virtual?: boolean;
   date_field?: 'work' | 'due' | 'start';
+  kind?: 'work_block_occurrence' | 'date_occurrence' | 'group_block';
+  container?: GroupContainer;
   task?: {
     id: string;
     title: string;
@@ -41,6 +60,12 @@ interface Plan {
     task_type_key?: string | null;
     task_type_color?: string | null;
   } | null;
+}
+
+// Stable identity for move/resize matching. Group blocks share task_id='' so we
+// key them by container instead.
+function blockKey(p: { kind?: string; container?: { id: string }; task_id: string }): string {
+  return p.kind === 'group_block' && p.container ? `grp:${p.container.id}` : `task:${p.task_id}`;
 }
 
 function fmtHourLabel(h: number): string {
@@ -130,6 +155,10 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
   const move = useMoveDayPlan();
   const updatePlan = useUpdateDayPlan();
   const unschedule = useUnscheduleTask();
+  const scheduleGroup = useScheduleGroupOnDay();
+  const updateGroupPlan = useUpdateGroupDayPlan();
+  const moveGroup = useMoveGroupDayPlan();
+  const unscheduleGroup = useUnscheduleGroup();
   const updateTask = useUpdateTask(null);
   const setActiveTask = usePMStore((s) => s.setActiveTask);
 
@@ -140,10 +169,10 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
   const [dragOver, setDragOver] = useState<{ date: string; start: number } | null>(null);
   const [allDayOver, setAllDayOver] = useState<string | null>(null);
   const [moving, setMoving] = useState<{
-    taskId: string; fromDate: string; duration: number; previewDate: string; previewStart: number; threshold: boolean;
+    key: string; fromDate: string; duration: number; previewDate: string; previewStart: number; threshold: boolean;
   } | null>(null);
   const [resizing, setResizing] = useState<{
-    taskId: string; date: string; previewStart: number; previewDur: number;
+    key: string; date: string; previewStart: number; previewDur: number;
   } | null>(null);
   const [nowMinute, setNowMinute] = useState(() => {
     const d = new Date();
@@ -200,10 +229,27 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
   const handleColumnDrop = (date: string, e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(null);
-    const taskId = e.dataTransfer.getData(DND_TASK_ID);
-    if (!taskId) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const start = snap((e.clientY - rect.top) / PX_PER_MIN);
+
+    // Group drop → ONE combined block sized to the summed estimate.
+    const containerId = e.dataTransfer.getData(DND_GROUP_CONTAINER_ID);
+    if (containerId) {
+      const totalEst = Number(e.dataTransfer.getData(DND_GROUP_ESTIMATE_TOTAL));
+      const dur = Number.isFinite(totalEst) && totalEst > 0 ? totalEst : 30;
+      scheduleGroup.mutate({
+        container_type: e.dataTransfer.getData(DND_GROUP_CONTAINER_TYPE) as GroupContainer['type'],
+        container_id: containerId,
+        container_name: e.dataTransfer.getData(DND_GROUP_CONTAINER_NAME),
+        plan_date: date,
+        start_minute: start,
+        duration_minutes: Math.min(dur, 1440 - start),
+      });
+      return;
+    }
+
+    const taskId = e.dataTransfer.getData(DND_TASK_ID);
+    if (!taskId) return;
     const est = Number(e.dataTransfer.getData(DND_TASK_ESTIMATE));
     const duration = Number.isFinite(est) && est > 0 ? est : 30;
     schedule.mutate({
@@ -239,7 +285,16 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
     if (e.button !== 0) return;
     const originX = e.clientX;
     const originY = e.clientY;
-    const origin = { taskId: plan.task_id, fromDate: day, duration: plan.duration_minutes, originStart: plan.start_minute };
+    const isGroup = plan.kind === 'group_block' && !!plan.container;
+    const origin = {
+      key: blockKey(plan),
+      taskId: plan.task_id,
+      container: plan.container,
+      isGroup,
+      fromDate: day,
+      duration: plan.duration_minutes,
+      originStart: plan.start_minute,
+    };
     let live: { previewDate: string; previewStart: number } | null = null;
 
     const onMove = (ev: MouseEvent) => {
@@ -250,21 +305,32 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
       const previewDate = at ? at.date : origin.fromDate;
       const previewStart = Math.max(0, Math.min(1440 - origin.duration, snap(origin.originStart + Math.round(dy / PX_PER_MIN))));
       live = { previewDate, previewStart };
-      setMoving({ taskId: origin.taskId, fromDate: origin.fromDate, duration: origin.duration, previewDate, previewStart, threshold: true });
+      setMoving({ key: origin.key, fromDate: origin.fromDate, duration: origin.duration, previewDate, previewStart, threshold: true });
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       setMoving(null);
       if (live && (live.previewDate !== origin.fromDate || live.previewStart !== origin.originStart)) {
-        move.mutate({
-          task_id: origin.taskId,
-          from_date: origin.fromDate,
-          to_date: live.previewDate,
-          start_minute: live.previewStart,
-          duration_minutes: origin.duration,
-        });
-      } else {
+        if (origin.isGroup && origin.container) {
+          moveGroup.mutate({
+            container_type: origin.container.type,
+            container_id: origin.container.id,
+            from_date: origin.fromDate,
+            to_date: live.previewDate,
+            start_minute: live.previewStart,
+            duration_minutes: origin.duration,
+          });
+        } else {
+          move.mutate({
+            task_id: origin.taskId,
+            from_date: origin.fromDate,
+            to_date: live.previewDate,
+            start_minute: live.previewStart,
+            duration_minutes: origin.duration,
+          });
+        }
+      } else if (!origin.isGroup) {
         setActiveTask(origin.taskId); // click (or no-net-move drag) → open the task
       }
     };
@@ -278,7 +344,8 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
     e.preventDefault();
     e.stopPropagation();
     const origin = { y: e.clientY, start: plan.start_minute, dur: plan.duration_minutes };
-    setResizing({ taskId: plan.task_id, date: day, previewStart: origin.start, previewDur: origin.dur });
+    const key = blockKey(plan);
+    setResizing({ key, date: day, previewStart: origin.start, previewDur: origin.dur });
     const MIN = 15;
     let live: { previewStart: number; previewDur: number } = { previewStart: origin.start, previewDur: origin.dur };
     const onMove = (ev: MouseEvent) => {
@@ -295,14 +362,24 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
         previewDur = Math.max(MIN, Math.round(target / SNAP_MIN) * SNAP_MIN);
       }
       live = { previewStart, previewDur };
-      setResizing({ taskId: plan.task_id, date: day, previewStart, previewDur });
+      setResizing({ key, date: day, previewStart, previewDur });
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       setResizing(null);
       if (live.previewStart !== origin.start || live.previewDur !== origin.dur) {
-        updatePlan.mutate({ task_id: plan.task_id, plan_date: day, start_minute: live.previewStart, duration_minutes: live.previewDur });
+        if (plan.kind === 'group_block' && plan.container) {
+          updateGroupPlan.mutate({
+            container_type: plan.container.type,
+            container_id: plan.container.id,
+            plan_date: day,
+            start_minute: live.previewStart,
+            duration_minutes: live.previewDur,
+          });
+        } else {
+          updatePlan.mutate({ task_id: plan.task_id, plan_date: day, start_minute: live.previewStart, duration_minutes: live.previewDur });
+        }
       }
     };
     document.addEventListener('mousemove', onMove);
@@ -401,20 +478,24 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
               )}
 
               {(timedByDate[day] ?? []).map((p) => {
-                const isResizing = resizing?.taskId === p.task_id && resizing.date === day;
-                const isMoving = moving?.taskId === p.task_id && moving.threshold;
+                const key = blockKey(p);
+                const isResizing = resizing?.key === key && resizing.date === day;
+                const isMoving = moving?.key === key && moving.threshold;
                 const renderStart = isResizing ? resizing!.previewStart : p.start_minute;
                 const renderDur = isResizing ? resizing!.previewDur : p.duration_minutes;
                 const done = isTaskDone(p.task?.status);
                 const isWb = p.task?.task_type_key === 'work_block';
+                const isGroup = p.kind === 'group_block';
+                const groupName = p.container?.name ?? 'Group';
                 const wbColor = p.task?.task_type_color || '#8b5cf6';
+                const title = isGroup ? `Grouped tasks under ${groupName}` : p.task?.title ?? 'Task';
                 return (
                   <div
                     key={p.id}
                     className="cal-tt-block"
                     data-level={priorityLevel((p.task?.priority ?? 'none') as any)}
                     data-done={done || undefined}
-                    data-type={isWb ? 'work_block' : undefined}
+                    data-type={isGroup ? 'group_block' : isWb ? 'work_block' : undefined}
                     data-virtual={p.virtual || undefined}
                     data-hidden={isMoving || undefined}
                     style={{
@@ -424,7 +505,7 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
                       width: `calc((100% - 6px) / ${p.cols} - 2px)`,
                       ...(isWb ? { background: `color-mix(in oklch, ${wbColor} 18%, transparent)`, borderLeftColor: wbColor } : {}),
                     }}
-                    title={`${p.task?.title ?? 'Task'} · ${fmtTimeRange(renderStart, renderDur)}`}
+                    title={`${title} · ${fmtTimeRange(renderStart, renderDur)}`}
                   >
                     <div className="cal-tt-block-handle top" onMouseDown={startResize(p, day, 'top')} title="Drag to change start" />
                     <div className="cal-tt-block-body" onMouseDown={startMove(p, day)}>
@@ -433,13 +514,17 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
                           type="button"
                           className="cal-tt-block-x"
                           onMouseDown={(e) => e.stopPropagation()}
-                          onClick={(e) => { e.stopPropagation(); unschedule.mutate({ task_id: p.task_id, plan_date: day }); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isGroup && p.container) unscheduleGroup.mutate({ container_type: p.container.type, container_id: p.container.id, plan_date: day });
+                            else unschedule.mutate({ task_id: p.task_id, plan_date: day });
+                          }}
                           aria-label="Remove from calendar"
                         >
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
                         </button>
                       )}
-                      <div className="cal-tt-block-title">{p.task?.title ?? 'Task'}</div>
+                      <div className="cal-tt-block-title">{title}</div>
                       {renderDur >= 30 && <div className="cal-tt-block-time">{fmtTimeRange(renderStart, renderDur)}</div>}
                     </div>
                     <div className="cal-tt-block-handle bottom" onMouseDown={startResize(p, day, 'bottom')} title="Drag to change end" />
