@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { getTaskStatusCategory } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
@@ -15,6 +16,7 @@ import {
 import {
   dayToWorkDateISO,
   slotToWorkDateISO,
+  groupRunTargetFromContainer,
   DND_GROUP_CONTAINER_ID,
   DND_GROUP_CONTAINER_TYPE,
   DND_GROUP_CONTAINER_NAME,
@@ -120,6 +122,8 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
   const unscheduleGroup = useUnscheduleGroup();
   const updateTask = useUpdateTask(null);
   const setActiveTask = usePMStore((s) => s.setActiveTask);
+  const setGroupRunPanel = usePMStore((s) => s.setGroupRunPanel);
+  const qc = useQueryClient();
 
   const [dragOverHour, setDragOverHour] = useState<number | null>(null);
   const [allDayOver, setAllDayOver] = useState(false);
@@ -306,10 +310,14 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
               duration_minutes: cur.duration,
             });
           }
-        } else if ((!cur || !cur.threshold) && origin.kind !== 'group_block') {
-          // No real drag → treat as a click to open the task (group blocks have
-          // no single task to open).
-          setActiveTask(origin.taskId);
+        } else if (!cur || !cur.threshold) {
+          // No real drag → a click. A group block opens the group session panel
+          // (matching the palette row); a task block opens the task.
+          if (origin.kind === 'group_block' && origin.container) {
+            setGroupRunPanel(groupRunTargetFromContainer(qc, origin.container));
+          } else {
+            setActiveTask(origin.taskId);
+          }
         }
         return null;
       });
