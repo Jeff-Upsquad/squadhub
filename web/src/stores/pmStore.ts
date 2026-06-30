@@ -134,6 +134,10 @@ interface PMState {
   groupByScope: Record<string, GroupBy>;
   sortByScope: Record<string, SortBy>;
   focusTodayScope: Record<string, boolean>;
+  // Group-by selection for each Home "disappearing card" panel, keyed by card
+  // key ('urgent' | 'recordings' | 'meetings' | 'calls'). Persisted so it sticks
+  // across refresh and syncs across devices.
+  secondaryCardGroupBy: Record<string, GroupBy>;
   todayListGroupBy: GroupBy;
   todayListView: TodayListView;
   calendarMode: CalendarMode;
@@ -176,6 +180,7 @@ interface PMState {
   setScopedGroupBy: (scopeKey: string, value: GroupBy) => void;
   setScopedSortBy: (scopeKey: string, value: SortBy) => void;
   setScopedFocusToday: (scopeKey: string, value: boolean) => void;
+  setSecondaryCardGroupBy: (cardKey: string, value: GroupBy) => void;
   setTodayListGroupBy: (value: GroupBy) => void;
   setTodayListView: (value: TodayListView) => void;
   toggleGroupedExpanded: (containerId: string) => void;
@@ -243,6 +248,7 @@ export const usePMStore = create<PMState>()(
       groupByScope: {},
       sortByScope: {},
       focusTodayScope: {},
+      secondaryCardGroupBy: {},
       todayListGroupBy: 'none',
       todayListView: 'list',
       calendarMode: 'month',
@@ -378,6 +384,12 @@ export const usePMStore = create<PMState>()(
         }));
         triggerSave();
       },
+      setSecondaryCardGroupBy: (cardKey, value) => {
+        set((state) => ({
+          secondaryCardGroupBy: { ...state.secondaryCardGroupBy, [cardKey]: value },
+        }));
+        triggerSave();
+      },
       setTodayListGroupBy: (value) => {
         set({ todayListGroupBy: value });
         triggerSave();
@@ -461,6 +473,7 @@ export const usePMStore = create<PMState>()(
         if (prefs.groupByScope !== undefined) patch.groupByScope = prefs.groupByScope as Record<string, GroupBy>;
         if (prefs.sortByScope !== undefined) patch.sortByScope = prefs.sortByScope as Record<string, SortBy>;
         if (prefs.focusTodayScope !== undefined) patch.focusTodayScope = prefs.focusTodayScope as Record<string, boolean>;
+        if (prefs.secondaryCardGroupBy !== undefined) patch.secondaryCardGroupBy = prefs.secondaryCardGroupBy as Record<string, GroupBy>;
         if (prefs.todayListGroupBy !== undefined) patch.todayListGroupBy = prefs.todayListGroupBy as GroupBy;
         if (prefs.todayListView === 'list' || prefs.todayListView === 'calendar') {
           patch.todayListView = prefs.todayListView;
@@ -502,6 +515,7 @@ export const usePMStore = create<PMState>()(
           groupByScope: s.groupByScope,
           sortByScope: s.sortByScope,
           focusTodayScope: s.focusTodayScope,
+          secondaryCardGroupBy: s.secondaryCardGroupBy,
           todayListGroupBy: s.todayListGroupBy,
           todayListView: s.todayListView,
           calendarMode: s.calendarMode,
@@ -513,7 +527,7 @@ export const usePMStore = create<PMState>()(
           focusBucketsRolloverDate: s.focusBucketsRolloverDate,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',
@@ -539,6 +553,7 @@ export const usePMStore = create<PMState>()(
         groupByScope: state.groupByScope,
         sortByScope: state.sortByScope,
         focusTodayScope: state.focusTodayScope,
+        secondaryCardGroupBy: state.secondaryCardGroupBy,
         todayListGroupBy: state.todayListGroupBy,
         todayListView: state.todayListView,
         groupedExpanded: state.groupedExpanded,
