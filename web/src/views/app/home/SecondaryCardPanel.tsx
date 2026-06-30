@@ -1,7 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePMStore } from '../../../stores/pmStore';
+import { groupTasks, type GroupBy } from '../../../lib/taskGrouping';
 import type { SecondaryCardItem } from '../../../hooks/useSecondaryCards';
 import type { SecondaryCardConfig } from './SecondaryCardRow';
+
+const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'priority', label: 'Priority' },
+  { value: 'due_date', label: 'Due date' },
+  { value: 'status', label: 'Status' },
+  { value: 'space', label: 'Space' },
+  { value: 'list', label: 'List' },
+];
 
 // Slide-in list opened when a Home "disappearing card" is clicked. Mirrors
 // DashboardListPanel's mount / Escape / backdrop behaviour and reuses its
@@ -9,7 +19,11 @@ import type { SecondaryCardConfig } from './SecondaryCardRow';
 // card's hook produced (already filtered to that card's rule).
 export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig | null }) {
   const setActiveSecondaryCard = usePMStore((s) => s.setActiveSecondaryCard);
+  const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
   const [mounted, setMounted] = useState(false);
+  const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement>(null);
   const open = !!card;
 
   useEffect(() => {
@@ -34,12 +48,33 @@ export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig
     return () => window.removeEventListener('keydown', onKey);
   }, [open, setActiveSecondaryCard]);
 
+  // Close the group-by menu on any outside click.
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onDown = (e: MouseEvent) => {
+      if (anchorRef.current && !anchorRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [menuOpen]);
+
+  const items = card?.data.items ?? [];
+  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
+  // When a group-by is active, group the underlying tasks then map each back to
+  // its item row (keyed by task id) so the panel's row UI is reused verbatim.
+  const groups = useMemo(() => {
+    if (groupBy === 'none') return null;
+    const byId = new Map(items.map((it) => [it.id, it] as const));
+    return groupTasks(items.map((it) => it.task), groupBy, tz, fadingTaskIds)
+      .map((g) => ({ key: g.key, label: g.label, items: g.tasks.map((t) => byId.get(t.id)).filter(Boolean) as SecondaryCardItem[] }));
+  }, [items, groupBy, tz, fadingTaskIds]);
+
   if (!card) return null;
 
-  const items = card.data.items;
   const isLoading = card.data.isLoading;
   const overdueCount = items.filter((i) => i.overdue).length;
   const close = () => setActiveSecondaryCard(null);
+  const currentLabel = GROUP_OPTIONS.find((o) => o.value === groupBy)?.label ?? 'None';
 
   return (
     <div className="fixed inset-0 z-[90]">
@@ -76,6 +111,44 @@ export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig
             )}
           </div>
           <div className="hmp-head-actions">
+            {!isLoading && items.length > 0 && (
+              <div ref={anchorRef} style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  className="hm-pill"
+                  onClick={() => setMenuOpen((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                >
+                  <span className="dim">Group:</span>
+                  {currentLabel}
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+                {menuOpen && (
+                  <div className="hm-menu" role="menu">
+                    {GROUP_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        role="menuitem"
+                        className="hm-menu-item"
+                        data-active={groupBy === opt.value}
+                        onClick={() => { setGroupBy(opt.value); setMenuOpen(false); }}
+                      >
+                        <span>{opt.label}</span>
+                        {groupBy === opt.value && (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <kbd className="hmp-kbd" title="Press Escape to close">esc</kbd>
           </div>
         </div>
@@ -95,6 +168,20 @@ export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig
                 <div className="p">Tasks appear here as they match this card.</div>
               </div>
             </div>
+          ) : groups ? (
+            groups.map((g) => (
+              <div key={g.key} className="hm-group">
+                <div className="hm-group-head">
+                  <span>{g.label}</span>
+                  <span className="count">· {g.items.length}</span>
+                </div>
+                <div className="hmp-list" style={{ paddingTop: 0 }}>
+                  {g.items.map((it) => (
+                    <SecondaryRow key={it.id} item={it} />
+                  ))}
+                </div>
+              </div>
+            ))
           ) : (
             <div className="hmp-list">
               {items.map((it) => (
