@@ -8,8 +8,10 @@ const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'priority', label: 'Priority' },
   { value: 'due_date', label: 'Due date' },
+  { value: 'work_date', label: 'Work date' },
   { value: 'status', label: 'Status' },
   { value: 'space', label: 'Space' },
+  { value: 'folder', label: 'Folder' },
   { value: 'list', label: 'List' },
 ];
 
