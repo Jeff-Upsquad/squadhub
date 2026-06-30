@@ -24,6 +24,54 @@ function invalidateTaskLists(qc: QueryClient, listId: string | null) {
   qc.invalidateQueries({ queryKey: ['day-plans'] });
 }
 
+// Decide whether a status being written represents task completion (a
+// "done"/"closed" bucket). Covers the three forms callers actually send: the
+// literal 'done'/'closed' strings (TaskRow, TodayList, Inbox), a built-in
+// catalog key (e.g. 'closed' from the task-type detail panel), and a space's
+// custom status NAME — resolved against any cached space_statuses.
+function statusMeansComplete(qc: QueryClient, status: string | undefined): boolean {
+  if (!status) return false;
+  if (status === 'done' || status === 'closed') return true;
+  const cat = getTaskStatusCategory(status);
+  if (cat === 'done' || cat === 'closed') return true;
+  const spaceHasDoneStatus = (space: unknown): boolean => {
+    const list = (space as { space_statuses?: SpaceStatus[] } | null)?.space_statuses;
+    return Array.isArray(list)
+      && list.some((s) => s.name === status && (s.category === 'done' || s.category === 'closed'));
+  };
+  for (const [, data] of qc.getQueriesData({ queryKey: ['space'] })) {
+    if (spaceHasDoneStatus(data)) return true;
+  }
+  for (const [, data] of qc.getQueriesData({ queryKey: ['spaces'] })) {
+    if (Array.isArray(data) && data.some(spaceHasDoneStatus)) return true;
+  }
+  return false;
+}
+
+// If a per-task timer is running for the task being completed, stop it and log
+// the elapsed session — closing a task shouldn't leave its timer ticking.
+// Mirrors ActiveTimer's stop+save flow; idempotent because stopTimer() clears
+// the single global timer.
+async function stopRunningTimerOnComplete(qc: QueryClient, taskId: string) {
+  const { timer, stopTimer } = usePMStore.getState();
+  if (!timer || timer.taskId !== taskId) return;
+  const stopped = stopTimer();
+  if (!stopped) return;
+  const elapsedSecs = Math.floor((Date.now() - stopped.startedAt) / 1000);
+  if (elapsedSecs < 1) return;
+  try {
+    await api.post(`/pm/tasks/${stopped.taskId}/time-entries`, {
+      started_at: new Date(stopped.startedAt).toISOString(),
+      duration_seconds: elapsedSecs,
+    });
+    qc.invalidateQueries({ queryKey: ['task-time-entries'] });
+    qc.invalidateQueries({ queryKey: ['task', stopped.taskId] });
+    qc.invalidateQueries({ queryKey: ['folder-time-summary'] });
+  } catch (err) {
+    console.error('Failed to save tracked time on completion:', err);
+  }
+}
+
 export function useTasks(listId: string | null, filters?: { status?: string; priority?: string; sort?: string; includeSubtasks?: boolean }) {
   return useQuery<Task[]>({
     queryKey: ['tasks', listId, filters],
@@ -225,6 +273,11 @@ export function useUpdateTask(listId: string | null) {
             }
           }
         }
+      }
+
+      // Auto-stop a running per-task timer when this update completes the task.
+      if (statusMeansComplete(qc, vars.status)) {
+        void stopRunningTimerOnComplete(qc, vars.id);
       }
       return { snapshots };
     },
