@@ -22,6 +22,7 @@ const ALL_FALSE_PERMISSIONS: RolePermissions = {
   can_manage_workspace: false,
   can_edit_time_logs: false,
   time_edit_window_hours: 0,
+  can_edit_elapsed_time: false,
 };
 
 // Boolean keys only — excludes numeric fields like time_edit_window_hours.
