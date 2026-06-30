@@ -11,10 +11,40 @@ export type TodayListView = 'list' | 'calendar';
 // Calendar app view mode + which weekday the Week/Month grids start on (0=Sun…6=Sat).
 // Synced cross-device via the view-preferences payload.
 export type CalendarMode = 'month' | 'week' | '5day' | '4day' | 'day';
-// Manual "later today" triage buckets for the Home Focus list. A starred task
-// can be moved into Evening (after 3 PM) or Night (after 7 PM); these are labels
-// only — no clock-driven behavior. Mirrors the focusedTodayIds persistence.
+// "Later today" triage buckets for the Home Focus list. A starred task can be
+// moved into Evening (after 3 PM) or Night (after 7 PM). Per-instance
+// assignments live in `focusBuckets` and fall back to the main Focus list at
+// local midnight (see rolloverFocusBuckets); a recurring task's section is
+// instead remembered per recurrence template in `recurringFocusBuckets`, so
+// every freshly spawned copy reappears in the same section.
 export type FocusBucket = 'evening' | 'night';
+
+// Local-clock thresholds (hour-of-day, 24h) for the two buckets.
+export const EVENING_START_HOUR = 15; // 3 PM
+export const NIGHT_START_HOUR = 19;   // 7 PM
+
+// Which bucket a minute-of-day falls into when a task is dropped onto the day
+// planner grid: ≥7 PM → night, ≥3 PM → evening, earlier → none (main list).
+export function focusBucketForMinute(minute: number): FocusBucket | null {
+  if (minute >= NIGHT_START_HOUR * 60) return 'night';
+  if (minute >= EVENING_START_HOUR * 60) return 'evening';
+  return null;
+}
+
+// Resolve the section a task currently sits in: an explicit per-instance
+// assignment wins; otherwise a recurring task inherits its template's sticky
+// section so spawned copies reappear where the user last placed the routine.
+export function effectiveFocusBucket(
+  task: { id: string; recurring_parent_id?: string | null },
+  focusBuckets: Record<string, FocusBucket>,
+  recurringFocusBuckets: Record<string, FocusBucket>,
+): FocusBucket | undefined {
+  const own = focusBuckets[task.id];
+  if (own) return own;
+  const parent = task.recurring_parent_id;
+  if (parent && recurringFocusBuckets[parent]) return recurringFocusBuckets[parent];
+  return undefined;
+}
 export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner';
 
 interface TimerState {
@@ -89,6 +119,14 @@ interface PMState {
   focusedTodayIds: string[];
   focusedTodayDate: string;
   focusBuckets: Record<string, FocusBucket>;
+  // Sticky Evening/Night section per recurrence template id. Unlike
+  // focusBuckets it survives the midnight rollover, so each day's freshly
+  // spawned copy of a recurring task reappears in the same section.
+  recurringFocusBuckets: Record<string, FocusBucket>;
+  // Local date (todayKey) the per-instance focusBuckets were last rolled over.
+  // When it goes stale, rolloverFocusBuckets clears focusBuckets back to the
+  // main Focus list (recurringFocusBuckets is left untouched).
+  focusBucketsRolloverDate: string;
   groupByScope: Record<string, GroupBy>;
   sortByScope: Record<string, SortBy>;
   focusTodayScope: Record<string, boolean>;
@@ -142,7 +180,8 @@ interface PMState {
   setCalendarWeekStart: (value: number) => void;
   setLastView: (section: string, homeView: string) => void;
   toggleFocusToday: (taskId: string) => void;
-  setFocusBucket: (taskId: string, bucket: FocusBucket | null) => void;
+  setFocusBucket: (taskId: string, bucket: FocusBucket | null, recurringParentId?: string | null) => void;
+  rolloverFocusBuckets: () => void;
   isFocusedToday: (taskId: string) => boolean;
   resetFocusTodayIfStale: () => void;
   _hydrateFromServer: (prefs: Record<string, unknown>) => void;
@@ -193,6 +232,8 @@ export const usePMStore = create<PMState>()(
       focusedTodayIds: [],
       focusedTodayDate: todayKey(),
       focusBuckets: {},
+      recurringFocusBuckets: {},
+      focusBucketsRolloverDate: todayKey(),
       groupByScope: {},
       sortByScope: {},
       focusTodayScope: {},
@@ -370,14 +411,39 @@ export const usePMStore = create<PMState>()(
         });
         triggerSave();
       },
-      setFocusBucket: (taskId, bucket) => {
+      setFocusBucket: (taskId, bucket, recurringParentId) => {
         set((state) => {
           const next = { ...state.focusBuckets };
           if (bucket === null) delete next[taskId];
           else next[taskId] = bucket;
-          return { focusBuckets: next };
+          // Recurring tasks also record the section against their template so
+          // future spawned copies inherit it — and it survives the midnight
+          // rollover (see rolloverFocusBuckets / effectiveFocusBucket).
+          let recurringFocusBuckets = state.recurringFocusBuckets;
+          if (recurringParentId) {
+            const r = { ...recurringFocusBuckets };
+            if (bucket === null) delete r[recurringParentId];
+            else r[recurringParentId] = bucket;
+            recurringFocusBuckets = r;
+          }
+          return { focusBuckets: next, recurringFocusBuckets };
         });
         triggerSave();
+      },
+      // Roll the per-instance Evening/Night buckets back to the main Focus list
+      // once the local day flips: non-recurring tasks lose their section, while
+      // recurring tasks keep theirs via recurringFocusBuckets. A no-op until the
+      // stored date is stale, so the mount call + once-a-minute tick fire it
+      // exactly once when midnight passes, even with the app left open.
+      rolloverFocusBuckets: () => {
+        const today = todayKey();
+        let changed = false;
+        set((state) => {
+          if (state.focusBucketsRolloverDate === today) return state;
+          changed = true;
+          return { focusBuckets: {}, focusBucketsRolloverDate: today };
+        });
+        if (changed) triggerSave();
       },
       isFocusedToday: (taskId) => get().focusedTodayIds.includes(taskId),
       _hydrateFromServer: (prefs) => {
@@ -412,6 +478,12 @@ export const usePMStore = create<PMState>()(
         if (prefs.focusBuckets && typeof prefs.focusBuckets === 'object') {
           patch.focusBuckets = prefs.focusBuckets as Record<string, FocusBucket>;
         }
+        if (prefs.recurringFocusBuckets && typeof prefs.recurringFocusBuckets === 'object') {
+          patch.recurringFocusBuckets = prefs.recurringFocusBuckets as Record<string, FocusBucket>;
+        }
+        if (typeof prefs.focusBucketsRolloverDate === 'string') {
+          patch.focusBucketsRolloverDate = prefs.focusBucketsRolloverDate as string;
+        }
         if (Object.keys(patch).length > 0) set(patch);
       },
       _getServerPayload: () => {
@@ -430,9 +502,11 @@ export const usePMStore = create<PMState>()(
           focusedTodayIds: s.focusedTodayIds,
           focusedTodayDate: s.focusedTodayDate,
           focusBuckets: s.focusBuckets,
+          recurringFocusBuckets: s.recurringFocusBuckets,
+          focusBucketsRolloverDate: s.focusBucketsRolloverDate,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',
@@ -453,6 +527,8 @@ export const usePMStore = create<PMState>()(
         focusedTodayIds: state.focusedTodayIds,
         focusedTodayDate: state.focusedTodayDate,
         focusBuckets: state.focusBuckets,
+        recurringFocusBuckets: state.recurringFocusBuckets,
+        focusBucketsRolloverDate: state.focusBucketsRolloverDate,
         groupByScope: state.groupByScope,
         sortByScope: state.sortByScope,
         focusTodayScope: state.focusTodayScope,

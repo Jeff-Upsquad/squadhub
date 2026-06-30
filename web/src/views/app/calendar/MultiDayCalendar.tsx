@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getTaskStatusCategory } from '@squadhub/shared';
-import { usePMStore } from '../../../stores/pmStore';
+import { usePMStore, focusBucketForMinute } from '../../../stores/pmStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
 import {
   useDayPlansRange,
@@ -17,6 +17,7 @@ import {
 import {
   DND_TASK_ID,
   DND_TASK_ESTIMATE,
+  DND_TASK_RECURRING_PARENT,
   DND_GROUP_CONTAINER_ID,
   DND_GROUP_CONTAINER_TYPE,
   DND_GROUP_CONTAINER_NAME,
@@ -163,6 +164,7 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
   const unscheduleGroup = useUnscheduleGroup();
   const updateTask = useUpdateTask(null);
   const setActiveTask = usePMStore((s) => s.setActiveTask);
+  const setFocusBucket = usePMStore((s) => s.setFocusBucket);
   const setGroupRunPanel = usePMStore((s) => s.setGroupRunPanel);
   const qc = useQueryClient();
 
@@ -265,6 +267,13 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
     // Mirror the slot onto the task: its work date AND time now reflect where
     // it sits on the calendar (the day-plan block above carries the duration).
     updateTask.mutate({ id: taskId, work_date: slotToWorkDateISO(date, start) });
+    // For today, mirror the slot's time-of-day onto the Home Focus list: an
+    // Evening/Night slot files it under that section, earlier slots clear it.
+    // For a recurring task the section sticks against its template.
+    if (date === todayKey) {
+      const recurringParent = e.dataTransfer.getData(DND_TASK_RECURRING_PARENT) || undefined;
+      setFocusBucket(taskId, focusBucketForMinute(start), recurringParent);
+    }
   };
 
   // Drop on the all-day strip → set work_date (date-only) for that day. This
@@ -333,6 +342,9 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
             start_minute: live.previewStart,
             duration_minutes: origin.duration,
           });
+          // Re-file on the Home Focus list: landing on today's Evening/Night
+          // window → that section; earlier today, or any other day, → main list.
+          setFocusBucket(origin.taskId, live.previewDate === todayKey ? focusBucketForMinute(live.previewStart) : null);
         }
       } else if (origin.isGroup && origin.container) {
         setGroupRunPanel(groupRunTargetFromContainer(qc, origin.container)); // open the group session panel
@@ -434,6 +446,7 @@ export default function MultiDayCalendar({ days, todayKey, onOpenTask, onOpenDay
                   onDragStart={(e) => {
                     e.dataTransfer.setData(DND_TASK_ID, p.task_id);
                     e.dataTransfer.setData(DND_TASK_ESTIMATE, String(p.task?.time_estimate ?? 30));
+                    e.dataTransfer.setData(DND_TASK_RECURRING_PARENT, (p.task as any)?.recurring_parent_id ?? '');
                     e.dataTransfer.effectAllowed = 'copyMove';
                     setSlimDragImage(e, p.task?.title ?? 'Task');
                   }}

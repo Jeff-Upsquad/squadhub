@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
 import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
 import { useCreateTaskTimeEntry, useMyTimeEntries } from '../../../hooks/useTaskTimeEntries';
-import { usePMStore, todayKey, type FocusBucket } from '../../../stores/pmStore';
+import { usePMStore, todayKey, effectiveFocusBucket, type FocusBucket } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
 import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
 import { groupTasks, isFutureDay, isTaskFocused, collapseGroupedTasks, isGroupedRow, type GroupBy } from '../../../lib/taskGrouping';
@@ -69,6 +69,8 @@ export default function TodayList() {
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setActiveDashboardTab = usePMStore((s) => s.setActiveDashboardTab);
   const focusBuckets = usePMStore((s) => s.focusBuckets);
+  const recurringFocusBuckets = usePMStore((s) => s.recurringFocusBuckets);
+  const rolloverFocusBuckets = usePMStore((s) => s.rolloverFocusBuckets);
   const groupedExpanded = usePMStore((s) => s.groupedExpanded);
   const toggleGroupedExpanded = usePMStore((s) => s.toggleGroupedExpanded);
   const focusBucketCollapsed = usePMStore((s) => s.focusBucketCollapsed);
@@ -128,9 +130,9 @@ export default function TodayList() {
   // triage buckets that render as their own sections below it. Tasks already in
   // the "In progress today" section are excluded here to avoid duplicates.
   const focusTasks = useMemo(() => tasks.filter((t) => !inProgressIds.has(t.id)), [tasks, inProgressIds]);
-  const mainTasks = useMemo(() => focusTasks.filter((t) => !focusBuckets[t.id]), [focusTasks, focusBuckets]);
-  const eveningTasks = useMemo(() => focusTasks.filter((t) => focusBuckets[t.id] === 'evening'), [focusTasks, focusBuckets]);
-  const nightTasks = useMemo(() => focusTasks.filter((t) => focusBuckets[t.id] === 'night'), [focusTasks, focusBuckets]);
+  const mainTasks = useMemo(() => focusTasks.filter((t) => !effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets)), [focusTasks, focusBuckets, recurringFocusBuckets]);
+  const eveningTasks = useMemo(() => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets) === 'evening'), [focusTasks, focusBuckets, recurringFocusBuckets]);
+  const nightTasks = useMemo(() => focusTasks.filter((t) => effectiveFocusBucket(t, focusBuckets, recurringFocusBuckets) === 'night'), [focusTasks, focusBuckets, recurringFocusBuckets]);
 
   const groupBy = usePMStore((s) => s.todayListGroupBy);
   const setTodayListGroupBy = usePMStore((s) => s.setTodayListGroupBy);
@@ -215,6 +217,18 @@ export default function TodayList() {
     const id = setInterval(check, 60_000);
     return () => clearInterval(id);
   }, []);
+
+  // Roll the Evening / Night buckets back to the main Focus list at local
+  // midnight. Non-recurring tasks fall back; recurring tasks keep their section
+  // (remembered per template in recurringFocusBuckets, so the next spawned copy
+  // reappears there). rolloverFocusBuckets no-ops until the day flips, so the
+  // mount call + once-a-minute tick fire it exactly once when midnight passes,
+  // even with the app left open.
+  useEffect(() => {
+    rolloverFocusBuckets();
+    const id = setInterval(rolloverFocusBuckets, 60_000);
+    return () => clearInterval(id);
+  }, [rolloverFocusBuckets]);
 
   const groups = useMemo(
     () => (groupBy === 'none' ? [] : groupTasks(mainTasks, groupBy, tz, fadingTaskIds)),
@@ -475,7 +489,11 @@ function BucketSection({
 function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (id: string) => void; secondsToday?: number }) {
   const updateTask = useUpdateTask(null);
   const setFocusBucket = usePMStore((s) => s.setFocusBucket);
-  const bucket = usePMStore((s) => s.focusBuckets[t.id]);
+  const ownBucket = usePMStore((s) => s.focusBuckets[t.id]);
+  const recurringFocusBuckets = usePMStore((s) => s.recurringFocusBuckets);
+  // Effective section: an explicit per-instance bucket wins; a recurring task
+  // otherwise inherits its template's sticky section.
+  const bucket = ownBucket ?? (t.recurring_parent_id ? recurringFocusBuckets[t.recurring_parent_id] : undefined);
   const markFading = usePMStore((s) => s.markFading);
   const unmarkFading = usePMStore((s) => s.unmarkFading);
   const isFading = usePMStore((s) => s.fadingTaskIds.has(t.id));
@@ -558,7 +576,9 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
 
   const moveTo = (e: React.MouseEvent, next: FocusBucket | null) => {
     e.stopPropagation();
-    setFocusBucket(t.id, next);
+    // For a recurring task, also persist the section against its template so
+    // future copies inherit it and it survives the midnight rollover.
+    setFocusBucket(t.id, next, t.recurring_parent_id ?? undefined);
     setMenuPos(null);
   };
 
