@@ -22,8 +22,11 @@ const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
 export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig | null }) {
   const setActiveSecondaryCard = usePMStore((s) => s.setActiveSecondaryCard);
   const fadingTaskIds = usePMStore((s) => s.fadingTaskIds);
+  // Group-by is a persisted per-card preference (synced via view-preferences),
+  // so the choice sticks across refresh and devices instead of resetting.
+  const groupBy = usePMStore((s) => (card ? s.secondaryCardGroupBy[card.key] ?? 'none' : 'none'));
+  const setSecondaryCardGroupBy = usePMStore((s) => s.setSecondaryCardGroupBy);
   const [mounted, setMounted] = useState(false);
-  const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [menuOpen, setMenuOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
   const open = !!card;
@@ -137,7 +140,7 @@ export default function SecondaryCardPanel({ card }: { card: SecondaryCardConfig
                         role="menuitem"
                         className="hm-menu-item"
                         data-active={groupBy === opt.value}
-                        onClick={() => { setGroupBy(opt.value); setMenuOpen(false); }}
+                        onClick={() => { setSecondaryCardGroupBy(card.key, opt.value); setMenuOpen(false); }}
                       >
                         <span>{opt.label}</span>
                         {groupBy === opt.value && (
