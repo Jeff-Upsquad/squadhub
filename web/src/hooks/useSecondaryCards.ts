@@ -89,9 +89,15 @@ export function useSecondaryCards(): SecondaryCardsResult {
       .map((t) => toItem(t, 'urgent'));
 
     // Label cards: carry the label AND are starred OR have a today/overdue date.
+    // Like Urgent, a task whose work_date is in the future is held back until
+    // that day arrives — even when starred.
     const labelCard = (names: string[], kind: string) =>
       all
-        .filter((t) => taskHasLabel(t, names) && (isTaskFocused(t) || hasDateTodayOrOverdue(t, tz)))
+        .filter((t) =>
+          taskHasLabel(t, names) &&
+          !isFutureDay(t.work_date, tz) &&
+          (isTaskFocused(t) || hasDateTodayOrOverdue(t, tz)),
+        )
         .map((t) => toItem(t, kind));
 
     return {
