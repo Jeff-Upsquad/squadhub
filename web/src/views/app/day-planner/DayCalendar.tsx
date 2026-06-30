@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getTaskStatusCategory } from '@squadhub/shared';
-import { usePMStore } from '../../../stores/pmStore';
+import { usePMStore, focusBucketForMinute } from '../../../stores/pmStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
 import {
   planDateKey,
@@ -21,6 +21,7 @@ import {
   DND_GROUP_CONTAINER_TYPE,
   DND_GROUP_CONTAINER_NAME,
   DND_GROUP_ESTIMATE_TOTAL,
+  DND_TASK_RECURRING_PARENT,
 } from '../calendar/calendarUtils';
 
 type GroupContainer = { type: 'list' | 'folder' | 'space'; id: string; name: string };
@@ -122,6 +123,7 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
   const unscheduleGroup = useUnscheduleGroup();
   const updateTask = useUpdateTask(null);
   const setActiveTask = usePMStore((s) => s.setActiveTask);
+  const setFocusBucket = usePMStore((s) => s.setFocusBucket);
   const setGroupRunPanel = usePMStore((s) => s.setGroupRunPanel);
   const qc = useQueryClient();
 
@@ -232,6 +234,13 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
     // Mirror the slot onto the task: its work date AND time now reflect where
     // it sits on the calendar (the day-plan block above carries the duration).
     updateTask.mutate({ id: taskId, work_date: slotToWorkDateISO(date, start_minute) });
+    // For today, mirror the slot's time-of-day onto the Home Focus list: an
+    // Evening/Night slot files it under that section, earlier slots clear it.
+    // For a recurring task the section sticks against its template.
+    if (date === today) {
+      const recurringParent = e.dataTransfer.getData(DND_TASK_RECURRING_PARENT) || undefined;
+      setFocusBucket(taskId, focusBucketForMinute(start_minute), recurringParent);
+    }
   };
 
   // Drop on the all-day strip → set work_date (date-only) for the viewed day,
@@ -309,6 +318,9 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
               start_minute: cur.previewStart,
               duration_minutes: cur.duration,
             });
+            // Re-timing a block on today's grid re-files it on the Home Focus
+            // list: Evening/Night window → that section, earlier → main list.
+            if (date === today) setFocusBucket(cur.taskId, focusBucketForMinute(cur.previewStart));
           }
         } else if (!cur || !cur.threshold) {
           // No real drag → a click. A group block opens the group session panel
@@ -484,6 +496,7 @@ export default function DayCalendar({ date, today, onDateChange }: Props) {
                     onDragStart={(e) => {
                       e.dataTransfer.setData('application/x-task-id', p.task_id);
                       e.dataTransfer.setData('application/x-task-estimate', String(p.task?.time_estimate ?? 30));
+                      e.dataTransfer.setData(DND_TASK_RECURRING_PARENT, (p.task as any)?.recurring_parent_id ?? '');
                       e.dataTransfer.effectAllowed = 'copyMove';
                     }}
                     onClick={() => setActiveTask(p.task_id)}

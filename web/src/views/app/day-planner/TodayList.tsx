@@ -162,6 +162,9 @@ export default function TodayList() {
         onDragStart={(e) => {
           e.dataTransfer.setData('application/x-task-id', t.id);
           e.dataTransfer.setData('application/x-task-estimate', String(t.time_estimate ?? 30));
+          // Recurrence template id (empty for non-recurring) so a drop into the
+          // Evening/Night window can make the section stick for future copies.
+          e.dataTransfer.setData('application/x-task-recurring-parent', t.recurring_parent_id ?? '');
           // Match the slot's dropEffect='move' — see DayCalendar.
           e.dataTransfer.effectAllowed = 'copyMove';
         }}

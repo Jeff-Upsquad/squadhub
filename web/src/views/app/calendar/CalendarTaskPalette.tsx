@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Task } from '@squadhub/shared';
 import { usePMStore } from '../../../stores/pmStore';
 import { useFocusTask, planDateKey } from '../../../hooks/useDayPlanner';
-import { DND_TASK_ID, DND_TASK_ESTIMATE, priorityLevel, setSlimDragImage } from './calendarUtils';
+import { DND_TASK_ID, DND_TASK_ESTIMATE, DND_TASK_RECURRING_PARENT, priorityLevel, setSlimDragImage } from './calendarUtils';
 
 type Filter = 'unscheduled' | 'all';
 
@@ -112,6 +112,7 @@ export default function CalendarTaskPalette({
                 onDragStart={(e) => {
                   e.dataTransfer.setData(DND_TASK_ID, t.id);
                   e.dataTransfer.setData(DND_TASK_ESTIMATE, String(t.time_estimate ?? 30));
+                  e.dataTransfer.setData(DND_TASK_RECURRING_PARENT, t.recurring_parent_id ?? '');
                   e.dataTransfer.effectAllowed = 'copyMove';
                   setSlimDragImage(e, t.title);
                 }}

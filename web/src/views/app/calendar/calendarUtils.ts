@@ -11,6 +11,10 @@ import { collapseGroupedTasks, isGroupedRow } from '../../../lib/taskGrouping';
 // slots without any special-casing.
 export const DND_TASK_ID = 'application/x-task-id';
 export const DND_TASK_ESTIMATE = 'application/x-task-estimate';
+// Recurrence template id of the dragged task (empty for non-recurring). Lets a
+// timed drop into the Evening/Night window record the section against the
+// template so future spawned copies inherit it. See focusBucketForMinute.
+export const DND_TASK_RECURRING_PARENT = 'application/x-task-recurring-parent';
 
 // Group ("Grouped tasks under …") drag payload — dropping it creates ONE
 // combined block sized to the summed estimate (DND_GROUP_ESTIMATE_TOTAL).
