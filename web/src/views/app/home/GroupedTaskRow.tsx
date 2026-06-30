@@ -51,7 +51,7 @@ export default function GroupedTaskRow({
   // Mirror GroupRunDetailPanel.openPanel's key so the timer here and the
   // Start/Stop in the detail panel drive the same server-side group run.
   const groupKey = `group-container:${row.container.type}:${row.container.id}`;
-  const groupLabel = `Grouped tasks under ${row.container.name}`;
+  const groupLabel = row.container.name;
   const listId = row.container.type === 'list' ? row.container.id : null;
 
   const { data: activeRun } = useActiveGroupRun();
@@ -231,7 +231,7 @@ export default function GroupedTaskRow({
         </span>
         <div className="t">
           <span className="title hm-grouped-title">
-            Grouped tasks under {row.container.name}
+            {row.container.name}
           </span>
         </div>
         <button
