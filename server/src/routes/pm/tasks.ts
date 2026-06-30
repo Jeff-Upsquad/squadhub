@@ -478,7 +478,10 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
     // Multi-home grouping: a task also collapses into any secondary "ALSO IN"
     // list whose chain has Group Tasks ON, not just its primary list chain.
     const withGroups = await hydrateMultiHomeGroups(withLists);
-    const tasks = await hydrateParents(withGroups);
+    const withParents = await hydrateParents(withGroups);
+    // Attach Labels (`tags`) so the Home "disappearing cards" (Recordings /
+    // Meetings / Calls) can filter by label name client-side.
+    const tasks = await hydrateLabels(withParents);
 
     // Compute day boundaries in user's timezone
     const fmt = new Intl.DateTimeFormat('en-CA', {
@@ -559,7 +562,7 @@ router.get('/tasks/my', async (req: Request, res: Response) => {
       if (!includeDone) {
         extra = extra.filter((t: any) => t.status !== 'done' && t.status !== 'closed');
       }
-      const hydratedExtra = await hydrateParents(await hydrateLists(await hydrateAssignees(extra)));
+      const hydratedExtra = await hydrateLabels(await hydrateParents(await hydrateLists(await hydrateAssignees(extra))));
       buckets.focused = [...fromExisting, ...hydratedExtra];
     }
 
