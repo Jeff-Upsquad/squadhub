@@ -14,6 +14,7 @@ export interface SecondaryCardItem {
   whenText: string;       // "Today" / "Overdue · Jun 12" / "" when undated
   overdue: boolean;
   kind: string;
+  task: Task;             // raw task, so the panel can group by space/list/etc.
   open?: () => void;      // row click (opens the task)
   toggleDone?: () => void;// inline "complete" affordance
 }
@@ -75,6 +76,7 @@ export function useSecondaryCards(): SecondaryCardsResult {
         whenText: when.text,
         overdue: when.state === 'overdue',
         kind,
+        task: t,
         open: () => { setActiveSecondaryCard(null); setActiveTask(t.id); },
         toggleDone: () => updateTask.mutate({ id: t.id, status: 'done' }),
       };
