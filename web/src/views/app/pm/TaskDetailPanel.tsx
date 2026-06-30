@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { usePMStore } from '../../../stores/pmStore';
 import { useTask, useUpdateTask, useDeleteTask, useTaskComments, useAddComment, useCreateTask, useUpdateTaskTimeTracked, useTaskLists, useAddTaskToLists, useRemoveTaskFromList, useTaskActivity } from '../../../hooks/useTasks';
 import { useTimeStats } from '../../../hooks/useTimer';
@@ -324,6 +324,31 @@ export default function TaskDetailPanel({
   const updateChecklistItem = useUpdateChecklistItem(effectiveTaskId);
   const deleteChecklistItem = useDeleteChecklistItem(effectiveTaskId);
   const qc = useQueryClient();
+
+  // Read-only "Elapsed (idle)" for design/video spaces: the task's folder's
+  // elapsed time for today (a per-space/day figure, written by the elapsed-time
+  // cron). Folders with no elapsed time — e.g. non-design spaces — return 0 and
+  // the row is hidden, so this stays invisible everywhere it doesn't apply.
+  const elapsedTodayISO = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+  const { data: elapsedTodaySeconds = 0 } = useQuery({
+    queryKey: ['folder-elapsed-today', folderId, elapsedTodayISO],
+    queryFn: async () => {
+      try {
+        const r = await api.get(
+          `/pm/folders/${folderId}/time-summary?from=${elapsedTodayISO}&to=${elapsedTodayISO}`,
+        );
+        const rows = (r.data.data || []) as { date: string; elapsed_seconds?: number }[];
+        return rows.reduce((s, x) => s + (x.elapsed_seconds || 0), 0);
+      } catch {
+        return 0;
+      }
+    },
+    enabled: !!folderId,
+    staleTime: 60_000,
+  });
 
   const [editing, setEditing] = useState<'title' | 'description' | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -1670,6 +1695,20 @@ export default function TaskDetailPanel({
                     )}
                   </span>
                 </div>
+
+                {/* Elapsed (idle) — read-only, design/video spaces only. A
+                    per-space/day figure (not task-specific); managers edit it in
+                    the space Reports tab. Hidden when the folder has none today. */}
+                {elapsedTodaySeconds > 0 && (
+                  <div className="td-settings-row" data-half="true" style={{ cursor: 'default' }}>
+                    <span className="k">{META_ICONS.Estimate}Elapsed (idle)</span>
+                    <span className="v">
+                      <span title="Idle-day time elapsed for this space today. Edit it in the space's Reports tab.">
+                        {formatTracked(elapsedTodaySeconds) || '0m'}
+                      </span>
+                    </span>
+                  </div>
+                )}
 
                 {/* Created by — full width */}
                 <div className="td-settings-row" data-half="true" style={{ gridColumn: '1 / -1', borderRight: 'none', borderBottom: 'none' }}>

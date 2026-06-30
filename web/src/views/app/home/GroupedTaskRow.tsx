@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
 import type { GroupedRow } from '../../../lib/taskGrouping';
-import { usePMStore, type FocusBucket } from '../../../stores/pmStore';
+import { usePMStore, effectiveFocusBucket, type FocusBucket } from '../../../stores/pmStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
 import { useActiveGroupRun, useStartGroupRun, useStopGroupRun } from '../../../hooks/useGroupRuns';
 import DatePicker from '../pm/DatePicker';
@@ -46,12 +46,13 @@ export default function GroupedTaskRow({
   const setGroupRunPanel = usePMStore((s) => s.setGroupRunPanel);
   const setFocusBucket = usePMStore((s) => s.setFocusBucket);
   const focusBuckets = usePMStore((s) => s.focusBuckets);
+  const recurringFocusBuckets = usePMStore((s) => s.recurringFocusBuckets);
   const updateTask = useUpdateTask(null);
 
   // Mirror GroupRunDetailPanel.openPanel's key so the timer here and the
   // Start/Stop in the detail panel drive the same server-side group run.
   const groupKey = `group-container:${row.container.type}:${row.container.id}`;
-  const groupLabel = `Grouped tasks under ${row.container.name}`;
+  const groupLabel = row.container.name;
   const listId = row.container.type === 'list' ? row.container.id : null;
 
   const { data: activeRun } = useActiveGroupRun();
@@ -62,7 +63,8 @@ export default function GroupedTaskRow({
   // All tasks in a rendered group share a focus bucket (collapseGroupedTasks
   // runs within a single section's list), so the first task's bucket is the
   // group's bucket — used to mark the active menu item and offer "back to Focus".
-  const groupBucket: FocusBucket | null = (row.tasks[0] && focusBuckets[row.tasks[0].id]) || null;
+  const groupBucket: FocusBucket | null =
+    (row.tasks[0] && effectiveFocusBucket(row.tasks[0], focusBuckets, recurringFocusBuckets)) || null;
 
   const openPanel = () => {
     setGroupRunPanel({
@@ -129,7 +131,9 @@ export default function GroupedTaskRow({
 
   const moveTo = (e: React.MouseEvent, next: FocusBucket | null) => {
     e.stopPropagation();
-    for (const t of row.tasks) setFocusBucket(t.id, next);
+    // Recurring tasks also record the section against their template so future
+    // copies inherit it and it survives the midnight rollover.
+    for (const t of row.tasks) setFocusBucket(t.id, next, t.recurring_parent_id ?? undefined);
     setMenuPos(null);
   };
 
@@ -231,7 +235,7 @@ export default function GroupedTaskRow({
         </span>
         <div className="t">
           <span className="title hm-grouped-title">
-            Grouped tasks under {row.container.name}
+            {row.container.name}
           </span>
         </div>
         <button

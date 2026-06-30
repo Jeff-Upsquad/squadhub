@@ -109,6 +109,36 @@ export async function aggregateFolderTimeSummary(
 }
 
 /**
+ * Aggregates `elapsed_time_entries` for a folder into one row per IST day that
+ * has elapsed (idle-day) time, summing every stage (midday + afternoon + any
+ * manual override). Parallels `aggregateFolderTimeSummary` so the report can
+ * show Actual and Elapsed side by side; `date` is already an IST calendar day
+ * on the row, so no timezone bucketing is needed.
+ */
+export async function aggregateFolderElapsedSummary(
+  folderId: string,
+  from: string,
+  to: string,
+): Promise<{ date: string; elapsed_seconds: number }[]> {
+  const { data: rows, error } = await supabaseAdmin
+    .from('elapsed_time_entries')
+    .select('date, seconds')
+    .eq('folder_id', folderId)
+    .gte('date', from)
+    .lte('date', to);
+  if (error) throw new Error(error.message);
+
+  const buckets: Record<string, number> = {};
+  for (const r of rows || []) {
+    const key = (r as any).date as string;
+    buckets[key] = (buckets[key] || 0) + Number((r as any).seconds || 0);
+  }
+  return Object.entries(buckets)
+    .map(([date, elapsed_seconds]) => ({ date, elapsed_seconds }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+/**
  * Reads the hours plan (daily/weekly/monthly) from the subscription card linked
  * to this folder. Mirrors GET /pm/folders/:id/link-status but exposes only the
  * derived allotments — never card_code or billing dates.

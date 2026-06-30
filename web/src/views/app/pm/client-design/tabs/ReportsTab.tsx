@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useHasPermission, useIsAdmin } from '../../../../../hooks/usePermissions';
 import type { RequestRowData } from '../atoms/RequestRow';
 import type { DesignPlan } from '../../../../../hooks/useClientDesignPlan';
 import {
@@ -214,6 +215,7 @@ export default function ReportsTab({
   // ---- Derived time figures -------------------------------------------------
   const weekRemaining = Math.max(0, plan.weeklyHours - plan.usedWeek);
 
+  type PeriodPoint = { date: string; total_work_seconds: number; elapsed_seconds?: number };
   const { data: periodData } = useQuery({
     queryKey: ['folder-time-period', folderId, periodRange.from, periodRange.to],
     queryFn: async () => {
@@ -221,9 +223,9 @@ export default function ReportsTab({
         const r = await api.get(
           `/pm/folders/${folderId}/time-summary?from=${periodRange.from}&to=${periodRange.to}`,
         );
-        return r.data.data as { date: string; total_work_seconds: number }[];
+        return r.data.data as PeriodPoint[];
       } catch {
-        return [] as { date: string; total_work_seconds: number }[];
+        return [] as PeriodPoint[];
       }
     },
     enabled: !!folderId && !!periodRange.from && !!periodRange.to,
@@ -235,8 +237,62 @@ export default function ReportsTab({
     return Math.round((secs / 3600) * 10) / 10;
   }, [periodData, periodRange.isCurrent, plan.usedMonth]);
 
+  // Elapsed (idle-day) totals for the period and the current week, summed from
+  // the same per-day endpoint that drives `periodUsed`.
+  const periodElapsed = useMemo(() => {
+    const secs = (periodData || []).reduce((s, d) => s + (d.elapsed_seconds || 0), 0);
+    return Math.round((secs / 3600) * 10) / 10;
+  }, [periodData]);
+
+  const weekStartISO = toISODate(weekStart);
+  const weekElapsed = useMemo(() => {
+    const secs = (periodData || [])
+      .filter((d) => d.date >= weekStartISO && d.date <= todayISO)
+      .reduce((s, d) => s + (d.elapsed_seconds || 0), 0);
+    return Math.round((secs / 3600) * 10) / 10;
+  }, [periodData, weekStartISO, todayISO]);
+
   const periodRemaining =
     periodRange.allot != null ? Math.max(0, periodRange.allot - periodUsed) : null;
+
+  // ---- Elapsed-time editing (Squad manager / admin) -------------------------
+  const canEditElapsed = useHasPermission('can_edit_elapsed_time') || useIsAdmin();
+  const queryClient = useQueryClient();
+  const [editDate, setEditDate] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [savingElapsed, setSavingElapsed] = useState(false);
+
+  const refreshElapsed = () => {
+    queryClient.invalidateQueries({ queryKey: ['folder-time-history', folderId] });
+    queryClient.invalidateQueries({ queryKey: ['folder-time-period', folderId] });
+  };
+  const beginEditElapsed = (date: string, hours: number) => {
+    setEditDate(date);
+    setEditValue(hours ? String(Math.round(hours * 100) / 100) : '');
+  };
+  const saveElapsed = async () => {
+    if (!editDate) return;
+    const hours = Number(editValue);
+    if (!Number.isFinite(hours) || hours < 0) return;
+    setSavingElapsed(true);
+    try {
+      await api.put(`/pm/folders/${folderId}/elapsed`, { date: editDate, hours });
+      refreshElapsed();
+      setEditDate(null);
+    } finally {
+      setSavingElapsed(false);
+    }
+  };
+  const removeElapsed = async (date: string) => {
+    setSavingElapsed(true);
+    try {
+      await api.delete(`/pm/folders/${folderId}/elapsed?date=${date}`);
+      refreshElapsed();
+      if (editDate === date) setEditDate(null);
+    } finally {
+      setSavingElapsed(false);
+    }
+  };
 
   const periodTaskCount = useMemo(() => {
     const from = new Date(`${periodRange.from}T00:00:00`);
@@ -395,11 +451,11 @@ export default function ReportsTab({
               </div>
               <div className="cd-stat">
                 <div className="cd-stat-label">Elapsed {!ELAPSED_ENABLED && <ElapsedTag />}</div>
-                <div className="cd-stat-val is-muted">{elapsedDisplay(0)}</div>
+                <div className="cd-stat-val is-muted">{elapsedDisplay(weekElapsed)}</div>
               </div>
               <div className="cd-stat">
                 <div className="cd-stat-label">Total</div>
-                <div className="cd-stat-val">{formatHours(plan.usedWeek)}</div>
+                <div className="cd-stat-val">{formatHours(plan.usedWeek + weekElapsed)}</div>
               </div>
               <div className="cd-stat">
                 <div className="cd-stat-label">Remaining</div>
@@ -434,11 +490,11 @@ export default function ReportsTab({
               </div>
               <div className="cd-stat">
                 <div className="cd-stat-label">Elapsed {!ELAPSED_ENABLED && <ElapsedTag />}</div>
-                <div className="cd-stat-val is-muted">{elapsedDisplay(0)}</div>
+                <div className="cd-stat-val is-muted">{elapsedDisplay(periodElapsed)}</div>
               </div>
               <div className="cd-stat">
                 <div className="cd-stat-label">Total</div>
-                <div className="cd-stat-val">{formatHours(periodUsed)}</div>
+                <div className="cd-stat-val">{formatHours(periodUsed + periodElapsed)}</div>
               </div>
               <div className="cd-stat">
                 <div className="cd-stat-label">Remaining</div>
@@ -454,6 +510,7 @@ export default function ReportsTab({
             data={breakdown}
             weeklyHours={plan.weeklyHours}
             monthlyHours={plan.monthlyHours}
+            elapsedHours={periodElapsed}
           />
         )}
 
@@ -500,6 +557,7 @@ export default function ReportsTab({
         </div>
         {history.days.map((d) => {
           const over = d.allotHours > 0 && d.actualHours > d.allotHours;
+          const editing = editDate === d.date;
           return (
             <div
               className={`cd-tl-row${d.today ? ' is-today' : ''}${d.weekend ? ' is-weekend' : ''}`}
@@ -510,7 +568,48 @@ export default function ReportsTab({
                 <UsageBar used={d.actualHours} allot={d.allotHours} />
               </div>
               <span className={`cd-tl-val${over ? ' over' : ''}`}>{formatHours(d.actualHours)}</span>
-              <span className="cd-tl-val is-muted">{elapsedDisplay(d.elapsedHours)}</span>
+              {editing ? (
+                <span className="cd-tl-val" style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'flex-end' }}>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.25}
+                    autoFocus
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveElapsed();
+                      if (e.key === 'Escape') setEditDate(null);
+                    }}
+                    disabled={savingElapsed}
+                    style={{ width: 52, padding: '1px 4px', fontSize: 11, textAlign: 'right' }}
+                    aria-label={`Elapsed hours for ${d.label}`}
+                  />
+                  <button className="cd-topbar-btn" style={{ padding: '1px 5px', fontSize: 10 }} onClick={saveElapsed} disabled={savingElapsed} title="Save">✓</button>
+                  <button className="cd-topbar-btn" style={{ padding: '1px 5px', fontSize: 10 }} onClick={() => setEditDate(null)} disabled={savingElapsed} title="Cancel">✕</button>
+                </span>
+              ) : canEditElapsed ? (
+                <span
+                  className="cd-tl-val is-muted"
+                  style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end', cursor: 'pointer' }}
+                  title="Edit elapsed time"
+                >
+                  <span onClick={() => beginEditElapsed(d.date, d.elapsedHours)}>{elapsedDisplay(d.elapsedHours)}</span>
+                  {d.elapsedHours > 0 && (
+                    <button
+                      className="cd-topbar-btn"
+                      style={{ padding: '0 4px', fontSize: 10, opacity: 0.7 }}
+                      onClick={() => removeElapsed(d.date)}
+                      disabled={savingElapsed}
+                      title="Remove elapsed time"
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              ) : (
+                <span className="cd-tl-val is-muted">{elapsedDisplay(d.elapsedHours)}</span>
+              )}
             </div>
           );
         })}
@@ -602,7 +701,8 @@ export default function ReportsTab({
                           })()}
                         </span>
                         <span className="cd-wk-task-val">{formatHours((t.time_tracked || 0) / 3600)}</span>
-                        <span className="cd-wk-task-val is-muted">{elapsedDisplay(0)}</span>
+                        {/* Elapsed is a per-day/space figure, not attributable to a single task. */}
+                        <span className="cd-wk-task-val is-muted">—</span>
                       </div>
                     );
                   })}
@@ -637,11 +737,13 @@ function PeriodBreakdown({
   data,
   weeklyHours,
   monthlyHours,
+  elapsedHours,
 }: {
   label: string;
   data: { months: BreakdownMonth[]; totalSecs: number; totalTasks: number; multiMonth: boolean };
   weeklyHours: number;
   monthlyHours: number;
+  elapsedHours: number;
 }) {
   const totalHours = data.totalSecs / 3600;
   // Allotment across the period (one month's allotment per month spanned),
@@ -666,11 +768,11 @@ function PeriodBreakdown({
         </div>
         <div className="cd-stat">
           <div className="cd-stat-label">Elapsed {!ELAPSED_ENABLED && <ElapsedTag />}</div>
-          <div className="cd-stat-val is-muted">{elapsedDisplay(0)}</div>
+          <div className="cd-stat-val is-muted">{elapsedDisplay(elapsedHours)}</div>
         </div>
         <div className="cd-stat">
           <div className="cd-stat-label">Total</div>
-          <div className="cd-stat-val">{formatHours(totalHours)}</div>
+          <div className="cd-stat-val">{formatHours(totalHours + elapsedHours)}</div>
         </div>
         <div className="cd-stat">
           <div className="cd-stat-label">Remaining</div>
