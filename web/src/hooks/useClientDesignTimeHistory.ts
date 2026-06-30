@@ -4,16 +4,17 @@ import api from '../services/api';
 import type { DesignPlan } from './useClientDesignPlan';
 
 // ---------------------------------------------------------------------------
-// Elapsed time is a planned feature: "idle" time (a day or half-day where no
-// work happened) that still counts toward the billed total. The data source
-// does not exist yet, so every elapsed value is 0 and the UI renders it as a
-// disabled / "coming soon" field. Flip this flag (and feed real numbers into
-// the buckets below) when the feature ships.
-export const ELAPSED_ENABLED = false;
+// Elapsed time: "idle" time (a day or half-day where no active work happened)
+// that still counts toward the billed total. Written by the elapsed-time cron
+// into elapsed_time_entries and surfaced per day via the /time-summary endpoint
+// (elapsed_seconds). The buckets below carry real elapsedHours; the Reports UI
+// shows them alongside actual hours.
+export const ELAPSED_ENABLED = true;
 
 interface DailySummary {
   date: string;
   total_work_seconds: number;
+  elapsed_seconds?: number;
 }
 
 export interface DayPoint {
@@ -140,7 +141,11 @@ export function useClientDesignTimeHistory(
 
   return useMemo(() => {
     const map = new Map<string, number>();
-    for (const s of data || []) map.set(s.date, s.total_work_seconds || 0);
+    const emap = new Map<string, number>();
+    for (const s of data || []) {
+      map.set(s.date, s.total_work_seconds || 0);
+      emap.set(s.date, s.elapsed_seconds || 0);
+    }
 
     const todayISO = toISODate(today);
     const yesterdayISO = toISODate(addDays(today, -1));
@@ -167,7 +172,7 @@ export function useClientDesignTimeHistory(
           date: iso,
           label,
           actualHours: (map.get(iso) || 0) / 3600,
-          elapsedHours: 0,
+          elapsedHours: (emap.get(iso) || 0) / 3600,
           allotHours: weekend ? 0 : plan.dailyHours,
           today: isToday,
           weekend,
@@ -182,9 +187,13 @@ export function useClientDesignTimeHistory(
         const ws = new Date(cur);
         const we = addDays(ws, 6);
         let secs = 0;
+        let esecs = 0;
         for (let k = 0; k < 7; k++) {
           const dd = addDays(ws, k);
-          if (inRange(dd)) secs += map.get(toISODate(dd)) || 0;
+          if (inRange(dd)) {
+            secs += map.get(toISODate(dd)) || 0;
+            esecs += emap.get(toISODate(dd)) || 0;
+          }
         }
         const anchor = ws < start ? start : ws;
         const dispEnd = we > end ? end : we;
@@ -194,7 +203,7 @@ export function useClientDesignTimeHistory(
           start: ws,
           end: we,
           actualHours: secs / 3600,
-          elapsedHours: 0,
+          elapsedHours: esecs / 3600,
           allotHours: plan.weeklyHours,
           current: today >= ws && today <= we && inRange(today),
         });
@@ -210,16 +219,20 @@ export function useClientDesignTimeHistory(
       ) {
         const daysInMonth = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
         let secs = 0;
+        let esecs = 0;
         for (let day = 1; day <= daysInMonth; day++) {
           const dd = new Date(m.getFullYear(), m.getMonth(), day);
-          if (inRange(dd)) secs += map.get(toISODate(dd)) || 0;
+          if (inRange(dd)) {
+            secs += map.get(toISODate(dd)) || 0;
+            esecs += emap.get(toISODate(dd)) || 0;
+          }
         }
         sMonths.push({
           key: `${m.getFullYear()}-${m.getMonth() + 1}`,
           label: `${MONTH_LABELS[m.getMonth()]} ${m.getFullYear()}`,
           start: new Date(m),
           actualHours: secs / 3600,
-          elapsedHours: 0,
+          elapsedHours: esecs / 3600,
           allotHours: plan.monthlyHours,
           current:
             m.getFullYear() === today.getFullYear() &&
@@ -245,7 +258,7 @@ export function useClientDesignTimeHistory(
         date: iso,
         label,
         actualHours: (map.get(iso) || 0) / 3600,
-        elapsedHours: 0,
+        elapsedHours: (emap.get(iso) || 0) / 3600,
         allotHours: weekend ? 0 : plan.dailyHours,
         today: iso === todayISO,
         weekend,
@@ -259,7 +272,11 @@ export function useClientDesignTimeHistory(
       const ws = addDays(curWeekStart, -i * 7);
       const we = addDays(ws, 6);
       let secs = 0;
-      for (let k = 0; k < 7; k++) secs += map.get(toISODate(addDays(ws, k))) || 0;
+      let esecs = 0;
+      for (let k = 0; k < 7; k++) {
+        secs += map.get(toISODate(addDays(ws, k))) || 0;
+        esecs += emap.get(toISODate(addDays(ws, k))) || 0;
+      }
       const current = i === 0;
       const lastWeek = i === 1;
       const label = current
@@ -273,7 +290,7 @@ export function useClientDesignTimeHistory(
         start: ws,
         end: we,
         actualHours: secs / 3600,
-        elapsedHours: 0,
+        elapsedHours: esecs / 3600,
         allotHours: plan.weeklyHours,
         current,
       });
@@ -285,8 +302,11 @@ export function useClientDesignTimeHistory(
       const mStart = new Date(today.getFullYear(), today.getMonth() - i, 1);
       const daysInMonth = new Date(mStart.getFullYear(), mStart.getMonth() + 1, 0).getDate();
       let secs = 0;
+      let esecs = 0;
       for (let day = 1; day <= daysInMonth; day++) {
-        secs += map.get(toISODate(new Date(mStart.getFullYear(), mStart.getMonth(), day))) || 0;
+        const k = toISODate(new Date(mStart.getFullYear(), mStart.getMonth(), day));
+        secs += map.get(k) || 0;
+        esecs += emap.get(k) || 0;
       }
       const current = i === 0;
       months.push({
@@ -294,7 +314,7 @@ export function useClientDesignTimeHistory(
         label: MONTH_LABELS[mStart.getMonth()],
         start: mStart,
         actualHours: secs / 3600,
-        elapsedHours: 0,
+        elapsedHours: esecs / 3600,
         // monthlyHours is prorated for the current month; for past months it is
         // an approximate reference allotment (true historical plan not stored).
         allotHours: plan.monthlyHours,

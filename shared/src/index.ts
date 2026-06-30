@@ -819,6 +819,9 @@ export interface RolePermissions {
   // Time Logs — resolved against the PRIMARY role only
   can_edit_time_logs: boolean;
   time_edit_window_hours: number; // 0 = unlimited when toggle is on
+  // Elapsed time — edit/remove a design/video space's idle-day elapsed hours
+  // (the "Squad manager" role gets this). Resolved against the PRIMARY role.
+  can_edit_elapsed_time: boolean;
   [key: string]: boolean | number;
 }
 

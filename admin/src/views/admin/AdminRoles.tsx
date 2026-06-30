@@ -75,6 +75,7 @@ const PERMISSION_GROUPS: PermissionGroup[] = [
     ),
     permissions: [
       { key: 'can_edit_time_logs', label: 'Edit Own Time Logs', description: "Edit or delete their own timer sessions (primary role only)" },
+      { key: 'can_edit_elapsed_time', label: 'Edit Elapsed Time', description: 'Edit or remove a design/video space’s idle-day elapsed hours in Reports (primary role only)' },
     ],
   },
   {

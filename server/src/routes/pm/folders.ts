@@ -3,10 +3,13 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
-import { requirePermission, checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin, isResourceLocked } from '../../middleware/permissions';
+import { requirePermission, checkResourceAccess, meetsAccessLevel, isWorkspaceAdmin, isResourceLocked, getPrimaryRolePermissions } from '../../middleware/permissions';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import type { User } from '@squadhub/shared';
-import { aggregateFolderTimeSummary } from '../../services/folderShareMetrics';
+import {
+  aggregateFolderTimeSummary,
+  aggregateFolderElapsedSummary,
+} from '../../services/folderShareMetrics';
 
 const router = Router();
 
@@ -946,11 +949,124 @@ router.get('/folders/:id/time-summary', async (req: Request, res: Response) => {
     }
 
     // Aggregation (lists → tasks → task_time_entries, IST-bucketed) is shared
-    // with the public design-space share view via this helper.
-    const data = await aggregateFolderTimeSummary(id, from, to);
+    // with the public design-space share view via this helper. Elapsed
+    // (idle-day) time is merged in per date so the report shows Actual +
+    // Elapsed side by side.
+    const [actual, elapsed] = await Promise.all([
+      aggregateFolderTimeSummary(id, from, to),
+      aggregateFolderElapsedSummary(id, from, to),
+    ]);
+    const byDate = new Map<string, { date: string; total_work_seconds: number; elapsed_seconds: number }>();
+    for (const r of actual) byDate.set(r.date, { date: r.date, total_work_seconds: r.total_work_seconds, elapsed_seconds: 0 });
+    for (const r of elapsed) {
+      const row = byDate.get(r.date) || { date: r.date, total_work_seconds: 0, elapsed_seconds: 0 };
+      row.elapsed_seconds = r.elapsed_seconds;
+      byDate.set(r.date, row);
+    }
+    const data = Array.from(byDate.values()).sort((a, b) => (a.date < b.date ? -1 : 1));
     res.json({ success: true, data });
   } catch (err) {
     console.error('Get folder time summary error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Elapsed-time edit/remove (Squad manager / admin only). Backed by
+// elapsed_time_entries (migration 149); the cron auto-writes 'midday'/'afternoon'
+// rows, and these endpoints let a manager override or clear a day. A manual edit
+// replaces the whole day with one 'manual' row so the report total equals the
+// entered value exactly.
+async function canEditElapsedTime(userId: string): Promise<boolean> {
+  const { data: me } = await supabaseAdmin
+    .from('users')
+    .select('is_admin')
+    .eq('id', userId)
+    .single();
+  if ((me as any)?.is_admin) return true;
+  const perms = await getPrimaryRolePermissions(userId);
+  return perms.can_edit_elapsed_time === true;
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// PUT /pm/folders/:id/elapsed  { date: 'YYYY-MM-DD', hours: number }
+router.put('/folders/:id/elapsed', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const date = String(req.body?.date || '').trim();
+    const hours = Number(req.body?.hours);
+    if (!DATE_RE.test(date) || !Number.isFinite(hours) || hours < 0) {
+      res.status(400).json({ success: false, error: 'date (YYYY-MM-DD) and a non-negative hours are required' });
+      return;
+    }
+    if (!(await checkResourceAccess(req.userId!, 'folder', id))) {
+      res.status(403).json({ success: false, error: 'You do not have access to this folder' });
+      return;
+    }
+    if (!(await canEditElapsedTime(req.userId!))) {
+      res.status(403).json({ success: false, error: 'Your role cannot edit elapsed time' });
+      return;
+    }
+
+    // workspace_id for the new row, via the folder's space.
+    const { data: folder } = await supabaseAdmin
+      .from('folders')
+      .select('space:space_id(workspace_id)')
+      .eq('id', id)
+      .maybeSingle();
+    const workspaceId = (folder as any)?.space?.workspace_id ?? null;
+
+    // Replace the whole day with a single manual row so the total equals `hours`.
+    await supabaseAdmin.from('elapsed_time_entries').delete().eq('folder_id', id).eq('date', date);
+    const { error } = await supabaseAdmin.from('elapsed_time_entries').insert({
+      folder_id: id,
+      workspace_id: workspaceId,
+      date,
+      stage: 'manual',
+      seconds: Math.round(hours * 3600),
+      source: 'manual',
+      created_by: req.userId!,
+    });
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data: { date, seconds: Math.round(hours * 3600) } });
+  } catch (err) {
+    console.error('Edit elapsed time error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /pm/folders/:id/elapsed?date=YYYY-MM-DD — clear a day's elapsed time.
+router.delete('/folders/:id/elapsed', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const date = String(req.query.date || '').trim();
+    if (!DATE_RE.test(date)) {
+      res.status(400).json({ success: false, error: 'date (YYYY-MM-DD) query param is required' });
+      return;
+    }
+    if (!(await checkResourceAccess(req.userId!, 'folder', id))) {
+      res.status(403).json({ success: false, error: 'You do not have access to this folder' });
+      return;
+    }
+    if (!(await canEditElapsedTime(req.userId!))) {
+      res.status(403).json({ success: false, error: 'Your role cannot edit elapsed time' });
+      return;
+    }
+    const { error } = await supabaseAdmin
+      .from('elapsed_time_entries')
+      .delete()
+      .eq('folder_id', id)
+      .eq('date', date);
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete elapsed time error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
