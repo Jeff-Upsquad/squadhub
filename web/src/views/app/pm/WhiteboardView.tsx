@@ -21,12 +21,14 @@ import {
   getBezierPath,
   getSmoothStepPath,
   addEdge,
+  reconnectEdge,
   useNodesState,
   useEdgesState,
   useReactFlow,
   useViewport,
   type Node,
   type Edge,
+  type Connection,
   type NodeProps,
   type EdgeProps,
 } from '@xyflow/react';
@@ -1273,6 +1275,15 @@ function Canvas({
     setEdges((eds) => eds.map((e) => (e.id === id ? { ...e, data: { ...e.data, waypoint } } : e)));
   }, [setEdges]);
 
+  // Reconnect an existing arrow: drag either endpoint onto another element.
+  // Keep the edge's own id (so its data/waypoint stay attached) and drop any
+  // bend, since the old waypoint no longer fits the new geometry.
+  const onReconnect = useCallback((oldEdge: WBEdge, conn: Connection) => {
+    if (!canEdit) return;
+    setEdges((eds) => reconnectEdge(oldEdge, conn, eds, { shouldReplaceId: false })
+      .map((e) => (e.id === oldEdge.id ? { ...e, data: { ...e.data, waypoint: null } } : e)));
+  }, [canEdit, setEdges]);
+
   // Keyboard layering for the selected element(s):
   //   ]  (or ⌘/Ctrl+])  → bring to front
   //   [  (or ⌘/Ctrl+[)  → send to back
@@ -1436,6 +1447,8 @@ function Canvas({
           onNodeDoubleClick={(_, node) => { if (canEdit) startEditing(node.id); }}
           onEdgeClick={onEdgeClick}
           onEdgeDoubleClick={(_, edge) => { if (canEdit) startEditingEdge(edge.id); }}
+          onReconnect={onReconnect}
+          edgesReconnectable={canEdit}
           onMoveEnd={() => { if (!firstRun.current) save(serialize(nodes, edges, rf.getViewport())); }}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
