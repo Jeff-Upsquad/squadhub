@@ -488,10 +488,13 @@ export default function AdminPublishedCards() {
 
   // The opened card can live in either query (an archived card opened from the
   // Archive tab, or a live card from any other card-list tab).
-  const allLoadedCards = useMemo(
-    () => [...activeCards, ...archivedCards],
-    [activeCards, archivedCards],
-  );
+  // A card opened via ?card= is force-included by the backend in BOTH the
+  // active and archived responses, so dedupe by id to avoid a doubled tier chip.
+  const allLoadedCards = useMemo(() => {
+    const byId = new Map<string, PublishedCard>();
+    for (const c of [...activeCards, ...archivedCards]) byId.set(c.id, c);
+    return [...byId.values()];
+  }, [activeCards, archivedCards]);
   const selectedCard = useMemo(
     () => allLoadedCards.find((c) => c.id === selectedCardId) || null,
     [allLoadedCards, selectedCardId],
