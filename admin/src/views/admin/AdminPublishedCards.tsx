@@ -189,23 +189,28 @@ function formatPublishedAt(iso: string | null): string {
 }
 
 type GroupBy = 'status' | 'date';
-// UI bucket — independent of `state` because the new "Assigned" bucket is
-// driven by selected_recipient_id, which can coexist with state='closed'
-// (webhook from Profiles closes the card and pins a selection together).
-type Bucket = 'active' | 'selected' | 'assigned' | 'cancelled';
-type StateFilter = 'all' | Bucket;
+// UI bucket — independent of `state` because the "Assigned" bucket is driven by
+// selected_recipient_id (which can coexist with state='closed' when the Profiles
+// webhook closes the card and pins a selection together), and the published-state
+// cards split into "published" (live, not yet broadcast) vs "broadcaster"
+// (already broadcast to recipients).
+type Bucket = 'published' | 'broadcaster' | 'selected' | 'assigned' | 'cancelled';
 
 /**
  * Precedence-based bucketing. A card with `selected_recipient_id` set always
  * lands in "assigned" — even if state='closed' (webhook flow) or state='assigned'
  * (admin manually picked one final recipient). Only when no final recipient
- * exists do we fall through to state-based buckets.
+ * exists do we fall through to state-based buckets. A live published card then
+ * splits by whether its recipients have been sent: `needs_broadcast` → the
+ * "published" (awaiting-broadcast) bucket, otherwise the "broadcaster" bucket.
+ * Closed cards land in "cancelled", which the Archive tab surfaces.
  */
 function categorize(card: PublishedCard): Bucket {
   if (card.selected_recipient_id) return 'assigned';
   if (card.state === 'assigned') return 'selected';
   if (card.state === 'closed') return 'cancelled';
-  return 'active';
+  // state === 'published'
+  return card.needs_broadcast ? 'published' : 'broadcaster';
 }
 
 function bucketByDate<T extends { state: 'published' | 'assigned' | 'closed'; published_at: string | null }>(
@@ -236,15 +241,85 @@ function publishedCardTitle(card: PublishedCard): string {
   return subName ? `${business} · ${subName}` : business;
 }
 
-type Tab = 'published' | 'requests' | 'custom' | 'archive';
+type Tab = 'requests' | 'published' | 'broadcaster' | 'selected' | 'assigned' | 'archive' | 'custom';
+
+// Tabs backed by the published-cards lists (as opposed to New deals / Custom,
+// which render their own components). These share the active + archived card
+// queries and support the card detail view.
+const CARD_LIST_TABS = ['published', 'broadcaster', 'selected', 'assigned', 'archive'] as const;
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'requests', label: 'New deals' },
+  { key: 'published', label: 'Published' },
+  { key: 'broadcaster', label: 'Broadcasted' },
+  { key: 'selected', label: 'Selected' },
+  { key: 'assigned', label: 'Assigned' },
+  { key: 'archive', label: 'Archive' },
+  { key: 'custom', label: 'Custom' },
+];
+
+const HEADER_META: Record<Tab, { title: string; subtitle: string }> = {
+  requests: {
+    title: 'New Deals',
+    subtitle: 'Incoming briefs and drafts. Fill in the details, save as a draft, then publish.',
+  },
+  published: {
+    title: 'Published',
+    subtitle: 'Published cards that haven’t been broadcast yet. Open one and click Broadcast to send it to partners and talents.',
+  },
+  broadcaster: {
+    title: 'Broadcasted',
+    subtitle: 'Cards already broadcast to partners and talents — awaiting accepts and rejects.',
+  },
+  selected: {
+    title: 'Selected',
+    subtitle: 'Cards where recipients have been selected, pending a final assignment.',
+  },
+  assigned: {
+    title: 'Assigned',
+    subtitle: 'Cards with a final recipient assigned.',
+  },
+  archive: {
+    title: 'Archive',
+    subtitle: 'Cancelled and declined cards, plus anything you’ve archived. Hidden from talent feeds and the active pipeline.',
+  },
+  custom: {
+    title: 'Custom Cards',
+    subtitle: 'Cards created from scratch by admins (not from a request or submission).',
+  },
+};
+
+// Empty-state copy for each card-list tab (shown when the bucket is empty and
+// no search/filter is narrowing it).
+const EMPTY_COPY: Record<(typeof CARD_LIST_TABS)[number], { title: string; hint: string }> = {
+  published: {
+    title: 'Nothing waiting to broadcast',
+    hint: 'Published cards that still need to be sent to partners and talents show up here.',
+  },
+  broadcaster: {
+    title: 'No broadcast cards yet',
+    hint: 'Once you broadcast a card, it lands here while partners and talents respond.',
+  },
+  selected: {
+    title: 'No selected cards',
+    hint: 'Cards where recipients have been selected but not finally assigned show up here.',
+  },
+  assigned: {
+    title: 'No assigned cards',
+    hint: 'Cards with a final recipient assigned show up here.',
+  },
+  archive: {
+    title: 'Nothing archived yet',
+    hint: 'Cancelled and declined cards, plus anything you archive, show up here.',
+  },
+};
 
 export default function AdminPublishedCards() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
-  const [activeTab, setActiveTab] = useState<Tab>('published');
-  const [stateFilter, setStateFilter] = useState<StateFilter>('all');
+  const [activeTab, setActiveTab] = useState<Tab>('requests');
   const [publishedBy, setPublishedBy] = useState<string>('');
   const [search, setSearch] = useState<string>('');
   // Debounced copy of `search` — the query keys off this so each keystroke
@@ -275,28 +350,47 @@ export default function AdminPublishedCards() {
     }
   }, [router, pathname]);
 
-  const isArchiveTab = activeTab === 'archive';
+  const isCardListTab = (CARD_LIST_TABS as readonly string[]).includes(activeTab);
 
-  // Server returns all states for the current tab; state filtering happens
-  // client-side so the secondary tabs can show accurate counts.
-  const { data: cardsRes, isLoading, isFetching } = useQuery({
-    queryKey: ['admin-published-cards', publishedBy, debouncedSearch, isArchiveTab ? 'archived' : 'active', selectedCardId],
+  // Two card queries feed the flattened tab bar. The active query drives the
+  // Published / Broadcaster / Selected / Assigned buckets (and the closed cards
+  // the Archive tab folds in); the archived query drives the rest of Archive.
+  // Both run regardless of the active tab so every tab's count stays live.
+  const { data: activeCardsRes, isLoading: activeLoading, isFetching: activeFetching } = useQuery({
+    queryKey: ['admin-published-cards', publishedBy, debouncedSearch, 'active', selectedCardId],
     queryFn: () => {
       const params: Record<string, string> = {};
       if (publishedBy) params.published_by = publishedBy;
       if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
-      if (isArchiveTab) params.archived = 'true';
       if (selectedCardId) params.card_id = selectedCardId;
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
-    enabled: activeTab === 'published' || activeTab === 'archive',
     // Keep showing the prior list while a new filter/search refetches, so the
     // view never blanks to a loading state mid-typing.
     placeholderData: keepPreviousData,
     // Re-opening the tab within 30s reuses cached cards instantly.
     staleTime: 30_000,
   });
-  const cards: PublishedCard[] = cardsRes?.data || [];
+  const activeCards: PublishedCard[] = activeCardsRes?.data || [];
+
+  const { data: archivedCardsRes, isLoading: archivedLoading, isFetching: archivedFetching } = useQuery({
+    queryKey: ['admin-published-cards', publishedBy, debouncedSearch, 'archived', selectedCardId],
+    queryFn: () => {
+      const params: Record<string, string> = { archived: 'true' };
+      if (publishedBy) params.published_by = publishedBy;
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+      if (selectedCardId) params.card_id = selectedCardId;
+      return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+  const archivedCards: PublishedCard[] = archivedCardsRes?.data || [];
+
+  // The Archive tab loads both queries; every other card-list tab only needs
+  // the active one.
+  const isLoading = activeTab === 'archive' ? activeLoading || archivedLoading : activeLoading;
+  const isFetching = activeTab === 'archive' ? activeFetching || archivedFetching : activeFetching;
 
   // Reuse the sales-people endpoint to populate the "Published by" dropdown.
   const { data: peopleRes } = useQuery({
@@ -346,18 +440,27 @@ export default function AdminPublishedCards() {
     (pendingBriefRes?.data || []).length;
 
   const bucketed = useMemo(() => {
-    const out: Record<Bucket, PublishedCard[]> = { active: [], selected: [], assigned: [], cancelled: [] };
-    for (const c of cards) out[categorize(c)].push(c);
+    const out: Record<Bucket, PublishedCard[]> = { published: [], broadcaster: [], selected: [], assigned: [], cancelled: [] };
+    for (const c of activeCards) out[categorize(c)].push(c);
     return out;
-  }, [cards]);
+  }, [activeCards]);
 
-  const stateCounts = useMemo(() => ({
-    all: cards.length,
-    active: bucketed.active.length,
+  // Archive = manually-archived cards + cancelled/declined (closed) cards,
+  // deduped by id so a card that is somehow both never shows twice.
+  const archiveCards = useMemo(() => {
+    const byId = new Map<string, PublishedCard>();
+    for (const c of archivedCards) byId.set(c.id, c);
+    for (const c of bucketed.cancelled) if (!byId.has(c.id)) byId.set(c.id, c);
+    return [...byId.values()];
+  }, [archivedCards, bucketed.cancelled]);
+
+  const tabCounts = useMemo(() => ({
+    published: bucketed.published.length,
+    broadcaster: bucketed.broadcaster.length,
     selected: bucketed.selected.length,
     assigned: bucketed.assigned.length,
-    cancelled: bucketed.cancelled.length,
-  }), [cards, bucketed]);
+    archive: archiveCards.length,
+  }), [bucketed, archiveCards]);
 
   const unreviewedAssignedCount = useMemo(
     () => bucketed.assigned.filter((c) => !c.admin_reviewed_at).length,
@@ -369,33 +472,39 @@ export default function AdminPublishedCards() {
     [bucketed.selected],
   );
 
-  const filteredCards = useMemo(
-    () => stateFilter === 'all' ? cards : bucketed[stateFilter],
-    [cards, bucketed, stateFilter],
+  // Cards shown under the active card-list tab.
+  const cardsForTab = useMemo(() => {
+    switch (activeTab) {
+      case 'published': return bucketed.published;
+      case 'broadcaster': return bucketed.broadcaster;
+      case 'selected': return bucketed.selected;
+      case 'assigned': return bucketed.assigned;
+      case 'archive': return archiveCards;
+      default: return [] as PublishedCard[];
+    }
+  }, [activeTab, bucketed, archiveCards]);
+
+  const dateGroups = useMemo(() => bucketByDate(cardsForTab), [cardsForTab]);
+
+  // The opened card can live in either query (an archived card opened from the
+  // Archive tab, or a live card from any other card-list tab).
+  const allLoadedCards = useMemo(
+    () => [...activeCards, ...archivedCards],
+    [activeCards, archivedCards],
   );
-
-  const groups = useMemo(() => ({
-    active: bucketed.active,
-    selected: bucketed.selected,
-    assigned: bucketed.assigned,
-    cancelled: bucketed.cancelled,
-  }), [bucketed]);
-
-  const dateGroups = useMemo(() => bucketByDate(filteredCards), [filteredCards]);
-
   const selectedCard = useMemo(
-    () => cards.find((c) => c.id === selectedCardId) || null,
-    [cards, selectedCardId],
+    () => allLoadedCards.find((c) => c.id === selectedCardId) || null,
+    [allLoadedCards, selectedCardId],
   );
 
   // The per-tier sibling cards of the opened brief (tier-ordered), so the detail
   // view can show a tab per tier. Empty for single-tier / ungrouped cards.
   const selectedGroupCards = useMemo(() => {
     if (!selectedCard?.brief_group_id) return [] as PublishedCard[];
-    return cards
+    return allLoadedCards
       .filter((c) => c.brief_group_id === selectedCard.brief_group_id)
       .sort((a, b) => tierRankOf(a) - tierRankOf(b));
-  }, [cards, selectedCard]);
+  }, [allLoadedCards, selectedCard]);
 
   // Switch the active tier inside the opened card. Uses replace (not push) so
   // the back button still returns to the list, not the previously-viewed tier.
@@ -404,7 +513,7 @@ export default function AdminPublishedCards() {
     [router, pathname],
   );
 
-  const showDetailView = (activeTab === 'published' || activeTab === 'archive') && !!selectedCard;
+  const showDetailView = isCardListTab && !!selectedCard;
 
   // When switching primary tabs, drop any stale ?card= so the detail view
   // doesn't unexpectedly re-open when the user comes back to this tab.
@@ -415,16 +524,17 @@ export default function AdminPublishedCards() {
     }
   }, [pathname, router, searchParams]);
 
-  // Header copy per tab — computed once instead of inline-nested ternaries.
-  // `count` is the small metric chip beside the title; for Published/Archive it's
-  // a live card count, otherwise a short descriptor.
-  const headerMeta = activeTab === 'archive'
-    ? { title: 'Archived Cards', count: `${cards.length} archived`, subtitle: 'Hidden from talent feeds and the default Published list. Republish or delete from here.' }
-    : activeTab === 'requests'
-      ? { title: 'New Deals', count: 'Inbound queue', subtitle: 'Incoming briefs and drafts. Fill in the details, save as a draft, then publish.' }
-      : activeTab === 'custom'
-        ? { title: 'Custom Cards', count: 'Admin-created', subtitle: 'Cards created from scratch by admins (not from a request or submission).' }
-        : { title: 'Published Cards', count: `${cards.length} published`, subtitle: 'All subscription cards published across the org.' };
+  // Header copy per tab. `count` is the small metric chip beside the title; for
+  // the card-list tabs it's a live card count, otherwise a short descriptor.
+  const headerCount = activeTab === 'requests'
+    ? 'Inbound queue'
+    : activeTab === 'custom'
+      ? 'Admin-created'
+      : (() => {
+          const n = tabCounts[activeTab as keyof typeof tabCounts];
+          return `${n} card${n === 1 ? '' : 's'}`;
+        })();
+  const headerMeta = { ...HEADER_META[activeTab], count: headerCount };
 
   return (
     <div className="flex h-full flex-col sh-surface">
@@ -456,60 +566,48 @@ export default function AdminPublishedCards() {
             </button>
           </header>
 
-          {/* Primary tabs */}
+          {/* Tabs — one row across the whole deal lifecycle: the New deals
+              inbound queue, the published-card buckets, Archive, then Custom. */}
           <div className="overflow-x-auto">
             <div className="sh-tab-bar">
-              {([['published', 'Published'], ['requests', 'New Deals'], ['custom', 'Custom'], ['archive', 'Archive']] as const).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  data-active={activeTab === key}
-                  onClick={() => switchTab(key)}
-                  className="sh-tab"
-                >
-                  {label}
-                  {key === 'requests' && pendingRequestCount > 0 && (
-                    <span
-                      className="ml-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none"
-                      style={{
-                        // Lime fill doesn't flip between themes, so pin the
-                        // ink dark — the global --sh-ink flips light in dark
-                        // mode and would vanish on the yellow badge.
-                        background: 'var(--color-sh-lime)',
-                        color: '#0a0a0a',
-                        boxShadow: 'inset 0 0 0 1px #0a0a0a',
-                      }}
-                      title={`${pendingRequestCount} pending review`}
-                    >
-                      {pendingRequestCount}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Secondary tabs (state filter) — only on Published / Archive */}
-          {(activeTab === 'published' || activeTab === 'archive') && (
-            <div className="overflow-x-auto">
-              <div className="sh-tab-bar">
-                {([['all', 'All'], ['active', 'Active'], ['selected', 'Selected'], ['assigned', 'Assigned'], ['cancelled', 'Cancelled']] as const).map(([key, label]) => (
+              {TABS.map(({ key, label }) => {
+                const count =
+                  key === 'published' || key === 'broadcaster' || key === 'selected' || key === 'assigned'
+                    ? tabCounts[key]
+                    : key === 'archive'
+                      ? tabCounts.archive
+                      : null;
+                return (
                   <button
                     key={key}
                     type="button"
-                    data-active={stateFilter === key}
-                    onClick={() => setStateFilter(key)}
+                    data-active={activeTab === key}
+                    onClick={() => switchTab(key)}
                     className="sh-tab"
                   >
-                    {label} <span className="opacity-70">({stateCounts[key]})</span>
+                    {label}
+                    {count != null && <span className="opacity-70"> ({count})</span>}
+                    {key === 'requests' && pendingRequestCount > 0 && (
+                      <span
+                        className="ml-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none"
+                        style={{
+                          // Lime fill doesn't flip between themes, so pin the
+                          // ink dark — the global --sh-ink flips light in dark
+                          // mode and would vanish on the yellow badge.
+                          background: 'var(--color-sh-lime)',
+                          color: '#0a0a0a',
+                          boxShadow: 'inset 0 0 0 1px #0a0a0a',
+                        }}
+                        title={`${pendingRequestCount} pending review`}
+                      >
+                        {pendingRequestCount}
+                      </span>
+                    )}
                     {((key === 'assigned' && unreviewedAssignedCount > 0) ||
                       (key === 'selected' && unreviewedSelectedCount > 0)) && (
                       <span
                         className="ml-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none"
-                        style={{
-                          background: '#DC2626',
-                          color: 'white',
-                        }}
+                        style={{ background: '#DC2626', color: 'white' }}
                         title={`${
                           key === 'assigned' ? unreviewedAssignedCount : unreviewedSelectedCount
                         } new — admin review pending`}
@@ -518,13 +616,13 @@ export default function AdminPublishedCards() {
                       </span>
                     )}
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
-          )}
+          </div>
 
           {/* Filters */}
-          {(activeTab === 'published' || activeTab === 'archive') && (
+          {isCardListTab && (
             <div className="flex flex-wrap items-center gap-1.5">
               <select
                 value={publishedBy}
@@ -573,7 +671,7 @@ export default function AdminPublishedCards() {
                 className="sh-input sh-input-sm"
                 style={{ width: 'auto' }}
               >
-                <option value="status">By status</option>
+                <option value="status">Flat list</option>
                 <option value="date">By date</option>
               </select>
             </div>
@@ -581,7 +679,7 @@ export default function AdminPublishedCards() {
         </div>
       )}
 
-      {(activeTab === 'published' || activeTab === 'archive') && selectedCard ? (
+      {isCardListTab && selectedCard ? (
         <AdminPublishedCardRecipientsView
           key={selectedCard.id}
           card={selectedCard}
@@ -592,67 +690,38 @@ export default function AdminPublishedCards() {
             <DetailTierTabs cards={selectedGroupCards} activeId={selectedCard.id} onSelect={selectTierCard} />
           ) : undefined}
         />
-      ) : activeTab === 'published' ? (
+      ) : isCardListTab ? (
         <div className="flex-1 overflow-y-auto px-6 pb-8">
           <RefreshingBar show={isFetching && !isLoading} />
           {isLoading ? (
             <CardListSkeleton />
-          ) : filteredCards.length === 0 ? (
+          ) : cardsForTab.length === 0 ? (
             <EmptyState
-              title={debouncedSearch || publishedBy || stateFilter !== 'all' ? 'No cards match your filters' : 'No published cards yet'}
-              hint={debouncedSearch || publishedBy || stateFilter !== 'all' ? 'Try clearing the search or filters above.' : 'Cards published across the org will appear here.'}
+              title={debouncedSearch || publishedBy ? 'No cards match your filters' : EMPTY_COPY[activeTab as (typeof CARD_LIST_TABS)[number]].title}
+              hint={debouncedSearch || publishedBy ? 'Try clearing the search or filters above.' : EMPTY_COPY[activeTab as (typeof CARD_LIST_TABS)[number]].hint}
             />
-          ) : stateFilter !== 'all' ? (
-            // Single-state view: flat list, no group headers.
-            <CardList items={filteredCards} onOpen={setSelectedCardId} canShowCancelled />
-          ) : (
+          ) : groupBy === 'date' ? (
             <div className="space-y-7">
-              {groupBy === 'status' ? (
-                <>
-                  {groups.active.length > 0 && (
-                    <CardGroup label="Active" color="#10B981" items={groups.active} onOpen={setSelectedCardId} showCancelledTag={false} />
-                  )}
-                  {groups.selected.length > 0 && (
-                    <CardGroup label="Selected" color="#0EA5E9" items={groups.selected} onOpen={setSelectedCardId} showCancelledTag={false} />
-                  )}
-                  {groups.assigned.length > 0 && (
-                    <CardGroup label="Assigned" color="#059669" items={groups.assigned} onOpen={setSelectedCardId} showCancelledTag={false} />
-                  )}
-                  {groups.cancelled.length > 0 && (
-                    <CardGroup label="Cancelled" color="#6B7280" items={groups.cancelled} onOpen={setSelectedCardId} showCancelledTag={false} />
-                  )}
-                </>
-              ) : (
-                <>
-                  {dateGroups.today.length > 0 && (
-                    <CardGroup label="Today" color="#475569" items={dateGroups.today} onOpen={setSelectedCardId} showCancelledTag />
-                  )}
-                  {dateGroups.yesterday.length > 0 && (
-                    <CardGroup label="Yesterday" color="#475569" items={dateGroups.yesterday} onOpen={setSelectedCardId} showCancelledTag />
-                  )}
-                  {dateGroups.thisWeek.length > 0 && (
-                    <CardGroup label="Earlier this week" color="#475569" items={dateGroups.thisWeek} onOpen={setSelectedCardId} showCancelledTag />
-                  )}
-                  {dateGroups.earlier.length > 0 && (
-                    <CardGroup label="Earlier" color="#475569" items={dateGroups.earlier} onOpen={setSelectedCardId} showCancelledTag />
-                  )}
-                </>
+              {dateGroups.today.length > 0 && (
+                <CardGroup label="Today" color="#475569" items={dateGroups.today} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive'} showArchivedTag={activeTab === 'archive'} />
+              )}
+              {dateGroups.yesterday.length > 0 && (
+                <CardGroup label="Yesterday" color="#475569" items={dateGroups.yesterday} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive'} showArchivedTag={activeTab === 'archive'} />
+              )}
+              {dateGroups.thisWeek.length > 0 && (
+                <CardGroup label="Earlier this week" color="#475569" items={dateGroups.thisWeek} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive'} showArchivedTag={activeTab === 'archive'} />
+              )}
+              {dateGroups.earlier.length > 0 && (
+                <CardGroup label="Earlier" color="#475569" items={dateGroups.earlier} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive'} showArchivedTag={activeTab === 'archive'} />
               )}
             </div>
-          )}
-        </div>
-      ) : activeTab === 'archive' ? (
-        <div className="flex-1 overflow-y-auto px-6 pb-8">
-          <RefreshingBar show={isFetching && !isLoading} />
-          {isLoading ? (
-            <CardListSkeleton />
-          ) : filteredCards.length === 0 ? (
-            <EmptyState
-              title="No archived cards yet"
-              hint="Cards you archive are hidden from talent feeds and the default list — they show up here."
-            />
           ) : (
-            <CardGroup label="Archived" color="#7C3AED" items={filteredCards} onOpen={setSelectedCardId} showCancelledTag={false} showArchivedTag />
+            <CardList
+              items={cardsForTab}
+              onOpen={setSelectedCardId}
+              canShowCancelled={activeTab === 'archive'}
+              canShowArchived={activeTab === 'archive'}
+            />
           )}
         </div>
       ) : null}
