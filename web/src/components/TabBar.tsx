@@ -36,6 +36,14 @@ function useTabLabel(s: TabSnapshot): string {
   const meId = useAuthStore((st) => st.user?.id);
   const { data: space } = useSpace(isPm ? s.spaceId : null);
 
+  if (kind === 'external') {
+    if (s.externalTitle) return s.externalTitle;
+    try {
+      return new URL(s.externalUrl!).hostname;
+    } catch {
+      return s.externalUrl || 'Link';
+    }
+  }
   if (kind === 'list') {
     const lists = [
       ...(space?.lists ?? []),
@@ -78,6 +86,8 @@ function TabIcon({ s }: { s: TabSnapshot }) {
     return svg(<><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>);
   }
   switch (kind) {
+    case 'external':
+      return svg(<><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" /></>);
     case 'list':
       return svg(<><path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" /></>);
     case 'folder':

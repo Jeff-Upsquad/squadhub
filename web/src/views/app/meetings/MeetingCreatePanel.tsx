@@ -163,6 +163,17 @@ export default function MeetingCreatePanel({
     setRow(i, { times: dateRows[i].times.map((t, idx) => (idx === ti ? v : t)) });
   const removeTime = (i: number, ti: number) => setRow(i, { times: dateRows[i].times.filter((_, idx) => idx !== ti) });
 
+  // "Meet now" — collapse to a single slot at today's date and the current local
+  // time, so the host can spin up an instant meeting without picking date/time.
+  const meetNow = () => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const time = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    setDatesOnly(false);
+    setDateRows([{ date, times: [time] }]);
+  };
+
   const canSubmit = title.trim().length > 0 && dateRows.some((r) => r.date);
 
   const submit = () => {
@@ -358,9 +369,23 @@ export default function MeetingCreatePanel({
           <div className="mb-4">
             <div className="mb-2 flex items-center justify-between">
               <label className={`${SECTION} mb-0`}>Date & Time</label>
-              <label className="flex items-center gap-1.5 text-[11px] text-[color:var(--sh-ink-3)]">
-                <input type="checkbox" checked={datesOnly} onChange={(e) => setDatesOnly(e.target.checked)} /> Dates only
-              </label>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={meetNow}
+                  title="Set to right now"
+                  className="flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition hover:bg-[color:var(--sh-hair-3)]"
+                  style={{ borderColor: MEETING_ACCENT, color: MEETING_ACCENT }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                  </svg>
+                  Meet now
+                </button>
+                <label className="flex items-center gap-1.5 text-[11px] text-[color:var(--sh-ink-3)]">
+                  <input type="checkbox" checked={datesOnly} onChange={(e) => setDatesOnly(e.target.checked)} /> Dates only
+                </label>
+              </div>
             </div>
             <div className="space-y-2">
               {dateRows.map((row, i) => (

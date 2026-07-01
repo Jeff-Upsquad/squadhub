@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMeetingEvent, useMeetingActions } from '../../../hooks/useMeetingEvents';
+import { useTabsStore } from '../../../stores/tabsStore';
+import { buildExternalSnapshot } from '../../../lib/tabSnapshots';
 import { MEETING_ACCENT, avatarColor, initialOf } from './meetingUtils';
 import MeetingSlotRow from './MeetingSlotRow';
 import MeetingAvailabilitySummary from './MeetingAvailabilitySummary';
@@ -76,13 +78,20 @@ export default function MeetingDetailPanel({
               </div>
             </div>
 
-            {/* Meeting link */}
+            {/* Meeting link — opens inside the app as a new tab. */}
             {detail.event.link_url && (
               <div className="mb-4">
                 <h3 className="mb-1 text-xs font-medium uppercase tracking-[0.12em] text-[#666] font-[family-name:var(--font-mono)]">Meeting Link</h3>
-                <a href={detail.event.link_url} target="_blank" rel="noopener noreferrer" className="block truncate rounded-lg border border-[#CAD5E2] bg-[#F8FAFC] px-3 py-2 text-sm text-[#2962FF] hover:underline">
+                <button
+                  type="button"
+                  onClick={() => {
+                    useTabsStore.getState().openInNewTab(buildExternalSnapshot(detail.event.link_url!, detail.event.title));
+                    onClose();
+                  }}
+                  className="block w-full truncate rounded-lg border border-[#CAD5E2] bg-[#F8FAFC] px-3 py-2 text-left text-sm text-[#2962FF] hover:underline"
+                >
                   {detail.event.link_url}
-                </a>
+                </button>
               </div>
             )}
 

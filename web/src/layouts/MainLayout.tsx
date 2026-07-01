@@ -28,6 +28,7 @@ import CheckInsPage from '../views/app/check-ins/CheckInsPage';
 import CandidatesPage from '../views/app/candidates/CandidatesPage';
 import MeetingsView from '../views/app/meetings/MeetingsView';
 import GlobalMeetingPanel from '../views/app/meetings/GlobalMeetingPanel';
+import ExternalTabPane from '../components/ExternalTabPane';
 import NotesShell from '../views/app/notes/NotesShell';
 import { useHasMiniApp } from '../hooks/useMiniApps';
 import TimeManagementPage from '../views/app/time-management/TimeManagementPage';
@@ -91,6 +92,8 @@ type NavSnapshot = {
   folderId: string | null;
   spacePageId: string | null;
   designFolderId: string | null;
+  externalUrl?: string | null;
+  externalTitle?: string | null;
 };
 
 // ---- Rail icons — soft-solid set (filled glyphs, 18×18) -------------------
@@ -288,6 +291,19 @@ export default function MainLayout() {
   const [homeView, setHomeView] = useState<HomeView>(
     () => (usePMStore.getState().lastHomeView as HomeView) || 'hub',
   );
+  // External web page embedded in the active tab (e.g. a meeting link). Part of
+  // the live view so the tab strip's live-mirror round-trips it; cleared by any
+  // normal navigation (see the effect below applySnapshot). Seeded from the
+  // persisted active tab so a reload with an external tab focused doesn't get
+  // overwritten by the live-mirror (mirrors how section/homeView restore above).
+  const [externalUrl, setExternalUrl] = useState<string | null>(() => {
+    const st = useTabsStore.getState();
+    return st.tabs.find((t) => t.id === st.activeTabId)?.snapshot.externalUrl ?? null;
+  });
+  const [externalTitle, setExternalTitle] = useState<string | null>(() => {
+    const st = useTabsStore.getState();
+    return st.tabs.find((t) => t.id === st.activeTabId)?.snapshot.externalTitle ?? null;
+  });
   // Live presence set for the chat header dot (hooks can't run inside the
   // header IIFE below, so subscribe here).
   const onlineUserIds = usePresenceStore((s) => s.onlineUserIds);
@@ -599,7 +615,9 @@ export default function MainLayout() {
   // changes (e.g. default channel auto-selecting while on a tasks view)
   // don't record entries.
   const navKey =
-    activeSection !== 'home'
+    externalUrl
+      ? `ext:${externalUrl}`
+      : activeSection !== 'home'
       ? `section:${activeSection}`
       : homeView === 'chat'
         ? `chat:${activeChannelKind}:${activeChannelId ?? ''}`
@@ -617,16 +635,25 @@ export default function MainLayout() {
       folderId: activeFolderId,
       spacePageId: activeSpacePageId,
       designFolderId: activeDesignFolderId,
+      externalUrl,
+      externalTitle,
     }),
-    [activeSection, homeView, activeChannelId, activeChannelKind, activeSpaceId, activeListId, activeFolderId, activeSpacePageId, activeDesignFolderId],
+    [activeSection, homeView, activeChannelId, activeChannelKind, activeSpaceId, activeListId, activeFolderId, activeSpacePageId, activeDesignFolderId, externalUrl, externalTitle],
   );
 
   // Apply a saved snapshot to the live view — shared by the sidebar back/forward
   // history and the top tab strip (both restore a NavSnapshot). Setters used here
   // are stable (useState/zustand actions), so this is safe to memoize.
   const applySnapshot = useCallback((s: NavSnapshot) => {
+    setExternalUrl(s.externalUrl ?? null);
+    setExternalTitle(s.externalTitle ?? null);
     setActiveSection(s.section);
     setHomeView(s.homeView);
+    // External tabs carry a benign home/hub base — no channel/pm state to restore.
+    if (s.externalUrl) {
+      setMobileDrawerOpen(false);
+      return;
+    }
     if (s.section === 'home' && s.homeView === 'chat') {
       setActiveChannel(s.channelId, s.channelKind);
     } else if (s.section === 'home' && s.homeView === 'tasks') {
@@ -677,6 +704,18 @@ export default function MainLayout() {
   useEffect(() => {
     useTabsStore.getState().onNavigate(navSnapshot, tabKey, navRestoringRef.current);
   }, [navSnapshot, tabKey]);
+
+  // Any genuine navigation to an INTERNAL destination drops the embedded external
+  // page from the active tab. Declared before the navRestoringRef reset below so
+  // it sees the guard still set during a tab restore and leaves the URL intact.
+  const internalNavIdentity =
+    `${activeSection}|${homeView}|${activeChannelId ?? ''}|${activeChannelKind}|` +
+    `${activeSpaceId ?? ''}|${activeListId ?? ''}|${activeFolderId ?? ''}|${activeSpacePageId ?? ''}|${activeDesignFolderId ?? ''}`;
+  useEffect(() => {
+    if (navRestoringRef.current) return;
+    setExternalUrl(null);
+    setExternalTitle(null);
+  }, [internalNavIdentity]);
 
   const nav = useNavHistory<NavSnapshot>({
     snapshot: navSnapshot,
@@ -903,6 +942,7 @@ export default function MainLayout() {
 
   const renderPane = (snap: TabSnapshot, active = true) => {
     const { section, homeView: hv } = snap;
+    if (snap.externalUrl) return <ExternalTabPane url={snap.externalUrl} title={snap.externalTitle} />;
     if (section === 'learning') return <LearningShell />;
     if (section === 'docs') return <NotesShell />;
     if (section === 'cal') return <CalendarView />;
@@ -1038,8 +1078,8 @@ export default function MainLayout() {
             icon={ICON.home}
             label="Home"
             anchorKey="rail.home"
-            active={activeSection === 'home' && homeView === 'hub'}
-            onClick={() => { setActiveSection('home'); setHomeView('hub'); }}
+            active={activeSection === 'home' && homeView === 'hub' && !externalUrl}
+            onClick={() => { setExternalUrl(null); setExternalTitle(null); setActiveSection('home'); setHomeView('hub'); }}
           />
           <RailBtn
             icon={ICON.inbox}
