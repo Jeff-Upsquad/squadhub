@@ -247,8 +247,6 @@ export default function MainLayout() {
   // A list/board view shows its own floating "New task" button; when it does,
   // the global top-bar "+" hides so the two create affordances don't overlap.
   const newTaskFabVisible = usePMStore((s) => s.newTaskFabVisible);
-  // The tab strip only shows with ≥2 tabs; the top-right "+" sits below it when so.
-  const tabStripVisible = useTabsStore((s) => s.tabs.length > 1);
   // The full tab list + active id drive the multi-pane content area: every open
   // tab is rendered from its OWN snapshot and kept mounted, so switching tabs
   // preserves each one's state (scroll, inputs, media) instead of remounting.
@@ -1211,25 +1209,9 @@ export default function MainLayout() {
       <div className="relative flex flex-1 flex-col overflow-hidden bg-surface pt-12 md:pt-0">
         {/* Chrome-style tab strip (desktop only) — each tab is a saved view. */}
         <TabBar />
-        {/* Universal "New task" button — visible on task surfaces. Hidden on
-            mobile (the mobile top bar has its own "+"), and hidden wherever the
-            surface owns the top-right create affordance — a list/board's floating
-            "New task" FAB, or an embedded app's own header (see hideGlobalCreateBtn).
-            Offset below the tab strip's height on desktop. */}
-        {!hideGlobalCreateBtn && (
-          <button
-            type="button"
-            onClick={() => setShowCreateTaskModal(true)}
-            title="New task"
-            aria-label="Create new task"
-            data-tip-anchor="action.new-task"
-            className={`absolute right-3 top-2 z-40 hidden h-8 w-8 place-items-center rounded-[9px] border border-transparent text-[var(--sh-ink-3)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)] transition md:grid ${tabStripVisible ? 'md:top-[44px]' : ''}`}
-          >
-            <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          </button>
-        )}
+        {/* The universal top-right "New task" floating "+" was removed per request
+            — task-surface create actions live in each surface's own header (e.g.
+            the design space "New Design Task" button) and the list/board FAB. */}
         {/* Day Planner: the create button lives as a bottom-right floating FAB
             (same style as the list view's) instead of the top-right "+". */}
         {onDayPlanner && (
