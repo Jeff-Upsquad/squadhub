@@ -41,6 +41,13 @@ type SquadHireTalent = {
   email?: string | null;
 };
 
+// Read-only preview of who a published (not-yet-broadcast) card would reach.
+type MatchPreview = {
+  count: number;
+  talents: Array<{ talent_user_id: string; talent_name: string }>;
+  computed_at: string;
+};
+
 function formatRelative(iso: string | null): string {
   if (!iso) return '';
   const then = new Date(iso).getTime();
@@ -102,7 +109,13 @@ export default function AdminPublishedCardRecipientsView({
   const { data: shRecipientsRes } = useQuery({
     queryKey: ['admin-card-squadhire-recipients', card.id],
     queryFn: () =>
-      api.get(`/admin/subscription-cards/${card.id}/squadhire-recipients`).then((r) => r.data?.data as SquadHireTalent[]),
+      api.get(`/admin/subscription-cards/${card.id}/squadhire-recipients`).then(
+        (r) =>
+          r.data as {
+            data: SquadHireTalent[];
+            match_preview?: MatchPreview | null;
+          },
+      ),
     enabled: hasSquadHireCategories,
   });
   // Memoize the fallback so an empty result stays the SAME array reference across
@@ -110,7 +123,9 @@ export default function AdminPublishedCardRecipientsView({
   // re-ran the allRecipients memo, which re-fired the pre-check effect's
   // setCheckedIds → "Maximum update depth exceeded" infinite re-render loop on any
   // card with no SquadHire matches.
-  const squadhireTalents: SquadHireTalent[] = useMemo(() => shRecipientsRes || [], [shRecipientsRes]);
+  const squadhireTalents: SquadHireTalent[] = useMemo(() => shRecipientsRes?.data || [], [shRecipientsRes]);
+  // Read-only "who would match" preview for a published, not-yet-broadcast card.
+  const matchPreview = shRecipientsRes?.match_preview ?? null;
 
   const allRecipients = useMemo<UnifiedRecipient[]>(() => {
     if (!data) return [];
@@ -272,6 +287,18 @@ export default function AdminPublishedCardRecipientsView({
     },
     onError: (err: any) => {
       showToast(err?.response?.data?.error || err.message || 'Failed to broadcast', 'error');
+    },
+  });
+
+  const refreshMatchesMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${card.id}/refresh-matches`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
+      showToast('Matches refreshed.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to refresh matches', 'error');
     },
   });
 
@@ -773,8 +800,33 @@ export default function AdminPublishedCardRecipientsView({
                     <span className="text-xs text-[var(--color-sh-ink-muted)]">
                       <span className="font-bold text-[#92400E]">{talentQueuedCount} talent{talentQueuedCount !== 1 ? 's' : ''}</span> queued on SquadHire — not broadcast yet
                     </span>
+                  ) : matchPreview && matchPreview.count > 0 ? (
+                    <span className="text-xs text-[var(--color-sh-ink-muted)]">
+                      <span className="font-bold text-[var(--color-sh-ink)]">{matchPreview.count} talent{matchPreview.count !== 1 ? 's' : ''}</span> match — will be invited when you broadcast
+                    </span>
                   ) : (
-                    <span className="text-xs text-[var(--color-sh-ink-muted)]">No talents matched on SquadHire yet</span>
+                    <span className="text-xs text-[var(--color-sh-ink-muted)]">
+                      {matchPreview ? 'No talents match the current filters yet' : 'No talents matched on SquadHire yet'}
+                    </span>
+                  )}
+                  {matchPreview && (
+                    <button
+                      type="button"
+                      onClick={() => refreshMatchesMutation.mutate()}
+                      disabled={refreshMatchesMutation.isPending}
+                      className="ml-1 inline-flex items-center gap-1 rounded-full border border-[var(--color-sh-warm-border)] bg-white/60 px-2 py-0.5 text-[11px] font-medium text-[var(--color-sh-ink-muted)] hover:bg-white disabled:opacity-50"
+                    >
+                      <svg
+                        className={`h-3 w-3 ${refreshMatchesMutation.isPending ? 'animate-spin' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      {refreshMatchesMutation.isPending ? 'Refreshing…' : 'Refresh'}
+                    </button>
                   )}
                 </>
               )}
@@ -785,6 +837,31 @@ export default function AdminPublishedCardRecipientsView({
                 </>
               )}
             </div>
+
+            {/* Match preview — who this card would reach if broadcast now. Shown
+                only before broadcast (once broadcast, the real recipient list
+                below takes over). Names come from SquadHire's live matcher; no
+                one has been contacted yet. */}
+            {talentSentCount === 0 && talentQueuedCount === 0 && matchPreview && matchPreview.count > 0 && (
+              <div className="sh-card px-4 py-3">
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-subtle)]">
+                  Matches preview · {matchPreview.count}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {matchPreview.talents.map((t) => (
+                    <span
+                      key={t.talent_user_id}
+                      className="inline-flex items-center rounded-full bg-[var(--color-sh-lime-soft)] px-2.5 py-1 text-xs font-medium text-[var(--color-sh-ink)]"
+                    >
+                      {t.talent_name}
+                    </span>
+                  ))}
+                </div>
+                <div className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">
+                  Preview only — no one has been contacted. Click “Broadcast to talents” to invite them.
+                </div>
+              </div>
+            )}
 
             {/* Response stats — a compact segmented strip (clickable filters).
                 Zero counts stay muted; only real responses take their status

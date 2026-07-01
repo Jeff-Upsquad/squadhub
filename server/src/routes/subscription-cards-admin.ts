@@ -8,6 +8,7 @@ import {
   buildSquadhirePayloadForCard,
   deliverCardToSquadhire,
   fetchSquadhireRecipients,
+  previewSquadhireMatches,
   notifySquadhireOfCardRecall,
   notifySquadhireOfManualAssignment,
 } from '../utils/squadhireWebhook';
@@ -543,6 +544,51 @@ router.get('/:id/recipients', async (req: Request, res: Response) => {
 // Calls SquadHire's webhook endpoint to get all broadcasted talents
 // (including those who haven't responded yet).
 // ============================================================
+
+interface MatchPreviewCard {
+  id: string;
+  state: string | null;
+  distribution: string | null;
+  squadhire_synced_at: string | null;
+  squadhire_match_preview: SquadhireMatchPreviewCache | null;
+}
+
+interface SquadhireMatchPreviewCache {
+  count: number;
+  talents: Array<{ talent_user_id: string; talent_name: string }>;
+  computed_at: string;
+}
+
+// Return the cached preview, or compute+store it, for a published broadcast
+// card that hasn't been broadcast yet. Returns null for any other card (manual,
+// draft, already-broadcast) — those show the real recipient list instead.
+// `force` recomputes even when a cache exists (Refresh action).
+async function getOrComputeMatchPreview(
+  card: MatchPreviewCard,
+  force = false,
+): Promise<SquadhireMatchPreviewCache | null> {
+  const eligible =
+    card.state === 'published' &&
+    card.distribution !== 'manual' &&
+    !card.squadhire_synced_at;
+  if (!eligible) return card.squadhire_match_preview ?? null;
+
+  if (!force && card.squadhire_match_preview) return card.squadhire_match_preview;
+
+  const preview = await previewSquadhireMatches(card.id);
+  const cache: SquadhireMatchPreviewCache = {
+    count: preview.count,
+    talents: preview.talents,
+    computed_at: new Date().toISOString(),
+  };
+  const { error } = await supabaseAdmin
+    .from('subscription_cards')
+    .update({ squadhire_match_preview: cache })
+    .eq('id', card.id);
+  if (error) console.error('[match-preview] failed to cache preview', error);
+  return cache;
+}
+
 router.get('/:id/squadhire-recipients', async (req: Request, res: Response) => {
   try {
     const cardId = req.params.id as string;
@@ -550,7 +596,7 @@ router.get('/:id/squadhire-recipients', async (req: Request, res: Response) => {
     // We need the card's ID as the external_id SquadHire knows
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id')
+      .select('id, state, distribution, squadhire_synced_at, squadhire_match_preview')
       .eq('id', cardId)
       .maybeSingle();
     if (!card) return res.status(404).json({ success: false, error: 'Card not found' });
@@ -560,11 +606,41 @@ router.get('/:id/squadhire-recipients', async (req: Request, res: Response) => {
     // pending row whose email matches a SquadHub user. fetchSquadhireRecipients
     // soft-fails to [] when unconfigured/unreachable so the UI still works.
     const data = await fetchSquadhireRecipients(cardId);
-    res.json({ success: true, data });
+
+    // For a published broadcast card that hasn't been broadcast yet, show a
+    // read-only "who would match" preview. Compute lazily on first view and
+    // cache it; a Refresh action recomputes. Never notifies or writes recipients.
+    const match_preview = await getOrComputeMatchPreview(card as MatchPreviewCard);
+
+    res.json({ success: true, data, match_preview });
   } catch (err: any) {
     console.error('Admin get SquadHire recipients error:', err);
     // Non-fatal: return empty list so the UI still works
     res.json({ success: true, data: [], note: err?.message || 'Failed to reach SquadHire' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/refresh-matches
+// Force-recompute the read-only match preview for a published broadcast card.
+// Backs the "Refresh" button on the recipients view. No-op-safe on cards that
+// aren't published broadcast cards (returns whatever preview is stored).
+// ============================================================
+router.post('/:id/refresh-matches', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, distribution, squadhire_synced_at, squadhire_match_preview')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) return res.status(404).json({ success: false, error: 'Card not found' });
+
+    const match_preview = await getOrComputeMatchPreview(card as MatchPreviewCard, true);
+    res.json({ success: true, match_preview });
+  } catch (err: any) {
+    console.error('Admin refresh matches error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Failed to refresh matches' });
   }
 });
 

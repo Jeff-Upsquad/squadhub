@@ -930,6 +930,63 @@ export async function fetchSquadhireRecipients(cardId: string): Promise<Squadhir
 }
 
 // ------------------------------------------------------------
+// Public: read-only preview of the talents a card WOULD match on SquadHire,
+// without ingesting the card, writing recipients, or notifying anyone. Powers
+// the "Matches" audience preview shown on a published (not-yet-broadcast) card.
+// Builds the same match_rules broadcast delivery uses and asks SquadHire's
+// matcher to run them live. Soft-failing: returns an empty preview when the
+// integration is unconfigured or SquadHire is unreachable.
+// ------------------------------------------------------------
+
+export interface SquadhireMatchPreview {
+  count: number;
+  talents: Array<{ talent_user_id: string; talent_name: string }>;
+}
+
+export async function previewSquadhireMatches(cardId: string): Promise<SquadhireMatchPreview> {
+  const baseUrl = config.squadhireWebhookUrl;
+  if (!baseUrl || !config.squadhireWebhookSecret) return { count: 0, talents: [] };
+
+  // Reuse the delivery payload builder so the preview honours the exact same
+  // match_rules (category / tier / language / country) a real broadcast would.
+  let matchRules: Record<string, unknown> = {};
+  try {
+    const payload = await buildSquadhirePayloadForCard(cardId);
+    matchRules = (payload?.match_rules as Record<string, unknown>) ?? {};
+  } catch (err: any) {
+    console.error('[squadhire-webhook] preview payload build failed', err?.message || err);
+    return { count: 0, talents: [] };
+  }
+
+  const previewUrl = baseUrl.replace(/\/cards\/?$/, '/cards/recipients/preview');
+  try {
+    const response = await fetch(previewUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify({ match_rules: matchRules }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      console.error(`[squadhire-webhook] preview fetch failed: ${response.status} ${text}`);
+      return { count: 0, talents: [] };
+    }
+    const result = (await response.json()) as {
+      data?: Array<{ talent_user_id: string; talent_name: string }>;
+      count?: number;
+    };
+    const talents = result.data || [];
+    return { count: result.count ?? talents.length, talents };
+  } catch (err: any) {
+    console.error('[squadhire-webhook] preview fetch errored', err?.message || err);
+    return { count: 0, talents: [] };
+  }
+}
+
+// ------------------------------------------------------------
 // Public: background sweeper — retries published cards that never synced.
 // Bounded by SWEEPER_BATCH_SIZE per tick and MAX_SYNC_ATTEMPTS per card.
 // ------------------------------------------------------------
