@@ -944,7 +944,7 @@ export default function AdminCardEditor({
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
-                        <Field label="Proposed Price (₹/mo)">
+                        <Field label="Proposed Price by customer (₹/mo)">
                           <input
                             type="number"
                             value={entry.proposedPrice || ''}
@@ -959,13 +959,24 @@ export default function AdminCardEditor({
                               Originally <span className="line-through">₹{originalProposedPrice!.toLocaleString()}</span>
                             </p>
                           )}
-                          {catalogPricingRow && (
-                            <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
-                              Catalog min: ₹{catalogPricingRow.price.toLocaleString()}
-                            </p>
-                          )}
+                          <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
+                            Budget the client submitted in their brief.
+                          </p>
                         </Field>
+                        {/* Read-only reference: the plan's price from the
+                            Subscriptions catalog (set in the admin panel). */}
                         <Field label="Subscription Price (₹/mo)">
+                          <div className="flex h-[40px] items-center rounded-[10px] border border-[var(--color-sh-warm-border)] bg-surface px-3 text-sm font-medium text-[var(--color-sh-ink)]">
+                            {catalogPricingRow ? `₹${catalogPricingRow.price.toLocaleString()}` : '—'}
+                          </div>
+                          <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
+                            Default price from the Subscriptions catalog.
+                          </p>
+                        </Field>
+                        {/* "Final Price" is the finalized amount the client
+                            actually pays. Stored as subscription_price under the
+                            hood; blank falls back to the proposed price. */}
+                        <Field label="Final Price (₹/mo)">
                           <input
                             type="number"
                             min={0}
@@ -1012,7 +1023,7 @@ export default function AdminCardEditor({
                           <div className="flex h-[40px] items-center rounded-[10px] border border-[var(--color-sh-warm-border)] bg-surface px-3 text-sm font-bold text-[var(--color-sh-ink)]">
                             {partnerPrice != null ? `₹${partnerPrice.toLocaleString()}` : '—'}
                           </div>
-                          <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">= Finalized − Margin</p>
+                          <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">= Final Price − Margin</p>
                         </Field>
                       </div>
                     </div>
