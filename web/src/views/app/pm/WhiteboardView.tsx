@@ -748,7 +748,7 @@ function ShapeNode({ id, data, selected }: NodeProps<WBNode>) {
         <ShapeGeom shape={data.shape || 'rect'} fill={fill} stroke="var(--sh-ink-3)" />
       </svg>
       <NodeHandles />
-      <EditBar id={id} data={data} type="shape" visible={!!selected && canEdit} />
+      <EditBar id={id} data={data} type="shape" visible={!!selected && canEdit && solo} />
       {!selected && <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />}
       <NodeChrome id={id} data={data} />
       <EditableText id={id} data={data} placeholder="" className="wb-shape-text" />
@@ -817,8 +817,9 @@ const edgeMarkers = (d?: { arrowStart?: boolean; arrowEnd?: boolean }) => ({
 // carries an optional centre label (double-click to edit), and shows a toolbar
 // (line style, arrowheads, delete) when selected.
 function WBEdgeComponent({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerStart, markerEnd, selected, data, label }: EdgeProps) {
-  const { canEdit, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, stopEditing, setEdgeLabel, setEdgeWaypoint } = useWB();
+  const { canEdit, selectionCount, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, stopEditing, setEdgeLabel, setEdgeWaypoint } = useWB();
   const rf = useReactFlow();
+  const solo = selectionCount < 2;
   const editing = editingEdgeId === id;
   const labelText = typeof label === 'string' ? label : '';
   const lineType = (data?.lineType as WhiteboardLineType) || 'smoothstep';
@@ -879,7 +880,7 @@ function WBEdgeComponent({ id, sourceX, sourceY, targetX, targetY, sourcePositio
         </EdgeLabelRenderer>
       )}
       {/* Bend handle (no label): drag to reshape the line, double-click to reset. */}
-      {selected && canEdit && !editing && !labelText && (
+      {selected && canEdit && solo && !editing && !labelText && (
         <EdgeLabelRenderer>
           <div
             className="wb-edge-bend nodrag nopan"
@@ -890,7 +891,7 @@ function WBEdgeComponent({ id, sourceX, sourceY, targetX, targetY, sourcePositio
           />
         </EdgeLabelRenderer>
       )}
-      {selected && canEdit && (
+      {selected && canEdit && solo && (
         <EdgeLabelRenderer>
           <div className="wb-ebar wb-edge-bar nodrag nopan" style={{ position: 'absolute', transform: `translate(-50%,-50%) translate(${labelX}px,${labelY - 38}px)`, pointerEvents: 'all' }}>
             {styleBtn('straight', 'Straight', 'M4 12h16')}
