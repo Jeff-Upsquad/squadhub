@@ -7329,6 +7329,9 @@ ol.sqc-list {
 .wb-flow {
   background: var(--surface-alt);
   font-family: 'Inter', system-ui, sans-serif;
+  /* Stop a horizontal two-finger swipe (panOnScroll) from escaping to the
+     browser's back/forward history navigation on macOS trackpads. */
+  overscroll-behavior: none;
 }
 /* Cursor: a normal select/click arrow by default; the closed-hand "grabbing"
    cursor appears only while actively panning the canvas or dragging an element.
