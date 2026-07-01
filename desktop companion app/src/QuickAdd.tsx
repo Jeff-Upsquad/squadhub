@@ -186,6 +186,17 @@ export default function QuickAdd() {
     void resolvePersonal();
     reset();
 
+    // Rust emits this on EVERY summon (hotkey or tray). It's the authoritative
+    // "start a fresh task" signal — tauri://focus alone is unreliable for a
+    // non-activating NSPanel, which would leave the previously-added task in the
+    // fields when the panel is reopened.
+    const unlistenShow = win.listen('quickadd:show', () => {
+      cancelPendingHide();
+      useAuthStore.getState().hydrate();
+      void resolvePersonal();
+      reset();
+    });
+
     const unlisten = win.onFocusChanged(({ payload: isFocused }) => {
       if (isFocused) {
         cancelPendingHide();
@@ -209,6 +220,7 @@ export default function QuickAdd() {
     return () => {
       cancelPendingHide();
       void unlisten.then((fn) => fn());
+      void unlistenShow.then((fn) => fn());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
