@@ -38,10 +38,7 @@ interface SubscriptionRequest {
   verified_at?: string | null;
 }
 
-type RequestSubTab = 'active' | 'published' | 'declined';
-
 export default function AdminRequestsList() {
-  const [subTab, setSubTab] = useState<RequestSubTab>('active');
   const [search, setSearch] = useState<string>('');
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [shareCardId, setShareCardId] = useState<string | null>(null);
@@ -62,10 +59,10 @@ export default function AdminRequestsList() {
   );
 
   // Form submissions (Shared Form via /connect, plus Landing Page entries
-  // from the marketing site) live in subscription_cards. Draft cards drive
-  // the Active sub-tab; published/assigned/closed cards drive Published and
-  // Declined. Two queries per source — drafts and non-drafts — because the
-  // server endpoint excludes drafts unless explicitly asked.
+  // from the marketing site) live in subscription_cards. New Deals only shows
+  // the live inbound queue, so we fetch just the 'new'/'draft' cards; once a
+  // card is published it moves to the Published/Broadcaster tabs, and once it's
+  // closed it moves to Archive.
   function adaptCardToRequest(
     c: any,
     source: 'shared_form' | 'landing_page_form' | 'internal_brief',
@@ -112,26 +109,7 @@ export default function AdminRequestsList() {
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
   });
-  // Non-draft cards from the same two form sources — surface published,
-  // assigned, and closed cards in the Published / Declined sub-tabs.
-  const { data: sharedPublishedRes, isLoading: sharedPublishedLoading } = useQuery({
-    queryKey: ['admin-shared-form-submissions', 'published', search],
-    queryFn: () => {
-      const params: Record<string, string> = { source: 'shared_form' };
-      if (search.trim()) params.search = search.trim();
-      return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
-    },
-  });
-  const { data: lpPublishedRes, isLoading: lpPublishedLoading } = useQuery({
-    queryKey: ['admin-landing-page-submissions', 'published', search],
-    queryFn: () => {
-      const params: Record<string, string> = { source: 'landing_page_form' };
-      if (search.trim()) params.search = search.trim();
-      return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
-    },
-  });
-  // Internal client briefs (Workflow 1) — drafts feed Active, non-drafts feed
-  // Published / Declined, same as the form-submission sources.
+  // Internal client briefs (Workflow 1) also land in the New Deals queue.
   const { data: briefRes, isLoading: briefLoading } = useQuery({
     queryKey: ['admin-internal-brief-submissions', search],
     queryFn: () => {
@@ -140,27 +118,12 @@ export default function AdminRequestsList() {
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
   });
-  const { data: briefPublishedRes, isLoading: briefPublishedLoading } = useQuery({
-    queryKey: ['admin-internal-brief-submissions', 'published', search],
-    queryFn: () => {
-      const params: Record<string, string> = { source: 'internal_brief' };
-      if (search.trim()) params.search = search.trim();
-      return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
-    },
-  });
-  const sharedFormRequests: SubscriptionRequest[] = [
-    ...(sharedRes?.data || []).map((c: any) => adaptCardToRequest(c, 'shared_form')),
-    ...(sharedPublishedRes?.data || []).map((c: any) => adaptCardToRequest(c, 'shared_form')),
-  ];
-  const landingPageRequests: SubscriptionRequest[] = [
-    ...(lpRes?.data || []).map((c: any) => adaptCardToRequest(c, 'landing_page_form')),
-    ...(lpPublishedRes?.data || []).map((c: any) => adaptCardToRequest(c, 'landing_page_form')),
-  ];
-
-  const internalBriefRequests: SubscriptionRequest[] = [
-    ...(briefRes?.data || []).map((c: any) => adaptCardToRequest(c, 'internal_brief')),
-    ...(briefPublishedRes?.data || []).map((c: any) => adaptCardToRequest(c, 'internal_brief')),
-  ];
+  const sharedFormRequests: SubscriptionRequest[] =
+    (sharedRes?.data || []).map((c: any) => adaptCardToRequest(c, 'shared_form'));
+  const landingPageRequests: SubscriptionRequest[] =
+    (lpRes?.data || []).map((c: any) => adaptCardToRequest(c, 'landing_page_form'));
+  const internalBriefRequests: SubscriptionRequest[] =
+    (briefRes?.data || []).map((c: any) => adaptCardToRequest(c, 'internal_brief'));
 
   const allRequests: SubscriptionRequest[] = [
     ...upsquadRequests,
@@ -197,22 +160,14 @@ export default function AdminRequestsList() {
     [allRequests, archivedCardIds],
   );
 
-  const counts = useMemo(() => ({
-    active: requests.filter((r) => r.status === 'pending' || r.status === 'in_review').length,
-    published: requests.filter((r) => r.status === 'published').length,
-    declined: requests.filter((r) => r.status === 'declined' || r.status === 'cancelled').length,
-  }), [requests]);
-
-  const visibleRequests = useMemo(() => {
-    switch (subTab) {
-      case 'active':
-        return requests.filter((r) => r.status === 'pending' || r.status === 'in_review');
-      case 'published':
-        return requests.filter((r) => r.status === 'published');
-      case 'declined':
-        return requests.filter((r) => r.status === 'declined' || r.status === 'cancelled');
-    }
-  }, [requests, subTab]);
+  // New deals only surfaces the live inbound queue — freshly-submitted briefs
+  // and admin-saved drafts (both status 'pending'), plus any upsquad requests
+  // still pending review. Published cards live in the Published/Broadcaster
+  // tabs and closed/declined ones in Archive.
+  const visibleRequests = useMemo(
+    () => requests.filter((r) => r.status === 'pending' || r.status === 'in_review'),
+    [requests],
+  );
 
   const createCardMutation = useMutation({
     mutationFn: (requestId: number) =>
@@ -268,40 +223,6 @@ export default function AdminRequestsList() {
         </p>
       </div>
 
-      {/* Sub-tabs */}
-      <div className="px-6 pb-3">
-        <div className="overflow-x-auto">
-          <div className="sh-tab-bar">
-            <button
-              type="button"
-              data-active={subTab === 'active'}
-              onClick={() => setSubTab('active')}
-              className="sh-tab"
-            >
-              Active <span className="opacity-70">({counts.active})</span>
-            </button>
-            <button
-              type="button"
-              data-active={subTab === 'published'}
-              onClick={() => setSubTab('published')}
-              className="sh-tab"
-            >
-              Published <span className="opacity-70">({counts.published})</span>
-            </button>
-            {(counts.declined > 0 || subTab === 'declined') && (
-              <button
-                type="button"
-                data-active={subTab === 'declined'}
-                onClick={() => setSubTab('declined')}
-                className="sh-tab"
-              >
-                Declined <span className="opacity-70">({counts.declined})</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* Search */}
       <div className="px-6 pb-4">
         <div className="relative max-w-md">
@@ -325,18 +246,14 @@ export default function AdminRequestsList() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 pb-8">
-        {isLoading || sharedLoading || lpLoading || sharedPublishedLoading || lpPublishedLoading || briefLoading || briefPublishedLoading ? (
+        {isLoading || sharedLoading || lpLoading || briefLoading ? (
           <div className="sh-card py-16 text-center">
             <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading…</p>
           </div>
         ) : visibleRequests.length === 0 ? (
           <div className="sh-card py-16 text-center">
             <p className="text-sm text-[var(--color-sh-ink-subtle)]">
-              {subTab === 'active'
-                ? 'No active requests in the queue.'
-                : subTab === 'published'
-                  ? 'No published requests yet.'
-                  : 'No declined requests.'}
+              No new deals in the queue.
             </p>
           </div>
         ) : (
