@@ -846,7 +846,7 @@ export default function ConnectBriefForm({
                           </div>
                         </div>
                         <Field label="Project budget" optional hint={`Total budget for this project in ${currencySymbol}.`}>
-                          <input type="number" min="0" inputMode="numeric" value={req.budget} onChange={(e) => updateRoleReq(opt.slug, 'budget', e.target.value)} placeholder={`e.g. ${currencySymbol}50000`} className="connect-input" />
+                          <input type="text" inputMode="numeric" pattern="[0-9]*" value={req.budget} onChange={(e) => updateRoleReq(opt.slug, 'budget', e.target.value.replace(/[^0-9]/g, ''))} placeholder={`e.g. ${currencySymbol}50000`} className="connect-input" />
                         </Field>
                         <Field label="Duration / timeline" optional hint="Rough length of the engagement.">
                           <input type="text" value={req.duration} onChange={(e) => updateRoleReq(opt.slug, 'duration', e.target.value)} placeholder="e.g. 4 weeks, 2 months" className="connect-input" />
@@ -970,11 +970,11 @@ export default function ConnectBriefForm({
                                       Monthly budget for {lvl.label} <span className="font-normal text-[#9C9486]">(optional)</span>
                                     </label>
                                     <input
-                                      type="number"
-                                      min="0"
+                                      type="text"
                                       inputMode="numeric"
+                                      pattern="[0-9]*"
                                       value={req.tierBudgets[lvl.value] ?? ''}
-                                      onChange={(e) => updateRoleTierBudget(opt.slug, lvl.value, e.target.value)}
+                                      onChange={(e) => updateRoleTierBudget(opt.slug, lvl.value, e.target.value.replace(/[^0-9]/g, ''))}
                                       placeholder={`e.g. ${currencySymbol}25000`}
                                       className="connect-input"
                                     />
