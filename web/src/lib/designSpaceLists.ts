@@ -31,6 +31,24 @@ export function isDesignStatusListName(name: string): boolean {
 }
 
 /**
+ * The general-tasks list backing a Design/Video space's "Tasks" tab. Like the
+ * status lists it is plumbing surfaced as a view (the Tasks tab), not a lane in
+ * the request pipeline — so it is deliberately NOT mapped by `listNameToStatus`
+ * and is excluded from the request aggregation (see `useFolderTasks`).
+ */
+export function isGeneralTasksListName(name: string): boolean {
+  return name.trim().toLowerCase() === 'tasks';
+}
+
+/**
+ * True for any list a Design/Video space surfaces as a tab (status lists + the
+ * general Tasks list). Used to hide those backing lists from the sidebar tree.
+ */
+export function isDesignReservedListName(name: string): boolean {
+  return isDesignStatusListName(name) || isGeneralTasksListName(name);
+}
+
+/**
  * Order a space's statuses by their template position so columns/groups render
  * New Request → … → Closed regardless of the order the API returns them in.
  */

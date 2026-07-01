@@ -4,7 +4,7 @@ import api from '../services/api';
 import type { Task, Folder, SpaceStatus } from '@squadhub/shared';
 import type { RequestStatus } from '../views/app/pm/client-design/atoms/StatusPill';
 import type { RequestRowData } from '../views/app/pm/client-design/atoms/RequestRow';
-import { listNameToStatus, resolveStage, sortStages, stageCategoryToBucket } from '../lib/designSpaceLists';
+import { isGeneralTasksListName, listNameToStatus, resolveStage, sortStages, stageCategoryToBucket } from '../lib/designSpaceLists';
 
 export interface FolderDetail extends Folder {
   lists?: (NonNullable<Folder['lists']>[number] & { name: string; id: string })[];
@@ -77,6 +77,8 @@ export function useFolderTasks(
     };
 
     for (const l of lists) {
+      // The general "Tasks" list is surfaced as its own tab, not a request lane.
+      if (isGeneralTasksListName(l.name)) continue;
       const mapped = listNameToStatus(l.name);
       if (mapped && !listByStatus[mapped]) {
         listByStatus[mapped] = { id: l.id, name: l.name };
@@ -85,6 +87,8 @@ export function useFolderTasks(
 
     for (const q of taskQueries) {
       if (!q.data) continue;
+      // Keep general-task-list tasks out of Dashboard/Board/Reports/Completed.
+      if (isGeneralTasksListName(q.data.listName)) continue;
       const mapped = listNameToStatus(q.data.listName);
       for (const t of q.data.tasks) {
         const taskStatus = (t as any).status as string | undefined;
