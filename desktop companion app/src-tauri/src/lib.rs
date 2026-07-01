@@ -1,7 +1,7 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Manager,
+    Emitter, Manager,
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_store::StoreExt;
@@ -74,6 +74,14 @@ fn show_quick_add(app: &tauri::AppHandle) {
             // full-screen Space instead of floating over it.
             panel.show();
             qa_log("showed quick-add panel");
+            // Tell the (persistent) webview it's being summoned so it resets the
+            // form to a blank task. We can't rely on tauri://focus for this: a
+            // non-activating NSPanel shown/hidden from Rust doesn't reliably emit
+            // a focus-changed event on every re-summon, so the previous task
+            // would otherwise still be sitting in the fields on the next open.
+            if let Some(window) = app.get_webview_window("quickadd") {
+                let _ = window.emit("quickadd:show", ());
+            }
             return;
         }
         qa_log("quick-add panel not registered; falling back to window show");
@@ -81,6 +89,7 @@ fn show_quick_add(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("quickadd") {
         let _ = window.show();
         let _ = window.set_focus();
+        let _ = window.emit("quickadd:show", ());
     }
 }
 
