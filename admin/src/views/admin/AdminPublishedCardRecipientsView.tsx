@@ -537,6 +537,13 @@ export default function AdminPublishedCardRecipientsView({
     isManual ? (!!r.notified_at || !!r.responded_at) : !card.needs_broadcast;
   const talentSentCount = allRecipients.filter((r) => r.type === 'talent' && talentIsDelivered(r)).length;
   const talentQueuedCount = talentTotal - talentSentCount;
+  // Read-only match preview → shown as a "Will be invited on broadcast" group in
+  // the Recipients list (and folded into its count) while the card is still
+  // pre-broadcast, i.e. no talents have actually been queued/sent yet.
+  const previewTalents =
+    talentSentCount === 0 && talentQueuedCount === 0 && matchPreview ? matchPreview.talents : [];
+  const previewCount = previewTalents.length;
+  const recipientsTotal = counts.total + previewCount;
   // Partners are broadcast as a pool too — so the verb has to track the stage.
   // Manual cards hand-pick (share), broadcast cards stage at publish and only
   // go out once needs_broadcast clears. Mirrors the lifecycle pill above.
@@ -838,30 +845,6 @@ export default function AdminPublishedCardRecipientsView({
               )}
             </div>
 
-            {/* Match preview — who this card would reach if broadcast now. Shown
-                only before broadcast (once broadcast, the real recipient list
-                below takes over). Names come from SquadHire's live matcher; no
-                one has been contacted yet. */}
-            {talentSentCount === 0 && talentQueuedCount === 0 && matchPreview && matchPreview.count > 0 && (
-              <div className="sh-card px-4 py-3">
-                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-subtle)]">
-                  Matches preview · {matchPreview.count}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {matchPreview.talents.map((t) => (
-                    <span
-                      key={t.talent_user_id}
-                      className="inline-flex items-center rounded-full bg-[var(--color-sh-lime-soft)] px-2.5 py-1 text-xs font-medium text-[var(--color-sh-ink)]"
-                    >
-                      {t.talent_name}
-                    </span>
-                  ))}
-                </div>
-                <div className="mt-2 text-[11px] text-[var(--color-sh-ink-faint)]">
-                  Preview only — no one has been contacted. Click “Broadcast to talents” to invite them.
-                </div>
-              </div>
-            )}
 
             {/* Response stats — a compact segmented strip (clickable filters).
                 Zero counts stay muted; only real responses take their status
@@ -909,7 +892,7 @@ export default function AdminPublishedCardRecipientsView({
                 Recipients
               </span>
               <span className="text-xs font-semibold tabular-nums text-[var(--color-sh-ink-faint)]">
-                {counts.total}
+                {recipientsTotal}
               </span>
               <div className="h-px flex-1 bg-[var(--color-sh-warm-border)]" />
             </div>
@@ -918,7 +901,7 @@ export default function AdminPublishedCardRecipientsView({
             <div className="overflow-x-auto">
               <div className="sh-tab-bar">
                 {(['all', 'accepted', 'rejected', 'pending'] as const).map((tab) => {
-                  const count = tab === 'all' ? counts.total : counts[tab];
+                  const count = tab === 'all' ? recipientsTotal : counts[tab];
                   const label = tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1);
                   return (
                     <button
@@ -1055,8 +1038,45 @@ export default function AdminPublishedCardRecipientsView({
                 );
               };
 
+              // Read-only rows for the pre-broadcast match preview. Rendered like
+              // a queued talent (avatar + "Awaiting broadcast" + queued pill) but
+              // without any assign/remove/auto-accept actions — no one has been
+              // contacted yet, so there's nothing to act on.
+              const renderPreviewRow = (t: { talent_user_id: string; talent_name: string }) => (
+                <div key={`preview-${t.talent_user_id}`} className="sh-card flex items-center gap-3 px-4 py-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
+                    {(t.talent_name || '?').charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">{t.talent_name || 'Unknown talent'}</p>
+                    <p className="text-[11px] text-[var(--color-sh-ink-faint)]">Awaiting broadcast</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>queued</span>
+                    <span className="sh-status-pill" style={{ backgroundColor: '#F2EBFE', color: '#6B21A8' }}>Talent</span>
+                    {adminUrl && (
+                      <a
+                        href={`${adminUrl}/admin/users/${t.talent_user_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="View profile in SquadHire"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-sh-ink-faint)] transition hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)]"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                        </svg>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+
+              // Preview only surfaces on the "All" tab — these aren't real
+              // responses, so the Accepted/Rejected/Pending buckets stay clean.
+              const showPreview = previewCount > 0 && activeTab === 'all';
+
               if (!grouped) {
-                if (filtered.length === 0) {
+                if (filtered.length === 0 && !showPreview) {
                   return (
                     <div className="sh-card py-12 text-center">
                       <p className="text-sm text-[var(--color-sh-ink-subtle)]">
@@ -1067,6 +1087,14 @@ export default function AdminPublishedCardRecipientsView({
                 }
                 return (
                   <div className="space-y-2">
+                    {showPreview && (
+                      <>
+                        <div className="px-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-subtle)]">
+                          Will be invited on broadcast ({previewCount})
+                        </div>
+                        {previewTalents.map(renderPreviewRow)}
+                      </>
+                    )}
                     {filtered.map(renderRow)}
                   </div>
                 );
