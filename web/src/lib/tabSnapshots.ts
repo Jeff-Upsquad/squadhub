@@ -20,9 +20,14 @@ export interface TabSnapshot {
   folderId: string | null;
   spacePageId: string | null;
   designFolderId: string | null;
+  // External web page opened inside the app (e.g. a meeting link). When set, the
+  // tab renders an <iframe> pane instead of an internal view; the other fields
+  // carry a benign home/hub base so the rest of the nav plumbing stays happy.
+  externalUrl?: string | null;
+  externalTitle?: string | null;
 }
 
-export type TabKind = 'list' | 'folder' | 'space' | 'designFolder' | 'app' | 'chat' | 'home';
+export type TabKind = 'list' | 'folder' | 'space' | 'designFolder' | 'app' | 'chat' | 'home' | 'external';
 
 // Mini-app home views — keep in sync with the `view` values in config/apps.tsx.
 // Hardcoded (rather than importing APPS) so this stays a dependency-free leaf
@@ -45,6 +50,8 @@ const APP_VIEWS = new Set<string>([
  * own tab regardless of whether it was opened from the Home or Apps section.
  */
 export function canonicalKey(s: TabSnapshot): string {
+  // Each distinct external URL is its own tab.
+  if (s.externalUrl) return `ext:${s.externalUrl}`;
   if (s.section === 'home') {
     if (s.homeView === 'chat') return `chat:${s.channelKind}:${s.channelId ?? ''}`;
     if (s.homeView === 'tasks') {
@@ -64,6 +71,7 @@ export function canonicalKey(s: TabSnapshot): string {
 }
 
 export function tabKind(s: TabSnapshot): TabKind {
+  if (s.externalUrl) return 'external';
   if (s.section === 'home' && s.homeView === 'tasks') {
     if (s.designFolderId) return 'designFolder';
     if (s.listId) return 'list';
@@ -89,7 +97,14 @@ function base(section: ActiveSection, homeView: HomeView): TabSnapshot {
     folderId: null,
     spacePageId: null,
     designFolderId: null,
+    externalUrl: null,
+    externalTitle: null,
   };
+}
+
+/** A tab that embeds an external web page (e.g. a meeting link) in an iframe. */
+export function buildExternalSnapshot(url: string, title?: string | null): TabSnapshot {
+  return { ...base('home', 'hub'), externalUrl: url, externalTitle: title ?? null };
 }
 
 export function buildListSnapshot(spaceId: string, listId: string): TabSnapshot {
