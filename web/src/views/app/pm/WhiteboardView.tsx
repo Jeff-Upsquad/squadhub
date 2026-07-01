@@ -11,6 +11,7 @@ import {
   Handle,
   Position,
   ConnectionMode,
+  SelectionMode,
   MarkerType,
   NodeResizer,
   NodeToolbar,
@@ -148,6 +149,9 @@ function statusIsDone(status: unknown): boolean {
 interface WhiteboardCtx {
   canEdit: boolean;
   listId: string;
+  // How many nodes are currently selected. When >1 the per-node edit bars and
+  // resizers hide and a single group toolbar takes over (see GroupEditBar).
+  selectionCount: number;
   startConnectDrag: (sourceId: string, side: Position, e: React.PointerEvent) => void;
   editingId: string | null;
   startEditing: (id: string) => void;
@@ -203,6 +207,7 @@ function useNearestSide() {
 // ── Inline text-formatting style derived from the element's data ────────────
 function textStyle(data: WhiteboardNodeData): React.CSSProperties {
   return {
+    color: data.textColor,
     fontWeight: data.bold ? 700 : undefined,
     fontSize: data.fontSize ? FONT_PX[data.fontSize] : undefined,
     textAlign: data.align,
@@ -392,12 +397,13 @@ function TaskMentionPicker({ currentTaskId, onPick }: { currentTaskId?: string |
 function EditBar({ id, data, type, visible }: { id: string; data: WhiteboardNodeData; type: WBKind; visible: boolean }) {
   const { setNodeData, convertToTask, mentionTask, unlinkTask, removeNode, openTask } = useWB();
   const [colorOpen, setColorOpen] = useState(false);
+  const [textColorOpen, setTextColorOpen] = useState(false);
   const [shapeOpen, setShapeOpen] = useState(false);
   const [mentionOpen, setMentionOpen] = useState(false);
   const size = data.fontSize || 'md';
   const noFill = data.color === NO_FILL;
   const triggerColor = noFill ? 'transparent' : (data.color || (type === 'shape' ? 'var(--surface)' : STICKY_COLORS[0]));
-  useEffect(() => { if (!visible) { setColorOpen(false); setShapeOpen(false); setMentionOpen(false); } }, [visible]);
+  useEffect(() => { if (!visible) { setColorOpen(false); setTextColorOpen(false); setShapeOpen(false); setMentionOpen(false); } }, [visible]);
   // A mentioned-task card is a fixed reference, not a formatting target — its
   // bar only opens the task or removes the card.
   if (type === 'task') {
@@ -465,6 +471,31 @@ function EditBar({ id, data, type, visible }: { id: string; data: WhiteboardNode
         </button>
       ))}
       <span className="wb-ebar-sep" />
+      <div className="wb-color-wrap">
+        <button type="button" className="wb-ebar-btn wb-textcolor-btn" title="Text colour" onClick={() => setTextColorOpen((o) => !o)}>
+          <span className="wb-textcolor-a">
+            A
+            <span className="wb-textcolor-bar" style={{ background: data.textColor || 'var(--sh-ink)' }} />
+          </span>
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+        </button>
+        {textColorOpen && (
+          <div className="wb-color-pop">
+            <div className="wb-color-tabs">
+              <button type="button" data-active={!data.textColor} onClick={() => setNodeData(id, { textColor: undefined })}>Default</button>
+            </div>
+            <div className="wb-color-grid">
+              {FILL_COLORS.map((c) => (
+                <button key={c} type="button" className="wb-color-cell" data-active={data.textColor === c} style={{ background: c }} onClick={() => setNodeData(id, { textColor: c })} aria-label={c} />
+              ))}
+              <label className="wb-color-cell wb-color-custom" title="Custom colour">
+                <input type="color" value={typeof data.textColor === 'string' && data.textColor.startsWith('#') ? data.textColor : '#000000'} onChange={(e) => setNodeData(id, { textColor: e.target.value })} />
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
+      <span className="wb-ebar-sep" />
       <button type="button" className="wb-ebar-btn" data-active={(data.align || 'left') === 'left'} title="Align left" onClick={() => setNodeData(id, { align: 'left' })}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h13" /></svg>
       </button>
@@ -502,14 +533,106 @@ function EditBar({ id, data, type, visible }: { id: string; data: WhiteboardNode
   );
 }
 
+// Group edit bar — a single toolbar shown above a multi-selection (≥2 nodes).
+// Its actions fan out to EVERY selected node at once (fill, text colour, bold,
+// text size, alignment) plus duplicate/delete. Anchored to the bounding box of
+// the selection via NodeToolbar's array `nodeId`. Per-node bars hide while this
+// is up (see the `solo` gate in each node).
+function GroupEditBar({ ids, nodes, onPatch, onDuplicate, onDelete }: {
+  ids: string[];
+  nodes: WBNode[];
+  onPatch: (patch: Partial<WhiteboardNodeData>) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  const [fillOpen, setFillOpen] = useState(false);
+  const [textOpen, setTextOpen] = useState(false);
+  const visible = ids.length >= 2;
+  useEffect(() => { if (!visible) { setFillOpen(false); setTextOpen(false); } }, [visible]);
+  // Highlight a formatting button only when the whole selection already shares it.
+  const allBold = nodes.length > 0 && nodes.every((n) => !!n.data.bold);
+  const first = nodes[0]?.data;
+  const size = first && nodes.every((n) => (n.data.fontSize || 'md') === (first.fontSize || 'md')) ? (first.fontSize || 'md') : null;
+  const align = first && nodes.every((n) => (n.data.align || 'left') === (first.align || 'left')) ? (first.align || 'left') : null;
+  return (
+    <NodeToolbar nodeId={ids} isVisible={visible} position={Position.Top} offset={22} className="wb-ebar nodrag nowheel">
+      <span className="wb-ebar-count">{ids.length} selected</span>
+      <span className="wb-ebar-sep" />
+      {/* Fill colour → all selected */}
+      <div className="wb-color-wrap">
+        <button type="button" className="wb-ebar-btn wb-color-btn" title="Fill" onClick={() => { setFillOpen((o) => !o); setTextOpen(false); }}>
+          <span className="wb-ebar-swatch" style={{ background: 'conic-gradient(#ef4444,#f59e0b,#22c55e,#3b82f6,#8b5cf6,#ef4444)' }} />
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+        </button>
+        {fillOpen && (
+          <div className="wb-color-pop">
+            <div className="wb-color-tabs">
+              <button type="button" onClick={() => onPatch({ color: FILL_COLORS[0] })}>Fill</button>
+              <button type="button" onClick={() => onPatch({ color: NO_FILL })}>No fill</button>
+            </div>
+            <div className="wb-color-grid">
+              {FILL_COLORS.map((c) => (
+                <button key={c} type="button" className="wb-color-cell" style={{ background: c }} onClick={() => onPatch({ color: c })} aria-label={c} />
+              ))}
+              <label className="wb-color-cell wb-color-custom" title="Custom colour">
+                <input type="color" defaultValue="#ffffff" onChange={(e) => onPatch({ color: e.target.value })} />
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
+      {/* Text colour → all selected */}
+      <div className="wb-color-wrap">
+        <button type="button" className="wb-ebar-btn wb-textcolor-btn" title="Text colour" onClick={() => { setTextOpen((o) => !o); setFillOpen(false); }}>
+          <span className="wb-textcolor-a">A<span className="wb-textcolor-bar" style={{ background: 'var(--sh-ink)' }} /></span>
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+        </button>
+        {textOpen && (
+          <div className="wb-color-pop">
+            <div className="wb-color-tabs">
+              <button type="button" onClick={() => onPatch({ textColor: undefined })}>Default</button>
+            </div>
+            <div className="wb-color-grid">
+              {FILL_COLORS.map((c) => (
+                <button key={c} type="button" className="wb-color-cell" style={{ background: c }} onClick={() => onPatch({ textColor: c })} aria-label={c} />
+              ))}
+              <label className="wb-color-cell wb-color-custom" title="Custom colour">
+                <input type="color" defaultValue="#000000" onChange={(e) => onPatch({ textColor: e.target.value })} />
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
+      <span className="wb-ebar-sep" />
+      <button type="button" className="wb-ebar-btn" data-active={allBold} title="Bold" onClick={() => onPatch({ bold: !allBold })}><b>B</b></button>
+      {(['sm', 'md', 'lg'] as const).map((s) => (
+        <button key={s} type="button" className="wb-ebar-btn wb-ebar-size" data-active={size === s} title={`${s === 'sm' ? 'Small' : s === 'md' ? 'Medium' : 'Large'} text`} onClick={() => onPatch({ fontSize: s })}>
+          {s === 'sm' ? 'S' : s === 'md' ? 'M' : 'L'}
+        </button>
+      ))}
+      <span className="wb-ebar-sep" />
+      <button type="button" className="wb-ebar-btn" data-active={align === 'left'} title="Align left" onClick={() => onPatch({ align: 'left' })}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h13" /></svg>
+      </button>
+      <button type="button" className="wb-ebar-btn" data-active={align === 'center'} title="Align centre" onClick={() => onPatch({ align: 'center' })}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M7 12h10M5 18h14" /></svg>
+      </button>
+      <span className="wb-ebar-sep" />
+      <button type="button" className="wb-ebar-btn wb-ebar-text" title="Duplicate selection" onClick={onDuplicate}>Duplicate</button>
+      <button type="button" className="wb-ebar-btn wb-ebar-text" title="Delete selection" onClick={onDelete}>Delete</button>
+    </NodeToolbar>
+  );
+}
+
 function StickyNode({ id, data, selected }: NodeProps<WBNode>) {
-  const { canEdit } = useWB();
+  const { canEdit, selectionCount } = useWB();
+  const solo = selectionCount < 2;
   const { side, onMouseMove, onMouseLeave, cancelHide } = useNearestSide();
   return (
     <div className="wb-sticky" style={{ background: data.color || STICKY_COLORS[0] }} onMouseMove={canEdit ? onMouseMove : undefined} onMouseLeave={onMouseLeave}>
-      <NodeResizer minWidth={120} minHeight={96} isVisible={!!selected && canEdit} color="var(--sh-ink-3)" />
+      <NodeResizer minWidth={120} minHeight={96} isVisible={!!selected && canEdit && solo} color="var(--sh-ink-3)" />
       <NodeHandles />
-      <EditBar id={id} data={data} type="sticky" visible={!!selected && canEdit} />
+      <EditBar id={id} data={data} type="sticky" visible={!!selected && canEdit && solo} />
       {!selected && <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />}
       <NodeChrome id={id} data={data} />
       <EditableText id={id} data={data} placeholder="Type a note…" className="wb-sticky-text" />
@@ -518,12 +641,13 @@ function StickyNode({ id, data, selected }: NodeProps<WBNode>) {
 }
 
 function TextNode({ id, data, selected }: NodeProps<WBNode>) {
-  const { canEdit } = useWB();
+  const { canEdit, selectionCount } = useWB();
+  const solo = selectionCount < 2;
   const { side, onMouseMove, onMouseLeave, cancelHide } = useNearestSide();
   return (
     <div className="wb-textnode" onMouseMove={canEdit ? onMouseMove : undefined} onMouseLeave={onMouseLeave}>
       <NodeHandles />
-      <EditBar id={id} data={data} type="text" visible={!!selected && canEdit} />
+      <EditBar id={id} data={data} type="text" visible={!!selected && canEdit && solo} />
       {!selected && <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />}
       <NodeChrome id={id} data={data} />
       <EditableText id={id} data={data} placeholder="Text" className="wb-textnode-text" />
@@ -532,12 +656,13 @@ function TextNode({ id, data, selected }: NodeProps<WBNode>) {
 }
 
 function ShapeNode({ id, data, selected }: NodeProps<WBNode>) {
-  const { canEdit } = useWB();
+  const { canEdit, selectionCount } = useWB();
+  const solo = selectionCount < 2;
   const { side, onMouseMove, onMouseLeave, cancelHide } = useNearestSide();
   const fill = data.color === NO_FILL ? 'none' : (data.color || 'var(--surface)');
   return (
     <div className="wb-shape" onMouseMove={canEdit ? onMouseMove : undefined} onMouseLeave={onMouseLeave}>
-      <NodeResizer minWidth={80} minHeight={60} isVisible={!!selected && canEdit} color="var(--sh-ink-3)" />
+      <NodeResizer minWidth={80} minHeight={60} isVisible={!!selected && canEdit && solo} color="var(--sh-ink-3)" />
       <svg className="wb-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
         <ShapeGeom shape={data.shape || 'rect'} fill={fill} stroke="var(--sh-ink-3)" />
       </svg>
@@ -556,15 +681,16 @@ function ShapeNode({ id, data, selected }: NodeProps<WBNode>) {
 // (opens the task), the title, and — for tasks from another list — a source
 // breadcrumb. Connectable to other elements via the side arrows.
 function TaskCardNode({ id, data, selected }: NodeProps<WBNode>) {
-  const { canEdit, openTask, toggleDone } = useWB();
+  const { canEdit, openTask, toggleDone, selectionCount } = useWB();
+  const solo = selectionCount < 2;
   const { side, onMouseMove, onMouseLeave, cancelHide } = useNearestSide();
   const done = !!data.done;
   const loc = typeof data.taskList === 'string' ? data.taskList : '';
   return (
     <div className={`wb-taskcard ${done ? 'wb-taskcard-done' : ''}`} onMouseMove={canEdit ? onMouseMove : undefined} onMouseLeave={onMouseLeave}>
-      <NodeResizer minWidth={184} minHeight={84} isVisible={!!selected && canEdit} color="var(--sh-ink-3)" />
+      <NodeResizer minWidth={184} minHeight={84} isVisible={!!selected && canEdit && solo} color="var(--sh-ink-3)" />
       <NodeHandles />
-      <EditBar id={id} data={data} type="task" visible={!!selected && canEdit} />
+      <EditBar id={id} data={data} type="task" visible={!!selected && canEdit && solo} />
       {!selected && <DuplicateArrows nodeId={id} side={side} onArrowEnter={cancelHide} />}
       <div className="wb-taskcard-head">
         <button
@@ -719,6 +845,7 @@ function serialize(nodes: WBNode[], edges: WBEdge[], viewport?: WhiteboardData['
       color: n.data.color,
       shape: n.data.shape,
       bold: n.data.bold,
+      textColor: n.data.textColor,
       fontSize: n.data.fontSize,
       align: n.data.align,
       taskId: n.data.taskId ?? null,
@@ -835,6 +962,45 @@ function Canvas({
   const setNodeData = useCallback((id: string, patch: Partial<WhiteboardNodeData>) => {
     setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)));
   }, [setNodes]);
+
+  // ── Multi-selection (≥2 nodes) bulk actions, driven by GroupEditBar ──
+  // Apply one data patch to every selected node at once.
+  const patchSelection = useCallback((patch: Partial<WhiteboardNodeData>) => {
+    setNodes((nds) => nds.map((n) => (n.selected ? { ...n, data: { ...n.data, ...patch } } : n)));
+  }, [setNodes]);
+  // Duplicate every selected node, offset down-right; the clones become the new
+  // selection. Task links are dropped (mirrors single-node duplicate) but text
+  // and look are kept — this is a real copy, not a fresh blank.
+  const duplicateSelection = useCallback(() => {
+    if (!canEdit) return;
+    setNodes((nds) => {
+      const sel = nds.filter((n) => n.selected);
+      if (!sel.length) return nds;
+      const GAP = 32;
+      const clones: WBNode[] = sel.map((n) => {
+        const type: WhiteboardNodeType = n.type === 'task' ? 'sticky' : ((n.type as WhiteboardNodeType) || 'sticky');
+        const w = n.width ?? n.measured?.width ?? undefined;
+        const h = n.height ?? n.measured?.height ?? undefined;
+        const s = n.data;
+        const data: WhiteboardNodeData = {
+          text: s.text ?? '', color: s.color, shape: s.shape, bold: s.bold, textColor: s.textColor,
+          fontSize: s.fontSize, align: s.align, taskId: null, taskNumber: null, done: false,
+        };
+        return {
+          id: crypto.randomUUID(), type, position: { x: n.position.x + GAP, y: n.position.y + GAP },
+          ...(w != null ? { width: w } : {}), ...(h != null ? { height: h } : {}), data, selected: true,
+        };
+      });
+      return [...nds.map((n) => (n.selected ? { ...n, selected: false } : n)), ...clones];
+    });
+  }, [canEdit, setNodes]);
+  // Delete the whole selection (routes through rf.deleteElements so the
+  // whole-board guard and edge cleanup both run).
+  const deleteSelection = useCallback(() => {
+    if (!canEdit) return;
+    const sel = rf.getNodes().filter((n) => n.selected);
+    if (sel.length) rf.deleteElements({ nodes: sel.map((n) => ({ id: n.id })) });
+  }, [canEdit, rf]);
 
   const convertToTask = useCallback((id: string) => {
     const node = rf.getNode(id) as WBNode | undefined;
@@ -1112,9 +1278,15 @@ function Canvas({
     return () => window.removeEventListener('keydown', onKey);
   }, [canEdit, undo, redo]);
 
+  // Current selection (derived from node state so it stays in sync with node
+  // data — used both to gate per-node bars and to feed the group toolbar).
+  const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
+  const selectedIds = useMemo(() => selectedNodes.map((n) => n.id), [selectedNodes]);
+  const selectionCount = selectedIds.length;
+
   const ctx = useMemo<WhiteboardCtx>(
-    () => ({ canEdit, listId, startConnectDrag, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, mentionTask, unlinkTask, removeNode, openTask, toggleDone, duplicateNode, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, setEdgeLabel, setEdgeWaypoint }),
-    [canEdit, listId, startConnectDrag, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, mentionTask, unlinkTask, removeNode, openTask, toggleDone, duplicateNode, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, setEdgeLabel, setEdgeWaypoint],
+    () => ({ canEdit, listId, selectionCount, startConnectDrag, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, mentionTask, unlinkTask, removeNode, openTask, toggleDone, duplicateNode, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, setEdgeLabel, setEdgeWaypoint }),
+    [canEdit, listId, selectionCount, startConnectDrag, editingId, startEditing, stopEditing, updateNodeText, setNodeData, convertToTask, mentionTask, unlinkTask, removeNode, openTask, toggleDone, duplicateNode, setEdgeLineType, cycleEdgeArrows, deleteEdge, editingEdgeId, startEditingEdge, setEdgeLabel, setEdgeWaypoint],
   );
 
   // Place new nodes at the centre of the current viewport.
@@ -1166,6 +1338,9 @@ function Canvas({
           connectionMode={ConnectionMode.Loose}
           elevateNodesOnSelect={false}
           panOnScroll
+          selectionOnDrag={canEdit}
+          panOnDrag={canEdit ? [1, 2] : true}
+          selectionMode={SelectionMode.Partial}
           zoomOnDoubleClick={false}
           defaultEdgeOptions={defaultEdgeOptions}
           defaultViewport={initial.viewport}
@@ -1180,6 +1355,16 @@ function Canvas({
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
           <Controls showInteractive={false} />
+
+          {canEdit && (
+            <GroupEditBar
+              ids={selectedIds}
+              nodes={selectedNodes}
+              onPatch={patchSelection}
+              onDuplicate={duplicateSelection}
+              onDelete={deleteSelection}
+            />
+          )}
 
           <Panel position="top-right" className="wb-fs-panel">
             <button
