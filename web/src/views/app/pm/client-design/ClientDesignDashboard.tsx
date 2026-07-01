@@ -8,19 +8,21 @@ import { useTaskTypes } from '../../../../hooks/useTaskTypes';
 import { useUpdateTask } from '../../../../hooks/useTasks';
 import { useSpace } from '../../../../hooks/useSpaces';
 import { usePMStore } from '../../../../stores/pmStore';
+import { useMeetingPanelStore } from '../../../../stores/meetingPanelStore';
 import { canAtLeast } from '../../../../lib/access';
-import { sortStages } from '../../../../lib/designSpaceLists';
+import { sortStages, isGeneralTasksListName } from '../../../../lib/designSpaceLists';
 import ContainerChatButton from '../../../../components/pm/ContainerChatButton';
 import DashboardTab from './tabs/DashboardTab';
 import BoardTab from './tabs/BoardTab';
 import ReportsTab from './tabs/ReportsTab';
 import CompletedTab from './tabs/CompletedTab';
+import TasksTab from './tabs/TasksTab';
 import TaskCreatePanel from '../TaskCreatePanel';
 import SquadShareModal from './SquadShareModal';
 
-type TabKey = 'dashboard' | 'board' | 'reports' | 'completed';
+type TabKey = 'dashboard' | 'board' | 'tasks' | 'reports' | 'completed';
 const TAB_STORAGE = 'cd.tab';
-const TAB_KEYS: TabKey[] = ['dashboard', 'board', 'reports', 'completed'];
+const TAB_KEYS: TabKey[] = ['dashboard', 'board', 'tasks', 'reports', 'completed'];
 
 const TAB_ICONS: Record<TabKey, React.ReactNode> = {
   dashboard: (
@@ -31,6 +33,11 @@ const TAB_ICONS: Record<TabKey, React.ReactNode> = {
   board: (
     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+    </svg>
+  ),
+  tasks: (
+    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
     </svg>
   ),
   reports: (
@@ -54,13 +61,18 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
     return v && TAB_KEYS.includes(v) ? v : 'dashboard';
   });
   const [showCreatePanel, setShowCreatePanel] = useState(false);
+  const [createMode, setCreateMode] = useState<'design' | 'general'>('design');
+  const [showNewMenu, setShowNewMenu] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingListId, setPendingListId] = useState<string | null>(null);
+  const [pendingTasksListId, setPendingTasksListId] = useState<string | null>(null);
   const creatingRef = useRef(false);
+  const creatingTasksRef = useRef(false);
 
   const qc = useQueryClient();
   const setActiveTask = usePMStore((s) => s.setActiveTask);
+  const openMeetingPanel = useMeetingPanelStore((s) => s.openMeetingPanel);
   // Resolve the space (and its 8-stage status catalog) first so the resolved
   // stages can be fed into useFolderTasks for accurate grouping. useFolder here
   // shares the ['folder', folderId] query with useFolderTasks (no extra fetch).
@@ -90,6 +102,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
   const handleNewTask = useCallback(async () => {
     const listId = listByStatus.queued?.id || pendingListId;
     if (listId) {
+      setCreateMode('design');
       setShowCreatePanel(true);
       return;
     }
@@ -105,12 +118,61 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
         setPendingListId(newListId);
         qc.invalidateQueries({ queryKey: ['folder', folderId] });
         qc.invalidateQueries({ queryKey: ['folder-tasks', folderId] });
+        setCreateMode('design');
         setShowCreatePanel(true);
       }
     } catch (err) {
       console.error('Failed to create default list:', err);
     }
   }, [listByStatus.queued?.id, pendingListId, folder, qc, folderId]);
+
+  // The general "Tasks" list backing the Tasks tab. Find-or-create lazily,
+  // mirroring the Briefs list above. Returns the resolved list id (or null on
+  // failure) so callers can immediately act on it.
+  const existingTasksListId =
+    (folder?.lists?.find((l) => isGeneralTasksListName(l.name))?.id) || pendingTasksListId;
+
+  const ensureTasksList = useCallback(async (): Promise<string | null> => {
+    if (existingTasksListId) return existingTasksListId;
+    if (!folder || creatingTasksRef.current) return null;
+    creatingTasksRef.current = true;
+    try {
+      const res = await api.post('/pm/lists', {
+        space_id: folder.space_id,
+        folder_id: folder.id,
+        name: 'Tasks',
+      });
+      const newListId = res.data?.data?.id as string | undefined;
+      if (newListId) {
+        setPendingTasksListId(newListId);
+        qc.invalidateQueries({ queryKey: ['folder', folderId] });
+        qc.invalidateQueries({ queryKey: ['folder-tasks', folderId] });
+        return newListId;
+      }
+      return null;
+    } catch (err) {
+      console.error('Failed to create Tasks list:', err);
+      return null;
+    } finally {
+      creatingTasksRef.current = false;
+    }
+  }, [existingTasksListId, folder, qc, folderId]);
+
+  const handleNewGeneralTask = useCallback(async () => {
+    setShowNewMenu(false);
+    const listId = await ensureTasksList();
+    if (!listId) return;
+    setTab('tasks');
+    setCreateMode('general');
+    setShowCreatePanel(true);
+  }, [ensureTasksList]);
+
+  const handleScheduleMeeting = useCallback(async () => {
+    setShowNewMenu(false);
+    const listId = await ensureTasksList();
+    if (!listId) return;
+    openMeetingPanel({ listId });
+  }, [ensureTasksList, openMeetingPanel]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') window.localStorage.setItem(TAB_STORAGE, tab);
@@ -141,14 +203,19 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
   const activeCount = requests.filter((r) => r._stage?.category !== 'closed').length;
   const doneCount = requests.filter((r) => r._stage?.category === 'closed').length;
 
+  const tasksListEntry = folder?.lists?.find((l) => isGeneralTasksListName(l.name));
+  const tasksCount = (tasksListEntry as any)?.task_count as number | undefined;
+
   const tabs: { key: TabKey; label: string; count?: number }[] = [
     { key: 'dashboard', label: 'Dashboard', count: activeCount },
     { key: 'board', label: 'Board' },
+    { key: 'tasks', label: 'Tasks', count: tasksCount },
     { key: 'reports', label: 'Reports' },
     { key: 'completed', label: 'Completed', count: doneCount },
   ];
 
   const briefsListId = listByStatus.queued?.id || pendingListId;
+  const tasksListId = existingTasksListId;
 
   return (
     // min-h-0 / min-w-0 are load-bearing: this is a flex child of the layout's
@@ -195,15 +262,68 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
             </button>
           )}
 
-          <button
-            onClick={handleNewTask}
-            className="lv-newtask-btn"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            {newTaskLabel}
-          </button>
+          {/* Split button: main click = New Design/Video request (default,
+              unchanged); caret opens a dropdown with general-task + meeting. */}
+          <div style={{ position: 'relative', display: 'inline-flex' }}>
+            <div style={{ display: 'inline-flex' }}>
+              <button
+                onClick={handleNewTask}
+                className="lv-newtask-btn"
+                style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                {newTaskLabel}
+              </button>
+              <button
+                onClick={() => setShowNewMenu((v) => !v)}
+                className="lv-newtask-btn"
+                style={{
+                  borderTopLeftRadius: 0,
+                  borderBottomLeftRadius: 0,
+                  borderLeft: '1px solid rgba(255,255,255,0.22)',
+                  padding: '0 7px',
+                }}
+                aria-label="More create options"
+                aria-haspopup="menu"
+                aria-expanded={showNewMenu}
+                title="More options"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+            </div>
+            {showNewMenu && (
+              <>
+                <div className="fixed inset-0 z-[1]" onClick={() => setShowNewMenu(false)} />
+                <div
+                  className="absolute right-0 top-[calc(100%+6px)] z-[2] w-52 overflow-hidden rounded-xl border shadow-lg"
+                  style={{ borderColor: 'var(--sh-hair)', background: 'var(--surface)' }}
+                  role="menu"
+                >
+                  <button
+                    onClick={handleNewGeneralTask}
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] text-[color:var(--sh-ink)] hover:bg-[color:var(--sh-hair-3)]"
+                    role="menuitem"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M9 11l3 3 8-8M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9" /></svg>
+                    New General Task
+                  </button>
+                  <button
+                    onClick={handleScheduleMeeting}
+                    className="flex w-full items-center gap-2 border-t px-3 py-2.5 text-left text-[13px] text-[color:var(--sh-ink)] hover:bg-[color:var(--sh-hair-3)]"
+                    style={{ borderColor: 'var(--sh-hair)' }}
+                    role="menuitem"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0a7d55" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                    Schedule Meeting
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -268,6 +388,27 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
                     onMoveStage={(id, name) => updateTask.mutate({ id, status: name })}
                   />
               )}
+              {tab === 'tasks' && (
+                tasksListId ? (
+                  <TasksTab
+                    listId={tasksListId}
+                    statuses={sortedStatuses}
+                    searchQuery={searchQuery}
+                  />
+                ) : (
+                  <div style={{ padding: 60, textAlign: 'center', color: 'var(--sh-ink-3)' }}>
+                    <div style={{ fontSize: 13, marginBottom: 14 }}>
+                      No general tasks yet. Add plain to-dos or schedule a meeting here.
+                    </div>
+                    <button onClick={handleNewGeneralTask} className="lv-newtask-btn" style={{ margin: '0 auto' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                      New General Task
+                    </button>
+                  </div>
+                )
+              )}
               {tab === 'reports' && (
                 <ReportsTab requests={filteredRequests} plan={plan} folderId={folderId} />
               )}
@@ -283,7 +424,7 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
         </div>
       </div>
 
-      {showCreatePanel && briefsListId && (
+      {showCreatePanel && createMode === 'design' && briefsListId && (
         <TaskCreatePanel
           listId={briefsListId}
           spaceName={space?.name}
@@ -294,6 +435,19 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
           isDesignTask
           customTaskTypeKey={taskTypeKey}
           designTaskTypeId={designType?.id || null}
+          statuses={sortedStatuses}
+          defaultStatus={sortedStatuses[0]?.name}
+        />
+      )}
+
+      {showCreatePanel && createMode === 'general' && tasksListId && (
+        <TaskCreatePanel
+          listId={tasksListId}
+          spaceName={space?.name}
+          spaceColor={space?.color || null}
+          folderName={folder?.name || null}
+          listName="Tasks"
+          onClose={() => setShowCreatePanel(false)}
           statuses={sortedStatuses}
           defaultStatus={sortedStatuses[0]?.name}
         />
