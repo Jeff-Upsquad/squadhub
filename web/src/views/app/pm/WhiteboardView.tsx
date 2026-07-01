@@ -1460,6 +1460,8 @@ function Canvas({
           selectionMode={SelectionMode.Partial}
           multiSelectionKeyCode={['Shift', 'Meta', 'Control']}
           zoomOnDoubleClick={false}
+          minZoom={0.05}
+          maxZoom={4}
           defaultEdgeOptions={defaultEdgeOptions}
           defaultViewport={initial.viewport}
           fitView={!initial.viewport && (initial.nodes?.length ?? 0) > 0}
