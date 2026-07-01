@@ -374,6 +374,8 @@ export interface WhiteboardNodeData {
   shape?: WhiteboardShape;
   // Text formatting set from the element's floating edit bar.
   bold?: boolean;
+  // Text colour set from the edit bar; unset falls back to the theme default.
+  textColor?: string;
   fontSize?: 'sm' | 'md' | 'lg';
   align?: 'left' | 'center' | 'right';
   // Set once the element is converted to a task from its edit bar. taskId links

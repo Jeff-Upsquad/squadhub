@@ -7448,6 +7448,11 @@ ol.sqc-list {
 .wb-color-custom { position: relative; overflow: hidden; background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red); }
 .wb-color-custom input { position: absolute; inset: -4px; opacity: 0; cursor: pointer; }
 
+/* Text-colour trigger: a capital "A" over a swatch bar showing the current colour. */
+.wb-textcolor-btn { gap: 3px; }
+.wb-textcolor-a { display: inline-flex; flex-direction: column; align-items: center; line-height: 1; font-weight: 800; font-size: 12px; }
+.wb-textcolor-bar { width: 12px; height: 3px; border-radius: 1px; margin-top: 1px; }
+
 /* Floating edit bar (React Flow NodeToolbar) shown above a selected element. */
 .wb-ebar {
   display: flex; align-items: center; gap: 3px;
@@ -7470,6 +7475,7 @@ ol.sqc-list {
 .wb-ebar-btn:hover { background: var(--sh-hair-3); color: var(--sh-ink); }
 .wb-ebar-btn[data-active="true"] { background: var(--sh-ink); color: var(--surface); }
 .wb-ebar-size { font-size: 11px; }
+.wb-ebar-count { padding: 0 6px; font-size: 11.5px; font-weight: 700; color: var(--sh-ink-2); white-space: nowrap; }
 .wb-ebar-text { padding: 0 8px; }
 .wb-ebar-convert { color: #2563eb; }
 .wb-ebar-convert:hover { background: rgba(37,99,235,0.12); color: #2563eb; }
