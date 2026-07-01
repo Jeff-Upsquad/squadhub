@@ -56,10 +56,15 @@ fn show_quick_add(app: &tauri::AppHandle) {
             // our home Space (so ⌘⇧T surfaces it on the desktop *behind* the
             // full-screen app, i.e. "nothing happened"). Re-applying these each
             // time keeps it floating over the active full-screen Space.
+            // CanJoinAllSpaces | FullScreenAuxiliary — matches tauri-nspanel's
+            // proven `fullscreen` example. We previously also OR'd in Stationary,
+            // which is NOT in that example; on macOS 26 (Tahoe) the reworked
+            // Spaces system appears to treat a Stationary panel as desktop-pinned
+            // and drops it onto the home Space instead of floating over the active
+            // full-screen Space. Dropped it here.
             panel.set_collection_behaviour(
                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
-                    | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
-                    | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary,
+                    | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary,
             );
             panel.set_level(25);
             // show() already does orderFrontRegardless + makeKeyWindow, which is
@@ -84,12 +89,19 @@ fn show_quick_add(app: &tauri::AppHandle) {
 #[cfg(target_os = "macos")]
 fn qa_log(msg: &str) {
     use std::io::Write;
+    // Prefix each line with an epoch-millis timestamp so we can correlate a
+    // "showed panel" with a "resigned key" that lands microseconds later — the
+    // tell-tale of AppKit racing to hide a non-activating panel on show.
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open("/tmp/sh-quickadd.log")
     {
-        let _ = writeln!(f, "{msg}");
+        let _ = writeln!(f, "{ts} {msg}");
     }
 }
 
@@ -178,20 +190,37 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 use cocoa::appkit::NSWindowCollectionBehavior;
-                use tauri_nspanel::WebviewWindowExt;
+                use tauri_nspanel::{panel_delegate, WebviewWindowExt};
                 if let Some(window) = app.get_webview_window("quickadd") {
                     match window.to_panel() {
                         Ok(panel) => {
                             // NSWindowStyleMaskNonActivatingPanel (1<<7): take key
                             // focus without activating the app (no Space switch).
                             panel.set_style_mask(1 << 7);
+                            // CanJoinAllSpaces | FullScreenAuxiliary only — see the
+                            // note in show_quick_add(); Stationary was dropped as it
+                            // desktop-pins the panel on macOS 26 (Tahoe).
                             panel.set_collection_behaviour(
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
-                                    | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
-                                    | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary,
+                                    | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary,
                             );
                             // NSMainMenuWindowLevel + 1: above full-screen content.
                             panel.set_level(25);
+
+                            // Diagnostics: log key transitions so we can tell, from
+                            // /tmp/sh-quickadd.log, WHETHER the panel is being hidden
+                            // by AppKit right after show (resign-key immediately after
+                            // "showed panel") vs. simply landing on the wrong Space.
+                            let delegate = panel_delegate!(QuickAddPanelDelegate {
+                                window_did_become_key,
+                                window_did_resign_key
+                            });
+                            delegate.set_listener(Box::new(move |name: String| match name.as_str() {
+                                "window_did_become_key" => qa_log("panel became key"),
+                                "window_did_resign_key" => qa_log("panel resigned key"),
+                                _ => {}
+                            }));
+                            panel.set_delegate(delegate);
                             // NSPanel defaults hidesOnDeactivate = YES. Our app is
                             // .Accessory and this panel is non-activating, so the app
                             // is NEVER the active app — with the default, AppKit races
