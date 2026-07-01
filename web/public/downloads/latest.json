@@ -1,10 +1,10 @@
 {
-  "version": "0.1.12",
-  "notes": "Quick-add (\u2318\u21e7T) now reliably floats over full-screen apps on macOS 26 (Tahoe).",
-  "pub_date": "2026-07-01T11:14:44Z",
+  "version": "0.1.13",
+  "notes": "Quick-add (\u2318\u21e7T) now opens a fresh blank task every time \u2014 a previously added task no longer lingers in the fields when you reopen the panel.",
+  "pub_date": "2026-07-01T11:41:12Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKd3dPNkJyK0FpcmxiZ2o1cjMvNWszZUpyVlcrcnhWSFJSaEl6dXBkbkNVcWNoTXlMREt2cnQ1czBYUVBTRXFPYnhab2RNMExvb20zMzUrSngvbVVNUlFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyOTA0MTg2CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKaSs2RVkzMDkrY05jT1VzZCtRVzkxUmZvQ0FOZFFsUlFMV2FNN2xXcWNCZGllWjIwK1E4TnNLaHBXUGxPcHF5bXFXQzdQN2pNN1o1NmlFWm5TbTBTQUE9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQ003TTR4K1pKdzA3OS9CTVhoREpiYnBBa2tLUU9VN0dZQlU3bkFKTWxuWmtKaCs5ZXlWRGE1WHhWcHhuMEJLSHQ2Y25Vb21UTTd5K0pONWt6YXcwM1FwM1U2OG9OSXdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyOTA2MDI2CWZpbGU6U3F1YWRIdWIgQ29tcGFuaW9uLmFwcC50YXIuZ3oKT1NxNGpMVWhXaWJuYXNkZDhBTCtYOWZxZDdtQWoxc3BSNGZHSnhkczZtdWV5RHlNbFo1L0NMemJYWnRseUp3d1Y4bFJtVmZPNXZadll2TTNNaGYxRFE9PQo=",
       "url": "https://squadhub.in/downloads/SquadHub.app.tar.gz"
     }
   }
