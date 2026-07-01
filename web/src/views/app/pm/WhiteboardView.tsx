@@ -24,6 +24,7 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  useViewport,
   type Node,
   type Edge,
   type NodeProps,
@@ -621,6 +622,86 @@ function GroupEditBar({ ids, nodes, onPatch, onDuplicate, onDelete }: {
       <button type="button" className="wb-ebar-btn wb-ebar-text" title="Duplicate selection" onClick={onDuplicate}>Duplicate</button>
       <button type="button" className="wb-ebar-btn wb-ebar-text" title="Delete selection" onClick={onDelete}>Delete</button>
     </NodeToolbar>
+  );
+}
+
+// Group resize — a bounding box with 8 handles drawn around a multi-selection
+// (≥2 nodes). Dragging a handle scales every selected node's position and size
+// proportionally around the opposite edge/corner (FigJam-style). Rendered as a
+// fixed overlay in SCREEN space (so handle size stays constant at any zoom); the
+// box tracks pan/zoom via useViewport and follows nodes as they scale.
+type ResizeDir = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
+const GRESIZE_HANDLES: Array<[ResizeDir, number, number]> = [
+  ['nw', 0, 0], ['n', 0.5, 0], ['ne', 1, 0], ['e', 1, 0.5],
+  ['se', 1, 1], ['s', 0.5, 1], ['sw', 0, 1], ['w', 0, 0.5],
+];
+function GroupResizer({ nodes, setNodes }: { nodes: WBNode[]; setNodes: React.Dispatch<React.SetStateAction<WBNode[]>> }) {
+  const rf = useReactFlow();
+  useViewport(); // re-render as the canvas pans / zooms so the box stays aligned
+  if (nodes.length < 2) return null;
+
+  const dims = (n: WBNode) => ({
+    w: n.width ?? n.measured?.width ?? 0,
+    h: n.height ?? n.measured?.height ?? 0,
+  });
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of nodes) {
+    const { w, h } = dims(n);
+    minX = Math.min(minX, n.position.x); minY = Math.min(minY, n.position.y);
+    maxX = Math.max(maxX, n.position.x + w); maxY = Math.max(maxY, n.position.y + h);
+  }
+  if (!isFinite(minX)) return null;
+  const tl = rf.flowToScreenPosition({ x: minX, y: minY });
+  const br = rf.flowToScreenPosition({ x: maxX, y: maxY });
+
+  const onDown = (dir: ResizeDir) => (e: React.PointerEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    const b = { minX, minY, maxX, maxY };
+    const spanX = Math.max(b.maxX - b.minX, 1e-6);
+    const spanY = Math.max(b.maxY - b.minY, 1e-6);
+    const dirX = dir.includes('e') ? 1 : dir.includes('w') ? -1 : 0;
+    const dirY = dir.includes('s') ? 1 : dir.includes('n') ? -1 : 0;
+    const anchorX = dirX === -1 ? b.maxX : b.minX; // the edge that stays put
+    const anchorY = dirY === -1 ? b.maxY : b.minY;
+    // Snapshot each node's start geometry; only nodes with an EXPLICIT size get
+    // resized (text nodes autosize to content — we just reposition them).
+    const snap = nodes.map((n) => ({ id: n.id, x: n.position.x, y: n.position.y, ...dims(n), sizeW: n.width != null, sizeH: n.height != null }));
+    const move = (ev: PointerEvent) => {
+      const p = rf.screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
+      let sx = 1, sy = 1;
+      if (dirX === 1) sx = (p.x - b.minX) / spanX; else if (dirX === -1) sx = (b.maxX - p.x) / spanX;
+      if (dirY === 1) sy = (p.y - b.minY) / spanY; else if (dirY === -1) sy = (b.maxY - p.y) / spanY;
+      sx = Math.max(sx, 0.1); sy = Math.max(sy, 0.1);
+      const byId = new Map(snap.map((s) => [s.id, s]));
+      setNodes((nds) => nds.map((n) => {
+        const s = byId.get(n.id);
+        if (!s) return n;
+        const next: WBNode = { ...n, position: { x: anchorX + (s.x - anchorX) * sx, y: anchorY + (s.y - anchorY) * sy } };
+        if (s.sizeW) next.width = Math.max(20, s.w * sx);
+        if (s.sizeH) next.height = Math.max(20, s.h * sy);
+        return next;
+      }));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  const cursorFor: Record<ResizeDir, string> = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize' };
+  return (
+    <div className="wb-gresize" style={{ position: 'fixed', left: tl.x, top: tl.y, width: br.x - tl.x, height: br.y - tl.y, pointerEvents: 'none', zIndex: 50 }}>
+      {GRESIZE_HANDLES.map(([dir, fx, fy]) => (
+        <div
+          key={dir}
+          className="wb-gresize-h"
+          style={{ position: 'absolute', left: `${fx * 100}%`, top: `${fy * 100}%`, cursor: cursorFor[dir] }}
+          onPointerDown={onDown(dir)}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -1424,6 +1505,7 @@ function Canvas({
             </Panel>
           )}
         </ReactFlow>
+        {canEdit && <GroupResizer nodes={selectedNodes} setNodes={setNodes} />}
         {connectLine && (
           <svg className="wb-connect-line" style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 9999 }}>
             <line x1={connectLine.sx} y1={connectLine.sy} x2={connectLine.x} y2={connectLine.y} stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 4" />

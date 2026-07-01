@@ -7476,6 +7476,14 @@ ol.sqc-list {
 .wb-ebar-btn[data-active="true"] { background: var(--sh-ink); color: var(--surface); }
 .wb-ebar-size { font-size: 11px; }
 .wb-ebar-count { padding: 0 6px; font-size: 11.5px; font-weight: 700; color: var(--sh-ink-2); white-space: nowrap; }
+
+/* Group-resize overlay: a bounding box + 8 handles around a multi-selection. */
+.wb-gresize { border: 1.5px solid var(--sh-ink-3); border-radius: 2px; }
+.wb-gresize-h {
+  width: 10px; height: 10px; margin: -5px 0 0 -5px;
+  background: var(--surface); border: 1.5px solid var(--sh-ink-3); border-radius: 2px;
+  pointer-events: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+}
 .wb-ebar-text { padding: 0 8px; }
 .wb-ebar-convert { color: #2563eb; }
 .wb-ebar-convert:hover { background: rgba(37,99,235,0.12); color: #2563eb; }
