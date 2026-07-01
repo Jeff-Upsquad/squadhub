@@ -1423,6 +1423,7 @@ function Canvas({
           selectionOnDrag={canEdit}
           panOnDrag={canEdit ? [1, 2] : true}
           selectionMode={SelectionMode.Partial}
+          multiSelectionKeyCode={['Shift', 'Meta', 'Control']}
           zoomOnDoubleClick={false}
           defaultEdgeOptions={defaultEdgeOptions}
           defaultViewport={initial.viewport}
