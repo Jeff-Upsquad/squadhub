@@ -51,6 +51,25 @@ const FILL_COLORS = [
 const NO_FILL = 'transparent';
 const FONT_PX: Record<NonNullable<WhiteboardNodeData['fontSize']>, number> = { sm: 12, md: 15, lg: 21 };
 
+// Darken a hex colour toward black by `factor` (0–1) — used to give a shape a
+// border that's the same hue as its fill, just a shade deeper (FigJam-style).
+// Returns null for anything that isn't a #rgb/#rrggbb hex (e.g. CSS vars).
+function darkenHex(color: string | undefined, factor = 0.72): string | null {
+  if (typeof color !== 'string' || color[0] !== '#') return null;
+  const m = color.slice(1);
+  const full = m.length === 3 ? m.split('').map((c) => c + c).join('') : m;
+  if (full.length !== 6) return null;
+  const ch = (i: number) => {
+    const v = parseInt(full.slice(i, i + 2), 16);
+    if (Number.isNaN(v)) return null;
+    return Math.max(0, Math.min(255, Math.round(v * factor)));
+  };
+  const r = ch(0), g = ch(2), b = ch(4);
+  if (r === null || g === null || b === null) return null;
+  const hx = (v: number) => v.toString(16).padStart(2, '0');
+  return `#${hx(r)}${hx(g)}${hx(b)}`;
+}
+
 // Initial sizes for resizable node types (text auto-sizes to its content).
 const DEFAULT_SIZE: Partial<Record<WhiteboardNodeType, { width: number; height: number }>> = {
   sticky: { width: 188, height: 152 },
@@ -741,11 +760,14 @@ function ShapeNode({ id, data, selected }: NodeProps<WBNode>) {
   const solo = selectionCount < 2;
   const { side, onMouseMove, onMouseLeave, cancelHide } = useNearestSide();
   const fill = data.color === NO_FILL ? 'none' : (data.color || 'var(--surface)');
+  // Border matches the fill: a shade darker than the same hue. Falls back to the
+  // neutral ink when there's no solid hex fill (no-fill / default surface).
+  const stroke = darkenHex(data.color) ?? 'var(--sh-ink-3)';
   return (
     <div className="wb-shape" onMouseMove={canEdit ? onMouseMove : undefined} onMouseLeave={onMouseLeave}>
       <NodeResizer minWidth={80} minHeight={60} isVisible={!!selected && canEdit && solo} color="var(--sh-ink-3)" />
       <svg className="wb-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <ShapeGeom shape={data.shape || 'rect'} fill={fill} stroke="var(--sh-ink-3)" />
+        <ShapeGeom shape={data.shape || 'rect'} fill={fill} stroke={stroke} />
       </svg>
       <NodeHandles />
       <EditBar id={id} data={data} type="shape" visible={!!selected && canEdit && solo} />
