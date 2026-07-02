@@ -1002,13 +1002,17 @@ function toRFEdges(data: WhiteboardData): WBEdge[] {
   }));
 }
 
-// ── Canvas (mounted once per list; seeded from the loaded blob) ─────────────
+// ── Canvas (mounted once per whiteboard view; seeded from the loaded blob) ──
+// `viewId` keys the canvas blob (a list can hold multiple whiteboard views);
+// `listId` keys task operations (create/link tasks into this list).
 function Canvas({
+  viewId,
   listId,
   initial,
   statuses,
   canEdit,
 }: {
+  viewId: string;
   listId: string;
   initial: WhiteboardData;
   statuses: SpaceStatus[];
@@ -1018,7 +1022,7 @@ function Canvas({
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<WBNode>(toRFNodes(initial));
   const [edges, setEdges, onEdgesChange] = useEdgesState<WBEdge>(toRFEdges(initial));
-  const { save } = useWhiteboardAutosave(listId);
+  const { save } = useWhiteboardAutosave(viewId);
   const createTask = useCreateTask(listId);
   const updateTask = useUpdateTask(listId);
   const [newColor, setNewColor] = useState(STICKY_COLORS[0]);
@@ -1556,17 +1560,19 @@ function Canvas({
 }
 
 export default function WhiteboardView({
+  viewId,
   listId,
   statuses,
   canEdit = true,
 }: {
+  viewId: string;
   listId: string;
   statuses: SpaceStatus[];
   canEdit?: boolean;
 }) {
-  const { data: wb, isLoading } = useWhiteboard(listId);
+  const { data: wb, isLoading } = useWhiteboard(viewId);
 
-  if (isLoading || !wb) {
+  if (!viewId || isLoading || !wb) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <p className="text-sm text-[color:var(--sh-ink-3)]">Loading whiteboard…</p>
@@ -1576,7 +1582,7 @@ export default function WhiteboardView({
 
   return (
     <ReactFlowProvider>
-      <Canvas key={listId} listId={listId} initial={wb} statuses={statuses} canEdit={canEdit} />
+      <Canvas key={viewId} viewId={viewId} listId={listId} initial={wb} statuses={statuses} canEdit={canEdit} />
     </ReactFlowProvider>
   );
 }

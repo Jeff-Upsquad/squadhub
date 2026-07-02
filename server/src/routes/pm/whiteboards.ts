@@ -10,8 +10,8 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_staff'));
 
-// The whiteboard blob is owned by the whiteboard view — we store it opaquely
-// and only sanity-check the top-level shape so a malformed body can't poison the
+// The whiteboard blob is owned by the whiteboard view — we store it opaquely and
+// only sanity-check the top-level shape so a malformed body can't poison the
 // column. nodes/edges contents are passthrough (z.any()).
 const putSchema = z.object({
   data: z.object({
@@ -23,21 +23,50 @@ const putSchema = z.object({
 
 const EMPTY = { nodes: [], edges: [] };
 
-// GET /pm/lists/:id/whiteboard — viewer+ access on the list
-router.get('/lists/:id/whiteboard', async (req: Request, res: Response) => {
-  try {
-    const id = req.params.id as string;
+// Resolve the whiteboard view row and confirm the caller can reach it. Access is
+// checked against the parent list (same model as list_whiteboards). Returns the
+// view (with its list_id) or null; on failure `res` has already been answered.
+async function loadWhiteboardView(req: Request, res: Response, requireLevel: 'viewer' | 'member') {
+  const viewId = req.params.viewId as string;
 
-    const userLevel = await checkResourceAccess(req.userId!, 'list', id);
-    if (!userLevel) {
-      res.status(403).json({ success: false, error: 'You do not have access to this list' });
-      return;
-    }
+  const { data: view, error } = await supabaseAdmin
+    .from('list_views')
+    .select('id, list_id, view_type, is_private, owner_id')
+    .eq('id', viewId)
+    .maybeSingle();
+
+  if (error) {
+    res.status(500).json({ success: false, error: error.message });
+    return null;
+  }
+  if (!view || view.view_type !== 'whiteboard') {
+    res.status(404).json({ success: false, error: 'Whiteboard view not found' });
+    return null;
+  }
+
+  const level = await checkResourceAccess(req.userId!, 'list', view.list_id);
+  if (!level || !meetsAccessLevel(level, requireLevel)) {
+    res.status(403).json({ success: false, error: 'You do not have access to this whiteboard' });
+    return null;
+  }
+  if (view.is_private && view.owner_id !== req.userId!) {
+    res.status(403).json({ success: false, error: 'This view is private' });
+    return null;
+  }
+
+  return view as { id: string; list_id: string };
+}
+
+// GET /pm/views/:viewId/whiteboard — viewer+ access on the parent list
+router.get('/views/:viewId/whiteboard', async (req: Request, res: Response) => {
+  try {
+    const view = await loadWhiteboardView(req, res, 'viewer');
+    if (!view) return;
 
     const { data, error } = await supabaseAdmin
-      .from('list_whiteboards')
+      .from('whiteboards')
       .select('data')
-      .eq('list_id', id)
+      .eq('view_id', view.id)
       .maybeSingle();
 
     if (error) {
@@ -52,19 +81,14 @@ router.get('/lists/:id/whiteboard', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /pm/lists/:id/whiteboard — member+ access on the list (upsert the blob)
-router.put('/lists/:id/whiteboard', async (req: Request, res: Response) => {
+// PUT /pm/views/:viewId/whiteboard — member+ access on the parent list (upsert)
+router.put('/views/:viewId/whiteboard', async (req: Request, res: Response) => {
   try {
-    const id = req.params.id as string;
-
-    const userLevel = await checkResourceAccess(req.userId!, 'list', id);
-    if (!userLevel || !meetsAccessLevel(userLevel, 'member')) {
-      res.status(403).json({ success: false, error: 'Member access required to edit the whiteboard' });
-      return;
-    }
+    const view = await loadWhiteboardView(req, res, 'member');
+    if (!view) return;
 
     const adminUser = await isWorkspaceAdmin(req.userId!);
-    if (!adminUser && await isResourceLocked('list', id)) {
+    if (!adminUser && (await isResourceLocked('list', view.list_id))) {
       res.status(403).json({ success: false, error: 'This list is locked' });
       return;
     }
@@ -72,10 +96,10 @@ router.put('/lists/:id/whiteboard', async (req: Request, res: Response) => {
     const body = putSchema.parse(req.body);
 
     const { error } = await supabaseAdmin
-      .from('list_whiteboards')
+      .from('whiteboards')
       .upsert(
-        { list_id: id, data: body.data, updated_by: req.userId!, updated_at: new Date().toISOString() },
-        { onConflict: 'list_id' },
+        { view_id: view.id, data: body.data, updated_by: req.userId!, updated_at: new Date().toISOString() },
+        { onConflict: 'view_id' },
       );
 
     if (error) {

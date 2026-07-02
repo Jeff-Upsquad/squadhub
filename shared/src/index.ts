@@ -356,6 +356,43 @@ export interface List {
   profile?: CustomProfile;
 }
 
+// ---- Named list views (multiple views per list) ----
+// A list can hold multiple named views. `view_type` reuses the ListView union.
+// For 'list' / 'board' views, `config` holds the saved filter + group-by + sort.
+// For 'whiteboard' views, `config` is unused — the canvas lives in the
+// `whiteboards` table keyed by the view id. Views are shared on the list;
+// `is_private` scopes a view to its `owner_id`.
+// groupBy/sortBy are kept as loose strings here so shared stays decoupled from
+// the web layer's grouping unions (web casts to its own ListGroupBy / SortBy).
+export interface ListViewFilters {
+  statusCategories?: string[];
+  priorities?: TaskPriority[];
+  assigneeIds?: string[];
+  tagIds?: string[];
+  dueDate?: string[];
+}
+
+export interface ListViewConfig {
+  filters?: ListViewFilters;
+  groupBy?: string;
+  sortBy?: string;
+}
+
+export interface ListViewRow {
+  id: string;
+  list_id: string;
+  view_type: ListView;
+  name: string;
+  position: number;
+  is_default: boolean;
+  is_private: boolean;
+  owner_id: string | null;
+  config: ListViewConfig;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---- Whiteboard (FigJam-style list view) ----
 // A list's whiteboard is persisted as a single app-owned JSONB blob
 // (list_whiteboards.data). The shape is owned by the whiteboard view; the

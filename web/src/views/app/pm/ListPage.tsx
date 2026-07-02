@@ -5,11 +5,14 @@ import { usePMStore } from '../../../stores/pmStore';
 import { useMeetingPanelStore } from '../../../stores/meetingPanelStore';
 import { useIsAdmin } from '../../../hooks/usePermissions';
 import { useTasks } from '../../../hooks/useTasks';
+import { useListViews, useCreateView, useUpdateView, useDeleteView } from '../../../hooks/useListViews';
+import { useAuthStore } from '../../../stores/authStore';
 import { canAtLeast } from '../../../lib/access';
-import type { SpaceStatus, AccessLevel } from '@squadhub/shared';
+import type { SpaceStatus, AccessLevel, ListView as ListViewType, ListViewRow, ListViewConfig } from '@squadhub/shared';
 import ListView from './ListView';
 import BoardView from './BoardView';
 import WhiteboardView from './WhiteboardView';
+import ViewTabs from '../../../components/pm/ViewTabs';
 import SettingsSlider from '../../../components/SettingsSlider';
 import ManageMembersModal from './ManageMembersModal';
 import TaskCreatePanel from './TaskCreatePanel';
@@ -18,7 +21,8 @@ import GroupByDropdown from '../../../components/pm/GroupByDropdown';
 import ViewSearchInput from '../../../components/pm/ViewSearchInput';
 import ContainerChatButton from '../../../components/pm/ContainerChatButton';
 import { LIST_GROUP_BY_OPTIONS, SORT_BY_OPTIONS, type SortBy } from '../../../lib/taskGrouping';
-import { EMPTY_FILTER, deriveAssigneeOptions, deriveTagOptions } from '../../../lib/filters';
+import { type ListGroupBy } from '../../../stores/pmStore';
+import { EMPTY_FILTER, deriveAssigneeOptions, deriveTagOptions, type TaskFilterState } from '../../../lib/filters';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const SORT_ICON = (
@@ -36,46 +40,63 @@ export default function ListPage({
   const {
     activeSpaceId: storeSpaceId,
     activeListId: storeListId,
-    viewMode,
-    setViewMode,
     setActiveTask,
     setActiveSpacePage,
     setActiveFolder,
-    listGroupBy,
-    setListGroupBy,
     myTasksOnly,
     setMyTasksOnly,
-    filtersByScope,
-    setScopeFilters,
-    clearScopeFilters,
   } = usePMStore();
+  const activeViewIdByList = usePMStore((s) => s.activeViewIdByList);
+  const setActiveView = usePMStore((s) => s.setActiveView);
   // When rendered embedded (the private My Tasks view), the target list/space is
   // passed as props and overrides global nav state, so opening it doesn't disturb
   // the sidebar/breadcrumb. Falls back to the store for normal list navigation.
   const activeSpaceId = propSpaceId ?? storeSpaceId;
   const activeListId = propListId ?? storeListId;
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const [showSettings, setShowSettings] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [showNewMenu, setShowNewMenu] = useState(false);
   const openMeetingPanel = useMeetingPanelStore((s) => s.openMeetingPanel);
-  const sortByScope = usePMStore((s) => s.sortByScope);
-  const setScopedSortBy = usePMStore((s) => s.setScopedSortBy);
+  // "Focus today" and "My tasks" stay per-user ephemeral toggles (not part of a
+  // saved view's config), so they keep using the existing list-scoped store.
   const focusTodayScope = usePMStore((s) => s.focusTodayScope);
   const setScopedFocusToday = usePMStore((s) => s.setScopedFocusToday);
   const listScopeKey = activeListId ? `list:${activeListId}` : '';
-  const sortBy = (listScopeKey && sortByScope[listScopeKey]) || 'manual' as SortBy;
   const focusToday = !!(listScopeKey && focusTodayScope[listScopeKey]);
 
-  const scopeKey = activeListId ? `list:${activeListId}` : '';
-  const filters = (scopeKey && filtersByScope[scopeKey]) || EMPTY_FILTER;
-
-  // On mobile, force the list view — kanban is unusable on touch and the
-  // BoardView's drag-and-drop has no touch fallback. The stored desktop
-  // preference is preserved (we read but don't write back).
+  // On mobile, force the list layout — kanban/whiteboard are unusable on touch.
   const isMobile = useIsMobile();
-  const effectiveViewMode = isMobile ? 'list' : viewMode;
+
+  // ── Named views for this list (dynamic List/Board/Whiteboard tabs) ───────
+  const { data: views = [] } = useListViews(activeListId);
+  const createView = useCreateView(activeListId);
+  const updateView = useUpdateView(activeListId);
+  const deleteView = useDeleteView(activeListId);
+
+  // Active view = the last tab the user opened on this list, else its default.
+  const activeView: ListViewRow | null = useMemo(() => {
+    if (!views.length) return null;
+    const savedId = activeListId ? activeViewIdByList[activeListId] : null;
+    return views.find((v) => v.id === savedId) || views.find((v) => v.is_default) || views[0];
+  }, [views, activeViewIdByList, activeListId]);
+
+  const contentType: ListViewType = isMobile ? 'list' : (activeView?.view_type ?? 'list');
+
+  // Working copy of the active view's saved config. Toolbar edits mutate this
+  // locally; "Save" pushes it to the shared view. Reset whenever the tab changes.
+  const [workingConfig, setWorkingConfig] = useState<ListViewConfig>({});
+  useEffect(() => { setWorkingConfig(activeView?.config ?? {}); }, [activeView?.id]);
+
+  const filters = (workingConfig.filters ?? EMPTY_FILTER) as TaskFilterState;
+  const listGroupBy = (workingConfig.groupBy ?? 'status') as ListGroupBy;
+  const sortBy = (workingConfig.sortBy ?? 'manual') as SortBy;
+  const configDirty = useMemo(
+    () => JSON.stringify(workingConfig ?? {}) !== JSON.stringify(activeView?.config ?? {}),
+    [workingConfig, activeView?.config],
+  );
 
   const { data: listData } = useQuery({
     queryKey: ['list', activeListId],
@@ -121,6 +142,34 @@ export default function ListPage({
   const { data: tasksForOptions } = useTasks(activeListId, undefined);
   const assigneeOptions = useMemo(() => deriveAssigneeOptions(tasksForOptions ?? []), [tasksForOptions]);
   const tagOptions = useMemo(() => deriveTagOptions(tasksForOptions ?? []), [tasksForOptions]);
+
+  // ── View actions (tab strip + save) ─────────────────────────────────────
+  const selectView = (viewId: string) => { if (activeListId) setActiveView(activeListId, viewId); };
+  const defaultViewName = (type: ListViewType) => {
+    const base = type === 'board' ? 'Board' : type === 'whiteboard' ? 'Whiteboard' : 'List';
+    const n = views.filter((v) => v.view_type === type).length;
+    return n === 0 ? base : `${base} ${n + 1}`;
+  };
+  const handleCreateView = (type: ListViewType) =>
+    createView.mutate({ view_type: type, name: defaultViewName(type) }, { onSuccess: (v) => selectView(v.id) });
+  const handleRenameView = (view: ListViewRow, name: string) => updateView.mutate({ id: view.id, name });
+  const handleDuplicateView = (view: ListViewRow) =>
+    createView.mutate(
+      { view_type: view.view_type, name: `${view.name} (copy)`, is_private: view.is_private, config: view.config },
+      { onSuccess: (v) => selectView(v.id) },
+    );
+  const handleSetDefaultView = (view: ListViewRow) => updateView.mutate({ id: view.id, is_default: true });
+  const handleTogglePrivate = (view: ListViewRow) => updateView.mutate({ id: view.id, is_private: !view.is_private });
+  const handleDeleteView = (view: ListViewRow) => {
+    if (!window.confirm(`Delete the "${view.name}" view?`)) return;
+    deleteView.mutate(view.id);
+  };
+  const saveView = () => { if (activeView) updateView.mutate({ id: activeView.id, config: workingConfig }); };
+  const saveAsNewView = () =>
+    createView.mutate(
+      { view_type: contentType, name: defaultViewName(contentType), config: workingConfig },
+      { onSuccess: (v) => selectView(v.id) },
+    );
 
   // Tell the global top-bar "+" to step aside while this view shows its own
   // floating "New task" button (rendered below, gated on the same condition),
@@ -217,51 +266,21 @@ export default function ListPage({
         </div>
       </div>
 
-      {/* Row 2: View Tabs */}
+      {/* Row 2: Named view tabs (List / Board / Whiteboard views + "+") */}
       <div className="lv-tabs-row">
-        <button
-          onClick={() => setViewMode('list')}
-          className="lv-tab"
-          data-active={effectiveViewMode === 'list'}
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
-          </svg>
-          List
-        </button>
-        <button
-          onClick={() => setViewMode('board')}
-          className="lv-tab hidden md:inline-flex"
-          data-active={effectiveViewMode === 'board'}
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-          </svg>
-          Board
-        </button>
-        <button
-          onClick={() => setViewMode('whiteboard')}
-          className="lv-tab hidden md:inline-flex"
-          data-active={effectiveViewMode === 'whiteboard'}
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v11a1 1 0 01-1 1h-5l-3 3-3-3H5a1 1 0 01-1-1V5z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 9h8M8 12.5h5" />
-          </svg>
-          Whiteboard
-        </button>
-        <button
-          className="lv-tab"
-          data-active={false}
-          disabled
-          title="Timeline view (coming soon)"
-          style={{ opacity: 0.5, cursor: 'not-allowed' }}
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          Timeline
-        </button>
+        <ViewTabs
+          views={views}
+          activeViewId={activeView?.id ?? null}
+          currentUserId={currentUserId}
+          canEdit={canEdit && !isMobile}
+          onSelect={selectView}
+          onCreate={handleCreateView}
+          onRename={handleRenameView}
+          onDuplicate={handleDuplicateView}
+          onSetDefault={handleSetDefaultView}
+          onTogglePrivate={handleTogglePrivate}
+          onDelete={handleDeleteView}
+        />
         {activeListId && (
           <ContainerChatButton
             resourceType="list"
@@ -274,18 +293,18 @@ export default function ListPage({
       </div>
 
       {/* Group by dropdown + Filter + Sort + Focus today + My tasks toggle (List view only) */}
-      {effectiveViewMode === 'list' && (
+      {contentType === 'list' && (
         <div className="lv-subtoolbar shrink-0">
           <span className="st-label">Group by</span>
           <GroupByDropdown
             options={LIST_GROUP_BY_OPTIONS}
             value={listGroupBy}
-            onChange={(v) => setListGroupBy(v as typeof listGroupBy)}
+            onChange={(v) => setWorkingConfig((c) => ({ ...c, groupBy: v }))}
           />
           <div className="st-divider" />
           <FilterBar
             filters={filters}
-            onChange={(next) => scopeKey && setScopeFilters(scopeKey, next)}
+            onChange={(next) => setWorkingConfig((c) => ({ ...c, filters: next }))}
             statuses={statuses}
             assigneeOptions={assigneeOptions}
             tagOptions={tagOptions}
@@ -293,10 +312,16 @@ export default function ListPage({
           <GroupByDropdown
             options={SORT_BY_OPTIONS}
             value={sortBy}
-            onChange={(v) => listScopeKey && setScopedSortBy(listScopeKey, v as SortBy)}
+            onChange={(v) => setWorkingConfig((c) => ({ ...c, sortBy: v }))}
             icon={SORT_ICON}
             menuTitle="Sort tasks by"
           />
+          {canEdit && configDirty && (
+            <div className="vt-saverow">
+              <button type="button" className="lv-toolbtn vt-save" onClick={saveView} title="Save these settings to this view">Save view</button>
+              <button type="button" className="lv-toolbtn lv-toolbtn--outline" onClick={saveAsNewView} title="Save as a new view">Save as new</button>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => listScopeKey && setScopedFocusToday(listScopeKey, !focusToday)}
@@ -328,27 +353,33 @@ export default function ListPage({
         </div>
       )}
 
-      {/* For board view: filter row above content */}
-      {effectiveViewMode === 'board' && (
-        <div className="sh-view dl-groupby shrink-0">
+      {/* For board view: filter row (+ save) above content */}
+      {contentType === 'board' && (
+        <div className="sh-view dl-groupby shrink-0" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <FilterBar
             filters={filters}
-            onChange={(next) => scopeKey && setScopeFilters(scopeKey, next)}
+            onChange={(next) => setWorkingConfig((c) => ({ ...c, filters: next }))}
             statuses={statuses}
             assigneeOptions={assigneeOptions}
             tagOptions={tagOptions}
           />
+          {canEdit && configDirty && (
+            <div className="vt-saverow">
+              <button type="button" className="lv-toolbtn vt-save" onClick={saveView} title="Save this filter to this view">Save view</button>
+              <button type="button" className="lv-toolbtn lv-toolbtn--outline" onClick={saveAsNewView} title="Save as a new view">Save as new</button>
+            </div>
+          )}
         </div>
       )}
 
       {/* Content area + task detail panel */}
       <div className="flex flex-1 overflow-hidden">
-        {effectiveViewMode === 'list' ? (
+        {contentType === 'list' ? (
           <ListView
             listId={activeListId}
             statuses={statuses}
             filters={filters}
-            onClearFilters={() => scopeKey && clearScopeFilters(scopeKey)}
+            onClearFilters={() => setWorkingConfig((c) => ({ ...c, filters: {} }))}
             groupBy={listGroupBy}
             myTasksOnly={myTasksOnly}
             searchQuery={searchQuery}
@@ -356,7 +387,7 @@ export default function ListPage({
             sortBy={sortBy}
             focusToday={focusToday}
           />
-        ) : effectiveViewMode === 'board' ? (
+        ) : contentType === 'board' ? (
           <BoardView
             listId={activeListId}
             statuses={statuses}
@@ -367,6 +398,7 @@ export default function ListPage({
           />
         ) : (
           <WhiteboardView
+            viewId={activeView?.id ?? ''}
             listId={activeListId}
             statuses={statuses}
             canEdit={canEdit}
