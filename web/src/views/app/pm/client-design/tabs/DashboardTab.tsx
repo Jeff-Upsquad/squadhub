@@ -1,11 +1,27 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { SpaceStatus } from '@squadhub/shared';
-import type { RequestRowData } from '../atoms/RequestRow';
+import RequestRow, { type RequestRowData } from '../atoms/RequestRow';
 import type { DesignPlan } from '../../../../../hooks/useClientDesignPlan';
 import RequestsTab from './RequestsTab';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../../../services/api';
 import { isRequestStageDone } from '../../../../../lib/designSpaceLists';
+import { usePMStore } from '../../../../../stores/pmStore';
+
+// Local YYYY-MM-DD (matches work_date storage + useClientDesignPlan boundaries).
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+// Monday-start week, mirroring useClientDesignPlan.startOfWeek.
+function startOfWeek(d: Date): Date {
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  out.setDate(out.getDate() - ((out.getDay() + 6) % 7));
+  return out;
+}
 
 export default function DashboardTab({
   requests,
@@ -21,8 +37,11 @@ export default function DashboardTab({
   folderId: string;
 }) {
   const qc = useQueryClient();
+  const setActiveTask = usePMStore((s) => s.setActiveTask);
   const [codeInput, setCodeInput] = useState('');
   const [showLinkInput, setShowLinkInput] = useState(false);
+  // Which KPI card's task list is open in the side drawer (null = closed).
+  const [openCardKey, setOpenCardKey] = useState<string | null>(null);
 
   const { data: linkStatus } = useQuery({
     queryKey: ['folder-link-status', folderId],
@@ -45,6 +64,23 @@ export default function DashboardTab({
   const active = useMemo(() => requests.filter((r) => !isRequestStageDone(r._stage)), [requests]);
   const inProgress = useMemo(() => requests.filter((r) => r._stage?.category === 'active'), [requests]);
 
+  // Time-window buckets for the hours cards: requests scheduled (work_date) in
+  // the current day / week / month, so each card's drawer lists the work it counts.
+  const { todayRequests, weekRequests, monthRequests } = useMemo(() => {
+    const now = new Date();
+    const todayKey = toISODate(now);
+    const weekStart = toISODate(startOfWeek(now));
+    const weekEnd = toISODate(new Date(startOfWeek(now).getTime() + 6 * 864e5));
+    const monthKey = todayKey.slice(0, 7);
+    return {
+      todayRequests: requests.filter((r) => r.work_date === todayKey),
+      weekRequests: requests.filter(
+        (r) => r.work_date != null && r.work_date >= weekStart && r.work_date <= weekEnd,
+      ),
+      monthRequests: requests.filter((r) => r.work_date?.slice(0, 7) === monthKey),
+    };
+  }, [requests]);
+
   const remainingToday = Math.max(0, plan.dailyHours - plan.usedToday);
   const pctOfToday = plan.dailyHours
     ? Math.round((plan.usedToday / plan.dailyHours) * 100)
@@ -60,6 +96,7 @@ export default function DashboardTab({
   ).size;
 
   const kpis: {
+    key: string;
     label: string;
     dot: string;
     num: number;
@@ -67,8 +104,11 @@ export default function DashboardTab({
     delta: string;
     spark: number[];
     pct: number | null;
+    // Tasks this card represents; shown in the side drawer when the card is clicked.
+    items: RequestRowData[];
   }[] = [
     {
+      key: 'active',
       label: 'Active requests',
       dot: 'var(--cd-progress)',
       num: active.length,
@@ -76,8 +116,10 @@ export default function DashboardTab({
       delta: `${inProgress.length} in progress`,
       spark: [3, 4, 3, 5, 4, 6, 5, active.length % 9 || 7],
       pct: active.length ? Math.round((inProgress.length / active.length) * 100) : null,
+      items: active,
     },
     {
+      key: 'in-progress',
       label: 'In progress',
       dot: 'var(--cd-progress)',
       num: inProgress.length,
@@ -85,8 +127,10 @@ export default function DashboardTab({
       delta: `${designersWorking} designer${designersWorking === 1 ? '' : 's'} working`,
       spark: [1, 2, 2, 1, 3, 2, 3, 2],
       pct: null,
+      items: inProgress,
     },
     {
+      key: 'today',
       label: 'Today',
       dot: 'var(--cd-acc)',
       num: plan.usedToday,
@@ -94,8 +138,10 @@ export default function DashboardTab({
       delta: `${remainingToday.toFixed(1)}h remaining`,
       spark: [1, 3, 2, 4, 3, 2, 3, 2],
       pct: pctOfToday,
+      items: todayRequests,
     },
     {
+      key: 'this-week',
       label: 'This week',
       dot: 'var(--cd-review)',
       num: plan.usedWeek,
@@ -103,8 +149,10 @@ export default function DashboardTab({
       delta: `${pctOfWeek}% of plan`,
       spark: [2, 3, 4, 3, 4, 3, 4, 3],
       pct: pctOfWeek,
+      items: weekRequests,
     },
     {
+      key: 'this-month',
       label: 'This month',
       dot: 'var(--cd-done)',
       num: plan.usedMonth,
@@ -112,6 +160,7 @@ export default function DashboardTab({
       delta: `${pctOfMonth}% used`,
       spark: [8, 7, 6, 5, 4, 4, 3, 3],
       pct: pctOfMonth,
+      items: monthRequests,
     },
   ];
 
@@ -119,13 +168,38 @@ export default function DashboardTab({
     ? kpis
     : kpis.filter((k) => k.label === 'Active requests' || k.label === 'In progress');
 
+  const openCard = openCardKey ? visibleKpis.find((k) => k.key === openCardKey) ?? null : null;
+
+  // Close the drawer on Escape.
+  useEffect(() => {
+    if (!openCard) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setOpenCardKey(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [openCard]);
+
   return (
     <>
       <div className="cd-kpi-row" data-count={visibleKpis.length}>
         {visibleKpis.map((k) => (
           <div
-            className="cd-kpi"
+            className="cd-kpi cd-kpi-clickable"
             key={k.label}
+            role="button"
+            tabIndex={0}
+            aria-label={`${k.label} — view tasks`}
+            onClick={() => setOpenCardKey(k.key)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setOpenCardKey(k.key);
+              }
+            }}
             style={{ '--kpi-accent': k.dot } as React.CSSProperties}
           >
             <div className="cd-kpi-top">
@@ -263,6 +337,62 @@ export default function DashboardTab({
           </>
         }
       />
+
+      {openCard && (
+        <>
+          <div className="cd-drawer-backdrop" onClick={() => setOpenCardKey(null)} />
+          <div className="cd-drawer" role="dialog" aria-label={`${openCard.label} tasks`}>
+            <div className="cd-drawer-head">
+              <span className="cd-kpi-dot" style={{ background: openCard.dot }} />
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--cd-fg-0)' }}>
+                  {openCard.label}
+                </div>
+                <div className="id">
+                  {openCard.items.length} task{openCard.items.length === 1 ? '' : 's'}
+                </div>
+              </div>
+              <div className="spacer" />
+              <button
+                className="cd-topbar-btn"
+                style={{ border: '1px solid var(--cd-br-0)', padding: 5 }}
+                onClick={() => setOpenCardKey(null)}
+                aria-label="Close"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="cd-drawer-body">
+              {openCard.items.length === 0 ? (
+                <div
+                  style={{
+                    padding: 40,
+                    textAlign: 'center',
+                    fontFamily: 'var(--cd-font-mono)',
+                    fontSize: 11,
+                    color: 'var(--cd-fg-3)',
+                  }}
+                >
+                  No tasks in this bucket.
+                </div>
+              ) : (
+                openCard.items.map((r) => (
+                  <RequestRow
+                    key={r.id}
+                    request={r}
+                    onClick={() => {
+                      setActiveTask(r.id);
+                      setOpenCardKey(null);
+                    }}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }
