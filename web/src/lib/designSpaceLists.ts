@@ -87,6 +87,25 @@ export function resolveStage(
 }
 
 /**
+ * Stage names that count as "done" for a request — it has left the open/active
+ * pipeline and is finished. Mirrors the server's DONE_STAGE_NAMES in
+ * elapsedTime.ts: per product spec the active range is "New Request → Changes",
+ * so "Changes" (seeded as category 'done') is deliberately still treated as open
+ * rework, while "For Review" and "Closed" are the finished states.
+ */
+const DONE_STAGE_NAMES = new Set(['For Review', 'Closed']);
+
+/**
+ * True when a request's resolved stage is finished (For Review or Closed) and so
+ * should NOT count as an open/active request. Split by stage NAME rather than
+ * category because "Changes" is category 'done' but is still active work.
+ */
+export function isRequestStageDone(stage: SpaceStatus | null | undefined): boolean {
+  if (!stage) return false;
+  return stage.category === 'closed' || DONE_STAGE_NAMES.has(stage.name);
+}
+
+/**
  * Collapse a stage's fine-grained category into the legacy 4-bucket
  * RequestStatus used by the coarse KPI/report rollups.
  */

@@ -10,7 +10,7 @@ import { useSpace } from '../../../../hooks/useSpaces';
 import { usePMStore } from '../../../../stores/pmStore';
 import { useMeetingPanelStore } from '../../../../stores/meetingPanelStore';
 import { canAtLeast } from '../../../../lib/access';
-import { sortStages, isGeneralTasksListName } from '../../../../lib/designSpaceLists';
+import { sortStages, isGeneralTasksListName, isRequestStageDone } from '../../../../lib/designSpaceLists';
 import ContainerChatButton from '../../../../components/pm/ContainerChatButton';
 import DashboardTab from './tabs/DashboardTab';
 import BoardTab from './tabs/BoardTab';
@@ -200,8 +200,11 @@ export default function ClientDesignDashboard({ folderId }: { folderId: string }
     return requests.filter((r) => r.title?.toLowerCase().includes(q));
   }, [requests, searchQuery]);
 
-  const activeCount = requests.filter((r) => r._stage?.category !== 'closed').length;
-  const doneCount = requests.filter((r) => r._stage?.category === 'closed').length;
+  // Open (Dashboard badge) vs finished (Completed badge): "For Review" and
+  // "Closed" are done, everything up to "Changes" is still open. Shared rule so
+  // the two counts always partition the request set — see isRequestStageDone.
+  const activeCount = requests.filter((r) => !isRequestStageDone(r._stage)).length;
+  const doneCount = requests.filter((r) => isRequestStageDone(r._stage)).length;
 
   const tasksListEntry = folder?.lists?.find((l) => isGeneralTasksListName(l.name));
   const tasksCount = (tasksListEntry as any)?.task_count as number | undefined;
