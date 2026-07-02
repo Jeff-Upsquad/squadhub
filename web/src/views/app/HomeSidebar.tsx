@@ -569,9 +569,10 @@ export default function HomeSidebar({
         </div>
 
         {/* Shared with me section — only show when there are shared items.
-            Hidden for partner-tier users: their shared client folders / spaces /
-            lists are surfaced as roots under AREAS (SpaceTree → PartnerSharedRoots). */}
-        {!isPartner && sharedItems && sharedItems.length > 0 && (
+            Hidden for partner-tier AND client users: their shared client folders /
+            spaces / lists are surfaced as roots under AREAS (SpaceTree →
+            PartnerSharedRoots). */}
+        {!isPartner && !isClient && sharedItems && sharedItems.length > 0 && (
           <>
             {/* Divider */}
             <div className="mx-2 border-t border-[var(--sh-hair)]" />
@@ -622,8 +623,10 @@ export default function HomeSidebar({
         {/* Divider */}
         <div className="mx-2 border-t border-[var(--sh-hair)]" />
 
-        {/* Spaces section — hidden for client users */}
-        {!isClient && (
+        {/* Areas section — shown for all user types. Clients & partners have no
+            owned areas, so SpaceTree surfaces their shared roots here instead of
+            in a separate "Shared with me" section. */}
+        {(
           <>
             <div className="pb-1">
               <SectionHeader
