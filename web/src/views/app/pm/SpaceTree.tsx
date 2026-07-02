@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useSpaces, useSpace, useCreateList } from '../../../hooks/useSpaces';
 import { useSharedTree } from '../../../hooks/useSharedWithMe';
-import { useIsPartner } from '../../../hooks/useUserType';
+import { useIsPartner, useIsClient } from '../../../hooks/useUserType';
 import { useHasPermission } from '../../../hooks/usePermissions';
 import { usePMStore } from '../../../stores/pmStore';
 import { useTabsStore } from '../../../stores/tabsStore';
@@ -668,11 +668,11 @@ function SpaceItem({ spaceId, initial }: { spaceId: string; initial?: Space }) {
   );
 }
 
-// ---- Partner shared roots ----
-// Partner / partner-employee users have no space-level membership, so their
-// shared client folders, design spaces and lists are surfaced here as top-level
-// AREAS roots (flattened — the parent area they can't see is never shown).
-// Create/add affordances stay off: partners only ever view what was shared.
+// ---- Partner / client shared roots ----
+// Partner-tier and client users have no space-level membership, so their shared
+// client folders, design spaces and lists are surfaced here as top-level AREAS
+// roots (flattened — the parent area they can't see is never shown).
+// Create/add affordances stay off: these users only ever view what was shared.
 function PartnerSharedRoots({ workspaceId }: { workspaceId: string }) {
   const { data: tree } = useSharedTree(workspaceId, true);
 
@@ -726,8 +726,11 @@ function PartnerSharedRoots({ workspaceId }: { workspaceId: string }) {
 
 // ---- Main SpaceTree ----
 export default function SpaceTree({ workspaceId, onRequestCreate }: { workspaceId: string; onRequestCreate?: () => void }) {
-  const { data: spaces, isLoading } = useSpaces(workspaceId);
   const isPartner = useIsPartner();
+  const isClient = useIsClient();
+  // Clients aren't allowed on GET /pm/spaces (internal/partner-only) and own no
+  // areas — skip the fetch (it would 403) and rely on their shared roots below.
+  const { data: spaces, isLoading } = useSpaces(isClient ? undefined : workspaceId);
   const [showCreate, setShowCreate] = useState(false);
   const canCreateSpaces = useHasPermission('can_create_spaces');
 
@@ -742,9 +745,10 @@ export default function SpaceTree({ workspaceId, onRequestCreate }: { workspaceI
         {isLoading && (
           <p className="px-3 py-[5px] text-[11.5px] text-[var(--sh-ink-4)]">Loading…</p>
         )}
-        {/* Partners have no owned/member areas — their shared roots render below,
-            so suppress the internal "No areas yet / create" empty state for them. */}
-        {spaces?.length === 0 && !isLoading && !isPartner && (
+        {/* Partners and clients have no owned/member areas — their shared roots
+            render below, so suppress the internal "No areas yet / create" empty
+            state for them. */}
+        {spaces?.length === 0 && !isLoading && !isPartner && !isClient && (
           <div className="px-3 py-2 text-center">
             <p className="text-[11.5px] text-[var(--sh-ink-4)]">No areas yet</p>
             {canCreateSpaces && (
@@ -762,7 +766,7 @@ export default function SpaceTree({ workspaceId, onRequestCreate }: { workspaceI
         ))}
       </div>
 
-      {isPartner && <PartnerSharedRoots workspaceId={workspaceId} />}
+      {(isPartner || isClient) && <PartnerSharedRoots workspaceId={workspaceId} />}
 
       {showCreate && (
         <CreateSpaceModal workspaceId={workspaceId} onClose={() => setShowCreate(false)} />
