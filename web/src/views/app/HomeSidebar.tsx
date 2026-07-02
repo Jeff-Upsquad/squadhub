@@ -347,31 +347,36 @@ export default function HomeSidebar({
             pulse={inboxPulse}
             onClick={() => onChangeView('inbox')}
           />
-          <NavItem
-            icon={
-              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <circle cx="12" cy="13" r="8" />
-                <path d="M12 9v4l2.5 1.5" />
-                <path d="M5 3 3 5M19 3l2 2" />
-              </svg>
-            }
-            label="Day Planner"
-            active={homeView === 'day-planner'}
-            onClick={() => onChangeView('day-planner')}
-          />
-          <NavItem
-            icon={
-              <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <path d="m17 2 4 4-4 4" />
-                <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
-                <path d="m7 22-4-4 4-4" />
-                <path d="M21 13v1a4 4 0 0 1-4 4H3" />
-              </svg>
-            }
-            label="Routines"
-            active={homeView === 'routines'}
-            onClick={() => onChangeView('routines')}
-          />
+          {/* Day Planner + Routines — hidden for client / client-staff users. */}
+          {!isClient && (
+            <>
+              <NavItem
+                icon={
+                  <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <circle cx="12" cy="13" r="8" />
+                    <path d="M12 9v4l2.5 1.5" />
+                    <path d="M5 3 3 5M19 3l2 2" />
+                  </svg>
+                }
+                label="Day Planner"
+                active={homeView === 'day-planner'}
+                onClick={() => onChangeView('day-planner')}
+              />
+              <NavItem
+                icon={
+                  <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <path d="m17 2 4 4-4 4" />
+                    <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+                    <path d="m7 22-4-4 4-4" />
+                    <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+                  </svg>
+                }
+                label="Routines"
+                active={homeView === 'routines'}
+                onClick={() => onChangeView('routines')}
+              />
+            </>
+          )}
           {/* My Tasks — the user's private personal workspace. Available to all users. */}
           <NavItem
             icon={
@@ -384,23 +389,6 @@ export default function HomeSidebar({
             active={homeView === 'my-tasks'}
             onClick={() => onChangeView('my-tasks')}
           />
-          {isClient && (
-            <button
-              onClick={() => onChangeView('published-cards')}
-              className={`flex w-full items-center gap-[9px] rounded-[6px] px-2 py-[5px] text-left text-[13px] transition ${
-                homeView === 'published-cards'
-                  ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
-                  : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
-              }`}
-              style={homeView === 'published-cards' ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
-            >
-              <svg className={`h-[14px] w-[14px] shrink-0 ${homeView === 'published-cards' ? 'text-[var(--sh-ink)]' : 'text-[var(--sh-ink-3)]'}`} fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 7.5h19.5M3.75 6h16.5a1.5 1.5 0 011.5 1.5v10.5a1.5 1.5 0 01-1.5 1.5H3.75a1.5 1.5 0 01-1.5-1.5V7.5A1.5 1.5 0 013.75 6zm3 5.25h4.5m-4.5 3h7.5" />
-              </svg>
-              Published Cards
-            </button>
-          )}
-
           {isPartner && (
             <PartnerOpportunitiesLink
               active={homeView === 'opportunities'}
