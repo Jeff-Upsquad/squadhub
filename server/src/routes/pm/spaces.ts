@@ -13,10 +13,20 @@ const router = Router();
 // (ahead of the folders/lists/shared-with-me routers), so a path-less
 // requireUserType here would gate the WHOLE /pm namespace — which previously
 // 403'd client users out of folders/shared-with-me before they reached those
-// routers. Scope the internal/partner-only gate to the /spaces paths this file
-// actually owns so other /pm routers (which allow clients) can handle their own.
+// routers. Scope the gate to the /spaces paths this file actually owns so other
+// /pm routers (which allow clients) can handle their own.
+//
+// Clients/client_staff are allowed through (mirroring partners) because they get
+// shared into design spaces just like partners do. GET /spaces/:id does its own
+// per-resource access check (checkResourceAccess + getAccessibleDescendants,
+// 403 otherwise) and returns a descendant-scoped view for share-only users, and
+// the write routes are independently gated (POST needs can_create_spaces, PUT/
+// DELETE need manager). Without this, a client's useSpace() call 403'd and the
+// space's status catalog never loaded — so stage resolution failed and every
+// request counted as active (Dashboard "18 open", no status chips, empty
+// Completed) while internal users saw them correctly grouped.
 router.use(requireAuth);
-router.use('/spaces', requireUserType('internal', ...PARTNER_USER_TYPES));
+router.use('/spaces', requireUserType('internal', ...PARTNER_USER_TYPES, 'client', 'client_staff'));
 
 const createSchema = z.object({
   workspace_id: z.string().uuid(),
