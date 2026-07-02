@@ -167,6 +167,11 @@
   transform: translateY(-1px);
 }
 .cd-kpi:hover::before { opacity: 1; }
+.cd-kpi-clickable { cursor: pointer; }
+.cd-kpi-clickable:focus-visible {
+  outline: 2px solid var(--kpi-accent);
+  outline-offset: 2px;
+}
 
 .cd-kpi-top {
   display: flex;
