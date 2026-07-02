@@ -90,6 +90,10 @@ interface PMState {
   homeView: HomeView;
   contextListId: string | null;
   viewMode: ViewMode;
+  // The active named view (tab) per list, keyed by list id. Persisted + synced so
+  // the last-opened tab is restored across reloads and devices. Falls back to the
+  // list's default view when absent.
+  activeViewIdByList: Record<string, string>;
   listGroupBy: ListGroupBy;
   myTasksOnly: boolean;
   collapsedGroups: Record<string, boolean>;
@@ -164,6 +168,7 @@ interface PMState {
   setNewTaskFabVisible: (visible: boolean) => void;
   setHomeView: (v: HomeView) => void;
   setViewMode: (mode: ViewMode) => void;
+  setActiveView: (listId: string, viewId: string) => void;
   setListGroupBy: (g: ListGroupBy) => void;
   setMyTasksOnly: (v: boolean) => void;
   toggleGroupCollapse: (statusId: string) => void;
@@ -228,6 +233,7 @@ export const usePMStore = create<PMState>()(
       homeView: 'hub',
       contextListId: null,
       viewMode: 'list',
+      activeViewIdByList: {},
       listGroupBy: 'status',
       myTasksOnly: false,
       collapsedGroups: {},
@@ -273,6 +279,10 @@ export const usePMStore = create<PMState>()(
       setNewTaskFabVisible: (visible) => set({ newTaskFabVisible: visible }),
       setHomeView: (v) => set({ homeView: v }),
       setViewMode: (mode) => set({ viewMode: mode }),
+      setActiveView: (listId, viewId) => {
+        set((s) => ({ activeViewIdByList: { ...s.activeViewIdByList, [listId]: viewId } }));
+        triggerSave();
+      },
       setListGroupBy: (g) => { set({ listGroupBy: g }); triggerSave(); },
       setMyTasksOnly: (v) => { set({ myTasksOnly: v }); triggerSave(); },
       toggleGroupCollapse: (statusId) =>
@@ -467,6 +477,7 @@ export const usePMStore = create<PMState>()(
       isFocusedToday: (taskId) => get().focusedTodayIds.includes(taskId),
       _hydrateFromServer: (prefs) => {
         const patch: Partial<PMState> = {};
+        if (prefs.activeViewIdByList && typeof prefs.activeViewIdByList === 'object') patch.activeViewIdByList = prefs.activeViewIdByList as Record<string, string>;
         if (prefs.listGroupBy !== undefined) patch.listGroupBy = prefs.listGroupBy as ListGroupBy;
         if (prefs.myTasksOnly !== undefined) patch.myTasksOnly = prefs.myTasksOnly as boolean;
         if (prefs.filtersByScope !== undefined) patch.filtersByScope = prefs.filtersByScope as Record<string, TaskFilterState>;
@@ -509,6 +520,7 @@ export const usePMStore = create<PMState>()(
       _getServerPayload: () => {
         const s = get();
         return {
+          activeViewIdByList: s.activeViewIdByList,
           listGroupBy: s.listGroupBy,
           myTasksOnly: s.myTasksOnly,
           filtersByScope: s.filtersByScope,
@@ -527,7 +539,7 @@ export const usePMStore = create<PMState>()(
           focusBucketsRolloverDate: s.focusBucketsRolloverDate,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', activeViewIdByList: {}, listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',
@@ -542,6 +554,7 @@ export const usePMStore = create<PMState>()(
         homeView: state.homeView,
         contextListId: state.contextListId,
         timer: state.timer,
+        activeViewIdByList: state.activeViewIdByList,
         listGroupBy: state.listGroupBy,
         myTasksOnly: state.myTasksOnly,
         filtersByScope: state.filtersByScope,

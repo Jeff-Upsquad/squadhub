@@ -261,6 +261,15 @@ router.post('/lists', requirePermission('can_create_lists'), async (req: Request
       access_level: 'manager',
     });
 
+    // Seed the default List + Board views so the list opens with tabs. The
+    // default flag follows the list's default_view (whiteboard is added lazily
+    // via the "+" menu, so a 'whiteboard' default just falls back to List).
+    const preferBoard = (insertPayload.default_view as string | undefined) === 'board';
+    await supabaseAdmin.from('list_views').insert([
+      { list_id: data.id, view_type: 'list', name: 'List', position: 0, is_default: !preferBoard, created_by: req.userId! },
+      { list_id: data.id, view_type: 'board', name: 'Board', position: 1, is_default: preferBoard, created_by: req.userId! },
+    ]);
+
     res.status(201).json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) {
