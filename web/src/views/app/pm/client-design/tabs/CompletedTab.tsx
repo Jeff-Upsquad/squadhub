@@ -1,6 +1,7 @@
 import type { SpaceStatus } from '@squadhub/shared';
 import RequestsTab from './RequestsTab';
 import type { RequestRowData } from '../atoms/RequestRow';
+import { isRequestStageDone } from '../../../../../lib/designSpaceLists';
 
 export default function CompletedTab({
   requests,
@@ -13,7 +14,7 @@ export default function CompletedTab({
 }) {
   return (
     <RequestsTab
-      requests={requests.filter((r) => r._stage?.category === 'closed')}
+      requests={requests.filter((r) => isRequestStageDone(r._stage))}
       statuses={statuses}
       listByStatus={listByStatus}
     />

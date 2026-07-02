@@ -5,6 +5,7 @@ import type { DesignPlan } from '../../../../../hooks/useClientDesignPlan';
 import RequestsTab from './RequestsTab';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../../../services/api';
+import { isRequestStageDone } from '../../../../../lib/designSpaceLists';
 
 export default function DashboardTab({
   requests,
@@ -38,9 +39,10 @@ export default function DashboardTab({
       qc.invalidateQueries({ queryKey: ['folder-link-status', folderId] });
     },
   });
-  // "Open" = anything not in the Closed stage; "in progress" = the active
-  // category (Line-up / Assigned / Work in Progress).
-  const active = useMemo(() => requests.filter((r) => r._stage?.category !== 'closed'), [requests]);
+  // "Open" = not yet finished — the active pipeline New Request … Changes.
+  // "For Review" and "Closed" are done, so they drop out (see isRequestStageDone).
+  // "in progress" = the active category (Line-up / Assigned / Work in Progress).
+  const active = useMemo(() => requests.filter((r) => !isRequestStageDone(r._stage)), [requests]);
   const inProgress = useMemo(() => requests.filter((r) => r._stage?.category === 'active'), [requests]);
 
   const remainingToday = Math.max(0, plan.dailyHours - plan.usedToday);
