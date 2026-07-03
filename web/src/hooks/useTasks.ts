@@ -275,6 +275,19 @@ export function useUpdateTask(listId: string | null) {
         }
       }
 
+      // Patch this task's row inside any open parent detail's `subtasks` array —
+      // the subtask checkbox and done counter in TaskDetailPanel render from the
+      // PARENT's cache, not the subtask's own ['task', id] entry.
+      for (const [key, data] of qc.getQueriesData({ queryKey: ['task'] })) {
+        if (!data || typeof data !== 'object') continue;
+        const subtasks = (data as { subtasks?: unknown }).subtasks;
+        const nextSubtasks = patchInArray(subtasks);
+        if (nextSubtasks !== subtasks) {
+          snapshots.push([key, data]);
+          qc.setQueryData(key, { ...(data as object), subtasks: nextSubtasks });
+        }
+      }
+
       // Auto-stop a running per-task timer when this update completes the task.
       if (statusMeansComplete(qc, vars.status)) {
         void stopRunningTimerOnComplete(qc, vars.id);
@@ -301,13 +314,17 @@ export function useUpdateTask(listId: string | null) {
         });
       }
     },
-    onSuccess: (_data, vars) => {
+    onSuccess: (data, vars) => {
       invalidateTaskLists(qc, listId);
       if (vars.list_id && vars.list_id !== listId) {
         invalidateTaskLists(qc, vars.list_id);
         qc.invalidateQueries({ queryKey: ['list', vars.list_id] });
       }
       qc.invalidateQueries({ queryKey: ['task', vars.id] });
+      // Updating a subtask must also refresh the parent's detail — its
+      // `subtasks` array drives the checkbox + N/M counter in the panel.
+      const parentId = (data as { parent_task_id?: string | null } | undefined)?.parent_task_id;
+      if (parentId) qc.invalidateQueries({ queryKey: ['task', parentId] });
       qc.invalidateQueries({ queryKey: ['task-activity', vars.id] });
       qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
       qc.invalidateQueries({ queryKey: ['notifications', 'list'] });
