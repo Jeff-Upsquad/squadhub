@@ -7,6 +7,7 @@ import type {
   DesignShareTask,
   TaskTypeField,
 } from '@squadhub/shared';
+import { resolveFolderCommittedHours } from '../utils/folderCommittedHours';
 
 // IST is the canonical timezone for this system's daily reporting (matches the
 // time-summary bucketing in routes/pm/folders.ts).
@@ -139,23 +140,19 @@ export async function aggregateFolderElapsedSummary(
 }
 
 /**
- * Reads the hours plan (daily/weekly/monthly) from the subscription card linked
- * to this folder. Mirrors GET /pm/folders/:id/link-status but exposes only the
- * derived allotments — never card_code or billing dates.
+ * Reads the hours plan (daily/weekly/monthly) for the subscription card linked
+ * to this folder. Period-aware: committed hours follow the card's assignment-
+ * term timeline, so a mid-engagement plan change reads as a blended monthly
+ * figure. Mirrors GET /pm/folders/:id/link-status but exposes only the derived
+ * allotments — never card_code or billing dates.
  */
 export async function getFolderPlanHours(folderId: string): Promise<DesignSharePlan> {
-  const { data: card } = await supabaseAdmin
-    .from('subscription_cards')
-    .select('plan_snapshot')
-    .eq('linked_folder_id', folderId)
-    .maybeSingle();
-  const snapshot = card?.plan_snapshot as
-    | { plan?: { daily_hours?: number | null; weekly_hours?: number | null } }
-    | null;
-  const daily = snapshot?.plan?.daily_hours != null ? Number(snapshot.plan.daily_hours) : null;
-  const weekly = snapshot?.plan?.weekly_hours != null ? Number(snapshot.plan.weekly_hours) : null;
-  const monthly = daily != null ? daily * 20 : null;
-  return { daily_hours: daily, weekly_hours: weekly, monthly_hours: monthly };
+  const c = await resolveFolderCommittedHours(folderId);
+  return {
+    daily_hours: c.daily_hours,
+    weekly_hours: c.weekly_hours,
+    monthly_hours: c.monthly_hours,
+  };
 }
 
 export interface DesignTaskTypeInfo {

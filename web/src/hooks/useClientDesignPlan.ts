@@ -50,6 +50,15 @@ export function useClientDesignPlan(folderId?: string): DesignPlan {
   const weeklyHours = linkData?.weekly_hours ?? 20;
   const monthlyHours = linkData?.prorated_monthly_hours ?? linkData?.monthly_hours ?? dailyHours * 20;
 
+  // Per-day committed targets (period-aware): a plan change mid-week/month
+  // changes the target on either side of the change date. Falls back to a flat
+  // daily allotment when the server doesn't provide the map.
+  const dailyTargets: Record<string, number> = {};
+  for (const t of (linkData?.daily_targets ?? []) as { date: string; hours: number }[]) {
+    dailyTargets[t.date] = t.hours;
+  }
+  const hasTargets = Object.keys(dailyTargets).length > 0;
+
   const weekStart = startOfWeek(new Date());
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
@@ -98,7 +107,9 @@ export function useClientDesignPlan(folderId?: string): DesignPlan {
     const iso = toISODate(d);
     const secs = summaries.find((s) => s.date === iso)?.total_work_seconds || 0;
     const used = secs / 3600;
-    const allot = isWeekend ? 0 : dailyHours;
+    // Period-aware target for this specific day when available; else the flat
+    // weekday allotment (weekends 0).
+    const allot = hasTargets ? dailyTargets[iso] ?? 0 : isWeekend ? 0 : dailyHours;
     const over = Math.max(0, used - allot);
     return {
       day: label,

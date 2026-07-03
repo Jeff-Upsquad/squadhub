@@ -10,6 +10,7 @@ import {
   aggregateFolderTimeSummary,
   aggregateFolderElapsedSummary,
 } from '../../services/folderShareMetrics';
+import { resolveFolderCommittedHours } from '../../utils/folderCommittedHours';
 
 const router = Router();
 
@@ -683,26 +684,17 @@ router.get('/folders/:id/link-status', async (req: Request, res: Response) => {
 
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
-      .select('card_code, linked_at, plan_snapshot, billing_start_date')
+      .select('card_code, linked_at, billing_start_date')
       .eq('linked_folder_id', folderId)
       .maybeSingle();
 
-    const snapshot = card?.plan_snapshot as { plan?: { daily_hours?: number | null; weekly_hours?: number | null } } | null;
-    const dailyHours = snapshot?.plan?.daily_hours != null ? Number(snapshot.plan.daily_hours) : null;
-    const weeklyHours = snapshot?.plan?.weekly_hours != null ? Number(snapshot.plan.weekly_hours) : null;
-    const monthlyHours = dailyHours != null ? dailyHours * 20 : null;
-
-    let proratedMonthlyHours: number | null = null;
+    // Period-aware committed hours: follows the card's assignment-term timeline,
+    // so a mid-engagement plan change (upgrade/downgrade) yields a blended
+    // monthly figure (old plan before the change date, new plan after) instead
+    // of a wholesale flip. `daily_targets` gives the per-day allotment so the
+    // weekly bars can reflect the boundary too.
+    const committed = await resolveFolderCommittedHours(folderId);
     const billingStartDate = card?.billing_start_date ?? null;
-    if (dailyHours != null && billingStartDate) {
-      const start = new Date(billingStartDate + 'T00:00:00');
-      const now = new Date();
-      if (start.getFullYear() === now.getFullYear() && start.getMonth() === now.getMonth()) {
-        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-        const remainingDays = lastDay - start.getDate() + 1;
-        proratedMonthlyHours = dailyHours * remainingDays;
-      }
-    }
 
     res.json({
       success: true,
@@ -711,10 +703,12 @@ router.get('/folders/:id/link-status', async (req: Request, res: Response) => {
         card_code: card?.card_code ?? null,
         linked_at: card?.linked_at ?? null,
         billing_start_date: billingStartDate,
-        daily_hours: dailyHours,
-        weekly_hours: weeklyHours,
-        monthly_hours: monthlyHours,
-        prorated_monthly_hours: proratedMonthlyHours,
+        daily_hours: committed.daily_hours,
+        weekly_hours: committed.weekly_hours,
+        monthly_hours: committed.monthly_hours,
+        // Kept for backward compat; monthly_hours is already period-aware.
+        prorated_monthly_hours: committed.monthly_hours,
+        daily_targets: committed.daily_targets,
         workspace_id: workspaceId,
       },
     });

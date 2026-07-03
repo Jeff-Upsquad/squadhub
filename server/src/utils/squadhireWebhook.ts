@@ -1060,7 +1060,7 @@ export function startSquadhireSyncSweeper(): NodeJS.Timeout {
 // Manual assignment: single POST attempt
 // ------------------------------------------------------------
 
-function postManualAssignmentOnce(
+async function postManualAssignmentOnce(
   cardId: string,
   talentId: string,
 ): Promise<AttemptOutcome> {
@@ -1068,12 +1068,33 @@ function postManualAssignmentOnce(
   if (!baseUrl) return Promise.resolve({ delivered: false, error: 'squadhire_webhook_url_not_configured' });
   if (!config.squadhireWebhookSecret) return Promise.resolve({ delivered: false, error: 'squadhire_webhook_secret_not_configured' });
 
+  // Direct-assign detection: when this talent is already the card's finalized
+  // recipient (the change-talent swap stamps the card BEFORE notifying), tell
+  // SquadHire to record them as selected/assigned immediately — not as a
+  // pending offer, which on an assigned card would render in the talent's
+  // Expired tab. Derived from the card (not a parameter) so the retry sweeper
+  // sends the same flag as the inline attempt.
+  let assigned = false;
+  try {
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('selected_recipient_type, selected_recipient_id')
+      .eq('id', cardId)
+      .maybeSingle();
+    assigned =
+      (card as any)?.selected_recipient_type === 'talent' &&
+      (card as any)?.selected_recipient_id === talentId;
+  } catch {
+    // Fall through as a plain offer — SquadHire-side idempotency keeps this safe.
+  }
+
   const url = baseUrl.endsWith('/') ? `${baseUrl}manual-assignments` : `${baseUrl}/manual-assignments`;
   const body = {
     type: 'manual_assignment',
     card_id: cardId,
     talent_id: talentId,
     assigned_at: new Date().toISOString(),
+    ...(assigned ? { assigned: true } : {}),
   };
 
   const controller = new AbortController();
@@ -1170,12 +1191,16 @@ export function startManualAssignmentSweeper(): NodeJS.Timeout {
       // the admin clicks "Broadcast to these N users". Released rows whose
       // SquadHire HTTP call failed (squadhire_notified_at still null) are
       // still picked up here so they get retried in the background.
+      // Archived rows are excluded: a talent swapped out (change-talent) or a
+      // reopened round must not get a ghost retry offer for a card they were
+      // just removed from.
       const { data: rows, error } = await supabaseAdmin
         .from('subscription_card_external_recipients')
         .select('id, card_id, external_user_id')
         .eq('assigned_manually', true)
         .not('notified_at', 'is', null)
         .is('squadhire_notified_at', null)
+        .is('archived_at', null)
         .lt('squadhire_notify_attempts', MAX_SYNC_ATTEMPTS)
         .order('created_at', { ascending: true })
         .limit(SWEEPER_BATCH_SIZE);
@@ -1202,24 +1227,22 @@ export function startManualAssignmentSweeper(): NodeJS.Timeout {
 
 // ------------------------------------------------------------
 // Public: outbound notification when an admin removes a previously-
-// assigned talent. SquadHire deletes its mirror recipient row so the
-// card stops appearing in the talent's subscription tab. Best-effort,
-// single attempt. Idempotent on the receiving side.
+// assigned talent. SquadHire retires its mirror recipient row so the
+// card stops appearing in the talent's subscription tab. Inline retries
+// (same backoff as manual assignment) and the outcome is returned so
+// callers ending a LIVE engagement can surface a failure to the admin —
+// a lost removal would leave the old talent seeing the client forever.
+// Idempotent on the receiving side.
 // ------------------------------------------------------------
 
-export async function notifySquadhireOfManualRemoval(
+function postManualRemovalOnce(
   cardId: string,
   talentId: string,
-): Promise<void> {
+  notify: boolean,
+): Promise<AttemptOutcome> {
   const baseUrl = config.squadhireWebhookUrl;
-  if (!baseUrl) {
-    console.warn('[squadhire-webhook] manual-removal skipped: url not configured');
-    return;
-  }
-  if (!config.squadhireWebhookSecret) {
-    console.warn('[squadhire-webhook] manual-removal skipped: secret not configured');
-    return;
-  }
+  if (!baseUrl) return Promise.resolve({ delivered: false, error: 'squadhire_webhook_url_not_configured' });
+  if (!config.squadhireWebhookSecret) return Promise.resolve({ delivered: false, error: 'squadhire_webhook_secret_not_configured' });
 
   const url = baseUrl.endsWith('/')
     ? `${baseUrl}manual-assignments/remove`
@@ -1229,29 +1252,51 @@ export async function notifySquadhireOfManualRemoval(
     card_id: cardId,
     talent_id: talentId,
     removed_at: new Date().toISOString(),
+    ...(notify ? { notify: true } : {}),
   };
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-SquadHub-Signature': config.squadhireWebhookSecret,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      console.warn(`[squadhire-webhook] manual-removal http_${res.status}`);
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn('[squadhire-webhook] manual-removal failed', msg);
-  } finally {
-    clearTimeout(timer);
+  return fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-SquadHub-Signature': config.squadhireWebhookSecret,
+    },
+    body: JSON.stringify(body),
+    signal: controller.signal,
+  })
+    .then((res) => {
+      if (!res.ok) return { delivered: false, error: `http_${res.status}` } as AttemptOutcome;
+      return { delivered: true } as AttemptOutcome;
+    })
+    .catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { delivered: false, error: msg.slice(0, 500) } as AttemptOutcome;
+    })
+    .finally(() => clearTimeout(timer));
+}
+
+export async function notifySquadhireOfManualRemoval(
+  cardId: string,
+  talentId: string,
+  opts?: {
+    /** Push an "assignment updated" notification to the removed talent.
+     *  Used by change-talent (a live engagement ending); pre-broadcast
+     *  hand-pick removals stay silent as before. */
+    notify?: boolean;
+  },
+): Promise<AttemptOutcome> {
+  let lastOutcome: AttemptOutcome = { delivered: false, error: 'not_attempted' };
+  for (let i = 0; i < INLINE_ATTEMPTS; i++) {
+    if (INLINE_BACKOFF_MS[i] > 0) await sleep(INLINE_BACKOFF_MS[i]);
+    lastOutcome = await postManualRemovalOnce(cardId, talentId, opts?.notify ?? false);
+    if (lastOutcome.delivered) break;
   }
+  if (!lastOutcome.delivered) {
+    console.warn('[squadhire-webhook] manual-removal failed', cardId, talentId, lastOutcome.error);
+  }
+  return lastOutcome;
 }
 
 // ------------------------------------------------------------

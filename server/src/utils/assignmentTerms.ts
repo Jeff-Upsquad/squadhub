@@ -13,6 +13,7 @@
 // paths share one consistent ledger.
 // ============================================================
 import { supabaseAdmin } from '../supabase';
+import { resolveCardBilling } from './cardBilling';
 
 interface EnsureTermInput {
   cardId: string;
@@ -71,6 +72,16 @@ export async function ensureActiveAssignmentTerm(input: EnsureTermInput): Promis
       }
     }
 
+    // Freeze the plan + resolved pricing onto the term (migration 152) so a
+    // later in-place plan change (upgrade/downgrade) can't retroactively reprice
+    // this slice. Best-effort — a billing hiccup shouldn't block the term.
+    let billing: Awaited<ReturnType<typeof resolveCardBilling>> = null;
+    try {
+      billing = await resolveCardBilling(cardId);
+    } catch (e) {
+      console.error('[assignmentTerms] resolveCardBilling failed', e);
+    }
+
     await supabaseAdmin.from('subscription_assignment_terms').insert({
       card_id: cardId,
       recipient_type: recipientType,
@@ -81,6 +92,10 @@ export async function ensureActiveAssignmentTerm(input: EnsureTermInput): Promis
       assigned_date: assignedIso,
       work_start_date: assignedIso.slice(0, 10),
       status: 'active',
+      plan_snapshot: billing?.plan_snapshot ?? null,
+      partner_price: billing?.partner_price ?? null,
+      subscription_price: billing?.subscription_price ?? null,
+      currency: billing?.currency ?? null,
     });
   } catch (err) {
     console.error('[assignmentTerms] ensureActiveAssignmentTerm failed', err);
@@ -91,17 +106,25 @@ export async function ensureActiveAssignmentTerm(input: EnsureTermInput): Promis
  * Close every active term for a card (records the work-end date). Mirrors the
  * admin un-assign flow. Best-effort. Used when a selection is undone / a card
  * is reopened so we don't keep billing an engagement that was reversed.
+ *
+ * `effectiveDate` (YYYY-MM-DD) lets a plan change / reassignment end the old
+ * slice on the intended date rather than the click date, so billing pro-rates
+ * at the true boundary. The `unassigned_date` audit timestamp is always now.
  */
-export async function endActiveAssignmentTermsForCard(cardId: string): Promise<void> {
+export async function endActiveAssignmentTermsForCard(
+  cardId: string,
+  effectiveDate?: string,
+): Promise<void> {
   try {
-    const endIso = new Date().toISOString();
+    const nowIso = new Date().toISOString();
+    const workEnd = effectiveDate ?? nowIso.slice(0, 10);
     await supabaseAdmin
       .from('subscription_assignment_terms')
       .update({
-        unassigned_date: endIso,
-        work_end_date: endIso.slice(0, 10),
+        unassigned_date: nowIso,
+        work_end_date: workEnd,
         status: 'ended',
-        updated_at: endIso,
+        updated_at: nowIso,
       })
       .eq('card_id', cardId)
       .eq('status', 'active');
