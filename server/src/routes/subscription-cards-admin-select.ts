@@ -552,7 +552,7 @@ router.post('/subscription-cards/:id/rebroadcast', async (req: Request, res: Res
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, squadhire_synced_at')
+      .select('id, state, distribution, squadhire_synced_at')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
@@ -560,6 +560,20 @@ router.post('/subscription-cards/:id/rebroadcast', async (req: Request, res: Res
     if (card.state !== 'published') {
       res.status(409).json({ success: false, error: 'Card must be published to broadcast' });
       return;
+    }
+
+    // Rebroadcasting IS a broadcast: the pool gets notified immediately. A
+    // soft-published (manual) card therefore graduates to broadcast
+    // distribution here — otherwise the recipients view keeps mislabeling the
+    // already-notified pool as "queued — not broadcast yet", and (for a
+    // never-synced card) the ingest would skip the fan-out entirely. Same
+    // upgrade the requests router's /broadcast performs. Done BEFORE payload
+    // build so the delivered card carries distribution='broadcast'.
+    if ((card as any).distribution === 'manual') {
+      await supabaseAdmin
+        .from('subscription_cards')
+        .update({ distribution: 'broadcast' })
+        .eq('id', cardId);
     }
 
     if (!card.squadhire_synced_at) {
@@ -1328,7 +1342,14 @@ router.post('/subscription-cards/:id/resume', async (req: Request, res: Response
         console.error('[resume] notify squadhire selection-undo failed', err);
       });
 
-      // Re-fan-out (same logic as /rebroadcast).
+      // Re-fan-out (same logic as /rebroadcast). A rebroadcast IS a broadcast —
+      // graduate a soft-published card so the pool's notified state renders
+      // correctly and first-delivery ingest fans out.
+      await supabaseAdmin
+        .from('subscription_cards')
+        .update({ distribution: 'broadcast' })
+        .eq('id', cardId)
+        .eq('distribution', 'manual');
       const { data: sync } = await supabaseAdmin
         .from('subscription_cards')
         .select('squadhire_synced_at')
