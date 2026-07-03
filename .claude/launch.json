@@ -415,6 +415,19 @@
       "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/adoring-shaw-005a72/web' && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3131"],
       "port": 3131,
       "autoPort": true
+    },
+    {
+      "name": "Zealous Payne Server",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/zealous-payne-bbbb5e' && PORT=4031 exec npm run dev -w server"],
+      "port": 4031
+    },
+    {
+      "name": "Zealous Payne Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/zealous-payne-bbbb5e/web' && INTERNAL_API_URL=http://localhost:4031 exec npx next dev -p 3145"],
+      "port": 3145,
+      "autoPort": true
     }
   ]
 }

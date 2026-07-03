@@ -1,4 +1,5 @@
-import type { TaskTypeField } from '@squadhub/shared';
+import type { SpaceStatus, TaskTypeField } from '@squadhub/shared';
+import { getTaskStatusCategory } from '@squadhub/shared';
 
 /** Short scalar field types that can pair 2-up in the brief form. Long-form
  *  controls (textarea, multi_select, select) always span full width. */
@@ -27,6 +28,19 @@ function hashHue(input: string): number {
   let h = 0;
   for (let i = 0; i < input.length; i++) h = (h * 31 + input.charCodeAt(i)) | 0;
   return Math.abs(h) % 360;
+}
+
+/** Does this status string represent a completed task? Handles the three forms
+ *  tasks actually store: the literal category ('done'/'closed'), a built-in
+ *  catalog key (task-type statuses), and a custom space status NAME resolved
+ *  against the space's statuses (design/video spaces store names). */
+export function statusIsComplete(status: string | null | undefined, statuses: SpaceStatus[]): boolean {
+  if (!status) return false;
+  if (status === 'done' || status === 'closed') return true;
+  const cat = getTaskStatusCategory(status);
+  if (cat === 'done' || cat === 'closed') return true;
+  const match = statuses.find((s) => s.name === status);
+  return match?.category === 'done' || match?.category === 'closed';
 }
 
 export function avatarColor(seed: string | undefined | null): string {

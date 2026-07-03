@@ -281,12 +281,24 @@ export function useUpdateTask(listId: string | null) {
       }
       return { snapshots };
     },
-    onError: (_err, _vars, context) => {
+    onError: (err, vars, context) => {
       const snapshots = (context as { snapshots?: Array<[readonly unknown[], unknown]> } | undefined)?.snapshots;
       if (snapshots) {
         for (const [key, data] of snapshots) {
           qc.setQueryData(key, data);
         }
+      }
+      // Server-side completion gate (open subtasks / unchecked checklist
+      // items): the write bounced and the optimistic update just rolled back —
+      // explain why, wherever the click happened (board drag, home rows and
+      // the status dropdown all funnel through this mutation).
+      const resp = (err as { response?: { data?: { code?: string; error?: string } } })?.response?.data;
+      if (resp?.code === 'INCOMPLETE_ITEMS') {
+        showToastCard({
+          subtitle: 'Task not completed',
+          title: resp.error || 'Complete all subtasks and checklist items first',
+          onClick: () => usePMStore.getState().setActiveTask(vars.id),
+        });
       }
     },
     onSuccess: (_data, vars) => {

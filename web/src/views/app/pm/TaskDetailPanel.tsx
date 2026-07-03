@@ -22,10 +22,11 @@ import type { SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority, 
 import { getTaskStatusDef, describeTaskRecurrence } from '@squadhub/shared';
 import AssigneePicker from './AssigneePicker';
 import NoAssigneeCompleteDialog from './NoAssigneeCompleteDialog';
+import IncompleteItemsDialog from './IncompleteItemsDialog';
 import MentionPicker from '../../../components/MentionPicker';
 import DatePicker from './DatePicker';
 import RepeatPicker from './RepeatPicker';
-import { nextQuickDate, groupDesignFields } from './taskHelpers';
+import { nextQuickDate, groupDesignFields, statusIsComplete } from './taskHelpers';
 import EmergencyConfirm from './EmergencyConfirm';
 import TaskStatusPicker from './TaskStatusPicker';
 import ListPickerCombobox from './ListPickerCombobox';
@@ -391,6 +392,9 @@ export default function TaskDetailPanel({
   const [celebratingSubtaskId, setCelebratingSubtaskId] = useState<string | null>(null);
   const [noAssigneePrompt, setNoAssigneePrompt] = useState<DOMRect | null>(null);
   const [assignCompleteAnchor, setAssignCompleteAnchor] = useState<DOMRect | null>(null);
+  // Completion gate — set when a check-off is blocked because the task still
+  // has open subtasks / unchecked checklist items. Blocking: no complete-anyway.
+  const [incompletePrompt, setIncompletePrompt] = useState<{ rect: DOMRect; subtasks: number; checklist: number } | null>(null);
 
   useEffect(() => {
     if (!effectiveTaskId) { setMounted(false); return undefined; }
@@ -667,6 +671,22 @@ export default function TaskDetailPanel({
         next = 'open';
       }
       updateTask.mutate({ id: task.id, status: next } as any);
+      return;
+    }
+    // Completion gate: every subtask and checklist item must be complete
+    // before the task itself can close. Blocking — unlike the assignee
+    // prompt below there is no complete-anyway. Mirrors TaskRow.
+    const openSubs = (task.subtasks || [])
+      .filter((s) => !statusIsComplete((s as any).status as string | undefined, statuses)).length;
+    const openItems = (checklists || [])
+      .flatMap((c) => c.items || [])
+      .filter((i) => !i.is_done).length;
+    if ((openSubs > 0 || openItems > 0) && e) {
+      setIncompletePrompt({
+        rect: (e.currentTarget as HTMLElement).getBoundingClientRect(),
+        subtasks: openSubs,
+        checklist: openItems,
+      });
       return;
     }
     // Completing with nobody assigned: ask first (assign to me / someone else /
@@ -2112,6 +2132,15 @@ export default function TaskDetailPanel({
           anchorRect={assigneeAnchorRect}
           onChange={(ids) => updateTask.mutate({ id: task.id, assignee_ids: ids })}
           onClose={() => setAssigneePickerOpen(false)}
+        />
+      )}
+
+      {incompletePrompt && task && (
+        <IncompleteItemsDialog
+          anchorRect={incompletePrompt.rect}
+          openSubtasks={incompletePrompt.subtasks}
+          openChecklistItems={incompletePrompt.checklist}
+          onClose={() => setIncompletePrompt(null)}
         />
       )}
 

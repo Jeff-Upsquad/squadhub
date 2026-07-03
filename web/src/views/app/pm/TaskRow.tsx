@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Task, SpaceStatus, TaskPriority } from '@squadhub/shared';
+import { useQueryClient } from '@tanstack/react-query';
+import type { Task, SpaceStatus, TaskPriority, TaskChecklist } from '@squadhub/shared';
+import api from '../../../services/api';
 import { usePMStore } from '../../../stores/pmStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useUpdateTask } from '../../../hooks/useTasks';
@@ -8,9 +10,10 @@ import { useTaskTypes } from '../../../hooks/useTaskTypes';
 import { useActiveWorkBlockRun, useRecordWorkBlockCompletion } from '../../../hooks/useWorkBlocks';
 import { useActiveGroupRun, useRecordGroupRunCompletion } from '../../../hooks/useGroupRuns';
 import { isTaskFocused } from '../../../lib/taskGrouping';
-import { avatarColor, initialOf, formatWhen, nextQuickDate } from './taskHelpers';
+import { avatarColor, initialOf, formatWhen, nextQuickDate, statusIsComplete } from './taskHelpers';
 import AssigneePicker from './AssigneePicker';
 import NoAssigneeCompleteDialog from './NoAssigneeCompleteDialog';
+import IncompleteItemsDialog from './IncompleteItemsDialog';
 import DatePicker from './DatePicker';
 import PriorityPicker, { PRIORITY_META } from './PriorityPicker';
 
@@ -90,7 +93,11 @@ export default function TaskRow({
   // shows the people picker for the "assign to someone else" path.
   const [noAssigneePrompt, setNoAssigneePrompt] = useState<DOMRect | null>(null);
   const [assignCompleteAnchor, setAssignCompleteAnchor] = useState<DOMRect | null>(null);
+  // Completion gate — set when a check-off is blocked because the task still
+  // has open subtasks / unchecked checklist items. Blocking: no complete-anyway.
+  const [incompletePrompt, setIncompletePrompt] = useState<{ rect: DOMRect; subtasks: number; checklist: number } | null>(null);
   const currentUser = useAuthStore((s) => s.user);
+  const qc = useQueryClient();
 
   const hasSubtasks = !!(task.subtasks && task.subtasks.length > 0);
   const isActive = activeTaskId === task.id;
@@ -136,7 +143,7 @@ export default function TaskRow({
     updateTask.mutate(payload as any, { onError: () => { unmarkFading(task.id); } });
   };
 
-  const handleGlyphClick = (e: React.MouseEvent) => {
+  const handleGlyphClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!canEdit) return;
     // Re-opening a completed task: flip straight back to todo, no prompt.
@@ -144,10 +151,39 @@ export default function TaskRow({
       updateTask.mutate({ id: task.id, status: 'todo' } as any);
       return;
     }
+    // Capture the anchor now — e.currentTarget is gone after the await below.
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    // Completion gate: a task with open subtasks or unchecked checklist items
+    // can't be completed. List rows don't carry that data, so fetch it at
+    // click time (cached under the same keys the detail panel uses). Fails
+    // open on fetch errors — the server enforces the same rule as a backstop.
+    try {
+      const [detail, checklists] = await Promise.all([
+        qc.fetchQuery<Task>({
+          queryKey: ['task', task.id],
+          queryFn: async () => (await api.get(`/pm/tasks/${task.id}`)).data.data,
+          staleTime: 10_000,
+        }),
+        qc.fetchQuery<TaskChecklist[]>({
+          queryKey: ['checklists', task.id],
+          queryFn: async () => (await api.get(`/pm/tasks/${task.id}/checklists`)).data.data,
+          staleTime: 10_000,
+        }),
+      ]);
+      const openSubtasks = (detail?.subtasks || [])
+        .filter((s) => !statusIsComplete((s as any).status as string | undefined, statuses)).length;
+      const openChecklist = (checklists || [])
+        .flatMap((c) => c.items || [])
+        .filter((i) => !i.is_done).length;
+      if (openSubtasks > 0 || openChecklist > 0) {
+        setIncompletePrompt({ rect, subtasks: openSubtasks, checklist: openChecklist });
+        return;
+      }
+    } catch { /* fail open — the server-side gate still blocks */ }
     // Completing a task with nobody assigned: ask first (assign to me / someone
     // else / complete as-is) instead of silently closing it unassigned.
     if (assignees.length === 0) {
-      setNoAssigneePrompt((e.currentTarget as HTMLElement).getBoundingClientRect());
+      setNoAssigneePrompt(rect);
       return;
     }
     completeTask();
@@ -501,6 +537,19 @@ export default function TaskRow({
           anchorRect={assigneeAnchor}
           onChange={(ids) => updateTask.mutate({ id: task.id, assignee_ids: ids, list_id: effectiveListId || undefined } as any)}
           onClose={() => setAssigneeAnchor(null)}
+        />
+      )}
+
+      {incompletePrompt && (
+        <IncompleteItemsDialog
+          anchorRect={incompletePrompt.rect}
+          openSubtasks={incompletePrompt.subtasks}
+          openChecklistItems={incompletePrompt.checklist}
+          onViewTask={() => {
+            setIncompletePrompt(null);
+            setActiveTask(task.id);
+          }}
+          onClose={() => setIncompletePrompt(null)}
         />
       )}
 
