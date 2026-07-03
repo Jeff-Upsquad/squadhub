@@ -39,7 +39,29 @@ router.get('/', async (req: Request, res: Response) => {
 
     const { data, error } = await query;
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
-    res.json({ success: true, data: data || [] });
+
+    // Attach the card lifecycle so the view can badge paused / cancelled
+    // engagements (billing already reflects them via the ended terms).
+    const rows = (data || []) as any[];
+    const cardIds = [...new Set(rows.map((t) => t.card_id).filter(Boolean))];
+    const cardById = new Map<string, { state: string; paused_at: string | null; cancelled_at: string | null }>();
+    if (cardIds.length) {
+      const { data: cards } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('id, state, paused_at, cancelled_at')
+        .in('id', cardIds);
+      (cards || []).forEach((c: any) =>
+        cardById.set(c.id, { state: c.state, paused_at: c.paused_at ?? null, cancelled_at: c.cancelled_at ?? null }),
+      );
+    }
+    const withCard = rows.map((t) => ({
+      ...t,
+      card_state: cardById.get(t.card_id)?.state ?? null,
+      card_paused_at: cardById.get(t.card_id)?.paused_at ?? null,
+      card_cancelled_at: cardById.get(t.card_id)?.cancelled_at ?? null,
+    }));
+
+    res.json({ success: true, data: withCard });
   } catch (err: any) {
     console.error('[subscription-assignments] list error', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
@@ -190,6 +212,9 @@ router.get('/users', async (req: Request, res: Response) => {
       missing_pricing: boolean;
     };
     const groups = new Map<string, Group>();
+    // Cards already counted toward a recipient's weekly commitment (dedupe
+    // across multiple same-month terms on one card — pause/resume, plan change).
+    const countedWeeklyCards = new Map<string, Set<string>>();
 
     for (const t of terms) {
       const key = recipientKey(t);
@@ -215,7 +240,14 @@ router.get('/users', async (req: Request, res: Response) => {
       const start = t.work_start_date ?? t.assigned_date;
       const end = t.work_end_date ?? t.unassigned_date ?? null;
       const activeDays = activeDaysInMonth(start, end, year, month, todayIso);
-      if (activeDays > 0 && b?.weekly_hours != null) g.committed_weekly_hours += b.weekly_hours;
+      // Weekly commitment counts once per CARD, not per term — a same-month
+      // pause+resume (or plan change) yields multiple terms on one card and
+      // would otherwise double the recipient's committed hours/utilization.
+      if (activeDays > 0 && b?.weekly_hours != null && !countedWeeklyCards.get(key)?.has(t.card_id)) {
+        g.committed_weekly_hours += b.weekly_hours;
+        if (!countedWeeklyCards.has(key)) countedWeeklyCards.set(key, new Set());
+        countedWeeklyCards.get(key)!.add(t.card_id);
+      }
       if (b) {
         if (b.missing_partner_price) g.missing_pricing = true;
         const pay = prorateMonthly(b.partner_price, start, end, year, month, todayIso);
@@ -296,6 +328,9 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
 
     const paymentByCurrency = new Map<string, number>();
     let committedWeekly = 0;
+    // Weekly commitment counts once per CARD (multiple same-month terms on one
+    // card — pause/resume, plan change — must not double the figure).
+    const weeklyCounted = new Set<string>();
 
     const cards = terms.map((t) => {
       const b = resolveTermBilling(t, billing.get(t.card_id));
@@ -307,7 +342,10 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
         const cur = b?.currency || 'UNKNOWN';
         paymentByCurrency.set(cur, (paymentByCurrency.get(cur) || 0) + monthPayment);
       }
-      if (activeDays > 0 && b?.weekly_hours != null) committedWeekly += b.weekly_hours;
+      if (activeDays > 0 && b?.weekly_hours != null && !weeklyCounted.has(t.card_id)) {
+        committedWeekly += b.weekly_hours;
+        weeklyCounted.add(t.card_id);
+      }
       return {
         term_id: t.id,
         card_id: t.card_id,

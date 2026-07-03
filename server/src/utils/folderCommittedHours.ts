@@ -27,11 +27,17 @@ export * from './folderCommittedHoursMath';
 
 /** Build the plan timeline for the card linked to this folder from its terms. */
 export async function getFolderPlanTimeline(folderId: string): Promise<FolderPlanTimeline> {
-  const { data: card } = await supabaseAdmin
+  // linked_folder_id has no unique constraint, so a folder can accumulate more
+  // than one card over its life (e.g. a cancelled subscription followed by its
+  // replacement). maybeSingle() would ERROR on that and read as "no card" —
+  // instead prefer the live card, else the most recently linked.
+  const { data: cards } = await supabaseAdmin
     .from('subscription_cards')
-    .select('id, plan_snapshot, working_days, billing_start_date, linked_at')
+    .select('id, plan_snapshot, working_days, billing_start_date, linked_at, state, paused_at')
     .eq('linked_folder_id', folderId)
-    .maybeSingle();
+    .order('linked_at', { ascending: false, nullsFirst: false });
+  const list = (cards || []) as any[];
+  const card = list.find((c) => c.state !== 'closed') ?? list[0] ?? null;
   if (!card) return { hasCard: false, segments: [], workingDays: parseWorkingDays(null) };
 
   const workingDays = parseWorkingDays((card as any).working_days);
@@ -52,14 +58,26 @@ export async function getFolderPlanTimeline(folderId: string): Promise<FolderPla
     segments.push({ start, end, daily: snapDaily(snap), weekly: snapWeekly(snap) });
   }
 
-  // Fallback: card linked but no terms recorded — one open segment from the
-  // billing start / link date using the card's live snapshot.
-  if (segments.length === 0 && cardSnap) {
+  // Fallback: card linked but no terms recorded (pre-ledger engagements) —
+  // one segment from the billing start / link date using the card's live
+  // snapshot. Term-less cards have nothing for pause/cancel to end, so cap
+  // the segment at the pause date (or drop it when the card is closed) —
+  // otherwise a paused/cancelled legacy card keeps reporting full committed
+  // hours forever.
+  if (segments.length === 0 && cardSnap && (card as any).state !== 'closed') {
     const linkedAt = (card as any).linked_at;
     const start =
       (card as any).billing_start_date ??
       (typeof linkedAt === 'string' ? linkedAt.slice(0, 10) : istTodayISO());
-    segments.push({ start, end: null, daily: snapDaily(cardSnap), weekly: snapWeekly(cardSnap) });
+    const pausedAt = (card as any).paused_at as string | null;
+    // Pause-day is unbilled (terms end the day before) — mirror that here.
+    let end: string | null = null;
+    if (pausedAt) {
+      const d = new Date(String(pausedAt).slice(0, 10) + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() - 1);
+      end = d.toISOString().slice(0, 10);
+    }
+    segments.push({ start, end, daily: snapDaily(cardSnap), weekly: snapWeekly(cardSnap) });
   }
 
   return { hasCard: true, segments, workingDays };

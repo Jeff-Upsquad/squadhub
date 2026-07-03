@@ -14,6 +14,8 @@ export type CardEventType =
   | 'assigned'
   | 'plan_changed'
   | 'talent_changed'
+  | 'paused'
+  | 'resumed'
   | 'recipient_accepted'
   | 'recipient_declined';
 

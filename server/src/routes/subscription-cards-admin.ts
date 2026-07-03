@@ -11,7 +11,10 @@ import {
   previewSquadhireMatches,
   notifySquadhireOfCardRecall,
   notifySquadhireOfManualAssignment,
+  notifySquadhireOfManualRemoval,
 } from '../utils/squadhireWebhook';
+import { endActiveAssignmentTermsForCard } from '../utils/assignmentTerms';
+import { handOffSpaceToNewTalent } from '../utils/spaceTalentHandoff';
 import {
   attachSubmissionToExistingClient,
   findExistingClientForSubmission,
@@ -1377,16 +1380,71 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
 
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, parent_card_id')
+      .select('id, state, parent_card_id, paused_at, selected_recipient_type, selected_recipient_id')
       .eq('id', cardId)
       .maybeSingle();
     if (!card) {
       res.status(404).json({ success: false, error: 'Card not found' });
       return;
     }
-    if (card.state !== 'published') {
-      res.status(409).json({ success: false, error: 'Only published cards can be cancelled' });
+    if (card.state !== 'published' && card.state !== 'assigned') {
+      res.status(409).json({ success: false, error: 'Only published or assigned cards can be cancelled' });
       return;
+    }
+
+    // Cancelling a LIVE (assigned, possibly paused) subscription: billing stops
+    // today — the active term ends the day before (no-op when already paused,
+    // pause ended it) — and the assigned talent is retired on SquadHire with an
+    // "assignment updated" push. The card then follows the normal close path.
+    const cancelWarnings: string[] = [];
+    if (card.state === 'assigned') {
+      const todayIst = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const dayBefore = new Date(new Date(todayIst + 'T00:00:00Z').getTime() - 86400000)
+        .toISOString()
+        .slice(0, 10);
+      await endActiveAssignmentTermsForCard(cardId, dayBefore);
+
+      // The cancel day is unbilled — drop today's auto-elapsed rows (manual
+      // overrides are kept), mirroring the pause flow.
+      const { data: linkRow } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('linked_folder_id')
+        .eq('id', cardId)
+        .maybeSingle();
+      if ((linkRow as any)?.linked_folder_id) {
+        await supabaseAdmin
+          .from('elapsed_time_entries')
+          .delete()
+          .eq('folder_id', (linkRow as any).linked_folder_id)
+          .eq('date', todayIst)
+          .eq('source', 'auto');
+      }
+
+      if (card.selected_recipient_type === 'talent' && card.selected_recipient_id) {
+        await supabaseAdmin
+          .from('subscription_card_external_recipients')
+          .update({ archived_at: new Date().toISOString() })
+          .eq('card_id', cardId)
+          .eq('external_user_id', card.selected_recipient_id)
+          .is('archived_at', null);
+        const removal = await notifySquadhireOfManualRemoval(cardId, card.selected_recipient_id, { notify: true });
+        if (!removal.delivered) {
+          cancelWarnings.push('SquadHire could not be updated — the talent may still see this client. Check the integration.');
+        }
+      }
+
+      // The engagement is over: unwind the linked space (default assignee,
+      // open tasks off the talent, client access), same as a talent change
+      // with no replacement. Best-effort.
+      if (card.selected_recipient_type && card.selected_recipient_id) {
+        handOffSpaceToNewTalent({
+          cardId,
+          oldRecipientType: card.selected_recipient_type as 'talent' | 'partner',
+          oldRecipientId: card.selected_recipient_id,
+          newRecipientType: null,
+          newRecipientId: null,
+        }).catch((err) => console.error('[admin-cancel] space hand-off failed', err));
+      }
     }
 
     const [{ count: acceptedPartners }, { count: acceptedTalents }] = await Promise.all([
@@ -1423,6 +1481,7 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
         state: 'closed' as const,
         closed_at: now,
         cancelled_at: now,
+        paused_at: null,
         squadhire_synced_at: null,
         squadhire_sync_attempts: 0,
         squadhire_sync_last_error: null,
@@ -1485,10 +1544,14 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
       actorId: (req as any).userId ?? null,
       actorType: 'admin',
       actorLabel: (req as any).userName ?? null,
-      metadata: { had_acceptances: hasAcceptances, is_secondary: isSecondary },
+      metadata: { had_acceptances: hasAcceptances, is_secondary: isSecondary, was_assigned: card.state === 'assigned' },
     });
 
-    res.json({ success: true, data: await hydrateCard(updated) });
+    res.json({
+      success: true,
+      data: await hydrateCard(updated),
+      ...(cancelWarnings.length ? { warning: cancelWarnings.join(' ') } : {}),
+    });
   } catch (err: any) {
     console.error('Admin cancel card error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
@@ -1615,6 +1678,8 @@ router.post('/:id/republish', async (req: Request, res: Response) => {
         cancelled_at: null,
         closed_at: null,
         assigned_at: null,
+        // A republished card starts a fresh life — never paused.
+        paused_at: null,
         selected_recipient_type: null,
         selected_recipient_id: null,
         published_at: now,

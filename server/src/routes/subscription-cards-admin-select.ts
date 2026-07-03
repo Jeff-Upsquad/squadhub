@@ -19,6 +19,8 @@ import {
   ensureActiveAssignmentTerm,
   endActiveAssignmentTermsForCard,
 } from '../utils/assignmentTerms';
+import { fetchTalentAvailability } from '../utils/squadhireTalent';
+import { loadCardBilling } from '../utils/cardBilling';
 import { buildPlanSnapshot, resolvePlanIdForCard } from '../utils/cardPlanSnapshot';
 import { handOffSpaceToNewTalent } from '../utils/spaceTalentHandoff';
 import crypto from 'crypto';
@@ -122,13 +124,17 @@ router.post('/subscription-cards/:id/assign', async (req: Request, res: Response
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, submission_subscription_id, card_code')
+      .select('id, state, submission_subscription_id, card_code, paused_at')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
     if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
     if (card.state !== 'published' && card.state !== 'assigned') {
       res.status(409).json({ success: false, error: 'Card must be published or assigned' });
+      return;
+    }
+    if ((card as any).paused_at) {
+      res.status(409).json({ success: false, error: 'Subscription is paused — resume it first' });
       return;
     }
 
@@ -278,6 +284,10 @@ async function resetCardAndCloseTerms(cardId: string, effectiveDate?: string): P
       admin_reviewed_at: null,
       recalled_at: null,
       closed_at: null,
+      // A published card can't be "paused" — clear the marker so an
+      // Unassign/Reopen on a paused card doesn't strand it in a state where
+      // every manage action 409s.
+      paused_at: null,
       selected_recipient_type: null,
       selected_recipient_id: null,
       squadhire_activation_notified_at: null,
@@ -663,13 +673,17 @@ router.post('/subscription-cards/:id/change-plan', async (req: Request, res: Res
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, selected_recipient_type, selected_recipient_id')
+      .select('id, state, paused_at, selected_recipient_type, selected_recipient_id')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
     if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
     if (card.state !== 'assigned' || !card.selected_recipient_id) {
       res.status(409).json({ success: false, error: 'Card is not an active assignment' });
+      return;
+    }
+    if (card.paused_at) {
+      res.status(409).json({ success: false, error: 'Subscription is paused — resume it first' });
       return;
     }
 
@@ -773,13 +787,17 @@ router.post('/subscription-cards/:id/change-talent', async (req: Request, res: R
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, selected_recipient_type, selected_recipient_id')
+      .select('id, state, paused_at, selected_recipient_type, selected_recipient_id')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
     if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
     if (card.state !== 'assigned' || !card.selected_recipient_id) {
       res.status(409).json({ success: false, error: 'Card is not an active assignment' });
+      return;
+    }
+    if (card.paused_at) {
+      res.status(409).json({ success: false, error: 'Subscription is paused — resume it first' });
       return;
     }
     const oldType = card.selected_recipient_type as 'talent' | 'partner' | null;
@@ -937,6 +955,408 @@ router.post('/subscription-cards/:id/change-talent', async (req: Request, res: R
     res.json({ success: true, ...(warnings.length ? { warning: warnings.join(' ') } : {}) });
   } catch (err: any) {
     console.error('Change talent error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/pause
+//
+// Pause a LIVE assignment: billing stops that day (the active term ends the
+// day before, so the pause day itself is not billed), the talent's SquadHire
+// My Clients card is retired with an "assignment updated" push, and the card
+// keeps state='assigned' + selected_recipient_* as the "previous talent"
+// memory the resume flow offers to re-assign. Reports/elapsed-time follow
+// automatically: no active term covering a day → 0 committed target.
+// ============================================================
+router.post('/subscription-cards/:id/pause', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    const { data: card, error: cardErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, paused_at, selected_recipient_type, selected_recipient_id')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
+    if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
+    if (card.state !== 'assigned' || !card.selected_recipient_id) {
+      res.status(409).json({ success: false, error: 'Card is not an active assignment' });
+      return;
+    }
+    if (card.paused_at) {
+      res.status(409).json({ success: false, error: 'Subscription is already paused' });
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const todayIst = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    // 1. Billing stops today: the term ends the day before, same boundary
+    //    convention as change-plan/change-talent (no partial-day billing).
+    await endActiveAssignmentTermsForCard(cardId, isoDayBefore(todayIst));
+
+    // 1b. The pause day is unbilled, so the cron's auto-elapsed rows for today
+    //     (12:01/15:00 checkpoints that may have already run) must not stand.
+    //     Manual overrides are kept.
+    const { data: linkRow } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('linked_folder_id')
+      .eq('id', cardId)
+      .maybeSingle();
+    if ((linkRow as any)?.linked_folder_id) {
+      await supabaseAdmin
+        .from('elapsed_time_entries')
+        .delete()
+        .eq('folder_id', (linkRow as any).linked_folder_id)
+        .eq('date', todayIst)
+        .eq('source', 'auto');
+    }
+
+    // 2. Mark paused. selected_recipient_* stays — it's the resume memory.
+    const { error: updErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .update({ paused_at: nowIso })
+      .eq('id', cardId);
+    if (updErr) { res.status(500).json({ success: false, error: updErr.message }); return; }
+
+    // 3. Retire the talent's local recipient row for this round (audit kept,
+    //    sweeper can't ghost-retry it) and their SquadHire mirror, with a push.
+    const warnings: string[] = [];
+    if (card.selected_recipient_type === 'talent' && card.selected_recipient_id) {
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .update({ archived_at: nowIso })
+        .eq('card_id', cardId)
+        .eq('external_user_id', card.selected_recipient_id)
+        .is('archived_at', null);
+      const removal = await notifySquadhireOfManualRemoval(cardId, card.selected_recipient_id, { notify: true });
+      if (!removal.delivered) {
+        // A re-POST of /pause would 409 (already paused), so don't suggest it.
+        warnings.push('Paused, but SquadHire could not be updated — the talent may still see this client. Check the integration; resuming and pausing again will retry.');
+      }
+    }
+
+    logCardEvent({
+      cardId,
+      eventType: 'paused',
+      actorId: (req as any).user?.id ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: { recipient_type: card.selected_recipient_type, recipient_id: card.selected_recipient_id },
+    });
+
+    res.json({ success: true, ...(warnings.length ? { warning: warnings.join(' ') } : {}) });
+  } catch (err: any) {
+    console.error('Pause subscription error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// GET /admin/subscription-cards/:id/previous-talent-availability
+//
+// Resume helper: is the previously-assigned talent free to take the work
+// back? Returns their SquadHire self-declared weekly hours plus the committed
+// hours across their OTHER active assignment terms, so the admin can decide
+// between re-assigning them and rebroadcasting.
+// ============================================================
+router.get('/subscription-cards/:id/previous-talent-availability', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, paused_at, selected_recipient_type, selected_recipient_id')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
+    if (!card.selected_recipient_id) {
+      res.json({ success: true, data: { has_previous_talent: false } });
+      return;
+    }
+
+    // Partner recipients aren't on SquadHire, so there's no availability to
+    // fetch — but they ARE a valid previous recipient the resume flow can
+    // re-assign. Return their name so the modal offers the same-recipient path.
+    if (card.selected_recipient_type === 'partner') {
+      const { data: pu } = await supabaseAdmin
+        .from('users')
+        .select('display_name')
+        .eq('id', card.selected_recipient_id)
+        .maybeSingle();
+      res.json({
+        success: true,
+        data: {
+          has_previous_talent: true,
+          talent_id: card.selected_recipient_id,
+          talent_name: (pu as any)?.display_name ?? null,
+          available_weekly_hours: null,
+          committed_weekly_hours: 0,
+          free_weekly_hours: null,
+          active_other_cards: 0,
+        },
+      });
+      return;
+    }
+    const talentId = card.selected_recipient_id as string;
+
+    // Display name from the (archived) recipient row of this card.
+    const { data: rec } = await supabaseAdmin
+      .from('subscription_card_external_recipients')
+      .select('talent_name')
+      .eq('card_id', cardId)
+      .eq('external_user_id', talentId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // Committed hours from their still-active terms on OTHER cards.
+    const { data: terms } = await supabaseAdmin
+      .from('subscription_assignment_terms')
+      .select('card_id')
+      .eq('recipient_type', 'talent')
+      .eq('recipient_id', talentId)
+      .eq('status', 'active');
+    const otherCardIds = [...new Set((terms || []).map((t: any) => t.card_id).filter((id: string) => id !== cardId))];
+    let committedWeekly = 0;
+    if (otherCardIds.length) {
+      const billing = await loadCardBilling(otherCardIds);
+      for (const b of billing.values()) {
+        if (b.weekly_hours != null) committedWeekly += b.weekly_hours;
+      }
+    }
+
+    const availability = await fetchTalentAvailability([talentId]);
+    const avail = availability.get(talentId);
+
+    res.json({
+      success: true,
+      data: {
+        has_previous_talent: true,
+        talent_id: talentId,
+        talent_name: (rec as any)?.talent_name ?? null,
+        available_weekly_hours: avail?.weekly_hours ?? null,
+        committed_weekly_hours: Math.round(committedWeekly * 100) / 100,
+        free_weekly_hours:
+          avail?.weekly_hours != null
+            ? Math.round((avail.weekly_hours - committedWeekly) * 100) / 100
+            : null,
+        active_other_cards: otherCardIds.length,
+      },
+    });
+  } catch (err: any) {
+    console.error('Previous talent availability error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/resume
+//
+// Restart a paused subscription. Two modes:
+//   same_talent — re-assign the previous talent: fresh term from today,
+//                 SquadHire direct-assign (back into My Clients), content
+//                 re-delivery. Billing resumes today.
+//   rebroadcast — no previous talent (or they're busy): archive the old
+//                 round, reopen the card to `published`, and re-fan-out to
+//                 the matching pool. Billing stays stopped until a new talent
+//                 is finalized (the sourcing gap is unbilled by design).
+// ============================================================
+const resumeSchema = z.object({
+  mode: z.enum(['same_talent', 'rebroadcast']),
+});
+
+router.post('/subscription-cards/:id/resume', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const parsed = resumeSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
+      return;
+    }
+    const { mode } = parsed.data;
+
+    const { data: card, error: cardErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, paused_at, selected_recipient_type, selected_recipient_id')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
+    if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
+    if (!card.paused_at) {
+      res.status(409).json({ success: false, error: 'Subscription is not paused' });
+      return;
+    }
+    // A paused card is always state='assigned'; anything else means it was
+    // closed/cancelled by another flow while paused — resuming would revive a
+    // dead card and open a billing term nothing else knows about.
+    if (card.state !== 'assigned') {
+      res.status(409).json({ success: false, error: 'Card is no longer an active assignment — it cannot be resumed' });
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const todayIst = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const warnings: string[] = [];
+
+    // Conditional un-pause: exactly ONE resume wins. A concurrent double-click
+    // would otherwise run the whole flow twice (double webhooks; the partial
+    // unique index on active terms is the DB backstop for double-billing).
+    const { data: unpaused } = await supabaseAdmin
+      .from('subscription_cards')
+      .update({ paused_at: null })
+      .eq('id', cardId)
+      .not('paused_at', 'is', null)
+      .select('id');
+    if (!unpaused || unpaused.length === 0) {
+      res.status(409).json({ success: false, error: 'Subscription is not paused' });
+      return;
+    }
+
+    if (mode === 'same_talent') {
+      const rType = card.selected_recipient_type as 'talent' | 'partner' | null;
+      const rId = card.selected_recipient_id as string | null;
+      if (!rType || !rId) {
+        // Nothing external happened yet — restore the pause before bailing.
+        await supabaseAdmin.from('subscription_cards').update({ paused_at: card.paused_at }).eq('id', cardId);
+        res.status(409).json({ success: false, error: 'No previous recipient on this card — use rebroadcast instead' });
+        return;
+      }
+
+      if (rType === 'talent') {
+        // Revive the row pause archived. Looked up by (card, external_user_id)
+        // — NOT upserted on the (card, external_system, external_recipient_id)
+        // key: broadcast-accept rows store the SquadHire recipient-row id in
+        // external_recipient_id, so an upsert keyed on the user id would
+        // insert a DUPLICATE row sharing external_user_id and break every
+        // downstream maybeSingle() lookup on that pair.
+        const { data: existingRow } = await supabaseAdmin
+          .from('subscription_card_external_recipients')
+          .select('id')
+          .eq('card_id', cardId)
+          .eq('external_user_id', rId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const revival = {
+          status: 'accepted',
+          responded_at: nowIso,
+          assigned_manually: true,
+          selected_at: nowIso,
+          selected_by: (req as any).user?.id ?? null,
+          passed_over_at: null,
+          archived_at: null,
+          notified_at: nowIso,
+          squadhire_notified_at: null,
+          squadhire_notify_attempts: 0,
+          squadhire_notify_error: null,
+        };
+        let rowId: string | undefined;
+        if (existingRow) {
+          await supabaseAdmin
+            .from('subscription_card_external_recipients')
+            .update(revival)
+            .eq('id', (existingRow as any).id);
+          rowId = (existingRow as any).id;
+        } else {
+          const { data: inserted } = await supabaseAdmin
+            .from('subscription_card_external_recipients')
+            .insert({
+              card_id: cardId,
+              external_system: 'squadhire',
+              external_recipient_id: rId,
+              external_user_id: rId,
+              ...revival,
+            })
+            .select('id')
+            .maybeSingle();
+          rowId = (inserted as any)?.id;
+        }
+
+        const outcome = await notifySquadhireOfManualAssignment(cardId, rId, rowId);
+        if (!outcome.delivered) {
+          warnings.push('SquadHire was not notified — the talent may not see the client yet. The system will retry automatically.');
+        }
+        notifySquadhireOfActivation(cardId).catch((err) =>
+          console.error('[resume] notify squadhire activation failed', err),
+        );
+        const contentWarning = await redeliverCardContent(cardId);
+        if (contentWarning) warnings.push(contentWarning);
+      }
+
+      // Billing resumes today with the card's current plan/price.
+      await ensureActiveAssignmentTerm({
+        cardId,
+        recipientType: rType,
+        recipientId: rId,
+        assignedDate: todayIst,
+      });
+    } else {
+      // rebroadcast: reopen to a fresh round (mirrors reopen-for-new-talents),
+      // then re-fan-out. The card leaves `assigned`, so the "previous talent"
+      // memory is consumed here. (paused_at already cleared by the conditional
+      // un-pause above.)
+      const oldType = card.selected_recipient_type as 'talent' | 'partner' | null;
+      const oldId = card.selected_recipient_id as string | null;
+
+      const archivedAt = nowIso;
+      await supabaseAdmin
+        .from('subscription_card_recipients')
+        .update({ archived_at: archivedAt })
+        .eq('card_id', cardId)
+        .is('archived_at', null);
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .update({ archived_at: archivedAt })
+        .eq('card_id', cardId)
+        .is('archived_at', null);
+
+      await resetCardAndCloseTerms(cardId); // card → published (terms already ended by pause)
+
+      if (oldType === 'talent' && oldId) {
+        handOffSpaceToNewTalent({
+          cardId,
+          oldRecipientType: 'talent',
+          oldRecipientId: oldId,
+          newRecipientType: null,
+          newRecipientId: null,
+        }).catch((err) => console.error('[resume] space hand-off failed', err));
+      }
+
+      notifySquadhireOfSelectionUndo(cardId).catch((err) => {
+        console.error('[resume] notify squadhire selection-undo failed', err);
+      });
+
+      // Re-fan-out (same logic as /rebroadcast).
+      const { data: sync } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('squadhire_synced_at')
+        .eq('id', cardId)
+        .maybeSingle();
+      if (!(sync as any)?.squadhire_synced_at) {
+        buildSquadhirePayloadForCard(cardId)
+          .then((payload) => payload && deliverCardToSquadhire(cardId, payload))
+          .catch((err) => console.error('[resume] squadhire first-delivery failed', err));
+      } else {
+        notifySquadhireOfFreshBroadcast(cardId).catch((err) => {
+          console.error('[resume] notify squadhire fresh-broadcast failed', err);
+        });
+      }
+    }
+
+    logCardEvent({
+      cardId,
+      eventType: 'resumed',
+      actorId: (req as any).user?.id ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: { mode },
+    });
+
+    res.json({ success: true, ...(warnings.length ? { warning: warnings.join(' ') } : {}) });
+  } catch (err: any) {
+    console.error('Resume subscription error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });

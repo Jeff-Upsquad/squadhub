@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../supabase';
 import { getTaskStatusDef, type SpaceStatus } from '@squadhub/shared';
 import { todayIST, isNonWorkingDay } from '../utils/ist';
+import { getFolderPlanTimeline, segmentDailyForDate } from '../utils/folderCommittedHours';
 
 // ============================================================
 // Elapsed time core (idle-day plan consumption).
@@ -65,24 +66,32 @@ export interface ElapsibleSpace {
 }
 
 /**
- * Every design/video space currently linked to a subscription card, with its
- * plan's daily hours. Spaces with no linked card, a non-design template, or a
- * null/zero daily allotment are skipped (nothing to elapse).
+ * Every design/video space currently linked to a subscription card, with the
+ * daily hours in effect TODAY. Term-aware: the allotment comes from the
+ * assignment term covering today (via the folder plan timeline), so a paused
+ * or cancelled subscription — or the sourcing gap while a replacement talent
+ * is found — elapses nothing, and a mid-engagement plan change elapses the
+ * new plan's hours from its effective date. Spaces with no linked card, a
+ * closed/paused card, a non-design template, or a zero allotment are skipped.
  */
 export async function listElapsibleSpaces(): Promise<ElapsibleSpace[]> {
   const { data: cards } = await supabaseAdmin
     .from('subscription_cards')
-    .select('linked_folder_id, plan_snapshot')
+    .select('id, linked_folder_id, state, paused_at')
     .not('linked_folder_id', 'is', null);
   if (!cards || cards.length === 0) return [];
 
-  // daily_hours per folder from the card's plan snapshot (first non-null wins).
+  // Daily hours in effect today, per folder (first positive allotment wins).
+  // Fast-skip closed/paused cards before the per-folder timeline queries.
+  const today = todayIST();
   const dailyByFolder = new Map<string, number>();
   for (const c of cards as any[]) {
     const fid = c.linked_folder_id as string;
     if (dailyByFolder.has(fid)) continue;
-    const daily = c.plan_snapshot?.plan?.daily_hours;
-    if (daily != null && Number(daily) > 0) dailyByFolder.set(fid, Number(daily));
+    if (c.state === 'closed' || c.paused_at) continue;
+    const timeline = await getFolderPlanTimeline(fid);
+    const daily = segmentDailyForDate(timeline, today);
+    if (daily != null && daily > 0) dailyByFolder.set(fid, daily);
   }
   if (dailyByFolder.size === 0) return [];
 
