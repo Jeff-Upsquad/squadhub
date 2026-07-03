@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import type { User, TaskRecurrence, TaskTag, TaskListPath } from '@squadhub/shared';
-import { taskRecurrenceOccursOn } from '@squadhub/shared';
+import { taskRecurrenceOccursOn, getTaskStatusCategory } from '@squadhub/shared';
 import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
@@ -65,6 +65,56 @@ const updateSchema = z.object({
 async function getTaskListId(taskId: string): Promise<string | null> {
   const { data } = await supabaseAdmin.from('tasks').select('list_id').eq('id', taskId).single();
   return data?.list_id || null;
+}
+
+// ---- Completion gate --------------------------------------------------------
+// A task can only move INTO a done/closed status once every direct subtask is
+// complete and every checklist item is checked. The web client shows a blocking
+// prompt before it ever calls PUT; this is the authoritative backstop for every
+// other write path (board drag, home rows, mobile apps).
+
+// Custom (design/video) spaces store the status NAME on tasks, so completion
+// checks must resolve the list's space statuses, not just literal categories.
+async function getSpaceDoneStatusNames(listId: string | null): Promise<Set<string>> {
+  const names = new Set<string>();
+  if (!listId) return names;
+  const { data: list } = await supabaseAdmin.from('lists').select('space_id').eq('id', listId).single();
+  const spaceId = (list as any)?.space_id;
+  if (!spaceId) return names;
+  const { data } = await supabaseAdmin
+    .from('space_statuses')
+    .select('name, category')
+    .eq('space_id', spaceId)
+    .in('category', ['done', 'closed']);
+  for (const s of (data || []) as { name: string }[]) names.add(s.name);
+  return names;
+}
+
+// Open (not yet complete) direct subtasks + unchecked checklist items.
+async function countOpenCompletionItems(
+  taskId: string,
+  isDoneStatus: (st: string | null | undefined) => boolean,
+): Promise<{ open_subtasks: number; open_checklist_items: number }> {
+  const { data: subs } = await supabaseAdmin
+    .from('tasks')
+    .select('status')
+    .eq('parent_task_id', taskId);
+  const open_subtasks = (subs || []).filter((s: any) => !isDoneStatus(s.status)).length;
+
+  const { data: cls } = await supabaseAdmin
+    .from('task_checklists')
+    .select('id')
+    .eq('task_id', taskId);
+  let open_checklist_items = 0;
+  if (cls && cls.length > 0) {
+    const { count } = await supabaseAdmin
+      .from('task_checklist_items')
+      .select('id', { count: 'exact', head: true })
+      .in('checklist_id', cls.map((c: any) => c.id))
+      .eq('is_done', false);
+    open_checklist_items = count || 0;
+  }
+  return { open_subtasks, open_checklist_items };
 }
 
 // Helper to attach hydrated assignees to one or more task rows.
@@ -1217,6 +1267,35 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
       .single();
     const priorEstimate: number | null = (prior as any)?.time_estimate ?? null;
     const estimateListId: string | null = (prior as any)?.list_id ?? null;
+
+    // Completion gate: only fires on the transition INTO a done/closed status —
+    // tasks already complete can be re-saved (or moved between done states)
+    // freely. Rejects with structured counts so clients can explain the bounce.
+    if (body.status !== undefined) {
+      const doneNames = await getSpaceDoneStatusNames(listId);
+      const isDoneStatus = (st: string | null | undefined): boolean => {
+        if (!st) return false;
+        if (st === 'done' || st === 'closed') return true;
+        const cat = getTaskStatusCategory(st);
+        if (cat === 'done' || cat === 'closed') return true;
+        return doneNames.has(st);
+      };
+      if (isDoneStatus(body.status) && !isDoneStatus((prior as any)?.status)) {
+        const { open_subtasks, open_checklist_items } = await countOpenCompletionItems(id, isDoneStatus);
+        if (open_subtasks > 0 || open_checklist_items > 0) {
+          const parts: string[] = [];
+          if (open_subtasks > 0) parts.push(`${open_subtasks} subtask${open_subtasks === 1 ? '' : 's'}`);
+          if (open_checklist_items > 0) parts.push(`${open_checklist_items} checklist item${open_checklist_items === 1 ? '' : 's'}`);
+          res.status(409).json({
+            success: false,
+            code: 'INCOMPLETE_ITEMS',
+            error: `Complete ${parts.join(' and ')} before closing this task`,
+            details: { open_subtasks, open_checklist_items },
+          });
+          return;
+        }
+      }
+    }
 
     const updatePayload: Record<string, any> = { ...body, last_modified_by: req.userId! };
     if (body.recurrence !== undefined) {
