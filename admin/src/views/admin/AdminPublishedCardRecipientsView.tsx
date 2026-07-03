@@ -11,6 +11,7 @@ import { openLeadInCRM } from '@/utils/squadCrm';
 import { resolveFinalizedPrice } from '@squadhub/shared';
 import type { PublishedCard } from './AdminPublishedCards';
 import type { RecipientsResponse } from './AdminPublishedCardRecipientsPanel';
+import AssignmentChangeModal from './AssignmentChangeModal';
 
 type UnifiedRecipient = {
   id: string;
@@ -360,6 +361,7 @@ export default function AdminPublishedCardRecipientsView({
 
   const [autoAcceptTarget, setAutoAcceptTarget] = useState<{ id: string; name: string; email: string } | null>(null);
   const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string; type: 'partner' | 'talent' } | null>(null);
+  const [changeOpen, setChangeOpen] = useState(false);
 
   const removeRecipientMutation = useMutation({
     mutationFn: ({ id, type }: { id: string; type: 'partner' | 'talent' }) =>
@@ -754,6 +756,14 @@ export default function AdminPublishedCardRecipientsView({
                 {bucket === 'assigned' && (
                   <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-emerald-200 pt-4 dark:border-emerald-500/30">
                     <button
+                      onClick={() => setChangeOpen(true)}
+                      disabled={undoMutation.isPending || reopenMutation.isPending}
+                      className="sh-btn-primary sh-btn-primary-sm"
+                      title="Upgrade/downgrade the plan or change the assigned talent — same card, billing splits at the effective date"
+                    >
+                      Manage assignment
+                    </button>
+                    <button
                       onClick={() => {
                         if (window.confirm('Unassign this talent?\n\nThis ends the live subscription on SquadHire — reconcile it there too. The card reopens so you can select someone else.')) undoMutation.mutate();
                       }}
@@ -772,7 +782,7 @@ export default function AdminPublishedCardRecipientsView({
                       {reopenMutation.isPending ? 'Reopening…' : 'Reopen for new talents'}
                     </button>
                     <span className="text-[11px] text-emerald-700/80 dark:text-emerald-300/90">
-                      To reassign, unassign and then pick another talent below.
+                      Manage assignment changes the plan or talent in place; Unassign/Reopen restart the selection round.
                     </span>
                   </div>
                 )}
@@ -1233,6 +1243,9 @@ export default function AdminPublishedCardRecipientsView({
           </div>
         );
       })()}
+      {changeOpen && (
+        <AssignmentChangeModal cardId={card.id} onClose={() => setChangeOpen(false)} />
+      )}
       {autoAcceptTarget && (
         <ConfirmDialog
           open
