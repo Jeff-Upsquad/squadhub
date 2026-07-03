@@ -46,9 +46,13 @@ export function useClientDesignPlan(folderId?: string): DesignPlan {
     enabled: !!folderId,
   });
 
-  const dailyHours = linkData?.daily_hours ?? 4;
-  const weeklyHours = linkData?.weekly_hours ?? 20;
-  const monthlyHours = linkData?.prorated_monthly_hours ?? linkData?.monthly_hours ?? dailyHours * 20;
+  // For a LINKED space, null hours are meaningful (paused / no active term) —
+  // show 0, not the demo defaults. The 4h/20h fallbacks only apply to spaces
+  // with no linked card at all (pre-link preview state).
+  const isLinked = !!linkData?.linked;
+  const dailyHours = linkData?.daily_hours ?? (isLinked ? 0 : 4);
+  const weeklyHours = linkData?.weekly_hours ?? (isLinked ? 0 : 20);
+  const monthlyHours = linkData?.prorated_monthly_hours ?? linkData?.monthly_hours ?? (isLinked ? 0 : dailyHours * 20);
 
   // Per-day committed targets (period-aware): a plan change mid-week/month
   // changes the target on either side of the change date. Falls back to a flat

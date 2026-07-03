@@ -471,12 +471,12 @@ export default function AdminPublishedCardRecipientsView({
   // selected_recipient_id otherwise shows "Assigned" regardless of state.
   const bucket: 'active' | 'selected' | 'assigned' | 'cancelled' | 'archived' = card.archived_at
     ? 'archived'
-    : card.selected_recipient_id
-      ? 'assigned'
-      : card.state === 'assigned'
-        ? 'selected'
-        : card.state === 'closed'
-          ? 'cancelled'
+    : card.cancelled_at || card.state === 'closed'
+      ? 'cancelled'
+      : card.selected_recipient_id
+        ? 'assigned'
+        : card.state === 'assigned'
+          ? 'selected'
           : 'active';
   const stateColor =
     bucket === 'active' ? '#10B981'
@@ -755,13 +755,18 @@ export default function AdminPublishedCardRecipientsView({
                 </div>
                 {bucket === 'assigned' && (
                   <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-emerald-200 pt-4 dark:border-emerald-500/30">
+                    {card.paused_at && (
+                      <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
+                        Paused {new Date(card.paused_at).toLocaleDateString()}
+                      </span>
+                    )}
                     <button
                       onClick={() => setChangeOpen(true)}
                       disabled={undoMutation.isPending || reopenMutation.isPending}
                       className="sh-btn-primary sh-btn-primary-sm"
-                      title="Upgrade/downgrade the plan or change the assigned talent — same card, billing splits at the effective date"
+                      title={card.paused_at ? 'Resume this paused subscription (same talent or rebroadcast) or cancel it' : 'Upgrade/downgrade the plan, change the assigned talent, or pause/cancel — same card, billing splits at the effective date'}
                     >
-                      Manage assignment
+                      {card.paused_at ? 'Resume / Cancel' : 'Manage assignment'}
                     </button>
                     <button
                       onClick={() => {
@@ -1244,7 +1249,7 @@ export default function AdminPublishedCardRecipientsView({
         );
       })()}
       {changeOpen && (
-        <AssignmentChangeModal cardId={card.id} onClose={() => setChangeOpen(false)} />
+        <AssignmentChangeModal cardId={card.id} pausedAt={card.paused_at ?? null} onClose={() => setChangeOpen(false)} />
       )}
       {autoAcceptTarget && (
         <ConfirmDialog

@@ -198,12 +198,21 @@ router.post(
         .eq('status', 'accepted')
         .is('passed_over_at', null);
 
-      // Close the card
+      // Mark the card assigned. Historically this set state='closed', which
+      // made SquadHire-selected cards second-class on the admin side: the UI
+      // buckets them as Assigned (selected_recipient wins), but every manage
+      // action (change plan/talent, pause, unassign, reopen) gated on
+      // state='assigned' and rejected them with "Card is closed". 'assigned'
+      // is the same lifecycle the admin finalize flow produces, and it maps to
+      // status 'assigned' (not 'archived') in the SquadHire payload builder.
       await supabaseAdmin
         .from('subscription_cards')
         .update({
-          state: 'closed',
-          closed_at: now,
+          state: 'assigned',
+          assigned_at: now,
+          closed_at: null,
+          // A fresh selection starts unpaused regardless of prior rounds.
+          paused_at: null,
           selected_recipient_type: 'talent',
           selected_recipient_id: body.talent_user_id,
         })
@@ -286,6 +295,8 @@ router.post(
         .update({
           state: 'published',
           closed_at: null,
+          // A published card can't be "paused" — don't strand the marker.
+          paused_at: null,
           selected_recipient_type: null,
           selected_recipient_id: null,
         })
@@ -376,6 +387,8 @@ router.post(
           state: 'published',
           closed_at: null,
           assigned_at: null,
+          // A published card can't be "paused" — don't strand the marker.
+          paused_at: null,
           selected_recipient_type: null,
           selected_recipient_id: null,
           squadhire_activation_notified_at: null,

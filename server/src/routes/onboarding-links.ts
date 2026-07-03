@@ -553,6 +553,12 @@ router.post('/leads/:id/subscriptions/:rowId/cancel', requireSalesLeadsAccess, a
       res.status(409).json({ success: false, error: 'Card is already cancelled' });
       return;
     }
+    // A LIVE assignment must go through the admin Cancel flow (ends the
+    // billing term, retires + notifies the talent on SquadHire, clears pause).
+    if (card.state === 'assigned') {
+      res.status(409).json({ success: false, error: 'This subscription has an assigned talent — cancel it from Admin → Published Cards instead' });
+      return;
+    }
 
     // state === 'published' → close the card. Reset SquadHire sync state so
     // the archived-delivery is re-attempted, mirroring the close endpoint.

@@ -5,12 +5,24 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 
-// Post-assignment change modal: upgrade/downgrade the plan, or change the
-// assigned talent — on the SAME card, with an effective date so billing and the
-// space report pro-rate at the boundary. Talent change offers the primary
-// "find a new one" path (reopen + rebroadcast) and a direct hand-pick shortcut.
+// Post-assignment change modal: upgrade/downgrade the plan, change the
+// assigned talent, or pause/cancel — on the SAME card, with billing splitting
+// at the boundary. Talent change offers the primary "find a new one" path
+// (reopen + rebroadcast) and a direct hand-pick shortcut. When the card is
+// paused the modal becomes the resume surface: re-assign the previous talent
+// (with an availability check) or rebroadcast for a new one.
 
-type Mode = 'plan' | 'talent';
+type Mode = 'plan' | 'talent' | 'lifecycle';
+
+interface PreviousTalentAvailability {
+  has_previous_talent: boolean;
+  talent_id?: string;
+  talent_name?: string | null;
+  available_weekly_hours?: number | null;
+  committed_weekly_hours?: number;
+  free_weekly_hours?: number | null;
+  active_other_cards?: number;
+}
 
 interface PlanOption {
   id: string;
@@ -33,11 +45,15 @@ function todayISO(): string {
 export default function AssignmentChangeModal({
   cardId,
   onClose,
+  pausedAt = null,
 }: {
   cardId: string;
   onClose: () => void;
+  /** subscription_cards.paused_at — when set, the modal shows the resume flow. */
+  pausedAt?: string | null;
 }) {
   const qc = useQueryClient();
+  const isPaused = !!pausedAt;
   const [mode, setMode] = useState<Mode>('plan');
   const [effectiveDate, setEffectiveDate] = useState(todayISO());
   const [error, setError] = useState<string | null>(null);
@@ -126,9 +142,48 @@ export default function AssignmentChangeModal({
     onError: onErr,
   });
 
+  // ---- Pause / cancel / resume ----
+  const withWarning = (r: any) => {
+    const warning = r?.data?.warning as string | undefined;
+    if (warning) showToast(warning, 'error');
+    invalidate();
+    onClose();
+  };
+  const pauseSub = useMutation({
+    mutationFn: () => api.post(`/admin/subscription-cards/${cardId}/pause`),
+    onSuccess: withWarning,
+    onError: onErr,
+  });
+  const cancelSub = useMutation({
+    mutationFn: () => api.post(`/admin/subscription-cards/${cardId}/cancel`),
+    onSuccess: withWarning,
+    onError: onErr,
+  });
+  const resumeSub = useMutation({
+    mutationFn: (resumeMode: 'same_talent' | 'rebroadcast') =>
+      api.post(`/admin/subscription-cards/${cardId}/resume`, { mode: resumeMode }),
+    onSuccess: withWarning,
+    onError: onErr,
+  });
+  const availabilityQ = useQuery({
+    queryKey: ['admin-card-prev-talent-availability', cardId],
+    queryFn: () =>
+      api
+        .get(`/admin/subscription-cards/${cardId}/previous-talent-availability`)
+        .then((r) => r.data?.data as PreviousTalentAvailability),
+    enabled: isPaused,
+  });
+
   const talents = talentsQ.data ?? [];
   const partners = partnersQ.data ?? [];
-  const busy = changePlan.isPending || changeTalent.isPending || findNewTalent.isPending;
+  const busy =
+    changePlan.isPending ||
+    changeTalent.isPending ||
+    findNewTalent.isPending ||
+    pauseSub.isPending ||
+    cancelSub.isPending ||
+    resumeSub.isPending;
+  const avail = availabilityQ.data;
   const planLabel = (p: PlanOption) => [p.plan, p.tier].filter(Boolean).join(' · ') || 'Plan';
   const currentPlanLabel = useMemo(() => {
     const cur = plans.find((p) => p.id === currentPlanId);
@@ -150,23 +205,100 @@ export default function AssignmentChangeModal({
           </button>
         </div>
 
-        {/* Mode tabs + effective date */}
+        {/* Mode tabs + effective date (hidden while paused — resume is the only flow) */}
+        {!isPaused && (
         <div className="border-b border-[var(--color-sh-warm-border)] bg-surface px-5 py-3 space-y-3">
           <div className="flex gap-2">
             <button onClick={() => { setMode('plan'); setError(null); }} className={mode === 'plan' ? 'sh-btn-primary sh-btn-primary-sm' : 'sh-btn-ghost sh-btn-ghost-sm'}>Change plan</button>
             <button onClick={() => { setMode('talent'); setError(null); }} className={mode === 'talent' ? 'sh-btn-primary sh-btn-primary-sm' : 'sh-btn-ghost sh-btn-ghost-sm'}>Change talent</button>
+            <button onClick={() => { setMode('lifecycle'); setError(null); }} className={mode === 'lifecycle' ? 'sh-btn-primary sh-btn-primary-sm' : 'sh-btn-ghost sh-btn-ghost-sm'}>Pause / Cancel</button>
           </div>
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-faint)]">Effective date</span>
-            <input type="date" value={effectiveDate} max={todayISO()} onChange={(e) => setEffectiveDate(e.target.value)} className="sh-input mt-1" />
-            <span className="mt-1 block text-[11px] text-[var(--color-sh-ink-muted)]">Billing and the space's hours target split at this date. Today or earlier — the talent-side switch applies immediately.</span>
-          </label>
+          {mode !== 'lifecycle' && (
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-faint)]">Effective date</span>
+              <input type="date" value={effectiveDate} max={todayISO()} onChange={(e) => setEffectiveDate(e.target.value)} className="sh-input mt-1" />
+              <span className="mt-1 block text-[11px] text-[var(--color-sh-ink-muted)]">Billing and the space's hours target split at this date. Today or earlier — the talent-side switch applies immediately.</span>
+            </label>
+          )}
         </div>
+        )}
 
         <div className="flex-1 overflow-y-auto p-4">
           {error && <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
-          {mode === 'plan' ? (
+          {isPaused ? (
+            <div className="space-y-4">
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Subscription paused since {new Date(pausedAt!).toLocaleDateString()}. Billing and the space's hours target stopped that day.
+              </div>
+
+              <div className="sh-card px-4 py-3">
+                <p className="text-sm font-semibold text-[var(--color-sh-ink)]">Re-assign the previous talent</p>
+                {availabilityQ.isLoading ? (
+                  <p className="mt-1 text-xs text-[var(--color-sh-ink-muted)]">Checking availability…</p>
+                ) : avail?.has_previous_talent ? (
+                  <>
+                    <p className="mt-1 text-xs text-[var(--color-sh-ink-muted)]">
+                      <span className="font-semibold text-[var(--color-sh-ink)]">{avail.talent_name ?? 'Previous talent'}</span>
+                      {avail.available_weekly_hours != null ? (
+                        <> — available <span className="font-semibold">{avail.available_weekly_hours}h/wk</span>, committed elsewhere <span className="font-semibold">{avail.committed_weekly_hours ?? 0}h/wk</span>{avail.free_weekly_hours != null && <> → free <span className={`font-semibold ${avail.free_weekly_hours > 0 ? 'text-emerald-700' : 'text-red-600'}`}>{avail.free_weekly_hours}h/wk</span></>} ({avail.active_other_cards ?? 0} other active {avail.active_other_cards === 1 ? 'client' : 'clients'})</>
+                      ) : (
+                        <> — availability unknown (SquadHire unreachable or no self-declared hours)</>
+                      )}
+                    </p>
+                    <button onClick={() => resumeSub.mutate('same_talent')} disabled={busy} className="sh-btn-primary sh-btn-primary-sm mt-2 disabled:opacity-50">
+                      {resumeSub.isPending ? 'Resuming…' : `Resume with ${avail.talent_name ?? 'previous talent'}`}
+                    </button>
+                  </>
+                ) : (
+                  <p className="mt-1 text-xs text-[var(--color-sh-ink-muted)]">No previous talent on record for this card.</p>
+                )}
+              </div>
+
+              <div className="sh-card px-4 py-3">
+                <p className="text-sm font-semibold text-[var(--color-sh-ink)]">Or find a new talent</p>
+                <p className="mt-1 text-xs text-[var(--color-sh-ink-muted)]">Reopens the call and re-broadcasts to the matching pool. Billing stays stopped until a new talent is finalized.</p>
+                <button onClick={() => resumeSub.mutate('rebroadcast')} disabled={busy} className="sh-btn-ghost sh-btn-ghost-sm mt-2 disabled:opacity-50">
+                  {resumeSub.isPending ? 'Working…' : 'Resume via rebroadcast'}
+                </button>
+              </div>
+
+              <div className="border-t border-[var(--color-sh-warm-border)] pt-3">
+                <button
+                  onClick={() => { if (window.confirm('Cancel this subscription permanently?\n\nThe card closes, the talent is released, and billing stays stopped. This cannot be resumed.')) cancelSub.mutate(); }}
+                  disabled={busy}
+                  className="sh-btn-danger disabled:opacity-50"
+                >
+                  {cancelSub.isPending ? 'Cancelling…' : 'Cancel subscription permanently'}
+                </button>
+              </div>
+            </div>
+          ) : mode === 'lifecycle' ? (
+            <div className="space-y-4">
+              <div className="sh-card px-4 py-3">
+                <p className="text-sm font-semibold text-[var(--color-sh-ink)]">Pause subscription</p>
+                <p className="mt-1 text-xs text-[var(--color-sh-ink-muted)]">Billing stops today; the talent is released on SquadHire and notified. Reports, payouts and the space's hours target stop from today. You can resume later — with the same talent (availability is checked) or by rebroadcasting.</p>
+                <button
+                  onClick={() => { if (window.confirm('Pause this subscription?\n\nBilling stops today and the talent is released until you resume.')) pauseSub.mutate(); }}
+                  disabled={busy}
+                  className="sh-btn-warning mt-2 disabled:opacity-50"
+                >
+                  {pauseSub.isPending ? 'Pausing…' : 'Pause subscription'}
+                </button>
+              </div>
+              <div className="sh-card px-4 py-3">
+                <p className="text-sm font-semibold text-[var(--color-sh-ink)]">Cancel subscription</p>
+                <p className="mt-1 text-xs text-[var(--color-sh-ink-muted)]">Billing stops today and the card closes permanently. The talent is released and notified. This cannot be undone.</p>
+                <button
+                  onClick={() => { if (window.confirm('Cancel this subscription permanently?\n\nBilling stops today, the card closes, and the talent is released. This cannot be undone.')) cancelSub.mutate(); }}
+                  disabled={busy}
+                  className="sh-btn-danger mt-2 disabled:opacity-50"
+                >
+                  {cancelSub.isPending ? 'Cancelling…' : 'Cancel subscription'}
+                </button>
+              </div>
+            </div>
+          ) : mode === 'plan' ? (
             <div className="space-y-4">
               {currentPlanLabel && <p className="text-xs text-[var(--color-sh-ink-muted)]">Current plan: <span className="font-semibold text-[var(--color-sh-ink)]">{currentPlanLabel}</span></p>}
               <label className="block">

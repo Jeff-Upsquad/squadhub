@@ -51,6 +51,7 @@ export type PublishedCard = {
   cancelled_at?: string | null;
   archived_at?: string | null;
   closed_at?: string | null;
+  paused_at?: string | null;
   assigned_at?: string | null;
   admin_reviewed_at?: string | null;
   card_code?: string | null;
@@ -206,9 +207,12 @@ type Bucket = 'published' | 'broadcaster' | 'selected' | 'assigned' | 'cancelled
  * Closed cards land in "cancelled", which the Archive tab surfaces.
  */
 function categorize(card: PublishedCard): Bucket {
+  // Cancelled wins over the recipient pointer: cancelling a LIVE assignment
+  // keeps selected_recipient_id for audit, and without this check the card
+  // would sit in the Assigned tab forever offering actions that all 409.
+  if (card.cancelled_at || card.state === 'closed') return 'cancelled';
   if (card.selected_recipient_id) return 'assigned';
   if (card.state === 'assigned') return 'selected';
-  if (card.state === 'closed') return 'cancelled';
   // state === 'published'
   return card.needs_broadcast ? 'published' : 'broadcaster';
 }

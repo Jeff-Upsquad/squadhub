@@ -670,7 +670,7 @@ function CardPanelContent({
         <AssignRecipientPicker cardId={activeCardId} onClose={() => setPickerOpen(false)} />
       )}
       {changeOpen && (
-        <AssignmentChangeModal cardId={activeCardId} onClose={() => setChangeOpen(false)} />
+        <AssignmentChangeModal cardId={activeCardId} pausedAt={activeCard.paused_at ?? null} onClose={() => setChangeOpen(false)} />
       )}
       <ConfirmActionDialog
         confirmAction={confirmAction}

@@ -20,6 +20,30 @@ interface AssignmentTerm {
   work_start_date: string | null;
   work_end_date: string | null;
   status: 'active' | 'ended';
+  // Card lifecycle attached by the API so paused/cancelled engagements badge
+  // correctly (their terms read 'ended', which alone is ambiguous).
+  card_state?: string | null;
+  card_paused_at?: string | null;
+  card_cancelled_at?: string | null;
+}
+
+/** Paused/Cancelled chip for a term's card (null when neither applies). */
+function CardLifecycleChip({ term }: { term: AssignmentTerm }) {
+  if (term.card_paused_at) {
+    return (
+      <span className="ml-1.5 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+        Paused
+      </span>
+    );
+  }
+  if (term.card_cancelled_at || term.card_state === 'closed') {
+    return (
+      <span className="ml-1.5 inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+        Cancelled
+      </span>
+    );
+  }
+  return null;
 }
 
 const STATUS_BADGE: Record<'active' | 'ended', string> = {
@@ -217,6 +241,7 @@ function BySubscriptionView() {
                     >
                       {r.status}
                     </span>
+                    <CardLifecycleChip term={r} />
                   </td>
                   <td className="px-4 py-2.5 text-right">
                     <button

@@ -514,6 +514,14 @@ router.post(
         res.status(409).json({ success: false, error: 'Card is already closed' });
         return;
       }
+      // A LIVE assignment must go through the admin Cancel flow: it ends the
+      // billing term, retires + notifies the talent on SquadHire, and clears
+      // the pause marker. Closing it here would leave the term accruing
+      // forever and the talent still seeing the client.
+      if (loaded.card.state === 'assigned') {
+        res.status(409).json({ success: false, error: 'This subscription has an assigned talent — cancel it from Admin → Published Cards instead' });
+        return;
+      }
 
       const { data: updated, error } = await supabaseAdmin
         .from('subscription_cards')
