@@ -166,3 +166,46 @@ clips.squadhub.in {
 		reverse_proxy host.docker.internal:3200
 	}
 }
+
+appsquad.upsquadconnect.com {
+	encode gzip
+	reverse_proxy appsquad-web:80
+}
+
+squadpayroll.upsquadconnect.com {
+  @sub path /api/subscriptions /api/subscriptions/* /api/admin/* /api/webhooks/*
+  handle @sub {
+    reverse_proxy host.docker.internal:3022
+  }
+  handle /api/* {
+    reverse_proxy host.docker.internal:3021
+  }
+  @portal path /portal /portal/*
+  handle @portal {
+    root * /srv/attendanceapp/squadpayroll
+    rewrite * /portal/index.html
+    file_server
+  }
+  @login path /login /login/*
+  handle @login {
+    root * /srv/attendanceapp/squadpayroll
+    rewrite * /app.html
+    file_server
+  }
+  handle {
+    encode gzip
+    root * /srv/attendanceapp/squadpayroll
+    @html path *.html /
+    header @html Cache-Control "no-cache, no-store, must-revalidate"
+    try_files {path} /index.html
+    file_server
+  }
+}
+
+squadhire-demo.upsquadconnect.com {
+	reverse_proxy host.docker.internal:8080
+}
+
+squadbooks.upsquadconnect.com {
+	reverse_proxy squadbooks-saas:3300
+}
