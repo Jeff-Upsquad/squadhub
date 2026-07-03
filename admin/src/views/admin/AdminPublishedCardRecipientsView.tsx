@@ -490,16 +490,26 @@ export default function AdminPublishedCardRecipientsView({
       : bucket === 'assigned' ? 'Assigned'
       : bucket === 'archived' ? 'Archived'
       : 'Cancelled';
+  // Partner recipient count — also drives the lifecycle pill below, so it's
+  // computed here (ahead of the broadcast-summary block that reuses it).
+  const partnerCount = (card.recipient_counts?.partners?.pending ?? 0) +
+    (card.recipient_counts?.partners?.accepted ?? 0) +
+    (card.recipient_counts?.partners?.rejected ?? 0);
   // Lifecycle status pill (distinct from the distribution mode it used to show).
   // For broadcast-mode cards: "Published" while staged (nothing pushed yet) vs
-  // "Broadcasted" once the Broadcast action has sent it. Soft-publish/draft keep
+  // "Broadcasted" once the Broadcast action has sent it to partners. A broadcast
+  // that reached zero partners never actually went to the partner network — it
+  // only fanned out to talents via SquadHire — so labeling it "Broadcasted" is
+  // misleading; it shows the neutral "Sent" instead. Soft-publish/draft keep
   // their own labels.
   const lifecycleStatus =
     card.distribution === 'manual'
       ? { label: 'Soft Published', bg: '#EEF2F6', color: '#475569' }
       : card.needs_broadcast
         ? { label: 'Published', bg: '#DBEAFE', color: '#1E40AF' }
-        : { label: 'Broadcasted', bg: '#DCFCE7', color: '#166534' };
+        : partnerCount > 0
+          ? { label: 'Broadcasted', bg: '#DCFCE7', color: '#166534' }
+          : { label: 'Sent', bg: '#EEF2F6', color: '#475569' };
   const publisher = card.published_by_user;
   const isUnreviewed = (bucket === 'assigned' || bucket === 'selected') && !card.admin_reviewed_at;
 
@@ -524,9 +534,6 @@ export default function AdminPublishedCardRecipientsView({
   const planPriceDisplay = finalizedPrice != null ? `${cur} ${finalizedPrice.toLocaleString()}/mo` : null;
 
   // Broadcast summary info
-  const partnerCount = (card.recipient_counts?.partners?.pending ?? 0) +
-    (card.recipient_counts?.partners?.accepted ?? 0) +
-    (card.recipient_counts?.partners?.rejected ?? 0);
   const talentTotal = allRecipients.filter((r) => r.type === 'talent').length;
   const talentRespondedCount = allRecipients.filter((r) => r.type === 'talent' && r.responded_at).length;
   // A talent has actually had the card delivered only when SquadHire has it
