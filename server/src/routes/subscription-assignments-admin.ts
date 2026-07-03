@@ -1,11 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { resolvePartnerPrice } from '@squadhub/shared';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import { prorateMonthly, activeDaysInMonth } from '../utils/assignmentBilling';
 import { fetchTalentAvailability } from '../utils/squadhireTalent';
+import { loadCardBilling, CardBilling } from '../utils/cardBilling';
 
 // Admin module: view + manage subscription assignment terms. Rows are created /
 // closed automatically by the finalize-selection / unassign flow (see
@@ -97,15 +97,6 @@ router.patch('/:id', async (req: Request, res: Response) => {
 // (committed hours from the card vs. the talent's self-declared availability).
 // ============================================================
 
-interface CardBilling {
-  partner_price: number | null; // monthly, full
-  currency: string | null;
-  daily_hours: number | null;
-  weekly_hours: number | null;
-  monthly_hours: number | null;
-  missing_partner_price: boolean;
-}
-
 type AssignmentTermRow = {
   id: string;
   card_id: string;
@@ -119,113 +110,38 @@ type AssignmentTermRow = {
   work_start_date: string | null;
   work_end_date: string | null;
   status: 'active' | 'ended';
+  // Term-level frozen billing (migration 152). Null on legacy terms → fall back
+  // to the card's live plan_snapshot via resolveTermBilling().
+  plan_snapshot: any | null;
+  partner_price: number | null;
+  subscription_price: number | null;
+  currency: string | null;
 };
 
-// Resolve full monthly partner price, currency and committed hours for a set of
-// cards. Returns a map keyed by card_id. Pricing mirrors the shared
-// resolvePartnerPrice helper (override, else finalized − plan margin); hours
-// come from the plan snapshot frozen on the card at publish time.
-async function loadCardBilling(cardIds: string[]): Promise<Map<string, CardBilling>> {
-  const out = new Map<string, CardBilling>();
-  if (cardIds.length === 0) return out;
-
-  const { data: cards, error } = await supabaseAdmin
-    .from('subscription_cards')
-    .select(
-      'id, submission_subscription_id, subscription_price, proposed_price, markup, partner_price_override, plan_snapshot',
-    )
-    .in('id', cardIds);
-  if (error) throw new Error(error.message);
-
-  // The card itself carries no billing country. For staged cards it's the
-  // client-submission's country; resolve that chain in batch so we can pick the
-  // right margin row / currency. (Margin is usually moot — markup on the card
-  // overrides it — but currency still needs a country.)
-  const cardList = (cards || []) as any[];
-  const subSubIds = cardList
-    .map((c) => c.submission_subscription_id)
-    .filter((v): v is string => !!v);
-  const cardCountry = new Map<string, string>();
-  if (subSubIds.length) {
-    const { data: subSubs } = await supabaseAdmin
-      .from('client_submission_subscriptions')
-      .select('id, submission_id')
-      .in('id', subSubIds);
-    const submissionIdBySubSub = new Map<string, string>();
-    (subSubs || []).forEach((s: any) => submissionIdBySubSub.set(s.id, s.submission_id));
-    const submissionIds = [...new Set([...submissionIdBySubSub.values()].filter(Boolean))];
-    const countryBySubmission = new Map<string, string>();
-    if (submissionIds.length) {
-      const { data: subs } = await supabaseAdmin
-        .from('client_submissions')
-        .select('id, country_id')
-        .in('id', submissionIds);
-      (subs || []).forEach((s: any) => {
-        if (s.country_id) countryBySubmission.set(s.id, s.country_id);
-      });
-    }
-    for (const c of cardList) {
-      const subId = c.submission_subscription_id
-        ? submissionIdBySubSub.get(c.submission_subscription_id)
-        : null;
-      const countryId = subId ? countryBySubmission.get(subId) : null;
-      if (countryId) cardCountry.set(c.id, countryId);
-    }
-  }
-
-  // Batch the lookups the snapshot can't answer: currency (per country) and
-  // monthly_hours (not stored in the snapshot — only daily/weekly are).
-  const countryIds = new Set<string>();
-  const planIds = new Set<string>();
-  const prepared = cardList.map((card: any) => {
-    const snap = (card.plan_snapshot as any) || null;
-    const pricingRows: any[] = Array.isArray(snap?.pricing) ? snap.pricing : [];
-    // Pick the margin row for the card's billing country; fall back to the sole
-    // pricing row when there's exactly one (covers cards we couldn't map a country for).
-    let countryId: string | null = cardCountry.get(card.id) ?? null;
-    let marginRow =
-      (countryId && pricingRows.find((p) => p.country_id === countryId)) || null;
-    if (!marginRow && pricingRows.length === 1) {
-      marginRow = pricingRows[0];
-      if (!countryId) countryId = marginRow.country_id ?? null;
-    }
-    if (countryId) countryIds.add(countryId);
-    const planId: string | null = snap?.plan?.id ?? null;
-    if (planId) planIds.add(planId);
-    return { card, snap, marginRow, countryId, planId };
-  });
-
-  const [{ data: countries }, { data: plans }] = await Promise.all([
-    countryIds.size
-      ? supabaseAdmin.from('countries').select('id, currency').in('id', [...countryIds])
-      : Promise.resolve({ data: [] as any[] }),
-    planIds.size
-      ? supabaseAdmin.from('subscription_plans').select('id, monthly_hours').in('id', [...planIds])
-      : Promise.resolve({ data: [] as any[] }),
-  ]);
-  const currencyByCountry = new Map<string, string>();
-  (countries || []).forEach((c: any) => currencyByCountry.set(c.id, c.currency));
-  const monthlyByPlan = new Map<string, number | null>();
-  (plans || []).forEach((p: any) =>
-    monthlyByPlan.set(p.id, p.monthly_hours != null ? Number(p.monthly_hours) : null),
-  );
-
-  for (const { card, snap, marginRow, countryId, planId } of prepared) {
-    const partnerPrice = resolvePartnerPrice(card, marginRow);
-    const daily = snap?.plan?.daily_hours != null ? Number(snap.plan.daily_hours) : null;
-    const weekly = snap?.plan?.weekly_hours != null ? Number(snap.plan.weekly_hours) : null;
-    const monthlyFromPlan = planId ? monthlyByPlan.get(planId) ?? null : null;
-    const monthly = monthlyFromPlan != null ? monthlyFromPlan : weekly != null ? weekly * 4 : null;
-    out.set(card.id, {
-      partner_price: partnerPrice,
-      currency: countryId ? currencyByCountry.get(countryId) ?? null : null,
-      daily_hours: daily,
-      weekly_hours: weekly,
-      monthly_hours: monthly,
-      missing_partner_price: partnerPrice == null,
-    });
-  }
-  return out;
+// Effective billing for one term: prefer the values frozen on the term when it
+// opened; fall back to the card's current plan_snapshot for legacy terms (which
+// map 1:1 to their card's single plan, so the card value is still correct).
+function resolveTermBilling(term: AssignmentTermRow, card: CardBilling | undefined): CardBilling {
+  const snap = term.plan_snapshot ?? card?.plan_snapshot ?? null;
+  const daily = snap?.plan?.daily_hours != null ? Number(snap.plan.daily_hours) : card?.daily_hours ?? null;
+  const weekly = snap?.plan?.weekly_hours != null ? Number(snap.plan.weekly_hours) : card?.weekly_hours ?? null;
+  const monthly =
+    term.plan_snapshot != null
+      ? weekly != null
+        ? weekly * 4
+        : card?.monthly_hours ?? null
+      : card?.monthly_hours ?? null;
+  const partnerPrice = term.partner_price != null ? term.partner_price : card?.partner_price ?? null;
+  return {
+    partner_price: partnerPrice,
+    currency: term.currency ?? card?.currency ?? null,
+    daily_hours: daily,
+    weekly_hours: weekly,
+    monthly_hours: monthly,
+    missing_partner_price: partnerPrice == null,
+    subscription_price: term.subscription_price ?? card?.subscription_price ?? null,
+    plan_snapshot: snap,
+  };
 }
 
 function parseMonth(raw: unknown): { year: number; month: number; key: string } {
@@ -295,7 +211,7 @@ router.get('/users', async (req: Request, res: Response) => {
       if (t.status === 'active') g.active_card_count += 1;
       if (!g.recipient_name && t.recipient_name) g.recipient_name = t.recipient_name;
 
-      const b = billing.get(t.card_id);
+      const b = resolveTermBilling(t, billing.get(t.card_id));
       const start = t.work_start_date ?? t.assigned_date;
       const end = t.work_end_date ?? t.unassigned_date ?? null;
       const activeDays = activeDaysInMonth(start, end, year, month, todayIso);
@@ -382,7 +298,7 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
     let committedWeekly = 0;
 
     const cards = terms.map((t) => {
-      const b = billing.get(t.card_id);
+      const b = resolveTermBilling(t, billing.get(t.card_id));
       const start = t.work_start_date ?? t.assigned_date;
       const end = t.work_end_date ?? t.unassigned_date ?? null;
       const activeDays = activeDaysInMonth(start, end, year, month, todayIso);

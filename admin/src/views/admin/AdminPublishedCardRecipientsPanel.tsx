@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import AssignRecipientPicker from './AssignRecipientPicker';
+import AssignmentChangeModal from './AssignmentChangeModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import CardCodeChip from '@/components/CardCodeChip';
 import { showToast } from '@/components/Toast';
@@ -155,6 +156,7 @@ function CardPanelContent({
   onClose: () => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [changeOpen, setChangeOpen] = useState(false);
   const qc = useQueryClient();
   const { adminUrl, configured: shConfigured } = useSquadhireConfig();
 
@@ -496,13 +498,24 @@ function CardPanelContent({
           {hasSelection ? (
             <>
               <p className="text-xs font-semibold text-accent-strong">A recipient has been selected for this card.</p>
-              <button
-                onClick={() => setConfirmAction({ kind: 'undoSelection' })}
-                disabled={undoSelection.isPending}
-                className="sh-btn-ghost sh-btn-ghost-sm"
-              >
-                Undo selection
-              </button>
+              <div className="flex items-center gap-2">
+                {activeCard.state === 'assigned' && (
+                  <button
+                    onClick={() => setChangeOpen(true)}
+                    className="sh-btn-primary sh-btn-primary-sm"
+                    title="Upgrade/downgrade the plan or change the assigned talent"
+                  >
+                    Manage assignment
+                  </button>
+                )}
+                <button
+                  onClick={() => setConfirmAction({ kind: 'undoSelection' })}
+                  disabled={undoSelection.isPending}
+                  className="sh-btn-ghost sh-btn-ghost-sm"
+                >
+                  Undo selection
+                </button>
+              </div>
             </>
           ) : (
             <>
@@ -655,6 +668,9 @@ function CardPanelContent({
       </div>
       {pickerOpen && (
         <AssignRecipientPicker cardId={activeCardId} onClose={() => setPickerOpen(false)} />
+      )}
+      {changeOpen && (
+        <AssignmentChangeModal cardId={activeCardId} onClose={() => setChangeOpen(false)} />
       )}
       <ConfirmActionDialog
         confirmAction={confirmAction}

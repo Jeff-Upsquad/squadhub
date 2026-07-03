@@ -12,6 +12,8 @@ export type CardEventType =
   | 'archived'
   | 'republished'
   | 'assigned'
+  | 'plan_changed'
+  | 'talent_changed'
   | 'recipient_accepted'
   | 'recipient_declined';
 
