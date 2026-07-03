@@ -151,5 +151,18 @@ books.squadhub.in {
 }
 
 clips.squadhub.in {
-	reverse_proxy host.docker.internal:3200
+	# The clips app only whitelists squadhub.in + squadhire.upsquadconnect.com
+	# in its own frame-ancestors CSP, so the UpSquad marketing site can't embed
+	# a shared clip. Override the CSP at the edge for the embeddable routes
+	# (/embed/* and /share/*) to also allow the UpSquad domains. Everything else
+	# proxies through untouched so the app's own CSP still applies.
+	@embeddable path /embed/* /share/*
+	handle @embeddable {
+		reverse_proxy host.docker.internal:3200 {
+			header_down Content-Security-Policy "frame-ancestors 'self' https://squadhub.in https://squadhire.upsquadconnect.com https://www.upsquadconnect.com https://upsquadconnect.com"
+		}
+	}
+	handle {
+		reverse_proxy host.docker.internal:3200
+	}
 }
