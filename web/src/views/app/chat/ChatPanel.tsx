@@ -416,6 +416,16 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // ---- Jump to a message picked from search --------------------------------
+  // Switching conversations abandons any in-flight jump: a stale pendingJumpId
+  // would otherwise page the NEW conversation for a message that lives in the
+  // old one, and a stale highlight would linger. Declared BEFORE the seeding
+  // effect below so, on a switch that also carries a fresh jump target, this
+  // clears first and the seeding effect re-sets pendingJumpId afterwards.
+  useEffect(() => {
+    setPendingJumpId(null);
+    setHighlightId(null);
+  }, [channelId, kind]);
+
   // A jump request in the store that targets THIS conversation seeds the search:
   // thread replies open the thread panel; top-level messages seed pendingJumpId.
   useEffect(() => {
@@ -458,10 +468,10 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
     }
   }, [pendingJumpId, messages, hasNextPage, isFetchingNextPage, fetchNextPage, clearMessageJump]);
 
-  // Clear the flash once it has played.
+  // Clear the highlight once it has held + faded (matches the 5s CSS animation).
   useEffect(() => {
     if (!highlightId) return;
-    const t = setTimeout(() => setHighlightId(null), 2400);
+    const t = setTimeout(() => setHighlightId(null), 5000);
     return () => clearTimeout(t);
   }, [highlightId]);
 

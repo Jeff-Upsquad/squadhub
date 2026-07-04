@@ -6069,11 +6069,20 @@ textarea.td-input-shell {
   padding: 0 1px;
 }
 
-/* Flash a message row that a search result jumped to. */
-.sqc-msg.is-search-hit { animation: sqc-search-flash 2.2s ease-out; }
+/* Highlight a message row that a search result jumped to: a strong pulse that
+   settles into a steady tint held for a few seconds, then fades. The brand
+   left-border rides an inset box-shadow so the row doesn't shift (unlike
+   is-mentioned, which pads to compensate a real border). */
+.sqc-msg.is-search-hit {
+  box-shadow: inset 3px 0 0 var(--sh-brand);
+  animation: sqc-search-flash 5s ease-out forwards;
+}
+.sqc-msg.is-search-hit:hover { background: rgba(255, 90, 31, 0.2); }
 @keyframes sqc-search-flash {
-  0%, 22% { background: rgba(255, 90, 31, 0.16); }
-  100% { background: transparent; }
+  0% { background: rgba(255, 90, 31, 0.36); }
+  9% { background: rgba(255, 90, 31, 0.16); }
+  80% { background: rgba(255, 90, 31, 0.16); }
+  100% { background: rgba(255, 90, 31, 0); }
 }
 
 /* Message rows */
