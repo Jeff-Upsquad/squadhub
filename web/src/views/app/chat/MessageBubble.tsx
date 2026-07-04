@@ -4,6 +4,7 @@ import type { Message, Reaction } from '@squadhub/shared';
 import api from '../../../services/api';
 import { useAuthStore } from '../../../stores/authStore';
 import EmojiPicker from './EmojiPicker';
+import ImageLightbox from './ImageLightbox';
 import LinkUnfurlCard from './LinkUnfurlCard';
 import MeetingPollCard from './MeetingPollCard';
 import { URL_PATTERN, URL_TEST, splitTrailingPunct, toHref } from '../../../lib/urlPattern';
@@ -474,22 +475,38 @@ function EditHistoryModal({ messageId, onClose }: { messageId: string; onClose: 
   );
 }
 
+// Chat image: sized to fit its container (so it stays fully visible inside the
+// narrow thread panel) and opens in an in-app full-screen viewer on click
+// instead of a new browser tab.
+function ImageAttachment({ src, alt }: { src: string; alt: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-2 block max-w-[480px] cursor-zoom-in"
+        title="Click to view"
+      >
+        <img
+          src={src}
+          alt={alt}
+          className="max-h-[360px] w-auto max-w-full rounded-[8px] border border-[var(--sh-border)] object-contain"
+          loading="lazy"
+        />
+      </button>
+      {open && <ImageLightbox src={src} alt={alt} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
 // ---- Attachment renderers (unchanged behavior, restyled with sh tokens) ----
 function AttachmentBlock({ message }: { message: Message }) {
   if (!message.file_url) return null;
   const mime = message.file_mime || '';
 
   if (message.type === 'image' || mime.startsWith('image/')) {
-    return (
-      <a href={message.file_url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block">
-        <img
-          src={message.file_url}
-          alt={message.file_name || 'image'}
-          className="max-h-[360px] max-w-[480px] rounded-[8px] border border-[var(--sh-border)] object-cover"
-          loading="lazy"
-        />
-      </a>
-    );
+    return <ImageAttachment src={message.file_url} alt={message.file_name || 'image'} />;
   }
 
   if (message.type === 'audio' || mime.startsWith('audio/')) {
