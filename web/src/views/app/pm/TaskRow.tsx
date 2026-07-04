@@ -43,26 +43,27 @@ export default function TaskRow({
   /** Render faded — used for focused tasks that also appear in the Focus Today banner above. */
   dimmed?: boolean;
 }) {
-  const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, fadingTaskIds, markFading, unmarkFading, timer: globalTimer } = usePMStore();
+  const { activeTaskId, setActiveTask, selectedTasks, toggleTaskSelection, fadingTaskIds, markFading, unmarkFading, timers } = usePMStore();
   const focusTask = useFocusTask();
   const { data: activeWB } = useActiveWorkBlockRun();
   // Per-row timer indicator: live ticking elapsed for whichever timer this row
-  // owns (per-task timer OR a work-block run on this task). Updates once per
-  // second only when a relevant timer is active — quiet for everyone else.
-  const isPerTaskTimer = globalTimer?.taskId === task.id;
+  // owns (a running parallel per-task timer OR a work-block run on this task).
+  // Updates once per second only when a relevant timer is active.
+  const rowTimer = timers.find((t) => t.taskId === task.id) || null;
+  const isPerTaskTimer = !!rowTimer;
   const isWorkBlockRun = activeWB?.task.id === task.id && !activeWB?.run.ended_at;
   const isTiming = isPerTaskTimer || isWorkBlockRun;
   const [tickElapsed, setTickElapsed] = useState(0);
   useEffect(() => {
     if (!isTiming) { setTickElapsed(0); return; }
     const startMs = isPerTaskTimer
-      ? (globalTimer?.startedAt ?? Date.now())
+      ? (rowTimer?.startedAt ?? Date.now())
       : new Date(activeWB!.run.started_at).getTime();
     const tick = () => setTickElapsed(Math.max(0, Math.floor((Date.now() - startMs) / 1000)));
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [isTiming, isPerTaskTimer, globalTimer?.startedAt, activeWB?.run.started_at]);
+  }, [isTiming, isPerTaskTimer, rowTimer?.startedAt, activeWB?.run.started_at]);
   const isFocused = isTaskFocused(task);
   const effectiveListId = listId || (task as any).list_id || task.list?.id || null;
   const updateTask = useUpdateTask(effectiveListId);

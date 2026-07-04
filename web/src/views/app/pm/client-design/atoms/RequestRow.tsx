@@ -40,8 +40,8 @@ export default function RequestRow({
   onClick?: () => void;
 }) {
   const assignee = request.assignees?.[0];
-  const timerState = usePMStore((s) => s.timer);
-  const isTicking = timerState?.taskId === request.id;
+  const timerState = usePMStore((s) => s.timers.find((t) => t.taskId === request.id) ?? null);
+  const isTicking = !!timerState;
   const dueIn = daysUntilDue(request.due_date);
   const dueCls = dueIn != null ? (dueIn < 0 ? 'over' : dueIn <= 1 ? 'soon' : '') : '';
   const category = (request.metadata as any)?.category as string | undefined;

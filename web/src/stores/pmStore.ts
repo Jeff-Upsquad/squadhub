@@ -47,12 +47,47 @@ export function effectiveFocusBucket(
 }
 export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner';
 
-interface TimerState {
+export interface TimerState {
   taskId: string;
   taskTitle: string;
   listId: string;
   startedAt: number;
   baseTracked: number;
+}
+
+// Parallel timers: 1 primary + up to 3 secondary. `timers[0]` is always the
+// earliest-started running timer — that's the primary by definition; when it
+// stops, the next-earliest secondary is promoted implicitly.
+export const MAX_PARALLEL_TIMERS = 4;
+
+// One task's slice of a closed timer segment. Wall-clock time between two
+// timer start/stop events is divided evenly among every timer that was running
+// through that segment; callers persist each share as a task time entry.
+export interface TimerShare {
+  taskId: string;
+  listId: string;
+  /** Segment start (ms epoch) — becomes the time entry's started_at. */
+  startedAt: number;
+  seconds: number;
+}
+
+// A start request that hit the "another timer is already running" gate. Held
+// here (not persisted) so the global TimerConflictDialog can render it from
+// any surface that starts timers.
+export interface PendingTimerStart {
+  taskId: string;
+  taskTitle: string;
+  listId: string;
+  baseTracked: number;
+}
+
+// Close the running segment: every currently running timer gets an equal split
+// of the wall-clock elapsed since the segment opened.
+function closeSegmentShares(timers: TimerState[], segmentStart: number | null, now: number): TimerShare[] {
+  if (!timers.length || segmentStart === null) return [];
+  const per = Math.round((now - segmentStart) / 1000 / timers.length);
+  if (per < 1) return [];
+  return timers.map((t) => ({ taskId: t.taskId, listId: t.listId, startedAt: segmentStart, seconds: per }));
 }
 
 // Target for the grouped-task detail panel (the work-block-style view opened by
@@ -122,7 +157,13 @@ interface PMState {
   // clicking the grouped row's name. Mirrors the work-block task type view but
   // for a virtual group (no task row). Not persisted.
   groupRunPanel: GroupRunPanelTarget | null;
-  timer: TimerState | null;
+  // Running per-task timers, ordered by start time (timers[0] = primary).
+  // A shared segment clock (timerSegmentStart) marks the last start/stop event;
+  // the wall-clock since then is what gets split evenly across `timers` when
+  // the next event closes the segment.
+  timers: TimerState[];
+  timerSegmentStart: number | null;
+  pendingTimerStart: PendingTimerStart | null;
   filtersByScope: Record<string, TaskFilterState>;
   focusedTodayIds: string[];
   focusedTodayDate: string;
@@ -178,8 +219,9 @@ interface PMState {
   clearSelection: () => void;
   markFading: (taskId: string, prevStatus: string) => void;
   unmarkFading: (taskId: string) => void;
-  startTimer: (taskId: string, taskTitle: string, listId: string, baseTracked: number) => TimerState | null;
-  stopTimer: () => TimerState | null;
+  startParallelTimer: (taskId: string, taskTitle: string, listId: string, baseTracked: number) => { shares: TimerShare[] } | null;
+  stopParallelTimer: (taskId: string) => { stopped: TimerState; shares: TimerShare[] } | null;
+  setPendingTimerStart: (pending: PendingTimerStart | null) => void;
   setScopeFilters: (scopeKey: string, next: TaskFilterState) => void;
   clearScopeFilters: (scopeKey: string) => void;
   setScopedGroupBy: (scopeKey: string, value: GroupBy) => void;
@@ -244,7 +286,9 @@ export const usePMStore = create<PMState>()(
       fadingTaskIds: new Map<string, string>(),
       peekTaskId: null,
       groupRunPanel: null,
-      timer: null,
+      timers: [],
+      timerSegmentStart: null,
+      pendingTimerStart: null,
       filtersByScope: {},
       focusedTodayIds: [],
       focusedTodayDate: todayKey(),
@@ -345,18 +389,34 @@ export const usePMStore = create<PMState>()(
           next.delete(taskId);
           return { fadingTaskIds: next };
         }),
-      startTimer: (taskId, taskTitle, listId, baseTracked) => {
-        const prev = get().timer;
+      startParallelTimer: (taskId, taskTitle, listId, baseTracked) => {
+        const { timers, timerSegmentStart } = get();
+        if (timers.some((t) => t.taskId === taskId)) return null;
+        if (timers.length >= MAX_PARALLEL_TIMERS) return null;
+        const now = Date.now();
+        const shares = closeSegmentShares(timers, timerSegmentStart, now);
         set({
-          timer: { taskId, taskTitle, listId, startedAt: Date.now(), baseTracked },
+          timers: [...timers, { taskId, taskTitle, listId, startedAt: now, baseTracked }],
+          timerSegmentStart: now,
         });
-        return prev;
+        return { shares };
       },
-      stopTimer: () => {
-        const prev = get().timer;
-        set({ timer: null });
-        return prev;
+      stopParallelTimer: (taskId) => {
+        const { timers, timerSegmentStart } = get();
+        const stopped = timers.find((t) => t.taskId === taskId);
+        if (!stopped) return null;
+        const now = Date.now();
+        // The stopping timer ran through this segment too, so it takes its
+        // equal split alongside the survivors.
+        const shares = closeSegmentShares(timers, timerSegmentStart, now);
+        const remaining = timers.filter((t) => t.taskId !== taskId);
+        set({
+          timers: remaining,
+          timerSegmentStart: remaining.length ? now : null,
+        });
+        return { stopped, shares };
       },
+      setPendingTimerStart: (pending) => set({ pendingTimerStart: pending }),
       setScopeFilters: (scopeKey, next) => {
         set((state) => {
           if (isFilterEmpty(next)) {
@@ -539,7 +599,7 @@ export const usePMStore = create<PMState>()(
           focusBucketsRolloverDate: s.focusBucketsRolloverDate,
         };
       },
-      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', activeViewIdByList: {}, listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timer: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
+      reset: () => set({ activeSpaceId: null, activeListId: null, activeFolderId: null, activeSpacePageId: null, activeTaskId: null, activeDesignFolderId: null, activeDashboardTab: null, activeSecondaryCard: null, newTasksOpen: false, newTaskFabVisible: false, homeView: 'hub', contextListId: null, viewMode: 'list', activeViewIdByList: {}, listGroupBy: 'status', myTasksOnly: false, collapsedGroups: {}, groupedExpanded: {}, focusBucketCollapsed: {}, focusBucketAutoOpenedDate: {}, selectedTasks: [], fadingTaskIds: new Map<string, string>(), peekTaskId: null, groupRunPanel: null, timers: [], timerSegmentStart: null, pendingTimerStart: null, filtersByScope: {}, focusedTodayIds: [], focusedTodayDate: todayKey(), focusBuckets: {}, recurringFocusBuckets: {}, focusBucketsRolloverDate: todayKey(), groupByScope: {}, sortByScope: {}, focusTodayScope: {}, secondaryCardGroupBy: {}, todayListGroupBy: 'none', todayListView: 'list', lastActiveSection: 'home', lastHomeView: 'hub' }),
     }),
     {
       name: 'squadhub-pm',
@@ -553,7 +613,8 @@ export const usePMStore = create<PMState>()(
         activeDashboardTab: state.activeDashboardTab,
         homeView: state.homeView,
         contextListId: state.contextListId,
-        timer: state.timer,
+        timers: state.timers,
+        timerSegmentStart: state.timerSegmentStart,
         activeViewIdByList: state.activeViewIdByList,
         listGroupBy: state.listGroupBy,
         myTasksOnly: state.myTasksOnly,
@@ -577,14 +638,21 @@ export const usePMStore = create<PMState>()(
         lastActiveSection: state.lastActiveSection,
         lastHomeView: state.lastHomeView,
       }),
-      version: 3,
+      version: 4,
       migrate: (persisted: unknown, fromVersion: number) => {
-        const p = (persisted ?? {}) as Partial<PMState>;
+        let p = (persisted ?? {}) as Partial<PMState> & { timer?: TimerState | null };
         if (fromVersion < 2) {
-          return { ...p, filtersByScope: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none' };
+          p = { ...p, filtersByScope: {}, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none' };
+        } else if (fromVersion < 3) {
+          p = { ...p, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none' };
         }
-        if (fromVersion < 3) {
-          return { ...p, groupByScope: {}, sortByScope: {}, focusTodayScope: {}, todayListGroupBy: 'none' };
+        if (fromVersion < 4) {
+          // v3 kept a single running timer; carry it over as the primary. Its
+          // segment opens at its own start, so stopping it logs the full
+          // elapsed exactly like the old model did.
+          const legacy = p.timer ?? null;
+          p = { ...p, timers: legacy ? [legacy] : [], timerSegmentStart: legacy ? legacy.startedAt : null };
+          delete p.timer;
         }
         return p;
       },

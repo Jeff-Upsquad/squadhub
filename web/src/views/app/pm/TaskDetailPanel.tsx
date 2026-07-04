@@ -43,13 +43,8 @@ import {
   useActiveWorkBlockRun,
   useRecordWorkBlockCompletion,
   useOpenWorkBlockTaskTime,
-  useCloseWorkBlockTaskTime,
 } from '../../../hooks/useWorkBlocks';
-import {
-  useActiveGroupRun,
-  useOpenGroupRunTaskTime,
-  useCloseGroupRunTaskTime,
-} from '../../../hooks/useGroupRuns';
+import { useParallelTimers } from '../../../hooks/useParallelTimers';
 
 function parseTimeInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
@@ -277,7 +272,7 @@ export default function TaskDetailPanel({
   isPeek?: boolean;
 }) {
   const pmStore = usePMStore();
-  const { activeTaskId, timer, startTimer: globalStartTimer, stopTimer: globalStopTimer } = pmStore;
+  const { activeTaskId, timers, timerSegmentStart } = pmStore;
   const focusTask = useFocusTask();
   // effectiveTaskId — primary uses the global activeTaskId; peek uses the override.
   const effectiveTaskId = taskIdOverride ?? activeTaskId;
@@ -456,26 +451,26 @@ export default function TaskDetailPanel({
   const activeWorkBlock = useActiveWorkBlockRun();
   const recordCompletion = useRecordWorkBlockCompletion();
   const openTaskTime = useOpenWorkBlockTaskTime();
-  const closeTaskTime = useCloseWorkBlockTaskTime();
-  // Group-run overlaps: a per-task timer running while a group focus session is
-  // active is bracketed into the group run too, so the group can show what was
-  // worked on inside it.
-  const activeGroupRun = useActiveGroupRun();
-  const openGroupTaskTime = useOpenGroupRunTaskTime();
-  const closeGroupTaskTime = useCloseGroupRunTaskTime();
+  // Parallel per-task timers — start (with the conflict dialog gate), stop, and
+  // the segment-share flush + work-block/group-run bracketing all live in here.
+  const { requestStartTimer, stopTimer: stopParallelTimer } = useParallelTimers();
 
   // Two independent "is running for this task?" predicates: the per-task
   // timer (regular tasks) and the work-block run (work-block tasks). They
   // never overlap on the *same* task, but a regular task's timer can run
   // alongside a work-block run on a different task — that's the whole point.
-  const isTimerForThisTask = !isWorkBlock && timer?.taskId === effectiveTaskId;
+  const isTimerForThisTask = !isWorkBlock && timers.some((t) => t.taskId === effectiveTaskId);
   const isWorkBlockRunForThisTask =
     isWorkBlock && activeWorkBlock.data?.task.id === effectiveTaskId && !activeWorkBlock.data?.run.ended_at;
   const isAnyRunningForThisTask = isTimerForThisTask || isWorkBlockRunForThisTask;
 
   useEffect(() => {
-    if (isTimerForThisTask && timer) {
-      const tick = () => setTimerElapsed(Math.floor((Date.now() - timer.startedAt) / 1000));
+    if (isTimerForThisTask && timers.length && timerSegmentStart != null) {
+      // Live add-on for a running task = its equal split of the CURRENT
+      // segment. Earlier segments are already flushed into task.time_tracked,
+      // which every display adds this to.
+      const tick = () =>
+        setTimerElapsed(Math.max(0, Math.floor((Date.now() - timerSegmentStart) / 1000 / timers.length)));
       tick();
       const id = setInterval(tick, 1000);
       return () => clearInterval(id);
@@ -489,62 +484,29 @@ export default function TaskDetailPanel({
     }
     setTimerElapsed(0);
     return undefined;
-  }, [isTimerForThisTask, timer, isWorkBlockRunForThisTask, activeWorkBlock.data]);
+  }, [isTimerForThisTask, timers, timerSegmentStart, isWorkBlockRunForThisTask, activeWorkBlock.data]);
 
   const handleStartTimer = async () => {
     if (!task) return;
 
     // ---- Work-block path: only manage the work-block run, leave the
-    // per-task timer alone so the user can still run one on a regular task
+    // per-task timers alone so the user can still run them on regular tasks
     // at the same time.
     if (isWorkBlock) {
       try {
         const run = await startWorkBlockRun.mutateAsync({ task_id: task.id });
-        // If a per-task timer is already running on a regular task, log the
-        // overlap immediately so the work block shows it from second 0.
-        if (timer && timer.taskId !== task.id) {
-          openTaskTime.mutate({ run_id: run.id, task_id: timer.taskId });
+        // Any per-task timers already running on regular tasks get their
+        // overlap logged immediately so the work block shows them from second 0.
+        for (const t of timers) {
+          if (t.taskId !== task.id) openTaskTime.mutate({ run_id: run.id, task_id: t.taskId });
         }
       } catch (err) { console.error('Failed to start work-block run:', err); }
       return;
     }
 
-    // ---- Regular-task path: existing per-task timer flow + (if a work-
-    // block run is active) bracket the overlap with task-time rows.
-    const prev = globalStartTimer(task.id, task.title, listId, task.time_tracked || 0);
-    const active = activeWorkBlock.data;
-    const gRun = activeGroupRun.data?.run && !activeGroupRun.data.run.ended_at ? activeGroupRun.data.run : null;
-    if (prev) {
-      const elapsedSecs = Math.floor((Date.now() - prev.startedAt) / 1000);
-      // Close the prev task's overlap row first — any new row for the same
-      // (run, task) would otherwise hit the partial unique index.
-      if (active && prev.taskId !== task.id) {
-        closeTaskTime.mutate({ run_id: active.run.id, task_id: prev.taskId });
-      }
-      if (gRun && prev.taskId !== task.id) {
-        closeGroupTaskTime.mutate({ run_id: gRun.id, task_id: prev.taskId });
-      }
-      if (elapsedSecs >= 1) {
-        try {
-          await api.post(`/pm/tasks/${prev.taskId}/time-entries`, {
-            started_at: new Date(prev.startedAt).toISOString(),
-            duration_seconds: elapsedSecs,
-          });
-          qc.invalidateQueries({ queryKey: ['task-time-entries'] });
-          qc.invalidateQueries({ queryKey: ['tasks', prev.listId] });
-          qc.invalidateQueries({ queryKey: ['task', prev.taskId] });
-          qc.invalidateQueries({ queryKey: ['folder-time-summary'] });
-        } catch (err) {
-          console.error('Failed to save previous timer:', err);
-        }
-      }
-    }
-    if (active) {
-      openTaskTime.mutate({ run_id: active.run.id, task_id: task.id });
-    }
-    if (gRun) {
-      openGroupTaskTime.mutate({ run_id: gRun.id, task_id: task.id });
-    }
+    // ---- Regular-task path: nothing running → starts the primary timer;
+    // otherwise the global conflict dialog offers to add this as a secondary.
+    await requestStartTimer({ taskId: task.id, taskTitle: task.title, listId, baseTracked: task.time_tracked || 0 });
   };
 
   const handleStopTimer = async () => {
@@ -561,32 +523,9 @@ export default function TaskDetailPanel({
       return;
     }
 
-    // ---- Regular-task path: existing per-task time entry + close the
-    // corresponding overlap row if a work-block run is active.
-    const stopped = globalStopTimer();
-    if (!stopped) return;
-    const active = activeWorkBlock.data;
-    if (active) {
-      closeTaskTime.mutate({ run_id: active.run.id, task_id: stopped.taskId });
-    }
-    const gRun = activeGroupRun.data?.run && !activeGroupRun.data.run.ended_at ? activeGroupRun.data.run : null;
-    if (gRun) {
-      closeGroupTaskTime.mutate({ run_id: gRun.id, task_id: stopped.taskId });
-    }
-    const elapsedSecs = Math.floor((Date.now() - stopped.startedAt) / 1000);
-    if (elapsedSecs < 1) return;
-    try {
-      await api.post(`/pm/tasks/${stopped.taskId}/time-entries`, {
-        started_at: new Date(stopped.startedAt).toISOString(),
-        duration_seconds: elapsedSecs,
-      });
-      qc.invalidateQueries({ queryKey: ['task-time-entries'] });
-      qc.invalidateQueries({ queryKey: ['tasks', stopped.listId] });
-      qc.invalidateQueries({ queryKey: ['task', stopped.taskId] });
-      qc.invalidateQueries({ queryKey: ['folder-time-summary'] });
-    } catch (err) {
-      console.error('Failed to save tracked time:', err);
-    }
+    // ---- Regular-task path: stop just this task's timer — any others keep
+    // running. The hook logs each running task's share of the closed segment.
+    await stopParallelTimer(task.id);
   };
 
   if (!effectiveTaskId) return null;

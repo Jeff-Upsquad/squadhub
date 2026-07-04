@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task } from '@squadhub/shared';
 import { useMyTasks, useUpdateTask } from '../../../hooks/useTasks';
-import { useCreateTaskTimeEntry, useMyTimeEntries } from '../../../hooks/useTaskTimeEntries';
+import { useMyTimeEntries } from '../../../hooks/useTaskTimeEntries';
+import { useParallelTimers } from '../../../hooks/useParallelTimers';
 import { usePMStore, todayKey, effectiveFocusBucket, type FocusBucket } from '../../../stores/pmStore';
 import { avatarColor, initialOf, formatWhen } from '../pm/taskHelpers';
 import { formatTracked, toLocalDateKey } from '../../../lib/formatDuration';
@@ -150,13 +151,14 @@ export default function TodayList() {
   // timer is actually running so the figures advance live without a permanent
   // 1s interval.
   const { data: timeEntries } = useMyTimeEntries();
-  const timer = usePMStore((s) => s.timer);
+  const timers = usePMStore((s) => s.timers);
+  const timerSegmentStart = usePMStore((s) => s.timerSegmentStart);
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
-    if (!timer) return;
+    if (!timers.length) return;
     const id = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [timer]);
+  }, [timers.length]);
   const { secondsTodayByTask, totalTodaySeconds } = useMemo(() => {
     const map = new Map<string, number>();
     let total = 0;
@@ -171,15 +173,20 @@ export default function TodayList() {
       map.set(e.task_id, (map.get(e.task_id) || 0) + dur);
       total += dur;
     }
-    if (timer) {
-      const live = Math.max(0, Math.floor((nowTick - timer.startedAt) / 1000));
+    // Live add-on per running task = its equal split of the CURRENT segment
+    // only — earlier segments were already flushed into today's entries above,
+    // so this can't double-count.
+    if (timers.length && timerSegmentStart != null) {
+      const live = Math.max(0, Math.floor((nowTick - timerSegmentStart) / 1000 / timers.length));
       if (live > 0) {
-        map.set(timer.taskId, (map.get(timer.taskId) || 0) + live);
-        total += live;
+        for (const rt of timers) {
+          map.set(rt.taskId, (map.get(rt.taskId) || 0) + live);
+          total += live;
+        }
       }
     }
     return { secondsTodayByTask: map, totalTodaySeconds: total };
-  }, [timeEntries, today, timer, nowTick]);
+  }, [timeEntries, today, timers, timerSegmentStart, nowTick]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -497,39 +504,18 @@ function TodayRow({ task: t, onOpen, secondsToday = 0 }: { task: Task; onOpen: (
   const markFading = usePMStore((s) => s.markFading);
   const unmarkFading = usePMStore((s) => s.unmarkFading);
   const isFading = usePMStore((s) => s.fadingTaskIds.has(t.id));
-  const timer = usePMStore((s) => s.timer);
-  const startTimer = usePMStore((s) => s.startTimer);
-  const stopTimer = usePMStore((s) => s.stopTimer);
-  const createEntry = useCreateTaskTimeEntry();
-  const isTracking = timer?.taskId === t.id;
-
-  // Persist a finished timer session as a time entry (bumps task.time_tracked
-  // server-side). Mirrors ActiveTimer.handleStopPerTask / the detail panel.
-  const saveSession = async (taskId: string, startedAt: number) => {
-    const secs = Math.floor((Date.now() - startedAt) / 1000);
-    if (secs < 1) return;
-    try {
-      await createEntry.mutateAsync({
-        taskId,
-        startedAt: new Date(startedAt).toISOString(),
-        durationSeconds: secs,
-      });
-    } catch (err) {
-      console.error('Failed to save tracked time:', err);
-    }
-  };
+  const { timers, requestStartTimer, stopTimer } = useParallelTimers();
+  const isTracking = timers.some((x) => x.taskId === t.id);
 
   const onTimerClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isTracking) {
-      const stopped = stopTimer();
-      if (stopped) await saveSession(stopped.taskId, stopped.startedAt);
+      await stopTimer(t.id);
       return;
     }
-    // Starting here switches the single global timer to this task; if another
-    // task was being tracked, save its session first so no time is lost.
-    const prev = startTimer(t.id, t.title, t.list_id || '', t.time_tracked || 0);
-    if (prev) await saveSession(prev.taskId, prev.startedAt);
+    // With nothing running this starts the primary timer; otherwise it opens
+    // the global conflict dialog offering to add this task as a secondary.
+    await requestStartTimer({ taskId: t.id, taskTitle: t.title, listId: t.list_id || '', baseTracked: t.time_tracked || 0 });
   };
   const [isHidden, setIsHidden] = useState(false);
   // Fixed-viewport coordinates for the bucket menu (null = closed). The menu is

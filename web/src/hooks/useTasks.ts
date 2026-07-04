@@ -4,6 +4,7 @@ import type { Task, SpaceStatus, TaskComment, TaskMetadata, TaskRecurrence, Spac
 import { getTaskStatusCategory } from '@squadhub/shared';
 import { showToastCard } from '../components/Toast';
 import { usePMStore } from '../stores/pmStore';
+import { flushTimerShares } from './useParallelTimers';
 
 // Invalidate every query key that contributes to a task-list UI so all views
 // (List, Folder, Space, My Tasks, Emergency, Day Planner) refresh after a
@@ -49,24 +50,15 @@ function statusMeansComplete(qc: QueryClient, status: string | undefined): boole
 }
 
 // If a per-task timer is running for the task being completed, stop it and log
-// the elapsed session — closing a task shouldn't leave its timer ticking.
-// Mirrors ActiveTimer's stop+save flow; idempotent because stopTimer() clears
-// the single global timer.
+// the closed segment's shares — closing a task shouldn't leave its timer
+// ticking. Only this task's timer stops; any parallel timers keep running.
 async function stopRunningTimerOnComplete(qc: QueryClient, taskId: string) {
-  const { timer, stopTimer } = usePMStore.getState();
-  if (!timer || timer.taskId !== taskId) return;
-  const stopped = stopTimer();
-  if (!stopped) return;
-  const elapsedSecs = Math.floor((Date.now() - stopped.startedAt) / 1000);
-  if (elapsedSecs < 1) return;
+  const { timers, stopParallelTimer } = usePMStore.getState();
+  if (!timers.some((t) => t.taskId === taskId)) return;
+  const res = stopParallelTimer(taskId);
+  if (!res) return;
   try {
-    await api.post(`/pm/tasks/${stopped.taskId}/time-entries`, {
-      started_at: new Date(stopped.startedAt).toISOString(),
-      duration_seconds: elapsedSecs,
-    });
-    qc.invalidateQueries({ queryKey: ['task-time-entries'] });
-    qc.invalidateQueries({ queryKey: ['task', stopped.taskId] });
-    qc.invalidateQueries({ queryKey: ['folder-time-summary'] });
+    await flushTimerShares(qc, res.shares);
   } catch (err) {
     console.error('Failed to save tracked time on completion:', err);
   }

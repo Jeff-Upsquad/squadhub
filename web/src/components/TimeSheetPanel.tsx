@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TaskTimeEntry } from '@squadhub/shared';
 import { usePMStore } from '../stores/pmStore';
-import { useMyTimeEntries, useCreateTaskTimeEntry } from '../hooks/useTaskTimeEntries';
+import { useMyTimeEntries } from '../hooks/useTaskTimeEntries';
+import { useParallelTimers } from '../hooks/useParallelTimers';
 import {
   formatTracked,
   formatClock,
@@ -18,21 +19,17 @@ type Props = {
 export default function TimeSheetPanel({ anchorRect, onClose }: Props) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const { data: entries, isLoading } = useMyTimeEntries(true);
-  const timer = usePMStore((s) => s.timer);
   const setActiveTask = usePMStore((s) => s.setActiveTask);
-  const startTimer = usePMStore((s) => s.startTimer);
-  const stopTimer = usePMStore((s) => s.stopTimer);
-  const createEntry = useCreateTaskTimeEntry();
-  const [elapsed, setElapsed] = useState(0);
+  const { timers, requestStartTimer, stopTimer } = useParallelTimers();
+  const [now, setNow] = useState(() => Date.now());
 
-  // Tick the running timer's live elapsed seconds
+  // One shared tick drives every running timer's live elapsed
   useEffect(() => {
-    if (!timer) { setElapsed(0); return; }
-    const tick = () => setElapsed(Math.floor((Date.now() - timer.startedAt) / 1000));
-    tick();
-    const id = setInterval(tick, 1000);
+    if (!timers.length) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [timer]);
+  }, [timers.length]);
 
   // Close on Escape or outside click
   useEffect(() => {
@@ -80,31 +77,12 @@ export default function TimeSheetPanel({ anchorRect, onClose }: Props) {
     return { top: t, left: l };
   }, [anchorRect]);
 
-  const persistTimer = async (priorTimer: ReturnType<typeof startTimer>) => {
-    if (!priorTimer) return;
-    const elapsedSecs = Math.floor((Date.now() - priorTimer.startedAt) / 1000);
-    if (elapsedSecs < 1) return;
-    try {
-      await createEntry.mutateAsync({
-        taskId: priorTimer.taskId,
-        startedAt: new Date(priorTimer.startedAt).toISOString(),
-        durationSeconds: elapsedSecs,
-      });
-    } catch (err) {
-      console.error('Failed to persist timer entry:', err);
-    }
-  };
-
   const handlePlay = async (entry: TaskTimeEntry) => {
     const task = entry.task;
     if (!task) return;
-    const prior = startTimer(task.id, task.title, task.list_id, task.time_tracked || 0);
-    await persistTimer(prior);
-  };
-
-  const handleStopRunning = async () => {
-    const stopped = stopTimer();
-    await persistTimer(stopped);
+    // Nothing running → starts the primary timer; otherwise the global
+    // conflict dialog offers to add this task as a secondary.
+    await requestStartTimer({ taskId: task.id, taskTitle: task.title, listId: task.list_id, baseTracked: task.time_tracked || 0 });
   };
 
   const handleOpenTask = (taskId: string) => {
@@ -145,36 +123,56 @@ export default function TimeSheetPanel({ anchorRect, onClose }: Props) {
 
       {/* Body (scrollable) */}
       <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 76px)' }}>
-        {/* Running-timer row (sticky at top of body) */}
-        {timer && (
-          <div className="sticky top-0 z-[1] border-b border-[var(--sh-hair)] bg-emerald-50 px-4 py-3">
-            <div className="flex items-start gap-2">
-              <span className="relative mt-1.5 flex h-2 w-2 shrink-0">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-              </span>
-              <div className="flex-1 min-w-0">
-                <button
-                  onClick={() => handleOpenTask(timer.taskId)}
-                  className="block w-full truncate text-left text-[13px] font-semibold text-[var(--sh-ink)] hover:text-emerald-700"
-                >
-                  {timer.taskTitle}
-                </button>
-                <div className="mt-0.5 font-mono text-[12px] font-semibold tabular-nums text-emerald-800">
-                  {formatClock(elapsed)}
+        {/* Running-timer rows (sticky at top of body): primary first, then secondaries */}
+        {timers.length > 0 && (
+          <div className="sticky top-0 z-[1] border-b border-[var(--sh-hair)] bg-emerald-50 px-4 py-2">
+            {timers.map((t, i) => (
+              <div key={t.taskId} className="flex items-start gap-2 py-1">
+                <span className="relative mt-1.5 flex h-2 w-2 shrink-0">
+                  <span
+                    className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75"
+                    style={{ background: i === 0 ? '#34d399' : '#fbbf24' }}
+                  />
+                  <span
+                    className="relative inline-flex h-2 w-2 rounded-full"
+                    style={{ background: i === 0 ? '#10b981' : '#f59e0b' }}
+                  />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <button
+                    onClick={() => handleOpenTask(t.taskId)}
+                    className="block w-full truncate text-left text-[13px] font-semibold text-[var(--sh-ink)] hover:text-emerald-700"
+                  >
+                    {t.taskTitle}
+                  </button>
+                  <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[12px] font-semibold tabular-nums text-emerald-800">
+                    {formatClock(Math.max(0, Math.floor((now - t.startedAt) / 1000)))}
+                    {timers.length > 1 && (
+                      <span
+                        className="rounded px-1 py-px font-sans text-[9.5px] font-semibold uppercase tracking-wide"
+                        style={
+                          i === 0
+                            ? { background: '#d1fae5', color: '#047857' }
+                            : { background: '#fef3c7', color: '#b45309' }
+                        }
+                      >
+                        {i === 0 ? 'Primary' : 'Secondary'}
+                      </span>
+                    )}
+                  </div>
                 </div>
+                <button
+                  onClick={() => stopTimer(t.taskId)}
+                  className="flex shrink-0 items-center gap-1 rounded-[6px] bg-red-500 px-2 py-1 text-[11px] font-medium text-white hover:bg-red-600"
+                  title="Stop timer"
+                >
+                  <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="6" y="6" width="12" height="12" rx="1" />
+                  </svg>
+                  Stop
+                </button>
               </div>
-              <button
-                onClick={handleStopRunning}
-                className="flex shrink-0 items-center gap-1 rounded-[6px] bg-red-500 px-2 py-1 text-[11px] font-medium text-white hover:bg-red-600"
-                title="Stop timer"
-              >
-                <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
-                  <rect x="6" y="6" width="12" height="12" rx="1" />
-                </svg>
-                Stop
-              </button>
-            </div>
+            ))}
           </div>
         )}
 
@@ -182,7 +180,7 @@ export default function TimeSheetPanel({ anchorRect, onClose }: Props) {
           <div className="px-4 py-8 text-center text-[12px] text-[var(--sh-ink-3)]">Loading…</div>
         )}
 
-        {!isLoading && (!entries || entries.length === 0) && !timer && (
+        {!isLoading && (!entries || entries.length === 0) && timers.length === 0 && (
           <div className="px-4 py-10 text-center">
             <div className="mx-auto mb-2 grid h-10 w-10 place-items-center rounded-full bg-[var(--sh-hair-3)] text-[var(--sh-ink-3)]">
               <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -208,7 +206,7 @@ export default function TimeSheetPanel({ anchorRect, onClose }: Props) {
                 entry={entry}
                 onOpen={handleOpenTask}
                 onPlay={handlePlay}
-                isRunningTask={timer?.taskId === entry.task?.id}
+                isRunningTask={timers.some((t) => t.taskId === entry.task?.id)}
               />
             ))}
           </div>
