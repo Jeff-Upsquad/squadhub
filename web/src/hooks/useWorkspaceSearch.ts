@@ -5,6 +5,7 @@ import api from '../services/api';
 import { useSpaces } from './useSpaces';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useWorkspaceMembers, type WorkspaceMember } from './useWorkspaceMembers';
+import type { MessageSearchResult } from './useMessageSearch';
 
 const PER_CATEGORY_LIMIT = 8;
 
@@ -159,6 +160,21 @@ export function useWorkspaceSearch(workspaceId: string | undefined, query: strin
     staleTime: 30_000,
   });
 
+  // Chat message content, across every channel + DM the user can read in this
+  // workspace. Channel *names* are matched client-side above (filteredChannels);
+  // this searches the message bodies themselves.
+  const messagesQuery = useQuery<MessageSearchResult[]>({
+    queryKey: ['message-search', `ws:${workspaceId ?? ''}`, debouncedQ, PER_CATEGORY_LIMIT],
+    queryFn: async () => {
+      const res = await api.get('/messages/search', {
+        params: { workspace_id: workspaceId, q: debouncedQ, limit: PER_CATEGORY_LIMIT },
+      });
+      return (res.data?.data?.messages || []) as MessageSearchResult[];
+    },
+    enabled: !!workspaceId && debouncedQ.length > 0,
+    staleTime: 30_000,
+  });
+
   return {
     spaces: filteredSpaces,
     folders: filteredFolders,
@@ -166,6 +182,7 @@ export function useWorkspaceSearch(workspaceId: string | undefined, query: strin
     tasks: tasksQuery.data ?? [],
     channels: filteredChannels,
     members: filteredMembers,
-    isLoading: tasksQuery.isFetching,
+    messages: messagesQuery.data ?? [],
+    isLoading: tasksQuery.isFetching || messagesQuery.isFetching,
   };
 }

@@ -678,9 +678,11 @@ interface Props {
   inThread?: boolean;
   grouped?: boolean;
   threadMeta?: ThreadMeta;
+  /** Flash this row (a search result was jumped to). */
+  highlighted?: boolean;
 }
 
-export default function MessageBubble({ message, onOpenThread, inThread, grouped, threadMeta }: Props) {
+export default function MessageBubble({ message, onOpenThread, inThread, grouped, threadMeta, highlighted }: Props) {
   const queryClient = useQueryClient();
   const [showPicker, setShowPicker] = useState(false);
   const sender = message.sender;
@@ -793,10 +795,13 @@ export default function MessageBubble({ message, onOpenThread, inThread, grouped
   }, [sender, message.sender_id]);
 
   const cls =
-    'sqc-msg' + (grouped ? ' is-grouped' : '') + (isMentioned ? ' is-mentioned' : '');
+    'sqc-msg' +
+    (grouped ? ' is-grouped' : '') +
+    (isMentioned ? ' is-mentioned' : '') +
+    (highlighted ? ' is-search-hit' : '');
 
   return (
-    <div className={cls}>
+    <div className={cls} data-message-id={message.id}>
       <HoverActions
         onAddReaction={() => setShowPicker(true)}
         onReplyInThread={!inThread && onOpenThread ? onOpenThread : undefined}

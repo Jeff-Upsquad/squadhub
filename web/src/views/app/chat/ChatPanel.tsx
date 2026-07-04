@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import { getSocket } from '../../../services/socket';
@@ -137,6 +137,8 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
   const queryClient = useQueryClient();
   const activeThreadParentId = useWorkspaceStore((s) => s.activeThreadParentId);
   const setActiveThread = useWorkspaceStore((s) => s.setActiveThread);
+  const messageJumpTarget = useWorkspaceStore((s) => s.messageJumpTarget);
+  const clearMessageJump = useWorkspaceStore((s) => s.clearMessageJump);
   const meId = useAuthStore((s) => s.user?.id);
 
   // "Message #design" / "Message Jane D" placeholder, like Slack.
@@ -372,6 +374,13 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
   // scrollHeight captured just before an older-messages fetch, so we can keep the
   // current messages visually fixed once the prepended batch grows the content.
   const restoreScrollRef = useRef<number | null>(null);
+  // Jump-to-message (from search): the id we're seeking, and the id currently
+  // flashing. `jumpProcessedNonce` dedupes a request across re-renders;
+  // `jumpFetchCount` bounds the page-loads so a very old target can't spin forever.
+  const [pendingJumpId, setPendingJumpId] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const jumpProcessedNonce = useRef<number>(-1);
+  const jumpFetchCount = useRef(0);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || topLevelMessages.length === 0) return;
@@ -405,6 +414,56 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
       fetchNextPage();
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // ---- Jump to a message picked from search --------------------------------
+  // A jump request in the store that targets THIS conversation seeds the search:
+  // thread replies open the thread panel; top-level messages seed pendingJumpId.
+  useEffect(() => {
+    const t = messageJumpTarget;
+    if (!t || t.conversationId !== channelId || t.kind !== kind) return;
+    if (jumpProcessedNonce.current === t.nonce) return;
+    jumpProcessedNonce.current = t.nonce;
+    if (t.parentId) {
+      setActiveThread(t.parentId);
+      clearMessageJump();
+      return;
+    }
+    jumpFetchCount.current = 0;
+    setPendingJumpId(t.messageId);
+  }, [messageJumpTarget, channelId, kind, setActiveThread, clearMessageJump]);
+
+  // Locate the pending target: scroll + flash it if it's in the DOM, otherwise
+  // pull older pages until it appears (bounded), then give up once history is
+  // exhausted or the cap is hit.
+  useEffect(() => {
+    if (!pendingJumpId) return;
+    const el = scrollRef.current?.querySelector(`[data-message-id="${pendingJumpId}"]`);
+    if (el) {
+      (el as HTMLElement).scrollIntoView({ block: 'center' });
+      setHighlightId(pendingJumpId);
+      setPendingJumpId(null);
+      clearMessageJump();
+      return;
+    }
+    // First page may still be loading — wait for the next messages update rather
+    // than declaring failure on an empty list.
+    if (messages.length === 0) return;
+    const MAX_JUMP_PAGES = 40;
+    if (hasNextPage && !isFetchingNextPage && jumpFetchCount.current < MAX_JUMP_PAGES) {
+      jumpFetchCount.current += 1;
+      fetchNextPage();
+    } else if (!hasNextPage || jumpFetchCount.current >= MAX_JUMP_PAGES) {
+      setPendingJumpId(null);
+      clearMessageJump();
+    }
+  }, [pendingJumpId, messages, hasNextPage, isFetchingNextPage, fetchNextPage, clearMessageJump]);
+
+  // Clear the flash once it has played.
+  useEffect(() => {
+    if (!highlightId) return;
+    const t = setTimeout(() => setHighlightId(null), 2400);
+    return () => clearTimeout(t);
+  }, [highlightId]);
 
   // Tag a message as "grouped" when the prior visible message is from the
   // same author and within 5 minutes — matches the Slack-style stacking.
@@ -455,6 +514,7 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
                 grouped={isGrouped(i)}
                 threadMeta={threadIndex.get(item.message!.id)}
                 onOpenThread={() => setActiveThread(item.message!.id)}
+                highlighted={highlightId === item.message!.id}
               />
             )
           )}
