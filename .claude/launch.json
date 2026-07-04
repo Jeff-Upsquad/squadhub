@@ -428,6 +428,13 @@
       "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/zealous-payne-bbbb5e/web' && INTERNAL_API_URL=http://localhost:4031 exec npx next dev -p 3145"],
       "port": 3145,
       "autoPort": true
+    },
+    {
+      "name": "Laughing Cerf Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/laughing-cerf-df8ea6/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3150"],
+      "port": 3150,
+      "autoPort": true
     }
   ]
 }
