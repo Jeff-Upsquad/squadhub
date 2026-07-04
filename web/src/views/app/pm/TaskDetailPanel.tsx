@@ -18,7 +18,7 @@ import {
   useDeleteChecklistItem,
 } from '../../../hooks/useChecklists';
 import api from '../../../services/api';
-import type { SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority, TaskStatusKey, TaskRecurrence } from '@squadhub/shared';
+import type { Task, TaskChecklist, SpaceStatus, TaskType, TaskTypeField, TaskMetadata, TaskPriority, TaskStatusKey, TaskRecurrence } from '@squadhub/shared';
 import { getTaskStatusDef, describeTaskRecurrence } from '@squadhub/shared';
 import AssigneePicker from './AssigneePicker';
 import NoAssigneeCompleteDialog from './NoAssigneeCompleteDialog';
@@ -390,11 +390,13 @@ export default function TaskDetailPanel({
   const [mounted, setMounted] = useState(false);
   const [mainCelebrating, setMainCelebrating] = useState(false);
   const [celebratingSubtaskId, setCelebratingSubtaskId] = useState<string | null>(null);
-  const [noAssigneePrompt, setNoAssigneePrompt] = useState<DOMRect | null>(null);
-  const [assignCompleteAnchor, setAssignCompleteAnchor] = useState<DOMRect | null>(null);
+  // Completion-time prompts. `subtaskId` set = the prompt targets a subtask row
+  // checkbox instead of the main task's status control.
+  const [noAssigneePrompt, setNoAssigneePrompt] = useState<{ rect: DOMRect; subtaskId?: string } | null>(null);
+  const [assignCompleteAnchor, setAssignCompleteAnchor] = useState<{ rect: DOMRect; subtaskId?: string } | null>(null);
   // Completion gate — set when a check-off is blocked because the task still
   // has open subtasks / unchecked checklist items. Blocking: no complete-anyway.
-  const [incompletePrompt, setIncompletePrompt] = useState<{ rect: DOMRect; subtasks: number; checklist: number } | null>(null);
+  const [incompletePrompt, setIncompletePrompt] = useState<{ rect: DOMRect; subtasks: number; checklist: number; subtaskId?: string } | null>(null);
 
   useEffect(() => {
     if (!effectiveTaskId) { setMounted(false); return undefined; }
@@ -693,10 +695,68 @@ export default function TaskDetailPanel({
     // complete as-is) instead of silently closing it unassigned. Mirrors the
     // list-view checkbox in TaskRow.
     if ((task.assignees || []).length === 0 && e) {
-      setNoAssigneePrompt((e.currentTarget as HTMLElement).getBoundingClientRect());
+      setNoAssigneePrompt({ rect: (e.currentTarget as HTMLElement).getBoundingClientRect() });
       return;
     }
     completeToDone();
+  };
+
+  // Mark a subtask row done, optionally assigning people in the same write —
+  // the subtask counterpart of completeToDone, used by the checkbox and the
+  // no-assignee prompt's assign-&-complete paths.
+  const completeSubtask = (subtaskId: string, assigneeIds?: string[]) => {
+    setCelebratingSubtaskId(subtaskId);
+    setTimeout(() => {
+      setCelebratingSubtaskId((curr) => (curr === subtaskId ? null : curr));
+    }, 650);
+    const payload: Record<string, unknown> = { id: subtaskId, status: 'done' };
+    if (assigneeIds) payload.assignee_ids = assigneeIds;
+    updateTask.mutate(payload as any);
+  };
+
+  // Subtask checkbox — same gates as the main task and TaskRow: open
+  // subtasks/checklist items block, then no-assignee prompts. The row only
+  // carries shallow data, so fetch the subtask's own detail at click time
+  // (cached under the same keys its detail panel uses). Fails open on fetch
+  // errors — the server enforces the same rule as a backstop.
+  const handleSubtaskToggle = async (st: any, e: React.MouseEvent) => {
+    if (!canEdit) return;
+    const stDone = st.status === 'done' || st.status === 'closed';
+    // Re-opening a completed subtask: flip straight back, no prompt.
+    if (stDone) {
+      updateTask.mutate({ id: st.id, status: 'todo' } as any);
+      return;
+    }
+    // Capture the anchor now — e.currentTarget is gone after the await below.
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    try {
+      const [detail, subChecklists] = await Promise.all([
+        qc.fetchQuery<Task>({
+          queryKey: ['task', st.id],
+          queryFn: async () => (await api.get(`/pm/tasks/${st.id}`)).data.data,
+          staleTime: 10_000,
+        }),
+        qc.fetchQuery<TaskChecklist[]>({
+          queryKey: ['checklists', st.id],
+          queryFn: async () => (await api.get(`/pm/tasks/${st.id}/checklists`)).data.data,
+          staleTime: 10_000,
+        }),
+      ]);
+      const openSubs = (detail?.subtasks || [])
+        .filter((s) => !statusIsComplete((s as any).status as string | undefined, statuses)).length;
+      const openItems = (subChecklists || [])
+        .flatMap((c) => c.items || [])
+        .filter((i) => !i.is_done).length;
+      if (openSubs > 0 || openItems > 0) {
+        setIncompletePrompt({ rect, subtasks: openSubs, checklist: openItems, subtaskId: st.id });
+        return;
+      }
+    } catch { /* fail open — the server-side gate still blocks */ }
+    if ((st.assignees || []).length === 0) {
+      setNoAssigneePrompt({ rect, subtaskId: st.id });
+      return;
+    }
+    completeSubtask(st.id);
   };
 
   const addSubtask = (rawTitle: string, keepInputOpen: boolean) => {
@@ -1814,14 +1874,7 @@ export default function TaskDetailPanel({
                           tabIndex={0}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (!canEdit) return;
-                            if (!stDone) {
-                              setCelebratingSubtaskId(st.id);
-                              setTimeout(() => {
-                                setCelebratingSubtaskId((curr) => (curr === st.id ? null : curr));
-                              }, 650);
-                            }
-                            updateTask.mutate({ id: st.id, status: stDone ? 'todo' : 'done' } as any);
+                            void handleSubtaskToggle(st, e);
                           }}
                           className="td-checkbox shrink-0"
                           data-done={(stDone || celebratingSubtaskId === st.id) ? 'true' : 'false'}
@@ -2140,17 +2193,26 @@ export default function TaskDetailPanel({
           anchorRect={incompletePrompt.rect}
           openSubtasks={incompletePrompt.subtasks}
           openChecklistItems={incompletePrompt.checklist}
+          onViewTask={incompletePrompt.subtaskId ? () => {
+            // The blocked subtask's own open items aren't visible here —
+            // open it in the panel (mirrors TaskRow's "View open items").
+            const id = incompletePrompt.subtaskId!;
+            setIncompletePrompt(null);
+            setActiveTask(id);
+          } : undefined}
           onClose={() => setIncompletePrompt(null)}
         />
       )}
 
       {noAssigneePrompt && task && (
         <NoAssigneeCompleteDialog
-          anchorRect={noAssigneePrompt}
+          anchorRect={noAssigneePrompt.rect}
           canAssignToMe={!!currentUser?.id}
           onAssignToMe={() => {
-            if (currentUser?.id) completeToDone([currentUser.id]);
-            else completeToDone();
+            const sub = noAssigneePrompt.subtaskId;
+            const me = currentUser?.id ? [currentUser.id] : undefined;
+            if (sub) completeSubtask(sub, me);
+            else completeToDone(me);
             setNoAssigneePrompt(null);
           }}
           onAssignOther={() => {
@@ -2158,7 +2220,8 @@ export default function TaskDetailPanel({
             setNoAssigneePrompt(null);
           }}
           onCompleteAnyway={() => {
-            completeToDone();
+            if (noAssigneePrompt.subtaskId) completeSubtask(noAssigneePrompt.subtaskId);
+            else completeToDone();
             setNoAssigneePrompt(null);
           }}
           onClose={() => setNoAssigneePrompt(null)}
@@ -2167,13 +2230,14 @@ export default function TaskDetailPanel({
 
       {assignCompleteAnchor && task && (
         <AssigneePicker
-          taskId={task.id}
+          taskId={assignCompleteAnchor.subtaskId || task.id}
           currentAssigneeIds={[]}
-          anchorRect={assignCompleteAnchor}
+          anchorRect={assignCompleteAnchor.rect}
           onChange={(ids) => {
             // Picking someone assigns them and completes in one write. An empty
             // selection (Unassign all) just completes unassigned.
-            completeToDone(ids);
+            if (assignCompleteAnchor.subtaskId) completeSubtask(assignCompleteAnchor.subtaskId, ids);
+            else completeToDone(ids);
             setAssignCompleteAnchor(null);
           }}
           onClose={() => setAssignCompleteAnchor(null)}
