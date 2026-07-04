@@ -11,6 +11,7 @@ import type { Workspace, Channel } from '@squadhub/shared';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
 import { usePresenceStore } from '../stores/presenceStore';
 import ChatPanel from '../views/app/chat/ChatPanel';
+import ChatSearch from '../views/app/chat/ChatSearch';
 import CreateChannelModal from '../views/app/chat/CreateChannelModal';
 import GlobalCreateTaskModal from '../views/app/pm/GlobalCreateTaskModal';
 import type { SavedDraft } from '../stores/draftTaskStore';
@@ -876,6 +877,7 @@ export default function MainLayout() {
               </button>
             )}
             <div className="sqc-header__actions">
+              <ChatSearch channelId={channelId} kind={kind} />
               {isDm && memberCount != null && memberCount > 0 && (
                 <span className="sqc-pill" title={`${memberCount} ${memberCount === 1 ? 'member' : 'members'}`}>
                   <span className="sqc-pill__avatars">

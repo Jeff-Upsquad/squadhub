@@ -4,7 +4,7 @@ import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useWorkspaceSearch, type SearchTask } from '../../hooks/useWorkspaceSearch';
 import type { HomeView } from '../../layouts/MainLayout';
 
-type ResultKind = 'space' | 'folder' | 'list' | 'task' | 'channel' | 'member';
+type ResultKind = 'space' | 'folder' | 'list' | 'task' | 'channel' | 'member' | 'chat_message';
 
 interface ResultBase {
   key: string;
@@ -40,6 +40,13 @@ interface MemberResult extends ResultBase {
   kind: 'member';
   memberId: string;
 }
+interface ChatMessageResult extends ResultBase {
+  kind: 'chat_message';
+  conversationId: string;
+  chatKind: 'channel' | 'dm';
+  messageId: string;
+  parentId: string | null;
+}
 
 type Result =
   | SpaceResult
@@ -47,7 +54,8 @@ type Result =
   | ListResult
   | TaskResult
   | ChannelResult
-  | MemberResult;
+  | MemberResult
+  | ChatMessageResult;
 
 interface SearchPaletteProps {
   workspaceId: string;
@@ -96,6 +104,12 @@ function CategoryIcon({ kind }: { kind: ResultKind }) {
           <path d="M4 21a8 8 0 0116 0" />
         </svg>
       );
+    case 'chat_message':
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+          <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+        </svg>
+      );
   }
 }
 
@@ -111,6 +125,7 @@ const SECTION_LABEL: Record<SectionKey, string> = {
   'task-completed': 'Completed',
   channel: 'Channels',
   member: 'People',
+  chat_message: 'Messages',
 };
 
 function sectionKeyFor(r: Result): SectionKey {
@@ -138,8 +153,9 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
   const setActiveList = usePMStore((s) => s.setActiveList);
   const setActiveTask = usePMStore((s) => s.setActiveTask);
   const setActiveChannel = useWorkspaceStore((s) => s.setActiveChannel);
+  const requestMessageJump = useWorkspaceStore((s) => s.requestMessageJump);
 
-  const { spaces, folders, lists, tasks, channels, members, isLoading } = useWorkspaceSearch(
+  const { spaces, folders, lists, tasks, channels, members, messages, isLoading } = useWorkspaceSearch(
     workspaceId,
     query,
   );
@@ -203,8 +219,24 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
         memberId: m.id,
       });
     }
+    for (const msg of messages) {
+      const convId = msg.channel_id || msg.dm_conversation_id;
+      if (!convId) continue;
+      const who = msg.sender?.display_name ? `${msg.sender.display_name}: ` : '';
+      const body = (msg.content || '').replace(/\s+/g, ' ').trim();
+      out.push({
+        key: `chat_message:${msg.id}`,
+        kind: 'chat_message',
+        label: `${who}${body}`,
+        hint: msg.kind === 'channel' ? `#${msg.conversation_label}` : msg.conversation_label,
+        conversationId: convId,
+        chatKind: msg.kind,
+        messageId: msg.id,
+        parentId: msg.parent_message_id,
+      });
+    }
     return out;
-  }, [spaces, folders, lists, tasks, channels, members]);
+  }, [spaces, folders, lists, tasks, channels, members, messages]);
 
   useEffect(() => {
     setActiveIndex(0);
@@ -250,6 +282,17 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
       case 'member':
         // DMs aren't wired in this app yet; close palette as a no-op for now.
         break;
+      case 'chat_message':
+        // Open the conversation, then ask its ChatPanel to scroll to the message.
+        setActiveChannel(r.conversationId, r.chatKind);
+        setHomeView('chat');
+        requestMessageJump({
+          conversationId: r.conversationId,
+          kind: r.chatKind,
+          messageId: r.messageId,
+          parentId: r.parentId,
+        });
+        break;
     }
     onClose();
   };
@@ -281,7 +324,7 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
   // Group flat results back by section for rendered headings (but keep the same
   // indices). Completed tasks form a distinct "Completed" section after open tasks.
   const groupedSections: { section: SectionKey; items: { result: Result; index: number }[] }[] = useMemo(() => {
-    const order: SectionKey[] = ['space', 'folder', 'list', 'task', 'task-completed', 'channel', 'member'];
+    const order: SectionKey[] = ['space', 'folder', 'list', 'task', 'task-completed', 'channel', 'chat_message', 'member'];
     const map = new Map<SectionKey, { result: Result; index: number }[]>();
     flatResults.forEach((r, idx) => {
       const sk = sectionKeyFor(r);
@@ -322,7 +365,7 @@ export default function SearchPalette({ workspaceId, onClose, setHomeView }: Sea
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search spaces, lists, tasks, people…"
+            placeholder="Search spaces, lists, tasks, messages, people…"
             className="flex-1 bg-transparent text-[14px] text-[var(--sh-ink)] outline-none placeholder:text-[var(--sh-ink-4)]"
           />
           <button

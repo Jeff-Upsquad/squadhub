@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
-import { checkResourceAccess, meetsAccessLevel, requirePermission } from '../middleware/permissions';
+import { checkResourceAccess, meetsAccessLevel, requirePermission, isWorkspaceAdmin } from '../middleware/permissions';
 import { supabaseAdmin } from '../supabase';
 import { findFirstUrl, unfurl } from '../services/unfurl';
 import { deleteR2Object } from '../r2';
@@ -305,6 +305,224 @@ router.post('/mark-read', requireAuth, async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (err) {
     console.error('Mark chat read error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Resolve the channel IDs the user may read in a workspace, mirroring the
+// access rules in routes/channels.ts (admins: all; others: memberships +
+// channels they created). Returns null for "all channels in workspace" (admin).
+async function accessibleChannelIds(userId: string, workspaceId: string): Promise<string[]> {
+  const admin = await isWorkspaceAdmin(userId);
+  if (admin) {
+    const { data } = await supabaseAdmin
+      .from('channels')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .is('deleted_at', null);
+    return (data || []).map((c: any) => c.id);
+  }
+  const { data: memberships } = await supabaseAdmin
+    .from('resource_memberships')
+    .select('resource_id')
+    .eq('resource_type', 'channel')
+    .eq('user_id', userId);
+  const { data: created } = await supabaseAdmin
+    .from('channels')
+    .select('id')
+    .eq('workspace_id', workspaceId)
+    .is('deleted_at', null)
+    .eq('created_by', userId);
+  const memberIds = (memberships || []).map((m: any) => m.resource_id);
+  const createdIds = (created || []).map((c: any) => c.id);
+  const all = [...new Set([...memberIds, ...createdIds])];
+  if (all.length === 0) return [];
+  // Filter membership IDs (which can span workspaces) down to this workspace.
+  const { data: scoped } = await supabaseAdmin
+    .from('channels')
+    .select('id')
+    .eq('workspace_id', workspaceId)
+    .is('deleted_at', null)
+    .in('id', all);
+  return (scoped || []).map((c: any) => c.id);
+}
+
+// The DM conversation IDs the user participates in, scoped to a workspace.
+async function accessibleDmIds(userId: string, workspaceId: string): Promise<string[]> {
+  const { data: parts } = await supabaseAdmin
+    .from('dm_participants')
+    .select('conversation_id')
+    .eq('user_id', userId);
+  const ids = [...new Set((parts || []).map((p: any) => p.conversation_id))];
+  if (ids.length === 0) return [];
+  const { data: convs } = await supabaseAdmin
+    .from('dm_conversations')
+    .select('id')
+    .eq('workspace_id', workspaceId)
+    .in('id', ids);
+  return (convs || []).map((c: any) => c.id);
+}
+
+// GET /messages/search?q=...&channel_id=|dm_conversation_id=|workspace_id=&limit=
+// Full-text-ish (ILIKE) search over message content.
+//  - channel_id / dm_conversation_id given → search that one conversation.
+//  - workspace_id given (no conversation) → search every channel the user can
+//    read + every DM they're in, across that workspace ("normal" global search).
+// Returns matches newest-first, each enriched with its sender + a conversation
+// label so the client can render "in #channel" / "in DM with …".
+router.get('/search', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const rawQuery = (req.query.q as string) || '';
+    const q = rawQuery.trim();
+    const channelId = (req.query.channel_id as string) || undefined;
+    const dmConversationId = (req.query.dm_conversation_id as string) || undefined;
+    const workspaceId = (req.query.workspace_id as string) || undefined;
+    const limit = Math.min(parseInt((req.query.limit as string) || '20', 10) || 20, 50);
+
+    if (q.length < 1) {
+      res.json({ success: true, data: { messages: [] } });
+      return;
+    }
+
+    // Resolve which channels / DMs to search over, enforcing access.
+    let channelIds: string[] = [];
+    let dmIds: string[] = [];
+
+    if (channelId) {
+      const level = await checkResourceAccess(userId, 'channel', channelId);
+      if (!level) {
+        res.status(403).json({ success: false, error: 'You do not have access to this channel' });
+        return;
+      }
+      channelIds = [channelId];
+    } else if (dmConversationId) {
+      const { data: part } = await supabaseAdmin
+        .from('dm_participants')
+        .select('user_id')
+        .eq('conversation_id', dmConversationId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (!part) {
+        res.status(403).json({ success: false, error: 'You are not a participant in this conversation' });
+        return;
+      }
+      dmIds = [dmConversationId];
+    } else if (workspaceId) {
+      [channelIds, dmIds] = await Promise.all([
+        accessibleChannelIds(userId, workspaceId),
+        accessibleDmIds(userId, workspaceId),
+      ]);
+    } else {
+      res.status(400).json({ success: false, error: 'channel_id, dm_conversation_id or workspace_id is required' });
+      return;
+    }
+
+    if (channelIds.length === 0 && dmIds.length === 0) {
+      res.json({ success: true, data: { messages: [] } });
+      return;
+    }
+
+    // Escape ILIKE wildcards in user input so "50%" searches literally.
+    const safeQ = q.replace(/[\\%_]/g, (m) => `\\${m}`);
+    const SELECT =
+      'id, channel_id, dm_conversation_id, sender_id, content, type, created_at, parent_message_id, ' +
+      'sender:users!sender_id(id, display_name, avatar_url)';
+
+    // Two scoped queries (channels, DMs) merged — simpler and safer than a
+    // combined PostgREST .or() over two IN-lists (empty lists break that syntax).
+    // Supabase builders are thenables (PromiseLike), not Promises.
+    const queries: PromiseLike<{ data: any[] | null; error: { message: string } | null }>[] = [];
+    if (channelIds.length > 0) {
+      queries.push(
+        supabaseAdmin
+          .from('messages')
+          .select(SELECT)
+          .in('channel_id', channelIds)
+          .eq('is_deleted', false)
+          .not('content', 'is', null)
+          .ilike('content', `%${safeQ}%`)
+          .order('created_at', { ascending: false })
+          .limit(limit),
+      );
+    }
+    if (dmIds.length > 0) {
+      queries.push(
+        supabaseAdmin
+          .from('messages')
+          .select(SELECT)
+          .in('dm_conversation_id', dmIds)
+          .eq('is_deleted', false)
+          .not('content', 'is', null)
+          .ilike('content', `%${safeQ}%`)
+          .order('created_at', { ascending: false })
+          .limit(limit),
+      );
+    }
+
+    const results = await Promise.all(queries);
+    for (const r of results) {
+      if (r.error) {
+        res.status(500).json({ success: false, error: r.error.message });
+        return;
+      }
+    }
+    const rows = results.flatMap((r) => r.data || []);
+    // Re-sort the merged set newest-first and cap to `limit`.
+    rows.sort((a: any, b: any) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+    const top = rows.slice(0, limit);
+
+    // Labels: channel names + DM co-participants for the "in …" hint.
+    const matchedChannelIds = [...new Set(top.map((m: any) => m.channel_id).filter(Boolean))];
+    const channelNameById: Record<string, string> = {};
+    if (matchedChannelIds.length > 0) {
+      const { data: chs } = await supabaseAdmin
+        .from('channels')
+        .select('id, name')
+        .in('id', matchedChannelIds);
+      for (const c of (chs || []) as any[]) channelNameById[c.id] = c.name;
+    }
+
+    const matchedDmIds = [...new Set(top.map((m: any) => m.dm_conversation_id).filter(Boolean))];
+    const dmLabelById: Record<string, string> = {};
+    if (matchedDmIds.length > 0) {
+      const { data: parts } = await supabaseAdmin
+        .from('dm_participants')
+        .select('conversation_id, user:users(id, display_name)')
+        .in('conversation_id', matchedDmIds);
+      const byConv = new Map<string, string[]>();
+      for (const p of (parts || []) as any[]) {
+        // Label a DM by its OTHER participants (exclude the searcher).
+        if (p.user?.id === userId) continue;
+        const arr = byConv.get(p.conversation_id) || [];
+        if (p.user?.display_name) arr.push(p.user.display_name);
+        byConv.set(p.conversation_id, arr);
+      }
+      for (const id of matchedDmIds) {
+        const names = byConv.get(id) || [];
+        dmLabelById[id] =
+          names.length === 0 ? 'You' : names.length <= 2 ? names.join(', ') : `${names[0]} +${names.length - 1}`;
+      }
+    }
+
+    const messages = top.map((m: any) => ({
+      id: m.id,
+      channel_id: m.channel_id,
+      dm_conversation_id: m.dm_conversation_id,
+      parent_message_id: m.parent_message_id,
+      content: m.content,
+      type: m.type,
+      created_at: m.created_at,
+      sender: m.sender || null,
+      kind: m.channel_id ? 'channel' : 'dm',
+      conversation_label: m.channel_id
+        ? channelNameById[m.channel_id] || 'channel'
+        : dmLabelById[m.dm_conversation_id] || 'Direct message',
+    }));
+
+    res.json({ success: true, data: { messages } });
+  } catch (err) {
+    console.error('GET /messages/search error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
