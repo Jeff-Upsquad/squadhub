@@ -701,13 +701,6 @@ export default function TaskDetailPanel({
     completeToDone();
   };
 
-  // The subtask rows render from this task's own detail query, which nothing
-  // invalidates when a subtask is written — refresh it so the checkbox /
-  // counter update without reopening the panel.
-  const refreshSubtasks = () => {
-    if (task) qc.invalidateQueries({ queryKey: ['task', task.id] });
-  };
-
   // Mark a subtask row done, optionally assigning people in the same write —
   // the subtask counterpart of completeToDone, used by the checkbox and the
   // no-assignee prompt's assign-&-complete paths.
@@ -718,7 +711,7 @@ export default function TaskDetailPanel({
     }, 650);
     const payload: Record<string, unknown> = { id: subtaskId, status: 'done' };
     if (assigneeIds) payload.assignee_ids = assigneeIds;
-    updateTask.mutate(payload as any, { onSuccess: refreshSubtasks });
+    updateTask.mutate(payload as any);
   };
 
   // Subtask checkbox — same gates as the main task and TaskRow: open
@@ -731,7 +724,7 @@ export default function TaskDetailPanel({
     const stDone = st.status === 'done' || st.status === 'closed';
     // Re-opening a completed subtask: flip straight back, no prompt.
     if (stDone) {
-      updateTask.mutate({ id: st.id, status: 'todo' } as any, { onSuccess: refreshSubtasks });
+      updateTask.mutate({ id: st.id, status: 'todo' } as any);
       return;
     }
     // Capture the anchor now — e.currentTarget is gone after the await below.
