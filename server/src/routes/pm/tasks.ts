@@ -1262,7 +1262,7 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
     // activity feed (task_activity, migration 147). One lightweight read.
     const { data: prior } = await supabaseAdmin
       .from('tasks')
-      .select('time_estimate, list_id, title, description, status, priority, due_date, work_date, start_date, task_type_id, assignee_ids')
+      .select('time_estimate, list_id, title, description, status, priority, due_date, work_date, start_date, task_type_id, assignee_ids, recurrence, metadata')
       .eq('id', id)
       .single();
     const priorEstimate: number | null = (prior as any)?.time_estimate ?? null;
@@ -1429,6 +1429,24 @@ router.put('/tasks/:id', async (req: Request, res: Response) => {
         }
       }
 
+      // Recurrence rule set / changed / removed. The rule object is small, so
+      // snapshot both sides; the feed reads "set the task to repeat" vs "removed
+      // recurrence" from whether new_value is null.
+      if (body.recurrence !== undefined) {
+        const oldR = (p.recurrence ?? null) as unknown;
+        const newR = (body.recurrence ?? null) as unknown;
+        if (JSON.stringify(oldR) !== JSON.stringify(newR)) {
+          events.push({ event_type: 'field_change', field: 'recurrence', old_value: oldR, new_value: newR });
+        }
+      }
+
+      // Metadata bag changed → record that details moved. Values omitted: the bag
+      // is free-form and can be large; the feed just says "updated details".
+      if (body.metadata !== undefined
+        && JSON.stringify(p.metadata ?? null) !== JSON.stringify(body.metadata ?? null)) {
+        events.push({ event_type: 'field_change', field: 'metadata', old_value: null, new_value: null });
+      }
+
       await logTaskActivity(id, req.userId!, events);
     } catch (activityErr) {
       console.error('Activity diff logging failed:', activityErr);
@@ -1587,6 +1605,17 @@ router.post('/tasks/:id/lists', async (req: Request, res: Response) => {
       inserted.push(lid);
     }
 
+    // Activity: one "added to list" event per newly-linked list, name snapshotted.
+    if (inserted.length) {
+      const nameById = new Map<string, string>();
+      const { data: lists } = await supabaseAdmin.from('lists').select('id, name').in('id', inserted);
+      for (const l of (lists || []) as any[]) nameById.set(l.id, l.name);
+      await logTaskActivity(id, req.userId!, inserted.map((lid) => ({
+        event_type: 'list_link_added',
+        new_value: { id: lid, name: nameById.get(lid) ?? null },
+      })));
+    }
+
     res.json({ success: true, data: { added: inserted } });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -1629,6 +1658,14 @@ router.delete('/tasks/:id/lists/:listId', async (req: Request, res: Response) =>
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+
+    const { data: removedList } = await supabaseAdmin
+      .from('lists').select('id, name').eq('id', listId).maybeSingle();
+    await logTaskActivity(id, req.userId!, [{
+      event_type: 'list_link_removed',
+      old_value: { id: listId, name: (removedList as any)?.name ?? null },
+    }]);
+
     res.json({ success: true });
   } catch (err) {
     console.error('Remove task from list error:', err);
@@ -1690,6 +1727,14 @@ router.patch('/tasks/:id/time-tracked', async (req: Request, res: Response) => {
     }
 
     if (delta !== 0) {
+      // Activity: manual "Logged" edit. Timer writes go through PUT /pm/tasks/:id
+      // and are deliberately not logged (per-tick noise); this endpoint is the
+      // role-gated manual override, so it IS worth recording.
+      await logTaskActivity(id, req.userId!, [{
+        event_type: 'field_change', field: 'time_tracked',
+        old_value: oldTotal, new_value: time_tracked,
+      }]);
+
       const { data: list } = await supabaseAdmin
         .from('lists').select('space_id').eq('id', (existing as any).list_id).single();
       const { data: space } = list?.space_id
@@ -1784,11 +1829,25 @@ router.delete('/tasks/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    // Snapshot parent + title BEFORE the row is gone. A top-level task's own feed
+    // cannot record its deletion (task_activity cascades on task delete), but a
+    // subtask deletion can surface in the surviving PARENT's feed — the mirror of
+    // the subtask_added event written on create.
+    const { data: doomed } = await supabaseAdmin
+      .from('tasks').select('parent_task_id, title').eq('id', id).maybeSingle();
+
     const { error } = await supabaseAdmin.from('tasks').delete().eq('id', id);
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
+    }
+
+    if ((doomed as any)?.parent_task_id) {
+      await logTaskActivity((doomed as any).parent_task_id, req.userId!, [{
+        event_type: 'subtask_removed',
+        old_value: { id, title: (doomed as any).title ?? null },
+      }]);
     }
 
     res.json({ success: true, message: 'Task deleted' });
@@ -2065,11 +2124,19 @@ router.post('/tasks/:id/comments', async (req: Request, res: Response) => {
 router.delete('/task-comments/:id', requirePermission('can_delete_messages'), async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
+    // Resolve the parent task before the comment row is gone, so the deletion can
+    // be attributed to the right task's feed.
+    const { data: comment } = await supabaseAdmin
+      .from('task_comments').select('task_id').eq('id', id).maybeSingle();
     const { error } = await supabaseAdmin.from('task_comments').delete().eq('id', id);
 
     if (error) {
       res.status(500).json({ success: false, error: error.message });
       return;
+    }
+
+    if ((comment as any)?.task_id) {
+      await logTaskActivity((comment as any).task_id, req.userId!, [{ event_type: 'comment_deleted' }]);
     }
 
     res.json({ success: true, message: 'Comment deleted' });
@@ -2095,6 +2162,7 @@ router.patch('/tasks/:id/focus', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+    await logTaskActivity(id, req.userId!, [{ event_type: focused ? 'focus_set' : 'focus_cleared' }]);
     res.json({ success: true, data });
   } catch (err) {
     console.error('Patch focus error:', err);
@@ -2126,6 +2194,10 @@ router.patch('/tasks/:id/snooze', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+    await logTaskActivity(id, req.userId!, [{
+      event_type: until ? 'snooze_set' : 'snooze_cleared',
+      new_value: until ?? null,
+    }]);
     res.json({ success: true, data });
   } catch (err) {
     console.error('Patch snooze error:', err);
@@ -2148,6 +2220,7 @@ router.post('/tasks/:id/review', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+    await logTaskActivity(id, req.userId!, [{ event_type: 'reviewed' }]);
     res.json({ success: true });
   } catch (err) {
     console.error('Review task error:', err);
@@ -2168,6 +2241,7 @@ router.delete('/tasks/:id/review', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: error.message });
       return;
     }
+    await logTaskActivity(id, req.userId!, [{ event_type: 'unreviewed' }]);
     res.json({ success: true });
   } catch (err) {
     console.error('Unreview task error:', err);

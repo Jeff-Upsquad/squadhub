@@ -7,16 +7,22 @@ import { getWorkspaceIdForTask } from './labels';
 // Value shapes by event:
 //   field_change (scalar: title/description/status/priority/*_date) -> raw value
 //   field_change field='task_type_id'                                -> {id, name}
+//   field_change field='time_tracked' (SECONDS) / 'recurrence' / 'metadata'
 //   assignee_added / assignee_removed                                -> {id, name}
 //   label_added / label_removed                                      -> {id, name}
+//   list_link_added / list_link_removed                              -> {id, name}
 //   moved                                                            -> {id, name}
-//   subtask_added                                                    -> {id, title}
-//   attachment_added                                                 -> {name}
-//   created                                                          -> (no values)
+//   subtask_added / subtask_removed                                  -> {id, title}
+//   attachment_added / attachment_removed                            -> {name}
+//   focus_set / focus_cleared                                        -> (no values)
+//   snooze_set (ISO string) / snooze_cleared                         -> new_value / (none)
+//   reviewed / unreviewed / comment_deleted / created               -> (no values)
 //
 // time_estimate is intentionally NOT logged here — it has its own audit table
 // (task_estimate_changes, migration 134) which the read endpoint folds into the
-// same feed, so logging it here too would double-count it.
+// same feed, so logging it here too would double-count it. time_tracked writes
+// from the running timer go through PUT /pm/tasks/:id and are also NOT logged
+// (per-tick noise); only the manual "Logged" edit (PATCH /time-tracked) is.
 export type TaskActivityEvent = {
   event_type: string;
   field?: string | null;
