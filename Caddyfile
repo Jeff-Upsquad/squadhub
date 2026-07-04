@@ -33,6 +33,19 @@ api.squadhub.in {
 		file_server
 	}
 
+	# Sideloaded APKs for the Squad Hub Business app's in-app updater.
+	# Drop release APKs in /var/www/business-downloads on the host; the
+	# version manifest (GET /business-app/version) points apk_url here.
+	handle /business-downloads/* {
+		root * /srv/business-downloads
+		uri strip_prefix /business-downloads
+
+		@apk path *.apk
+		header @apk Content-Type application/vnd.android.package-archive
+
+		file_server
+	}
+
 	reverse_proxy server:4000
 }
 
