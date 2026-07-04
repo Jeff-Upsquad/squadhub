@@ -219,7 +219,7 @@ router.delete('/task-attachments/:id', async (req: Request, res: Response) => {
 
     const { data: row, error: fetchErr } = await supabaseAdmin
       .from('task_attachments')
-      .select('id, task_id, object_key')
+      .select('id, task_id, object_key, file_name')
       .eq('id', id)
       .single();
 
@@ -239,6 +239,11 @@ router.delete('/task-attachments/:id', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: delErr.message });
       return;
     }
+
+    await logTaskActivity(row.task_id, req.userId!, [{
+      event_type: 'attachment_removed',
+      old_value: { name: (row as any).file_name },
+    }]);
 
     // Best-effort R2 cleanup.
     deleteR2Object(row.object_key).catch((e) => console.error('R2 delete error for', row.object_key, e));

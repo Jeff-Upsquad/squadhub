@@ -176,6 +176,16 @@ function fmtEstimate(m: unknown): string {
   return h ? (min ? `${h}h ${min}m` : `${h}h`) : `${min}m`;
 }
 
+// time_tracked ("Logged") is stored in SECONDS, unlike time_estimate (minutes).
+function fmtSeconds(s: unknown): string {
+  const secs = Number(s);
+  if (!Number.isFinite(secs) || secs <= 0) return 'none';
+  const totalMin = Math.round(secs / 60);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+}
+
 function fmtDateValue(v: unknown): string {
   if (!v) return 'none';
   const { text } = formatDueRelative(String(v));
@@ -218,6 +228,17 @@ function renderActivity(e: ActivityForRender): { icon: string; body: React.React
     case 'label_removed': return { icon: '◇', body: line('removed label', entityName(e.old_value)) };
     case 'attachment_added': return { icon: '▣', body: line('attached', entityName(e.new_value)) };
     case 'moved': return { icon: '→', body: line('moved to', entityName(e.new_value)) };
+    case 'subtask_removed': return { icon: '◇', body: line('removed subtask', entityName(e.old_value)) };
+    case 'list_link_added': return { icon: '→', body: line('added to list', entityName(e.new_value)) };
+    case 'list_link_removed': return { icon: '←', body: line('removed from list', entityName(e.old_value)) };
+    case 'attachment_removed': return { icon: '▢', body: line('removed attachment', entityName(e.old_value)) };
+    case 'comment_deleted': return { icon: '○', body: line('deleted a comment') };
+    case 'focus_set': return { icon: '★', body: line('focused this task') };
+    case 'focus_cleared': return { icon: '☆', body: line('removed focus') };
+    case 'snooze_set': return { icon: '◔', body: line('snoozed this task') };
+    case 'snooze_cleared': return { icon: '○', body: line('cleared snooze') };
+    case 'reviewed': return { icon: '✓', body: line('marked as reviewed') };
+    case 'unreviewed': return { icon: '○', body: line('marked as not reviewed') };
     case 'field_change': {
       const f = e.field || '';
       if (f === 'status') return { icon: '●', body: line('set status to', String(e.new_value ?? 'none')) };
@@ -229,6 +250,11 @@ function renderActivity(e: ActivityForRender): { icon: string; body: React.React
       if (f === 'description') return { icon: '○', body: line('updated the description') };
       if (f === 'task_type_id') return { icon: '○', body: line('changed task type to', entityName(e.new_value)) };
       if (f === 'time_estimate') return { icon: '○', body: line('set estimate to', fmtEstimate(e.new_value)) };
+      if (f === 'time_tracked') return { icon: '○', body: line('set logged time to', fmtSeconds(e.new_value)) };
+      if (f === 'recurrence') return e.new_value == null
+        ? { icon: '○', body: line('removed recurrence') }
+        : { icon: '↻', body: line('set the task to repeat') };
+      if (f === 'metadata') return { icon: '○', body: line('updated details') };
       if (f in ACTIVITY_FIELD_LABEL) {
         const label = ACTIVITY_FIELD_LABEL[f];
         return e.new_value == null
