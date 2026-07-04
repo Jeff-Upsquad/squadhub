@@ -5856,6 +5856,13 @@ textarea.td-input-shell {
   --sh-accent: #C8F560;
   --sh-live: #19C37D;
 
+  /* Search-jump highlight (light). Steady tint the row keeps after landing,
+     the brighter entrance pulse, and a hover intensify. Dark mode overrides
+     these with a lighter, higher-alpha tone so it reads on a dark surface. */
+  --sqc-hit-bg: rgba(255, 90, 31, 0.22);
+  --sqc-hit-pulse: rgba(255, 90, 31, 0.5);
+  --sqc-hit-hover: rgba(255, 90, 31, 0.3);
+
   --sh-bg: #ffffff;
   --sh-bg-soft: #F7F6F4;
   --sh-bg-hover: #F4F4F3;
@@ -6069,20 +6076,21 @@ textarea.td-input-shell {
   padding: 0 1px;
 }
 
-/* Highlight a message row that a search result jumped to: a strong pulse that
-   settles into a steady tint held for a few seconds, then fades. The brand
+/* Highlight the message a search result jumped to. A brief entrance pulse draws
+   the eye, then the row keeps a STEADY tint (it does not fade) so the user can
+   see what search landed on until they leave the conversation. The brand
    left-border rides an inset box-shadow so the row doesn't shift (unlike
-   is-mentioned, which pads to compensate a real border). */
+   is-mentioned, which pads to compensate a real border). Colours come from
+   theme tokens so dark mode gets a lighter, more visible tone. */
 .sqc-msg.is-search-hit {
+  background: var(--sqc-hit-bg);
   box-shadow: inset 3px 0 0 var(--sh-brand);
-  animation: sqc-search-flash 5s ease-out forwards;
+  animation: sqc-search-pulse 1s ease-out;
 }
-.sqc-msg.is-search-hit:hover { background: rgba(255, 90, 31, 0.2); }
-@keyframes sqc-search-flash {
-  0% { background: rgba(255, 90, 31, 0.36); }
-  9% { background: rgba(255, 90, 31, 0.16); }
-  80% { background: rgba(255, 90, 31, 0.16); }
-  100% { background: rgba(255, 90, 31, 0); }
+.sqc-msg.is-search-hit:hover { background: var(--sqc-hit-hover); }
+@keyframes sqc-search-pulse {
+  0% { background: var(--sqc-hit-pulse); }
+  100% { background: var(--sqc-hit-bg); }
 }
 
 /* Message rows */
@@ -7004,6 +7012,12 @@ ol.sqc-list {
   --sh-text: var(--foreground);
   --sh-text-2: var(--foreground-muted);
   --sh-text-3: var(--foreground-dim);
+
+  /* Lighter, higher-alpha warm tone — saturated orange at low alpha turns muddy
+     on a dark surface, so the row wouldn't read. */
+  --sqc-hit-bg: rgba(255, 150, 100, 0.30);
+  --sqc-hit-pulse: rgba(255, 150, 100, 0.52);
+  --sqc-hit-hover: rgba(255, 150, 100, 0.4);
 }
 .dark .sqc-header,
 .dark .sqc-composer,
