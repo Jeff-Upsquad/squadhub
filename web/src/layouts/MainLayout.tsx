@@ -36,6 +36,7 @@ import SalesLeadsPage from '../views/app/sales/SalesLeadsPage';
 import ThemeToggle from '../components/ThemeToggle';
 import RailTimer from './RailTimer';
 import ActiveTimer from '../components/ActiveTimer';
+import TimerConflictDialog from '../components/TimerConflictDialog';
 import TimeSheetPanel from '../components/TimeSheetPanel';
 import ClientDashboard from '../views/app/client/ClientDashboard';
 import PartnerCashBook from '../views/app/partner/PartnerCashBook';
@@ -1270,6 +1271,7 @@ export default function MainLayout() {
         )}
         <EmergencyBanner />
         <ActiveTimer />
+        <TimerConflictDialog />
         {/* Fallback for the brief window before the tab strip is seeded (a brand
             new user with empty persisted tabs): render the live view from global
             state so the content area is never blank. */}

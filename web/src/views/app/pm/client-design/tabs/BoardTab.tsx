@@ -164,8 +164,8 @@ function BoardCard({
   request: RequestRowData;
   onClick: () => void;
 }) {
-  const timerState = usePMStore((s) => s.timer);
-  const isTicking = timerState?.taskId === request.id;
+  const timerState = usePMStore((s) => s.timers.find((t) => t.taskId === request.id) ?? null);
+  const isTicking = !!timerState;
   const assignee = request.assignees?.[0];
   const category = (request.metadata as any)?.category as string | undefined;
   const hours = (request.time_tracked || 0) / 3600;

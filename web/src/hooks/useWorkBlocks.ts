@@ -230,7 +230,7 @@ export function useUnlinkTaskFromWorkBlock() {
 
 // Mount this anywhere the "task marked done" event needs to be observed and
 // recorded against the caller's active work-block run. It listens to:
-//   - usePMStore.timer.taskId  (the currently-running per-task timer)
+//   - usePMStore.timers  (the currently-running per-task timers)
 //   - the active work-block run from the server
 // When the consumer calls notifyCompletion(taskId), the hook decides whether
 // to POST a completion: only if the timer is on a work-block task AND a run
@@ -238,15 +238,15 @@ export function useUnlinkTaskFromWorkBlock() {
 export function useWorkBlockCompletionRecorder() {
   const activeQuery = useActiveWorkBlockRun();
   const record = useRecordWorkBlockCompletion();
-  const timer = usePMStore((s) => s.timer);
+  const timers = usePMStore((s) => s.timers);
 
   const notify = (completedTaskId: string) => {
     const active = activeQuery.data;
     if (!active) return;
     // The active server-side run gives us the source of truth; the local
-    // timer is a fast-path predicate so we don't fire for users who simply
+    // timers are a fast-path predicate so we don't fire for users who simply
     // checked off a task without their work-block timer running.
-    if (!timer || timer.taskId !== active.task.id) return;
+    if (!timers.some((t) => t.taskId === active.task.id)) return;
     if (completedTaskId === active.task.id) return; // ignore self
     record.mutate({ run_id: active.run.id, completed_task_id: completedTaskId });
   };
