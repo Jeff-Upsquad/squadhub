@@ -468,12 +468,9 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
     }
   }, [pendingJumpId, messages, hasNextPage, isFetchingNextPage, fetchNextPage, clearMessageJump]);
 
-  // Clear the highlight once it has held + faded (matches the 5s CSS animation).
-  useEffect(() => {
-    if (!highlightId) return;
-    const t = setTimeout(() => setHighlightId(null), 5000);
-    return () => clearTimeout(t);
-  }, [highlightId]);
+  // The search highlight is intentionally sticky: it stays on the jumped-to
+  // message so the user can keep seeing what search landed on. It's cleared only
+  // when the conversation changes (effect above) or another jump replaces it.
 
   // Tag a message as "grouped" when the prior visible message is from the
   // same author and within 5 minutes — matches the Slack-style stacking.
