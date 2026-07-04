@@ -4,7 +4,8 @@ import api from '../../../services/api';
 import { getSocket } from '../../../services/socket';
 import type { Message } from '@squadhub/shared';
 import MessageBubble from './MessageBubble';
-import MessageComposer from './MessageComposer';
+import MessageComposer, { type MessageComposerHandle } from './MessageComposer';
+import { usePanelFileDrop } from '../pm/usePanelFileDrop';
 import { useWorkspaceStore, type ChatKind } from '../../../stores/workspaceStore';
 import { useAuthStore } from '../../../stores/authStore';
 
@@ -76,6 +77,13 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
   const root: Message | null = threadRes?.data?.root || null;
   const replies: Message[] = threadRes?.data?.replies || [];
 
+  // Drag a file anywhere over the thread panel to stage it on the reply composer
+  // (mirrors the main ChatPanel behaviour).
+  const composerRef = useRef<MessageComposerHandle>(null);
+  const { dragActive, panelHandlers } = usePanelFileDrop((files) => {
+    composerRef.current?.addFiles(files);
+  });
+
   // Keep the thread pinned to the newest reply: jump to the bottom when the
   // thread opens and stick there as replies arrive, unless the reader has
   // scrolled up to read history. Mirrors the main ChatPanel behaviour.
@@ -93,7 +101,15 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
   }, [parentId, root, replies.length]);
 
   return (
-    <div className="sqc-thread-panel relative flex w-[400px] shrink-0 flex-col border-l border-divider bg-white dark:bg-surface">
+    <div
+      className="sqc-thread-panel relative flex w-[400px] shrink-0 flex-col border-l border-divider bg-white dark:bg-surface"
+      {...panelHandlers}
+    >
+      {dragActive && (
+        <div aria-hidden className="sqc-drop-overlay">
+          <div className="sqc-drop-overlay__label">Drop a file to attach</div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between border-b border-divider px-4 py-[9px]">
         <div className="flex items-baseline gap-2 min-w-0">
@@ -134,6 +150,7 @@ export default function ThreadPanel({ parentId, channelId, kind, onClose }: Prop
 
       {/* Composer (posts with parent_message_id) */}
       <MessageComposer
+        ref={composerRef}
         channelId={channelId}
         kind={kind}
         parentMessageId={parentId}
