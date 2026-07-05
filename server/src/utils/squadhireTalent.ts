@@ -99,7 +99,7 @@ export async function fetchTalentAvailability(
 // 'not_found' IS a real value here (the upstream keeps unknown ids in the
 // response) so the caller can show "no longer on SquadHire".
 
-export type TalentStatusTag = 'active' | 'inactive' | 'suspended' | 'not_found';
+export type TalentStatusTag = 'active' | 'inactive' | 'suspended' | 'blacklisted' | 'not_found';
 
 export interface TalentAccountStatus {
   talent_user_id: string;
@@ -107,6 +107,8 @@ export interface TalentAccountStatus {
   is_active: boolean;
   suspended: boolean;
   suspended_reason: string | null;
+  blacklisted: boolean;
+  blacklisted_reason: string | null;
 }
 
 const statusCache = new Map<string, { value: TalentAccountStatus | null; expiresAt: number }>();
@@ -159,7 +161,14 @@ export async function fetchTalentStatuses(
         success?: boolean;
         data?: Record<
           string,
-          { status_tag?: TalentStatusTag; is_active?: boolean; suspended?: boolean; suspended_reason?: string | null }
+          {
+            status_tag?: TalentStatusTag;
+            is_active?: boolean;
+            suspended?: boolean;
+            suspended_reason?: string | null;
+            blacklisted?: boolean;
+            blacklisted_reason?: string | null;
+          }
         >;
       };
       const map = body.data ?? {};
@@ -172,6 +181,8 @@ export async function fetchTalentStatuses(
               is_active: raw.is_active !== false,
               suspended: raw.suspended === true,
               suspended_reason: raw.suspended_reason ?? null,
+              blacklisted: raw.blacklisted === true,
+              blacklisted_reason: raw.blacklisted_reason ?? null,
             }
           : null;
         statusCache.set(id, { value, expiresAt: now + CACHE_TTL_MS });

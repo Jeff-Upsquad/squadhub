@@ -79,7 +79,7 @@ const STATUS_NUMBER: Record<'accepted' | 'rejected' | 'pending', string> = {
 
 // A former assignee of this card (an ended assignment term), newest-first.
 // Talents carry their current SquadHire standing; partners don't (null).
-type SquadHireStatus = 'active' | 'inactive' | 'suspended' | 'not_found';
+type SquadHireStatus = 'active' | 'inactive' | 'suspended' | 'blacklisted' | 'not_found';
 type AssigneeEntry = {
   recipient_type: 'partner' | 'talent';
   recipient_id: string;
@@ -90,14 +90,18 @@ type AssigneeEntry = {
   work_end_date: string | null;
   squadhire_status: SquadHireStatus | null;
   suspended_reason: string | null;
+  blacklisted_reason: string | null;
 };
 
 // Tag shown next to a former talent — their current standing on SquadHire.
-// SquadHire has no "blacklisted" state; suspension is its block mechanism.
+// Severity order blacklisted > suspended > inactive; blacklisted is the
+// sternest block, so it gets a filled dark-red badge (vs suspended's lighter
+// pill) to read as the most severe at a glance.
 const SQUADHIRE_STATUS_TAG: Record<SquadHireStatus, { label: string; bg: string; color: string }> = {
   active: { label: 'Active on SquadHire', bg: '#D1FAE5', color: '#065F46' },
   inactive: { label: 'Inactive on SquadHire', bg: '#E5E7EB', color: '#374151' },
   suspended: { label: 'Suspended', bg: '#FEE2E2', color: '#B91C1C' },
+  blacklisted: { label: 'Blacklisted', bg: '#991B1B', color: '#FFFFFF' },
   not_found: { label: 'No longer on SquadHire', bg: '#F3F4F6', color: '#6B7280' },
 };
 
@@ -977,9 +981,11 @@ export default function AdminPublishedCardRecipientsView({
                 const period = formatAssignmentPeriod(e);
                 const sh = e.squadhire_status ? SQUADHIRE_STATUS_TAG[e.squadhire_status] : null;
                 const shTitle =
-                  e.squadhire_status === 'suspended' && e.suspended_reason
-                    ? `Suspended on SquadHire: ${e.suspended_reason}`
-                    : sh?.label;
+                  e.squadhire_status === 'blacklisted' && e.blacklisted_reason
+                    ? `Blacklisted on SquadHire: ${e.blacklisted_reason}`
+                    : e.squadhire_status === 'suspended' && e.suspended_reason
+                      ? `Suspended on SquadHire: ${e.suspended_reason}`
+                      : sh?.label;
                 return (
                   <div key={`prev-${e.recipient_type}-${e.recipient_id}`} className="sh-card flex items-center gap-3 px-4 py-3">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-sh-cream)] text-sm font-bold text-[var(--color-sh-ink-muted)] ring-1 ring-[var(--color-sh-warm-border)]">
