@@ -12,6 +12,7 @@ import {
   notifySquadhireOfManualRemoval,
   buildSquadhirePayloadForCard,
   deliverCardToSquadhire,
+  previewSquadhireMatches,
 } from '../utils/squadhireWebhook';
 import { stageSubscriptionsFromAssignedCards } from '../utils/submissionPipeline';
 import { logCardEvent } from '../utils/cardEvents';
@@ -1114,6 +1115,7 @@ router.get('/subscription-cards/:id/previous-talent-availability', async (req: R
         success: true,
         data: {
           has_previous_talent: true,
+          recipient_type: 'partner',
           talent_id: card.selected_recipient_id,
           talent_name: (pu as any)?.display_name ?? null,
           available_weekly_hours: null,
@@ -1159,6 +1161,7 @@ router.get('/subscription-cards/:id/previous-talent-availability', async (req: R
       success: true,
       data: {
         has_previous_talent: true,
+        recipient_type: 'talent',
         talent_id: talentId,
         talent_name: (rec as any)?.talent_name ?? null,
         available_weekly_hours: avail?.weekly_hours ?? null,
@@ -1177,6 +1180,27 @@ router.get('/subscription-cards/:id/previous-talent-availability', async (req: R
 });
 
 // ============================================================
+// GET /admin/subscription-cards/:id/match-pool
+//
+// The "who else is available" pool for the resume flow. Unlike the published
+// match-preview (which only computes for state='published' cards), this runs
+// the matcher for ANY card — including a paused one — so the resume UI can show
+// who a rebroadcast would reach before the admin commits. Read-only; never
+// writes recipients. Soft-fails to an empty pool when SquadHire is unreachable
+// so the modal still works.
+// ============================================================
+router.get('/subscription-cards/:id/match-pool', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const preview = await previewSquadhireMatches(cardId);
+    res.json({ success: true, data: { count: preview.count, talents: preview.talents } });
+  } catch (err: any) {
+    console.error('Match pool preview error:', err);
+    res.json({ success: true, data: { count: 0, talents: [] }, note: err?.message || 'Failed to reach SquadHire' });
+  }
+});
+
+// ============================================================
 // POST /admin/subscription-cards/:id/resume
 //
 // Restart a paused subscription. Two modes:
@@ -1189,12 +1213,12 @@ router.get('/subscription-cards/:id/previous-talent-availability', async (req: R
 //                 is finalized (the sourcing gap is unbilled by design).
 // ============================================================
 const resumeSchema = z.object({
-  mode: z.enum(['same_talent', 'rebroadcast']),
+  mode: z.enum(['same_talent', 'same_talent_offer', 'rebroadcast']),
 });
 
 export async function resumeCardCore(
   cardId: string,
-  mode: 'same_talent' | 'rebroadcast',
+  mode: 'same_talent' | 'same_talent_offer' | 'rebroadcast',
   actor: CardActor,
 ): Promise<CardLifecycleResult> {
   try {
@@ -1310,6 +1334,101 @@ export async function resumeCardCore(
         recipientId: rId,
         assignedDate: todayIst,
       });
+    } else if (mode === 'same_talent_offer') {
+      // Offer-based resume: instead of re-placing the previous talent directly,
+      // reopen the card to Published and send an OFFER to just them — they must
+      // accept before billing resumes (finalized via the normal accept flow).
+      // A previous PARTNER isn't on SquadHire, so they fall back to a direct
+      // re-assign (billing today), as in same_talent.
+      const rType2 = card.selected_recipient_type as 'talent' | 'partner' | null;
+      const rId2 = card.selected_recipient_id as string | null;
+      if (!rType2 || !rId2) {
+        await supabaseAdmin.from('subscription_cards').update({ paused_at: card.paused_at }).eq('id', cardId);
+        return { httpStatus: 409, body: { success: false, error: 'No previous recipient on this card — use rebroadcast instead' } };
+      }
+      if (rType2 === 'partner') {
+        await ensureActiveAssignmentTerm({ cardId, recipientType: 'partner', recipientId: rId2, assignedDate: todayIst });
+      } else {
+        // Capture the talent's existing (soon-to-be-archived) row before we
+        // clear the round — we revive it as the offer rather than insert a
+        // duplicate (the (card, system, external_recipient_id) key would clash).
+        const { data: prevRow } = await supabaseAdmin
+          .from('subscription_card_external_recipients')
+          .select('id, talent_name, email')
+          .eq('card_id', cardId)
+          .eq('external_user_id', rId2)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        // Archive the old round, reopen to published, then re-offer to just them.
+        await supabaseAdmin
+          .from('subscription_card_recipients')
+          .update({ archived_at: nowIso })
+          .eq('card_id', cardId)
+          .is('archived_at', null);
+        await supabaseAdmin
+          .from('subscription_card_external_recipients')
+          .update({ archived_at: nowIso })
+          .eq('card_id', cardId)
+          .is('archived_at', null);
+
+        await resetCardAndCloseTerms(cardId); // card → published (term already ended by pause)
+
+        // A single hand-picked offer — manual distribution, not a pool broadcast.
+        await supabaseAdmin
+          .from('subscription_cards')
+          .update({ distribution: 'manual' })
+          .eq('id', cardId);
+
+        // Fresh PENDING offer for the previous talent. Revive-or-insert (never a
+        // bare insert) so the just-archived row is un-archived + reset in place
+        // instead of colliding on the external-recipient unique key.
+        const offer = {
+          status: 'pending' as const,
+          responded_at: null,
+          assigned_manually: true,
+          selected_at: null,
+          selected_by: null,
+          passed_over_at: null,
+          archived_at: null,
+          notified_at: nowIso,
+          squadhire_notified_at: null,
+          squadhire_notify_attempts: 0,
+          squadhire_notify_error: null,
+          talent_name: (prevRow as any)?.talent_name ?? null,
+          email: (prevRow as any)?.email ?? null,
+        };
+        let offerRowId: string | undefined;
+        if ((prevRow as any)?.id) {
+          await supabaseAdmin
+            .from('subscription_card_external_recipients')
+            .update(offer)
+            .eq('id', (prevRow as any).id);
+          offerRowId = (prevRow as any).id;
+        } else {
+          const { data: insertedOffer } = await supabaseAdmin
+            .from('subscription_card_external_recipients')
+            .insert({
+              card_id: cardId,
+              external_system: 'squadhire',
+              external_recipient_id: rId2,
+              external_user_id: rId2,
+              ...offer,
+            })
+            .select('id')
+            .maybeSingle();
+          offerRowId = (insertedOffer as any)?.id;
+        }
+
+        // Deliver the card to SquadHire so the offer is deliverable, then notify.
+        const payload = await buildSquadhirePayloadForCard(cardId);
+        if (payload) await deliverCardToSquadhire(cardId, payload);
+        const outcome = await notifySquadhireOfManualAssignment(cardId, rId2, offerRowId);
+        if (!outcome.delivered) {
+          warnings.push('Reopened and offered to the previous talent, but SquadHire was not notified — they may not see the offer yet. The system will retry automatically.');
+        }
+      }
     } else {
       // rebroadcast: reopen to a fresh round (mirrors reopen-for-new-talents),
       // then re-fan-out. The card leaves `assigned`, so the "previous talent"
