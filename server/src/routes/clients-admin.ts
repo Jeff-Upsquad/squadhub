@@ -9,11 +9,22 @@ import {
   transitionSubmissionStatus,
 } from '../utils/submissionPipeline';
 import { hydrateStagedSubscriptions } from '../utils/stagedSubscriptions';
+import { findCardIdForClientSubscription } from '../utils/clientCardLink';
+import { pauseCardCore, resumeCardCore } from './subscription-cards-admin-select';
+import { cancelCardCore, archiveCardCore, reinstateCardCore } from './subscription-cards-admin';
 
 const router = Router();
 
 router.use(requireAuth);
 router.use(requireAdmin);
+
+/** Actor for propagating a Clients-module action onto the linked card. */
+function cardActor(req: Request) {
+  return {
+    userId: (req as any).userId ?? (req as any).user?.id ?? null,
+    userName: (req as any).userName ?? null,
+  };
+}
 
 const countryIdSchema = z.string().uuid();
 
@@ -1147,7 +1158,27 @@ router.put('/:clientId/subscriptions/:csId/status', async (req: Request, res: Re
       res.status(500).json({ success: false, error: error.message });
       return;
     }
-    res.json({ success: true, data });
+
+    // Propagate to the linked subscription card so billing, the talent's
+    // SquadHire assignment, and the Published Cards tabs stay in sync. The card
+    // cores reverse-sync back to this same row (harmless — already set). A
+    // client_subscription with no card, or a card whose state doesn't allow the
+    // transition, just leaves the Clients-side status changed + a warning.
+    let cardWarning: string | undefined;
+    const cardId = await findCardIdForClientSubscription(req.params.clientId as string, req.params.csId as string);
+    if (cardId) {
+      const actor = cardActor(req);
+      const result =
+        body.status === 'paused' ? await pauseCardCore(cardId, actor)
+        : body.status === 'cancelled' ? await cancelCardCore(cardId, actor)
+        : body.status === 'active' ? await resumeCardCore(cardId, 'rebroadcast', actor)
+        : null;
+      if (result && result.httpStatus >= 400 && result.body?.error) {
+        cardWarning = `Client status set to ${body.status}, but the linked card wasn't updated: ${result.body.error}`;
+      }
+    }
+
+    res.json({ success: true, data, ...(cardWarning ? { warning: cardWarning } : {}) });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ success: false, error: err.errors[0].message });
@@ -1173,7 +1204,17 @@ router.delete('/:clientId/subscriptions/:csId', async (req: Request, res: Respon
       res.status(500).json({ success: false, error: error.message });
       return;
     }
-    res.json({ success: true, message: 'Subscription archived' });
+    // Archive the linked card too (best-effort), so it leaves the active
+    // pipeline in Published Cards. "Already archived" is not an error here.
+    let cardWarning: string | undefined;
+    const cardId = await findCardIdForClientSubscription(req.params.clientId as string, req.params.csId as string);
+    if (cardId) {
+      const result = await archiveCardCore(cardId, cardActor(req));
+      if (result.httpStatus >= 400 && result.body?.error && result.body.error !== 'Card is already archived') {
+        cardWarning = `Subscription archived, but the linked card wasn't: ${result.body.error}`;
+      }
+    }
+    res.json({ success: true, message: 'Subscription archived', ...(cardWarning ? { warning: cardWarning } : {}) });
   } catch (err) {
     console.error('Archive client subscription error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -1192,7 +1233,17 @@ router.post('/:clientId/subscriptions/:csId/unarchive', async (req: Request, res
       res.status(500).json({ success: false, error: error.message });
       return;
     }
-    res.json({ success: true, message: 'Subscription unarchived' });
+    // Reinstate the linked card too (best-effort). "Only archived cards can be
+    // reinstated" just means the card wasn't archived — not an error here.
+    let cardWarning: string | undefined;
+    const cardId = await findCardIdForClientSubscription(req.params.clientId as string, req.params.csId as string);
+    if (cardId) {
+      const result = await reinstateCardCore(cardId, cardActor(req));
+      if (result.httpStatus >= 400 && result.body?.error && result.body.error !== 'Only archived cards can be reinstated') {
+        cardWarning = `Subscription unarchived, but the linked card wasn't reinstated: ${result.body.error}`;
+      }
+    }
+    res.json({ success: true, message: 'Subscription unarchived', ...(cardWarning ? { warning: cardWarning } : {}) });
   } catch (err) {
     console.error('Unarchive client subscription error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });

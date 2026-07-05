@@ -16,6 +16,11 @@ import {
 import { endActiveAssignmentTermsForCard } from '../utils/assignmentTerms';
 import { handOffSpaceToNewTalent } from '../utils/spaceTalentHandoff';
 import {
+  syncClientSubscriptionForCard,
+  type CardActor,
+  type CardLifecycleResult,
+} from '../utils/clientCardLink';
+import {
   attachSubmissionToExistingClient,
   findExistingClientForSubmission,
   transitionSubmissionStatus,
@@ -1376,22 +1381,18 @@ router.post('/:id/recall', async (req: Request, res: Response) => {
 // re-deliver to SquadHire) but always closes — no draft return
 // path. Acceptees keep seeing the card with a "Cancelled" tag.
 // ============================================================
-router.post('/:id/cancel', async (req: Request, res: Response) => {
+export async function cancelCardCore(cardId: string, actor: CardActor): Promise<CardLifecycleResult> {
   try {
-    const cardId = req.params.id as string;
-
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
       .select('id, state, parent_card_id, paused_at, selected_recipient_type, selected_recipient_id')
       .eq('id', cardId)
       .maybeSingle();
     if (!card) {
-      res.status(404).json({ success: false, error: 'Card not found' });
-      return;
+      return { httpStatus: 404, body: { success: false, error: 'Card not found' } };
     }
     if (card.state !== 'published' && card.state !== 'assigned') {
-      res.status(409).json({ success: false, error: 'Only published or assigned cards can be cancelled' });
-      return;
+      return { httpStatus: 409, body: { success: false, error: 'Only published or assigned cards can be cancelled' } };
     }
 
     // Cancelling a LIVE (assigned, possibly paused) subscription: billing stops
@@ -1492,8 +1493,7 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
       .select('*')
       .single();
     if (updErr) {
-      res.status(500).json({ success: false, error: updErr.message });
-      return;
+      return { httpStatus: 500, body: { success: false, error: updErr.message } };
     }
 
     // Re-deliver card to SquadHire with the new state (and cancelled_at).
@@ -1540,24 +1540,38 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
       }
     }
 
+    // Mirror onto the linked Clients-module subscription (best-effort).
+    await syncClientSubscriptionForCard(cardId, { status: 'cancelled' });
+
     await logCardEvent({
       cardId,
       eventType: 'cancelled',
-      actorId: (req as any).userId ?? null,
+      actorId: actor.userId,
       actorType: 'admin',
-      actorLabel: (req as any).userName ?? null,
+      actorLabel: actor.userName ?? null,
       metadata: { had_acceptances: hasAcceptances, is_secondary: isSecondary, was_assigned: card.state === 'assigned' },
     });
 
-    res.json({
-      success: true,
-      data: await hydrateCard(updated),
-      ...(cancelWarnings.length ? { warning: cancelWarnings.join(' ') } : {}),
-    });
+    return {
+      httpStatus: 200,
+      body: {
+        success: true,
+        data: await hydrateCard(updated),
+        ...(cancelWarnings.length ? { warning: cancelWarnings.join(' ') } : {}),
+      },
+    };
   } catch (err: any) {
     console.error('Admin cancel card error:', err);
-    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    return { httpStatus: 500, body: { success: false, error: err?.message || 'Internal server error' } };
   }
+}
+
+router.post('/:id/cancel', async (req: Request, res: Response) => {
+  const result = await cancelCardCore(req.params.id as string, {
+    userId: (req as any).userId ?? null,
+    userName: (req as any).userName ?? null,
+  });
+  res.status(result.httpStatus).json(result.body);
 });
 
 // ============================================================
@@ -1567,22 +1581,18 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
 // feeds. State is preserved so we can describe what was archived
 // in the Archive tab; republish/delete-permanent decide its fate.
 // ============================================================
-router.post('/:id/archive', async (req: Request, res: Response) => {
+export async function archiveCardCore(cardId: string, actor: CardActor): Promise<CardLifecycleResult> {
   try {
-    const cardId = req.params.id as string;
-
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
       .select('id, archived_at')
       .eq('id', cardId)
       .maybeSingle();
     if (!card) {
-      res.status(404).json({ success: false, error: 'Card not found' });
-      return;
+      return { httpStatus: 404, body: { success: false, error: 'Card not found' } };
     }
     if (card.archived_at) {
-      res.status(409).json({ success: false, error: 'Card is already archived' });
-      return;
+      return { httpStatus: 409, body: { success: false, error: 'Card is already archived' } };
     }
 
     const now = new Date().toISOString();
@@ -1598,8 +1608,7 @@ router.post('/:id/archive', async (req: Request, res: Response) => {
       .select('*')
       .single();
     if (updErr) {
-      res.status(500).json({ success: false, error: updErr.message });
-      return;
+      return { httpStatus: 500, body: { success: false, error: updErr.message } };
     }
 
     // Re-deliver to SquadHire so its local copy picks up archived_at
@@ -1617,19 +1626,30 @@ router.post('/:id/archive', async (req: Request, res: Response) => {
       console.error('[admin-archive] squadhire mirror drop error', err);
     });
 
+    // Mirror onto the linked Clients-module subscription (best-effort).
+    await syncClientSubscriptionForCard(cardId, { archived: true });
+
     await logCardEvent({
       cardId,
       eventType: 'archived',
-      actorId: (req as any).userId ?? null,
+      actorId: actor.userId,
       actorType: 'admin',
-      actorLabel: (req as any).userName ?? null,
+      actorLabel: actor.userName ?? null,
     });
 
-    res.json({ success: true, data: await hydrateCard(updated) });
+    return { httpStatus: 200, body: { success: true, data: await hydrateCard(updated) } };
   } catch (err: any) {
     console.error('Admin archive card error:', err);
-    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    return { httpStatus: 500, body: { success: false, error: err?.message || 'Internal server error' } };
   }
+}
+
+router.post('/:id/archive', async (req: Request, res: Response) => {
+  const result = await archiveCardCore(req.params.id as string, {
+    userId: (req as any).userId ?? null,
+    userName: (req as any).userName ?? null,
+  });
+  res.status(result.httpStatus).json(result.body);
 });
 
 // ============================================================
@@ -1641,22 +1661,18 @@ router.post('/:id/archive', async (req: Request, res: Response) => {
 // assigned card comes back exactly as it went in. Re-delivers to
 // SquadHire so its mirror leaves 'archived' and re-matches the card.
 // ============================================================
-router.post('/:id/reinstate', async (req: Request, res: Response) => {
+export async function reinstateCardCore(cardId: string, actor: CardActor): Promise<CardLifecycleResult> {
   try {
-    const cardId = req.params.id as string;
-
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
       .select('id, archived_at')
       .eq('id', cardId)
       .maybeSingle();
     if (!card) {
-      res.status(404).json({ success: false, error: 'Card not found' });
-      return;
+      return { httpStatus: 404, body: { success: false, error: 'Card not found' } };
     }
     if (!card.archived_at) {
-      res.status(409).json({ success: false, error: 'Only archived cards can be reinstated' });
-      return;
+      return { httpStatus: 409, body: { success: false, error: 'Only archived cards can be reinstated' } };
     }
 
     const { data: updated, error: updErr } = await supabaseAdmin
@@ -1674,8 +1690,7 @@ router.post('/:id/reinstate', async (req: Request, res: Response) => {
       .select('*')
       .single();
     if (updErr) {
-      res.status(500).json({ success: false, error: updErr.message });
-      return;
+      return { httpStatus: 500, body: { success: false, error: updErr.message } };
     }
 
     // Re-deliver to SquadHire so its mirror flips out of 'archived' and
@@ -1686,19 +1701,31 @@ router.post('/:id/reinstate', async (req: Request, res: Response) => {
       .then((payload) => payload && deliverCardToSquadhire(updated.id, payload))
       .catch((err) => console.error('[admin-reinstate] squadhire delivery error', err));
 
+    // Mirror onto the linked Clients-module subscription (best-effort): clear
+    // the archive flag but leave status alone (a cancelled card stays cancelled).
+    await syncClientSubscriptionForCard(cardId, { archived: false });
+
     await logCardEvent({
       cardId,
       eventType: 'reinstated',
-      actorId: (req as any).userId ?? null,
+      actorId: actor.userId,
       actorType: 'admin',
-      actorLabel: (req as any).userName ?? null,
+      actorLabel: actor.userName ?? null,
     });
 
-    res.json({ success: true, data: await hydrateCard(updated) });
+    return { httpStatus: 200, body: { success: true, data: await hydrateCard(updated) } };
   } catch (err: any) {
     console.error('Admin reinstate card error:', err);
-    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    return { httpStatus: 500, body: { success: false, error: err?.message || 'Internal server error' } };
   }
+}
+
+router.post('/:id/reinstate', async (req: Request, res: Response) => {
+  const result = await reinstateCardCore(req.params.id as string, {
+    userId: (req as any).userId ?? null,
+    userName: (req as any).userName ?? null,
+  });
+  res.status(result.httpStatus).json(result.body);
 });
 
 // ============================================================
