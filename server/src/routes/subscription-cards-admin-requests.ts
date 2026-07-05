@@ -112,7 +112,12 @@ router.get('/subscription-requests', async (req: Request, res: Response) => {
       const { data: cards } = await supabaseAdmin
         .from('subscription_cards')
         .select('id, subscription_request_id')
-        .in('subscription_request_id', ids);
+        .in('subscription_request_id', ids)
+        // Soft-deleted cards live in the admin Trash, not in any card list.
+        // Attaching a trashed card_id here would make the row render
+        // "View Card" / "Share link" that dead-end on the editor's
+        // deleted_at-filtered fetch ("Card not found.").
+        .is('deleted_at', null);
       cardByRequestId = new Map(
         (cards ?? []).map((c: any) => [c.subscription_request_id as number, c.id as string]),
       );
@@ -164,11 +169,14 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
     }
     const { subscription_request_id } = parsed.data;
 
-    // Check if a card already exists for this request
+    // Check if a *live* card already exists for this request. A soft-deleted
+    // card sits in the Trash and must be treated as absent, so a fresh draft
+    // is created instead of re-opening a card the editor can't load.
     const { data: existing } = await supabaseAdmin
       .from('subscription_cards')
       .select('id')
       .eq('subscription_request_id', subscription_request_id)
+      .is('deleted_at', null)
       .maybeSingle();
     if (existing) {
       const hydrated = await hydrateCard(
