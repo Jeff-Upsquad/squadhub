@@ -23,6 +23,11 @@ import { fetchTalentAvailability } from '../utils/squadhireTalent';
 import { loadCardBilling } from '../utils/cardBilling';
 import { buildPlanSnapshot, resolvePlanIdForCard } from '../utils/cardPlanSnapshot';
 import { handOffSpaceToNewTalent } from '../utils/spaceTalentHandoff';
+import {
+  syncClientSubscriptionForCard,
+  type CardActor,
+  type CardLifecycleResult,
+} from '../utils/clientCardLink';
 import crypto from 'crypto';
 
 const router = Router();
@@ -983,24 +988,20 @@ router.post('/subscription-cards/:id/change-talent', async (req: Request, res: R
 // memory the resume flow offers to re-assign. Reports/elapsed-time follow
 // automatically: no active term covering a day → 0 committed target.
 // ============================================================
-router.post('/subscription-cards/:id/pause', async (req: Request, res: Response) => {
+export async function pauseCardCore(cardId: string, actor: CardActor): Promise<CardLifecycleResult> {
   try {
-    const cardId = req.params.id as string;
-
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
       .select('id, state, paused_at, selected_recipient_type, selected_recipient_id')
       .eq('id', cardId)
       .maybeSingle();
-    if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
-    if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
+    if (cardErr) return { httpStatus: 500, body: { success: false, error: cardErr.message } };
+    if (!card) return { httpStatus: 404, body: { success: false, error: 'Card not found' } };
     if (card.state !== 'assigned' || !card.selected_recipient_id) {
-      res.status(409).json({ success: false, error: 'Card is not an active assignment' });
-      return;
+      return { httpStatus: 409, body: { success: false, error: 'Card is not an active assignment' } };
     }
     if (card.paused_at) {
-      res.status(409).json({ success: false, error: 'Subscription is already paused' });
-      return;
+      return { httpStatus: 409, body: { success: false, error: 'Subscription is already paused' } };
     }
 
     const nowIso = new Date().toISOString();
@@ -1032,7 +1033,7 @@ router.post('/subscription-cards/:id/pause', async (req: Request, res: Response)
       .from('subscription_cards')
       .update({ paused_at: nowIso })
       .eq('id', cardId);
-    if (updErr) { res.status(500).json({ success: false, error: updErr.message }); return; }
+    if (updErr) return { httpStatus: 500, body: { success: false, error: updErr.message } };
 
     // 3. Retire the talent's local recipient row for this round (audit kept,
     //    sweeper can't ghost-retry it) and their SquadHire mirror, with a push.
@@ -1051,20 +1052,31 @@ router.post('/subscription-cards/:id/pause', async (req: Request, res: Response)
       }
     }
 
+    // Mirror onto the linked Clients-module subscription (best-effort).
+    await syncClientSubscriptionForCard(cardId, { status: 'paused' });
+
     logCardEvent({
       cardId,
       eventType: 'paused',
-      actorId: (req as any).user?.id ?? null,
+      actorId: actor.userId,
       actorType: 'admin',
-      actorLabel: (req as any).userName ?? null,
+      actorLabel: actor.userName ?? null,
       metadata: { recipient_type: card.selected_recipient_type, recipient_id: card.selected_recipient_id },
     });
 
-    res.json({ success: true, ...(warnings.length ? { warning: warnings.join(' ') } : {}) });
+    return { httpStatus: 200, body: { success: true, ...(warnings.length ? { warning: warnings.join(' ') } : {}) } };
   } catch (err: any) {
     console.error('Pause subscription error:', err);
-    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    return { httpStatus: 500, body: { success: false, error: err?.message || 'Internal server error' } };
   }
+}
+
+router.post('/subscription-cards/:id/pause', async (req: Request, res: Response) => {
+  const result = await pauseCardCore(req.params.id as string, {
+    userId: (req as any).user?.id ?? null,
+    userName: (req as any).userName ?? null,
+  });
+  res.status(result.httpStatus).json(result.body);
 });
 
 // ============================================================
@@ -1180,33 +1192,27 @@ const resumeSchema = z.object({
   mode: z.enum(['same_talent', 'rebroadcast']),
 });
 
-router.post('/subscription-cards/:id/resume', async (req: Request, res: Response) => {
+export async function resumeCardCore(
+  cardId: string,
+  mode: 'same_talent' | 'rebroadcast',
+  actor: CardActor,
+): Promise<CardLifecycleResult> {
   try {
-    const cardId = req.params.id as string;
-    const parsed = resumeSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
-      return;
-    }
-    const { mode } = parsed.data;
-
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
       .select('id, state, paused_at, selected_recipient_type, selected_recipient_id')
       .eq('id', cardId)
       .maybeSingle();
-    if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
-    if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
+    if (cardErr) return { httpStatus: 500, body: { success: false, error: cardErr.message } };
+    if (!card) return { httpStatus: 404, body: { success: false, error: 'Card not found' } };
     if (!card.paused_at) {
-      res.status(409).json({ success: false, error: 'Subscription is not paused' });
-      return;
+      return { httpStatus: 409, body: { success: false, error: 'Subscription is not paused' } };
     }
     // A paused card is always state='assigned'; anything else means it was
     // closed/cancelled by another flow while paused — resuming would revive a
     // dead card and open a billing term nothing else knows about.
     if (card.state !== 'assigned') {
-      res.status(409).json({ success: false, error: 'Card is no longer an active assignment — it cannot be resumed' });
-      return;
+      return { httpStatus: 409, body: { success: false, error: 'Card is no longer an active assignment — it cannot be resumed' } };
     }
 
     const nowIso = new Date().toISOString();
@@ -1223,8 +1229,7 @@ router.post('/subscription-cards/:id/resume', async (req: Request, res: Response
       .not('paused_at', 'is', null)
       .select('id');
     if (!unpaused || unpaused.length === 0) {
-      res.status(409).json({ success: false, error: 'Subscription is not paused' });
-      return;
+      return { httpStatus: 409, body: { success: false, error: 'Subscription is not paused' } };
     }
 
     if (mode === 'same_talent') {
@@ -1233,8 +1238,7 @@ router.post('/subscription-cards/:id/resume', async (req: Request, res: Response
       if (!rType || !rId) {
         // Nothing external happened yet — restore the pause before bailing.
         await supabaseAdmin.from('subscription_cards').update({ paused_at: card.paused_at }).eq('id', cardId);
-        res.status(409).json({ success: false, error: 'No previous recipient on this card — use rebroadcast instead' });
-        return;
+        return { httpStatus: 409, body: { success: false, error: 'No previous recipient on this card — use rebroadcast instead' } };
       }
 
       if (rType === 'talent') {
@@ -1258,7 +1262,7 @@ router.post('/subscription-cards/:id/resume', async (req: Request, res: Response
           responded_at: nowIso,
           assigned_manually: true,
           selected_at: nowIso,
-          selected_by: (req as any).user?.id ?? null,
+          selected_by: actor.userId,
           passed_over_at: null,
           archived_at: null,
           notified_at: nowIso,
@@ -1366,20 +1370,38 @@ router.post('/subscription-cards/:id/resume', async (req: Request, res: Response
       }
     }
 
+    // Mirror onto the linked Clients-module subscription: resumed = active again
+    // (same_talent re-bills today; rebroadcast reopens the search — either way
+    // the client's subscription is no longer paused). Best-effort.
+    await syncClientSubscriptionForCard(cardId, { status: 'active' });
+
     logCardEvent({
       cardId,
       eventType: 'resumed',
-      actorId: (req as any).user?.id ?? null,
+      actorId: actor.userId,
       actorType: 'admin',
-      actorLabel: (req as any).userName ?? null,
+      actorLabel: actor.userName ?? null,
       metadata: { mode },
     });
 
-    res.json({ success: true, ...(warnings.length ? { warning: warnings.join(' ') } : {}) });
+    return { httpStatus: 200, body: { success: true, ...(warnings.length ? { warning: warnings.join(' ') } : {}) } };
   } catch (err: any) {
     console.error('Resume subscription error:', err);
-    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    return { httpStatus: 500, body: { success: false, error: err?.message || 'Internal server error' } };
   }
+}
+
+router.post('/subscription-cards/:id/resume', async (req: Request, res: Response) => {
+  const parsed = resumeSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
+    return;
+  }
+  const result = await resumeCardCore(req.params.id as string, parsed.data.mode, {
+    userId: (req as any).user?.id ?? null,
+    userName: (req as any).userName ?? null,
+  });
+  res.status(result.httpStatus).json(result.body);
 });
 
 export default router;
