@@ -462,9 +462,19 @@ router.get('/', async (req: Request, res: Response) => {
     if (search) {
       const needle = search.toLowerCase();
       hydrated = hydrated.filter((c: any) => {
+        // Match the same fields the list UI shows as the business name:
+        // submission.business_name || brand_name (cards from shared_form /
+        // request / custom have no linked submission, only brand_name), plus
+        // the legacy customer_company. Missing brand_name here made those
+        // cards render but stay invisible to search.
         const businessName = (c.submission?.business_name || '').toLowerCase();
+        const brandName = (c.brand_name || '').toLowerCase();
         const customerCompany = (c.customer_company || '').toLowerCase();
-        return businessName.includes(needle) || customerCompany.includes(needle);
+        return (
+          businessName.includes(needle) ||
+          brandName.includes(needle) ||
+          customerCompany.includes(needle)
+        );
       });
     }
 
