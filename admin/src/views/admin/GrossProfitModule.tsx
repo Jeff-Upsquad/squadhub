@@ -1,8 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
+
+type Granularity = 'month' | 'quarter' | 'year';
 
 type CurrencySummary = {
   currency: string;
@@ -13,104 +16,179 @@ type CurrencySummary = {
   client_count: number;
 };
 
-type SubBreakdown = {
-  client_subscription_id: string;
-  status: string;
-  subscription: { id: string; slug: string; name: string } | null;
-  plan: { id: string; plan: string; tier: string } | null;
-  customer_price: number;
-  partner_price: number;
+type Line = {
+  term_id: string;
+  card_id: string | null;
+  role: string | null;
+  subscription_name: string | null;
+  plan: string | null;
+  tier: string | null;
+  talent: string | null;
+  work_start: string | null;
+  work_end: string | null;
+  active_days: number;
+  status: 'active' | 'paused' | 'cancelled' | 'ended';
+  revenue: number;
+  partner_cost: number;
   gross_profit: number;
-  missing_customer_price: boolean;
+  missing_revenue: boolean;
   missing_partner_price: boolean;
+  finalized: boolean;
 };
 
 type ClientRow = {
   id: string;
   business_name: string;
-  country: { id: string; name: string; currency: string };
+  currency: string;
   active_subscription_count: number;
-  paused_subscription_count: number;
-  monthly_revenue: number;
-  monthly_partner_cost: number;
+  revenue: number;
+  partner_cost: number;
   gross_profit: number;
   margin_pct: number;
   has_missing_pricing: boolean;
-  subscriptions: SubBreakdown[];
+  lines: Line[];
 };
 
-type AssignedPartner = {
-  id: string;
-  user_id: string;
-  client_id: string;
-  role: string | null;
-  created_at: string;
-  user: { id: string; email: string; display_name: string; avatar_url: string | null };
+type Period = {
+  granularity: Granularity;
+  anchor: string;
+  label: string;
+  start: string;
+  end: string;
 };
 
-function formatMoney(cents: number, currency: string): string {
-  const amount = (cents || 0) / 100;
-  if (currency === 'INR') {
-    return '₹' + amount.toLocaleString('en-IN', { maximumFractionDigits: 0 });
-  }
-  if (currency === 'USD') {
-    return '$' + amount.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 0 });
-  }
-  return amount.toLocaleString();
+const MONTHS_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+// Amounts are stored in whole currency units (matches the Active Subscriptions
+// view, which renders the same term prices) — do NOT divide by 100.
+function formatMoney(amount: number, currency: string | null): string {
+  const cur = currency || '';
+  if (cur === 'INR') return '₹' + (amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  if (cur === 'USD') return '$' + (amount || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  // Unresolved currency (un-finalized engagement): show the bare number, never
+  // the literal "UNKNOWN" — the row is flagged as an estimate elsewhere.
+  return (amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+}
+
+function currencyLabel(currency: string): string {
+  return currency && currency !== 'UNKNOWN' ? currency : 'Unknown';
 }
 
 function formatPct(pct: number): string {
   return pct.toFixed(1) + '%';
 }
 
-function tierBadge(tier: string | undefined): string {
+function fmtDate(iso: string | null): string {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return iso;
+  return `${MONTHS_SHORT[m - 1]} ${d}, ${y}`;
+}
+
+function dateRange(start: string | null, end: string | null): string {
+  if (!start) return '—';
+  if (!end) return `Since ${fmtDate(start)}`;
+  return `${fmtDate(start)} – ${fmtDate(end)}`;
+}
+
+function tierBadge(tier: string | null | undefined): string {
   if (tier === 'Junior') return 'bg-canvas text-foreground-muted';
   if (tier === 'Pro') return 'bg-[#EEF2FF] text-[#4338CA]';
   if (tier === 'Top Talents') return 'bg-[#FEF3C7] text-[#A16207]';
   return 'bg-canvas text-foreground-muted';
 }
 
+function statusBadge(status: string): { label: string; cls: string } {
+  if (status === 'paused') return { label: 'Paused', cls: 'bg-[#FEF3C7] text-[#A16207]' };
+  if (status === 'cancelled') return { label: 'Cancelled', cls: 'bg-[#FEE2E2] text-[#B91C1C]' };
+  if (status === 'ended') return { label: 'Ended', cls: 'bg-canvas text-foreground-muted ring-1 ring-divider' };
+  return { label: 'Active', cls: 'bg-[#DCFCE7] text-[#15803D]' };
+}
+
+function anchorFor(g: Granularity, year: number, month: number): string {
+  if (g === 'year') return String(year);
+  if (g === 'quarter') return `${year}-Q${Math.floor((month - 1) / 3) + 1}`;
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+const GRAN_LABEL: Record<Granularity, string> = {
+  month: 'Month',
+  quarter: 'Quarter',
+  year: 'Year',
+};
+
 export default function GrossProfitModule() {
-  const [filters, setFilters] = useState({
-    country_id: '',
-    subscription_slug: '',
-    include_paused: false,
-  });
+  const now = useMemo(() => new Date(), []);
+  const [granularity, setGranularity] = useState<Granularity>('month');
+  const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
+  const [currency, setCurrency] = useState('');
+  const [subscription, setSubscription] = useState('');
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
 
+  const anchor = anchorFor(granularity, cursor.year, cursor.month);
+
+  function step(delta: number) {
+    setCursor((prev) => {
+      let { year, month } = prev;
+      if (granularity === 'year') {
+        year += delta;
+      } else if (granularity === 'quarter') {
+        const qStart = Math.floor((month - 1) / 3) * 3 + 1;
+        let m = qStart + delta * 3;
+        while (m < 1) { m += 12; year -= 1; }
+        while (m > 12) { m -= 12; year += 1; }
+        month = m;
+      } else {
+        let m = month + delta;
+        while (m < 1) { m += 12; year -= 1; }
+        while (m > 12) { m -= 12; year += 1; }
+        month = m;
+      }
+      return { year, month };
+    });
+  }
+
+  function resetToNow() {
+    setCursor({ year: now.getFullYear(), month: now.getMonth() + 1 });
+  }
+
   const queryParams = new URLSearchParams();
-  if (filters.country_id) queryParams.set('country_id', filters.country_id);
-  if (filters.subscription_slug) queryParams.set('subscription_slug', filters.subscription_slug);
-  if (filters.include_paused) queryParams.set('include_paused', 'true');
+  queryParams.set('granularity', granularity);
+  queryParams.set('anchor', anchor);
+  if (currency) queryParams.set('currency', currency);
+  if (subscription) queryParams.set('subscription', subscription);
 
   const { data: gpRes, isLoading } = useQuery({
-    queryKey: ['admin-gross-profit', filters],
+    queryKey: ['admin-gross-profit', granularity, anchor, currency, subscription],
     queryFn: () =>
       api.get(`/admin/gross-profit/clients?${queryParams.toString()}`).then((r) => r.data),
   });
 
-  const { data: countriesRes } = useQuery({
-    queryKey: ['admin-countries'],
-    queryFn: () => api.get('/admin/countries').then((r) => r.data),
-  });
-
-  const { data: partnersRes } = useQuery({
-    queryKey: ['admin-partners-by-client', selectedClientId],
-    queryFn: () =>
-      api.get(`/admin/partners/by-client/${selectedClientId}`).then((r) => r.data),
-    enabled: !!selectedClientId,
-  });
-
   const summary: CurrencySummary[] = gpRes?.data?.summary_by_currency || [];
   const clients: ClientRow[] = gpRes?.data?.clients || [];
-  const countries: Array<{ id: string; name: string; currency: string; is_active: boolean }> =
-    countriesRes?.data || [];
-  const assignedPartners: AssignedPartner[] = partnersRes?.data || [];
+  const period: Period | null = gpRes?.data?.period || null;
+  const periodLabel = period?.label || anchor;
 
   const selectedClient = selectedClientId
     ? clients.find((c) => c.id === selectedClientId) || null
     : null;
   const anyMissing = clients.some((c) => c.has_missing_pricing);
+
+  // Close the drill-in modal on Escape.
+  useEffect(() => {
+    if (!selectedClientId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedClientId(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedClientId]);
+
+  const resetLabel =
+    granularity === 'month' ? 'This month' : granularity === 'quarter' ? 'This quarter' : 'This year';
 
   return (
     <div>
@@ -120,21 +198,76 @@ export default function GrossProfitModule() {
           Gross Profit
         </h1>
         <p className="mt-1 text-sm text-foreground-muted">
-          Monthly revenue, partner cost, and profit per client based on active subscription pricing.
+          Revenue, partner cost, and profit per client for the selected period, from finalized
+          subscription billing.
         </p>
+      </div>
+
+      {/* Period controls: granularity toggle + stepper */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="inline-flex rounded-lg border border-divider bg-surface p-0.5">
+          {(['month', 'quarter', 'year'] as Granularity[]).map((g) => (
+            <button
+              key={g}
+              onClick={() => setGranularity(g)}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                granularity === g
+                  ? 'bg-[#EEF2FF] text-accent'
+                  : 'text-foreground-muted hover:text-foreground'
+              }`}
+            >
+              {GRAN_LABEL[g]}
+            </button>
+          ))}
+        </div>
+
+        <div className="inline-flex items-center gap-1 rounded-lg border border-divider bg-surface px-1 py-0.5">
+          <button
+            onClick={() => step(-1)}
+            className="rounded-md p-1.5 text-foreground-dim hover:bg-surface-alt hover:text-foreground"
+            aria-label="Previous period"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <span className="min-w-[7.5rem] text-center text-sm font-semibold text-foreground">
+            {periodLabel}
+          </span>
+          <button
+            onClick={() => step(1)}
+            className="rounded-md p-1.5 text-foreground-dim hover:bg-surface-alt hover:text-foreground"
+            aria-label="Next period"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+
+        <button
+          onClick={resetToNow}
+          className="rounded-md border border-divider bg-surface px-3 py-1.5 text-xs text-foreground-muted hover:text-foreground"
+        >
+          {resetLabel}
+        </button>
       </div>
 
       {/* Summary cards (one per currency) */}
       {summary.length > 0 && (
         <div className="mb-5 grid gap-3 sm:grid-cols-2">
           {summary.map((s) => (
-            <div
-              key={s.currency}
-              className="rounded-lg border border-divider bg-surface p-4"
-            >
+            <div key={s.currency} className="rounded-lg border border-divider bg-surface p-4">
               <div className="mb-3 flex items-center justify-between">
-                <span className="font-[family-name:var(--font-mono)] rounded-md bg-[#EEF2FF] px-2 py-0.5 text-[11px] font-semibold text-accent">
-                  {s.currency}
+                <span
+                  className={`font-[family-name:var(--font-mono)] rounded-md px-2 py-0.5 text-[11px] font-semibold ${
+                    s.currency === 'UNKNOWN'
+                      ? 'bg-[#FEF3C7] text-[#A16207]'
+                      : 'bg-[#EEF2FF] text-accent'
+                  }`}
+                  title={s.currency === 'UNKNOWN' ? 'Currency not set — figures are estimates' : undefined}
+                >
+                  {currencyLabel(s.currency)}
                 </span>
                 <span className="text-xs text-foreground-muted">
                   {s.client_count} client{s.client_count === 1 ? '' : 's'}
@@ -178,37 +311,23 @@ export default function GrossProfitModule() {
       {/* Filters */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <select
-          value={filters.country_id}
-          onChange={(e) => setFilters({ ...filters, country_id: e.target.value })}
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value)}
           className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground"
         >
-          <option value="">All Countries</option>
-          {countries
-            .filter((c) => c.is_active)
-            .map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.currency})
-              </option>
-            ))}
+          <option value="">All Currencies</option>
+          <option value="INR">INR (₹)</option>
+          <option value="USD">USD ($)</option>
         </select>
         <select
-          value={filters.subscription_slug}
-          onChange={(e) => setFilters({ ...filters, subscription_slug: e.target.value })}
+          value={subscription}
+          onChange={(e) => setSubscription(e.target.value)}
           className="rounded-md border border-divider px-3 py-1.5 text-xs text-foreground"
         >
           <option value="">All Subscriptions</option>
           <option value="designer">Designer</option>
           <option value="video_editor">Video Editor</option>
         </select>
-        <label className="flex items-center gap-1.5 rounded-md border border-divider bg-surface px-3 py-1.5 text-xs text-foreground cursor-pointer">
-          <input
-            type="checkbox"
-            checked={filters.include_paused}
-            onChange={(e) => setFilters({ ...filters, include_paused: e.target.checked })}
-            className="h-3.5 w-3.5"
-          />
-          Include paused
-        </label>
       </div>
 
       {/* Missing pricing banner */}
@@ -218,21 +337,22 @@ export default function GrossProfitModule() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
           </svg>
           <span>
-            Some clients are missing customer or partner pricing for their plan + country combination.
-            Rows with missing pricing show an amber dot. Treat their numbers as incomplete.
+            Some subscriptions active this period aren&apos;t finalized yet — their figures are
+            estimated from card/catalog pricing and their currency may be unset (shown as
+            &ldquo;Unknown&rdquo;). Those clients show an amber dot; finalize the engagements to lock
+            the numbers.
           </span>
         </div>
       )}
 
       {/* Body: table + optional drill-in */}
-      <div className="flex gap-4">
-        {/* Clients table */}
-        <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-divider bg-surface">
+      {/* Clients table (full width; drill-in opens as a modal) */}
+      <div className="overflow-hidden rounded-lg border border-divider bg-surface">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-divider bg-surface-alt">
                 <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Client</th>
-                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Country</th>
+                <th className="px-4 py-2.5 text-left font-medium text-foreground-muted">Currency</th>
                 <th className="px-4 py-2.5 text-right font-medium text-foreground-muted">Subs</th>
                 <th className="px-4 py-2.5 text-right font-medium text-foreground-muted">Revenue</th>
                 <th className="px-4 py-2.5 text-right font-medium text-foreground-muted">Partner Cost</th>
@@ -244,22 +364,18 @@ export default function GrossProfitModule() {
               {isLoading ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-foreground-dim">
-                    Loading...
+                    Loading…
                   </td>
                 </tr>
               ) : clients.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-foreground-dim">
-                    No clients with active subscriptions match these filters.
+                    No subscriptions were active in {periodLabel}.
                   </td>
                 </tr>
               ) : (
                 clients.map((c) => {
                   const isSelected = selectedClientId === c.id;
-                  const subsLabel =
-                    filters.include_paused && c.paused_subscription_count > 0
-                      ? `${c.active_subscription_count} active · ${c.paused_subscription_count} paused`
-                      : `${c.active_subscription_count}`;
                   return (
                     <tr
                       key={c.id}
@@ -272,7 +388,7 @@ export default function GrossProfitModule() {
                         <div className="flex items-center gap-2">
                           {c.has_missing_pricing && (
                             <span
-                              title="Missing pricing for one or more subscriptions"
+                              title="Includes not-finalized subscriptions — figures are estimates"
                               className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
                             />
                           )}
@@ -280,22 +396,23 @@ export default function GrossProfitModule() {
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-foreground-muted">
-                        {c.country.name || '—'}{' '}
-                        <span className="text-foreground-dim">({c.country.currency || '—'})</span>
+                        {c.currency === 'UNKNOWN' ? '—' : c.currency}
                       </td>
-                      <td className="px-4 py-2.5 text-right text-foreground-muted">{subsLabel}</td>
-                      <td className="px-4 py-2.5 text-right text-foreground">
-                        {formatMoney(c.monthly_revenue, c.country.currency)}
+                      <td className="px-4 py-2.5 text-right text-foreground-muted">
+                        {c.active_subscription_count}
                       </td>
                       <td className="px-4 py-2.5 text-right text-foreground">
-                        {formatMoney(c.monthly_partner_cost, c.country.currency)}
+                        {formatMoney(c.revenue, c.currency)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-foreground">
+                        {formatMoney(c.partner_cost, c.currency)}
                       </td>
                       <td
                         className={`px-4 py-2.5 text-right font-semibold ${
                           c.gross_profit >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'
                         }`}
                       >
-                        {formatMoney(c.gross_profit, c.country.currency)}
+                        {formatMoney(c.gross_profit, c.currency)}
                       </td>
                       <td className="px-4 py-2.5 text-right text-foreground-muted">
                         {formatPct(c.margin_pct)}
@@ -308,19 +425,28 @@ export default function GrossProfitModule() {
           </table>
         </div>
 
-        {/* Drill-in panel */}
-        {selectedClient && (
-          <aside className="w-[420px] shrink-0 overflow-hidden rounded-lg border border-divider bg-surface">
+        {/* Drill-in modal — portaled to <body> so an ancestor's overflow can't clip it */}
+        {selectedClient &&
+          createPortal(
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${selectedClient.business_name} subscriptions`}
+              onClick={() => setSelectedClientId(null)}
+            >
+              <div className="absolute inset-0 bg-black/50" aria-hidden="true" />
+              <div
+                className="relative z-10 max-h-[85vh] w-full max-w-[520px] overflow-y-auto rounded-xl border border-divider bg-surface shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
             <div className="flex items-start justify-between border-b border-divider px-4 py-3">
               <div className="min-w-0">
                 <h3 className="truncate text-sm font-semibold text-foreground">
                   {selectedClient.business_name}
                 </h3>
                 <p className="text-xs text-foreground-muted">
-                  {selectedClient.country.name || '—'}{' '}
-                  <span className="text-foreground-dim">
-                    ({selectedClient.country.currency || '—'})
-                  </span>
+                  {periodLabel} · {currencyLabel(selectedClient.currency)}
                 </p>
               </div>
               <button
@@ -334,76 +460,111 @@ export default function GrossProfitModule() {
               </button>
             </div>
 
-            {/* Per-subscription breakdown */}
-            <div className="border-b border-divider px-4 py-3">
+            {/* Totals for the period */}
+            <div className="grid grid-cols-3 gap-3 border-b border-divider px-4 py-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-foreground-dim">Revenue</p>
+                <p className="mt-0.5 text-sm font-semibold text-foreground">
+                  {formatMoney(selectedClient.revenue, selectedClient.currency)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-foreground-dim">Partner Cost</p>
+                <p className="mt-0.5 text-sm font-semibold text-foreground">
+                  {formatMoney(selectedClient.partner_cost, selectedClient.currency)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-foreground-dim">Profit</p>
+                <p
+                  className={`mt-0.5 text-sm font-semibold ${
+                    selectedClient.gross_profit >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'
+                  }`}
+                >
+                  {formatMoney(selectedClient.gross_profit, selectedClient.currency)}
+                </p>
+              </div>
+            </div>
+
+            {/* Per-subscription lines active in the period */}
+            <div className="px-4 py-3">
               <h4 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-foreground-dim">
-                Subscriptions ({selectedClient.subscriptions.length})
+                Subscriptions active in {periodLabel} ({selectedClient.lines.length})
               </h4>
               <div className="space-y-2">
-                {selectedClient.subscriptions.map((s) => (
+                {selectedClient.lines.map((s) => (
                   <div
-                    key={s.client_subscription_id}
+                    key={s.term_id}
                     className="rounded-md border border-divider bg-surface-alt p-3"
                   >
-                    <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="mb-2 flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-foreground">
-                          {s.subscription?.name || 'Unknown'}
+                          {s.role || s.subscription_name || 'Subscription'}
                         </p>
-                        <div className="mt-1 flex items-center gap-1.5">
-                          <span className="rounded-md bg-surface px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted ring-1 ring-divider">
-                            {s.plan?.plan || '—'}
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${statusBadge(s.status).cls}`}>
+                            {statusBadge(s.status).label}
                           </span>
-                          <span
-                            className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${tierBadge(
-                              s.plan?.tier,
-                            )}`}
-                          >
-                            {s.plan?.tier || '—'}
-                          </span>
-                          {s.status === 'paused' && (
-                            <span className="rounded-md bg-[#FEF9C3] px-1.5 py-0.5 text-[10px] font-medium text-[#A16207]">
-                              Paused
+                          {s.plan && (
+                            <span className="rounded-md bg-surface px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted ring-1 ring-divider">
+                              {s.plan}
+                            </span>
+                          )}
+                          {s.tier && (
+                            <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${tierBadge(s.tier)}`}>
+                              {s.tier}
+                            </span>
+                          )}
+                          {!s.finalized && (
+                            <span
+                              title="Estimated from card/catalog pricing — this engagement isn't finalized"
+                              className="rounded-md bg-[#FFFBEB] px-1.5 py-0.5 text-[10px] font-medium text-[#A16207] ring-1 ring-[#FCD34D]"
+                            >
+                              Estimated
                             </span>
                           )}
                         </div>
                       </div>
                     </div>
+
+                    <p className="mb-2 text-[11px] text-foreground-muted">
+                      {s.talent ? <span className="text-foreground">{s.talent}</span> : 'Unassigned'}
+                      <span className="text-foreground-dim"> · {dateRange(s.work_start, s.work_end)}</span>
+                      <span className="text-foreground-dim">
+                        {' '}· {s.active_days} day{s.active_days === 1 ? '' : 's'} in {periodLabel}
+                      </span>
+                    </p>
+
                     <div className="grid grid-cols-3 gap-2 text-xs">
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider text-foreground-dim">
-                          Customer
-                        </p>
+                        <p className="text-[10px] uppercase tracking-wider text-foreground-dim">Revenue</p>
                         <p className="mt-0.5 font-medium text-foreground">
-                          {s.missing_customer_price ? (
-                            <span className="text-amber-600">missing</span>
+                          {s.missing_revenue ? (
+                            <span className="text-amber-600">not set</span>
                           ) : (
-                            formatMoney(s.customer_price, selectedClient.country.currency)
+                            formatMoney(s.revenue, selectedClient.currency)
                           )}
                         </p>
                       </div>
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider text-foreground-dim">
-                          Partner
-                        </p>
+                        <p className="text-[10px] uppercase tracking-wider text-foreground-dim">Partner</p>
                         <p className="mt-0.5 font-medium text-foreground">
                           {s.missing_partner_price ? (
-                            <span className="text-amber-600">missing</span>
+                            <span className="text-amber-600">not set</span>
                           ) : (
-                            formatMoney(s.partner_price, selectedClient.country.currency)
+                            formatMoney(s.partner_cost, selectedClient.currency)
                           )}
                         </p>
                       </div>
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider text-foreground-dim">
-                          Profit
-                        </p>
+                        <p className="text-[10px] uppercase tracking-wider text-foreground-dim">Profit</p>
                         <p
                           className={`mt-0.5 font-semibold ${
                             s.gross_profit >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'
                           }`}
                         >
-                          {formatMoney(s.gross_profit, selectedClient.country.currency)}
+                          {formatMoney(s.gross_profit, selectedClient.currency)}
                         </p>
                       </div>
                     </div>
@@ -411,40 +572,10 @@ export default function GrossProfitModule() {
                 ))}
               </div>
             </div>
-
-            {/* Assigned partners */}
-            <div className="px-4 py-3">
-              <h4 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-foreground-dim">
-                Assigned Partners ({assignedPartners.length})
-              </h4>
-              {assignedPartners.length === 0 ? (
-                <p className="text-xs text-foreground-dim">No partners assigned to this client.</p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {assignedPartners.map((a) => (
-                    <li
-                      key={a.id}
-                      className="flex items-center justify-between gap-2 rounded-md bg-surface-alt px-3 py-2"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-medium text-foreground">
-                          {a.user.display_name || a.user.email}
-                        </p>
-                        <p className="truncate text-[11px] text-foreground-muted">{a.user.email}</p>
-                      </div>
-                      {a.role && (
-                        <span className="shrink-0 rounded-md bg-surface px-2 py-0.5 text-[10px] font-medium text-foreground-muted ring-1 ring-divider">
-                          {a.role}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </aside>
-        )}
-      </div>
+              </div>
+            </div>,
+            document.body,
+          )}
     </div>
   );
 }
