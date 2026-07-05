@@ -1016,13 +1016,20 @@ export function startSquadhireSyncSweeper(): NodeJS.Timeout {
       }
       if (!cards || cards.length === 0) return;
 
-      // Gate: a card published in broadcast mode SENDS NOTHING until the admin
-      // clicks "Broadcast to talents" — publishing only stages partners. So skip
-      // cards that are merely published-and-awaiting-broadcast: state='published'
-      // with zero delivery attempts and no recall/archive stamp. That shape can
-      // only be a never-broadcast card. Everything else — a broadcast whose
-      // inline delivery failed (attempts > 0), or a recalled/archived/closed
-      // card needing a status re-sync — still gets (re)delivered here.
+      // This is a RETRY net for deliveries that already fired inline — it must
+      // never INITIATE a card's first delivery, or a brief that was only
+      // published / soft-published (or not even that) gets broadcast to talents,
+      // and its matches WhatsApped, behind the admin's back. Deliver only:
+      //   • recalled / archived / closed cards — (re)push their archival status
+      //     so SquadHire takes the card down (recall/close reset synced_at +
+      //     attempts, then fire inline; this retries a failed inline).
+      //   • published cards whose inline BROADCAST failed (attempts > 0). A card
+      //     published in broadcast mode sits at attempts=0 until an admin clicks
+      //     "Broadcast to talents" (publish stages, broadcast sends), so a
+      //     non-zero count is the "was actually broadcast" signal.
+      // A 'new' / 'draft' card with no recall/archive stamp is never delivered —
+      // it was never broadcast, whatever its attempt count (the old sweeper may
+      // have churned some up to a non-zero count before this guard existed).
       const deliverable = (cards as Array<{
         id: string;
         state: string;
@@ -1030,12 +1037,9 @@ export function startSquadhireSyncSweeper(): NodeJS.Timeout {
         recalled_at: string | null;
         archived_at: string | null;
       }>).filter((c) => {
-        const awaitingBroadcast =
-          c.state === 'published' &&
-          (c.squadhire_sync_attempts ?? 0) === 0 &&
-          !c.recalled_at &&
-          !c.archived_at;
-        return !awaitingBroadcast;
+        if (c.recalled_at || c.archived_at || c.state === 'closed') return true;
+        if (c.state === 'published') return (c.squadhire_sync_attempts ?? 0) > 0;
+        return false;
       });
       if (deliverable.length === 0) return;
 
