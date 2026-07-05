@@ -16,12 +16,18 @@ type Mode = 'plan' | 'talent' | 'lifecycle';
 
 interface PreviousTalentAvailability {
   has_previous_talent: boolean;
+  recipient_type?: 'talent' | 'partner';
   talent_id?: string;
   talent_name?: string | null;
   available_weekly_hours?: number | null;
   committed_weekly_hours?: number;
   free_weekly_hours?: number | null;
   active_other_cards?: number;
+}
+
+interface MatchPool {
+  count: number;
+  talents: Array<{ talent_user_id: string; talent_name: string }>;
 }
 
 interface PlanOption {
@@ -160,7 +166,7 @@ export default function AssignmentChangeModal({
     onError: onErr,
   });
   const resumeSub = useMutation({
-    mutationFn: (resumeMode: 'same_talent' | 'rebroadcast') =>
+    mutationFn: (resumeMode: 'same_talent' | 'same_talent_offer' | 'rebroadcast') =>
       api.post(`/admin/subscription-cards/${cardId}/resume`, { mode: resumeMode }),
     onSuccess: withWarning,
     onError: onErr,
@@ -171,6 +177,15 @@ export default function AssignmentChangeModal({
       api
         .get(`/admin/subscription-cards/${cardId}/previous-talent-availability`)
         .then((r) => r.data?.data as PreviousTalentAvailability),
+    enabled: isPaused,
+  });
+  // The pool a rebroadcast would reach — shown so "broadcast to all" isn't blind.
+  const matchPoolQ = useQuery({
+    queryKey: ['admin-card-match-pool', cardId],
+    queryFn: () =>
+      api
+        .get(`/admin/subscription-cards/${cardId}/match-pool`)
+        .then((r) => r.data?.data as MatchPool),
     enabled: isPaused,
   });
 
@@ -184,6 +199,7 @@ export default function AssignmentChangeModal({
     cancelSub.isPending ||
     resumeSub.isPending;
   const avail = availabilityQ.data;
+  const pool = matchPoolQ.data;
   const planLabel = (p: PlanOption) => [p.plan, p.tier].filter(Boolean).join(' · ') || 'Plan';
   const currentPlanLabel = useMemo(() => {
     const cur = plans.find((p) => p.id === currentPlanId);
@@ -197,8 +213,8 @@ export default function AssignmentChangeModal({
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-[var(--color-sh-warm-border)] bg-surface px-5 py-4">
           <div className="space-y-1.5 min-w-0">
-            <span className="sh-eyebrow"><span className="sh-eyebrow-dot" />Manage assignment</span>
-            <h3 className="sh-display text-xl">Change plan or talent</h3>
+            <span className="sh-eyebrow"><span className="sh-eyebrow-dot" />{isPaused ? 'Resume subscription' : 'Manage assignment'}</span>
+            <h3 className="sh-display text-xl">{isPaused ? 'Bring this subscription back' : 'Change plan or talent'}</h3>
           </div>
           <button onClick={onClose} aria-label="Close" className="shrink-0 rounded-md p-1 text-[var(--color-sh-ink-muted)] hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)] transition">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -233,7 +249,7 @@ export default function AssignmentChangeModal({
               </div>
 
               <div className="sh-card px-4 py-3">
-                <p className="text-sm font-semibold text-[var(--color-sh-ink)]">Re-assign the previous talent</p>
+                <p className="text-sm font-semibold text-[var(--color-sh-ink)]">The previous {avail?.recipient_type === 'partner' ? 'partner' : 'talent'}</p>
                 {availabilityQ.isLoading ? (
                   <p className="mt-1 text-xs text-[var(--color-sh-ink-muted)]">Checking availability…</p>
                 ) : avail?.has_previous_talent ? (
@@ -246,8 +262,17 @@ export default function AssignmentChangeModal({
                         <> — availability unknown (SquadHire unreachable or no self-declared hours)</>
                       )}
                     </p>
-                    <button onClick={() => resumeSub.mutate('same_talent')} disabled={busy} className="sh-btn-primary sh-btn-primary-sm mt-2 disabled:opacity-50">
-                      {resumeSub.isPending ? 'Resuming…' : `Resume with ${avail.talent_name ?? 'previous talent'}`}
+                    <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
+                      {avail.recipient_type === 'partner'
+                        ? 'Re-assigned directly — billing resumes today.'
+                        : 'They get an offer and must accept before billing resumes. The card reopens to Published until they do.'}
+                    </p>
+                    <button onClick={() => resumeSub.mutate('same_talent_offer')} disabled={busy} className="sh-btn-primary sh-btn-primary-sm mt-2 disabled:opacity-50">
+                      {resumeSub.isPending
+                        ? 'Working…'
+                        : avail.recipient_type === 'partner'
+                          ? `Re-assign ${avail.talent_name ?? 'previous partner'}`
+                          : `Send offer to ${avail.talent_name ?? 'previous talent'}`}
                     </button>
                   </>
                 ) : (
@@ -256,11 +281,57 @@ export default function AssignmentChangeModal({
               </div>
 
               <div className="sh-card px-4 py-3">
-                <p className="text-sm font-semibold text-[var(--color-sh-ink)]">Or find a new talent</p>
-                <p className="mt-1 text-xs text-[var(--color-sh-ink-muted)]">Reopens the call and re-broadcasts to the matching pool. Billing stays stopped until a new talent is finalized.</p>
-                <button onClick={() => resumeSub.mutate('rebroadcast')} disabled={busy} className="sh-btn-ghost sh-btn-ghost-sm mt-2 disabled:opacity-50">
-                  {resumeSub.isPending ? 'Working…' : 'Resume via rebroadcast'}
-                </button>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-[var(--color-sh-ink)]">Or broadcast to other available talents</p>
+                  <button
+                    type="button"
+                    onClick={() => matchPoolQ.refetch()}
+                    disabled={matchPoolQ.isFetching}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--color-sh-warm-border)] bg-surface px-2 py-0.5 text-[11px] font-medium text-[var(--color-sh-ink-muted)] hover:text-[var(--color-sh-ink)] disabled:opacity-50"
+                  >
+                    <svg className={`h-3 w-3 ${matchPoolQ.isFetching ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M4 9a8 8 0 0114-3m2 9a8 8 0 01-14 3" /></svg>
+                    {matchPoolQ.isFetching ? 'Refreshing…' : 'Refresh'}
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-[var(--color-sh-ink-muted)]">Reopens the card to Published and invites the matching pool. Billing stays stopped until a new talent is finalized.</p>
+
+                {matchPoolQ.isLoading ? (
+                  <p className="mt-2 text-xs text-[var(--color-sh-ink-muted)]">Finding available talents…</p>
+                ) : pool && pool.count > 0 ? (
+                  <>
+                    <div className="mt-2 rounded-md border border-[var(--color-sh-warm-border)] bg-surface px-3 py-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-faint)]">
+                        {pool.count} available {pool.count === 1 ? 'talent' : 'talents'}
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {pool.talents.slice(0, 12).map((t) => (
+                          <span key={t.talent_user_id} className="inline-flex items-center rounded-full bg-[var(--color-sh-lime-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-sh-ink)] ring-1 ring-[var(--color-sh-warm-border)]">
+                            {t.talent_name}
+                          </span>
+                        ))}
+                        {pool.count > Math.min(12, pool.talents.length) && (
+                          <span className="inline-flex items-center px-1 text-[11px] text-[var(--color-sh-ink-muted)]">
+                            +{pool.count - Math.min(12, pool.talents.length)} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => { if (window.confirm(`Broadcast to all ${pool.count} matching talents?\n\nThe card reopens to Published and everyone in the pool is invited. Billing stays stopped until one is finalized.`)) resumeSub.mutate('rebroadcast'); }}
+                      disabled={busy}
+                      className="sh-btn-primary sh-btn-primary-sm mt-2 disabled:opacity-50"
+                    >
+                      {resumeSub.isPending ? 'Broadcasting…' : `Broadcast to all ${pool.count}`}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-2 text-xs text-[var(--color-sh-ink-muted)]">No matching talents available right now. You can still reopen the card to Published to keep sourcing.</p>
+                    <button onClick={() => resumeSub.mutate('rebroadcast')} disabled={busy} className="sh-btn-ghost sh-btn-ghost-sm mt-2 disabled:opacity-50">
+                      {resumeSub.isPending ? 'Working…' : 'Reopen to Published'}
+                    </button>
+                  </>
+                )}
               </div>
 
               <div className="border-t border-[var(--color-sh-warm-border)] pt-3">
