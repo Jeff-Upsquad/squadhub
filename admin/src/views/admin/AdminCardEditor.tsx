@@ -129,10 +129,11 @@ export default function AdminCardEditor({
     queryKey: ['admin-card-editor', cardId],
     queryFn: async () => {
       // Look in non-archived first, then archived — covers cards in any
-      // state (new / draft / published / closed) and any archive bucket so the
-      // editor doesn't 404 on a New Deal or a card moved to Archive.
+      // state (new / draft / published / assigned / closed) and any archive
+      // bucket so the editor doesn't 404 on a New Deal, an assigned card, or a
+      // card moved to Archive.
       for (const archived of ['false', 'true'] as const) {
-        for (const state of ['new', 'draft', 'published', 'closed']) {
+        for (const state of ['new', 'draft', 'published', 'assigned', 'closed']) {
           const params: Record<string, string> = { state };
           if (archived === 'true') params.archived = 'true';
           const r = await api.get('/admin/subscription-cards', { params });
