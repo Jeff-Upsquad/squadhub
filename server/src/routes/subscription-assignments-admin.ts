@@ -5,7 +5,7 @@ import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import { prorateMonthly, activeDaysInMonth } from '../utils/assignmentBilling';
 import { fetchTalentAvailability } from '../utils/squadhireTalent';
-import { loadCardBilling, CardBilling } from '../utils/cardBilling';
+import { loadCardBilling, resolveTermBilling } from '../utils/cardBilling';
 
 // Admin module: view + manage subscription assignment terms. Rows are created /
 // closed automatically by the finalize-selection / unassign flow (see
@@ -183,35 +183,6 @@ type AssignmentTermRow = {
   subscription_price: number | null;
   currency: string | null;
 };
-
-// Effective billing for one term: prefer the values frozen on the term when it
-// opened; fall back to the card's current plan_snapshot for legacy terms (which
-// map 1:1 to their card's single plan, so the card value is still correct).
-function resolveTermBilling(term: AssignmentTermRow, card: CardBilling | undefined): CardBilling {
-  const snap = term.plan_snapshot ?? card?.plan_snapshot ?? null;
-  const daily = snap?.plan?.daily_hours != null ? Number(snap.plan.daily_hours) : card?.daily_hours ?? null;
-  const weekly = snap?.plan?.weekly_hours != null ? Number(snap.plan.weekly_hours) : card?.weekly_hours ?? null;
-  const monthly =
-    term.plan_snapshot != null
-      ? weekly != null
-        ? weekly * 4
-        : card?.monthly_hours ?? null
-      : card?.monthly_hours ?? null;
-  const partnerPrice = term.partner_price != null ? term.partner_price : card?.partner_price ?? null;
-  return {
-    partner_price: partnerPrice,
-    currency: term.currency ?? card?.currency ?? null,
-    daily_hours: daily,
-    weekly_hours: weekly,
-    monthly_hours: monthly,
-    missing_partner_price: partnerPrice == null,
-    subscription_price: term.subscription_price ?? card?.subscription_price ?? null,
-    plan_snapshot: snap,
-    // Role name (Designer / Video Editor …) is invariant per card, so the card's
-    // resolved value is correct even for a term whose plan/tier later changed.
-    plan_name: card?.plan_name ?? null,
-  };
-}
 
 function parseMonth(raw: unknown): { year: number; month: number; key: string } {
   const s = typeof raw === 'string' && /^\d{4}-\d{2}$/.test(raw) ? raw : null;

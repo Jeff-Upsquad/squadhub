@@ -29,6 +29,18 @@ export interface CardBilling {
   plan_name: string | null;
 }
 
+/**
+ * The subset of a `subscription_assignment_terms` row that carries the billing
+ * values frozen when the term opened (migration 152). An `AssignmentTermRow`
+ * from the routes is structurally assignable to this.
+ */
+export interface TermBillingInput {
+  plan_snapshot: any | null;
+  partner_price: number | null;
+  subscription_price: number | null;
+  currency: string | null;
+}
+
 export async function loadCardBilling(cardIds: string[]): Promise<Map<string, CardBilling>> {
   const out = new Map<string, CardBilling>();
   if (cardIds.length === 0) return out;
@@ -152,4 +164,40 @@ export async function loadCardBilling(cardIds: string[]): Promise<Map<string, Ca
 export async function resolveCardBilling(cardId: string): Promise<CardBilling | null> {
   const map = await loadCardBilling([cardId]);
   return map.get(cardId) ?? null;
+}
+
+/**
+ * Effective billing for one assignment term: prefer the values frozen on the
+ * term when it opened (migration 152); fall back to the card's current
+ * plan_snapshot for legacy terms (which map 1:1 to their card's single plan, so
+ * the card value is still correct). Shared by the Active Subscriptions ledger
+ * and the Gross Profit report so both resolve a term's price the same way.
+ */
+export function resolveTermBilling(
+  term: TermBillingInput,
+  card: CardBilling | undefined,
+): CardBilling {
+  const snap = term.plan_snapshot ?? card?.plan_snapshot ?? null;
+  const daily = snap?.plan?.daily_hours != null ? Number(snap.plan.daily_hours) : card?.daily_hours ?? null;
+  const weekly = snap?.plan?.weekly_hours != null ? Number(snap.plan.weekly_hours) : card?.weekly_hours ?? null;
+  const monthly =
+    term.plan_snapshot != null
+      ? weekly != null
+        ? weekly * 4
+        : card?.monthly_hours ?? null
+      : card?.monthly_hours ?? null;
+  const partnerPrice = term.partner_price != null ? term.partner_price : card?.partner_price ?? null;
+  return {
+    partner_price: partnerPrice,
+    currency: term.currency ?? card?.currency ?? null,
+    daily_hours: daily,
+    weekly_hours: weekly,
+    monthly_hours: monthly,
+    missing_partner_price: partnerPrice == null,
+    subscription_price: term.subscription_price ?? card?.subscription_price ?? null,
+    plan_snapshot: snap,
+    // Role name (Designer / Video Editor …) is invariant per card, so the card's
+    // resolved value is correct even for a term whose plan/tier later changed.
+    plan_name: card?.plan_name ?? null,
+  };
 }
