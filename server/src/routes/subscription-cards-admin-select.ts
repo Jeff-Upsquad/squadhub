@@ -1246,6 +1246,7 @@ router.get('/subscription-cards/:id/assignment-history', async (req: Request, re
         ...e,
         squadhire_status: st ? st.status_tag : null,
         suspended_reason: st ? st.suspended_reason : null,
+        blacklisted_reason: st ? st.blacklisted_reason : null,
       };
     });
 
