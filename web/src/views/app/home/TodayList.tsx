@@ -160,18 +160,18 @@ export default function TodayList() {
     return () => clearInterval(id);
   }, [timers.length]);
   const { secondsTodayByTask, totalTodaySeconds } = useMemo(() => {
-    const map = new Map<string, number>();
-    let total = 0;
+    // Net seconds tracked today per task. We sum the SIGNED duration of every
+    // entry — real timer sessions AND negative manual "Time logged" corrections
+    // — so this uses the same signed accounting as the task's own logged total
+    // (tasks.time_tracked = sum of all its entries). Summing positive entries
+    // only (the old behaviour) silently dropped a downward correction, leaving
+    // Home showing more time than the task detail's "Time logged". We floor each
+    // task's net at 0 below, so a correction still can't push a row or the
+    // header total negative — the concern the old `dur <= 0` skip addressed.
+    const net = new Map<string, number>();
     for (const e of timeEntries ?? []) {
       if (toLocalDateKey(e.started_at) !== today) continue;
-      // Any time tracked today counts — real timer sessions and manual
-      // "Time logged" edits alike — so every tracked task surfaces here. The
-      // dur <= 0 guard below still drops negative reconciliation deltas, so a
-      // manual reduction can't pull the header total into phantom negatives.
-      const dur = e.duration_seconds || 0;
-      if (dur <= 0) continue;
-      map.set(e.task_id, (map.get(e.task_id) || 0) + dur);
-      total += dur;
+      net.set(e.task_id, (net.get(e.task_id) || 0) + (e.duration_seconds || 0));
     }
     // Live add-on per running task = its equal split of the CURRENT segment
     // only — earlier segments were already flushed into today's entries above,
@@ -179,11 +179,15 @@ export default function TodayList() {
     if (timers.length && timerSegmentStart != null) {
       const live = Math.max(0, Math.floor((nowTick - timerSegmentStart) / 1000 / timers.length));
       if (live > 0) {
-        for (const rt of timers) {
-          map.set(rt.taskId, (map.get(rt.taskId) || 0) + live);
-          total += live;
-        }
+        for (const rt of timers) net.set(rt.taskId, (net.get(rt.taskId) || 0) + live);
       }
+    }
+    const map = new Map<string, number>();
+    let total = 0;
+    for (const [taskId, secs] of net) {
+      const clamped = Math.max(0, secs);
+      map.set(taskId, clamped);
+      total += clamped;
     }
     return { secondsTodayByTask: map, totalTodaySeconds: total };
   }, [timeEntries, today, timers, timerSegmentStart, nowTick]);
