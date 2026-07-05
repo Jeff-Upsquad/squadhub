@@ -210,13 +210,13 @@ async function enrichClient(
       leadRow?.email
         ? supabaseAdmin
             .from('subscription_cards')
-            .select('id, service_type, plan_name, state, published_at, card_code, linked_folder_id, linked_at, proposed_price, subscription_price, markup, partner_price_override, cancelled_at, paused_at, selected_recipient_id, archived_at, parent_card_id, distribution, publish_targets, squadhire_category_ids, squadhire_synced_at')
+            .select('id, service_type, plan_name, state, published_at, card_code, linked_folder_id, linked_at, proposed_price, subscription_price, markup, partner_price_override, cancelled_at, paused_at, selected_recipient_id, archived_at, deleted_at, parent_card_id, distribution, publish_targets, squadhire_category_ids, squadhire_synced_at')
             .ilike('customer_email', leadRow.email.trim())
         : Promise.resolve({ data: [] as any[] }),
       phoneSuffix
         ? supabaseAdmin
             .from('subscription_cards')
-            .select('id, service_type, plan_name, state, published_at, card_code, linked_folder_id, linked_at, proposed_price, subscription_price, markup, partner_price_override, cancelled_at, paused_at, selected_recipient_id, archived_at, parent_card_id, distribution, publish_targets, squadhire_category_ids, squadhire_synced_at')
+            .select('id, service_type, plan_name, state, published_at, card_code, linked_folder_id, linked_at, proposed_price, subscription_price, markup, partner_price_override, cancelled_at, paused_at, selected_recipient_id, archived_at, deleted_at, parent_card_id, distribution, publish_targets, squadhire_category_ids, squadhire_synced_at')
             .ilike('customer_phone', `%${phoneSuffix}`)
         : Promise.resolve({ data: [] as any[] }),
     ]);
@@ -272,9 +272,12 @@ async function enrichClient(
       });
     }
 
-    // Collect email/phone-matched cards that didn't match any subscription
+    // Collect email/phone-matched cards that didn't match any subscription.
+    // Archived cards and cards moved to Trash are excluded — the "Other Cards"
+    // section must only surface live linked cards (and archived/trashed cards
+    // must not auto-create a subscription below either).
     unmatchedCards = textCards
-      .filter((crd: any) => !matchedTextCardIds.has(crd.id))
+      .filter((crd: any) => !matchedTextCardIds.has(crd.id) && !crd.archived_at && !crd.deleted_at)
       .reduce((acc: Record<string, any>, crd: any) => {
         if (!acc[crd.id]) acc[crd.id] = { id: crd.id, state: crd.state, published_at: crd.published_at, card_code: crd.card_code, linked_folder_id: crd.linked_folder_id, linked_at: crd.linked_at, proposed_price: crd.proposed_price ?? null, subscription_price: crd.subscription_price ?? null, markup: crd.markup ?? null, partner_price_override: crd.partner_price_override ?? null };
         return acc;
@@ -350,9 +353,10 @@ async function enrichClient(
         (cs as any[]).push(...createdCs);
       }
 
-      // Rebuild unmatchedCards without the ones we just matched
+      // Rebuild unmatchedCards without the ones we just matched (still
+      // excluding archived / trashed cards, as above).
       unmatchedCards = textCards
-        .filter((crd: any) => !matchedTextCardIds.has(crd.id))
+        .filter((crd: any) => !matchedTextCardIds.has(crd.id) && !crd.archived_at && !crd.deleted_at)
         .reduce((acc: Record<string, any>, crd: any) => {
           if (!acc[crd.id]) acc[crd.id] = { id: crd.id, state: crd.state, published_at: crd.published_at, card_code: crd.card_code, linked_folder_id: crd.linked_folder_id, linked_at: crd.linked_at, proposed_price: crd.proposed_price ?? null, subscription_price: crd.subscription_price ?? null, markup: crd.markup ?? null, partner_price_override: crd.partner_price_override ?? null };
           return acc;
