@@ -217,6 +217,14 @@ router.get('/users', async (req: Request, res: Response) => {
     const countedWeeklyCards = new Map<string, Set<string>>();
 
     for (const t of terms) {
+      const start = t.work_start_date ?? t.assigned_date;
+      const end = t.work_end_date ?? t.unassigned_date ?? null;
+      const activeDays = activeDaysInMonth(start, end, year, month, todayIso);
+      // Scope to the selected month: skip terms with no active days in it, so a
+      // recipient's row reflects only the subscriptions they were serving that
+      // month (a term that started or ended in another month adds nothing).
+      if (activeDays <= 0) continue;
+
       const key = recipientKey(t);
       let g = groups.get(key);
       if (!g) {
@@ -237,13 +245,10 @@ router.get('/users', async (req: Request, res: Response) => {
       if (!g.recipient_name && t.recipient_name) g.recipient_name = t.recipient_name;
 
       const b = resolveTermBilling(t, billing.get(t.card_id));
-      const start = t.work_start_date ?? t.assigned_date;
-      const end = t.work_end_date ?? t.unassigned_date ?? null;
-      const activeDays = activeDaysInMonth(start, end, year, month, todayIso);
       // Weekly commitment counts once per CARD, not per term — a same-month
       // pause+resume (or plan change) yields multiple terms on one card and
       // would otherwise double the recipient's committed hours/utilization.
-      if (activeDays > 0 && b?.weekly_hours != null && !countedWeeklyCards.get(key)?.has(t.card_id)) {
+      if (b?.weekly_hours != null && !countedWeeklyCards.get(key)?.has(t.card_id)) {
         g.committed_weekly_hours += b.weekly_hours;
         if (!countedWeeklyCards.has(key)) countedWeeklyCards.set(key, new Set());
         countedWeeklyCards.get(key)!.add(t.card_id);
@@ -369,7 +374,11 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
           monthly: b?.monthly_hours ?? null,
         },
       };
-    });
+    })
+      // Scope the breakdown to the selected month: drop terms with no active
+      // days in it (they'd render as a "0 days / — pay" row — pure noise). The
+      // totals above already exclude them, so this only trims the display list.
+      .filter((c) => c.month_active_days > 0);
 
     // Talent's self-declared available hours (graceful if SquadHire is down).
     let availableWeekly: number | null = null;
