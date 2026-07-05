@@ -25,6 +25,8 @@ export interface CardBilling {
   subscription_price: number | null;
   /** The card's frozen plan snapshot (plan/tier/hours/deliverables/pricing). */
   plan_snapshot: any | null;
+  /** Subscription (role) name for the plan — e.g. "Designer", "Video Editor". */
+  plan_name: string | null;
 }
 
 export async function loadCardBilling(cardIds: string[]): Promise<Map<string, CardBilling>> {
@@ -102,15 +104,27 @@ export async function loadCardBilling(cardIds: string[]): Promise<Map<string, Ca
       ? supabaseAdmin.from('countries').select('id, currency').in('id', [...countryIds])
       : Promise.resolve({ data: [] as any[] }),
     planIds.size
-      ? supabaseAdmin.from('subscription_plans').select('id, monthly_hours').in('id', [...planIds])
+      ? supabaseAdmin
+          .from('subscription_plans')
+          .select('id, monthly_hours, subscription_id')
+          .in('id', [...planIds])
       : Promise.resolve({ data: [] as any[] }),
   ]);
   const currencyByCountry = new Map<string, string>();
   (countries || []).forEach((c: any) => currencyByCountry.set(c.id, c.currency));
   const monthlyByPlan = new Map<string, number | null>();
-  (plans || []).forEach((p: any) =>
-    monthlyByPlan.set(p.id, p.monthly_hours != null ? Number(p.monthly_hours) : null),
-  );
+  const subIdByPlan = new Map<string, string | null>();
+  (plans || []).forEach((p: any) => {
+    monthlyByPlan.set(p.id, p.monthly_hours != null ? Number(p.monthly_hours) : null);
+    subIdByPlan.set(p.id, p.subscription_id ?? null);
+  });
+  // Subscription (role) name per plan — "Designer", "Video Editor", etc.
+  const roleBySubId = new Map<string, string>();
+  const subIds = [...new Set([...subIdByPlan.values()].filter((v): v is string => !!v))];
+  if (subIds.length) {
+    const { data: subs } = await supabaseAdmin.from('subscriptions').select('id, name').in('id', subIds);
+    (subs || []).forEach((s: any) => roleBySubId.set(s.id, s.name));
+  }
 
   for (const { card, snap, marginRow, countryId, planId } of prepared) {
     const partnerPrice = resolvePartnerPrice(card, marginRow);
@@ -118,6 +132,7 @@ export async function loadCardBilling(cardIds: string[]): Promise<Map<string, Ca
     const weekly = snap?.plan?.weekly_hours != null ? Number(snap.plan.weekly_hours) : null;
     const monthlyFromPlan = planId ? monthlyByPlan.get(planId) ?? null : null;
     const monthly = monthlyFromPlan != null ? monthlyFromPlan : weekly != null ? weekly * 4 : null;
+    const subId = planId ? subIdByPlan.get(planId) ?? null : null;
     out.set(card.id, {
       partner_price: partnerPrice,
       currency: countryId ? currencyByCountry.get(countryId) ?? null : null,
@@ -127,6 +142,7 @@ export async function loadCardBilling(cardIds: string[]): Promise<Map<string, Ca
       missing_partner_price: partnerPrice == null,
       subscription_price: resolveFinalizedPrice(card),
       plan_snapshot: snap,
+      plan_name: subId ? roleBySubId.get(subId) ?? null : null,
     });
   }
   return out;

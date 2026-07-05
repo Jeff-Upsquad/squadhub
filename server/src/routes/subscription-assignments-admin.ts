@@ -16,18 +16,29 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
-// GET /admin/subscription-assignments?status=active|ended|all&search=...
+// GET /admin/subscription-assignments?status=active|ended|all&search=...&month=YYYY-MM
+// Without `month`: raw terms + card lifecycle (legacy shape).
+// With `month`: each term enriched with that month's active-days, prorated pay,
+// and frozen billing (partner price + committed hours), filtered to terms that
+// were active in the month. The client folds multiple periods on one
+// card·talent (pause/resume, plan change) into a single row.
 router.get('/', async (req: Request, res: Response) => {
   try {
     const status = (req.query.status as string) || 'all';
     const search = ((req.query.search as string) || '').trim();
+    const monthRaw = req.query.month;
+    const monthScoped = typeof monthRaw === 'string' && /^\d{4}-\d{2}$/.test(monthRaw);
+    const { year, month } = parseMonth(monthRaw);
+    const todayIso = new Date().toISOString().slice(0, 10);
 
     let query = supabaseAdmin
       .from('subscription_assignment_terms')
       .select('*')
       .order('assigned_date', { ascending: false });
 
-    if (status === 'active' || status === 'ended') {
+    // When month-scoped, filter by month activity below and read status=active as
+    // "status column = active" (matches the By-user view); otherwise filter here.
+    if (!monthScoped && (status === 'active' || status === 'ended')) {
       query = query.eq('status', status);
     }
     if (search) {
@@ -39,10 +50,10 @@ router.get('/', async (req: Request, res: Response) => {
 
     const { data, error } = await query;
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+    const rows = (data || []) as AssignmentTermRow[];
 
     // Attach the card lifecycle so the view can badge paused / cancelled
     // engagements (billing already reflects them via the ended terms).
-    const rows = (data || []) as any[];
     const cardIds = [...new Set(rows.map((t) => t.card_id).filter(Boolean))];
     const cardById = new Map<string, { state: string; paused_at: string | null; cancelled_at: string | null }>();
     if (cardIds.length) {
@@ -54,14 +65,47 @@ router.get('/', async (req: Request, res: Response) => {
         cardById.set(c.id, { state: c.state, paused_at: c.paused_at ?? null, cancelled_at: c.cancelled_at ?? null }),
       );
     }
-    const withCard = rows.map((t) => ({
-      ...t,
+    const lifecycle = (t: AssignmentTermRow) => ({
       card_state: cardById.get(t.card_id)?.state ?? null,
       card_paused_at: cardById.get(t.card_id)?.paused_at ?? null,
       card_cancelled_at: cardById.get(t.card_id)?.cancelled_at ?? null,
-    }));
+    });
 
-    res.json({ success: true, data: withCard });
+    if (!monthScoped) {
+      res.json({ success: true, data: rows.map((t) => ({ ...t, ...lifecycle(t) })) });
+      return;
+    }
+
+    const billing = await loadCardBilling(cardIds);
+    const enriched = rows
+      .map((t) => {
+        const b = resolveTermBilling(t, billing.get(t.card_id));
+        const start = t.work_start_date ?? t.assigned_date;
+        const end = t.work_end_date ?? t.unassigned_date ?? null;
+        const activeDays = activeDaysInMonth(start, end, year, month, todayIso);
+        const monthPayment = b ? prorateMonthly(b.partner_price, start, end, year, month, todayIso) : 0;
+        return {
+          ...t,
+          ...lifecycle(t),
+          start_date: start ? start.slice(0, 10) : null,
+          stop_date: end ? end.slice(0, 10) : null,
+          month_active_days: activeDays,
+          month_payment: monthPayment,
+          partner_price: b?.partner_price ?? null,
+          currency: b?.currency ?? null,
+          missing_partner_price: b?.missing_partner_price ?? true,
+          committed_hours: {
+            daily: b?.daily_hours ?? null,
+            weekly: b?.weekly_hours ?? null,
+            monthly: b?.monthly_hours ?? null,
+          },
+          plan_name: b?.plan_name ?? null,
+        };
+      })
+      .filter((t) => t.month_active_days > 0)
+      .filter((t) => (status === 'active' ? t.status === 'active' : true));
+
+    res.json({ success: true, data: enriched, month: `${year}-${String(month).padStart(2, '0')}` });
   } catch (err: any) {
     console.error('[subscription-assignments] list error', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
@@ -163,6 +207,9 @@ function resolveTermBilling(term: AssignmentTermRow, card: CardBilling | undefin
     missing_partner_price: partnerPrice == null,
     subscription_price: term.subscription_price ?? card?.subscription_price ?? null,
     plan_snapshot: snap,
+    // Role name (Designer / Video Editor …) is invariant per card, so the card's
+    // resolved value is correct even for a term whose plan/tier later changed.
+    plan_name: card?.plan_name ?? null,
   };
 }
 
@@ -373,6 +420,7 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
           weekly: b?.weekly_hours ?? null,
           monthly: b?.monthly_hours ?? null,
         },
+        plan_name: b?.plan_name ?? null,
       };
     })
       // Scope the breakdown to the selected month: drop terms with no active

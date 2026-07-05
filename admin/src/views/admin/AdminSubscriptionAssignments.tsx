@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
@@ -25,10 +25,24 @@ interface AssignmentTerm {
   card_state?: string | null;
   card_paused_at?: string | null;
   card_cancelled_at?: string | null;
+  // Month-scoped enrichment — present when the list is fetched with ?month=.
+  start_date?: string | null;
+  stop_date?: string | null;
+  month_active_days?: number;
+  month_payment?: number;
+  partner_price?: number | null;
+  currency?: string | null;
+  missing_partner_price?: boolean;
+  committed_hours?: { daily: number | null; weekly: number | null; monthly: number | null };
+  plan_name?: string | null;
 }
 
 /** Paused/Cancelled chip for a term's card (null when neither applies). */
-function CardLifecycleChip({ term }: { term: AssignmentTerm }) {
+function CardLifecycleChip({
+  term,
+}: {
+  term: { card_paused_at?: string | null; card_cancelled_at?: string | null; card_state?: string | null };
+}) {
   if (term.card_paused_at) {
     return (
       <span className="ml-1.5 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
@@ -45,11 +59,6 @@ function CardLifecycleChip({ term }: { term: AssignmentTerm }) {
   }
   return null;
 }
-
-const STATUS_BADGE: Record<'active' | 'ended', string> = {
-  active: 'bg-emerald-100 text-emerald-700',
-  ended: 'bg-canvas text-foreground-muted',
-};
 
 function fmtTimestamp(iso: string | null) {
   if (!iso) return '—';
@@ -102,6 +111,211 @@ function aggregatePayments(lists: { currency: string; amount: number }[][]) {
     .sort((a, b) => b.amount - a.amount);
 }
 
+// ============================================================
+// Client grouping: fold a card·talent's multiple in-month periods (pause/resume,
+// plan change → several term rows) into one row, each period kept for the
+// click-to-expand breakdown. Shared by the By-subscription tab and the
+// partner / talent detail modal.
+// ============================================================
+
+interface Period {
+  term_id: string;
+  start_date: string | null;
+  stop_date: string | null;
+  active_days: number;
+  status: 'active' | 'ended';
+}
+
+interface ClientGroup {
+  key: string;
+  card_id: string;
+  recipient_type: 'talent' | 'partner';
+  recipient_id: string;
+  recipient_name: string | null;
+  business_name: string | null;
+  subscription_name: string | null;
+  status: 'active' | 'ended';
+  card_state?: string | null;
+  card_paused_at?: string | null;
+  card_cancelled_at?: string | null;
+  periods: Period[];
+  total_active_days: number;
+  payments: { currency: string; amount: number }[];
+  partner_price: number | null;
+  currency: string | null;
+  missing_partner_price: boolean;
+  committed_hours: { daily: number | null; weekly: number | null; monthly: number | null };
+  plan_name: string | null;
+}
+
+// Row shape shared by the enriched By-subscription term and the detail card.
+interface PeriodInput {
+  card_id: string;
+  business_name: string | null;
+  subscription_name: string | null;
+  status: 'active' | 'ended';
+  start_date: string | null;
+  stop_date: string | null;
+  month_active_days: number;
+  month_payment: number;
+  partner_price: number | null;
+  currency: string | null;
+  missing_partner_price: boolean;
+  committed_hours: { daily: number | null; weekly: number | null; monthly: number | null };
+  plan_name?: string | null;
+  term_id?: string;
+  id?: string;
+  recipient_type?: 'talent' | 'partner';
+  recipient_id?: string;
+  recipient_name?: string | null;
+  card_state?: string | null;
+  card_paused_at?: string | null;
+  card_cancelled_at?: string | null;
+}
+
+// Rows arrive newest-first (assigned_date desc); the first row per key supplies
+// the representative plan / price (i.e. the current one). Periods are re-sorted
+// oldest-first for a readable timeline.
+function groupIntoClients(rows: PeriodInput[], keyOf: (r: PeriodInput) => string): ClientGroup[] {
+  const map = new Map<string, ClientGroup>();
+  for (const r of rows) {
+    const key = keyOf(r);
+    let g = map.get(key);
+    if (!g) {
+      g = {
+        key,
+        card_id: r.card_id,
+        recipient_type: r.recipient_type ?? 'talent',
+        recipient_id: r.recipient_id ?? '',
+        recipient_name: r.recipient_name ?? null,
+        business_name: r.business_name,
+        subscription_name: r.subscription_name,
+        status: 'ended',
+        card_state: r.card_state ?? null,
+        card_paused_at: r.card_paused_at ?? null,
+        card_cancelled_at: r.card_cancelled_at ?? null,
+        periods: [],
+        total_active_days: 0,
+        payments: [],
+        partner_price: r.partner_price,
+        currency: r.currency,
+        missing_partner_price: r.missing_partner_price,
+        committed_hours: r.committed_hours,
+        plan_name: r.plan_name ?? null,
+      };
+      map.set(key, g);
+    }
+    g.periods.push({
+      term_id: r.term_id ?? r.id ?? `${key}:${g.periods.length}`,
+      start_date: r.start_date,
+      stop_date: r.stop_date,
+      active_days: r.month_active_days,
+      status: r.status,
+    });
+    g.total_active_days += r.month_active_days || 0;
+    if (r.status === 'active') g.status = 'active';
+    if (r.missing_partner_price) g.missing_partner_price = true;
+    if (r.month_payment > 0) {
+      const cur = r.currency || 'UNKNOWN';
+      const existing = g.payments.find((p) => p.currency === cur);
+      if (existing) existing.amount += r.month_payment;
+      else g.payments.push({ currency: cur, amount: r.month_payment });
+    }
+  }
+  for (const g of map.values()) {
+    g.periods.sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''));
+  }
+  return [...map.values()];
+}
+
+function partnerPriceLabel(g: { missing_partner_price: boolean; partner_price: number | null; currency: string | null }) {
+  return g.missing_partner_price ? '—' : `${formatMoney(g.partner_price || 0, g.currency)}/mo`;
+}
+
+// Plan cell: the role (Designer / Video Editor …) as the primary label, with
+// the tier + daily·weekly·monthly committed hours beneath.
+function PlanCell({
+  role,
+  tier,
+  hours,
+}: {
+  role: string | null;
+  tier: string | null;
+  hours: { daily: number | null; weekly: number | null; monthly: number | null };
+}) {
+  return (
+    <div>
+      <div className="font-medium text-foreground">{role || tier || '—'}</div>
+      <div className="text-xs text-foreground-dim">
+        {role && tier ? `${tier} · ` : ''}
+        {hrs(hours.daily)} · {hrs(hours.weekly)} · {hrs(hours.monthly)} hrs d·w·m
+      </div>
+    </div>
+  );
+}
+
+// Clickable active-days button + count/period badge.
+function ActiveDaysButton({
+  group,
+  expanded,
+  onToggle,
+}: {
+  group: ClientGroup;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className="inline-flex items-center gap-1.5 font-medium text-foreground hover:text-indigo-600"
+      title="Show start / stop periods"
+    >
+      {group.total_active_days} {group.total_active_days === 1 ? 'day' : 'days'}
+      {group.periods.length > 1 && (
+        <span className="rounded-full bg-indigo-50 px-1.5 text-[10px] font-semibold text-indigo-600">
+          {group.periods.length} periods
+        </span>
+      )}
+      <span className="text-foreground-dim">{expanded ? '▾' : '▸'}</span>
+    </button>
+  );
+}
+
+// Expanded breakdown of the start–stop period(s) that made up the month's
+// active days (more than one when the card was paused/resumed or replanned).
+function PeriodBreakdown({ periods, onEdit }: { periods: Period[]; onEdit?: (termId: string) => void }) {
+  return (
+    <div className="space-y-1.5 rounded-md bg-surface-alt px-3 py-2">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-foreground-dim">
+        {periods.length > 1 ? `${periods.length} active periods this month` : 'Active period this month'}
+      </div>
+      {periods.map((p) => (
+        <div key={p.term_id} className="flex items-center gap-2 text-sm">
+          <span className="text-foreground">
+            {fmtDate(p.start_date)} – {p.stop_date ? fmtDate(p.stop_date) : 'now'}
+          </span>
+          <span className="text-xs text-foreground-dim">
+            · {p.active_days} {p.active_days === 1 ? 'day' : 'days'}
+          </span>
+          {p.status === 'active' && (
+            <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+              active
+            </span>
+          )}
+          {onEdit && (
+            <button
+              onClick={() => onEdit(p.term_id)}
+              className="ml-auto text-xs font-medium text-indigo-600 hover:underline"
+            >
+              Edit dates
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 type ViewMode = 'subscription' | 'user';
 
 export default function AdminSubscriptionAssignments() {
@@ -116,19 +330,17 @@ export default function AdminSubscriptionAssignments() {
           <p className="mt-1 text-sm text-foreground-muted">
             {view === 'user'
               ? 'Each partner / talent and the subscriptions they’re serving — with the monthly payment owed and an hours snapshot.'
-              : 'Each talent serving a client’s subscription. Work start / end dates drive billing and can be edited; assigned / unassigned dates are captured automatically.'}
+              : 'Each talent serving a client’s subscription in the selected month — active days (click for each start / stop period), the prorated pay owed, and the plan.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {view === 'user' && (
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value || currentMonthKey())}
-              className="rounded-md border border-divider bg-surface px-3 py-1.5 text-sm outline-none focus:border-slate-400"
-              aria-label="Billing month"
-            />
-          )}
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value || currentMonthKey())}
+            className="rounded-md border border-divider bg-surface px-3 py-1.5 text-sm outline-none focus:border-slate-400"
+            aria-label="Billing month"
+          />
           <div className="flex gap-1 rounded-lg border border-divider bg-surface p-1">
             {(['user', 'subscription'] as ViewMode[]).map((v) => (
               <button
@@ -145,44 +357,62 @@ export default function AdminSubscriptionAssignments() {
         </div>
       </div>
 
-      {view === 'user' ? <ByUserView month={month} /> : <BySubscriptionView />}
+      {view === 'user' ? <ByUserView month={month} /> : <BySubscriptionView month={month} />}
     </div>
   );
 }
 
-function BySubscriptionView() {
+function BySubscriptionView({ month }: { month: string }) {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<Status>('active');
   const [search, setSearch] = useState('');
-  const [editing, setEditing] = useState<AssignmentTerm | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const { data: listRes, isLoading } = useQuery({
-    queryKey: ['admin-subscription-assignments', statusFilter, search],
+    queryKey: ['admin-subscription-assignments', month, statusFilter, search],
     queryFn: () =>
       api
         .get('/admin/subscription-assignments', {
-          params: { status: statusFilter, search: search || undefined },
+          params: { month, status: statusFilter, search: search || undefined },
         })
         .then((r) => r.data),
   });
   const rows: AssignmentTerm[] = listRes?.data || [];
+  // One row per client·talent; pause/resume + plan-change periods fold together.
+  const groups = groupIntoClients(
+    rows as unknown as PeriodInput[],
+    (r) => `${r.card_id}:${r.recipient_type}:${r.recipient_id}`,
+  );
+  const editingTerm = editingId ? rows.find((r) => r.id === editingId) ?? null : null;
+
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   return (
     <div className="space-y-6">
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-divider bg-surface p-3">
-        <div className="flex gap-1">
-          {(['active', 'ended', 'all'] as Status[]).map((s) => (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition ${
-                statusFilter === s ? 'bg-slate-900 text-white' : 'text-foreground-muted hover:bg-canvas'
-              }`}
-            >
-              {s}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1">
+            {(['active', 'all'] as Status[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition ${
+                  statusFilter === s ? 'bg-slate-900 text-white' : 'text-foreground-muted hover:bg-canvas'
+                }`}
+              >
+                {s === 'active' ? 'Active' : 'All'}
+              </button>
+            ))}
+          </div>
+          <span className="text-xs text-foreground-dim">Billing month: {monthLabel(month)}</span>
         </div>
         <input
           type="search"
@@ -195,73 +425,65 @@ function BySubscriptionView() {
 
       {isLoading ? (
         <p className="py-8 text-center text-sm text-foreground-dim">Loading…</p>
-      ) : rows.length === 0 ? (
+      ) : groups.length === 0 ? (
         <div className="rounded-lg border border-divider bg-surface py-12 text-center">
           <p className="text-sm text-foreground-dim">
-            No subscriptions{statusFilter !== 'all' ? ` (${statusFilter})` : ''} yet.
+            No {statusFilter === 'active' ? 'active ' : ''}subscriptions in {monthLabel(month)}.
           </p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-divider bg-surface">
-          <table className="w-full min-w-[860px]">
+          <table className="w-full min-w-[820px]">
             <thead className="bg-surface-alt text-left text-xs font-medium uppercase tracking-wide text-foreground-muted">
               <tr>
-                <th className="px-4 py-2.5">Business · Subscription</th>
-                <th className="px-4 py-2.5">Talent</th>
-                <th className="px-4 py-2.5 text-foreground">Work start</th>
-                <th className="px-4 py-2.5 text-foreground">Work end</th>
-                <th className="px-4 py-2.5 font-normal normal-case tracking-normal text-foreground-dim">Assigned</th>
-                <th className="px-4 py-2.5 font-normal normal-case tracking-normal text-foreground-dim">Unassigned</th>
-                <th className="px-4 py-2.5">Status</th>
-                <th className="px-4 py-2.5"></th>
+                <th className="px-4 py-2.5">Client · Talent</th>
+                <th className="px-4 py-2.5">Active days</th>
+                <th className="px-4 py-2.5">Partner price</th>
+                <th className="px-4 py-2.5">{monthLabel(month)} pay</th>
+                <th className="px-4 py-2.5">Plan</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm text-foreground">
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="px-4 py-2.5">
-                    <div className="font-medium">{r.business_name || '—'}</div>
-                    {r.subscription_name && (
-                      <div className="text-xs text-foreground-dim">{r.subscription_name}</div>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    {r.recipient_name || '—'}
-                    {r.recipient_type === 'partner' && (
-                      <span className="ml-1 text-[11px] text-foreground-dim">(partner)</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5 font-medium text-foreground">{fmtDate(r.work_start_date)}</td>
-                  <td className="px-4 py-2.5 font-medium text-foreground">{fmtDate(r.work_end_date)}</td>
-                  <td className="px-4 py-2.5 text-xs text-foreground-dim">{fmtTimestamp(r.assigned_date)}</td>
-                  <td className="px-4 py-2.5 text-xs text-foreground-dim">{fmtTimestamp(r.unassigned_date)}</td>
-                  <td className="px-4 py-2.5">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${STATUS_BADGE[r.status]}`}
-                    >
-                      {r.status}
-                    </span>
-                    <CardLifecycleChip term={r} />
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <button
-                      onClick={() => setEditing(r)}
-                      className="text-xs font-medium text-indigo-600 hover:underline"
-                    >
-                      Edit dates
-                    </button>
-                  </td>
-                </tr>
+              {groups.map((g) => (
+                <Fragment key={g.key}>
+                  <tr>
+                    <td className="px-4 py-2.5">
+                      <div className="font-medium">
+                        {g.business_name || '—'}
+                        <CardLifecycleChip term={g} />
+                      </div>
+                      <div className="text-xs text-foreground-dim">
+                        {g.recipient_name || g.recipient_id || '—'}
+                        {g.recipient_type === 'partner' && <span className="ml-1">(partner)</span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <ActiveDaysButton group={g} expanded={expanded.has(g.key)} onToggle={() => toggle(g.key)} />
+                    </td>
+                    <td className="px-4 py-2.5 text-foreground-muted">{partnerPriceLabel(g)}</td>
+                    <td className="px-4 py-2.5">{formatPayments(g.payments)}</td>
+                    <td className="px-4 py-2.5">
+                      <PlanCell role={g.plan_name} tier={g.subscription_name} hours={g.committed_hours} />
+                    </td>
+                  </tr>
+                  {expanded.has(g.key) && (
+                    <tr>
+                      <td colSpan={5} className="px-4 pb-3 pt-0">
+                        <PeriodBreakdown periods={g.periods} onEdit={(termId) => setEditingId(termId)} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
         </div>
       )}
 
-      {editing && (
+      {editingTerm && (
         <EditDatesModal
-          term={editing}
-          onClose={() => setEditing(null)}
+          term={editingTerm}
+          onClose={() => setEditingId(null)}
           onSaved={() => queryClient.invalidateQueries({ queryKey: ['admin-subscription-assignments'] })}
         />
       )}
@@ -557,6 +779,7 @@ interface UserDetailCard {
   month_active_days: number;
   month_payment: number;
   committed_hours: { daily: number | null; weekly: number | null; monthly: number | null };
+  plan_name?: string | null;
 }
 
 interface UserDetail {
@@ -594,7 +817,16 @@ function UserDetailModal({
   // Local month so you can step back through a user's previous months without
   // closing. Re-syncs to the list's month whenever that changes / on reopen.
   const [detailMonth, setDetailMonth] = useState(month);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   useEffect(() => setDetailMonth(month), [month]);
+
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   const { data: res, isLoading } = useQuery({
     queryKey: ['admin-subscription-assignments-user-detail', recipientType, recipientId, detailMonth],
@@ -607,6 +839,9 @@ function UserDetailModal({
   });
   const detail: UserDetail | null = res?.data || null;
   const totals = detail?.totals;
+  // One row per client (subscription card); pause/resume + plan-change periods
+  // in the month fold together, with each start/stop period in the breakdown.
+  const clientGroups = groupIntoClients(detail?.cards ?? [], (r) => r.card_id);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -688,50 +923,40 @@ function UserDetailModal({
               )}
 
               <div className="overflow-x-auto rounded-lg border border-divider">
-                <table className="w-full min-w-[760px]">
+                <table className="w-full min-w-[640px]">
                   <thead className="bg-surface-alt text-left text-xs font-medium uppercase tracking-wide text-foreground-muted">
                     <tr>
-                      <th className="px-3 py-2">Business · Subscription</th>
-                      <th className="px-3 py-2">Start</th>
-                      <th className="px-3 py-2">Stop</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Partner price</th>
+                      <th className="px-3 py-2">Client name</th>
                       <th className="px-3 py-2">Active days</th>
+                      <th className="px-3 py-2">Partner price</th>
                       <th className="px-3 py-2">{monthLabel(detailMonth)} pay</th>
-                      <th className="px-3 py-2">Hrs d·w·m</th>
+                      <th className="px-3 py-2">Plan</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm text-foreground">
-                    {detail.cards.map((c) => (
-                      <tr key={c.term_id}>
-                        <td className="px-3 py-2">
-                          <div className="font-medium">{c.business_name || '—'}</div>
-                          {c.subscription_name && (
-                            <div className="text-xs text-foreground-dim">{c.subscription_name}</div>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-foreground-muted">{fmtDate(c.start_date)}</td>
-                        <td className="px-3 py-2 text-foreground-muted">{fmtDate(c.stop_date)}</td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${STATUS_BADGE[c.status]}`}
-                          >
-                            {c.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          {c.missing_partner_price ? (
-                            <span className="text-amber-600" title="No resolvable partner price">—</span>
-                          ) : (
-                            `${formatMoney(c.partner_price || 0, c.currency)}/mo`
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-foreground-muted">{c.month_active_days}</td>
-                        <td className="px-3 py-2">{c.month_payment ? formatMoney(c.month_payment, c.currency) : '—'}</td>
-                        <td className="px-3 py-2 text-foreground-muted">
-                          {hrs(c.committed_hours.daily)}·{hrs(c.committed_hours.weekly)}·{hrs(c.committed_hours.monthly)}
-                        </td>
-                      </tr>
+                    {clientGroups.map((g) => (
+                      <Fragment key={g.key}>
+                        <tr>
+                          <td className="px-3 py-2">
+                            <div className="font-medium">{g.business_name || '—'}</div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <ActiveDaysButton group={g} expanded={expanded.has(g.key)} onToggle={() => toggle(g.key)} />
+                          </td>
+                          <td className="px-3 py-2 text-foreground-muted">{partnerPriceLabel(g)}</td>
+                          <td className="px-3 py-2">{formatPayments(g.payments)}</td>
+                          <td className="px-3 py-2">
+                            <PlanCell role={g.plan_name} tier={g.subscription_name} hours={g.committed_hours} />
+                          </td>
+                        </tr>
+                        {expanded.has(g.key) && (
+                          <tr>
+                            <td colSpan={5} className="px-3 pb-3 pt-0">
+                              <PeriodBreakdown periods={g.periods} />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
