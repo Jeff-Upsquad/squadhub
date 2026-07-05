@@ -305,6 +305,24 @@ function CardPanelContent({
     },
   });
 
+  const reinstateCard = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${activeCardId}/reinstate`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      if (isSecondaryView) onViewSecondary(null);
+      clearConfirm();
+      showToast('Card reinstated to its previous state.', 'success');
+      onClose();
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to reinstate card', 'error');
+      clearConfirm();
+    },
+  });
+
   const republishCard = useMutation({
     mutationFn: () =>
       api.post(`/admin/subscription-cards/${activeCardId}/republish`),
@@ -644,9 +662,16 @@ function CardPanelContent({
           ) : (
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs text-[var(--color-sh-ink-muted)]">
-                Republish this card as a manual draft, or delete it permanently.
+                Reinstate to its previous state, republish as a fresh manual draft, or delete permanently.
               </p>
               <div className="flex shrink-0 items-center gap-2">
+                <button
+                  onClick={() => setConfirmAction({ kind: 'reinstate' })}
+                  disabled={reinstateCard.isPending}
+                  className="sh-btn-primary"
+                >
+                  {reinstateCard.isPending ? 'Reinstating…' : 'Reinstate'}
+                </button>
                 <button
                   onClick={() => setConfirmAction({ kind: 'republish' })}
                   disabled={republishCard.isPending}
@@ -687,6 +712,7 @@ function CardPanelContent({
           recall: recallCard.isPending,
           cancel: cancelCard.isPending,
           archive: archiveCard.isPending,
+          reinstate: reinstateCard.isPending,
           republish: republishCard.isPending,
           deletePermanent: deleteCard.isPending,
           broadcast: broadcastCard.isPending,
@@ -703,6 +729,7 @@ function CardPanelContent({
             case 'recall': recallCard.mutate(); break;
             case 'cancel': cancelCard.mutate(); break;
             case 'archive': archiveCard.mutate(); break;
+            case 'reinstate': reinstateCard.mutate(); break;
             case 'republish': republishCard.mutate(); break;
             case 'deletePermanent': deleteCard.mutate(); break;
             case 'broadcast': broadcastCard.mutate(); break;
@@ -724,6 +751,7 @@ type ConfirmAction =
   | { kind: 'recall' }
   | { kind: 'cancel' }
   | { kind: 'archive' }
+  | { kind: 'reinstate' }
   | { kind: 'republish' }
   | { kind: 'deletePermanent' }
   | { kind: 'broadcast' }
@@ -816,10 +844,17 @@ function ConfirmActionDialog({
     },
     archive: {
       title: 'Archive this card?',
-      description: 'Hides the card from talents and from the default Published list. You can republish it as a manual draft or delete it from the Archive tab.',
+      description: 'Hides the card from talents and from the default Published list. You can reinstate it to this exact state, republish it fresh, or delete it — all from the Archive tab.',
       confirmLabel: 'Archive',
       pendingLabel: 'Archiving…',
       variant: 'warning',
+    },
+    reinstate: {
+      title: 'Reinstate this card?',
+      description: 'Un-archives the card and restores its exact previous state — same status, recipients, and history. Nothing is reset.',
+      confirmLabel: 'Reinstate',
+      pendingLabel: 'Reinstating…',
+      variant: 'default',
     },
     republish: {
       title: 'Republish this card?',

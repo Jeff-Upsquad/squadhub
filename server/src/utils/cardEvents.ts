@@ -10,6 +10,7 @@ export type CardEventType =
   | 'recalled'
   | 'cancelled'
   | 'archived'
+  | 'reinstated'
   | 'republished'
   | 'assigned'
   | 'plan_changed'

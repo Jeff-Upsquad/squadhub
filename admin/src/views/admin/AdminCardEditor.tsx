@@ -1269,6 +1269,7 @@ const EVENT_META: Record<string, { color: string; label: string }> = {
   recalled: { color: '#f59e0b', label: 'Recalled' },
   cancelled: { color: '#ef4444', label: 'Cancelled' },
   archived: { color: '#6b7280', label: 'Archived' },
+  reinstated: { color: '#3b82f6', label: 'Reinstated' },
   republished: { color: '#22c55e', label: 'Republished' },
   assigned: { color: '#a855f7', label: 'Assigned' },
 };

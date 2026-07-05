@@ -1631,6 +1631,75 @@ router.post('/:id/archive', async (req: Request, res: Response) => {
 });
 
 // ============================================================
+// POST /admin/subscription-cards/:id/reinstate
+// Inverse of /archive: clear archived_at and restore the card to its
+// EXACT pre-archive state. Unlike /republish, this touches nothing
+// else — state, distribution, recipients, and every lifecycle
+// timestamp are left as they were, so a Cancelled / Soft-Published /
+// assigned card comes back exactly as it went in. Re-delivers to
+// SquadHire so its mirror leaves 'archived' and re-matches the card.
+// ============================================================
+router.post('/:id/reinstate', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, archived_at')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) {
+      res.status(404).json({ success: false, error: 'Card not found' });
+      return;
+    }
+    if (!card.archived_at) {
+      res.status(409).json({ success: false, error: 'Only archived cards can be reinstated' });
+      return;
+    }
+
+    const { data: updated, error: updErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .update({
+        archived_at: null,
+        // Force a fresh SquadHire re-delivery below; leave everything
+        // else (state, recipients, cancelled_at/closed_at/assigned_at…)
+        // untouched so the card returns to its exact previous state.
+        squadhire_synced_at: null,
+        squadhire_sync_attempts: 0,
+        squadhire_sync_last_error: null,
+      })
+      .eq('id', cardId)
+      .select('*')
+      .single();
+    if (updErr) {
+      res.status(500).json({ success: false, error: updErr.message });
+      return;
+    }
+
+    // Re-deliver to SquadHire so its mirror flips out of 'archived' and
+    // the card re-matches. SquadHire re-derives its recipient pool on
+    // ingest, restoring the pending offers the archive recall had dropped
+    // — so we deliberately do NOT call notifySquadhireOfCardRecall here.
+    buildSquadhirePayloadForCard(updated.id)
+      .then((payload) => payload && deliverCardToSquadhire(updated.id, payload))
+      .catch((err) => console.error('[admin-reinstate] squadhire delivery error', err));
+
+    await logCardEvent({
+      cardId,
+      eventType: 'reinstated',
+      actorId: (req as any).userId ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+    });
+
+    res.json({ success: true, data: await hydrateCard(updated) });
+  } catch (err: any) {
+    console.error('Admin reinstate card error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
 // POST /admin/subscription-cards/:id/republish
 // Bring an archived card back as a fresh manual-published card.
 // Clears every recipient row (both partner + external), wipes
