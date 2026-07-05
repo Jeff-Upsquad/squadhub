@@ -9,6 +9,7 @@ import {
   transitionSubmissionStatus,
 } from '../utils/submissionPipeline';
 import { hydrateStagedSubscriptions } from '../utils/stagedSubscriptions';
+import { hydrateCardsBatch } from '../utils/subscriptionCards';
 import { findCardIdForClientSubscription } from '../utils/clientCardLink';
 import { pauseCardCore, resumeCardCore } from './subscription-cards-admin-select';
 import { cancelCardCore, archiveCardCore, reinstateCardCore } from './subscription-cards-admin';
@@ -93,7 +94,15 @@ async function assignPlansToClient(clientId: string, planIds: string[]) {
   return { error: null };
 }
 
-async function enrichClient(client: any, opts: { includeArchived?: boolean } = {}) {
+async function enrichClient(
+  client: any,
+  opts: { includeArchived?: boolean; withCardLifecycle?: boolean } = {},
+) {
+  // Raw linked-card rows keyed by id — collected as we match cards below so we
+  // can (optionally) compute each card's lifecycle bucket for the client detail
+  // Subscriptions tab. Only populated/used when `withCardLifecycle` is set, so
+  // the clients LIST endpoint (which calls enrichClient per row) stays lean.
+  const rawCardsById: Record<string, any> = {};
   // Hydrate the country
   let country: any = null;
   if (client.country_id) {
@@ -182,12 +191,13 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
       const stagedIds = stagedSubs.map((s: any) => s.id);
       const { data: stgCards } = await supabaseAdmin
         .from('subscription_cards')
-        .select('id, submission_subscription_id, state, published_at, card_code, linked_folder_id, linked_at, proposed_price, subscription_price, markup, partner_price_override')
+        .select('id, submission_subscription_id, state, published_at, card_code, linked_folder_id, linked_at, proposed_price, subscription_price, markup, partner_price_override, cancelled_at, paused_at, selected_recipient_id, archived_at, parent_card_id, distribution, publish_targets, squadhire_category_ids, squadhire_synced_at')
         .in('submission_subscription_id', stagedIds);
 
       (stgCards || []).forEach((crd: any) => {
         matchingCardIds.add(crd.id);
         cardByStagedId[crd.submission_subscription_id] = crd;
+        rawCardsById[crd.id] = crd;
       });
     }
 
@@ -200,16 +210,20 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
       leadRow?.email
         ? supabaseAdmin
             .from('subscription_cards')
-            .select('id, service_type, plan_name, state, published_at, card_code, linked_folder_id, linked_at, proposed_price, subscription_price, markup, partner_price_override')
+            .select('id, service_type, plan_name, state, published_at, card_code, linked_folder_id, linked_at, proposed_price, subscription_price, markup, partner_price_override, cancelled_at, paused_at, selected_recipient_id, archived_at, parent_card_id, distribution, publish_targets, squadhire_category_ids, squadhire_synced_at')
             .ilike('customer_email', leadRow.email.trim())
         : Promise.resolve({ data: [] as any[] }),
       phoneSuffix
         ? supabaseAdmin
             .from('subscription_cards')
-            .select('id, service_type, plan_name, state, published_at, card_code, linked_folder_id, linked_at, proposed_price, subscription_price, markup, partner_price_override')
+            .select('id, service_type, plan_name, state, published_at, card_code, linked_folder_id, linked_at, proposed_price, subscription_price, markup, partner_price_override, cancelled_at, paused_at, selected_recipient_id, archived_at, parent_card_id, distribution, publish_targets, squadhire_category_ids, squadhire_synced_at')
             .ilike('customer_phone', `%${phoneSuffix}`)
         : Promise.resolve({ data: [] as any[] }),
     ]);
+
+    [...(byEmail.data || []), ...(byPhone.data || [])].forEach((crd: any) => {
+      if (crd?.id) rawCardsById[crd.id] = crd;
+    });
 
     // Index cards matched by staged sub ID → keyed by (subscription_id, plan_id)
     if (stagedSubs) {
@@ -346,6 +360,51 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
     }
   }
 
+  // Compute each linked card's "needs broadcast" flag (published-but-unsent) so
+  // the client detail Subscriptions tab can bucket cards by lifecycle exactly
+  // like the Published Cards section (published vs broadcasted). Gated behind
+  // withCardLifecycle so the clients LIST never pays for it, and best-effort:
+  // a failure here must never break the client payload.
+  let needsBroadcastById = new Map<string, boolean>();
+  if (opts.withCardLifecycle) {
+    const rawCards = Object.values(rawCardsById);
+    if (rawCards.length > 0) {
+      try {
+        const hydrated = await hydrateCardsBatch(rawCards);
+        needsBroadcastById = new Map(
+          Array.from(hydrated.entries()).map(([id, h]) => [id, !!h.needs_broadcast]),
+        );
+      } catch (err) {
+        console.error('enrichClient: needs_broadcast hydration failed', err);
+      }
+    }
+  }
+
+  // Normalize a linked card to the exact shape the Subscriptions tab consumes:
+  // pull lifecycle fields from the raw row (which carries every selected column)
+  // and stamp the computed needs_broadcast. Also keeps internal columns
+  // (distribution, publish_targets, …) from leaking into the API response.
+  const normalizeLinkedCard = (mini: any): any => {
+    if (!mini) return null;
+    const raw = rawCardsById[mini.id] || mini;
+    return {
+      id: raw.id,
+      state: raw.state,
+      published_at: raw.published_at ?? null,
+      card_code: raw.card_code ?? null,
+      linked_folder_id: raw.linked_folder_id ?? null,
+      linked_at: raw.linked_at ?? null,
+      proposed_price: raw.proposed_price ?? null,
+      subscription_price: raw.subscription_price ?? null,
+      markup: raw.markup ?? null,
+      partner_price_override: raw.partner_price_override ?? null,
+      cancelled_at: raw.cancelled_at ?? null,
+      paused_at: raw.paused_at ?? null,
+      selected_recipient_id: raw.selected_recipient_id ?? null,
+      needs_broadcast: needsBroadcastById.get(raw.id) ?? false,
+    };
+  };
+
   return {
     ...client,
     country,
@@ -358,7 +417,7 @@ async function enrichClient(client: any, opts: { includeArchived?: boolean } = {
         ? { ...plansMap[c.plan_id], pricing: pricingByPlan[c.plan_id] || [] }
         : null,
       deliverables: delivsByCs[c.id] || [],
-      card: cardBySubPlan[`${c.subscription_id}:${c.plan_id}`] || null,
+      card: normalizeLinkedCard(cardBySubPlan[`${c.subscription_id}:${c.plan_id}`] || null),
     })),
     linkedCards: Object.values(unmatchedCards),
   };
@@ -954,7 +1013,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
 
     const includeArchived = req.query.include_archived === '1';
-    const enriched = await enrichClient(data, { includeArchived });
+    const enriched = await enrichClient(data, { includeArchived, withCardLifecycle: true });
     res.json({ success: true, data: enriched });
   } catch (err) {
     console.error('Get client error:', err);

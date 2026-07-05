@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../services/api';
 import type {
@@ -24,6 +24,48 @@ const TIER_COLOR: Record<SubscriptionTier, string> = {
   Pro: 'bg-indigo-100 text-indigo-700',
   'Top Talents': 'bg-yellow-100 text-yellow-700',
 };
+
+// ============================================================
+// Lifecycle grouping — buckets each subscription by the state of its linked
+// broadcast card, mirroring the Published Cards section's buckets so the two
+// stay consistent. Subscriptions with no linked card yet fall back to their
+// own status. (Precedence matches AdminPublishedCards.categorize().)
+// ============================================================
+type SubLifecycleBucket =
+  | 'newdeal' | 'published' | 'broadcaster' | 'selected'
+  | 'assigned' | 'paused' | 'cancelled' | 'archived';
+
+function subscriptionBucket(cs: ClientSubscription): SubLifecycleBucket {
+  if (cs.archived_at) return 'archived';
+  const card = cs.card;
+  if (card) {
+    // Cancelled/closed and paused win over the recipient pointer — both keep
+    // selected_recipient_id set (for audit / resume), so check them first.
+    if (card.cancelled_at || card.state === 'closed') return 'cancelled';
+    if (card.paused_at) return 'paused';
+    if (card.selected_recipient_id) return 'assigned';
+    if (card.state === 'assigned') return 'selected';
+    if (card.state === 'published') return card.needs_broadcast ? 'published' : 'broadcaster';
+    return 'newdeal'; // 'new' | 'draft' | anything not yet published
+  }
+  if (cs.status === 'cancelled') return 'cancelled';
+  if (cs.status === 'paused') return 'paused';
+  return 'newdeal';
+}
+
+// Display order + default-open policy. New Deals / Published / Broadcasted /
+// Assigned are the primary pipeline stages (open when they hold cards, shown
+// collapsed when empty); the rest sit collapsed and only appear when non-empty.
+const SUB_GROUPS: { key: SubLifecycleBucket; label: string; color: string; primary: boolean }[] = [
+  { key: 'newdeal',     label: 'New Deals',   color: '#64748b', primary: true },
+  { key: 'published',   label: 'Published',   color: '#3b82f6', primary: true },
+  { key: 'broadcaster', label: 'Broadcasted', color: '#6366f1', primary: true },
+  { key: 'selected',    label: 'Selected',    color: '#14b8a6', primary: false },
+  { key: 'assigned',    label: 'Assigned',    color: '#10b981', primary: true },
+  { key: 'paused',      label: 'Paused',      color: '#f59e0b', primary: false },
+  { key: 'cancelled',   label: 'Cancelled',   color: '#ef4444', primary: false },
+  { key: 'archived',    label: 'Archived',    color: '#94a3b8', primary: false },
+];
 
 /**
  * Presentational subscriptions manager for one client. The parent owns the
@@ -51,6 +93,15 @@ export default function ClientSubscriptionsPanel({
   const assignedSubscriptionIds = new Set((client.subscriptions || []).map((cs) => cs.subscription_id));
   const subs = client.subscriptions || [];
   const linkedCards = (client as unknown as { linkedCards?: { id: string; state: string }[] }).linkedCards || [];
+
+  const grouped = useMemo(() => {
+    const g: Record<SubLifecycleBucket, ClientSubscription[]> = {
+      newdeal: [], published: [], broadcaster: [], selected: [],
+      assigned: [], paused: [], cancelled: [], archived: [],
+    };
+    subs.forEach((cs) => { g[subscriptionBucket(cs)].push(cs); });
+    return g;
+  }, [subs]);
 
   return (
     <div className="space-y-4">
@@ -93,17 +144,33 @@ export default function ClientSubscriptionsPanel({
           {showArchived ? 'No subscriptions yet.' : 'No active subscriptions. Click “+ Add Subscription” to assign one.'}
         </p>
       ) : (
-        <div className="space-y-3">
-          {subs.map((cs) => (
-            <ClientSubscriptionCard
-              key={cs.id}
-              clientId={client.id}
-              cs={cs}
-              country={country}
-              catalog={catalog}
-              onRefetch={onRefetch}
-            />
-          ))}
+        <div className="space-y-0.5">
+          {SUB_GROUPS.map((g) => {
+            const items = grouped[g.key];
+            // Secondary groups only appear when they hold cards; the four primary
+            // stages always render (empty ones show collapsed with a 0 count).
+            if (items.length === 0 && !g.primary) return null;
+            return (
+              <SubscriptionGroup
+                key={g.key}
+                label={g.label}
+                color={g.color}
+                count={items.length}
+                defaultOpen={g.primary && items.length > 0}
+              >
+                {items.map((cs) => (
+                  <ClientSubscriptionCard
+                    key={cs.id}
+                    clientId={client.id}
+                    cs={cs}
+                    country={country}
+                    catalog={catalog}
+                    onRefetch={onRefetch}
+                  />
+                ))}
+              </SubscriptionGroup>
+            );
+          })}
         </div>
       )}
 
@@ -131,6 +198,53 @@ export default function ClientSubscriptionsPanel({
             ))}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Collapsible lifecycle group — chevron + colored dot + label + count, then a
+// hairline. Primary stages open by default (when non-empty); an empty primary
+// stage renders collapsed. User toggles persist for the panel's lifetime.
+// ============================================================
+
+function SubscriptionGroup({
+  label, color, count, defaultOpen, children,
+}: {
+  label: string;
+  color: string;
+  count: number;
+  defaultOpen: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2.5 py-2 text-left"
+      >
+        <svg
+          className={`h-3.5 w-3.5 shrink-0 text-foreground-dim transition-transform ${open ? 'rotate-90' : ''}`}
+          fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+        <span className="text-xs font-bold uppercase tracking-wider text-foreground">{label}</span>
+        <span className="min-w-[1.25rem] rounded-full bg-canvas px-1.5 py-0.5 text-center text-[10px] font-semibold tabular-nums text-foreground-muted">
+          {count}
+        </span>
+        <span className="ml-1 flex-1 self-center border-t border-divider" />
+      </button>
+      {open && (
+        count > 0 ? (
+          <div className="space-y-3 pb-2 pl-6">{children}</div>
+        ) : (
+          <p className="pb-2 pl-6 text-xs text-foreground-dim">No cards in this group.</p>
+        )
       )}
     </div>
   );

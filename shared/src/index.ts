@@ -2214,7 +2214,7 @@ export interface ClientSubscription {
   subscription?: Subscription;
   plan?: SubscriptionPlanRow;
   deliverables?: ClientSubscriptionDeliverable[];
-  card?: { id: string; state: string; published_at: string | null; card_code: string | null; linked_folder_id: string | null; linked_at: string | null; proposed_price: number | null; subscription_price: number | null; markup: number | null; partner_price_override: number | null } | null;
+  card?: { id: string; state: string; published_at: string | null; card_code: string | null; linked_folder_id: string | null; linked_at: string | null; proposed_price: number | null; subscription_price: number | null; markup: number | null; partner_price_override: number | null; cancelled_at: string | null; paused_at: string | null; selected_recipient_id: string | null; needs_broadcast: boolean } | null;
 }
 
 // ---- Cash Book ----
