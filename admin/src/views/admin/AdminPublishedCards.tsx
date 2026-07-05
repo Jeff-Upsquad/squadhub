@@ -520,7 +520,11 @@ export default function AdminPublishedCards() {
     [router, pathname],
   );
 
-  const showDetailView = isCardListTab && !!selectedCard;
+  // The card detail view is driven purely by ?card= (whichever tab is active).
+  // A deep link — e.g. "View card" from the Clients module, which opens in a new
+  // tab and mounts fresh on the default 'requests' tab — must still open the
+  // detail, so this can't be gated on isCardListTab.
+  const showDetailView = !!selectedCard;
 
   // When switching primary tabs, drop any stale ?card= so the detail view
   // doesn't unexpectedly re-open when the user comes back to this tab.
@@ -686,7 +690,7 @@ export default function AdminPublishedCards() {
         </div>
       )}
 
-      {isCardListTab && selectedCard ? (
+      {selectedCard ? (
         <AdminPublishedCardRecipientsView
           key={selectedCard.id}
           card={selectedCard}
@@ -733,8 +737,8 @@ export default function AdminPublishedCards() {
         </div>
       ) : null}
 
-      {activeTab === 'requests' && <AdminRequestsList />}
-      {activeTab === 'custom' && <AdminCustomCardsList />}
+      {!showDetailView && activeTab === 'requests' && <AdminRequestsList />}
+      {!showDetailView && activeTab === 'custom' && <AdminCustomCardsList />}
 
       {selectedCard && showPanel && (
         <AdminPublishedCardRecipientsPanel
