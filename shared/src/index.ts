@@ -1947,6 +1947,12 @@ export interface SubscriptionCard {
   /** Set when an admin recalled a card with acceptances. Acceptees keep
    *  seeing the card with a "Recalled" tag; pending recipients are dropped. */
   recalled_at?: string | null;
+  /** Soft-delete: set when the card is moved to the admin Trash. While set,
+   *  the card is hidden from every card list and can be restored or purged
+   *  from Trash. Null for live cards. */
+  deleted_at?: string | null;
+  /** Admin user id that moved the card to Trash. Null for live cards. */
+  deleted_by?: string | null;
   /** Secondary cards link to a primary card via parent_card_id. Primary
    *  cards have parent_card_id = null. */
   parent_card_id?: string | null;

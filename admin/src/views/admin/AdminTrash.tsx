@@ -12,9 +12,19 @@ type TrashItem = {
   space_id?: string;
   folder_id?: string;
   spaces?: { name: string; workspace_id: string };
+  // Cards only
+  card_type?: string;
+  card_code?: string | null;
+  state?: string;
 };
 
-type TrashType = 'space' | 'folder' | 'list' | 'channel';
+type TrashType = 'space' | 'folder' | 'list' | 'channel' | 'card';
+
+function cardTypeLabel(t?: string): string {
+  if (t === 'assignment') return 'Freelance';
+  if (t === 'hiring') return 'Hiring';
+  return 'Subscription';
+}
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -32,6 +42,7 @@ function TypeBadge({ type }: { type: TrashType }) {
     folder: 'bg-yellow-50 text-yellow-700',
     list: 'bg-blue-50 text-blue-700',
     channel: 'bg-green-50 text-green-700',
+    card: 'bg-pink-50 text-pink-700',
   };
   return (
     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${colors[type]}`}>
@@ -65,6 +76,7 @@ export default function AdminTrash() {
     data.folders?.forEach((f: TrashItem) => allItems.push({ type: 'folder', item: f }));
     data.lists?.forEach((l: TrashItem) => allItems.push({ type: 'list', item: l }));
     data.channels?.forEach((c: TrashItem) => allItems.push({ type: 'channel', item: c }));
+    data.cards?.forEach((c: TrashItem) => allItems.push({ type: 'card', item: c }));
   }
 
   // Sort by deleted_at descending
@@ -77,13 +89,13 @@ export default function AdminTrash() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">Trash</h1>
-          <p className="mt-1 text-sm text-foreground-muted">Deleted spaces, folders, and lists. Restore or permanently delete them.</p>
+          <p className="mt-1 text-sm text-foreground-muted">Deleted spaces, folders, lists, channels, and subscription cards. Restore or permanently delete them.</p>
         </div>
       </div>
 
       {/* Filter tabs */}
       <div className="mb-4 flex gap-1 rounded-lg bg-surface p-1 border border-divider w-fit">
-        {(['all', 'space', 'folder', 'list', 'channel'] as const).map((t) => (
+        {(['all', 'space', 'folder', 'list', 'channel', 'card'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setFilter(t)}
@@ -150,12 +162,21 @@ export default function AdminTrash() {
                     {type === 'channel' && (
                       <span className="text-sm text-foreground-dim">#</span>
                     )}
+                    {type === 'card' && (
+                      <svg className="h-4 w-4 text-pink-500/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z" />
+                      </svg>
+                    )}
                     <span className="text-sm font-medium text-foreground">{item.name}</span>
                   </div>
                 </td>
                 <td className="px-4 py-3"><TypeBadge type={type} /></td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">
-                  {type === 'space' ? '—' : item.spaces?.name || '—'}
+                  {type === 'space'
+                    ? '—'
+                    : type === 'card'
+                    ? item.card_code || cardTypeLabel(item.card_type)
+                    : item.spaces?.name || '—'}
                 </td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">{item.created_by_name || '—'}</td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">{timeAgo(item.deleted_at)}</td>

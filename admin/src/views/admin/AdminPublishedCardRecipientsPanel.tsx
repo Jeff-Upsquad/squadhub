@@ -348,7 +348,7 @@ function CardPanelContent({
       qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       clearConfirm();
-      showToast('Card deleted permanently.', 'success');
+      showToast('Card moved to Trash.', 'success');
       onClose();
     },
     onError: (err: any) => {
@@ -684,7 +684,7 @@ function CardPanelContent({
                   disabled={deleteCard.isPending}
                   className="sh-btn-danger"
                 >
-                  {deleteCard.isPending ? 'Deleting…' : 'Delete permanently'}
+                  {deleteCard.isPending ? 'Moving…' : 'Move to Trash'}
                 </button>
               </div>
             </div>
@@ -864,10 +864,10 @@ function ConfirmActionDialog({
       variant: 'warning',
     },
     deletePermanent: {
-      title: 'Delete this card permanently?',
-      description: 'This cannot be undone. Recipients and any secondary cards will be deleted with it.',
-      confirmLabel: 'Delete forever',
-      pendingLabel: 'Deleting…',
+      title: 'Move this card to Trash?',
+      description: 'The card moves to admin Trash, where you can restore it or delete it forever. Recipients and secondary cards are removed only when you permanently delete it from there.',
+      confirmLabel: 'Move to Trash',
+      pendingLabel: 'Moving…',
       variant: 'danger',
     },
     broadcast: {
