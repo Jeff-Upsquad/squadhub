@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import { getDefaultRoleIdForUserType } from '../utils/defaultRole';
+import { notifySquadhireOfCardRecall } from '../utils/squadhireWebhook';
 import type { UserType } from '@squadhub/shared';
 
 const router = Router();
@@ -676,7 +677,7 @@ router.get('/trash', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspace_id as string;
 
-    const [spacesRes, foldersRes, listsRes, channelsRes] = await Promise.all([
+    const [spacesRes, foldersRes, listsRes, channelsRes, cardsRes] = await Promise.all([
       supabaseAdmin
         .from('spaces')
         .select('id, name, color, icon, deleted_at, created_by, workspace_id')
@@ -730,6 +731,35 @@ router.get('/trash', async (req: Request, res: Response) => {
           const userMap = new Map((users || []).map((u: any) => [u.id, u.display_name]));
           return { ...r, data: r.data.map((c: any) => ({ ...c, created_by_name: userMap.get(c.created_by) || null })) };
         }),
+      // Subscription cards — soft-deleted via DELETE /admin/subscription-cards/:id.
+      // Only top-level cards (secondaries cascade with their parent on final purge).
+      // "Deleted by" reflects the admin who deleted it (deleted_by), not the creator.
+      supabaseAdmin
+        .from('subscription_cards')
+        .select('id, brand_name, card_code, card_type, state, deleted_at, deleted_by')
+        .is('parent_card_id', null)
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .then(async (r) => {
+          if (!r.data) return r;
+          const userIds = [...new Set(r.data.map((c: any) => c.deleted_by).filter(Boolean))];
+          const { data: users } = userIds.length
+            ? await supabaseAdmin.from('users').select('id, display_name').in('id', userIds)
+            : { data: [] as any[] };
+          const userMap = new Map((users || []).map((u: any) => [u.id, u.display_name]));
+          return {
+            ...r,
+            data: r.data.map((c: any) => ({
+              id: c.id,
+              name: c.brand_name || c.card_code || 'Untitled card',
+              card_type: c.card_type,
+              card_code: c.card_code,
+              state: c.state,
+              deleted_at: c.deleted_at,
+              created_by_name: c.deleted_by ? userMap.get(c.deleted_by) || null : null,
+            })),
+          };
+        }),
     ]);
 
     res.json({
@@ -739,6 +769,7 @@ router.get('/trash', async (req: Request, res: Response) => {
         folders: foldersRes.data || [],
         lists: listsRes.data || [],
         channels: channelsRes.data || [],
+        cards: cardsRes.data || [],
       },
     });
   } catch (err) {
@@ -751,15 +782,23 @@ router.get('/trash', async (req: Request, res: Response) => {
 router.put('/trash/restore', async (req: Request, res: Response) => {
   try {
     const { type, id } = z.object({
-      type: z.enum(['space', 'folder', 'list', 'channel']),
+      type: z.enum(['space', 'folder', 'list', 'channel', 'card']),
       id: z.string().uuid(),
     }).parse(req.body);
 
-    const table = type === 'space' ? 'spaces' : type === 'folder' ? 'folders' : type === 'channel' ? 'channels' : 'lists';
+    const table = type === 'space' ? 'spaces'
+      : type === 'folder' ? 'folders'
+      : type === 'channel' ? 'channels'
+      : type === 'card' ? 'subscription_cards'
+      : 'lists';
+
+    // A restored card returns to its prior draft/archived state (both already
+    // out of talent feeds), so we only clear the trash markers here.
+    const restoreFields = type === 'card' ? { deleted_at: null, deleted_by: null } : { deleted_at: null };
 
     const { error } = await supabaseAdmin
       .from(table)
-      .update({ deleted_at: null })
+      .update(restoreFields)
       .eq('id', id);
 
     if (error) {
@@ -793,11 +832,23 @@ router.put('/trash/restore', async (req: Request, res: Response) => {
 router.delete('/trash/permanent', async (req: Request, res: Response) => {
   try {
     const { type, id } = z.object({
-      type: z.enum(['space', 'folder', 'list', 'channel']),
+      type: z.enum(['space', 'folder', 'list', 'channel', 'card']),
       id: z.string().uuid(),
     }).parse(req.body);
 
-    const table = type === 'space' ? 'spaces' : type === 'folder' ? 'folders' : type === 'channel' ? 'channels' : 'lists';
+    const table = type === 'space' ? 'spaces'
+      : type === 'folder' ? 'folders'
+      : type === 'channel' ? 'channels'
+      : type === 'card' ? 'subscription_cards'
+      : 'lists';
+
+    // For a card, drop SquadHire's mirror rows before the row (and its
+    // recipients + secondary cards, via FK cascade) disappear for good.
+    if (type === 'card') {
+      notifySquadhireOfCardRecall(id).catch((err) => {
+        console.error('[admin-trash-permanent] squadhire mirror drop error', err);
+      });
+    }
 
     const { error } = await supabaseAdmin
       .from(table)

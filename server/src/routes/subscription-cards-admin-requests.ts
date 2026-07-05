@@ -1006,6 +1006,12 @@ router.post('/subscription-cards/:id/broadcast', async (req: Request, res: Respo
 
 // ============================================================
 // DELETE /admin/subscription-cards/:id — hard delete draft only
+// NOTE: This route is SHADOWED. index.ts mounts subscriptionCardsAdminRoutes
+// at '/admin/subscription-cards' (its DELETE /:id) BEFORE this router at
+// '/admin', so that handler wins and now SOFT-deletes the card into Trash.
+// This hard-delete handler is unreachable via that path; if you ever change
+// the mount order, port the soft-delete here too or drafts will vanish
+// instead of moving to Trash.
 // ============================================================
 router.delete('/subscription-cards/:id', async (req: Request, res: Response) => {
   try {

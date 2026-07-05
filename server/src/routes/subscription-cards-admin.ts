@@ -47,6 +47,8 @@ router.get('/', async (req: Request, res: Response) => {
       .from('subscription_cards')
       .select('*')
       .is('parent_card_id', null)
+      // Soft-deleted cards live in the admin Trash, not in any card list.
+      .is('deleted_at', null)
       .order('published_at', { ascending: false, nullsFirst: false });
 
     if (showArchived) {
@@ -1791,11 +1793,13 @@ router.post('/:id/republish', async (req: Request, res: Response) => {
 
 // ============================================================
 // DELETE /admin/subscription-cards/:id
-// Permanently delete a draft or archived card. Recipients
-// (partner + external) and secondaries cascade-delete via FK.
-// Notifies SquadHire to drop its mirrors. Drafts have never been
-// broadcast; archived cards have already been recalled — both are
-// safe to remove without racing active-card flows.
+// Soft-delete a draft or archived card: stamp deleted_at/deleted_by so
+// the card moves to the admin Trash (restorable) instead of vanishing.
+// Drops SquadHire mirrors so it leaves talent feeds. The real purge —
+// row delete + FK cascade of recipients/secondaries — happens later
+// from Trash via "Delete forever" (DELETE /admin/trash/permanent).
+// Drafts have never been broadcast; archived cards have already been
+// recalled — both are safe to move without racing active-card flows.
 // ============================================================
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
@@ -1803,29 +1807,36 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, archived_at')
+      .select('id, state, archived_at, deleted_at')
       .eq('id', cardId)
       .maybeSingle();
     if (!card) {
       res.status(404).json({ success: false, error: 'Card not found' });
       return;
     }
+    // Already in Trash — idempotent no-op.
+    if (card.deleted_at) {
+      res.json({ success: true });
+      return;
+    }
     if (!card.archived_at && card.state !== 'draft') {
-      res.status(409).json({ success: false, error: 'Only draft or archived cards can be deleted permanently. Archive it first.' });
+      res.status(409).json({ success: false, error: 'Only draft or archived cards can be deleted. Archive it first.' });
       return;
     }
 
-    // Drop SquadHire mirror rows before we lose the card row.
+    // Drop SquadHire mirror rows so the card leaves every talent feed while it
+    // sits in Trash. Restore returns it to its prior draft/archived state
+    // (both already out of feeds), so no re-delivery is needed on restore.
     notifySquadhireOfCardRecall(cardId).catch((err) => {
       console.error('[admin-delete-card] squadhire mirror drop error', err);
     });
 
-    const { error: delErr } = await supabaseAdmin
+    const { error: updErr } = await supabaseAdmin
       .from('subscription_cards')
-      .delete()
+      .update({ deleted_at: new Date().toISOString(), deleted_by: req.userId || null })
       .eq('id', cardId);
-    if (delErr) {
-      res.status(500).json({ success: false, error: delErr.message });
+    if (updErr) {
+      res.status(500).json({ success: false, error: updErr.message });
       return;
     }
 
