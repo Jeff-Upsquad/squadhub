@@ -20,7 +20,7 @@ import {
   ensureActiveAssignmentTerm,
   endActiveAssignmentTermsForCard,
 } from '../utils/assignmentTerms';
-import { fetchTalentAvailability } from '../utils/squadhireTalent';
+import { fetchTalentAvailability, fetchTalentStatuses } from '../utils/squadhireTalent';
 import { loadCardBilling } from '../utils/cardBilling';
 import { buildPlanSnapshot, resolvePlanIdForCard } from '../utils/cardPlanSnapshot';
 import { handOffSpaceToNewTalent } from '../utils/spaceTalentHandoff';
@@ -1175,6 +1175,84 @@ router.get('/subscription-cards/:id/previous-talent-availability', async (req: R
     });
   } catch (err: any) {
     console.error('Previous talent availability error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// GET /admin/subscription-cards/:id/assignment-history
+//
+// Former assignees of this card, newest first, sourced from the ENDED
+// assignment terms (subscription_assignment_terms.status='ended'). The current
+// active assignee is excluded on purpose — it's shown in the "Selected" card
+// above, and its term is still 'active'. The most-recent ended term is the
+// "previous assignee"; older ones are "past assignees". Deduped by recipient
+// so someone who held the card across non-contiguous stints appears once (their
+// most-recent stint's dates win). Talents are enriched with their current
+// SquadHire standing (active/inactive/suspended, or not_found if they've left);
+// partners have no SquadHire status. Soft-degrades: if SquadHire is unreachable
+// the rows still return with squadhire_status=null.
+// ============================================================
+router.get('/subscription-cards/:id/assignment-history', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
+
+    const { data: terms } = await supabaseAdmin
+      .from('subscription_assignment_terms')
+      .select('recipient_type, recipient_id, recipient_name, assigned_date, unassigned_date, work_start_date, work_end_date')
+      .eq('card_id', cardId)
+      .eq('status', 'ended')
+      .order('assigned_date', { ascending: false });
+
+    // Dedupe by recipient — newest stint wins (rows are already newest-first).
+    const seen = new Set<string>();
+    type Entry = {
+      recipient_type: 'talent' | 'partner';
+      recipient_id: string;
+      recipient_name: string | null;
+      assigned_date: string | null;
+      unassigned_date: string | null;
+      work_start_date: string | null;
+      work_end_date: string | null;
+    };
+    const entries: Entry[] = [];
+    for (const t of (terms || []) as any[]) {
+      const key = `${t.recipient_type}:${t.recipient_id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      entries.push({
+        recipient_type: t.recipient_type,
+        recipient_id: t.recipient_id,
+        recipient_name: t.recipient_name ?? null,
+        assigned_date: t.assigned_date ?? null,
+        unassigned_date: t.unassigned_date ?? null,
+        work_start_date: t.work_start_date ?? null,
+        work_end_date: t.work_end_date ?? null,
+      });
+    }
+
+    // Enrich talents with SquadHire account standing (graceful-degrade to null).
+    const talentIds = entries.filter((e) => e.recipient_type === 'talent').map((e) => e.recipient_id);
+    const statuses = talentIds.length ? await fetchTalentStatuses(talentIds) : new Map();
+    const enriched = entries.map((e) => {
+      const st = e.recipient_type === 'talent' ? statuses.get(e.recipient_id) : undefined;
+      return {
+        ...e,
+        squadhire_status: st ? st.status_tag : null,
+        suspended_reason: st ? st.suspended_reason : null,
+      };
+    });
+
+    const [previous = null, ...past] = enriched;
+    res.json({ success: true, data: { previous, past } });
+  } catch (err: any) {
+    console.error('Assignment history error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });

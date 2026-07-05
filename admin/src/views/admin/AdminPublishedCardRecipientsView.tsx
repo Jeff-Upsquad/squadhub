@@ -77,6 +77,48 @@ const STATUS_NUMBER: Record<'accepted' | 'rejected' | 'pending', string> = {
   pending: '#D97706',
 };
 
+// A former assignee of this card (an ended assignment term), newest-first.
+// Talents carry their current SquadHire standing; partners don't (null).
+type SquadHireStatus = 'active' | 'inactive' | 'suspended' | 'not_found';
+type AssigneeEntry = {
+  recipient_type: 'partner' | 'talent';
+  recipient_id: string;
+  recipient_name: string | null;
+  assigned_date: string | null;
+  unassigned_date: string | null;
+  work_start_date: string | null;
+  work_end_date: string | null;
+  squadhire_status: SquadHireStatus | null;
+  suspended_reason: string | null;
+};
+
+// Tag shown next to a former talent — their current standing on SquadHire.
+// SquadHire has no "blacklisted" state; suspension is its block mechanism.
+const SQUADHIRE_STATUS_TAG: Record<SquadHireStatus, { label: string; bg: string; color: string }> = {
+  active: { label: 'Active on SquadHire', bg: '#D1FAE5', color: '#065F46' },
+  inactive: { label: 'Inactive on SquadHire', bg: '#E5E7EB', color: '#374151' },
+  suspended: { label: 'Suspended', bg: '#FEE2E2', color: '#B91C1C' },
+  not_found: { label: 'No longer on SquadHire', bg: '#F3F4F6', color: '#6B7280' },
+};
+
+function formatDateShort(d: string | null): string | null {
+  if (!d) return null;
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return null;
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Worked-period label from an ended term. Prefers the admin-editable work
+// dates, falling back to the raw assign/unassign timestamps.
+function formatAssignmentPeriod(e: AssigneeEntry): string | null {
+  const start = formatDateShort(e.work_start_date || e.assigned_date);
+  const end = formatDateShort(e.work_end_date || e.unassigned_date);
+  if (start && end) return `${start} – ${end}`;
+  if (start) return `From ${start}`;
+  if (end) return `Until ${end}`;
+  return null;
+}
+
 export default function AdminPublishedCardRecipientsView({
   card,
   title,
@@ -119,6 +161,20 @@ export default function AdminPublishedCardRecipientsView({
       ),
     enabled: hasSquadHireCategories,
   });
+
+  // Former assignees (ended assignment terms) — who held this card before the
+  // current pick. Independent of the recipients list; a paused card's talent
+  // lives here (their recipient row is archived on pause), not in "Selected".
+  const { data: historyRes } = useQuery({
+    queryKey: ['admin-card-assignment-history', card.id],
+    queryFn: () =>
+      api
+        .get(`/admin/subscription-cards/${card.id}/assignment-history`)
+        .then((r) => r.data?.data as { previous: AssigneeEntry | null; past: AssigneeEntry[] }),
+  });
+  const previousAssignee = historyRes?.previous ?? null;
+  const pastAssignees = useMemo(() => historyRes?.past ?? [], [historyRes]);
+
   // Memoize the fallback so an empty result stays the SAME array reference across
   // renders. A bare `shRecipientsRes || []` minted a fresh [] every render, which
   // re-ran the allRecipients memo, which re-fired the pre-check effect's
@@ -906,6 +962,96 @@ export default function AdminPublishedCardRecipientsView({
             {/* Per-tier tabs (multi-tier briefs) — switching loads that tier's
                 recipients into the counts + list below. */}
             {tierTabs}
+
+            {/* Former assignees — who held this card before the current pick,
+                sourced from ended assignment terms. Neutral styling (NOT the
+                emerald "Selected" card): these people are released / on hold.
+                Talents show their current SquadHire standing so a suspended or
+                inactive prior talent is obvious before you re-offer to them. */}
+            {(() => {
+              if (!previousAssignee && pastAssignees.length === 0) return null;
+              const total = (previousAssignee ? 1 : 0) + pastAssignees.length;
+              const renderAssignee = (e: AssigneeEntry, isPrevious: boolean) => {
+                const isTalent = e.recipient_type === 'talent';
+                const name = e.recipient_name || (isTalent ? 'Unknown talent' : 'Unknown partner');
+                const period = formatAssignmentPeriod(e);
+                const sh = e.squadhire_status ? SQUADHIRE_STATUS_TAG[e.squadhire_status] : null;
+                const shTitle =
+                  e.squadhire_status === 'suspended' && e.suspended_reason
+                    ? `Suspended on SquadHire: ${e.suspended_reason}`
+                    : sh?.label;
+                return (
+                  <div key={`prev-${e.recipient_type}-${e.recipient_id}`} className="sh-card flex items-center gap-3 px-4 py-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-sh-cream)] text-sm font-bold text-[var(--color-sh-ink-muted)] ring-1 ring-[var(--color-sh-warm-border)]">
+                      {name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">{name}</p>
+                        <span
+                          className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                          style={isTalent ? { backgroundColor: '#F2EBFE', color: '#6B21A8' } : { backgroundColor: '#DBEAFE', color: '#1E40AF' }}
+                        >
+                          {isTalent ? 'Talent' : 'Partner'}
+                        </span>
+                        {isPrevious && (
+                          <span className="shrink-0 rounded-full bg-[var(--color-sh-cream)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-sh-ink-muted)] ring-1 ring-[var(--color-sh-warm-border)]">
+                            Previous assignee
+                          </span>
+                        )}
+                        {sh && (
+                          <span
+                            className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                            style={{ backgroundColor: sh.bg, color: sh.color }}
+                            title={shTitle}
+                          >
+                            {sh.label}
+                          </span>
+                        )}
+                      </div>
+                      {period && (
+                        <p className="mt-0.5 truncate text-[11px] text-[var(--color-sh-ink-faint)]">{period}</p>
+                      )}
+                    </div>
+                    {isTalent && adminUrl && (
+                      <a
+                        href={`${adminUrl}/admin/users/${e.recipient_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="View profile in SquadHire"
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--color-sh-ink-muted)] transition hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)]"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                        </svg>
+                      </a>
+                    )}
+                  </div>
+                );
+              };
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3 pt-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.04em] text-[var(--color-sh-ink)]">
+                      Previous assignees
+                    </span>
+                    <span className="text-xs font-semibold tabular-nums text-[var(--color-sh-ink-faint)]">
+                      {total}
+                    </span>
+                    <div className="h-px flex-1 bg-[var(--color-sh-warm-border)]" />
+                  </div>
+                  {previousAssignee && renderAssignee(previousAssignee, true)}
+                  {pastAssignees.length > 0 && (
+                    <>
+                      <p className="px-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-faint)]">
+                        Past assignees
+                      </p>
+                      {pastAssignees.map((e) => renderAssignee(e, false))}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Recipients section header — hairline rule matches the list view's
                 section dividers, giving the lower half a clear title. */}
