@@ -196,7 +196,7 @@ type GroupBy = 'status' | 'date';
 // webhook closes the card and pins a selection together), and the published-state
 // cards split into "published" (live, not yet broadcast) vs "broadcaster"
 // (already broadcast to recipients).
-type Bucket = 'published' | 'broadcaster' | 'selected' | 'assigned' | 'cancelled';
+type Bucket = 'published' | 'broadcaster' | 'selected' | 'assigned' | 'paused' | 'cancelled';
 
 /**
  * Precedence-based bucketing. A card with `selected_recipient_id` set always
@@ -205,13 +205,18 @@ type Bucket = 'published' | 'broadcaster' | 'selected' | 'assigned' | 'cancelled
  * exists do we fall through to state-based buckets. A live published card then
  * splits by whether its recipients have been sent: `needs_broadcast` → the
  * "published" (awaiting-broadcast) bucket, otherwise the "broadcaster" bucket.
- * Closed cards land in "cancelled", which the Archive tab surfaces.
+ * Closed cards land in "cancelled" and paused-but-still-assigned cards in
+ * "paused", each surfaced by its own tab.
  */
 function categorize(card: PublishedCard): Bucket {
   // Cancelled wins over the recipient pointer: cancelling a LIVE assignment
   // keeps selected_recipient_id for audit, and without this check the card
   // would sit in the Assigned tab forever offering actions that all 409.
   if (card.cancelled_at || card.state === 'closed') return 'cancelled';
+  // A paused card keeps its selected_recipient_id and state='assigned' (pause
+  // memory for resume), so it must be pulled out before the assigned check or
+  // it would sit in the Assigned tab looking live.
+  if (card.paused_at) return 'paused';
   if (card.selected_recipient_id) return 'assigned';
   if (card.state === 'assigned') return 'selected';
   // state === 'published'
@@ -246,12 +251,12 @@ function publishedCardTitle(card: PublishedCard): string {
   return subName ? `${business} · ${subName}` : business;
 }
 
-type Tab = 'requests' | 'published' | 'broadcaster' | 'selected' | 'assigned' | 'archive' | 'custom';
+type Tab = 'requests' | 'published' | 'broadcaster' | 'selected' | 'assigned' | 'paused' | 'cancelled' | 'archive' | 'custom';
 
 // Tabs backed by the published-cards lists (as opposed to New deals / Custom,
 // which render their own components). These share the active + archived card
 // queries and support the card detail view.
-const CARD_LIST_TABS = ['published', 'broadcaster', 'selected', 'assigned', 'archive'] as const;
+const CARD_LIST_TABS = ['published', 'broadcaster', 'selected', 'assigned', 'paused', 'cancelled', 'archive'] as const;
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'requests', label: 'New deals' },
@@ -259,6 +264,8 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'broadcaster', label: 'Broadcasted' },
   { key: 'selected', label: 'Selected' },
   { key: 'assigned', label: 'Assigned' },
+  { key: 'paused', label: 'Paused' },
+  { key: 'cancelled', label: 'Cancelled' },
   { key: 'archive', label: 'Archive' },
   { key: 'custom', label: 'Custom' },
 ];
@@ -282,11 +289,19 @@ const HEADER_META: Record<Tab, { title: string; subtitle: string }> = {
   },
   assigned: {
     title: 'Assigned',
-    subtitle: 'Cards with a final recipient assigned.',
+    subtitle: 'Cards with a final recipient assigned. Pause or cancel a subscription right from its row.',
+  },
+  paused: {
+    title: 'Paused',
+    subtitle: 'Subscriptions paused mid-assignment — billing and the talent are on hold. Open one to resume (same talent or rebroadcast) or cancel it.',
+  },
+  cancelled: {
+    title: 'Cancelled',
+    subtitle: 'Subscriptions that were cancelled. Billing stopped on the cancel date and the card is closed.',
   },
   archive: {
     title: 'Archive',
-    subtitle: 'Cancelled and declined cards, plus anything you’ve archived. Hidden from talent feeds and the active pipeline.',
+    subtitle: 'Cards you’ve archived — hidden from talent feeds and the active pipeline.',
   },
   custom: {
     title: 'Custom Cards',
@@ -313,9 +328,17 @@ const EMPTY_COPY: Record<(typeof CARD_LIST_TABS)[number], { title: string; hint:
     title: 'No assigned cards',
     hint: 'Cards with a final recipient assigned show up here.',
   },
+  paused: {
+    title: 'No paused subscriptions',
+    hint: 'Assigned subscriptions you pause show up here until you resume or cancel them.',
+  },
+  cancelled: {
+    title: 'No cancelled subscriptions',
+    hint: 'Subscriptions you cancel show up here with their final billing dates.',
+  },
   archive: {
     title: 'Nothing archived yet',
-    hint: 'Cancelled and declined cards, plus anything you archive, show up here.',
+    hint: 'Cards you archive show up here.',
   },
 };
 
@@ -445,25 +468,26 @@ export default function AdminPublishedCards() {
     (pendingBriefRes?.data || []).length;
 
   const bucketed = useMemo(() => {
-    const out: Record<Bucket, PublishedCard[]> = { published: [], broadcaster: [], selected: [], assigned: [], cancelled: [] };
+    const out: Record<Bucket, PublishedCard[]> = { published: [], broadcaster: [], selected: [], assigned: [], paused: [], cancelled: [] };
     for (const c of activeCards) out[categorize(c)].push(c);
     return out;
   }, [activeCards]);
 
-  // Archive = manually-archived cards + cancelled/declined (closed) cards,
-  // deduped by id so a card that is somehow both never shows twice.
+  // Archive = only cards explicitly archived (archived_at set). Cancelled cards
+  // now have their own tab, so they're no longer folded in here. Deduped by id.
   const archiveCards = useMemo(() => {
     const byId = new Map<string, PublishedCard>();
     for (const c of archivedCards) byId.set(c.id, c);
-    for (const c of bucketed.cancelled) if (!byId.has(c.id)) byId.set(c.id, c);
     return [...byId.values()];
-  }, [archivedCards, bucketed.cancelled]);
+  }, [archivedCards]);
 
   const tabCounts = useMemo(() => ({
     published: bucketed.published.length,
     broadcaster: bucketed.broadcaster.length,
     selected: bucketed.selected.length,
     assigned: bucketed.assigned.length,
+    paused: bucketed.paused.length,
+    cancelled: bucketed.cancelled.length,
     archive: archiveCards.length,
   }), [bucketed, archiveCards]);
 
@@ -484,6 +508,8 @@ export default function AdminPublishedCards() {
       case 'broadcaster': return bucketed.broadcaster;
       case 'selected': return bucketed.selected;
       case 'assigned': return bucketed.assigned;
+      case 'paused': return bucketed.paused;
+      case 'cancelled': return bucketed.cancelled;
       case 'archive': return archiveCards;
       default: return [] as PublishedCard[];
     }
@@ -585,6 +611,7 @@ export default function AdminPublishedCards() {
               {TABS.map(({ key, label }) => {
                 const count =
                   key === 'published' || key === 'broadcaster' || key === 'selected' || key === 'assigned'
+                  || key === 'paused' || key === 'cancelled'
                     ? tabCounts[key]
                     : key === 'archive'
                       ? tabCounts.archive
@@ -715,23 +742,23 @@ export default function AdminPublishedCards() {
           ) : groupBy === 'date' ? (
             <div className="space-y-7">
               {dateGroups.today.length > 0 && (
-                <CardGroup label="Today" color="#475569" items={dateGroups.today} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive'} showArchivedTag={activeTab === 'archive'} />
+                <CardGroup label="Today" color="#475569" items={dateGroups.today} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive' || activeTab === 'cancelled'} showArchivedTag={activeTab === 'archive'} />
               )}
               {dateGroups.yesterday.length > 0 && (
-                <CardGroup label="Yesterday" color="#475569" items={dateGroups.yesterday} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive'} showArchivedTag={activeTab === 'archive'} />
+                <CardGroup label="Yesterday" color="#475569" items={dateGroups.yesterday} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive' || activeTab === 'cancelled'} showArchivedTag={activeTab === 'archive'} />
               )}
               {dateGroups.thisWeek.length > 0 && (
-                <CardGroup label="Earlier this week" color="#475569" items={dateGroups.thisWeek} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive'} showArchivedTag={activeTab === 'archive'} />
+                <CardGroup label="Earlier this week" color="#475569" items={dateGroups.thisWeek} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive' || activeTab === 'cancelled'} showArchivedTag={activeTab === 'archive'} />
               )}
               {dateGroups.earlier.length > 0 && (
-                <CardGroup label="Earlier" color="#475569" items={dateGroups.earlier} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive'} showArchivedTag={activeTab === 'archive'} />
+                <CardGroup label="Earlier" color="#475569" items={dateGroups.earlier} onOpen={setSelectedCardId} showCancelledTag={activeTab === 'archive' || activeTab === 'cancelled'} showArchivedTag={activeTab === 'archive'} />
               )}
             </div>
           ) : (
             <CardList
               items={cardsForTab}
               onOpen={setSelectedCardId}
-              canShowCancelled={activeTab === 'archive'}
+              canShowCancelled={activeTab === 'archive' || activeTab === 'cancelled'}
               canShowArchived={activeTab === 'archive'}
             />
           )}
@@ -887,7 +914,7 @@ function priceLabelForCard(card: PublishedCard): string {
   return priceValue ? `${priceCurrency}${Number(priceValue).toLocaleString()}/mo` : '';
 }
 
-function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag, onReinstate, reinstating }: { card: PublishedCard; onOpen: () => void; showCancelledTag: boolean; showArchivedTag?: boolean; onReinstate?: () => void; reinstating?: boolean }) {
+function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag, onReinstate, reinstating, onPause, onCancel, pausing, cancelling }: { card: PublishedCard; onOpen: () => void; showCancelledTag: boolean; showArchivedTag?: boolean; onReinstate?: () => void; reinstating?: boolean; onPause?: () => void; onCancel?: () => void; pausing?: boolean; cancelling?: boolean }) {
   const business = card.submission?.business_name || card.brand_name || 'Unknown';
   const serviceType = card.service_type || '';
   const planName =
@@ -972,6 +999,45 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag, onR
     );
   }
 
+  // Assigned rows get inline Pause / Cancel actions — the same nested-button-safe
+  // layout as the archived Reinstate row (a <button> can't nest inside a <button>).
+  if (categorize(card) === 'assigned' && onPause && onCancel) {
+    return (
+      <div className="sh-card sh-card-interactive relative flex w-full items-center justify-between px-5 py-4 text-left">
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={`Open ${business}`}
+          className="absolute inset-0 z-0"
+        />
+        <div className="pointer-events-none relative z-10 flex min-w-0 flex-1 items-center">
+          {leftBlock}
+        </div>
+        <div className="relative z-10 flex shrink-0 items-center gap-2 pl-3">
+          <div className="pointer-events-none">{statusCluster}</div>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onPause(); }}
+            disabled={pausing || cancelling}
+            className="sh-btn-warning shrink-0"
+            title="Pause billing and release the talent — you can resume later"
+          >
+            {pausing ? 'Pausing…' : 'Pause'}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onCancel(); }}
+            disabled={pausing || cancelling}
+            className="sh-btn-danger shrink-0"
+            title="Cancel this subscription — billing stops and the card closes permanently"
+          >
+            {cancelling ? 'Cancelling…' : 'Cancel'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <button
       onClick={onOpen}
@@ -1038,6 +1104,21 @@ function CardStatusAndCounts({ card, showCancelledTag, showArchivedTag }: { card
         )}
         {(() => {
           const bucket = categorize(card);
+          if (bucket === 'paused') {
+            return (
+              <span
+                className="sh-status-pill"
+                style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}
+                title={
+                  card.paused_at
+                    ? `Paused on ${new Date(card.paused_at).toLocaleDateString()}. Billing and the talent are on hold until you resume or cancel.`
+                    : 'Paused'
+                }
+              >
+                Paused{card.paused_at ? ` · ${new Date(card.paused_at).toLocaleDateString()}` : ''}
+              </span>
+            );
+          }
           if (bucket === 'assigned') {
             const isUnreviewed = !card.admin_reviewed_at;
             return (
@@ -1222,6 +1303,29 @@ function CardList({ items, onOpen, canShowCancelled, canShowArchived }: {
       showToast(err?.response?.data?.error || err.message || 'Failed to reinstate card', 'error');
     },
   });
+  // Inline pause / cancel straight from an assigned row. Both stop billing today
+  // (the server ends the active assignment term) and release the talent; the
+  // active list refetches so the row moves to the Paused / Cancelled tab.
+  const pause = useMutation({
+    mutationFn: (cardId: string) => api.post(`/admin/subscription-cards/${cardId}/pause`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      showToast('Subscription paused — billing stops today and the talent is released.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to pause subscription', 'error');
+    },
+  });
+  const cancel = useMutation({
+    mutationFn: (cardId: string) => api.post(`/admin/subscription-cards/${cardId}/cancel`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      showToast('Subscription cancelled — billing stopped and the card is closed.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to cancel subscription', 'error');
+    },
+  });
   return (
     <div className="space-y-2">
       {entries.map((e) =>
@@ -1234,6 +1338,18 @@ function CardList({ items, onOpen, canShowCancelled, canShowArchived }: {
             showArchivedTag={!!canShowArchived && !!e.card.archived_at}
             onReinstate={() => reinstate.mutate(e.card.id)}
             reinstating={reinstate.isPending && reinstate.variables === e.card.id}
+            onPause={() => {
+              if (window.confirm('Pause this subscription?\n\nBilling stops today and the talent is released until you resume.')) {
+                pause.mutate(e.card.id);
+              }
+            }}
+            onCancel={() => {
+              if (window.confirm('Cancel this subscription permanently?\n\nBilling stops today, the card closes, and the talent is released. This cannot be undone.')) {
+                cancel.mutate(e.card.id);
+              }
+            }}
+            pausing={pause.isPending && pause.variables === e.card.id}
+            cancelling={cancel.isPending && cancel.variables === e.card.id}
           />
         ) : (
           <GroupedPublishedCard
