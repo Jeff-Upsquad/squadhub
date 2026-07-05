@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { resolveFinalizedPrice } from '@squadhub/shared';
 import api from '@/services/api';
+import { showToast } from '@/components/Toast';
 import AdminPublishedCardRecipientsPanel from './AdminPublishedCardRecipientsPanel';
 import AdminPublishedCardRecipientsView from './AdminPublishedCardRecipientsView';
 import AdminRequestsList from './AdminRequestsList';
@@ -886,7 +887,7 @@ function priceLabelForCard(card: PublishedCard): string {
   return priceValue ? `${priceCurrency}${Number(priceValue).toLocaleString()}/mo` : '';
 }
 
-function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: { card: PublishedCard; onOpen: () => void; showCancelledTag: boolean; showArchivedTag?: boolean }) {
+function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag, onReinstate, reinstating }: { card: PublishedCard; onOpen: () => void; showCancelledTag: boolean; showArchivedTag?: boolean; onReinstate?: () => void; reinstating?: boolean }) {
   const business = card.submission?.business_name || card.brand_name || 'Unknown';
   const serviceType = card.service_type || '';
   const planName =
@@ -901,45 +902,83 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag }: {
     ? publisher.display_name || publisher.email || publisher.id.slice(0, 8)
     : null;
 
+  const leftBlock = (
+    <div className="flex min-w-0 items-center gap-3">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
+        {business.charAt(0).toUpperCase()}
+      </div>
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
+            {business}
+          </p>
+          <ServiceTypeBadge serviceType={serviceType} />
+          <CardTypeBadge cardType={card.card_type} />
+          {card.card_code && (
+            <span className="shrink-0 font-mono text-[10px] text-[var(--color-sh-ink-faint)]">
+              {card.card_code}
+            </span>
+          )}
+        </div>
+        {(planName || priceLabel) && (
+          <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
+            {planName}
+            {planName && priceLabel ? ', ' : ''}
+            {priceLabel}
+          </p>
+        )}
+        {(card.published_at || publisherLabel) && (
+          <p className="mt-1 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
+            {card.published_at ? formatPublishedAt(card.published_at) : ''}
+            {card.published_at && publisherLabel ? ' · ' : ''}
+            {publisherLabel ? `by ${publisherLabel}` : ''}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+  const statusCluster = (
+    <CardStatusAndCounts card={card} showCancelledTag={showCancelledTag} showArchivedTag={showArchivedTag} />
+  );
+
+  // Archived rows get an inline Reinstate action. The plain row is itself a
+  // <button>, and a <button> can't nest inside a <button> — so here we render a
+  // card-shaped <div> with a full-bleed click layer beneath the content (keeps
+  // the whole row openable) and the Reinstate button layered above it.
+  if (showArchivedTag && card.archived_at && onReinstate) {
+    return (
+      <div className="sh-card sh-card-interactive relative flex w-full items-center justify-between px-5 py-4 text-left">
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={`Open ${business}`}
+          className="absolute inset-0 z-0"
+        />
+        <div className="pointer-events-none relative z-10 flex min-w-0 flex-1 items-center">
+          {leftBlock}
+        </div>
+        <div className="relative z-10 flex shrink-0 items-center gap-2 pl-3">
+          <div className="pointer-events-none">{statusCluster}</div>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onReinstate(); }}
+            disabled={reinstating}
+            className="sh-btn-primary shrink-0"
+          >
+            {reinstating ? 'Reinstating…' : 'Reinstate'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <button
       onClick={onOpen}
       className="sh-card sh-card-interactive flex w-full items-center justify-between px-5 py-4 text-left"
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
-          {business.charAt(0).toUpperCase()}
-        </div>
-        <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">
-              {business}
-            </p>
-            <ServiceTypeBadge serviceType={serviceType} />
-            <CardTypeBadge cardType={card.card_type} />
-            {card.card_code && (
-              <span className="shrink-0 font-mono text-[10px] text-[var(--color-sh-ink-faint)]">
-                {card.card_code}
-              </span>
-            )}
-          </div>
-          {(planName || priceLabel) && (
-            <p className="mt-0.5 truncate text-xs text-[var(--color-sh-ink-muted)]">
-              {planName}
-              {planName && priceLabel ? ', ' : ''}
-              {priceLabel}
-            </p>
-          )}
-          {(card.published_at || publisherLabel) && (
-            <p className="mt-1 truncate text-[11px] text-[var(--color-sh-ink-faint)]">
-              {card.published_at ? formatPublishedAt(card.published_at) : ''}
-              {card.published_at && publisherLabel ? ' · ' : ''}
-              {publisherLabel ? `by ${publisherLabel}` : ''}
-            </p>
-          )}
-        </div>
-      </div>
-      <CardStatusAndCounts card={card} showCancelledTag={showCancelledTag} showArchivedTag={showArchivedTag} />
+      {leftBlock}
+      {statusCluster}
     </button>
   );
 }
@@ -1169,6 +1208,20 @@ function CardList({ items, onOpen, canShowCancelled, canShowArchived }: {
   canShowArchived?: boolean;
 }) {
   const entries = useMemo(() => buildCardListEntries(items), [items]);
+  const qc = useQueryClient();
+  // Inline reinstate straight from an archived row — no need to open the card.
+  // Clears archived_at server-side; both the active + archived lists refetch,
+  // so the row leaves the Archive tab on success.
+  const reinstate = useMutation({
+    mutationFn: (cardId: string) => api.post(`/admin/subscription-cards/${cardId}/reinstate`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      showToast('Card reinstated to its previous state.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to reinstate card', 'error');
+    },
+  });
   return (
     <div className="space-y-2">
       {entries.map((e) =>
@@ -1179,6 +1232,8 @@ function CardList({ items, onOpen, canShowCancelled, canShowArchived }: {
             onOpen={() => onOpen(e.card.id)}
             showCancelledTag={canShowCancelled && e.card.state === 'closed'}
             showArchivedTag={!!canShowArchived && !!e.card.archived_at}
+            onReinstate={() => reinstate.mutate(e.card.id)}
+            reinstating={reinstate.isPending && reinstate.variables === e.card.id}
           />
         ) : (
           <GroupedPublishedCard
