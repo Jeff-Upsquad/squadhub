@@ -116,7 +116,7 @@ export default function AdminSubscriptionAssignments() {
           <p className="mt-1 text-sm text-foreground-muted">
             {view === 'user'
               ? 'Each partner / talent and the subscriptions they’re serving — with the monthly payment owed and an hours snapshot.'
-              : 'Each talent serving a client’s subscription, and their term. Start / end dates are captured automatically; work start / end dates default to those and can be edited.'}
+              : 'Each talent serving a client’s subscription. Work start / end dates drive billing and can be edited; assigned / unassigned dates are captured automatically.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -208,10 +208,10 @@ function BySubscriptionView() {
               <tr>
                 <th className="px-4 py-2.5">Business · Subscription</th>
                 <th className="px-4 py-2.5">Talent</th>
-                <th className="px-4 py-2.5">Joined</th>
-                <th className="px-4 py-2.5">Left</th>
-                <th className="px-4 py-2.5">Work start</th>
-                <th className="px-4 py-2.5">Work end</th>
+                <th className="px-4 py-2.5 text-foreground">Work start</th>
+                <th className="px-4 py-2.5 text-foreground">Work end</th>
+                <th className="px-4 py-2.5 font-normal normal-case tracking-normal text-foreground-dim">Assigned</th>
+                <th className="px-4 py-2.5 font-normal normal-case tracking-normal text-foreground-dim">Unassigned</th>
                 <th className="px-4 py-2.5">Status</th>
                 <th className="px-4 py-2.5"></th>
               </tr>
@@ -231,10 +231,10 @@ function BySubscriptionView() {
                       <span className="ml-1 text-[11px] text-foreground-dim">(partner)</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-foreground-muted">{fmtTimestamp(r.assigned_date)}</td>
-                  <td className="px-4 py-2.5 text-foreground-muted">{fmtTimestamp(r.unassigned_date)}</td>
-                  <td className="px-4 py-2.5 text-foreground-muted">{fmtDate(r.work_start_date)}</td>
-                  <td className="px-4 py-2.5 text-foreground-muted">{fmtDate(r.work_end_date)}</td>
+                  <td className="px-4 py-2.5 font-medium text-foreground">{fmtDate(r.work_start_date)}</td>
+                  <td className="px-4 py-2.5 font-medium text-foreground">{fmtDate(r.work_end_date)}</td>
+                  <td className="px-4 py-2.5 text-xs text-foreground-dim">{fmtTimestamp(r.assigned_date)}</td>
+                  <td className="px-4 py-2.5 text-xs text-foreground-dim">{fmtTimestamp(r.unassigned_date)}</td>
                   <td className="px-4 py-2.5">
                     <span
                       className={`rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${STATUS_BADGE[r.status]}`}
@@ -340,7 +340,7 @@ function EditDatesModal({
         </div>
 
         <div className="mt-3 rounded-md bg-surface-alt px-3 py-2 text-[11px] text-foreground-muted">
-          Joined {fmtTimestamp(term.assigned_date)} · Left {fmtTimestamp(term.unassigned_date)} (auto-captured)
+          Assigned {fmtTimestamp(term.assigned_date)} · Unassigned {fmtTimestamp(term.unassigned_date)} (auto-captured)
         </div>
 
         {invalid && (
