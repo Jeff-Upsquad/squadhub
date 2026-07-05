@@ -167,6 +167,29 @@ export async function buildSquadhirePayloadForCard(
     contentSource = parent as any;
   }
 
+  // Never-published guard — the single chokepoint for EVERY delivery path
+  // (archive / reinstate / inline publish / retry sweeper). A card that was
+  // never published has no mirror on SquadHire, so "delivering" it updates
+  // nothing — it CREATES the card there and triggers a fresh talent broadcast
+  // on first ingest, even for a draft an admin merely spun up and archived
+  // (archive re-delivers to flip an EXISTING mirror to 'archived'; it must
+  // never be the card's first contact with SquadHire). Only cards actually
+  // published (published_at set) or advanced past it (assigned / closed) may
+  // reach SquadHire; a new/draft with no published_at never does, archived or
+  // not. This is the belt to the sweeper's own never-published filter.
+  const wasEverPublished =
+    !!(card as any).published_at ||
+    card.state === 'published' ||
+    card.state === 'assigned' ||
+    card.state === 'closed';
+  if (!wasEverPublished) {
+    console.warn(
+      '[squadhire] skipping delivery — card was never published',
+      { cardId, state: card.state, archived: !!(card as any).archived_at },
+    );
+    return null;
+  }
+
   // Skip-if-empty gate: an admin who didn't pick any SquadHire categories
   // doesn't want this card on SquadHire. The publish handler treats a null
   // payload as a no-op, so the outbound fetch + retry loop never starts.
