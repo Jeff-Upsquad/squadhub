@@ -1282,7 +1282,7 @@ router.get('/subscription-cards/:id/match-pool', async (req: Request, res: Respo
 // ============================================================
 // POST /admin/subscription-cards/:id/resume
 //
-// Restart a paused subscription. Two modes:
+// Restart a paused subscription. Modes:
 //   same_talent — re-assign the previous talent: fresh term from today,
 //                 SquadHire direct-assign (back into My Clients), content
 //                 re-delivery. Billing resumes today.
@@ -1290,14 +1290,19 @@ router.get('/subscription-cards/:id/match-pool', async (req: Request, res: Respo
 //                 round, reopen the card to `published`, and re-fan-out to
 //                 the matching pool. Billing stays stopped until a new talent
 //                 is finalized (the sourcing gap is unbilled by design).
+//   reopen      — like rebroadcast but WITHOUT the fan-out: archive the old
+//                 round and reset to `published` with a fresh not-yet-broadcast
+//                 posture, so the card lands back in the Published tab (former
+//                 assignees + "who would match" preview) and the admin drives
+//                 Broadcast + selection through the normal flow.
 // ============================================================
 const resumeSchema = z.object({
-  mode: z.enum(['same_talent', 'same_talent_offer', 'rebroadcast']),
+  mode: z.enum(['same_talent', 'same_talent_offer', 'rebroadcast', 'reopen']),
 });
 
 export async function resumeCardCore(
   cardId: string,
-  mode: 'same_talent' | 'same_talent_offer' | 'rebroadcast',
+  mode: 'same_talent' | 'same_talent_offer' | 'rebroadcast' | 'reopen',
   actor: CardActor,
 ): Promise<CardLifecycleResult> {
   try {
@@ -1508,6 +1513,65 @@ export async function resumeCardCore(
           warnings.push('Reopened and offered to the previous talent, but SquadHire was not notified — they may not see the offer yet. The system will retry automatically.');
         }
       }
+    } else if (mode === 'reopen') {
+      // reopen: archive the current round and reset the card to `published`
+      // WITHOUT broadcasting. Give it the same posture a fresh, not-yet-
+      // broadcast broadcast card has — distribution='broadcast', mirror treated
+      // as un-synced, cached match preview cleared — so it sits in the Published
+      // tab (needs_broadcast) and the "who would match" preview recomputes. The
+      // fan-out is deferred to the admin's Broadcast (first-delivery), matching
+      // the normal Published → Broadcast → select flow.
+      const oldType = card.selected_recipient_type as 'talent' | 'partner' | null;
+      const oldId = card.selected_recipient_id as string | null;
+
+      const archivedAt = nowIso;
+      await supabaseAdmin
+        .from('subscription_card_recipients')
+        .update({ archived_at: archivedAt })
+        .eq('card_id', cardId)
+        .is('archived_at', null);
+      await supabaseAdmin
+        .from('subscription_card_external_recipients')
+        .update({ archived_at: archivedAt })
+        .eq('card_id', cardId)
+        .is('archived_at', null);
+
+      await resetCardAndCloseTerms(cardId); // card → published; paused_at/selection cleared; term closed
+
+      if (oldType === 'talent' && oldId) {
+        handOffSpaceToNewTalent({
+          cardId,
+          oldRecipientType: 'talent',
+          oldRecipientId: oldId,
+          newRecipientType: null,
+          newRecipientId: null,
+        }).catch((err) => console.error('[resume:reopen] space hand-off failed', err));
+      }
+
+      // Clear the previous talent's selection on SquadHire (drops it from My
+      // Clients). Fired while the mirror is still considered synced.
+      notifySquadhireOfSelectionUndo(cardId).catch((err) => {
+        console.error('[resume:reopen] notify squadhire selection-undo failed', err);
+      });
+
+      // Fresh-broadcast posture: a broadcast-distribution card whose mirror is
+      // treated as never-delivered, so needs_broadcast is true (Published tab)
+      // and the match preview is eligible to recompute. NOT delivered here.
+      // squadhire_sync_attempts MUST reset to 0 alongside squadhire_synced_at:
+      // the sync sweeper delivers a published broadcast card with synced_at NULL
+      // only when attempts > 0, so leaving the old (non-zero) count would let it
+      // auto-broadcast to talents behind the admin's back. Attempts 0 keeps it
+      // staged until the admin clicks Broadcast (mirrors a freshly published
+      // card, and recall/close's synced_at+attempts reset).
+      await supabaseAdmin
+        .from('subscription_cards')
+        .update({
+          distribution: 'broadcast',
+          squadhire_synced_at: null,
+          squadhire_sync_attempts: 0,
+          squadhire_match_preview: null,
+        })
+        .eq('id', cardId);
     } else {
       // rebroadcast: reopen to a fresh round (mirrors reopen-for-new-talents),
       // then re-fan-out. The card leaves `assigned`, so the "previous talent"
