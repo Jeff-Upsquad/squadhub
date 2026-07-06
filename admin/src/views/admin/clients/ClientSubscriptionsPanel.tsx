@@ -33,10 +33,13 @@ const TIER_COLOR: Record<SubscriptionTier, string> = {
 // ============================================================
 type SubLifecycleBucket =
   | 'newdeal' | 'published' | 'broadcaster' | 'selected'
-  | 'assigned' | 'paused' | 'cancelled' | 'archived';
+  | 'assigned' | 'paused' | 'cancelled';
 
 function subscriptionBucket(cs: ClientSubscription): SubLifecycleBucket {
-  if (cs.archived_at) return 'archived';
+  // No dedicated "Archived" bucket — the grouping mirrors the Published Cards
+  // section, which surfaces archived/custom in their own tabs, not here. When
+  // "Show archived" is on, an archived subscription still folds into its
+  // lifecycle bucket (rendered with an "Archived" pill + Unarchive action).
   const card = cs.card;
   if (card) {
     // Cancelled/closed and paused win over the recipient pointer — both keep
@@ -64,7 +67,6 @@ const SUB_GROUPS: { key: SubLifecycleBucket; label: string; color: string; prima
   { key: 'assigned',    label: 'Assigned',    color: '#10b981', primary: true },
   { key: 'paused',      label: 'Paused',      color: '#f59e0b', primary: false },
   { key: 'cancelled',   label: 'Cancelled',   color: '#ef4444', primary: false },
-  { key: 'archived',    label: 'Archived',    color: '#94a3b8', primary: false },
 ];
 
 /**
@@ -97,7 +99,7 @@ export default function ClientSubscriptionsPanel({
   const grouped = useMemo(() => {
     const g: Record<SubLifecycleBucket, ClientSubscription[]> = {
       newdeal: [], published: [], broadcaster: [], selected: [],
-      assigned: [], paused: [], cancelled: [], archived: [],
+      assigned: [], paused: [], cancelled: [],
     };
     subs.forEach((cs) => { g[subscriptionBucket(cs)].push(cs); });
     return g;
