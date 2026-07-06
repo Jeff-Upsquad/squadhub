@@ -1121,6 +1121,16 @@ export async function pauseCardCore(cardId: string, actor: CardActor): Promise<C
       }
     }
 
+    // Re-deliver the card so SquadHire moves it into its Paused section. Pause
+    // keeps the card state='assigned', so this full re-delivery — which now
+    // carries paused_at — is the only signal that tells SquadHire it's paused;
+    // without it the business portal keeps listing the card as a live Active
+    // subscription. Awaited (not fire-and-forget): an already-synced assigned
+    // card gets no sweeper retry, so a silent failure would strand it in Active.
+    if ((await redeliverCardContent(cardId)) !== null) {
+      warnings.push('Paused, but SquadHire may still show this as an active subscription — the card sync failed. Resume and pause again to retry.');
+    }
+
     // Mirror onto the linked Clients-module subscription (best-effort).
     await syncClientSubscriptionForCard(cardId, { status: 'paused' });
 
