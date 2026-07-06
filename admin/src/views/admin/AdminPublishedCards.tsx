@@ -540,11 +540,21 @@ export default function AdminPublishedCards() {
       .sort((a, b) => tierRankOf(a) - tierRankOf(b));
   }, [allLoadedCards, selectedCard]);
 
+  // "All tiers" is the default overview when a grouped card is opened (no
+  // ?rv=). A specific tier is marked with ?rv=tier so the back button and the
+  // list open still land on the merged view first.
+  const allTiersMode = selectedGroupCards.length > 1 && searchParams.get('rv') !== 'tier';
+
   // Switch the active tier inside the opened card. Uses replace (not push) so
   // the back button still returns to the list, not the previously-viewed tier.
   const selectTierCard = useCallback(
-    (id: string) => { router.replace(`${pathname}?card=${id}`); },
+    (id: string) => { router.replace(`${pathname}?card=${id}&rv=tier`); },
     [router, pathname],
+  );
+  // Back to the merged "All tiers" overview (drops the ?rv=tier marker).
+  const selectAllTiers = useCallback(
+    () => { if (selectedCardId) router.replace(`${pathname}?card=${selectedCardId}`); },
+    [router, pathname, selectedCardId],
   );
 
   // The card detail view is driven purely by ?card= (whichever tab is active).
@@ -725,8 +735,16 @@ export default function AdminPublishedCards() {
           title={publishedCardTitle(selectedCard)}
           onBack={() => { setSelectedCardId(null); setShowPanel(false); }}
           onOpenPanel={() => setShowPanel(true)}
+          groupCards={selectedGroupCards}
+          allTiersMode={allTiersMode}
           tierTabs={selectedGroupCards.length > 1 ? (
-            <DetailTierTabs cards={selectedGroupCards} activeId={selectedCard.id} onSelect={selectTierCard} />
+            <DetailTierTabs
+              cards={selectedGroupCards}
+              activeId={selectedCard.id}
+              allActive={allTiersMode}
+              onSelect={selectTierCard}
+              onSelectAll={selectAllTiers}
+            />
           ) : undefined}
         />
       ) : isCardListTab ? (
@@ -1454,18 +1472,37 @@ function GroupedPublishedCard({ cards, onOpen }: {
 // The per-tier tab control rendered inside the opened card (detail view). Each
 // tab is a tier sibling; selecting it swaps the active card so the recipients
 // below are that tier's matched talents.
-function DetailTierTabs({ cards, activeId, onSelect }: {
+function DetailTierTabs({ cards, activeId, allActive, onSelect, onSelectAll }: {
   cards: PublishedCard[];
   activeId: string;
+  allActive?: boolean;
   onSelect: (id: string) => void;
+  onSelectAll?: () => void;
 }) {
+  const tabClass = (active: boolean) =>
+    `rounded-full border px-3 py-1 text-xs font-medium transition ${
+      active
+        ? 'border-transparent bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] shadow-[inset_0_0_0_1px_var(--color-sh-ink)]'
+        : 'border-[var(--color-sh-warm-border)] bg-surface text-[var(--color-sh-ink-muted)] hover:text-[var(--color-sh-ink)]'
+    }`;
   return (
     <div className="mt-3 flex flex-wrap items-center gap-1.5">
       <span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-faint)]">
         Tiers
       </span>
+      {onSelectAll && (
+        <button
+          type="button"
+          onClick={onSelectAll}
+          data-active={allActive}
+          className={tabClass(!!allActive)}
+          title="Show every tier's recipients together"
+        >
+          All
+        </button>
+      )}
       {cards.map((c) => {
-        const isActive = c.id === activeId;
+        const isActive = !allActive && c.id === activeId;
         const price = priceLabelForCard(c);
         return (
           <button
