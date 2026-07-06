@@ -37,6 +37,11 @@ interface AssignmentTerm {
   plan_name?: string | null;
   plan_label?: string | null;
   plan_tier?: string | null;
+  // Monthly hours completion (per card): plan target vs. tracked+elapsed actual.
+  additional_hours?: number;
+  additional_payment?: number;
+  actual_hours?: number;
+  target_hours_this_month?: number;
 }
 
 /** Paused/Cancelled chip for a term's card (null when neither applies). */
@@ -155,6 +160,11 @@ interface ClientGroup {
   missing_partner_price: boolean;
   committed_hours: { daily: number | null; weekly: number | null; monthly: number | null };
   plan_name: string | null;
+  // Hours completion for the card (identical across its periods → set once).
+  additional_hours: number;
+  additional_payment: number;
+  actual_hours: number;
+  target_hours: number;
 }
 
 // Row shape shared by the enriched By-subscription term and the detail card.
@@ -174,6 +184,10 @@ interface PeriodInput {
   plan_name?: string | null;
   plan_label?: string | null;
   plan_tier?: string | null;
+  additional_hours?: number;
+  additional_payment?: number;
+  actual_hours?: number;
+  target_hours_this_month?: number;
   term_id?: string;
   id?: string;
   recipient_type?: 'talent' | 'partner';
@@ -213,6 +227,11 @@ function groupIntoClients(rows: PeriodInput[], keyOf: (r: PeriodInput) => string
         missing_partner_price: r.missing_partner_price,
         committed_hours: r.committed_hours,
         plan_name: r.plan_name ?? null,
+        // Set once per card (identical across its in-month periods).
+        additional_hours: r.additional_hours ?? 0,
+        additional_payment: r.additional_payment ?? 0,
+        actual_hours: r.actual_hours ?? 0,
+        target_hours: r.target_hours_this_month ?? 0,
       };
       map.set(key, g);
     }
@@ -246,6 +265,67 @@ function groupIntoClients(rows: PeriodInput[], keyOf: (r: PeriodInput) => string
 
 function partnerPriceLabel(g: { missing_partner_price: boolean; partner_price: number | null; currency: string | null }) {
   return g.missing_partner_price ? '—' : `${formatMoney(g.partner_price || 0, g.currency)}/mo`;
+}
+
+// Signed hours-delta chip: +2.5 hrs (emerald overage) / −1 hrs (red shortfall) /
+// — at 0. Tooltip shows the actual vs. target hours behind the delta.
+function HoursDeltaChip({ hours, actual, target }: { hours: number; actual?: number; target?: number }) {
+  if (!hours) return <span className="text-foreground-dim">—</span>;
+  const up = hours > 0;
+  return (
+    <span
+      className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+        up ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+      }`}
+      title={actual != null && target != null ? `Actual ${actual} hrs vs target ${target} hrs` : undefined}
+    >
+      {up ? '+' : '−'}
+      {Math.abs(hours)} hrs
+    </span>
+  );
+}
+
+// Fold a signed additional payment into the base per-currency payment buckets.
+function combinePayments(
+  payments: { currency: string; amount: number }[],
+  additionalPayment: number,
+  currency: string | null,
+) {
+  if (!additionalPayment) return payments;
+  const cur = currency || 'UNKNOWN';
+  const out = payments.map((p) => ({ ...p }));
+  const hit = out.find((p) => p.currency === cur);
+  if (hit) hit.amount += additionalPayment;
+  else out.push({ currency: cur, amount: additionalPayment });
+  return out.filter((p) => p.amount !== 0);
+}
+
+// Pay cell: the month's total (prorated base + signed additional-hours pay), with
+// a secondary line naming the overage/shortfall when present.
+function PayCell({
+  payments,
+  additionalPayment,
+  additionalHours,
+  currency,
+}: {
+  payments: { currency: string; amount: number }[];
+  additionalPayment: number;
+  additionalHours: number;
+  currency: string | null;
+}) {
+  const combined = combinePayments(payments, additionalPayment, currency);
+  return (
+    <div>
+      <div>{formatPayments(combined)}</div>
+      {additionalPayment !== 0 && (
+        <div className={`text-[11px] ${additionalPayment > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+          {additionalPayment > 0 ? '+' : '−'}
+          {formatMoney(Math.abs(additionalPayment), currency)} add’l ({additionalHours > 0 ? '+' : ''}
+          {additionalHours} hrs)
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Plan cell: the role (Designer / Video Editor …) as the primary label, with
@@ -308,7 +388,19 @@ function planLabel(p: { plan_label: string | null; plan_tier: string | null }): 
 // active days (more than one when the card was paused/resumed or the plan was
 // changed). Each period also shows the plan it ran on and the pay it earned, so
 // an upgrade/downgrade reads as e.g. "Basic · Pro … ₹6,000" then "Plus · Pro … ₹11,000".
-function PeriodBreakdown({ periods, onEdit }: { periods: Period[]; onEdit?: (termId: string) => void }) {
+function PeriodBreakdown({
+  periods,
+  onEdit,
+  additionalHours = 0,
+  additionalPayment = 0,
+  currency = null,
+}: {
+  periods: Period[];
+  onEdit?: (termId: string) => void;
+  additionalHours?: number;
+  additionalPayment?: number;
+  currency?: string | null;
+}) {
   return (
     <div className="space-y-1.5 rounded-md bg-surface-alt px-3 py-2">
       <div className="text-[11px] font-medium uppercase tracking-wide text-foreground-dim">
@@ -348,6 +440,18 @@ function PeriodBreakdown({ periods, onEdit }: { periods: Period[]; onEdit?: (ter
           </div>
         );
       })}
+      {additionalHours !== 0 && (
+        <div className="flex items-center gap-2 border-t border-divider pt-1.5 text-sm">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-foreground-dim">
+            Additional this month
+          </span>
+          <HoursDeltaChip hours={additionalHours} />
+          <span className={`ml-auto font-medium ${additionalPayment >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+            {additionalPayment > 0 ? '+' : additionalPayment < 0 ? '−' : ''}
+            {formatMoney(Math.abs(additionalPayment), currency)}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -475,6 +579,7 @@ function BySubscriptionView({ month }: { month: string }) {
                 <th className="px-4 py-2.5">Client · Talent</th>
                 <th className="px-4 py-2.5">Active days</th>
                 <th className="px-4 py-2.5">Partner price</th>
+                <th className="px-4 py-2.5">Additional hrs</th>
                 <th className="px-4 py-2.5">{monthLabel(month)} pay</th>
                 <th className="px-4 py-2.5">Plan</th>
               </tr>
@@ -497,15 +602,31 @@ function BySubscriptionView({ month }: { month: string }) {
                       <ActiveDaysButton group={g} expanded={expanded.has(g.key)} onToggle={() => toggle(g.key)} />
                     </td>
                     <td className="px-4 py-2.5 text-foreground-muted">{partnerPriceLabel(g)}</td>
-                    <td className="px-4 py-2.5">{formatPayments(g.payments)}</td>
+                    <td className="px-4 py-2.5">
+                      <HoursDeltaChip hours={g.additional_hours} actual={g.actual_hours} target={g.target_hours} />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <PayCell
+                        payments={g.payments}
+                        additionalPayment={g.additional_payment}
+                        additionalHours={g.additional_hours}
+                        currency={g.currency}
+                      />
+                    </td>
                     <td className="px-4 py-2.5">
                       <PlanCell role={g.plan_name} tier={g.subscription_name} hours={g.committed_hours} />
                     </td>
                   </tr>
                   {expanded.has(g.key) && (
                     <tr>
-                      <td colSpan={5} className="px-4 pb-3 pt-0">
-                        <PeriodBreakdown periods={g.periods} onEdit={(termId) => setEditingId(termId)} />
+                      <td colSpan={6} className="px-4 pb-3 pt-0">
+                        <PeriodBreakdown
+                          periods={g.periods}
+                          onEdit={(termId) => setEditingId(termId)}
+                          additionalHours={g.additional_hours}
+                          additionalPayment={g.additional_payment}
+                          currency={g.currency}
+                        />
                       </td>
                     </tr>
                   )}
@@ -649,6 +770,9 @@ interface UserRow {
   utilization_pct: number | null;
   payments: Payment[];
   missing_pricing: boolean;
+  // Net signed hours delta across the user's cards this month (payments already
+  // include the money impact — this surfaces the hours behind it).
+  additional_hours: number;
 }
 
 function UtilizationBadge({ pct }: { pct: number | null }) {
@@ -736,6 +860,7 @@ function ByUserView({ month }: { month: string }) {
                 <th className="px-4 py-2.5">Partner / Talent</th>
                 <th className="px-4 py-2.5">Active cards</th>
                 <th className="px-4 py-2.5">{monthLabel(month)} payment</th>
+                <th className="px-4 py-2.5">Additional hrs</th>
                 <th className="px-4 py-2.5">Committed hrs/wk</th>
                 <th className="px-4 py-2.5">Available hrs/wk</th>
                 <th className="px-4 py-2.5">Utilization</th>
@@ -766,6 +891,9 @@ function ByUserView({ month }: { month: string }) {
                         ⚠
                       </span>
                     )}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <HoursDeltaChip hours={u.additional_hours || 0} />
                   </td>
                   <td className="px-4 py-2.5 text-foreground-muted">{u.committed_weekly_hours || 0}</td>
                   <td className="px-4 py-2.5 text-foreground-muted">
@@ -818,6 +946,10 @@ interface UserDetailCard {
   plan_name?: string | null;
   plan_label?: string | null;
   plan_tier?: string | null;
+  additional_hours?: number;
+  additional_payment?: number;
+  actual_hours?: number;
+  target_hours_this_month?: number;
 }
 
 interface UserDetail {
@@ -828,6 +960,7 @@ interface UserDetail {
   cards: UserDetailCard[];
   totals: {
     month_payments: Payment[];
+    additional_hours: number;
     committed_weekly_hours: number;
     available_weekly_hours: number | null;
     available_hours_status: 'ok' | 'unavailable' | 'not_applicable';
@@ -933,6 +1066,11 @@ function UserDetailModal({
                 <SummaryStat
                   label={`${monthLabel(detailMonth)} payment`}
                   value={formatPayments(totals?.month_payments || [])}
+                  hint={
+                    totals?.additional_hours
+                      ? `incl. ${totals.additional_hours > 0 ? '+' : ''}${totals.additional_hours} hrs additional`
+                      : undefined
+                  }
                 />
                 <SummaryStat label="Committed hrs/wk" value={`${totals?.committed_weekly_hours ?? 0}`} />
                 <SummaryStat
@@ -967,6 +1105,7 @@ function UserDetailModal({
                       <th className="px-3 py-2">Client name</th>
                       <th className="px-3 py-2">Active days</th>
                       <th className="px-3 py-2">Partner price</th>
+                      <th className="px-3 py-2">Additional hrs</th>
                       <th className="px-3 py-2">{monthLabel(detailMonth)} pay</th>
                       <th className="px-3 py-2">Plan</th>
                     </tr>
@@ -982,15 +1121,30 @@ function UserDetailModal({
                             <ActiveDaysButton group={g} expanded={expanded.has(g.key)} onToggle={() => toggle(g.key)} />
                           </td>
                           <td className="px-3 py-2 text-foreground-muted">{partnerPriceLabel(g)}</td>
-                          <td className="px-3 py-2">{formatPayments(g.payments)}</td>
+                          <td className="px-3 py-2">
+                            <HoursDeltaChip hours={g.additional_hours} actual={g.actual_hours} target={g.target_hours} />
+                          </td>
+                          <td className="px-3 py-2">
+                            <PayCell
+                              payments={g.payments}
+                              additionalPayment={g.additional_payment}
+                              additionalHours={g.additional_hours}
+                              currency={g.currency}
+                            />
+                          </td>
                           <td className="px-3 py-2">
                             <PlanCell role={g.plan_name} tier={g.subscription_name} hours={g.committed_hours} />
                           </td>
                         </tr>
                         {expanded.has(g.key) && (
                           <tr>
-                            <td colSpan={5} className="px-3 pb-3 pt-0">
-                              <PeriodBreakdown periods={g.periods} />
+                            <td colSpan={6} className="px-3 pb-3 pt-0">
+                              <PeriodBreakdown
+                                periods={g.periods}
+                                additionalHours={g.additional_hours}
+                                additionalPayment={g.additional_payment}
+                                currency={g.currency}
+                              />
                             </td>
                           </tr>
                         )}
@@ -1007,11 +1161,12 @@ function UserDetailModal({
   );
 }
 
-function SummaryStat({ label, value }: { label: string; value: string }) {
+function SummaryStat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="rounded-lg border border-divider bg-surface-alt px-3 py-2">
       <div className="text-[11px] uppercase tracking-wide text-foreground-dim">{label}</div>
       <div className="mt-0.5 text-sm font-semibold text-foreground">{value}</div>
+      {hint && <div className="mt-0.5 text-[11px] text-foreground-muted">{hint}</div>}
     </div>
   );
 }

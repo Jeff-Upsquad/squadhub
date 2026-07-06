@@ -31,6 +31,13 @@ type Line = {
   revenue: number;
   partner_cost: number;
   gross_profit: number;
+  // Hours-completion adjustment; revenue / partner_cost / gross_profit already include it.
+  additional_hours: number;
+  base_revenue: number;
+  base_partner_cost: number;
+  additional_revenue: number;
+  additional_cost: number;
+  hours_target_unresolved: boolean;
   missing_revenue: boolean;
   missing_partner_price: boolean;
   finalized: boolean;
@@ -46,6 +53,7 @@ type ClientRow = {
   gross_profit: number;
   margin_pct: number;
   has_missing_pricing: boolean;
+  has_unresolved_hours: boolean;
   lines: Line[];
 };
 
@@ -177,6 +185,19 @@ export default function GrossProfitModule() {
 
   const selectedClient = selectedClientId
     ? clients.find((c) => c.id === selectedClientId) || null
+    : null;
+  // Net hours-completion adjustment across the client's lines. Only resolved-target
+  // (money-moving) lines feed this summary; unresolved-target lines carry their own
+  // tag and move no money, so they'd otherwise show "+N hrs → +₹0".
+  const selectedAddl = selectedClient
+    ? (() => {
+        const resolved = selectedClient.lines.filter((l) => !l.hours_target_unresolved);
+        return {
+          hours: Math.round(resolved.reduce((sum, l) => sum + (l.additional_hours || 0), 0) * 100) / 100,
+          revenue: resolved.reduce((sum, l) => sum + (l.additional_revenue || 0), 0),
+          cost: resolved.reduce((sum, l) => sum + (l.additional_cost || 0), 0),
+        };
+      })()
     : null;
   const anyMissing = clients.some((c) => c.has_missing_pricing);
 
@@ -396,6 +417,14 @@ export default function GrossProfitModule() {
                             />
                           )}
                           <span className="font-medium">{c.business_name}</span>
+                          {c.has_unresolved_hours && (
+                            <span
+                              title="A subscription logged hours with no resolvable plan target — the hours are shown, but no money was adjusted for them. Open the client to see which."
+                              className="shrink-0 rounded-md bg-[#FFFBEB] px-1.5 py-0.5 text-[10px] font-medium text-[#A16207] ring-1 ring-[#FCD34D]"
+                            >
+                              ⚠ No target
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-foreground-muted">
@@ -489,6 +518,21 @@ export default function GrossProfitModule() {
               </div>
             </div>
 
+            {/* Net hours-completion adjustment folded into the totals above */}
+            {selectedAddl && selectedAddl.hours !== 0 && (
+              <div className="border-b border-divider px-4 py-2 text-[11px] text-foreground-muted">
+                Incl. additional hours:{' '}
+                <span className={`font-medium ${selectedAddl.hours > 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'}`}>
+                  {selectedAddl.hours > 0 ? '+' : '−'}
+                  {Math.abs(selectedAddl.hours)} hrs
+                </span>{' '}
+                → revenue {selectedAddl.revenue >= 0 ? '+' : '−'}
+                {formatMoney(Math.abs(selectedAddl.revenue), selectedClient.currency)}, cost{' '}
+                {selectedAddl.cost >= 0 ? '+' : '−'}
+                {formatMoney(Math.abs(selectedAddl.cost), selectedClient.currency)}
+              </div>
+            )}
+
             {/* Per-subscription lines active in the period */}
             <div className="px-4 py-3">
               <h4 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-foreground-dim">
@@ -506,6 +550,14 @@ export default function GrossProfitModule() {
                           {s.role || s.subscription_name || 'Subscription'}
                         </p>
                         <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          {s.hours_target_unresolved && (
+                            <span
+                              title="This subscription logged hours but its plan target couldn't be resolved (e.g. no assignment history) — the hours are shown for visibility, but no money was adjusted for them."
+                              className="rounded-md bg-[#FFFBEB] px-1.5 py-0.5 text-[10px] font-medium text-[#A16207] ring-1 ring-[#FCD34D]"
+                            >
+                              ⚠ No plan target
+                            </span>
+                          )}
                           <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${statusBadge(s.status).cls}`}>
                             {statusBadge(s.status).label}
                           </span>
@@ -525,6 +577,25 @@ export default function GrossProfitModule() {
                               className="rounded-md bg-[#FFFBEB] px-1.5 py-0.5 text-[10px] font-medium text-[#A16207] ring-1 ring-[#FCD34D]"
                             >
                               Estimated
+                            </span>
+                          )}
+                          {s.additional_hours !== 0 && (
+                            <span
+                              title={
+                                s.hours_target_unresolved
+                                  ? 'Hours logged with no resolvable plan target — shown for visibility, not billed'
+                                  : 'Actual vs. plan target hours this period — adjusts revenue + partner cost'
+                              }
+                              className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
+                                s.hours_target_unresolved
+                                  ? 'bg-[#FEF3C7] text-[#A16207]'
+                                  : s.additional_hours > 0
+                                    ? 'bg-[#DCFCE7] text-[#15803D]'
+                                    : 'bg-[#FEE2E2] text-[#B91C1C]'
+                              }`}
+                            >
+                              {s.additional_hours > 0 ? '+' : '−'}
+                              {Math.abs(s.additional_hours)} hrs
                             </span>
                           )}
                         </div>
@@ -549,6 +620,13 @@ export default function GrossProfitModule() {
                             formatMoney(s.revenue, selectedClient.currency)
                           )}
                         </p>
+                        {s.additional_revenue !== 0 && !s.missing_revenue && (
+                          <p className="mt-0.5 text-[10px] text-foreground-dim">
+                            base {formatMoney(s.base_revenue, selectedClient.currency)}{' '}
+                            {s.additional_revenue > 0 ? '+' : '−'}
+                            {formatMoney(Math.abs(s.additional_revenue), selectedClient.currency)}
+                          </p>
+                        )}
                       </div>
                       <div>
                         <p className="text-[10px] uppercase tracking-wider text-foreground-dim">Partner</p>
@@ -559,6 +637,13 @@ export default function GrossProfitModule() {
                             formatMoney(s.partner_cost, selectedClient.currency)
                           )}
                         </p>
+                        {s.additional_cost !== 0 && !s.missing_partner_price && (
+                          <p className="mt-0.5 text-[10px] text-foreground-dim">
+                            base {formatMoney(s.base_partner_cost, selectedClient.currency)}{' '}
+                            {s.additional_cost > 0 ? '+' : '−'}
+                            {formatMoney(Math.abs(s.additional_cost), selectedClient.currency)}
+                          </p>
+                        )}
                       </div>
                       <div>
                         <p className="text-[10px] uppercase tracking-wider text-foreground-dim">Profit</p>

@@ -22,7 +22,8 @@ import {
   prorateMonthly,
   daysInMonth,
 } from './assignmentBilling';
-import { loadCardBilling, resolveTermBilling } from './cardBilling';
+import { loadCardBilling, resolveTermBilling, type CardBilling } from './cardBilling';
+import { loadCardHoursCompletions, type HoursCompletion } from './cardHoursCompletion';
 import { supabaseAdmin } from '../supabase';
 
 export type Granularity = 'month' | 'quarter' | 'year';
@@ -61,6 +62,16 @@ export interface GrossProfitLine {
   revenue: number;
   partner_cost: number;
   gross_profit: number;
+  // Hours-completion adjustment (per card, over the period's active months).
+  // revenue / partner_cost / gross_profit above already INCLUDE these; base_* are
+  // the pre-delta figures so the UI can show "base ± additional".
+  additional_hours: number;
+  base_revenue: number;
+  base_partner_cost: number;
+  additional_revenue: number;
+  additional_cost: number;
+  /** A month's hours delta had a 0/unresolved plan target — hours shown, no money moved. */
+  hours_target_unresolved: boolean;
   missing_revenue: boolean;
   missing_partner_price: boolean;
   /** True only when the term itself carries a finalized price + partner + currency
@@ -78,6 +89,8 @@ export interface GrossProfitClient {
   gross_profit: number;
   margin_pct: number;
   has_missing_pricing: boolean;
+  /** Any line had a 0/unresolved hours target (hours shown but not billed). */
+  has_unresolved_hours: boolean;
   lines: GrossProfitLine[];
 }
 
@@ -219,12 +232,13 @@ export async function computeGrossProfit(
     cancel_type: string | null;
   };
   const cardLife = new Map<string, CardLife>();
+  const folderByCard = new Map<string, string | null>();
   const deleted = new Set<string>();
   const planHoursByCard = new Map<string, number | null>();
   if (cardIds.length) {
     const { data: cardMeta } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, deleted_at, paused_at, cancelled_at, closed_at, state, cancel_type, plan_snapshot')
+      .select('id, deleted_at, paused_at, cancelled_at, closed_at, state, cancel_type, plan_snapshot, linked_folder_id')
       .in('id', cardIds);
     (cardMeta || []).forEach((c: any) => {
       cardLife.set(c.id, {
@@ -236,6 +250,7 @@ export async function computeGrossProfit(
       });
       const wk = c.plan_snapshot?.plan?.weekly_hours;
       planHoursByCard.set(c.id, wk != null ? Number(wk) : null);
+      folderByCard.set(c.id, c.linked_folder_id ?? null);
       if (c.deleted_at) deleted.add(c.id);
     });
   }
@@ -267,6 +282,27 @@ export async function computeGrossProfit(
 
   const billing = await loadCardBilling(cardIds);
 
+  // Per-card monthly hours completion (plan target vs. tracked+elapsed actual →
+  // signed additional hours + the revenue/cost it moves), computed once per month
+  // in the period and summed per card over its active months below. Uses the same
+  // card-level billing as loadCardBilling, so the additional-hours rate matches
+  // the card's plan. Admin report at small scale, so the per-month recompute is fine.
+  const completionInputs = cardIds
+    .map((id) => ({ cardId: id, linkedFolderId: folderByCard.get(id) ?? null, billing: billing.get(id) }))
+    .filter(
+      (c): c is { cardId: string; linkedFolderId: string | null; billing: CardBilling } => !!c.billing,
+    );
+  // persist:false — Gross Profit is a read/aggregation and may span a whole year;
+  // Partner Payments (single month) + the daily cron own the persisted snapshots,
+  // so we don't want a report view upserting a row per card per month here.
+  const completionsByMonth = new Map<string, Map<string, HoursCompletion>>();
+  for (const { year, month } of period.months) {
+    completionsByMonth.set(
+      `${year}-${pad(month)}`,
+      await loadCardHoursCompletions(completionInputs, year, month, { persist: false }),
+    );
+  }
+
   type ClientAgg = {
     id: string;
     business_name: string;
@@ -276,6 +312,7 @@ export async function computeGrossProfit(
     partner_cost: number;
     gross_profit: number;
     has_missing_pricing: boolean;
+    has_unresolved_hours: boolean;
     lines: GrossProfitLine[];
   };
   const clients = new Map<string, ClientAgg>();
@@ -369,8 +406,14 @@ export async function computeGrossProfit(
     // capping at the month length excludes a pause gap (an ended term + a later
     // resumed term), while a 1-day talent-swap boundary overlap is absorbed by
     // the cap. Open terms still count the full current month (see cap arg).
+    // Additional hours (over/under the plan target) then adjust BOTH revenue
+    // (client rate) and cost (partner rate), counted only for active months.
     let cardRevenue = 0;
     let cardDays = 0;
+    let addlHours = 0;
+    let addlRevenue = 0;
+    let addlCost = 0;
+    let hoursUnresolved = false;
     for (const { year, month } of period.months) {
       const dim = daysInMonth(year, month);
       let activeDays = 0;
@@ -388,6 +431,14 @@ export async function computeGrossProfit(
       cardDays += activeDays;
       if (repBilling.subscription_price != null) {
         cardRevenue += Math.round((repBilling.subscription_price * activeDays) / dim);
+      }
+      // Additional-hours adjustment for this active month (revenue + cost sides).
+      const comp = completionsByMonth.get(`${year}-${pad(month)}`)?.get(cardId);
+      if (comp) {
+        addlHours += comp.additional_hours;
+        addlRevenue += comp.additional_revenue; // already 0 when the target was unresolved
+        addlCost += comp.additional_partner_payment; // already 0 when the target was unresolved
+        if (comp.target_unresolved) hoursUnresolved = true;
       }
     }
     if (cardDays <= 0) continue; // subscription wasn't active in the period
@@ -425,16 +476,20 @@ export async function computeGrossProfit(
         partner_cost: 0,
         gross_profit: 0,
         has_missing_pricing: false,
+        has_unresolved_hours: false,
         lines: [],
       };
       clients.set(key, c);
     }
 
-    c.revenue += cardRevenue;
-    c.partner_cost += cardCost;
-    c.gross_profit += cardRevenue - cardCost;
+    const lineRevenue = cardRevenue + addlRevenue;
+    const lineCost = cardCost + addlCost;
+    c.revenue += lineRevenue;
+    c.partner_cost += lineCost;
+    c.gross_profit += lineRevenue - lineCost;
     c.cardIds.add(cardId);
     if (!finalized) c.has_missing_pricing = true;
+    if (hoursUnresolved) c.has_unresolved_hours = true;
     c.lines.push({
       term_id: cardId,
       card_id: cardId,
@@ -447,9 +502,15 @@ export async function computeGrossProfit(
       work_end: cardEnd,
       active_days: cardDays,
       status,
-      revenue: cardRevenue,
-      partner_cost: cardCost,
-      gross_profit: cardRevenue - cardCost,
+      revenue: lineRevenue,
+      partner_cost: lineCost,
+      gross_profit: lineRevenue - lineCost,
+      additional_hours: Math.round(addlHours * 100) / 100,
+      base_revenue: cardRevenue,
+      base_partner_cost: cardCost,
+      additional_revenue: addlRevenue,
+      additional_cost: addlCost,
+      hours_target_unresolved: hoursUnresolved,
       missing_revenue: missingRevenue,
       missing_partner_price: anyPartnerMissing,
       finalized,
@@ -467,6 +528,7 @@ export async function computeGrossProfit(
       gross_profit: c.gross_profit,
       margin_pct: c.revenue > 0 ? (c.gross_profit / c.revenue) * 100 : 0,
       has_missing_pricing: c.has_missing_pricing,
+      has_unresolved_hours: c.has_unresolved_hours,
       lines: c.lines.sort((a, b) => b.revenue - a.revenue),
     }))
     .sort((a, b) => b.gross_profit - a.gross_profit);

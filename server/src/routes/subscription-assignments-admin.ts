@@ -5,7 +5,8 @@ import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import { prorateMonthly, activeDaysInMonth } from '../utils/assignmentBilling';
 import { fetchTalentAvailability } from '../utils/squadhireTalent';
-import { loadCardBilling, resolveTermBilling } from '../utils/cardBilling';
+import { loadCardBilling, resolveTermBilling, type CardBilling } from '../utils/cardBilling';
+import { loadCardHoursCompletions } from '../utils/cardHoursCompletion';
 
 // Admin module: view + manage subscription assignment terms. Rows are created /
 // closed automatically by the finalize-selection / unassign flow (see
@@ -55,14 +56,22 @@ router.get('/', async (req: Request, res: Response) => {
     // Attach the card lifecycle so the view can badge paused / cancelled
     // engagements (billing already reflects them via the ended terms).
     const cardIds = [...new Set(rows.map((t) => t.card_id).filter(Boolean))];
-    const cardById = new Map<string, { state: string; paused_at: string | null; cancelled_at: string | null }>();
+    const cardById = new Map<
+      string,
+      { state: string; paused_at: string | null; cancelled_at: string | null; linked_folder_id: string | null }
+    >();
     if (cardIds.length) {
       const { data: cards } = await supabaseAdmin
         .from('subscription_cards')
-        .select('id, state, paused_at, cancelled_at')
+        .select('id, state, paused_at, cancelled_at, linked_folder_id')
         .in('id', cardIds);
       (cards || []).forEach((c: any) =>
-        cardById.set(c.id, { state: c.state, paused_at: c.paused_at ?? null, cancelled_at: c.cancelled_at ?? null }),
+        cardById.set(c.id, {
+          state: c.state,
+          paused_at: c.paused_at ?? null,
+          cancelled_at: c.cancelled_at ?? null,
+          linked_folder_id: c.linked_folder_id ?? null,
+        }),
       );
     }
     const lifecycle = (t: AssignmentTermRow) => ({
@@ -77,9 +86,21 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     const billing = await loadCardBilling(cardIds);
+    // Per-card hours completion (plan target vs. tracked+elapsed actual → signed
+    // additional hours + payment) for the scoped month. Attached identically to
+    // every term of a card; the client folds it once per card row.
+    const folderByCard = new Map<string, string | null>(
+      cardIds.map((id) => [id, cardById.get(id)?.linked_folder_id ?? null]),
+    );
+    const completions = await loadCardHoursCompletions(
+      completionInput(cardIds, folderByCard, billing),
+      year,
+      month,
+    );
     const enriched = rows
       .map((t) => {
         const b = resolveTermBilling(t, billing.get(t.card_id));
+        const comp = completions.get(t.card_id);
         const start = t.work_start_date ?? t.assigned_date;
         const end = t.work_end_date ?? t.unassigned_date ?? null;
         const activeDays = activeDaysInMonth(start, end, year, month, todayIso);
@@ -99,6 +120,13 @@ router.get('/', async (req: Request, res: Response) => {
             weekly: b?.weekly_hours ?? null,
             monthly: b?.monthly_hours ?? null,
           },
+          // Monthly hours completion (per card; identical on every term of the
+          // card, so the client adds it once per folded row). month_payment above
+          // stays the prorated base — additional_payment is added on top.
+          additional_hours: comp?.additional_hours ?? 0,
+          additional_payment: comp?.additional_partner_payment ?? 0,
+          actual_hours: comp?.actual_hours ?? 0,
+          target_hours_this_month: comp?.target_monthly_hours ?? 0,
           plan_name: b?.plan_name ?? null,
           // Plan band + tier frozen on the term, so a multi-period breakdown can
           // name what each slice was on (e.g. "Basic" then "Plus" after a change).
@@ -200,6 +228,29 @@ function recipientKey(t: { recipient_type: string; recipient_id: string }) {
   return `${t.recipient_type}:${t.recipient_id}`;
 }
 
+/** Map card_id -> linked_folder_id (the linked space) for hours-completion. */
+async function fetchLinkedFolders(cardIds: string[]): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>();
+  if (!cardIds.length) return out;
+  const { data } = await supabaseAdmin
+    .from('subscription_cards')
+    .select('id, linked_folder_id')
+    .in('id', cardIds);
+  (data || []).forEach((c: any) => out.set(c.id, c.linked_folder_id ?? null));
+  return out;
+}
+
+/** Build the loadCardHoursCompletions input, dropping cards with no resolved billing. */
+function completionInput(
+  cardIds: string[],
+  folderByCard: Map<string, string | null>,
+  billing: Map<string, CardBilling>,
+): { cardId: string; linkedFolderId: string | null; billing: CardBilling }[] {
+  return cardIds
+    .map((id) => ({ cardId: id, linkedFolderId: folderByCard.get(id) ?? null, billing: billing.get(id) }))
+    .filter((c): c is { cardId: string; linkedFolderId: string | null; billing: CardBilling } => !!c.billing);
+}
+
 // GET /admin/subscription-assignments/users?month=YYYY-MM&status=active|all&search=
 // One row per recipient with the selected month's payment (per currency),
 // committed weekly hours, and (talent) self-declared available hours.
@@ -221,7 +272,14 @@ router.get('/users', async (req: Request, res: Response) => {
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
     const terms = (data || []) as AssignmentTermRow[];
 
-    const billing = await loadCardBilling([...new Set(terms.map((t) => t.card_id))]);
+    const cardIds = [...new Set(terms.map((t) => t.card_id))];
+    const billing = await loadCardBilling(cardIds);
+    const folderByCard = await fetchLinkedFolders(cardIds);
+    const completions = await loadCardHoursCompletions(
+      completionInput(cardIds, folderByCard, billing),
+      year,
+      month,
+    );
 
     type Group = {
       recipient_type: 'talent' | 'partner';
@@ -230,13 +288,17 @@ router.get('/users', async (req: Request, res: Response) => {
       card_count: number;
       active_card_count: number;
       committed_weekly_hours: number;
-      payments: Map<string, number>; // currency -> prorated total
+      payments: Map<string, number>; // currency -> prorated base + additional
       missing_pricing: boolean;
+      additional_hours: number; // net signed hours delta (once per card)
     };
     const groups = new Map<string, Group>();
     // Cards already counted toward a recipient's weekly commitment (dedupe
     // across multiple same-month terms on one card — pause/resume, plan change).
     const countedWeeklyCards = new Map<string, Set<string>>();
+    // Additional hours + payment count once per CARD (folder-level completion),
+    // not per term — a same-month pause/resume must not double the delta.
+    const countedAdditionalCards = new Map<string, Set<string>>();
 
     for (const t of terms) {
       const start = t.work_start_date ?? t.assigned_date;
@@ -259,6 +321,7 @@ router.get('/users', async (req: Request, res: Response) => {
           committed_weekly_hours: 0,
           payments: new Map(),
           missing_pricing: false,
+          additional_hours: 0,
         };
         groups.set(key, g);
       }
@@ -281,6 +344,18 @@ router.get('/users', async (req: Request, res: Response) => {
         if (pay > 0) {
           const cur = b.currency || 'UNKNOWN';
           g.payments.set(cur, (g.payments.get(cur) || 0) + pay);
+        }
+      }
+      // Additional hours + payment: once per card, folded into the card's own
+      // currency bucket so the recipient's total reflects base + overage/shortfall.
+      const comp = completions.get(t.card_id);
+      if (comp && !countedAdditionalCards.get(key)?.has(t.card_id)) {
+        if (!countedAdditionalCards.has(key)) countedAdditionalCards.set(key, new Set());
+        countedAdditionalCards.get(key)!.add(t.card_id);
+        g.additional_hours += comp.additional_hours;
+        if (comp.additional_partner_payment !== 0) {
+          const cur = b?.currency || 'UNKNOWN';
+          g.payments.set(cur, (g.payments.get(cur) || 0) + comp.additional_partner_payment);
         }
       }
     }
@@ -313,6 +388,7 @@ router.get('/users', async (req: Request, res: Response) => {
               : null,
           payments: [...g.payments.entries()].map(([currency, amount]) => ({ currency, amount })),
           missing_pricing: g.missing_pricing,
+          additional_hours: Math.round(g.additional_hours * 100) / 100,
         };
       })
       .sort((a, b) => {
@@ -351,13 +427,23 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
     const terms = (data || []) as AssignmentTermRow[];
 
-    const billing = await loadCardBilling([...new Set(terms.map((t) => t.card_id))]);
+    const cardIds = [...new Set(terms.map((t) => t.card_id))];
+    const billing = await loadCardBilling(cardIds);
+    const folderByCard = await fetchLinkedFolders(cardIds);
+    const completions = await loadCardHoursCompletions(
+      completionInput(cardIds, folderByCard, billing),
+      year,
+      month,
+    );
 
     const paymentByCurrency = new Map<string, number>();
     let committedWeekly = 0;
+    let totalAdditionalHours = 0;
     // Weekly commitment counts once per CARD (multiple same-month terms on one
     // card — pause/resume, plan change — must not double the figure).
     const weeklyCounted = new Set<string>();
+    // Additional hours + payment likewise count once per card.
+    const additionalCounted = new Set<string>();
 
     const cards = terms.map((t) => {
       const b = resolveTermBilling(t, billing.get(t.card_id));
@@ -372,6 +458,15 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
       if (activeDays > 0 && b?.weekly_hours != null && !weeklyCounted.has(t.card_id)) {
         committedWeekly += b.weekly_hours;
         weeklyCounted.add(t.card_id);
+      }
+      const comp = completions.get(t.card_id);
+      if (activeDays > 0 && comp && !additionalCounted.has(t.card_id)) {
+        additionalCounted.add(t.card_id);
+        totalAdditionalHours += comp.additional_hours;
+        if (comp.additional_partner_payment !== 0) {
+          const cur = b?.currency || 'UNKNOWN';
+          paymentByCurrency.set(cur, (paymentByCurrency.get(cur) || 0) + comp.additional_partner_payment);
+        }
       }
       return {
         term_id: t.id,
@@ -395,6 +490,12 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
           weekly: b?.weekly_hours ?? null,
           monthly: b?.monthly_hours ?? null,
         },
+        // Monthly hours completion for this card (month_payment stays the base;
+        // additional_payment is the signed overage/shortfall added on top).
+        additional_hours: comp?.additional_hours ?? 0,
+        additional_payment: comp?.additional_partner_payment ?? 0,
+        actual_hours: comp?.actual_hours ?? 0,
+        target_hours_this_month: comp?.target_monthly_hours ?? 0,
         plan_name: b?.plan_name ?? null,
         // Plan band + tier frozen on the term, so a multi-period breakdown can
         // name what each slice was on (e.g. "Basic" then "Plus" after a change).
@@ -431,6 +532,7 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
         cards,
         totals: {
           month_payments: [...paymentByCurrency.entries()].map(([currency, amount]) => ({ currency, amount })),
+          additional_hours: Math.round(totalAdditionalHours * 100) / 100,
           committed_weekly_hours: Math.round(committedWeekly * 100) / 100,
           available_weekly_hours: availableWeekly,
           available_hours_status: availableStatus,
