@@ -9,7 +9,6 @@ import CardCodeChip from '@/components/CardCodeChip';
 import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import { openLeadInCRM } from '@/utils/squadCrm';
 import { resolveFinalizedPrice } from '@squadhub/shared';
-import UpgradeDowngradeModal from './UpgradeDowngradeModal';
 import type { PublishedCard } from './AdminPublishedCards';
 import type { RecipientsResponse } from './AdminPublishedCardRecipientsPanel';
 
@@ -391,22 +390,6 @@ export default function AdminPublishedCardRecipientsView({
     },
   });
 
-  // Pause a live assignment: billing stops and the talent is held. To CHANGE the
-  // assignee you pause, then Resume (→ Published) to broadcast + re-select.
-  const pauseMutation = useMutation({
-    mutationFn: () =>
-      api.post(`/admin/subscription-cards/${card.id}/pause`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
-      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
-      showToast('Paused — billing stopped. Resume it (from the Paused tab) to re-broadcast and change the assignee.', 'success');
-    },
-    onError: (err: any) => {
-      showToast(err?.response?.data?.error || err.message || 'Failed to pause subscription', 'error');
-    },
-  });
-
   // Duplicate: copy this card (minus recipients/assignees) into a fresh New Deals draft.
   const duplicateMutation = useMutation({
     mutationFn: () =>
@@ -492,7 +475,6 @@ export default function AdminPublishedCardRecipientsView({
 
   const [autoAcceptTarget, setAutoAcceptTarget] = useState<{ id: string; name: string; email: string } | null>(null);
   const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string; type: 'partner' | 'talent' } | null>(null);
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   const removeRecipientMutation = useMutation({
     mutationFn: ({ id, type }: { id: string; type: 'partner' | 'talent' }) =>
@@ -944,33 +926,13 @@ export default function AdminPublishedCardRecipientsView({
                           {cancelSubscriptionMutation.isPending ? 'Cancelling…' : 'Cancel subscription'}
                         </button>
                         <span className="text-[11px] text-emerald-700/80 dark:text-emerald-300/90">
-                          Resume reopens the card to Published to broadcast and re-assign; Cancel closes it permanently.
+                          Resume reopens the card to Published to broadcast and re-assign; Cancel closes it permanently. <span className="font-semibold">Upgrade / downgrade</span> is under <span className="font-semibold">Card Details</span>.
                         </span>
                       </>
                     ) : (
-                      <>
-                        <button
-                          onClick={() => {
-                            if (window.confirm('Pause this subscription?\n\nBilling stops and the talent is held. To CHANGE the assignee, Resume it from the Paused tab — it reopens to Published where you broadcast (previous talent or all) and select someone new.')) pauseMutation.mutate();
-                          }}
-                          disabled={pauseMutation.isPending || duplicateMutation.isPending}
-                          className="sh-btn-primary sh-btn-primary-sm"
-                          title="Pause billing and hold the talent. Resume later to re-broadcast and change the assignee."
-                        >
-                          {pauseMutation.isPending ? 'Pausing…' : 'Pause'}
-                        </button>
-                        <button
-                          onClick={() => setUpgradeOpen(true)}
-                          disabled={pauseMutation.isPending}
-                          className="sh-btn-ghost sh-btn-ghost-sm"
-                          title="Upgrade or downgrade the plan — soft-cancels this card and opens a new one in New Deals on the new plan"
-                        >
-                          Upgrade / downgrade
-                        </button>
-                        <span className="text-[11px] text-emerald-700/80 dark:text-emerald-300/90">
-                          Pause to change the assignee; Upgrade/downgrade opens a new card in New Deals. Cancel &amp; Unassign live under <span className="font-semibold">Card Details</span>.
-                        </span>
-                      </>
+                      <span className="text-[11px] text-emerald-700/80 dark:text-emerald-300/90">
+                        Manage this module — <span className="font-semibold">Pause</span>, <span className="font-semibold">Upgrade / downgrade</span>, Cancel, Unassign — from <span className="font-semibold">Card Details</span> (top-right).
+                      </span>
                     )}
                   </div>
                 )}
@@ -1523,9 +1485,6 @@ export default function AdminPublishedCardRecipientsView({
           </div>
         );
       })()}
-      {upgradeOpen && (
-        <UpgradeDowngradeModal cardId={card.id} onClose={() => setUpgradeOpen(false)} />
-      )}
       {autoAcceptTarget && (
         <ConfirmDialog
           open
