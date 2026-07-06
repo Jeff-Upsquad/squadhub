@@ -35,6 +35,8 @@ interface AssignmentTerm {
   missing_partner_price?: boolean;
   committed_hours?: { daily: number | null; weekly: number | null; monthly: number | null };
   plan_name?: string | null;
+  plan_label?: string | null;
+  plan_tier?: string | null;
 }
 
 /** Paused/Cancelled chip for a term's card (null when neither applies). */
@@ -124,6 +126,13 @@ interface Period {
   stop_date: string | null;
   active_days: number;
   status: 'active' | 'ended';
+  // Per-period plan identity + prorated pay — so a multi-period breakdown (plan
+  // change / pause-resume) shows what each slice was on and what it earned.
+  plan_label: string | null;
+  plan_tier: string | null;
+  payment: number;
+  currency: string | null;
+  missing_partner_price: boolean;
 }
 
 interface ClientGroup {
@@ -163,6 +172,8 @@ interface PeriodInput {
   missing_partner_price: boolean;
   committed_hours: { daily: number | null; weekly: number | null; monthly: number | null };
   plan_name?: string | null;
+  plan_label?: string | null;
+  plan_tier?: string | null;
   term_id?: string;
   id?: string;
   recipient_type?: 'talent' | 'partner';
@@ -211,6 +222,11 @@ function groupIntoClients(rows: PeriodInput[], keyOf: (r: PeriodInput) => string
       stop_date: r.stop_date,
       active_days: r.month_active_days,
       status: r.status,
+      plan_label: r.plan_label ?? null,
+      plan_tier: r.plan_tier ?? null,
+      payment: r.month_payment,
+      currency: r.currency,
+      missing_partner_price: r.missing_partner_price,
     });
     g.total_active_days += r.month_active_days || 0;
     if (r.status === 'active') g.status = 'active';
@@ -281,37 +297,57 @@ function ActiveDaysButton({
   );
 }
 
+// "Plan band · tier" for a period — the frozen plan identity that tells one
+// slice apart from the next after an upgrade/downgrade. Falls back to whichever
+// part exists; empty string when the term carries neither.
+function planLabel(p: { plan_label: string | null; plan_tier: string | null }): string {
+  return [p.plan_label, p.plan_tier].filter(Boolean).join(' · ');
+}
+
 // Expanded breakdown of the start–stop period(s) that made up the month's
-// active days (more than one when the card was paused/resumed or replanned).
+// active days (more than one when the card was paused/resumed or the plan was
+// changed). Each period also shows the plan it ran on and the pay it earned, so
+// an upgrade/downgrade reads as e.g. "Basic · Pro … ₹6,000" then "Plus · Pro … ₹11,000".
 function PeriodBreakdown({ periods, onEdit }: { periods: Period[]; onEdit?: (termId: string) => void }) {
   return (
     <div className="space-y-1.5 rounded-md bg-surface-alt px-3 py-2">
       <div className="text-[11px] font-medium uppercase tracking-wide text-foreground-dim">
         {periods.length > 1 ? `${periods.length} active periods this month` : 'Active period this month'}
       </div>
-      {periods.map((p) => (
-        <div key={p.term_id} className="flex items-center gap-2 text-sm">
-          <span className="text-foreground">
-            {fmtDate(p.start_date)} – {p.stop_date ? fmtDate(p.stop_date) : 'now'}
-          </span>
-          <span className="text-xs text-foreground-dim">
-            · {p.active_days} {p.active_days === 1 ? 'day' : 'days'}
-          </span>
-          {p.status === 'active' && (
-            <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
-              active
+      {periods.map((p) => {
+        const plan = planLabel(p);
+        return (
+          <div key={p.term_id} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <span className="text-foreground">
+              {fmtDate(p.start_date)} – {p.stop_date ? fmtDate(p.stop_date) : 'now'}
             </span>
-          )}
-          {onEdit && (
-            <button
-              onClick={() => onEdit(p.term_id)}
-              className="ml-auto text-xs font-medium text-indigo-600 hover:underline"
-            >
-              Edit dates
-            </button>
-          )}
-        </div>
-      ))}
+            <span className="text-xs text-foreground-dim">
+              · {p.active_days} {p.active_days === 1 ? 'day' : 'days'}
+            </span>
+            {p.status === 'active' && (
+              <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                active
+              </span>
+            )}
+            {plan && (
+              <span className="rounded-md bg-surface px-1.5 py-0.5 text-[11px] font-medium text-foreground-muted ring-1 ring-divider">
+                {plan}
+              </span>
+            )}
+            <span className="ml-auto font-medium text-foreground">
+              {p.missing_partner_price ? '—' : formatMoney(p.payment, p.currency)}
+            </span>
+            {onEdit && (
+              <button
+                onClick={() => onEdit(p.term_id)}
+                className="text-xs font-medium text-indigo-600 hover:underline"
+              >
+                Edit dates
+              </button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -780,6 +816,8 @@ interface UserDetailCard {
   month_payment: number;
   committed_hours: { daily: number | null; weekly: number | null; monthly: number | null };
   plan_name?: string | null;
+  plan_label?: string | null;
+  plan_tier?: string | null;
 }
 
 interface UserDetail {
