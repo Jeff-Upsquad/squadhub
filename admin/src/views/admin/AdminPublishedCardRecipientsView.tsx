@@ -351,6 +351,40 @@ export default function AdminPublishedCardRecipientsView({
     },
   });
 
+  // Resume a paused subscription by reopening it to Published (no broadcast yet):
+  // the previous talent is released and shown as a former assignee, the matching
+  // pool becomes available again, and the admin drives Broadcast + selection from
+  // here through the normal flow.
+  const resumeReopenMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${card.id}/resume`, { mode: 'reopen' }),
+    onSuccess: () => {
+      setCheckedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      showToast('Resumed — moved to Published. Review the available talents, then Broadcast.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to resume subscription', 'error');
+    },
+  });
+
+  const cancelSubscriptionMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${card.id}/cancel`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      showToast('Subscription cancelled.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to cancel subscription', 'error');
+    },
+  });
+
   const refreshMatchesMutation = useMutation({
     mutationFn: () =>
       api.post(`/admin/subscription-cards/${card.id}/refresh-matches`),
@@ -822,40 +856,67 @@ export default function AdminPublishedCardRecipientsView({
                 </div>
                 {bucket === 'assigned' && (
                   <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-emerald-200 pt-4 dark:border-emerald-500/30">
-                    {card.paused_at && (
-                      <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
-                        Paused {new Date(card.paused_at).toLocaleDateString()}
-                      </span>
+                    {card.paused_at ? (
+                      <>
+                        <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
+                          Paused {new Date(card.paused_at).toLocaleDateString()}
+                        </span>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Resume this subscription?\n\nThe card reopens to Published — the previous talent is released (shown as a former assignee) and the matching pool is available again. Billing stays stopped until you Broadcast and finalize a new assignment.')) resumeReopenMutation.mutate();
+                          }}
+                          disabled={resumeReopenMutation.isPending || cancelSubscriptionMutation.isPending}
+                          className="sh-btn-primary sh-btn-primary-sm"
+                          title="Reopen this paused subscription to Published, then broadcast and select a new assignment"
+                        >
+                          {resumeReopenMutation.isPending ? 'Resuming…' : 'Resume'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Cancel this subscription permanently?\n\nThe card closes, the talent is released, and billing stays stopped. This cannot be resumed.')) cancelSubscriptionMutation.mutate();
+                          }}
+                          disabled={resumeReopenMutation.isPending || cancelSubscriptionMutation.isPending}
+                          className="sh-btn-danger"
+                        >
+                          {cancelSubscriptionMutation.isPending ? 'Cancelling…' : 'Cancel subscription'}
+                        </button>
+                        <span className="text-[11px] text-emerald-700/80 dark:text-emerald-300/90">
+                          Resume reopens the card to Published to broadcast and re-select; Cancel closes it permanently.
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setChangeOpen(true)}
+                          disabled={undoMutation.isPending || reopenMutation.isPending}
+                          className="sh-btn-primary sh-btn-primary-sm"
+                          title="Upgrade/downgrade the plan, change the assigned talent, or pause/cancel — same card, billing splits at the effective date"
+                        >
+                          Manage assignment
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Unassign this talent?\n\nThis ends the live subscription on SquadHire — reconcile it there too. The card reopens so you can select someone else.')) undoMutation.mutate();
+                          }}
+                          disabled={undoMutation.isPending || reopenMutation.isPending}
+                          className="sh-btn-danger"
+                        >
+                          {undoMutation.isPending ? 'Unassigning…' : 'Unassign'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Reopen this card?\n\nThis archives the current responses, unassigns the talent (ends their live subscription on SquadHire), and reopens the card. You can then Broadcast to a fresh pool.')) reopenMutation.mutate();
+                          }}
+                          disabled={undoMutation.isPending || reopenMutation.isPending}
+                          className="sh-btn-ghost"
+                        >
+                          {reopenMutation.isPending ? 'Reopening…' : 'Reopen for new talents'}
+                        </button>
+                        <span className="text-[11px] text-emerald-700/80 dark:text-emerald-300/90">
+                          Manage assignment changes the plan or talent in place; Unassign/Reopen restart the selection round.
+                        </span>
+                      </>
                     )}
-                    <button
-                      onClick={() => setChangeOpen(true)}
-                      disabled={undoMutation.isPending || reopenMutation.isPending}
-                      className="sh-btn-primary sh-btn-primary-sm"
-                      title={card.paused_at ? 'Resume this paused subscription (same talent or rebroadcast) or cancel it' : 'Upgrade/downgrade the plan, change the assigned talent, or pause/cancel — same card, billing splits at the effective date'}
-                    >
-                      {card.paused_at ? 'Resume / Cancel' : 'Manage assignment'}
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (window.confirm('Unassign this talent?\n\nThis ends the live subscription on SquadHire — reconcile it there too. The card reopens so you can select someone else.')) undoMutation.mutate();
-                      }}
-                      disabled={undoMutation.isPending || reopenMutation.isPending}
-                      className="sh-btn-danger"
-                    >
-                      {undoMutation.isPending ? 'Unassigning…' : 'Unassign'}
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (window.confirm('Reopen this card?\n\nThis archives the current responses, unassigns the talent (ends their live subscription on SquadHire), and reopens the card. You can then Broadcast to a fresh pool.')) reopenMutation.mutate();
-                      }}
-                      disabled={undoMutation.isPending || reopenMutation.isPending}
-                      className="sh-btn-ghost"
-                    >
-                      {reopenMutation.isPending ? 'Reopening…' : 'Reopen for new talents'}
-                    </button>
-                    <span className="text-[11px] text-emerald-700/80 dark:text-emerald-300/90">
-                      Manage assignment changes the plan or talent in place; Unassign/Reopen restart the selection round.
-                    </span>
                   </div>
                 )}
               </div>

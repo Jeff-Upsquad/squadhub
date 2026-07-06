@@ -288,6 +288,26 @@ function CardPanelContent({
     },
   });
 
+  // Resume a paused subscription by reopening it to Published (no broadcast yet):
+  // the previous talent is released and shown as a former assignee, and the
+  // matching pool becomes available so the admin can Broadcast + re-select.
+  const resumeReopen = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${activeCardId}/resume`, { mode: 'reopen' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
+      qc.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', activeCardId] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      showToast('Resumed — moved to Published. Review the available talents, then Broadcast.', 'success');
+      clearConfirm();
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to resume subscription', 'error');
+      clearConfirm();
+    },
+  });
+
   const archiveCard = useMutation({
     mutationFn: () =>
       api.post(`/admin/subscription-cards/${activeCardId}/archive`),
@@ -515,24 +535,48 @@ function CardPanelContent({
         <div className="mx-5 mb-4 sh-card flex items-center justify-between p-3">
           {hasSelection ? (
             <>
-              <p className="text-xs font-semibold text-accent-strong">A recipient has been selected for this card.</p>
+              <p className="text-xs font-semibold text-accent-strong">
+                {activeCard.paused_at ? 'This subscription is paused.' : 'A recipient has been selected for this card.'}
+              </p>
               <div className="flex items-center gap-2">
-                {activeCard.state === 'assigned' && (
-                  <button
-                    onClick={() => setChangeOpen(true)}
-                    className="sh-btn-primary sh-btn-primary-sm"
-                    title="Upgrade/downgrade the plan or change the assigned talent"
-                  >
-                    Manage assignment
-                  </button>
+                {activeCard.paused_at ? (
+                  <>
+                    <button
+                      onClick={() => setConfirmAction({ kind: 'resume' })}
+                      disabled={resumeReopen.isPending || cancelCard.isPending}
+                      className="sh-btn-primary sh-btn-primary-sm"
+                      title="Reopen this paused subscription to Published, then broadcast and select a new assignment"
+                    >
+                      {resumeReopen.isPending ? 'Resuming…' : 'Resume'}
+                    </button>
+                    <button
+                      onClick={() => setConfirmAction({ kind: 'cancel' })}
+                      disabled={resumeReopen.isPending || cancelCard.isPending}
+                      className="sh-btn-danger"
+                    >
+                      {cancelCard.isPending ? 'Cancelling…' : 'Cancel subscription'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {activeCard.state === 'assigned' && (
+                      <button
+                        onClick={() => setChangeOpen(true)}
+                        className="sh-btn-primary sh-btn-primary-sm"
+                        title="Upgrade/downgrade the plan or change the assigned talent"
+                      >
+                        Manage assignment
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setConfirmAction({ kind: 'undoSelection' })}
+                      disabled={undoSelection.isPending}
+                      className="sh-btn-ghost sh-btn-ghost-sm"
+                    >
+                      Undo selection
+                    </button>
+                  </>
                 )}
-                <button
-                  onClick={() => setConfirmAction({ kind: 'undoSelection' })}
-                  disabled={undoSelection.isPending}
-                  className="sh-btn-ghost sh-btn-ghost-sm"
-                >
-                  Undo selection
-                </button>
               </div>
             </>
           ) : (
@@ -711,6 +755,7 @@ function CardPanelContent({
           undoSelection: undoSelection.isPending,
           recall: recallCard.isPending,
           cancel: cancelCard.isPending,
+          resume: resumeReopen.isPending,
           archive: archiveCard.isPending,
           reinstate: reinstateCard.isPending,
           republish: republishCard.isPending,
@@ -728,6 +773,7 @@ function CardPanelContent({
             case 'undoSelection': undoSelection.mutate(); break;
             case 'recall': recallCard.mutate(); break;
             case 'cancel': cancelCard.mutate(); break;
+            case 'resume': resumeReopen.mutate(); break;
             case 'archive': archiveCard.mutate(); break;
             case 'reinstate': reinstateCard.mutate(); break;
             case 'republish': republishCard.mutate(); break;
@@ -750,6 +796,7 @@ type ConfirmAction =
   | { kind: 'undoSelection' }
   | { kind: 'recall' }
   | { kind: 'cancel' }
+  | { kind: 'resume' }
   | { kind: 'archive' }
   | { kind: 'reinstate' }
   | { kind: 'republish' }
@@ -841,6 +888,13 @@ function ConfirmActionDialog({
       confirmLabel: hasAcceptances ? 'Cancel anyway' : 'Cancel',
       pendingLabel: 'Cancelling…',
       variant: 'danger',
+    },
+    resume: {
+      title: 'Resume this subscription?',
+      description: 'The card reopens to Published — the previous talent is released (shown as a former assignee) and the matching pool is available again. Billing stays stopped until you Broadcast and finalize a new assignment.',
+      confirmLabel: 'Resume',
+      pendingLabel: 'Resuming…',
+      variant: 'default',
     },
     archive: {
       title: 'Archive this card?',
