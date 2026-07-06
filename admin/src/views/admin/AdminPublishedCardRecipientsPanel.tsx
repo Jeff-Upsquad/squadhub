@@ -166,6 +166,17 @@ function CardPanelContent({
       api.get(`/admin/subscription-cards/${activeCardId}/recipients`).then((r) => r.data?.data as RecipientsResponse),
   });
 
+  // Former assignees gate the in-place plan/talent change on a reopened Published
+  // card (a card that came from a prior assignment — Repost / resume / republish).
+  const { data: historyRes } = useQuery({
+    queryKey: ['admin-card-assignment-history', activeCardId],
+    queryFn: () =>
+      api
+        .get(`/admin/subscription-cards/${activeCardId}/assignment-history`)
+        .then((r) => r.data?.data as { previous: unknown | null; past: unknown[] }),
+  });
+  const hasFormerAssignees = !!historyRes?.previous || (historyRes?.past?.length ?? 0) > 0;
+
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const clearConfirm = () => setConfirmAction(null);
 
@@ -304,6 +315,26 @@ function CardPanelContent({
     },
     onError: (err: any) => {
       showToast(err?.response?.data?.error || err.message || 'Failed to resume subscription', 'error');
+      clearConfirm();
+    },
+  });
+
+  // Repost a live assignment: release the talent and send the module back to the
+  // Published tab, where the admin re-broadcasts, re-selects, and can change
+  // plan/talent in place.
+  const repost = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${activeCardId}/repost`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
+      qc.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', activeCardId] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      showToast('Reposted — moved to Published. Broadcast to re-source, or change plan/talent from here.', 'success');
+      clearConfirm();
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to repost module', 'error');
       clearConfirm();
     },
   });
@@ -493,6 +524,17 @@ function CardPanelContent({
                 {broadcastCard.isPending ? 'Switching…' : 'Send to all matching'}
               </button>
             )}
+            {/* Reposted / resumed module in Published — change the plan or hand-pick
+                a talent in place (gated to cards that came from a prior assignment). */}
+            {hasFormerAssignees && (
+              <button
+                onClick={() => setChangeOpen(true)}
+                className="sh-btn-ghost sh-btn-ghost-sm"
+                title="Upgrade/downgrade the plan or hand-pick a talent for this reposted module"
+              >
+                Change plan / talent
+              </button>
+            )}
           </div>
         )}
 
@@ -560,13 +602,23 @@ function CardPanelContent({
                 ) : (
                   <>
                     {activeCard.state === 'assigned' && (
-                      <button
-                        onClick={() => setChangeOpen(true)}
-                        className="sh-btn-primary sh-btn-primary-sm"
-                        title="Upgrade/downgrade the plan or change the assigned talent"
-                      >
-                        Manage assignment
-                      </button>
+                      <>
+                        <button
+                          onClick={() => setConfirmAction({ kind: 'repost' })}
+                          disabled={repost.isPending || cancelCard.isPending || undoSelection.isPending}
+                          className="sh-btn-primary sh-btn-primary-sm"
+                          title="Send this module back to Published to re-source — broadcast, re-select, and change plan/talent from there"
+                        >
+                          {repost.isPending ? 'Reposting…' : 'Repost'}
+                        </button>
+                        <button
+                          onClick={() => setConfirmAction({ kind: 'cancel' })}
+                          disabled={repost.isPending || cancelCard.isPending || undoSelection.isPending}
+                          className="sh-btn-danger"
+                        >
+                          {cancelCard.isPending ? 'Cancelling…' : 'Cancel the module'}
+                        </button>
+                      </>
                     )}
                     <button
                       onClick={() => setConfirmAction({ kind: 'undoSelection' })}
@@ -739,7 +791,7 @@ function CardPanelContent({
         <AssignRecipientPicker cardId={activeCardId} onClose={() => setPickerOpen(false)} />
       )}
       {changeOpen && (
-        <AssignmentChangeModal cardId={activeCardId} pausedAt={activeCard.paused_at ?? null} onClose={() => setChangeOpen(false)} />
+        <AssignmentChangeModal cardId={activeCardId} pausedAt={activeCard.paused_at ?? null} published={activeCard.state === 'published' && hasFormerAssignees} onClose={() => setChangeOpen(false)} />
       )}
       <ConfirmActionDialog
         confirmAction={confirmAction}
@@ -756,6 +808,7 @@ function CardPanelContent({
           recall: recallCard.isPending,
           cancel: cancelCard.isPending,
           resume: resumeReopen.isPending,
+          repost: repost.isPending,
           archive: archiveCard.isPending,
           reinstate: reinstateCard.isPending,
           republish: republishCard.isPending,
@@ -774,6 +827,7 @@ function CardPanelContent({
             case 'recall': recallCard.mutate(); break;
             case 'cancel': cancelCard.mutate(); break;
             case 'resume': resumeReopen.mutate(); break;
+            case 'repost': repost.mutate(); break;
             case 'archive': archiveCard.mutate(); break;
             case 'reinstate': reinstateCard.mutate(); break;
             case 'republish': republishCard.mutate(); break;
@@ -797,6 +851,7 @@ type ConfirmAction =
   | { kind: 'recall' }
   | { kind: 'cancel' }
   | { kind: 'resume' }
+  | { kind: 'repost' }
   | { kind: 'archive' }
   | { kind: 'reinstate' }
   | { kind: 'republish' }
@@ -895,6 +950,13 @@ function ConfirmActionDialog({
       confirmLabel: 'Resume',
       pendingLabel: 'Resuming…',
       variant: 'default',
+    },
+    repost: {
+      title: 'Repost this module?',
+      description: 'The talent is released and the module goes back to Published (shown as a former assignee, matching pool available). Billing stops until you re-assign. From Published you can Broadcast, re-select, and change plan or talent.',
+      confirmLabel: 'Repost',
+      pendingLabel: 'Reposting…',
+      variant: 'warning',
     },
     archive: {
       title: 'Archive this card?',

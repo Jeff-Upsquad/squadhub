@@ -17,6 +17,7 @@ export type CardEventType =
   | 'talent_changed'
   | 'paused'
   | 'resumed'
+  | 'reposted'
   | 'recipient_accepted'
   | 'recipient_declined';
 

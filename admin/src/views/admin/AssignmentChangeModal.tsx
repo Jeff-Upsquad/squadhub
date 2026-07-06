@@ -52,14 +52,23 @@ export default function AssignmentChangeModal({
   cardId,
   onClose,
   pausedAt = null,
+  published = false,
 }: {
   cardId: string;
   onClose: () => void;
   /** subscription_cards.paused_at — when set, the modal shows the resume flow. */
   pausedAt?: string | null;
+  /**
+   * Reopened-card mode: the card is back in Published (came from a prior
+   * assignment). Shows only Change plan + Change talent — no lifecycle tab, no
+   * billing-split date (nothing is billed while unassigned) — and change-talent
+   * hand-picks a direct assignment. Ignored while paused (resume takes over).
+   */
+  published?: boolean;
 }) {
   const qc = useQueryClient();
   const isPaused = !!pausedAt;
+  const isPublished = published && !isPaused;
   const [mode, setMode] = useState<Mode>('plan');
   const [effectiveDate, setEffectiveDate] = useState(todayISO());
   const [error, setError] = useState<string | null>(null);
@@ -213,7 +222,7 @@ export default function AssignmentChangeModal({
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-[var(--color-sh-warm-border)] bg-surface px-5 py-4">
           <div className="space-y-1.5 min-w-0">
-            <span className="sh-eyebrow"><span className="sh-eyebrow-dot" />{isPaused ? 'Resume subscription' : 'Manage assignment'}</span>
+            <span className="sh-eyebrow"><span className="sh-eyebrow-dot" />{isPaused ? 'Resume subscription' : isPublished ? 'Reposted module' : 'Manage assignment'}</span>
             <h3 className="sh-display text-xl">{isPaused ? 'Bring this subscription back' : 'Change plan or talent'}</h3>
           </div>
           <button onClick={onClose} aria-label="Close" className="shrink-0 rounded-md p-1 text-[var(--color-sh-ink-muted)] hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)] transition">
@@ -227,9 +236,16 @@ export default function AssignmentChangeModal({
           <div className="flex gap-2">
             <button onClick={() => { setMode('plan'); setError(null); }} className={mode === 'plan' ? 'sh-btn-primary sh-btn-primary-sm' : 'sh-btn-ghost sh-btn-ghost-sm'}>Change plan</button>
             <button onClick={() => { setMode('talent'); setError(null); }} className={mode === 'talent' ? 'sh-btn-primary sh-btn-primary-sm' : 'sh-btn-ghost sh-btn-ghost-sm'}>Change talent</button>
-            <button onClick={() => { setMode('lifecycle'); setError(null); }} className={mode === 'lifecycle' ? 'sh-btn-primary sh-btn-primary-sm' : 'sh-btn-ghost sh-btn-ghost-sm'}>Pause / Cancel</button>
+            {/* Reposted (Published) cards aren't a live assignment — pause/cancel don't apply. */}
+            {!isPublished && (
+              <button onClick={() => { setMode('lifecycle'); setError(null); }} className={mode === 'lifecycle' ? 'sh-btn-primary sh-btn-primary-sm' : 'sh-btn-ghost sh-btn-ghost-sm'}>Pause / Cancel</button>
+            )}
           </div>
-          {mode !== 'lifecycle' && (
+          {isPublished ? (
+            <p className="text-[11px] text-[var(--color-sh-ink-muted)]">
+              This module is reposted and waiting in Published. Changes apply to the card now; billing opens fresh on the new plan/talent when you re-assign.
+            </p>
+          ) : mode !== 'lifecycle' && (
             <label className="block">
               <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-faint)]">Effective date</span>
               <input type="date" value={effectiveDate} max={todayISO()} onChange={(e) => setEffectiveDate(e.target.value)} className="sh-input mt-1" />
@@ -393,16 +409,20 @@ export default function AssignmentChangeModal({
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="sh-card px-4 py-3">
-                <p className="text-sm font-semibold text-[var(--color-sh-ink)]">Don't have a replacement yet?</p>
-                <p className="mt-1 text-xs text-[var(--color-sh-ink-muted)]">Reopen the call to the matching pool and re-broadcast so new candidates can accept. The old talent is released as of the effective date.</p>
-                <button onClick={() => findNewTalent.mutate()} disabled={busy} className="sh-btn-primary sh-btn-primary-sm mt-2 disabled:opacity-50">
-                  {findNewTalent.isPending ? 'Reopening…' : 'Find a new talent (rebroadcast)'}
-                </button>
-              </div>
+              {/* Reposted cards are already in Published — Broadcast lives there;
+                  here we only hand-pick a direct assignment. */}
+              {!isPublished && (
+                <div className="sh-card px-4 py-3">
+                  <p className="text-sm font-semibold text-[var(--color-sh-ink)]">Don't have a replacement yet?</p>
+                  <p className="mt-1 text-xs text-[var(--color-sh-ink-muted)]">Reopen the call to the matching pool and re-broadcast so new candidates can accept. The old talent is released as of the effective date.</p>
+                  <button onClick={() => findNewTalent.mutate()} disabled={busy} className="sh-btn-primary sh-btn-primary-sm mt-2 disabled:opacity-50">
+                    {findNewTalent.isPending ? 'Reopening…' : 'Find a new talent (rebroadcast)'}
+                  </button>
+                </div>
+              )}
 
               <div>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-faint)]">Or hand-pick a known replacement (no rebroadcast)</p>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-faint)]">{isPublished ? 'Hand-pick a talent or partner to assign' : 'Or hand-pick a known replacement (no rebroadcast)'}</p>
                 <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search talents and partners…" className="sh-input" />
                 <div className="mt-3 space-y-1.5">
                   {talents.map((t) => (
