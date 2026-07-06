@@ -36,6 +36,9 @@ interface SubscriptionRequest {
   verified_by_user?: { id: string; display_name: string | null; email: string | null } | null;
   client_approved_at?: string | null;
   verified_at?: string | null;
+  // A reopened card (Repost / paused-resume) sent back to New Deals as a draft —
+  // it carries a published_at from its prior life. Drives the "Resumed" tag.
+  reopened?: boolean;
 }
 
 export default function AdminRequestsList() {
@@ -118,6 +121,25 @@ export default function AdminRequestsList() {
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
   });
+  // "Resumed" queue: cards reopened by Repost / paused-resume come back as drafts
+  // carrying a published_at from their prior life. `reopened=true` surfaces them
+  // regardless of source (the per-source queries above miss request/submission
+  // origins), tagged Resumed and de-duped from the other groups below.
+  const { data: reopenedRes } = useQuery({
+    queryKey: ['admin-reopened-drafts', search],
+    queryFn: () => {
+      const params: Record<string, string> = { state: 'new,draft', reopened: 'true' };
+      if (search.trim()) params.search = search.trim();
+      return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
+    },
+  });
+  const reopenedRequests: SubscriptionRequest[] = (reopenedRes?.data || []).map((c: any) => {
+    const src: 'shared_form' | 'landing_page_form' | 'internal_brief' =
+      c.source === 'shared_form' || c.source === 'landing_page_form' ? c.source : 'internal_brief';
+    return { ...adaptCardToRequest(c, src), reopened: true };
+  });
+  const reopenedIds = new Set(reopenedRequests.map((r) => r.card_id).filter(Boolean));
+
   const sharedFormRequests: SubscriptionRequest[] =
     (sharedRes?.data || []).map((c: any) => adaptCardToRequest(c, 'shared_form'));
   const landingPageRequests: SubscriptionRequest[] =
@@ -126,10 +148,13 @@ export default function AdminRequestsList() {
     (briefRes?.data || []).map((c: any) => adaptCardToRequest(c, 'internal_brief'));
 
   const allRequests: SubscriptionRequest[] = [
-    ...upsquadRequests,
-    ...sharedFormRequests,
-    ...landingPageRequests,
-    ...internalBriefRequests,
+    // Reopened drafts first, and filtered out of the other groups so a reopened
+    // card (which may also match a per-source query) appears once, tagged Resumed.
+    ...reopenedRequests,
+    ...upsquadRequests.filter((r) => !r.card_id || !reopenedIds.has(r.card_id)),
+    ...sharedFormRequests.filter((r) => !r.card_id || !reopenedIds.has(r.card_id)),
+    ...landingPageRequests.filter((r) => !r.card_id || !reopenedIds.has(r.card_id)),
+    ...internalBriefRequests.filter((r) => !r.card_id || !reopenedIds.has(r.card_id)),
   ];
 
   // Archived cards stay in the Archive tab — hide their originating
@@ -402,6 +427,15 @@ function RequestRow({
         {request.working_days && (
           <span className="text-xs text-[var(--color-sh-ink-muted)]">
             {request.working_days.split(',').length}d/wk
+          </span>
+        )}
+        {request.reopened && (
+          <span
+            className="sh-status-pill"
+            style={{ backgroundColor: '#F9731622', color: '#C2410C' }}
+            title="Resumed from a previous assignment (Repost / Resume). Review pricing and details, then publish to re-broadcast."
+          >
+            ↩ Resumed
           </span>
         )}
         {request.state === 'new' || request.state === 'draft' ? (
