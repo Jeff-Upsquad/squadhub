@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQuery, useQueries, useQueryClient, useMutation } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -47,6 +47,75 @@ type MatchPreview = {
   talents: Array<{ talent_user_id: string; talent_name: string }>;
   computed_at: string;
 };
+
+// A recipient tagged with the tier (tile) it belongs to — used by the "All"
+// tier view to show a merged, cross-tier list. tier is null for legacy rows.
+type TieredRecipient = UnifiedRecipient & { tier: string | null };
+
+// A tier card's display tier (first entry of target_tiers). Mirrors tierOf in
+// AdminPublishedCards without a cross-file import.
+const tierLabelOf = (c: PublishedCard): string | null =>
+  Array.isArray(c.target_tiers) && c.target_tiers.length > 0 ? c.target_tiers[0] : null;
+
+// Merge SquadHub-local recipients (partners + responded/queued talents) with
+// the live SquadHire match list into one unified list. Talents in both sources
+// are deduped in favour of the local row (it carries response + selection
+// state); SquadHire supplies emails and the not-yet-responded pool. Shared by
+// the single-tier view and the per-sibling "All" aggregation.
+function buildUnifiedRecipients(
+  data: RecipientsResponse | undefined,
+  squadhireTalents: SquadHireTalent[],
+): UnifiedRecipient[] {
+  if (!data) return [];
+
+  const partners: UnifiedRecipient[] = (data.partners || []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    type: 'partner',
+    status: p.status,
+    responded_at: p.responded_at,
+    assigned_manually: !!p.assigned_manually,
+    selected_at: p.selected_at ?? null,
+    passed_over_at: p.passed_over_at ?? null,
+    notified_at: null,
+    email: null,
+  }));
+
+  const localTalentIds = new Set((data.talents || []).map((t) => t.external_user_id));
+  const emailByTalentId = new Map(
+    squadhireTalents.map((t) => [t.talent_user_id, t.email ?? null] as const),
+  );
+
+  const localTalents: UnifiedRecipient[] = (data.talents || []).map((t) => ({
+    id: t.external_user_id,
+    name: t.name || 'Unknown talent',
+    type: 'talent',
+    status: t.status,
+    responded_at: t.responded_at,
+    assigned_manually: !!t.assigned_manually,
+    selected_at: t.selected_at ?? null,
+    passed_over_at: t.passed_over_at ?? null,
+    notified_at: t.notified_at ?? null,
+    email: t.email ?? emailByTalentId.get(t.external_user_id) ?? null,
+  }));
+
+  const remoteTalents: UnifiedRecipient[] = squadhireTalents
+    .filter((t) => !localTalentIds.has(t.talent_user_id))
+    .map((t) => ({
+      id: t.talent_user_id,
+      name: t.talent_name || 'Unknown talent',
+      type: 'talent',
+      status: t.status,
+      responded_at: t.responded_at,
+      assigned_manually: false,
+      selected_at: null,
+      passed_over_at: null,
+      notified_at: null,
+      email: t.email ?? null,
+    }));
+
+  return [...partners, ...localTalents, ...remoteTalents];
+}
 
 function formatRelative(iso: string | null): string {
   if (!iso) return '';
@@ -128,6 +197,8 @@ export default function AdminPublishedCardRecipientsView({
   onBack,
   onOpenPanel,
   tierTabs,
+  groupCards,
+  allTiersMode = false,
 }: {
   card: PublishedCard;
   title: string;
@@ -137,6 +208,12 @@ export default function AdminPublishedCardRecipientsView({
   // Switching a tab swaps the active tier card so the recipients below are the
   // talents matched to that tier. Undefined for single-tier cards.
   tierTabs?: React.ReactNode;
+  // All sibling tier cards of a multi-tier brief (length > 1 when grouped).
+  // Drives the merged "All tiers" recipients / former-assignees aggregation
+  // and the "Broadcast all tiers" action.
+  groupCards?: PublishedCard[];
+  // True when the "All" tier tab is active — render the merged cross-tier view.
+  allTiersMode?: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<StatusTab>('all');
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
@@ -191,73 +268,110 @@ export default function AdminPublishedCardRecipientsView({
   // Read-only "who would match" preview for a published, not-yet-broadcast card.
   const matchPreview = shRecipientsRes?.match_preview ?? null;
 
-  const allRecipients = useMemo<UnifiedRecipient[]>(() => {
-    if (!data) return [];
+  const allRecipients = useMemo<UnifiedRecipient[]>(
+    () => buildUnifiedRecipients(data, squadhireTalents),
+    [data, squadhireTalents],
+  );
 
-    // Partners from SquadHub
-    const partners: UnifiedRecipient[] = (data.partners || []).map((p) => ({
-      id: p.id,
-      name: p.name,
-      type: 'partner',
-      status: p.status,
-      responded_at: p.responded_at,
-      assigned_manually: !!p.assigned_manually,
-      selected_at: p.selected_at ?? null,
-      passed_over_at: p.passed_over_at ?? null,
-      notified_at: null,
-      email: null,
-    }));
+  // ── Cross-tier ("All tiers") aggregation ───────────────────────────────
+  // A multi-tier brief fans out into one sibling card per tier. The "All"
+  // view merges every sibling's recipients / former assignees into one list,
+  // each tagged with its tier. We reuse the SAME per-card query keys as the
+  // single-tier view, so the cache is shared — a broadcast/assign on one tier
+  // refreshes both views, and no request is duplicated.
+  const groupSiblings = useMemo(
+    () => (groupCards && groupCards.length > 1 ? groupCards : []),
+    [groupCards],
+  );
+  const isGrouped = groupSiblings.length > 1;
 
-    // Build a set of talent IDs we already have from the local callback table
-    // to avoid duplicating talents who responded (they exist in both sources)
-    const localTalentIds = new Set(
-      (data.talents || []).map((t) => t.external_user_id)
-    );
+  const groupRecipientQueries = useQueries({
+    queries: groupSiblings.map((c) => ({
+      queryKey: ['admin-card-recipients', c.id],
+      queryFn: () =>
+        api.get(`/admin/subscription-cards/${c.id}/recipients`).then((r) => r.data?.data as RecipientsResponse),
+    })),
+  });
+  const groupSquadhireQueries = useQueries({
+    queries: groupSiblings.map((c) => ({
+      queryKey: ['admin-card-squadhire-recipients', c.id],
+      queryFn: () =>
+        api.get(`/admin/subscription-cards/${c.id}/squadhire-recipients`).then((r) => (r.data as { data: SquadHireTalent[] }).data),
+      enabled: Array.isArray(c.squadhire_category_ids) && c.squadhire_category_ids.length > 0,
+    })),
+  });
+  const groupHistoryQueries = useQueries({
+    queries: groupSiblings.map((c) => ({
+      queryKey: ['admin-card-assignment-history', c.id],
+      queryFn: () =>
+        api.get(`/admin/subscription-cards/${c.id}/assignment-history`).then((r) => r.data?.data as { previous: AssigneeEntry | null; past: AssigneeEntry[] }),
+    })),
+  });
 
-    // Email lookup keyed by SquadHire talent_user_id. SquadHire is the
-    // source of truth for talent emails; our local table doesn't store them,
-    // so we cross-reference for any localTalent that also appears on the
-    // SquadHire side.
-    const emailByTalentId = new Map(
-      squadhireTalents.map((t) => [t.talent_user_id, t.email ?? null] as const),
-    );
+  const groupRecipients = useMemo<TieredRecipient[]>(() => {
+    if (!isGrouped) return [];
+    return groupSiblings.flatMap((c, i) => {
+      const recips = groupRecipientQueries[i]?.data as RecipientsResponse | undefined;
+      const sh = (groupSquadhireQueries[i]?.data as SquadHireTalent[] | undefined) ?? [];
+      const tier = tierLabelOf(c);
+      return buildUnifiedRecipients(recips, sh).map((r) => ({ ...r, tier }));
+    });
+  }, [isGrouped, groupSiblings, groupRecipientQueries, groupSquadhireQueries]);
 
-    // Talents from local callback table (responded via webhook)
-    const localTalents: UnifiedRecipient[] = (data.talents || []).map((t) => ({
-      id: t.external_user_id,
-      name: t.name || 'Unknown talent',
-      type: 'talent',
-      status: t.status,
-      responded_at: t.responded_at,
-      assigned_manually: !!t.assigned_manually,
-      selected_at: t.selected_at ?? null,
-      passed_over_at: t.passed_over_at ?? null,
-      notified_at: t.notified_at ?? null,
-      // Prefer the email persisted on our row (written by /assign-talent or
-      // /auto-accept-talent); fall back to SquadHire's matched-recipient
-      // email when our row predates the email column.
-      email: t.email ?? emailByTalentId.get(t.external_user_id) ?? null,
-    }));
+  const groupCounts = useMemo(() => ({
+    accepted: groupRecipients.filter((r) => r.status === 'accepted').length,
+    rejected: groupRecipients.filter((r) => r.status === 'rejected').length,
+    pending: groupRecipients.filter((r) => r.status === 'pending').length,
+    total: groupRecipients.length,
+  }), [groupRecipients]);
 
-    // Talents from SquadHire that are NOT already in local data
-    // These are the ones who haven't responded yet (or whose callback hasn't arrived)
-    const remoteTalents: UnifiedRecipient[] = squadhireTalents
-      .filter((t) => !localTalentIds.has(t.talent_user_id))
-      .map((t) => ({
-        id: t.talent_user_id,
-        name: t.talent_name || 'Unknown talent',
-        type: 'talent',
-        status: t.status,
-        responded_at: t.responded_at,
-        assigned_manually: false,
-        selected_at: null,
-        passed_over_at: null,
-        notified_at: null,
-        email: t.email ?? null,
-      }));
+  const groupAssignees = useMemo<Array<AssigneeEntry & { tier: string | null; isPrevious: boolean }>>(() => {
+    if (!isGrouped) return [];
+    const out: Array<AssigneeEntry & { tier: string | null; isPrevious: boolean }> = [];
+    groupSiblings.forEach((c, i) => {
+      const h = groupHistoryQueries[i]?.data as { previous: AssigneeEntry | null; past: AssigneeEntry[] } | undefined;
+      const tier = tierLabelOf(c);
+      if (h?.previous) out.push({ ...h.previous, tier, isPrevious: true });
+      (h?.past ?? []).forEach((e) => out.push({ ...e, tier, isPrevious: false }));
+    });
+    return out;
+  }, [isGrouped, groupSiblings, groupHistoryQueries]);
 
-    return [...partners, ...localTalents, ...remoteTalents];
-  }, [data, squadhireTalents]);
+  // Tiers still awaiting broadcast — the "Broadcast all tiers" action targets
+  // exactly these (published siblings whose recipients haven't been sent).
+  const broadcastableTiers = useMemo(
+    () => groupSiblings.filter((c) => c.state === 'published' && c.needs_broadcast),
+    [groupSiblings],
+  );
+
+  const broadcastAllMutation = useMutation({
+    mutationFn: async () => {
+      const results = await Promise.allSettled(
+        broadcastableTiers.map((c) => api.post(`/admin/subscription-cards/${c.id}/broadcast-now`)),
+      );
+      return results;
+    },
+    onSuccess: (results) => {
+      const ok = results.filter((r) => r.status === 'fulfilled').length;
+      const failed = results.length - ok;
+      groupSiblings.forEach((c) => {
+        queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', c.id] });
+        queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', c.id] });
+      });
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      if (failed === 0) {
+        showToast(`Broadcast ${ok} tier${ok !== 1 ? 's' : ''}.`, 'success');
+      } else {
+        showToast(
+          `Broadcast ${ok} of ${results.length} tier${results.length !== 1 ? 's' : ''} — ${failed} failed. Retry to send the rest.`,
+          failed === results.length ? 'error' : 'success',
+        );
+      }
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to broadcast tiers', 'error');
+    },
+  });
 
   // Once a card has a final recipient (Assigned bucket), recipient selection
   // is frozen — no checkboxes, no bottom action bar. Selecting Talent panel
@@ -666,10 +780,155 @@ export default function AdminPublishedCardRecipientsView({
     talentSentCount === 0 && talentQueuedCount === 0 && matchPreview ? matchPreview.talents : [];
   const previewCount = previewTalents.length;
   const recipientsTotal = counts.total + previewCount;
+
+  // Mode-aware recipients data: the "All tiers" view shows the merged
+  // cross-tier list + counts; a single tier shows just its own.
+  const displayTotal = allTiersMode ? groupCounts.total : recipientsTotal;
+  const displayCounts = allTiersMode ? groupCounts : counts;
+  const displayFiltered: TieredRecipient[] = allTiersMode
+    ? (activeTab === 'all' ? groupRecipients : groupRecipients.filter((r) => r.status === activeTab))
+    : [];
+
   // Partners are broadcast as a pool too — so the verb has to track the stage.
   // Manual cards hand-pick (share), broadcast cards stage at publish and only
   // go out once needs_broadcast clears. Mirrors the lifecycle pill above.
   const partnerVerb = isManual ? 'Shared with' : card.needs_broadcast ? 'Staged for' : 'Broadcasted to';
+
+  // A former-assignee row, optionally tagged with the tier it belongs to (the
+  // grouped "All" view passes a tier; the single-tier view passes null).
+  const renderAssigneeRow = (e: AssigneeEntry, isPrevious: boolean, tier: string | null) => {
+    const isTalent = e.recipient_type === 'talent';
+    const name = e.recipient_name || (isTalent ? 'Unknown talent' : 'Unknown partner');
+    const period = formatAssignmentPeriod(e);
+    const sh = e.squadhire_status ? SQUADHIRE_STATUS_TAG[e.squadhire_status] : null;
+    const shTitle =
+      e.squadhire_status === 'blacklisted' && e.blacklisted_reason
+        ? `Blacklisted on SquadHire: ${e.blacklisted_reason}`
+        : e.squadhire_status === 'suspended' && e.suspended_reason
+          ? `Suspended on SquadHire: ${e.suspended_reason}`
+          : sh?.label;
+    return (
+      <div key={`prev-${tier ?? ''}-${e.recipient_type}-${e.recipient_id}`} className="sh-card flex items-center gap-3 px-4 py-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-sh-cream)] text-sm font-bold text-[var(--color-sh-ink-muted)] ring-1 ring-[var(--color-sh-warm-border)]">
+          {name.charAt(0).toUpperCase()}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">{name}</p>
+            {tier && (
+              <span className="shrink-0 rounded-full bg-[var(--color-sh-lime-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-sh-ink)] ring-1 ring-[var(--color-sh-warm-border)]">
+                {tier}
+              </span>
+            )}
+            <span
+              className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+              style={isTalent ? { backgroundColor: '#F2EBFE', color: '#6B21A8' } : { backgroundColor: '#DBEAFE', color: '#1E40AF' }}
+            >
+              {isTalent ? 'Talent' : 'Partner'}
+            </span>
+            {isPrevious && (
+              <span className="shrink-0 rounded-full bg-[var(--color-sh-cream)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-sh-ink-muted)] ring-1 ring-[var(--color-sh-warm-border)]">
+                Previous assignee
+              </span>
+            )}
+            {sh && (
+              <span
+                className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                style={{ backgroundColor: sh.bg, color: sh.color }}
+                title={shTitle}
+              >
+                {sh.label}
+              </span>
+            )}
+          </div>
+          {period && (
+            <p className="mt-0.5 truncate text-[11px] text-[var(--color-sh-ink-faint)]">{period}</p>
+          )}
+        </div>
+        {isTalent && adminUrl && (
+          <a
+            href={`${adminUrl}/admin/users/${e.recipient_id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="View profile in SquadHire"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--color-sh-ink-muted)] transition hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)]"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+          </a>
+        )}
+      </div>
+    );
+  };
+
+  // A merged "All tiers" recipient row — read-only (assignment happens per
+  // tier), tagged with the tier it belongs to.
+  const renderTierRecipientRow = (r: TieredRecipient) => {
+    const statusCfg = STATUS_PILL[r.status];
+    const isQueuedTalent = r.type === 'talent' && r.status === 'pending' && !r.notified_at && !r.responded_at;
+    return (
+      <div key={`all-${r.tier ?? ''}-${r.type}-${r.id}`} className="sh-card flex items-center gap-3 px-4 py-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)] text-sm font-bold ring-1 ring-[var(--color-sh-warm-border)]">
+          {r.name.charAt(0).toUpperCase()}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-[var(--color-sh-ink)]">{r.name}</p>
+          {r.responded_at ? (
+            <p className="text-[11px] text-[var(--color-sh-ink-faint)]">Responded {formatRelative(r.responded_at)}</p>
+          ) : isQueuedTalent ? (
+            <p className="text-[11px] text-[var(--color-sh-ink-faint)]">Awaiting broadcast</p>
+          ) : r.status === 'pending' ? (
+            <p className="text-[11px] text-[var(--color-sh-ink-faint)]">Awaiting response</p>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {r.tier && (
+            <span className="sh-status-pill" style={{ backgroundColor: 'var(--color-sh-lime-soft)', color: 'var(--color-sh-ink)' }}>
+              {r.tier}
+            </span>
+          )}
+          {isQueuedTalent ? (
+            <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>queued</span>
+          ) : (
+            <span className="sh-status-pill" style={{ backgroundColor: statusCfg.bg, color: statusCfg.color }}>{r.status}</span>
+          )}
+          <span
+            className="sh-status-pill"
+            style={r.type === 'partner' ? { backgroundColor: '#DBEAFE', color: '#1E40AF' } : { backgroundColor: '#F2EBFE', color: '#6B21A8' }}
+          >
+            {r.type === 'partner' ? 'Partner' : 'Talent'}
+          </span>
+          {r.type === 'talent' && adminUrl && (
+            <a
+              href={`${adminUrl}/admin/users/${r.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="View profile in SquadHire"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-sh-ink-faint)] hover:bg-[var(--color-sh-cream)] hover:text-[var(--color-sh-ink)] transition"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderAllTiersList = () => {
+    if (displayFiltered.length === 0) {
+      return (
+        <div className="sh-card py-12 text-center">
+          <p className="text-sm text-[var(--color-sh-ink-subtle)]">
+            {activeTab === 'all' ? 'No recipients across any tier yet.' : `No ${activeTab} recipients across any tier.`}
+          </p>
+        </div>
+      );
+    }
+    return <div className="space-y-2">{displayFiltered.map(renderTierRecipientRow)}</div>;
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -843,6 +1102,57 @@ export default function AdminPublishedCardRecipientsView({
           </div>
         ) : (
           <>
+            {/* Previous assignees hoisted above the tabs for a grouped brief so
+                they span all tiers instead of hiding under one tier's tab. */}
+            {isGrouped && groupAssignees.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3 pt-1">
+                  <span className="text-xs font-bold uppercase tracking-[0.04em] text-[var(--color-sh-ink)]">
+                    Previous assignees
+                  </span>
+                  <span className="text-xs font-semibold tabular-nums text-[var(--color-sh-ink-faint)]">
+                    {groupAssignees.length}
+                  </span>
+                  <div className="h-px flex-1 bg-[var(--color-sh-warm-border)]" />
+                </div>
+                {groupAssignees.filter((e) => e.isPrevious).map((e) => renderAssigneeRow(e, true, e.tier))}
+                {groupAssignees.some((e) => !e.isPrevious) && (
+                  <>
+                    <p className="px-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-faint)]">
+                      Past assignees
+                    </p>
+                    {groupAssignees.filter((e) => !e.isPrevious).map((e) => renderAssigneeRow(e, false, e.tier))}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Tier tabs (incl. "All") pinned to the top of the detail. */}
+            {tierTabs}
+
+            {/* One-click broadcast for every tier still awaiting broadcast. */}
+            {allTiersMode && (
+              <div className="sh-card flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <span className="text-xs text-[var(--color-sh-ink-muted)]">
+                  {broadcastableTiers.length > 0
+                    ? `${broadcastableTiers.length} tier${broadcastableTiers.length !== 1 ? 's' : ''} awaiting broadcast`
+                    : 'All tiers have been broadcast'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => broadcastAllMutation.mutate()}
+                  disabled={broadcastableTiers.length === 0 || broadcastAllMutation.isPending}
+                  className="sh-btn-primary sh-btn-primary-sm"
+                  title="Broadcast every tier whose recipients haven't been sent yet"
+                >
+                  {broadcastAllMutation.isPending ? 'Broadcasting…' : 'Broadcast all tiers'}
+                </button>
+              </div>
+            )}
+
+            {/* Per-tier summary blocks — hidden in the merged "All tiers" view. */}
+            {!allTiersMode && (
+              <>
             {/* Selected talent(s) — emerald card mirroring the SquadHire business view */}
             {selectedRecipients.length > 0 && (
               <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/50 p-5 sm:p-6 dark:border-emerald-500/30 dark:bg-emerald-500/10">
@@ -1040,17 +1350,15 @@ export default function AdminPublishedCardRecipientsView({
                 );
               })}
             </div>
-
-            {/* Per-tier tabs (multi-tier briefs) — switching loads that tier's
-                recipients into the counts + list below. */}
-            {tierTabs}
+              </>
+            )}
 
             {/* Former assignees — who held this card before the current pick,
                 sourced from ended assignment terms. Neutral styling (NOT the
                 emerald "Selected" card): these people are released / on hold.
                 Talents show their current SquadHire standing so a suspended or
                 inactive prior talent is obvious before you re-offer to them. */}
-            {(() => {
+            {!isGrouped && (() => {
               if (!previousAssignee && pastAssignees.length === 0) return null;
               const total = (previousAssignee ? 1 : 0) + pastAssignees.length;
               const renderAssignee = (e: AssigneeEntry, isPrevious: boolean) => {
@@ -1144,7 +1452,7 @@ export default function AdminPublishedCardRecipientsView({
                 Recipients
               </span>
               <span className="text-xs font-semibold tabular-nums text-[var(--color-sh-ink-faint)]">
-                {recipientsTotal}
+                {displayTotal}
               </span>
               <div className="h-px flex-1 bg-[var(--color-sh-warm-border)]" />
             </div>
@@ -1153,7 +1461,7 @@ export default function AdminPublishedCardRecipientsView({
             <div className="overflow-x-auto">
               <div className="sh-tab-bar">
                 {(['all', 'accepted', 'rejected', 'pending'] as const).map((tab) => {
-                  const count = tab === 'all' ? recipientsTotal : counts[tab];
+                  const count = tab === 'all' ? displayTotal : displayCounts[tab];
                   const label = tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1);
                   return (
                     <button
@@ -1171,7 +1479,7 @@ export default function AdminPublishedCardRecipientsView({
             </div>
 
             {/* Recipient list */}
-            {(() => {
+            {allTiersMode ? renderAllTiersList() : (() => {
               const renderRow = (r: UnifiedRecipient) => {
                 const statusCfg = STATUS_PILL[r.status];
                 const rowKey = `${r.type}-${r.id}`;
@@ -1453,7 +1761,7 @@ export default function AdminPublishedCardRecipientsView({
       </div>
 
       {/* Floating Assign bar */}
-      {canAssign && checkedIds.size > 0 && (() => {
+      {!allTiersMode && canAssign && checkedIds.size > 0 && (() => {
         const isSelectedBucket = bucket === 'selected';
         const mutation = isSelectedBucket ? finalizeMutation : assignMutation;
         const idleLabel = isSelectedBucket
