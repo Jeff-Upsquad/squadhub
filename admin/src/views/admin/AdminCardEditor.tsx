@@ -916,120 +916,168 @@ export default function AdminCardEditor({
                 Select at least one tier above to set pricing.
               </p>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {tiers.length > 1 && (
                   <p className="rounded-lg bg-[var(--color-sh-cream)] px-3 py-2 text-[11px] text-[var(--color-sh-ink-muted)]">
                     All {tiers.length} tiers publish as <strong>one card</strong> with a tab per tier — talents and the business each see only their tier&apos;s pricing.
                   </p>
                 )}
-                {displayTiers.map((tier) => {
-                  const entry = tierPricing[tier] || { proposedPrice: 0, markup: null, subscriptionPrice: null };
-                  const partnerPrice = partnerPriceForTier(tier);
-                  const catalogPricingRow = catalogByTier[tier]?.pricing?.[0] || null;
-                  const catalogMarginInRupees = catalogMarginForTier(tier);
-                  const showOriginal =
-                    tiers.length === 1 &&
-                    originalProposedPrice != null &&
-                    originalProposedPrice !== entry.proposedPrice;
-                  return (
-                    <div
-                      key={tier}
-                      className="rounded-xl border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] p-4"
-                    >
-                      <div className="mb-3 flex items-center gap-2">
-                        <h3 className="text-sm font-semibold text-[var(--color-sh-ink)]">
-                          {tier} pricing
-                        </h3>
-                        <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-medium text-[var(--color-sh-ink-muted)]">
-                          {tiers.length > 1 ? 'Tab in 1 card' : '1 card on publish'}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <Field label="Proposed Price by customer (₹/mo)">
-                          <input
-                            type="number"
-                            value={entry.proposedPrice || ''}
-                            onChange={(e) =>
-                              updateTierPricing(tier, 'proposedPrice', parseInt(e.target.value) || 0)
-                            }
-                            disabled={!isEditable}
-                            className="sh-input"
-                          />
-                          {showOriginal && (
-                            <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
-                              Originally <span className="line-through">₹{originalProposedPrice!.toLocaleString()}</span>
-                            </p>
-                          )}
-                          <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
-                            Budget the client submitted in their brief.
-                          </p>
-                        </Field>
-                        {/* Read-only reference: the plan's price from the
-                            Subscriptions catalog (set in the admin panel). */}
-                        <Field label="Subscription Price (₹/mo)">
-                          <div className="flex h-[40px] items-center rounded-[10px] border border-[var(--color-sh-warm-border)] bg-surface px-3 text-sm font-medium text-[var(--color-sh-ink)]">
-                            {catalogPricingRow ? `₹${catalogPricingRow.price.toLocaleString()}` : '—'}
-                          </div>
-                          <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
-                            Default price from the Subscriptions catalog.
-                          </p>
-                        </Field>
-                        {/* "Final Price" is the finalized amount the client
-                            actually pays. Stored as subscription_price under the
-                            hood; blank falls back to the proposed price. */}
-                        <Field label="Final Price (₹/mo)">
-                          <input
-                            type="number"
-                            min={0}
-                            value={entry.subscriptionPrice ?? ''}
-                            placeholder={entry.proposedPrice ? `${entry.proposedPrice}` : ''}
-                            onChange={(e) => {
-                              const v = parseInt(e.target.value);
-                              updateTierPricing(tier, 'subscriptionPrice', Number.isFinite(v) && v > 0 ? v : null);
-                            }}
-                            disabled={!isEditable}
-                            className="sh-input"
-                          />
-                          <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
-                            Finalized price the client pays. Blank = use proposed.
-                          </p>
-                        </Field>
-                        <Field label="Margin (₹/mo)">
-                          <input
-                            type="number"
-                            min={0}
-                            value={entry.markup ?? ''}
-                            placeholder={catalogMarginInRupees != null ? `${catalogMarginInRupees}` : ''}
-                            onChange={(e) => {
-                              const v = parseInt(e.target.value);
-                              updateTierPricing(tier, 'markup', Number.isFinite(v) ? v : null);
-                            }}
-                            disabled={!isEditable}
-                            className="sh-input"
-                          />
-                          {catalogPricingRow ? (
-                            <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
-                              {entry.markup == null ? 'Using plan margin — ' : 'Plan: '}
-                              {catalogPricingRow.margin_type === 'percent'
-                                ? `${catalogPricingRow.margin_value}% (= ₹${(catalogMarginInRupees ?? 0).toLocaleString()})`
-                                : `₹${catalogPricingRow.margin_value.toLocaleString()} (flat)`}
-                            </p>
-                          ) : (
-                            <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">
-                              Blank = use plan margin.
-                            </p>
-                          )}
-                        </Field>
-                        <Field label="Partner Price (₹/mo)">
-                          <div className="flex h-[40px] items-center rounded-[10px] border border-[var(--color-sh-warm-border)] bg-surface px-3 text-sm font-bold text-[var(--color-sh-ink)]">
-                            {partnerPrice != null ? `₹${partnerPrice.toLocaleString()}` : '—'}
-                          </div>
-                          <p className="mt-1 text-[11px] text-[var(--color-sh-ink-faint)]">= Final Price − Margin</p>
-                        </Field>
-                      </div>
-                    </div>
-                  );
-                })}
+
+                {/* Pricing matrix — one row per selected tier. Columns run
+                    Subscription → Proposed → Final → Margin → Partner so the
+                    money reads left-to-right from catalog reference to payout.
+                    Final and Partner are the load-bearing figures (shaded): Final
+                    always resolves to a concrete number the client pays (explicit
+                    override, else the proposed price), and Partner is derived as
+                    Final − Margin. */}
+                <div className="overflow-x-auto rounded-xl border border-[var(--color-sh-warm-border)]">
+                  <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-[var(--color-sh-warm-border)] align-bottom">
+                        <th className="bg-[var(--color-sh-cream)] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                          Tier
+                        </th>
+                        <th className="bg-[var(--color-sh-cream)] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                          Subscription price
+                        </th>
+                        <th className="bg-[var(--color-sh-cream)] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                          Proposed price
+                        </th>
+                        <th className="bg-[var(--color-sh-cream)] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink)]">
+                          Final price
+                        </th>
+                        <th className="bg-[var(--color-sh-cream)] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                          Margin
+                        </th>
+                        <th className="bg-[var(--color-sh-cream)] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink)]">
+                          Partner price
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayTiers.map((tier, rowIdx) => {
+                        const entry = tierPricing[tier] || { proposedPrice: 0, markup: null, subscriptionPrice: null };
+                        const partnerPrice = partnerPriceForTier(tier);
+                        const catalogPricingRow = catalogByTier[tier]?.pricing?.[0] || null;
+                        const catalogMarginInRupees = catalogMarginForTier(tier);
+                        const showOriginal =
+                          tiers.length === 1 &&
+                          originalProposedPrice != null &&
+                          originalProposedPrice !== entry.proposedPrice;
+                        // The final price the client actually pays always resolves
+                        // to a number: the explicit override if set, otherwise the
+                        // proposed price (mirrors partnerPriceForTier's fallback).
+                        const effectiveFinal =
+                          entry.subscriptionPrice ?? (entry.proposedPrice > 0 ? entry.proposedPrice : null);
+                        const finalUsesProposed = entry.subscriptionPrice == null && effectiveFinal != null;
+                        return (
+                          <tr
+                            key={tier}
+                            className={`align-top ${rowIdx > 0 ? 'border-t border-[var(--color-sh-warm-border)]' : ''}`}
+                          >
+                            {/* Tier + publish badge */}
+                            <td className="px-4 py-3">
+                              <div className="text-sm font-semibold text-[var(--color-sh-ink)]">{tier}</div>
+                              <span className="mt-1 inline-block rounded-full bg-[var(--color-sh-cream)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-sh-ink-muted)]">
+                                {tiers.length > 1 ? 'Tab in 1 card' : '1 card on publish'}
+                              </span>
+                            </td>
+
+                            {/* Subscription price — read-only catalog reference */}
+                            <td className="px-3 py-3">
+                              <div className="text-sm font-medium tabular-nums text-[var(--color-sh-ink-muted)]">
+                                {catalogPricingRow ? `₹${catalogPricingRow.price.toLocaleString()}` : '—'}
+                              </div>
+                              <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">Catalog default</div>
+                            </td>
+
+                            {/* Proposed price — editable (client's brief budget) */}
+                            <td className="px-3 py-3">
+                              <PriceInput
+                                value={entry.proposedPrice || ''}
+                                onChange={(e) =>
+                                  updateTierPricing(tier, 'proposedPrice', parseInt(e.target.value) || 0)
+                                }
+                                disabled={!isEditable}
+                                ariaLabel={`${tier} proposed price`}
+                              />
+                              {showOriginal && (
+                                <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">
+                                  Was <span className="line-through">₹{originalProposedPrice!.toLocaleString()}</span>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Final price — editable override, but always shows
+                                the resolved figure the client actually pays. */}
+                            <td className="bg-[var(--color-sh-cream)] px-3 py-3">
+                              <PriceInput
+                                value={entry.subscriptionPrice ?? ''}
+                                placeholder={entry.proposedPrice ? `${entry.proposedPrice}` : ''}
+                                onChange={(e) => {
+                                  const v = parseInt(e.target.value);
+                                  updateTierPricing(tier, 'subscriptionPrice', Number.isFinite(v) && v > 0 ? v : null);
+                                }}
+                                disabled={!isEditable}
+                                emphasis
+                                ariaLabel={`${tier} final price`}
+                              />
+                              <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">
+                                {effectiveFinal != null ? (
+                                  <>
+                                    Client pays{' '}
+                                    <span className="font-semibold tabular-nums text-[var(--color-sh-ink)]">
+                                      ₹{effectiveFinal.toLocaleString()}
+                                    </span>
+                                    {finalUsesProposed ? ' (proposed)' : ''}
+                                  </>
+                                ) : (
+                                  'Set a proposed or final price'
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Margin — editable (blank inherits plan margin) */}
+                            <td className="px-3 py-3">
+                              <PriceInput
+                                value={entry.markup ?? ''}
+                                placeholder={catalogMarginInRupees != null ? `${catalogMarginInRupees}` : ''}
+                                onChange={(e) => {
+                                  const v = parseInt(e.target.value);
+                                  updateTierPricing(tier, 'markup', Number.isFinite(v) ? v : null);
+                                }}
+                                disabled={!isEditable}
+                                ariaLabel={`${tier} margin`}
+                              />
+                              {catalogPricingRow ? (
+                                <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">
+                                  {entry.markup == null ? 'Plan margin — ' : 'Plan: '}
+                                  {catalogPricingRow.margin_type === 'percent'
+                                    ? `${catalogPricingRow.margin_value}% (₹${(catalogMarginInRupees ?? 0).toLocaleString()})`
+                                    : `₹${catalogPricingRow.margin_value.toLocaleString()} flat`}
+                                </div>
+                              ) : (
+                                <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">Blank = plan margin</div>
+                              )}
+                            </td>
+
+                            {/* Partner price — derived, read-only, emphasized */}
+                            <td className="bg-[var(--color-sh-cream)] px-4 py-3">
+                              <div className="text-sm font-bold tabular-nums text-[var(--color-sh-ink)]">
+                                {partnerPrice != null ? `₹${partnerPrice.toLocaleString()}` : '—'}
+                              </div>
+                              <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">Final − Margin</div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <p className="px-1 text-[11px] leading-relaxed text-[var(--color-sh-ink-faint)]">
+                  All amounts are ₹/month. <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Subscription price</strong> is the catalog default · <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Proposed price</strong> is the client&apos;s brief budget · <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Final price</strong> is what the client pays (blank uses the proposed price) · <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Partner price</strong> = Final − Margin.
+                </p>
               </div>
             )}
           </Section>
@@ -1404,6 +1452,42 @@ function ReadOnlyField({ label, children }: { label: string; children: React.Rea
       <div className="flex h-[40px] items-center rounded-[10px] border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-3 text-sm font-bold text-[var(--color-sh-ink)]">
         {children}
       </div>
+    </div>
+  );
+}
+
+// Compact ₹-prefixed number input for the pricing table cells. `emphasis`
+// bolds the value (used for the Final price column, the amount the client pays).
+function PriceInput({
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  emphasis,
+  ariaLabel,
+}: {
+  value: number | string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  emphasis?: boolean;
+  ariaLabel?: string;
+}) {
+  return (
+    <div className="relative">
+      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--color-sh-ink-faint)]">
+        ₹
+      </span>
+      <input
+        type="number"
+        min={0}
+        value={value}
+        placeholder={placeholder}
+        onChange={onChange}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        className={`sh-input sh-input-sm w-full min-w-[90px] pl-6 tabular-nums ${emphasis ? 'font-semibold' : ''}`}
+      />
     </div>
   );
 }
