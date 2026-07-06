@@ -62,7 +62,7 @@ const MONTHS_SHORT = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-// Amounts are stored in whole currency units (matches the Active Subscriptions
+// Amounts are stored in whole currency units (matches the Partner Payments
 // view, which renders the same term prices) — do NOT divide by 100.
 function formatMoney(amount: number, currency: string | null): string {
   const cur = currency || '';

@@ -362,7 +362,7 @@ export default function AdminSubscriptionAssignments() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Active Subscriptions</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Partner Payments</h1>
           <p className="mt-1 text-sm text-foreground-muted">
             {view === 'user'
               ? 'Each partner / talent and the subscriptions they’re serving — with the monthly payment owed and an hours snapshot.'
