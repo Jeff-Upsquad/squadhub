@@ -178,6 +178,10 @@ export default function AdminPublishedCardRecipientsView({
   });
   const previousAssignee = historyRes?.previous ?? null;
   const pastAssignees = useMemo(() => historyRes?.past ?? [], [historyRes]);
+  // A card carrying former assignees came from a prior live stage (Repost /
+  // resume / republish) — the gate for in-place plan/talent changes on a
+  // reopened Published card (a fresh publish has none).
+  const hasFormerAssignees = !!previousAssignee || pastAssignees.length > 0;
 
   // Memoize the fallback so an empty result stays the SAME array reference across
   // renders. A bare `shRecipientsRes || []` minted a fresh [] every render, which
@@ -321,22 +325,6 @@ export default function AdminPublishedCardRecipientsView({
     },
   });
 
-  const reopenMutation = useMutation({
-    mutationFn: () =>
-      api.post(`/admin/subscription-cards/${card.id}/reopen-for-new-talents`),
-    onSuccess: () => {
-      setCheckedIds(new Set());
-      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
-      queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
-      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
-      showToast('Reopened — previous round archived. Use Broadcast to invite a fresh pool.', 'success');
-    },
-    onError: (err: any) => {
-      showToast(err?.response?.data?.error || err.message || 'Failed to reopen card', 'error');
-    },
-  });
-
   const broadcastToTalentsMutation = useMutation({
     mutationFn: () =>
       api.post(`/admin/subscription-cards/${card.id}/rebroadcast`),
@@ -382,6 +370,25 @@ export default function AdminPublishedCardRecipientsView({
     },
     onError: (err: any) => {
       showToast(err?.response?.data?.error || err.message || 'Failed to cancel subscription', 'error');
+    },
+  });
+
+  // Repost a live assignment: release the talent and send the module back to the
+  // Published tab (former assignee + matching pool), where the admin re-broadcasts,
+  // re-selects, and can change plan/talent in place.
+  const repostMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${card.id}/repost`),
+    onSuccess: () => {
+      setCheckedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      showToast('Reposted — moved to Published. Broadcast to re-source, or change plan/talent from here.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to repost module', 'error');
     },
   });
 
@@ -735,6 +742,17 @@ export default function AdminPublishedCardRecipientsView({
                 {broadcastToTalentsMutation.isPending ? 'Broadcasting…' : 'Broadcast to talents'}
               </button>
             )}
+            {/* Reposted / resumed module in Published — change the plan or hand-pick
+                a talent in place (gated to cards that came from a prior assignment). */}
+            {bucket === 'active' && hasFormerAssignees && (
+              <button
+                onClick={() => setChangeOpen(true)}
+                className="sh-btn-ghost"
+                title="Upgrade/downgrade the plan or hand-pick a talent for this reposted module"
+              >
+                Change plan / talent
+              </button>
+            )}
           </div>
           <h1 className="sh-display text-2xl sm:text-3xl truncate">{title}</h1>
           {card.card_code && (
@@ -887,33 +905,35 @@ export default function AdminPublishedCardRecipientsView({
                     ) : (
                       <>
                         <button
-                          onClick={() => setChangeOpen(true)}
-                          disabled={undoMutation.isPending || reopenMutation.isPending}
+                          onClick={() => {
+                            if (window.confirm('Repost this module?\n\nThe talent is released and the module goes back to Published (shown as a former assignee, matching pool available). Billing stops until you re-assign. From Published you can Broadcast, re-select, and change plan or talent.')) repostMutation.mutate();
+                          }}
+                          disabled={repostMutation.isPending || undoMutation.isPending || cancelSubscriptionMutation.isPending}
                           className="sh-btn-primary sh-btn-primary-sm"
-                          title="Upgrade/downgrade the plan, change the assigned talent, or pause/cancel — same card, billing splits at the effective date"
+                          title="Send this module back to Published to re-source — broadcast, re-select, and change plan/talent from there"
                         >
-                          Manage assignment
+                          {repostMutation.isPending ? 'Reposting…' : 'Repost'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Cancel this module permanently?\n\nThe card closes, the talent is released, and billing stops. This cannot be resumed.')) cancelSubscriptionMutation.mutate();
+                          }}
+                          disabled={repostMutation.isPending || undoMutation.isPending || cancelSubscriptionMutation.isPending}
+                          className="sh-btn-danger"
+                        >
+                          {cancelSubscriptionMutation.isPending ? 'Cancelling…' : 'Cancel the module'}
                         </button>
                         <button
                           onClick={() => {
                             if (window.confirm('Unassign this talent?\n\nThis ends the live subscription on SquadHire — reconcile it there too. The card reopens so you can select someone else.')) undoMutation.mutate();
                           }}
-                          disabled={undoMutation.isPending || reopenMutation.isPending}
-                          className="sh-btn-danger"
+                          disabled={repostMutation.isPending || undoMutation.isPending || cancelSubscriptionMutation.isPending}
+                          className="sh-btn-ghost"
                         >
                           {undoMutation.isPending ? 'Unassigning…' : 'Unassign'}
                         </button>
-                        <button
-                          onClick={() => {
-                            if (window.confirm('Reopen this card?\n\nThis archives the current responses, unassigns the talent (ends their live subscription on SquadHire), and reopens the card. You can then Broadcast to a fresh pool.')) reopenMutation.mutate();
-                          }}
-                          disabled={undoMutation.isPending || reopenMutation.isPending}
-                          className="sh-btn-ghost"
-                        >
-                          {reopenMutation.isPending ? 'Reopening…' : 'Reopen for new talents'}
-                        </button>
                         <span className="text-[11px] text-emerald-700/80 dark:text-emerald-300/90">
-                          Manage assignment changes the plan or talent in place; Unassign/Reopen restart the selection round.
+                          Repost sends the module back to Published to re-source (plan &amp; talent stay editable there); Cancel closes it permanently; Unassign just clears the current talent.
                         </span>
                       </>
                     )}
@@ -1469,7 +1489,7 @@ export default function AdminPublishedCardRecipientsView({
         );
       })()}
       {changeOpen && (
-        <AssignmentChangeModal cardId={card.id} pausedAt={card.paused_at ?? null} onClose={() => setChangeOpen(false)} />
+        <AssignmentChangeModal cardId={card.id} pausedAt={card.paused_at ?? null} published={bucket === 'active' && hasFormerAssignees} onClose={() => setChangeOpen(false)} />
       )}
       {autoAcceptTarget && (
         <ConfirmDialog

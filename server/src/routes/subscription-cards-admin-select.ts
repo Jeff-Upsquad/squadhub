@@ -338,6 +338,73 @@ async function resetCardSelection(cardId: string): Promise<void> {
   await resetCardAndCloseTerms(cardId);
 }
 
+// True when this card was previously assigned to someone — it has at least one
+// ENDED assignment term. Distinguishes a reopened/reposted card (paused-resume,
+// the assigned "Repost" action, or republish-from-cancelled) from a brand-new
+// publish, which gates the in-place plan / talent changes to reopened cards only.
+async function cardHasFormerAssignees(cardId: string): Promise<boolean> {
+  const { count } = await supabaseAdmin
+    .from('subscription_assignment_terms')
+    .select('id', { count: 'exact', head: true })
+    .eq('card_id', cardId)
+    .eq('status', 'ended');
+  return (count ?? 0) > 0;
+}
+
+// Reopen an assignment (the paused-resume "reopen" mode or the assigned "Repost"
+// action) back to the Published tab WITHOUT broadcasting. Archives the current
+// round, resets the card to `published` (closing the active term), releases the
+// previous talent on SquadHire + the linked space, and gives the card a fresh
+// not-yet-broadcast posture (broadcast distribution, mirror treated as un-synced,
+// attempts 0, preview cleared) so it lands in the Published tab with the "who
+// would match" preview and the admin drives Broadcast + select next.
+//
+// The squadhire_sync_attempts reset is load-bearing: the sync sweeper delivers a
+// published broadcast card with squadhire_synced_at NULL once attempts > 0, so
+// leaving the old count would auto-broadcast behind the admin's back.
+async function reopenAssignmentToPublished(
+  cardId: string,
+  prev: { type: 'talent' | 'partner' | null; id: string | null },
+): Promise<void> {
+  const nowIso = new Date().toISOString();
+  await supabaseAdmin
+    .from('subscription_card_recipients')
+    .update({ archived_at: nowIso })
+    .eq('card_id', cardId)
+    .is('archived_at', null);
+  await supabaseAdmin
+    .from('subscription_card_external_recipients')
+    .update({ archived_at: nowIso })
+    .eq('card_id', cardId)
+    .is('archived_at', null);
+
+  await resetCardAndCloseTerms(cardId); // → published; paused_at/selection cleared; active term ended
+
+  if (prev.type === 'talent' && prev.id) {
+    handOffSpaceToNewTalent({
+      cardId,
+      oldRecipientType: 'talent',
+      oldRecipientId: prev.id,
+      newRecipientType: null,
+      newRecipientId: null,
+    }).catch((err) => console.error('[reopen] space hand-off failed', err));
+  }
+
+  notifySquadhireOfSelectionUndo(cardId).catch((err) => {
+    console.error('[reopen] notify squadhire selection-undo failed', err);
+  });
+
+  await supabaseAdmin
+    .from('subscription_cards')
+    .update({
+      distribution: 'broadcast',
+      squadhire_synced_at: null,
+      squadhire_sync_attempts: 0,
+      squadhire_match_preview: null,
+    })
+    .eq('id', cardId);
+}
+
 // ============================================================
 // POST /admin/subscription-cards/:id/undo-selection
 //
@@ -545,6 +612,59 @@ router.post('/subscription-cards/:id/reopen-for-new-talents', async (req: Reques
 });
 
 // ============================================================
+// POST /admin/subscription-cards/:id/repost
+//
+// "Repost" a LIVE assignment back to the Published tab WITHOUT broadcasting: the
+// current talent is released (shown as a former assignee), the active term is
+// closed (billing stops), and the card gets a fresh not-yet-broadcast posture so
+// it lands in Published with the match preview. The admin then re-broadcasts +
+// re-selects, and can upgrade/downgrade the plan or change talent in place (both
+// gated on the card having former assignees). Distinct from /reopen-for-new-
+// talents, which leaves the mirror synced (lands in Broadcasted, no preview).
+// ============================================================
+router.post('/subscription-cards/:id/repost', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const { data: card, error: cardErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, paused_at, selected_recipient_type, selected_recipient_id')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
+    if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
+    if (card.paused_at) {
+      res.status(409).json({ success: false, error: 'Subscription is paused — resume it instead' });
+      return;
+    }
+    if (card.state !== 'assigned' || !card.selected_recipient_id) {
+      res.status(409).json({ success: false, error: 'Card is not an active assignment' });
+      return;
+    }
+
+    await reopenAssignmentToPublished(cardId, {
+      type: card.selected_recipient_type as 'talent' | 'partner' | null,
+      id: card.selected_recipient_id as string | null,
+    });
+
+    // The client's subscription stays active — the module is just being re-staffed.
+    await syncClientSubscriptionForCard(cardId, { status: 'active' });
+
+    logCardEvent({
+      cardId,
+      eventType: 'reposted',
+      actorId: (req as any).user?.id ?? null,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+    });
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Repost error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
 // POST /admin/subscription-cards/:id/rebroadcast
 //
 // Broadcast a reopened published card to a FRESH pool of talents: signals
@@ -698,6 +818,46 @@ router.post('/subscription-cards/:id/change-plan', async (req: Request, res: Res
       .maybeSingle();
     if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
     if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
+
+    // Reopened-card path: a Published card that came from a prior assignment
+    // (Repost / resume / republish — it has former assignees) can be re-planned
+    // in place before it's re-assigned. No talent is live, so there's no active
+    // term to split and nothing to push to SquadHire — just re-point the card at
+    // the new plan/price. Billing opens fresh on this plan when it's re-assigned.
+    if (card.state === 'published' && !card.paused_at && (await cardHasFormerAssignees(cardId))) {
+      const snapshot = await buildPlanSnapshot(plan_id);
+      if (!snapshot) {
+        res.status(400).json({ success: false, error: 'Plan not found' });
+        return;
+      }
+      const cardUpdate: Record<string, unknown> = {
+        plan_snapshot: snapshot,
+        plan_name: snapshot.plan.plan ?? null,
+        markup: parsed.data.markup ?? null,
+        partner_price_override: parsed.data.partner_price_override ?? null,
+      };
+      if ('subscription_price' in parsed.data) {
+        cardUpdate.subscription_price = parsed.data.subscription_price ?? null;
+      }
+      const { error: updErr } = await supabaseAdmin
+        .from('subscription_cards')
+        .update(cardUpdate)
+        .eq('id', cardId);
+      if (updErr) { res.status(500).json({ success: false, error: updErr.message }); return; }
+
+      logCardEvent({
+        cardId,
+        eventType: 'plan_changed',
+        actorId: (req as any).user?.id ?? null,
+        actorType: 'admin',
+        actorLabel: (req as any).userName ?? null,
+        metadata: { plan_id, plan: snapshot.plan.plan, tier: snapshot.plan.tier, unassigned: true },
+      });
+
+      res.json({ success: true });
+      return;
+    }
+
     if (card.state !== 'assigned' || !card.selected_recipient_id) {
       res.status(409).json({ success: false, error: 'Card is not an active assignment' });
       return;
@@ -812,6 +972,122 @@ router.post('/subscription-cards/:id/change-talent', async (req: Request, res: R
       .maybeSingle();
     if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
     if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
+
+    // Reopened-card path: hand-pick and assign a recipient directly to a Published
+    // card that came from a prior assignment (Repost / resume / republish — it has
+    // former assignees), moving it back to Assigned without a broadcast round.
+    // There's no outgoing talent to release and no term to split — stamp the
+    // recipient, point the card at them, notify, open a fresh term, and hand over
+    // the space. (The in-place swap for a live assignment is handled below.)
+    if (
+      card.state === 'published' &&
+      !card.paused_at &&
+      !card.selected_recipient_id &&
+      (await cardHasFormerAssignees(cardId))
+    ) {
+      const assignNow = new Date().toISOString();
+      const assignWarnings: string[] = [];
+
+      let assignRowId: string | undefined;
+      if (recipient_type === 'talent') {
+        const { data: row } = await supabaseAdmin
+          .from('subscription_card_external_recipients')
+          .upsert(
+            {
+              card_id: cardId,
+              external_system: 'squadhire',
+              external_recipient_id: recipient_id,
+              external_user_id: recipient_id,
+              talent_name: recipient_name ?? null,
+              email: recipient_email ?? null,
+              status: 'accepted',
+              responded_at: assignNow,
+              assigned_manually: true,
+              selected_at: assignNow,
+              selected_by: (req as any).user?.id ?? null,
+              passed_over_at: null,
+              archived_at: null,
+              notified_at: assignNow,
+              squadhire_notified_at: null,
+              squadhire_notify_attempts: 0,
+              squadhire_notify_error: null,
+            },
+            { onConflict: 'card_id,external_system,external_recipient_id' },
+          )
+          .select('id')
+          .maybeSingle();
+        assignRowId = (row as any)?.id;
+      } else {
+        await supabaseAdmin
+          .from('subscription_card_recipients')
+          .upsert(
+            {
+              card_id: cardId,
+              partner_id: recipient_id,
+              status: 'accepted',
+              assigned_manually: true,
+              selected_at: assignNow,
+              selected_by: (req as any).user?.id ?? null,
+              passed_over_at: null,
+              archived_at: null,
+            },
+            { onConflict: 'card_id,partner_id' },
+          );
+      }
+
+      const { error: assignUpdErr } = await supabaseAdmin
+        .from('subscription_cards')
+        .update({
+          state: 'assigned',
+          assigned_at: assignNow,
+          admin_reviewed_at: null,
+          selected_recipient_type: recipient_type,
+          selected_recipient_id: recipient_id,
+        })
+        .eq('id', cardId);
+      if (assignUpdErr) { res.status(500).json({ success: false, error: assignUpdErr.message }); return; }
+
+      if (recipient_type === 'talent') {
+        const outcome = await notifySquadhireOfManualAssignment(cardId, recipient_id, assignRowId);
+        if (!outcome.delivered) {
+          assignWarnings.push('SquadHire was not notified of the assignment — the talent may not see the client yet. The system will retry automatically.');
+        }
+        notifySquadhireOfActivation(cardId).catch((err) =>
+          console.error('[change-talent:assign] notify squadhire activation failed', err),
+        );
+        const contentWarning = await redeliverCardContent(cardId);
+        if (contentWarning) assignWarnings.push(contentWarning);
+      }
+
+      await ensureActiveAssignmentTerm({
+        cardId,
+        recipientType: recipient_type,
+        recipientId: recipient_id,
+        recipientName: recipient_name ?? null,
+        assignedDate: effective_date,
+      });
+
+      handOffSpaceToNewTalent({
+        cardId,
+        oldRecipientType: null,
+        oldRecipientId: null,
+        newRecipientType: recipient_type,
+        newRecipientId: recipient_id,
+      }).catch((err) => console.error('[change-talent:assign] space hand-off failed', err));
+
+      logCardEvent({
+        cardId,
+        eventType: 'talent_changed',
+        actorId: (req as any).user?.id ?? null,
+        actorType: 'admin',
+        actorLabel: (req as any).userName ?? null,
+        metadata: { from: null, to: { type: recipient_type, id: recipient_id }, effective_date, from_reopened: true },
+      });
+
+      res.json({ success: true, ...(assignWarnings.length ? { warning: assignWarnings.join(' ') } : {}) });
+      return;
+    }
+
     if (card.state !== 'assigned' || !card.selected_recipient_id) {
       res.status(409).json({ success: false, error: 'Card is not an active assignment' });
       return;
@@ -1514,64 +1790,14 @@ export async function resumeCardCore(
         }
       }
     } else if (mode === 'reopen') {
-      // reopen: archive the current round and reset the card to `published`
-      // WITHOUT broadcasting. Give it the same posture a fresh, not-yet-
-      // broadcast broadcast card has — distribution='broadcast', mirror treated
-      // as un-synced, cached match preview cleared — so it sits in the Published
-      // tab (needs_broadcast) and the "who would match" preview recomputes. The
-      // fan-out is deferred to the admin's Broadcast (first-delivery), matching
-      // the normal Published → Broadcast → select flow.
-      const oldType = card.selected_recipient_type as 'talent' | 'partner' | null;
-      const oldId = card.selected_recipient_id as string | null;
-
-      const archivedAt = nowIso;
-      await supabaseAdmin
-        .from('subscription_card_recipients')
-        .update({ archived_at: archivedAt })
-        .eq('card_id', cardId)
-        .is('archived_at', null);
-      await supabaseAdmin
-        .from('subscription_card_external_recipients')
-        .update({ archived_at: archivedAt })
-        .eq('card_id', cardId)
-        .is('archived_at', null);
-
-      await resetCardAndCloseTerms(cardId); // card → published; paused_at/selection cleared; term closed
-
-      if (oldType === 'talent' && oldId) {
-        handOffSpaceToNewTalent({
-          cardId,
-          oldRecipientType: 'talent',
-          oldRecipientId: oldId,
-          newRecipientType: null,
-          newRecipientId: null,
-        }).catch((err) => console.error('[resume:reopen] space hand-off failed', err));
-      }
-
-      // Clear the previous talent's selection on SquadHire (drops it from My
-      // Clients). Fired while the mirror is still considered synced.
-      notifySquadhireOfSelectionUndo(cardId).catch((err) => {
-        console.error('[resume:reopen] notify squadhire selection-undo failed', err);
+      // reopen: reset the card to Published WITHOUT broadcasting (former talent
+      // released + shown as a former assignee, matching pool back, match preview
+      // recomputes). The admin drives Broadcast + select next. Shared with the
+      // assigned "Repost" action — see reopenAssignmentToPublished.
+      await reopenAssignmentToPublished(cardId, {
+        type: card.selected_recipient_type as 'talent' | 'partner' | null,
+        id: card.selected_recipient_id as string | null,
       });
-
-      // Fresh-broadcast posture: a broadcast-distribution card whose mirror is
-      // treated as never-delivered, so needs_broadcast is true (Published tab)
-      // and the match preview is eligible to recompute. NOT delivered here.
-      // squadhire_sync_attempts MUST reset to 0 alongside squadhire_synced_at:
-      // the sync sweeper delivers a published broadcast card with synced_at NULL
-      // only when attempts > 0, so leaving the old (non-zero) count would let it
-      // auto-broadcast to talents behind the admin's back. Attempts 0 keeps it
-      // staged until the admin clicks Broadcast (mirrors a freshly published
-      // card, and recall/close's synced_at+attempts reset).
-      await supabaseAdmin
-        .from('subscription_cards')
-        .update({
-          distribution: 'broadcast',
-          squadhire_synced_at: null,
-          squadhire_sync_attempts: 0,
-          squadhire_match_preview: null,
-        })
-        .eq('id', cardId);
     } else {
       // rebroadcast: reopen to a fresh round (mirrors reopen-for-new-talents),
       // then re-fan-out. The card leaves `assigned`, so the "previous talent"
