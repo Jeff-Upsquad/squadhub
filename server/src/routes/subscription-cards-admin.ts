@@ -26,6 +26,7 @@ import {
   transitionSubmissionStatus,
 } from '../utils/submissionPipeline';
 import { logCardEvent } from '../utils/cardEvents';
+import { copyCardToNewDraft } from '../utils/duplicateCard';
 
 const router = Router();
 
@@ -87,13 +88,6 @@ router.get('/', async (req: Request, res: Response) => {
       sourceParam === 'internal_brief'
     ) {
       query = query.eq('source', sourceParam);
-    }
-    // "Resumed" surfacing for New Deals: reopened cards (Repost / paused-resume)
-    // return as drafts but carry a published_at stamp from their prior life,
-    // which distinguishes them from brand-new drafts. `reopened=true` surfaces
-    // them regardless of source so New Deals can group them reliably.
-    if (String(req.query.reopened || '').trim() === 'true') {
-      query = query.not('published_at', 'is', null);
     }
     if (publishedBy) query = query.eq('published_by', publishedBy);
 
@@ -1754,6 +1748,44 @@ router.post('/:id/reinstate', async (req: Request, res: Response) => {
 // and re-delivers to SquadHire. The user must explicitly broadcast
 // or hand-pick from there.
 // ============================================================
+// ============================================================
+// POST /admin/subscription-cards/:id/duplicate
+//
+// Copy a card (any state — broadcasted / published / assigned / paused /
+// cancelled) into a fresh DRAFT in New Deals with all the same details but NONE
+// of its recipients, assignees, terms, or linked space. The admin edits it there
+// and publishes it as a brand-new deal.
+// ============================================================
+router.post('/:id/duplicate', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const { data: card } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
+
+    const actorId = (req as any).user?.id ?? (req as any).userId ?? null;
+    const result = await copyCardToNewDraft(cardId, {}, actorId);
+    if ('error' in result) { res.status(500).json({ success: false, error: result.error }); return; }
+
+    await logCardEvent({
+      cardId: result.id,
+      eventType: 'created',
+      actorId,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: { duplicated_from: cardId },
+    });
+
+    res.json({ success: true, data: { id: result.id } });
+  } catch (err: any) {
+    console.error('Duplicate card error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
 router.post('/:id/republish', async (req: Request, res: Response) => {
   try {
     const cardId = req.params.id as string;

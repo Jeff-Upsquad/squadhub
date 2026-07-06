@@ -308,30 +308,11 @@ function CardPanelContent({
       qc.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', activeCardId] });
       qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
-      showToast('Resumed — moved to New Deals (Resumed). Review pricing/details there, then publish.', 'success');
+      showToast('Resumed — moved to Published. Broadcast to the previous talent or all matching, then select & assign.', 'success');
       clearConfirm();
     },
     onError: (err: any) => {
       showToast(err?.response?.data?.error || err.message || 'Failed to resume subscription', 'error');
-      clearConfirm();
-    },
-  });
-
-  // Repost a live assignment: release the talent and send the module back to New
-  // Deals as a "Resumed" draft, where the admin reviews pricing, then publishes.
-  const repost = useMutation({
-    mutationFn: () =>
-      api.post(`/admin/subscription-cards/${activeCardId}/repost`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
-      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
-      showToast('Reposted — moved to New Deals (Resumed). Review pricing/details there, then publish.', 'success');
-      clearConfirm();
-    },
-    onError: (err: any) => {
-      showToast(err?.response?.data?.error || err.message || 'Failed to repost module', 'error');
       clearConfirm();
     },
   });
@@ -629,7 +610,7 @@ function CardPanelContent({
                       onClick={() => setConfirmAction({ kind: 'resume' })}
                       disabled={resumeReopen.isPending || cancelCard.isPending}
                       className="sh-btn-primary sh-btn-primary-sm"
-                      title="Send this paused subscription back to New Deals as a Resumed draft — review pricing, then publish and broadcast"
+                      title="Reopen this paused subscription to Published, then broadcast (previous talent or all) and re-assign"
                     >
                       {resumeReopen.isPending ? 'Resuming…' : 'Resume'}
                     </button>
@@ -644,23 +625,13 @@ function CardPanelContent({
                 ) : (
                   <>
                     {activeCard.state === 'assigned' && (
-                      <>
-                        <button
-                          onClick={() => setConfirmAction({ kind: 'repost' })}
-                          disabled={repost.isPending || cancelCard.isPending || undoSelection.isPending}
-                          className="sh-btn-primary sh-btn-primary-sm"
-                          title="Send this module back to New Deals as a Resumed draft — review pricing, then publish and broadcast to re-source"
-                        >
-                          {repost.isPending ? 'Reposting…' : 'Repost'}
-                        </button>
-                        <button
-                          onClick={() => setConfirmAction({ kind: 'cancel' })}
-                          disabled={repost.isPending || cancelCard.isPending || undoSelection.isPending}
-                          className="sh-btn-danger"
-                        >
-                          {cancelCard.isPending ? 'Cancelling…' : 'Cancel the module'}
-                        </button>
-                      </>
+                      <button
+                        onClick={() => setConfirmAction({ kind: 'cancel' })}
+                        disabled={cancelCard.isPending || undoSelection.isPending}
+                        className="sh-btn-danger"
+                      >
+                        {cancelCard.isPending ? 'Cancelling…' : 'Cancel the module'}
+                      </button>
                     )}
                     <button
                       onClick={() => setConfirmAction({ kind: 'undoSelection' })}
@@ -847,7 +818,6 @@ function CardPanelContent({
           recall: recallCard.isPending,
           cancel: cancelCard.isPending,
           resume: resumeReopen.isPending,
-          repost: repost.isPending,
           offerPrevious: offerPreviousTalent.isPending,
           rebroadcastAll: rebroadcastAll.isPending,
           archive: archiveCard.isPending,
@@ -868,7 +838,6 @@ function CardPanelContent({
             case 'recall': recallCard.mutate(); break;
             case 'cancel': cancelCard.mutate(); break;
             case 'resume': resumeReopen.mutate(); break;
-            case 'repost': repost.mutate(); break;
             case 'offerPrevious': offerPreviousTalent.mutate(); break;
             case 'rebroadcastAll': rebroadcastAll.mutate(); break;
             case 'archive': archiveCard.mutate(); break;
@@ -894,7 +863,6 @@ type ConfirmAction =
   | { kind: 'recall' }
   | { kind: 'cancel' }
   | { kind: 'resume' }
-  | { kind: 'repost' }
   | { kind: 'offerPrevious' }
   | { kind: 'rebroadcastAll' }
   | { kind: 'archive' }
@@ -991,17 +959,10 @@ function ConfirmActionDialog({
     },
     resume: {
       title: 'Resume this subscription?',
-      description: 'The card goes back to New Deals as a "Resumed" draft — the previous talent is released. Review pricing/details there, then publish and broadcast (previous talent or all matching). Billing stays stopped until a new assignment is finalized.',
+      description: 'The card reopens to Published — the previous talent is released and shown as a former assignee, and the matching pool is refreshed. Broadcast to the previous talent or all matching, then select & assign (assign date = new start date).',
       confirmLabel: 'Resume',
       pendingLabel: 'Resuming…',
       variant: 'default',
-    },
-    repost: {
-      title: 'Repost this module?',
-      description: 'The talent is released and the module goes back to New Deals as a "Resumed" draft. Billing stops. Review pricing/details there, then publish to move it on to Published.',
-      confirmLabel: 'Repost',
-      pendingLabel: 'Reposting…',
-      variant: 'warning',
     },
     offerPrevious: {
       title: 'Broadcast to the previous talent?',

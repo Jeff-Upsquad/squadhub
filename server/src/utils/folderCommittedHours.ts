@@ -33,7 +33,7 @@ export async function getFolderPlanTimeline(folderId: string): Promise<FolderPla
   // instead prefer the live card, else the most recently linked.
   const { data: cards } = await supabaseAdmin
     .from('subscription_cards')
-    .select('id, plan_snapshot, working_days, billing_start_date, linked_at, state, paused_at')
+    .select('id, plan_snapshot, working_days, billing_start_date, linked_at, state, paused_at, supersedes_card_id')
     .eq('linked_folder_id', folderId)
     .order('linked_at', { ascending: false, nullsFirst: false });
   const list = (cards || []) as any[];
@@ -43,10 +43,27 @@ export async function getFolderPlanTimeline(folderId: string): Promise<FolderPla
   const workingDays = parseWorkingDays((card as any).working_days);
   const cardSnap = (card as any).plan_snapshot;
 
+  // Walk the supersedes chain back from the linked card: an upgrade/downgrade
+  // soft-cancels the old card and links the new one to this folder, so the old
+  // card's terms (its share of the timeline) live under a DIFFERENT card_id. Pull
+  // terms for the whole lineage so Reports stay continuous across the change.
+  const chainIds: string[] = [(card as any).id];
+  let cursor = (card as any).supersedes_card_id as string | null;
+  for (let hops = 0; cursor && hops < 25; hops++) {
+    if (chainIds.includes(cursor)) break;
+    chainIds.push(cursor);
+    const { data: prev } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('supersedes_card_id')
+      .eq('id', cursor)
+      .maybeSingle();
+    cursor = (prev as any)?.supersedes_card_id ?? null;
+  }
+
   const { data: terms } = await supabaseAdmin
     .from('subscription_assignment_terms')
     .select('work_start_date, work_end_date, assigned_date, unassigned_date, plan_snapshot')
-    .eq('card_id', (card as any).id)
+    .in('card_id', chainIds)
     .order('assigned_date', { ascending: true });
 
   const segments: FolderPlanTimeline['segments'] = [];
