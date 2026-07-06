@@ -23,6 +23,7 @@ import {
 import { fetchTalentAvailability, fetchTalentStatuses } from '../utils/squadhireTalent';
 import { loadCardBilling } from '../utils/cardBilling';
 import { buildPlanSnapshot, resolvePlanIdForCard } from '../utils/cardPlanSnapshot';
+import { copyCardToNewDraft } from '../utils/duplicateCard';
 import { handOffSpaceToNewTalent } from '../utils/spaceTalentHandoff';
 import {
   syncClientSubscriptionForCard,
@@ -352,13 +353,16 @@ async function resetCardSelection(cardId: string): Promise<void> {
 // Reopen an assignment (the paused-resume "reopen" mode or the assigned "Repost"
 // action) back to the New Deals section as a DRAFT — NOT straight to Published.
 // Archives the current round, ends the active term (billing stops), releases the
-// previous talent on SquadHire + the linked space, and resets the SquadHire
-// mirror so a later publish + broadcast re-delivers cleanly. The card keeps its
-// details (plan / pricing / deliverables) AND its published_at stamp — that stamp
-// is how New Deals recognises a reopened ("Resumed") card vs a brand-new draft.
-// The admin reviews/edits pricing there, then publishes to move it to Published,
-// where Broadcast-to-previous-talent / Broadcast-to-all become available.
-async function reopenAssignmentToDraft(
+// previous talent on SquadHire + the linked space, and gives the card a fresh
+// not-yet-broadcast posture so it lands back in the **Published** tab. There it
+// shows the former assignee(s) + a refreshed match preview, and the admin drives
+// Broadcast-to-previous / Broadcast-to-all → select → assign (assign date = new
+// start date). Shared by the paused-resume "reopen" mode.
+//
+// The squadhire_sync_attempts reset is load-bearing: the sweeper delivers a
+// published broadcast card with squadhire_synced_at NULL once attempts > 0, so
+// leaving the old count would auto-broadcast behind the admin's back.
+async function reopenAssignmentToPublished(
   cardId: string,
   prev: { type: 'talent' | 'partner' | null; id: string | null },
 ): Promise<void> {
@@ -374,32 +378,7 @@ async function reopenAssignmentToDraft(
     .eq('card_id', cardId)
     .is('archived_at', null);
 
-  // Back to a draft (New Deals). Mirrors resetCardAndCloseTerms' field clears but
-  // lands in 'draft' (not 'published'), and resets the SquadHire mirror so a draft
-  // isn't swept and a re-publish re-delivers cleanly. published_at is deliberately
-  // KEPT as the "was previously live" signal.
-  await supabaseAdmin
-    .from('subscription_cards')
-    .update({
-      state: 'draft',
-      assigned_at: null,
-      admin_reviewed_at: null,
-      recalled_at: null,
-      closed_at: null,
-      paused_at: null,
-      selected_recipient_type: null,
-      selected_recipient_id: null,
-      squadhire_activation_notified_at: null,
-      squadhire_activation_notify_attempts: 0,
-      squadhire_activation_notify_error: null,
-      squadhire_synced_at: null,
-      squadhire_sync_attempts: 0,
-      squadhire_match_preview: null,
-    })
-    .eq('id', cardId);
-
-  // Close the active billing term (records the work end date).
-  await endActiveAssignmentTermsForCard(cardId);
+  await resetCardAndCloseTerms(cardId); // → published; paused_at/selection cleared; active term ended
 
   if (prev.type === 'talent' && prev.id) {
     handOffSpaceToNewTalent({
@@ -414,6 +393,18 @@ async function reopenAssignmentToDraft(
   notifySquadhireOfSelectionUndo(cardId).catch((err) => {
     console.error('[reopen] notify squadhire selection-undo failed', err);
   });
+
+  // Fresh not-yet-broadcast posture so it sits in the Published tab (needs_broadcast)
+  // and the match preview recomputes. NOT delivered — Broadcast does first-delivery.
+  await supabaseAdmin
+    .from('subscription_cards')
+    .update({
+      distribution: 'broadcast',
+      squadhire_synced_at: null,
+      squadhire_sync_attempts: 0,
+      squadhire_match_preview: null,
+    })
+    .eq('id', cardId);
 }
 
 // ============================================================
@@ -618,58 +609,6 @@ router.post('/subscription-cards/:id/reopen-for-new-talents', async (req: Reques
     res.json({ success: true });
   } catch (err: any) {
     console.error('Reopen for new talents error:', err);
-    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
-  }
-});
-
-// ============================================================
-// POST /admin/subscription-cards/:id/repost
-//
-// "Repost" a LIVE assignment back to New Deals as a DRAFT: the current talent is
-// released (shown as a former assignee), the active term is closed (billing
-// stops), and the card returns to the New Deals queue tagged "Resumed" so the
-// admin can review/edit pricing before re-publishing. Publishing moves it to
-// Published, where Broadcast-to-previous-talent / Broadcast-to-all take over.
-// See reopenAssignmentToDraft — shared with the paused-resume "reopen" mode.
-// ============================================================
-router.post('/subscription-cards/:id/repost', async (req: Request, res: Response) => {
-  try {
-    const cardId = req.params.id as string;
-    const { data: card, error: cardErr } = await supabaseAdmin
-      .from('subscription_cards')
-      .select('id, state, paused_at, selected_recipient_type, selected_recipient_id')
-      .eq('id', cardId)
-      .maybeSingle();
-    if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
-    if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
-    if (card.paused_at) {
-      res.status(409).json({ success: false, error: 'Subscription is paused — resume it instead' });
-      return;
-    }
-    if (card.state !== 'assigned' || !card.selected_recipient_id) {
-      res.status(409).json({ success: false, error: 'Card is not an active assignment' });
-      return;
-    }
-
-    await reopenAssignmentToDraft(cardId, {
-      type: card.selected_recipient_type as 'talent' | 'partner' | null,
-      id: card.selected_recipient_id as string | null,
-    });
-
-    // The client's subscription stays active — the module is just being re-staffed.
-    await syncClientSubscriptionForCard(cardId, { status: 'active' });
-
-    logCardEvent({
-      cardId,
-      eventType: 'reposted',
-      actorId: (req as any).user?.id ?? null,
-      actorType: 'admin',
-      actorLabel: (req as any).userName ?? null,
-    });
-
-    res.json({ success: true });
-  } catch (err: any) {
-    console.error('Repost error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
@@ -1033,6 +972,146 @@ router.post('/subscription-cards/:id/change-plan', async (req: Request, res: Res
     res.json({ success: true, ...(syncWarning ? { warning: syncWarning } : {}) });
   } catch (err: any) {
     console.error('Change plan error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// POST /admin/subscription-cards/:id/upgrade-downgrade
+//
+// Upgrade/downgrade a LIVE assignment via the new-card model: SOFT-CANCEL the
+// current card (state=closed, cancel_type='soft', terms ended, talent released)
+// and create a NEW draft in New Deals carrying the NEW plan + the same details.
+// The new card SUPERSEDES the old (chained so Reports + assignment-history stay
+// continuous across the change) and inherits the linked space + subscription
+// link. It shows the former assignees, so the admin can broadcast to them / new
+// recipients / everyone and re-assign on the new plan (billing starts fresh then).
+// ============================================================
+const upgradeDowngradeSchema = z.object({
+  plan_id: z.string().uuid(),
+  subscription_price: z.number().int().nonnegative().nullable().optional(),
+  markup: z.number().int().nullable().optional(),
+  partner_price_override: z.number().int().nullable().optional(),
+});
+
+router.post('/subscription-cards/:id/upgrade-downgrade', async (req: Request, res: Response) => {
+  try {
+    const cardId = req.params.id as string;
+    const parsed = upgradeDowngradeSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'Invalid body' });
+      return;
+    }
+    const { plan_id } = parsed.data;
+
+    const { data: card, error: cardErr } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('id, state, paused_at, selected_recipient_type, selected_recipient_id, linked_folder_id, submission_subscription_id')
+      .eq('id', cardId)
+      .maybeSingle();
+    if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
+    if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
+    if (card.paused_at) { res.status(409).json({ success: false, error: 'Subscription is paused — resume it first' }); return; }
+    if (card.state !== 'assigned' || !card.selected_recipient_id) {
+      res.status(409).json({ success: false, error: 'Card is not an active assignment' });
+      return;
+    }
+
+    const snapshot = await buildPlanSnapshot(plan_id);
+    if (!snapshot) { res.status(400).json({ success: false, error: 'Plan not found' }); return; }
+
+    const actorId = (req as any).user?.id ?? null;
+    const nowIso = new Date().toISOString();
+    const oldFolderId = (card as any).linked_folder_id as string | null;
+    const oldSubSubId = (card as any).submission_subscription_id as string | null;
+    const oldType = card.selected_recipient_type as 'talent' | 'partner' | null;
+    const oldId = card.selected_recipient_id as string | null;
+    const warnings: string[] = [];
+
+    // 1. End the old plan's billing terms (records the work end date).
+    await endActiveAssignmentTermsForCard(cardId);
+
+    // 2. Release the previous recipient from the linked space (both talent AND
+    //    partner) while the folder is still attached — awaited, before detach.
+    //    The SquadHire removal is talent-only (partners aren't on SquadHire).
+    if (oldType && oldId) {
+      if (oldType === 'talent') {
+        const removal = await notifySquadhireOfManualRemoval(cardId, oldId, { notify: true });
+        if (!removal.delivered) {
+          warnings.push('SquadHire could not release the previous talent — reconcile it there too.');
+        }
+      }
+      await handOffSpaceToNewTalent({
+        cardId,
+        oldRecipientType: oldType,
+        oldRecipientId: oldId,
+        newRecipientType: null,
+        newRecipientId: null,
+      }).catch((err) => console.error('[upgrade-downgrade] space hand-off failed', err));
+    }
+
+    // 3. Soft-cancel the old card and DETACH its unique links (submission +
+    //    folder) so they can move to the new card without violating the 1:1 keys.
+    await supabaseAdmin
+      .from('subscription_cards')
+      .update({
+        state: 'closed',
+        cancelled_at: nowIso,
+        closed_at: nowIso,
+        cancel_type: 'soft',
+        paused_at: null,
+        linked_folder_id: null,
+        linked_at: null,
+        submission_subscription_id: null,
+      })
+      .eq('id', cardId);
+
+    // 4. Create the new draft on the NEW plan, superseding the old and inheriting
+    //    its space + subscription link. It carries the same details (copied) and,
+    //    via supersedes_card_id, the old card's former-assignee + billing history.
+    const result = await copyCardToNewDraft(
+      cardId,
+      {
+        plan_snapshot: snapshot,
+        plan_name: snapshot.plan.plan ?? null,
+        markup: parsed.data.markup ?? null,
+        partner_price_override: parsed.data.partner_price_override ?? null,
+        ...('subscription_price' in parsed.data ? { subscription_price: parsed.data.subscription_price ?? null } : {}),
+        supersedes_card_id: cardId,
+        linked_folder_id: oldFolderId,
+        linked_at: oldFolderId ? nowIso : null,
+        submission_subscription_id: oldSubSubId,
+      },
+      actorId,
+    );
+    if ('error' in result) { res.status(500).json({ success: false, error: result.error }); return; }
+
+    // 5. The client's subscription continues on the new card (best-effort sync).
+    await syncClientSubscriptionForCard(result.id, { status: 'active' }).catch((err) =>
+      console.error('[upgrade-downgrade] client subscription sync failed', err),
+    );
+
+    // 6. Audit both ends of the swap.
+    logCardEvent({
+      cardId,
+      eventType: 'cancelled',
+      actorId,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: { cancel_type: 'soft', superseded_by: result.id, reason: 'plan_change' },
+    });
+    logCardEvent({
+      cardId: result.id,
+      eventType: 'plan_changed',
+      actorId,
+      actorType: 'admin',
+      actorLabel: (req as any).userName ?? null,
+      metadata: { supersedes: cardId, plan_id, plan: snapshot.plan.plan, tier: snapshot.plan.tier, new_card: true },
+    });
+
+    res.json({ success: true, data: { id: result.id }, ...(warnings.length ? { warning: warnings.join(' ') } : {}) });
+  } catch (err: any) {
+    console.error('Upgrade/downgrade error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
@@ -1461,15 +1540,30 @@ router.get('/subscription-cards/:id/assignment-history', async (req: Request, re
     const cardId = req.params.id as string;
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id')
+      .select('id, supersedes_card_id')
       .eq('id', cardId)
       .maybeSingle();
     if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
 
+    // Walk the supersedes chain so an upgraded/downgraded card shows the former
+    // assignees from the card(s) it replaced too (e.g. all four past designers).
+    const chainIds: string[] = [cardId];
+    let cursor = (card as any).supersedes_card_id as string | null;
+    for (let hops = 0; cursor && hops < 25; hops++) {
+      if (chainIds.includes(cursor)) break;
+      chainIds.push(cursor);
+      const { data: prev } = await supabaseAdmin
+        .from('subscription_cards')
+        .select('supersedes_card_id')
+        .eq('id', cursor)
+        .maybeSingle();
+      cursor = (prev as any)?.supersedes_card_id ?? null;
+    }
+
     const { data: terms } = await supabaseAdmin
       .from('subscription_assignment_terms')
       .select('recipient_type, recipient_id, recipient_name, assigned_date, unassigned_date, work_start_date, work_end_date')
-      .eq('card_id', cardId)
+      .in('card_id', chainIds)
       .eq('status', 'ended')
       .order('assigned_date', { ascending: false });
 
@@ -1777,11 +1871,11 @@ export async function resumeCardCore(
         }
       }
     } else if (mode === 'reopen') {
-      // reopen: send the card back to New Deals as a "Resumed" draft (former
-      // talent released, active term closed, details kept). The admin reviews
-      // pricing there, then publishes to Published. Shared with the assigned
-      // "Repost" action — see reopenAssignmentToDraft.
-      await reopenAssignmentToDraft(cardId, {
+      // reopen: reset the card to the **Published** tab (former talent released,
+      // active term closed, matching pool refreshed). The admin then broadcasts
+      // to the previous talent / all matching, re-selects, and assigns (assign
+      // date = new start date). See reopenAssignmentToPublished.
+      await reopenAssignmentToPublished(cardId, {
         type: card.selected_recipient_type as 'talent' | 'partner' | null,
         id: card.selected_recipient_id as string | null,
       });
