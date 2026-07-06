@@ -92,6 +92,16 @@ export interface SquadhireCardPayload {
   // Cleared on republish; sent as null in that case so SquadHire can
   // transition out of archived. Omitted entirely when never archived.
   archived_at?: string | null;
+  // ISO timestamp set when an admin PAUSED an assigned subscription. The card
+  // stays state='assigned' (pause only pulls the talent + ends the billing
+  // term), so this is the only signal that lets SquadHire move the card from
+  // its Active section to Paused. Sent as null when not paused so a resume
+  // clears it. Requires SquadHub to re-deliver the card on pause/resume.
+  paused_at?: string | null;
+  // ISO timestamp set when an admin CANCELLED the subscription (card closed).
+  // Rides alongside status='archived'; lets SquadHire's Cancelled section tell
+  // a true cancel apart from a recall or plain close. Sent as null otherwise.
+  cancelled_at?: string | null;
   // True when this card was created by SquadHub as a secondary (child of
   // another card via parent_card_id). SquadHire's business dashboard hides
   // secondaries from the published-cards list — only the primary surfaces.
@@ -134,7 +144,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, distribution, card_type, assignment_details, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, source, proposed_price, subscription_price, markup, customer_company, customer_email, service_type, plan_name, plan_snapshot',
+      'id, state, distribution, card_type, assignment_details, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, paused_at, cancelled_at, source, proposed_price, subscription_price, markup, customer_company, customer_email, service_type, plan_name, plan_snapshot',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -778,6 +788,8 @@ export async function buildSquadhirePayloadForCard(
 
   const recalledAt = card.recalled_at as string | null | undefined;
   const archivedAt = (card as any).archived_at as string | null | undefined;
+  const pausedAt = (card as any).paused_at as string | null | undefined;
+  const cancelledAt = (card as any).cancelled_at as string | null | undefined;
 
   const businessPhone = leadPhone && leadPhone.length >= 6 ? leadPhone : undefined;
   const businessContactName = leadContactName && leadContactName.length > 0 ? leadContactName : undefined;
@@ -799,6 +811,8 @@ export async function buildSquadhirePayloadForCard(
     ...(businessCompany ? { business_company: businessCompany } : {}),
     ...(recalledAt ? { recalled_at: new Date(recalledAt).toISOString() } : {}),
     archived_at: archivedAt ? new Date(archivedAt).toISOString() : null,
+    paused_at: pausedAt ? new Date(pausedAt).toISOString() : null,
+    cancelled_at: cancelledAt ? new Date(cancelledAt).toISOString() : null,
   };
 }
 
