@@ -936,8 +936,13 @@ router.post('/subscription-cards/:id/upgrade-downgrade', async (req: Request, re
       }).catch((err) => console.error('[upgrade-downgrade] space hand-off failed', err));
     }
 
-    // 3. Soft-cancel the old card and DETACH its unique links (submission +
-    //    folder) so they can move to the new card without violating the 1:1 keys.
+    // 3. Soft-cancel the old card: mark it closed FIRST — with its links still
+    //    attached — so the SquadHire takedown just below builds a payload that
+    //    keeps the correct business_email / plan / price (staged cards resolve
+    //    those through submission_subscription_id) and only flips status to
+    //    'archived'. Reset the sync stamps too so a broadcast card also gets a
+    //    sweeper retry (the sweeper is broadcast-only; manual cards rely on the
+    //    inline re-delivery below).
     await supabaseAdmin
       .from('subscription_cards')
       .update({
@@ -946,6 +951,46 @@ router.post('/subscription-cards/:id/upgrade-downgrade', async (req: Request, re
         closed_at: nowIso,
         cancel_type: 'soft',
         paused_at: null,
+        squadhire_synced_at: null,
+        squadhire_sync_attempts: 0,
+        squadhire_sync_last_error: null,
+      })
+      .eq('id', cardId);
+
+    // 3b. Take the superseded card down on SquadHire NOW so it leaves the
+    //     business's "My subscription → Open" list immediately: a closed card
+    //     builds a payload with status='archived', which the mirror ingest
+    //     applies (moving the old card to Closed). Without this the mirror keeps
+    //     its last status='active' and the superseded card lingers next to its
+    //     replacement. Awaited + checked because a manual card gets NO sweeper
+    //     retry, so a lost takedown would strand it in the business's Open list.
+    try {
+      const takedownPayload = await buildSquadhirePayloadForCard(cardId);
+      if (takedownPayload) {
+        await deliverCardToSquadhire(cardId, takedownPayload);
+        const { data: syncCheck } = await supabaseAdmin
+          .from('subscription_cards')
+          .select('squadhire_sync_last_error')
+          .eq('id', cardId)
+          .maybeSingle();
+        if ((syncCheck as any)?.squadhire_sync_last_error) {
+          warnings.push(
+            'SquadHire could not take the previous card down — it may still show in the business portal until the next sync.',
+          );
+        }
+      }
+    } catch (err) {
+      console.error('[upgrade-downgrade] squadhire takedown of superseded card failed', err);
+      warnings.push(
+        'SquadHire could not take the previous card down — it may still show in the business portal.',
+      );
+    }
+
+    // 3c. Now DETACH the old card's unique links (submission + folder) so they
+    //     can move to the new card without violating the 1:1 keys.
+    await supabaseAdmin
+      .from('subscription_cards')
+      .update({
         linked_folder_id: null,
         linked_at: null,
         submission_subscription_id: null,
