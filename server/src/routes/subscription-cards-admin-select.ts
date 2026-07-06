@@ -894,7 +894,10 @@ router.post('/subscription-cards/:id/upgrade-downgrade', async (req: Request, re
       .maybeSingle();
     if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
     if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
-    if (card.paused_at) { res.status(409).json({ success: false, error: 'Subscription is paused — resume it first' }); return; }
+    // Upgrade/downgrade works on an active assignment OR a paused one (a paused
+    // card keeps state='assigned' + selected_recipient_id — its term is already
+    // ended, so the soft-cancel below just clears the pause and releases the
+    // held talent). No `paused_at` guard here on purpose.
     if (card.state !== 'assigned' || !card.selected_recipient_id) {
       res.status(409).json({ success: false, error: 'Card is not an active assignment' });
       return;

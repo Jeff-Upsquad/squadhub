@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import AssignRecipientPicker from './AssignRecipientPicker';
+import UpgradeDowngradeModal from './UpgradeDowngradeModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import CardCodeChip from '@/components/CardCodeChip';
 import { showToast } from '@/components/Toast';
@@ -155,6 +156,7 @@ function CardPanelContent({
   onClose: () => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const qc = useQueryClient();
   const { adminUrl, configured: shConfigured } = useSquadhireConfig();
 
@@ -313,6 +315,23 @@ function CardPanelContent({
     },
     onError: (err: any) => {
       showToast(err?.response?.data?.error || err.message || 'Failed to resume subscription', 'error');
+      clearConfirm();
+    },
+  });
+
+  // Pause a live assignment (change-assignee flow: Pause → Resume → Published).
+  const pause = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${activeCardId}/pause`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
+      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
+      showToast('Paused — billing stopped. Resume from the Paused tab to re-broadcast and change the assignee.', 'success');
+      clearConfirm();
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to pause subscription', 'error');
       clearConfirm();
     },
   });
@@ -603,16 +622,24 @@ function CardPanelContent({
               <p className="text-xs font-semibold text-accent-strong">
                 {activeCard.paused_at ? 'This subscription is paused.' : 'A recipient has been selected for this card.'}
               </p>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 {activeCard.paused_at ? (
                   <>
                     <button
                       onClick={() => setConfirmAction({ kind: 'resume' })}
-                      disabled={resumeReopen.isPending || cancelCard.isPending}
+                      disabled={resumeReopen.isPending || cancelCard.isPending || pause.isPending}
                       className="sh-btn-primary sh-btn-primary-sm"
                       title="Reopen this paused subscription to Published, then broadcast (previous talent or all) and re-assign"
                     >
                       {resumeReopen.isPending ? 'Resuming…' : 'Resume'}
+                    </button>
+                    <button
+                      onClick={() => setUpgradeOpen(true)}
+                      disabled={resumeReopen.isPending || cancelCard.isPending}
+                      className="sh-btn-ghost sh-btn-ghost-sm"
+                      title="Upgrade or downgrade the plan — soft-cancels this card and opens a new one in New Deals on the new plan"
+                    >
+                      Upgrade / downgrade
                     </button>
                     <button
                       onClick={() => setConfirmAction({ kind: 'cancel' })}
@@ -625,13 +652,31 @@ function CardPanelContent({
                 ) : (
                   <>
                     {activeCard.state === 'assigned' && (
-                      <button
-                        onClick={() => setConfirmAction({ kind: 'cancel' })}
-                        disabled={cancelCard.isPending || undoSelection.isPending}
-                        className="sh-btn-danger"
-                      >
-                        {cancelCard.isPending ? 'Cancelling…' : 'Cancel the module'}
-                      </button>
+                      <>
+                        <button
+                          onClick={() => setConfirmAction({ kind: 'pause' })}
+                          disabled={pause.isPending || cancelCard.isPending || undoSelection.isPending}
+                          className="sh-btn-primary sh-btn-primary-sm"
+                          title="Pause billing and hold the talent. Resume later to re-broadcast and change the assignee."
+                        >
+                          {pause.isPending ? 'Pausing…' : 'Pause'}
+                        </button>
+                        <button
+                          onClick={() => setUpgradeOpen(true)}
+                          disabled={pause.isPending || cancelCard.isPending}
+                          className="sh-btn-ghost sh-btn-ghost-sm"
+                          title="Upgrade or downgrade the plan — soft-cancels this card and opens a new one in New Deals on the new plan"
+                        >
+                          Upgrade / downgrade
+                        </button>
+                        <button
+                          onClick={() => setConfirmAction({ kind: 'cancel' })}
+                          disabled={cancelCard.isPending || undoSelection.isPending || pause.isPending}
+                          className="sh-btn-danger"
+                        >
+                          {cancelCard.isPending ? 'Cancelling…' : 'Cancel the module'}
+                        </button>
+                      </>
                     )}
                     <button
                       onClick={() => setConfirmAction({ kind: 'undoSelection' })}
@@ -803,6 +848,9 @@ function CardPanelContent({
       {pickerOpen && (
         <AssignRecipientPicker cardId={activeCardId} onClose={() => setPickerOpen(false)} />
       )}
+      {upgradeOpen && (
+        <UpgradeDowngradeModal cardId={activeCardId} onClose={() => setUpgradeOpen(false)} />
+      )}
       <ConfirmActionDialog
         confirmAction={confirmAction}
         onCancel={clearConfirm}
@@ -818,6 +866,7 @@ function CardPanelContent({
           recall: recallCard.isPending,
           cancel: cancelCard.isPending,
           resume: resumeReopen.isPending,
+          pause: pause.isPending,
           offerPrevious: offerPreviousTalent.isPending,
           rebroadcastAll: rebroadcastAll.isPending,
           archive: archiveCard.isPending,
@@ -838,6 +887,7 @@ function CardPanelContent({
             case 'recall': recallCard.mutate(); break;
             case 'cancel': cancelCard.mutate(); break;
             case 'resume': resumeReopen.mutate(); break;
+            case 'pause': pause.mutate(); break;
             case 'offerPrevious': offerPreviousTalent.mutate(); break;
             case 'rebroadcastAll': rebroadcastAll.mutate(); break;
             case 'archive': archiveCard.mutate(); break;
@@ -863,6 +913,7 @@ type ConfirmAction =
   | { kind: 'recall' }
   | { kind: 'cancel' }
   | { kind: 'resume' }
+  | { kind: 'pause' }
   | { kind: 'offerPrevious' }
   | { kind: 'rebroadcastAll' }
   | { kind: 'archive' }
@@ -963,6 +1014,13 @@ function ConfirmActionDialog({
       confirmLabel: 'Resume',
       pendingLabel: 'Resuming…',
       variant: 'default',
+    },
+    pause: {
+      title: 'Pause this subscription?',
+      description: 'Billing stops and the talent is held. To CHANGE the assignee, Resume it from the Paused tab — it reopens to Published where you broadcast (previous talent or all) and select someone new.',
+      confirmLabel: 'Pause',
+      pendingLabel: 'Pausing…',
+      variant: 'warning',
     },
     offerPrevious: {
       title: 'Broadcast to the previous talent?',
