@@ -88,6 +88,13 @@ router.get('/', async (req: Request, res: Response) => {
     ) {
       query = query.eq('source', sourceParam);
     }
+    // "Resumed" surfacing for New Deals: reopened cards (Repost / paused-resume)
+    // return as drafts but carry a published_at stamp from their prior life,
+    // which distinguishes them from brand-new drafts. `reopened=true` surfaces
+    // them regardless of source so New Deals can group them reliably.
+    if (String(req.query.reopened || '').trim() === 'true') {
+      query = query.not('published_at', 'is', null);
+    }
     if (publishedBy) query = query.eq('published_by', publishedBy);
 
     // Scope to a single lead's cards. The Lead detail panel calls this to

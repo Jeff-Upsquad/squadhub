@@ -11,7 +11,6 @@ import { openLeadInCRM } from '@/utils/squadCrm';
 import { resolveFinalizedPrice } from '@squadhub/shared';
 import type { PublishedCard } from './AdminPublishedCards';
 import type { RecipientsResponse } from './AdminPublishedCardRecipientsPanel';
-import AssignmentChangeModal from './AssignmentChangeModal';
 
 type UnifiedRecipient = {
   id: string;
@@ -339,6 +338,24 @@ export default function AdminPublishedCardRecipientsView({
     },
   });
 
+  // "Broadcast to previous talent" — offer the reopened, re-published card to its
+  // most-recent former assignee (they must accept before billing resumes).
+  const offerPreviousTalentMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/subscription-cards/${card.id}/offer-previous-talent`),
+    onSuccess: (r: any) => {
+      const warning = r?.data?.warning as string | undefined;
+      if (warning) showToast(warning, 'error');
+      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      if (!warning) showToast('Offer sent to the previous talent — awaiting their accept.', 'success');
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.error || err.message || 'Failed to offer to previous talent', 'error');
+    },
+  });
+
   // Resume a paused subscription by reopening it to Published (no broadcast yet):
   // the previous talent is released and shown as a former assignee, the matching
   // pool becomes available again, and the admin drives Broadcast + selection from
@@ -352,7 +369,7 @@ export default function AdminPublishedCardRecipientsView({
       queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
-      showToast('Resumed — moved to Published. Review the available talents, then Broadcast.', 'success');
+      showToast('Resumed — moved to New Deals (Resumed). Review pricing/details there, then publish.', 'success');
     },
     onError: (err: any) => {
       showToast(err?.response?.data?.error || err.message || 'Failed to resume subscription', 'error');
@@ -373,9 +390,9 @@ export default function AdminPublishedCardRecipientsView({
     },
   });
 
-  // Repost a live assignment: release the talent and send the module back to the
-  // Published tab (former assignee + matching pool), where the admin re-broadcasts,
-  // re-selects, and can change plan/talent in place.
+  // Repost a live assignment: release the talent and send the module back to New
+  // Deals as a "Resumed" draft, where the admin reviews pricing/details before
+  // re-publishing (then Broadcast-to-previous-talent / Broadcast-to-all).
   const repostMutation = useMutation({
     mutationFn: () =>
       api.post(`/admin/subscription-cards/${card.id}/repost`),
@@ -385,7 +402,7 @@ export default function AdminPublishedCardRecipientsView({
       queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
-      showToast('Reposted — moved to Published. Broadcast to re-source, or change plan/talent from here.', 'success');
+      showToast('Reposted — moved to New Deals (Resumed). Review pricing/details there, then publish.', 'success');
     },
     onError: (err: any) => {
       showToast(err?.response?.data?.error || err.message || 'Failed to repost module', 'error');
@@ -462,7 +479,6 @@ export default function AdminPublishedCardRecipientsView({
 
   const [autoAcceptTarget, setAutoAcceptTarget] = useState<{ id: string; name: string; email: string } | null>(null);
   const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string; type: 'partner' | 'talent' } | null>(null);
-  const [changeOpen, setChangeOpen] = useState(false);
 
   const removeRecipientMutation = useMutation({
     mutationFn: ({ id, type }: { id: string; type: 'partner' | 'talent' }) =>
@@ -731,26 +747,29 @@ export default function AdminPublishedCardRecipientsView({
                 {markReviewedMutation.isPending ? 'Marking…' : 'Mark as Reviewed'}
               </button>
             )}
+            {/* Reopened (Resumed/Reposted) module — offer straight to the former
+                assignee, or broadcast to the whole matching pool. */}
+            {bucket === 'active' && hasFormerAssignees && (
+              <button
+                onClick={() => {
+                  if (window.confirm('Broadcast to the previous talent?\n\nSends a fresh offer to the most-recent former assignee — they must accept before billing resumes.')) offerPreviousTalentMutation.mutate();
+                }}
+                disabled={offerPreviousTalentMutation.isPending || broadcastToTalentsMutation.isPending}
+                className="sh-btn-primary"
+                title="Send an offer to the card's most-recent former assignee"
+              >
+                {offerPreviousTalentMutation.isPending ? 'Offering…' : 'Broadcast to previous talent'}
+              </button>
+            )}
             {bucket === 'active' && (
               <button
                 onClick={() => {
-                  if (window.confirm('Broadcast this card to matching talents?')) broadcastToTalentsMutation.mutate();
+                  if (window.confirm(hasFormerAssignees ? 'Broadcast to all matching talents?\n\nInvites the full matching pool — not just the previous talent.' : 'Broadcast this card to matching talents?')) broadcastToTalentsMutation.mutate();
                 }}
-                disabled={broadcastToTalentsMutation.isPending}
-                className="sh-btn-primary"
+                disabled={offerPreviousTalentMutation.isPending || broadcastToTalentsMutation.isPending}
+                className={hasFormerAssignees ? 'sh-btn-ghost' : 'sh-btn-primary'}
               >
-                {broadcastToTalentsMutation.isPending ? 'Broadcasting…' : 'Broadcast to talents'}
-              </button>
-            )}
-            {/* Reposted / resumed module in Published — change the plan or hand-pick
-                a talent in place (gated to cards that came from a prior assignment). */}
-            {bucket === 'active' && hasFormerAssignees && (
-              <button
-                onClick={() => setChangeOpen(true)}
-                className="sh-btn-ghost"
-                title="Upgrade/downgrade the plan or hand-pick a talent for this reposted module"
-              >
-                Change plan / talent
+                {broadcastToTalentsMutation.isPending ? 'Broadcasting…' : hasFormerAssignees ? 'Broadcast to all matching' : 'Broadcast to talents'}
               </button>
             )}
           </div>
@@ -881,11 +900,11 @@ export default function AdminPublishedCardRecipientsView({
                         </span>
                         <button
                           onClick={() => {
-                            if (window.confirm('Resume this subscription?\n\nThe card reopens to Published — the previous talent is released (shown as a former assignee) and the matching pool is available again. Billing stays stopped until you Broadcast and finalize a new assignment.')) resumeReopenMutation.mutate();
+                            if (window.confirm('Resume this subscription?\n\nThe card goes back to New Deals as a "Resumed" draft — the previous talent is released. Review pricing/details there, then publish and broadcast (to the previous talent or all matching). Billing stays stopped until a new assignment is finalized.')) resumeReopenMutation.mutate();
                           }}
                           disabled={resumeReopenMutation.isPending || cancelSubscriptionMutation.isPending}
                           className="sh-btn-primary sh-btn-primary-sm"
-                          title="Reopen this paused subscription to Published, then broadcast and select a new assignment"
+                          title="Send this paused subscription back to New Deals as a Resumed draft — review pricing, then publish and broadcast"
                         >
                           {resumeReopenMutation.isPending ? 'Resuming…' : 'Resume'}
                         </button>
@@ -906,11 +925,11 @@ export default function AdminPublishedCardRecipientsView({
                       <>
                         <button
                           onClick={() => {
-                            if (window.confirm('Repost this module?\n\nThe talent is released and the module goes back to Published (shown as a former assignee, matching pool available). Billing stops until you re-assign. From Published you can Broadcast, re-select, and change plan or talent.')) repostMutation.mutate();
+                            if (window.confirm('Repost this module?\n\nThe talent is released and the module goes back to New Deals as a "Resumed" draft. Billing stops. Review pricing/details there, then publish — from Published you can Broadcast to the previous talent or to all matching recipients.')) repostMutation.mutate();
                           }}
                           disabled={repostMutation.isPending || undoMutation.isPending || cancelSubscriptionMutation.isPending}
                           className="sh-btn-primary sh-btn-primary-sm"
-                          title="Send this module back to Published to re-source — broadcast, re-select, and change plan/talent from there"
+                          title="Send this module back to New Deals as a Resumed draft — review pricing, then publish and broadcast to re-source"
                         >
                           {repostMutation.isPending ? 'Reposting…' : 'Repost'}
                         </button>
@@ -933,7 +952,7 @@ export default function AdminPublishedCardRecipientsView({
                           {undoMutation.isPending ? 'Unassigning…' : 'Unassign'}
                         </button>
                         <span className="text-[11px] text-emerald-700/80 dark:text-emerald-300/90">
-                          Repost sends the module back to Published to re-source (plan &amp; talent stay editable there); Cancel closes it permanently; Unassign just clears the current talent.
+                          Repost sends the module back to New Deals as a Resumed draft (edit pricing, then publish &amp; broadcast); Cancel closes it permanently; Unassign just clears the current talent.
                         </span>
                       </>
                     )}
@@ -1488,9 +1507,6 @@ export default function AdminPublishedCardRecipientsView({
           </div>
         );
       })()}
-      {changeOpen && (
-        <AssignmentChangeModal cardId={card.id} pausedAt={card.paused_at ?? null} published={bucket === 'active' && hasFormerAssignees} onClose={() => setChangeOpen(false)} />
-      )}
       {autoAcceptTarget && (
         <ConfirmDialog
           open
