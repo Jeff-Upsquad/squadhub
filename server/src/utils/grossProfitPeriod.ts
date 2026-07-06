@@ -58,7 +58,7 @@ export interface GrossProfitLine {
   work_start: string | null;
   work_end: string | null;
   active_days: number;
-  status: 'active' | 'paused' | 'cancelled' | 'ended';
+  status: 'active' | 'paused' | 'cancelled' | 'ended' | 'upgraded' | 'downgraded' | 'superseded';
   revenue: number;
   partner_cost: number;
   gross_profit: number;
@@ -227,14 +227,18 @@ export async function computeGrossProfit(
     cancelled_at: string | null;
     closed_at: string | null;
     state: string | null;
+    // 'soft' = the card was replaced by an upgrade/downgrade (migration 156);
+    // null/'hard' = a normal cancel.
+    cancel_type: string | null;
   };
   const cardLife = new Map<string, CardLife>();
   const folderByCard = new Map<string, string | null>();
   const deleted = new Set<string>();
+  const planHoursByCard = new Map<string, number | null>();
   if (cardIds.length) {
     const { data: cardMeta } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, deleted_at, paused_at, cancelled_at, closed_at, state, linked_folder_id')
+      .select('id, deleted_at, paused_at, cancelled_at, closed_at, state, cancel_type, plan_snapshot, linked_folder_id')
       .in('id', cardIds);
     (cardMeta || []).forEach((c: any) => {
       cardLife.set(c.id, {
@@ -242,9 +246,37 @@ export async function computeGrossProfit(
         cancelled_at: c.cancelled_at ?? null,
         closed_at: c.closed_at ?? null,
         state: c.state ?? null,
+        cancel_type: c.cancel_type ?? null,
       });
+      const wk = c.plan_snapshot?.plan?.weekly_hours;
+      planHoursByCard.set(c.id, wk != null ? Number(wk) : null);
       folderByCard.set(c.id, c.linked_folder_id ?? null);
       if (c.deleted_at) deleted.add(c.id);
+    });
+  }
+
+  // Upgrade vs downgrade: a soft-cancelled (superseded) card is replaced by a
+  // new card whose supersedes_card_id points back to it. Compare the successor's
+  // plan hours to the old card's so a plan change reads as an upgrade/downgrade
+  // rather than churn.
+  const supersedeDir = new Map<string, 'upgrade' | 'downgrade' | 'changed'>();
+  if (cardIds.length) {
+    const { data: successors } = await supabaseAdmin
+      .from('subscription_cards')
+      .select('supersedes_card_id, plan_snapshot')
+      .in('supersedes_card_id', cardIds)
+      .is('deleted_at', null);
+    (successors || []).forEach((s: any) => {
+      const oldId = s.supersedes_card_id as string | null;
+      if (!oldId) return;
+      const newWkRaw = s.plan_snapshot?.plan?.weekly_hours;
+      const newWk = newWkRaw != null ? Number(newWkRaw) : null;
+      const oldWk = planHoursByCard.get(oldId) ?? null;
+      let dir: 'upgrade' | 'downgrade' | 'changed' = 'changed';
+      if (newWk != null && oldWk != null && newWk !== oldWk) {
+        dir = newWk > oldWk ? 'upgrade' : 'downgrade';
+      }
+      supersedeDir.set(oldId, dir);
     });
   }
 
@@ -328,8 +360,21 @@ export async function computeGrossProfit(
     const cardStopped = life?.cancelled_at || life?.closed_at || life?.paused_at || null;
     const cardStoppedDate = cardStopped ? String(cardStopped).slice(0, 10) : null;
 
-    let status: 'active' | 'paused' | 'cancelled' | 'ended';
-    if (life?.cancelled_at) status = 'cancelled';
+    // A soft-cancel is an upgrade/downgrade — the subscription continues on a
+    // superseding card, so it's labelled by the plan-change direction, never
+    // "Cancelled". A normal cancel (cancel_type null/'hard') stays "Cancelled".
+    let status:
+      | 'active'
+      | 'paused'
+      | 'cancelled'
+      | 'ended'
+      | 'upgraded'
+      | 'downgraded'
+      | 'superseded';
+    if (life?.cancel_type === 'soft') {
+      const dir = supersedeDir.get(cardId);
+      status = dir === 'upgrade' ? 'upgraded' : dir === 'downgrade' ? 'downgraded' : 'superseded';
+    } else if (life?.cancelled_at) status = 'cancelled';
     else if (life?.closed_at) status = 'ended';
     else if (life?.paused_at) status = 'paused';
     else if (cardTerms.every((t) => endOf(t) != null || t.status === 'ended')) status = 'ended';
@@ -356,9 +401,13 @@ export async function computeGrossProfit(
     else if (!anyOpen) cardEnd = maxTermEnd;
     else cardEnd = null;
 
-    // Revenue: the client price, prorated ONCE over the card's active window.
-    // Additional hours (over/under the plan target) adjust BOTH revenue (client
-    // rate) and cost (partner rate), counted only for the card's active months.
+    // Revenue: the client price prorated over the subscription's ACTIVE days in
+    // each month — the union of this card's term windows. Summing the terms then
+    // capping at the month length excludes a pause gap (an ended term + a later
+    // resumed term), while a 1-day talent-swap boundary overlap is absorbed by
+    // the cap. Open terms still count the full current month (see cap arg).
+    // Additional hours (over/under the plan target) then adjust BOTH revenue
+    // (client rate) and cost (partner rate), counted only for active months.
     let cardRevenue = 0;
     let cardDays = 0;
     let addlHours = 0;
@@ -366,17 +415,24 @@ export async function computeGrossProfit(
     let addlCost = 0;
     let hoursUnresolved = false;
     for (const { year, month } of period.months) {
-      const days = activeDaysInMonth(cardStart, cardEnd, year, month, currentMonthEndIso);
-      if (days <= 0) continue;
-      cardDays += days;
-      cardRevenue += prorateMonthly(
-        repBilling.subscription_price,
-        cardStart,
-        cardEnd,
-        year,
-        month,
-        currentMonthEndIso,
-      );
+      const dim = daysInMonth(year, month);
+      let activeDays = 0;
+      for (const t of cardTerms) {
+        activeDays += activeDaysInMonth(
+          startOf(t),
+          endOf(t) ?? cardStoppedDate ?? null,
+          year,
+          month,
+          currentMonthEndIso,
+        );
+      }
+      activeDays = Math.min(activeDays, dim);
+      if (activeDays <= 0) continue;
+      cardDays += activeDays;
+      if (repBilling.subscription_price != null) {
+        cardRevenue += Math.round((repBilling.subscription_price * activeDays) / dim);
+      }
+      // Additional-hours adjustment for this active month (revenue + cost sides).
       const comp = completionsByMonth.get(`${year}-${pad(month)}`)?.get(cardId);
       if (comp) {
         addlHours += comp.additional_hours;

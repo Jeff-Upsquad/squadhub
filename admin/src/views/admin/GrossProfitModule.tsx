@@ -27,7 +27,7 @@ type Line = {
   work_start: string | null;
   work_end: string | null;
   active_days: number;
-  status: 'active' | 'paused' | 'cancelled' | 'ended';
+  status: 'active' | 'paused' | 'cancelled' | 'ended' | 'upgraded' | 'downgraded' | 'superseded';
   revenue: number;
   partner_cost: number;
   gross_profit: number;
@@ -113,6 +113,9 @@ function statusBadge(status: string): { label: string; cls: string } {
   if (status === 'paused') return { label: 'Paused', cls: 'bg-[#FEF3C7] text-[#A16207]' };
   if (status === 'cancelled') return { label: 'Cancelled', cls: 'bg-[#FEE2E2] text-[#B91C1C]' };
   if (status === 'ended') return { label: 'Ended', cls: 'bg-canvas text-foreground-muted ring-1 ring-divider' };
+  if (status === 'upgraded') return { label: 'Upgraded', cls: 'bg-[#EEF2FF] text-[#4338CA]' };
+  if (status === 'downgraded') return { label: 'Downgraded', cls: 'bg-[#EEF2FF] text-[#4338CA]' };
+  if (status === 'superseded') return { label: 'Plan changed', cls: 'bg-[#EEF2FF] text-[#4338CA]' };
   return { label: 'Active', cls: 'bg-[#DCFCE7] text-[#15803D]' };
 }
 
