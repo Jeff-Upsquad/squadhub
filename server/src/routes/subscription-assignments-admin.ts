@@ -100,6 +100,10 @@ router.get('/', async (req: Request, res: Response) => {
             monthly: b?.monthly_hours ?? null,
           },
           plan_name: b?.plan_name ?? null,
+          // Plan band + tier frozen on the term, so a multi-period breakdown can
+          // name what each slice was on (e.g. "Basic" then "Plus" after a change).
+          plan_label: b?.plan_snapshot?.plan?.plan ?? null,
+          plan_tier: b?.plan_snapshot?.plan?.tier ?? null,
         };
       })
       .filter((t) => t.month_active_days > 0)
@@ -392,6 +396,10 @@ router.get('/users/:recipientType/:recipientId', async (req: Request, res: Respo
           monthly: b?.monthly_hours ?? null,
         },
         plan_name: b?.plan_name ?? null,
+        // Plan band + tier frozen on the term, so a multi-period breakdown can
+        // name what each slice was on (e.g. "Basic" then "Plus" after a change).
+        plan_label: b?.plan_snapshot?.plan?.plan ?? null,
+        plan_tier: b?.plan_snapshot?.plan?.tier ?? null,
       };
     })
       // Scope the breakdown to the selected month: drop terms with no active
