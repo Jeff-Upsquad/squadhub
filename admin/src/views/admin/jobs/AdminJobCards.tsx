@@ -457,8 +457,15 @@ function JobCardRow({ card, onOpen }: { card: AdminJobCard; onOpen: () => void }
           </span>
         )}
         {card.paused_at && (
-          <span className="sh-status-pill" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+          <span className="sh-status-pill bg-amber-500/15 text-amber-500">
             Paused
+          </span>
+        )}
+        {card.recalled_at && (
+          // Recalled and not yet re-published (publish clears recalled_at):
+          // off SquadHire, editable, funnel preserved.
+          <span className="sh-status-pill bg-amber-500/15 text-amber-500">
+            Recalled
           </span>
         )}
         <JobStagePill stage={stage} />
@@ -570,8 +577,16 @@ function JobCardDetailView({
               <h1 className="sh-display text-xl leading-tight sm:text-2xl">{jobCardTitle(card)}</h1>
               <JobStagePill stage={stage} />
               {card.paused_at && (
-                <span className="sh-status-pill" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+                <span className="sh-status-pill bg-amber-500/15 text-amber-500">
                   Paused
+                </span>
+              )}
+              {card.recalled_at && (
+                <span
+                  className="sh-status-pill bg-amber-500/15 text-amber-500"
+                  title="Recalled — taken down from SquadHire; edit and re-publish for a fresh broadcast. Existing candidates are preserved."
+                >
+                  Recalled
                 </span>
               )}
               <RoleBadge role={card.role_service_type} />
