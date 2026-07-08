@@ -7,6 +7,7 @@ import { categorizeJobCard } from '../utils/jobStage';
 import { logJobCardEvent } from '../utils/jobCardEvents';
 import {
   findOrCreateSubmissionByContact,
+  findSubmissionByContact,
   findClientForSubmission,
 } from '../utils/leadLookup';
 import {
@@ -239,6 +240,44 @@ router.post('/client-brief', async (req: Request, res: Response) => {
       return;
     }
     console.error('Create job brief error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// GET /admin/job-cards/lead-lookup?email=&phone= — live autofill for the
+// brief form: newest lead matching the contact identity, returned as
+// prefillable fields. Read-only — find-OR-CREATE still happens at submit.
+// (Registered before /:id so 'lead-lookup' isn't captured as a card id.)
+// ============================================================
+router.get('/lead-lookup', async (req: Request, res: Response) => {
+  try {
+    const email = typeof req.query.email === 'string' ? req.query.email.trim() : '';
+    const phone = typeof req.query.phone === 'string' ? req.query.phone.trim() : '';
+    if (!email && !phone) {
+      res.json({ success: true, data: null });
+      return;
+    }
+
+    const submission = await findSubmissionByContact(email || null, phone || null);
+    if (!submission) {
+      res.json({ success: true, data: null });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        submission_id: submission.id,
+        business_name: submission.business_name ?? null,
+        contact_person: submission.contact_person ?? null,
+        email: submission.email ?? null,
+        phone: submission.contact_number ?? null,
+        country_id: submission.country_id ?? null,
+      },
+    });
+  } catch (err: any) {
+    console.error('Lead lookup error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
