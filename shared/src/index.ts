@@ -1875,7 +1875,7 @@ export interface AssignmentDetails {
 /**
  * `broadcast` (default) — at publish time the server fans out to all matching
  * partners and SquadHire broadcasts to its talents. `manual` — no fan-out;
- * the card is visible in admin Published Cards lists but recipients must be
+ * the card is visible in admin Subscription Cards lists but recipients must be
  * hand-picked via the assign endpoints.
  */
 export type SubscriptionCardDistribution = 'broadcast' | 'manual';

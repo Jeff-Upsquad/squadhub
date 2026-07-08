@@ -27,16 +27,16 @@ const TIER_COLOR: Record<SubscriptionTier, string> = {
 
 // ============================================================
 // Lifecycle grouping — buckets each subscription by the state of its linked
-// broadcast card, mirroring the Published Cards section's buckets so the two
+// broadcast card, mirroring the Subscription Cards section's buckets so the two
 // stay consistent. Subscriptions with no linked card yet fall back to their
-// own status. (Precedence matches AdminPublishedCards.categorize().)
+// own status. (Precedence matches AdminSubscriptionCards.categorize().)
 // ============================================================
 type SubLifecycleBucket =
   | 'newdeal' | 'published' | 'broadcaster' | 'selected'
   | 'assigned' | 'paused' | 'cancelled';
 
 function subscriptionBucket(cs: ClientSubscription): SubLifecycleBucket {
-  // No dedicated "Archived" bucket — the grouping mirrors the Published Cards
+  // No dedicated "Archived" bucket — the grouping mirrors the Subscription Cards
   // section, which surfaces archived/custom in their own tabs, not here. When
   // "Show archived" is on, an archived subscription still folds into its
   // lifecycle bucket (rendered with an "Archived" pill + Unarchive action).
@@ -188,7 +188,7 @@ export default function ClientSubscriptionsPanel({
                     {lc.state}
                   </span>
                   <a
-                    href={`/admin/published-cards?card=${lc.id}`}
+                    href={`/admin/subscription-cards?card=${lc.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="rounded bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-strong"
@@ -347,7 +347,7 @@ function ClientSubscriptionCard({
       <div className="mt-3 flex flex-wrap gap-1.5">
         {card?.id && (
           <a
-            href={`/admin/published-cards?card=${card.id}`}
+            href={`/admin/subscription-cards?card=${card.id}`}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-strong"

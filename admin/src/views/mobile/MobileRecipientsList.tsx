@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { PartnerRecipient, TalentRecipient } from '@/views/admin/AdminPublishedCardRecipientsPanel';
+import type { PartnerRecipient, TalentRecipient } from '@/views/admin/AdminSubscriptionCardRecipientsPanel';
 import MobileActionSheet from './MobileActionSheet';
 
 const STATUS_PILL: Record<string, { bg: string; fg: string }> = {

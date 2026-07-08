@@ -4,7 +4,7 @@ import api from '../../../services/api';
 import type { Country, SubscriptionCard, ClientSubmissionSubscription } from '@squadhub/shared';
 import { resolveFinalizedPrice, resolvePartnerPrice } from '@squadhub/shared';
 
-type PublishedCardItem = SubscriptionCard & {
+type SubscriptionCardItem = SubscriptionCard & {
   submission?: { id: string; business_name: string; country_id: string; country?: Country | null } | null;
   submission_subscription?: ClientSubmissionSubscription | null;
 };
@@ -54,13 +54,13 @@ const STATUS_CHIP: Record<'pending' | 'accepted' | 'rejected', string> = {
   pending: 'bg-amber-100 text-amber-700',
 };
 
-export default function PublishedCardRecipientsPanel({
+export default function SubscriptionCardRecipientsPanel({
   card,
   title,
   onClose,
   endpoint,
 }: {
-  card: PublishedCardItem;
+  card: SubscriptionCardItem;
   title: string;
   onClose: () => void;
   endpoint?: string;
@@ -149,7 +149,7 @@ export default function PublishedCardRecipientsPanel({
   );
 }
 
-function CardDetails({ card, countries }: { card: PublishedCardItem; countries: Country[] }) {
+function CardDetails({ card, countries }: { card: SubscriptionCardItem; countries: Country[] }) {
   const plan = card.submission_subscription?.plan as
     | { plan: string; tier: string; pricing?: { country_id: string; price: number; margin_value?: number; margin_type?: 'fixed' | 'percent'; country?: Country | null }[] }
     | undefined

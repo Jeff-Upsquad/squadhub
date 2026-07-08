@@ -299,9 +299,10 @@ router.get('/me/design-folders', requireAuth, async (req: Request, res: Response
   }
 });
 
-// GET /users/me/published-cards — published subscription cards for any client
-// the user has access to (via client_user_access). Mirrors the admin list shape.
-router.get('/me/published-cards', requireAuth, async (req: Request, res: Response) => {
+// GET /users/me/subscription-cards — subscription cards for any client the user
+// has access to (via client_user_access). Mirrors the admin list shape.
+// `/me/published-cards` is kept as a back-compat alias for older/native clients.
+router.get(['/me/subscription-cards', '/me/published-cards'], requireAuth, async (req: Request, res: Response) => {
   try {
     const stagedIds = await getStagedSubIdsForUser(req.userId!);
     if (stagedIds.length === 0) {
@@ -421,9 +422,10 @@ router.get('/me/published-cards', requireAuth, async (req: Request, res: Respons
   }
 });
 
-// GET /users/me/published-cards/:cardId/recipients — same shape as admin/sales recipients,
-// scoped to cards visible to the current user.
-router.get('/me/published-cards/:cardId/recipients', requireAuth, async (req: Request, res: Response) => {
+// GET /users/me/subscription-cards/:cardId/recipients — same shape as admin/sales
+// recipients, scoped to cards visible to the current user.
+// `/me/published-cards/:cardId/recipients` is kept as a back-compat alias.
+router.get(['/me/subscription-cards/:cardId/recipients', '/me/published-cards/:cardId/recipients'], requireAuth, async (req: Request, res: Response) => {
   try {
     const stagedIds = await getStagedSubIdsForUser(req.userId!);
     if (stagedIds.length === 0) {

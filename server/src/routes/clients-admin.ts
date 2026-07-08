@@ -366,7 +366,7 @@ async function enrichClient(
 
   // Compute each linked card's "needs broadcast" flag (published-but-unsent) so
   // the client detail Subscriptions tab can bucket cards by lifecycle exactly
-  // like the Published Cards section (published vs broadcasted). Gated behind
+  // like the Subscription Cards section (published vs broadcasted). Gated behind
   // withCardLifecycle so the clients LIST never pays for it, and best-effort:
   // a failure here must never break the client payload.
   let needsBroadcastById = new Map<string, boolean>();
@@ -1223,7 +1223,7 @@ router.put('/:clientId/subscriptions/:csId/status', async (req: Request, res: Re
     }
 
     // Propagate to the linked subscription card so billing, the talent's
-    // SquadHire assignment, and the Published Cards tabs stay in sync. The card
+    // SquadHire assignment, and the Subscription Cards tabs stay in sync. The card
     // cores reverse-sync back to this same row (harmless — already set). A
     // client_subscription with no card, or a card whose state doesn't allow the
     // transition, just leaves the Clients-side status changed + a warning.
@@ -1268,7 +1268,7 @@ router.delete('/:clientId/subscriptions/:csId', async (req: Request, res: Respon
       return;
     }
     // Archive the linked card too (best-effort), so it leaves the active
-    // pipeline in Published Cards. "Already archived" is not an error here.
+    // pipeline in Subscription Cards. "Already archived" is not an error here.
     let cardWarning: string | undefined;
     const cardId = await findCardIdForClientSubscription(req.params.clientId as string, req.params.csId as string);
     if (cardId) {

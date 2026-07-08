@@ -23,7 +23,7 @@
   --accent:           #2962FF;  /* royal-blue accent */
   --accent-strong:    #1E50D8;  /* accent hover / pressed */
 
-  /* SquadHire palette (Published Cards / mobile neo-brutalist module) */
+  /* SquadHire palette (Subscription Cards / mobile neo-brutalist module) */
   --sh-lime:          #FCF487;
   --sh-lime-hover:    #E8DD68;
   --sh-lime-soft:     #FDFAC2;
@@ -174,8 +174,8 @@ body {
 .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* ============================================================
- * SquadHire-flavored design system (scoped to Published Cards module)
- * Opt-in classes — applied only inside the Published Cards files.
+ * SquadHire-flavored design system (scoped to Subscription Cards module)
+ * Opt-in classes — applied only inside the Subscription Cards files.
  *
  * Wrapped in @layer components so Tailwind utilities (in @layer
  * utilities) always win over these defaults. That way `pl-8`,

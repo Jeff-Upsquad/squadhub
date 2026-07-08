@@ -9,6 +9,13 @@ const API_URL = process.env.INTERNAL_API_URL || 'http://localhost:4000';
 const nextConfig = {
   reactStrictMode: true,
 
+  // Module renamed Published Cards -> Subscription Cards. Old paths redirect so
+  // existing bookmarks/deep links keep working (query strings are preserved).
+  redirects: async () => [
+    { source: '/admin/published-cards', destination: '/admin/subscription-cards', permanent: false },
+    { source: '/m/published-cards', destination: '/m/subscription-cards', permanent: false },
+  ],
+
   rewrites: async () => ({
     beforeFiles: [
       { source: '/api/auth/:path*', destination: `${API_URL}/auth/:path*` },

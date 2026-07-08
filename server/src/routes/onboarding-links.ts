@@ -556,7 +556,7 @@ router.post('/leads/:id/subscriptions/:rowId/cancel', requireSalesLeadsAccess, a
     // A LIVE assignment must go through the admin Cancel flow (ends the
     // billing term, retires + notifies the talent on SquadHire, clears pause).
     if (card.state === 'assigned') {
-      res.status(409).json({ success: false, error: 'This subscription has an assigned talent — cancel it from Admin → Published Cards instead' });
+      res.status(409).json({ success: false, error: 'This subscription has an assigned talent — cancel it from Admin → Subscription Cards instead' });
       return;
     }
 

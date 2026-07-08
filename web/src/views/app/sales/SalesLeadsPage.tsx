@@ -14,12 +14,12 @@ import { PIPELINE_STATUSES } from '@squadhub/shared';
 import GenerateLinkDialog from './GenerateLinkDialog';
 import LeadStatusChips, { STATUS_META } from '../../../components/LeadStatusChips';
 import LeadSubscriptionsSection from './LeadSubscriptionsSection';
-import PublishedCardRecipientsPanel from './PublishedCardRecipientsPanel';
+import SubscriptionCardRecipientsPanel from './SubscriptionCardRecipientsPanel';
 import ProfileAccessTab from './ProfileAccessTab';
 
 type Tab = 'leads' | 'links' | 'published' | 'profile-access';
 
-type PublishedCardItem = SubscriptionCard & {
+type SubscriptionCardItem = SubscriptionCard & {
   submission?: { id: string; business_name: string; country_id: string; country?: Country | null } | null;
   submission_subscription?: ClientSubmissionSubscription | null;
 };
@@ -63,24 +63,24 @@ export default function SalesLeadsPage() {
   const links: OnboardingLink[] = linksRes?.data || [];
 
   const { data: cardsRes, isLoading: cardsLoading } = useQuery({
-    queryKey: ['sales-published-cards'],
+    queryKey: ['sales-subscription-cards'],
     queryFn: () => api.get('/subscription-cards/published-by-me').then((r) => r.data),
     enabled: tab === 'published',
   });
-  const publishedCards: PublishedCardItem[] = cardsRes?.data || [];
+  const subscriptionCards: SubscriptionCardItem[] = cardsRes?.data || [];
 
   const cardGroups = useMemo(() => {
-    const active = publishedCards.filter((c) => c.state === 'published');
-    const cancelled = publishedCards.filter((c) => c.state === 'closed');
+    const active = subscriptionCards.filter((c) => c.state === 'published');
+    const cancelled = subscriptionCards.filter((c) => c.state === 'closed');
     return { active, cancelled };
-  }, [publishedCards]);
+  }, [subscriptionCards]);
 
-  const cardDateGroups = useMemo(() => bucketByDate(publishedCards), [publishedCards]);
+  const cardDateGroups = useMemo(() => bucketByDate(subscriptionCards), [subscriptionCards]);
 
-  const selectedCard: PublishedCardItem | null = useMemo(() => {
+  const selectedCard: SubscriptionCardItem | null = useMemo(() => {
     if (!selectedCardId) return null;
-    return publishedCards.find((c) => c.id === selectedCardId) || null;
-  }, [publishedCards, selectedCardId]);
+    return subscriptionCards.find((c) => c.id === selectedCardId) || null;
+  }, [subscriptionCards, selectedCardId]);
 
   const { data: peopleRes } = useQuery({
     queryKey: ['sales-people'],
@@ -146,7 +146,7 @@ export default function SalesLeadsPage() {
         <div className="flex gap-1">
           <TabButton active={tab === 'leads'} onClick={() => setTab('leads')}>My Leads</TabButton>
           <TabButton active={tab === 'links'} onClick={() => setTab('links')}>My Invite Links</TabButton>
-          <TabButton active={tab === 'published'} onClick={() => setTab('published')}>Published Cards</TabButton>
+          <TabButton active={tab === 'published'} onClick={() => setTab('published')}>Subscription Cards</TabButton>
           <TabButton active={tab === 'profile-access'} onClick={() => setTab('profile-access')}>Profile Access</TabButton>
         </div>
       </div>
@@ -155,7 +155,7 @@ export default function SalesLeadsPage() {
         {tab === 'published' ? (
           cardsLoading ? (
             <p className="py-8 text-center text-sm text-[var(--sh-ink-4)]">Loading…</p>
-          ) : publishedCards.length === 0 ? (
+          ) : subscriptionCards.length === 0 ? (
             <div className="rounded-lg border border-[var(--sh-hair)] bg-[var(--surface)] py-12 text-center">
               <p className="text-sm text-[var(--sh-ink-4)]">No published cards yet.</p>
             </div>
@@ -325,9 +325,9 @@ export default function SalesLeadsPage() {
       {selected && <LeadDetailPanelWrapper lead={selected} onClose={() => setSelectedId(null)} />}
 
       {selectedCard && (
-        <PublishedCardRecipientsPanel
+        <SubscriptionCardRecipientsPanel
           card={selectedCard}
-          title={publishedCardTitle(selectedCard)}
+          title={subscriptionCardTitle(selectedCard)}
           onClose={() => setSelectedCardId(null)}
         />
       )}
@@ -463,7 +463,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function publishedCardTitle(card: PublishedCardItem): string {
+function subscriptionCardTitle(card: SubscriptionCardItem): string {
   const business = card.submission?.business_name || card.brand_name || 'Untitled lead';
   const subName = card.submission_subscription?.subscription?.name;
   return subName ? `${business} · ${subName}` : business;
@@ -511,7 +511,7 @@ function CardGroup({
 }: {
   label: string;
   color: string;
-  items: PublishedCardItem[];
+  items: SubscriptionCardItem[];
   onOpen: (id: string) => void;
   showCancelledTag: boolean;
 }) {
@@ -529,7 +529,7 @@ function CardGroup({
       </div>
       <div className="space-y-1.5">
         {items.map((card) => (
-          <PublishedCardRow
+          <SubscriptionCardRow
             key={card.id}
             card={card}
             onOpen={() => onOpen(card.id)}
@@ -541,7 +541,7 @@ function CardGroup({
   );
 }
 
-function PublishedCardRow({ card, onOpen, showCancelledTag }: { card: PublishedCardItem; onOpen: () => void; showCancelledTag: boolean }) {
+function SubscriptionCardRow({ card, onOpen, showCancelledTag }: { card: SubscriptionCardItem; onOpen: () => void; showCancelledTag: boolean }) {
   const business = card.submission?.business_name || card.brand_name || 'Untitled lead';
   const subName = card.submission_subscription?.subscription?.name || '';
   const plan = card.submission_subscription?.plan;

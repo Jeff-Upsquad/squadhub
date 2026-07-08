@@ -733,7 +733,7 @@ export default function SubscriptionCardDrawer({
               description={(() => {
                 const baseDescription =
                   pendingPublishMode === 'manual'
-                    ? "The card will appear in the Published Cards list and on SquadHire's admin, but partners and talents won't see it until you hand-pick them from the recipients panel. You can recall it only before anyone accepts."
+                    ? "The card will appear in the Subscription Cards list and on SquadHire's admin, but partners and talents won't see it until you hand-pick them from the recipients panel. You can recall it only before anyone accepts."
                     : `This will send the card to all matching partners (tiers ${targetTiers.length === 0 ? 'Any' : targetTiers.join(', ')}, min ${parseInt(minExp || '0', 10) || 0}y, ${targetCountryIds.length || 'all'} countries). You can recall it only before anyone accepts.`;
                 // Loud-on-purpose warning when no SquadHire categories are
                 // selected — silent skip is the bug we're guarding against.

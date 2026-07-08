@@ -448,6 +448,13 @@
       "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/keen-margulis-226629/web' && INTERNAL_API_URL=http://localhost:4033 exec npx next dev -p 3160"],
       "port": 3160,
       "autoPort": true
+    },
+    {
+      "name": "Elegant Herschel Admin",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/elegant-herschel-3a5cdc/admin' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3170"],
+      "port": 3170,
+      "autoPort": true
     }
   ]
 }

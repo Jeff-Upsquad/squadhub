@@ -1588,7 +1588,7 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
 // ============================================================
 // POST /admin/subscription-cards/:id/archive
 // Soft-hide any card. Sets archived_at; the card stops appearing
-// in the default Published Cards list and is dropped from talent
+// in the default Subscription Cards list and is dropped from talent
 // feeds. State is preserved so we can describe what was archived
 // in the Archive tab; republish/delete-permanent decide its fate.
 // ============================================================

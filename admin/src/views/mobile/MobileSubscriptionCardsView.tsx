@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
-import { squadhireDeliveryState, ServiceTypeBadge, CardTypeBadge, type PublishedCard } from '@/views/admin/AdminPublishedCards';
+import { squadhireDeliveryState, ServiceTypeBadge, CardTypeBadge, type AdminSubscriptionCard } from '@/views/admin/AdminSubscriptionCards';
 import MobileCardDetail from './MobileCardDetail';
 import MobileRequestsList from './MobileRequestsList';
 import MobileCustomCardsList from './MobileCustomCardsList';
@@ -25,15 +25,15 @@ function formatPublishedAt(iso: string | null): string {
   return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${time}`;
 }
 
-function bucketByDate(cards: PublishedCard[]): { today: PublishedCard[]; yesterday: PublishedCard[]; thisWeek: PublishedCard[]; earlier: PublishedCard[] } {
+function bucketByDate(cards: AdminSubscriptionCard[]): { today: AdminSubscriptionCard[]; yesterday: AdminSubscriptionCard[]; thisWeek: AdminSubscriptionCard[]; earlier: AdminSubscriptionCard[] } {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const startOfYesterday = startOfToday - 86400000;
   const startOfWeek = startOfToday - 6 * 86400000;
-  const today: PublishedCard[] = [];
-  const yesterday: PublishedCard[] = [];
-  const thisWeek: PublishedCard[] = [];
-  const earlier: PublishedCard[] = [];
+  const today: AdminSubscriptionCard[] = [];
+  const yesterday: AdminSubscriptionCard[] = [];
+  const thisWeek: AdminSubscriptionCard[] = [];
+  const earlier: AdminSubscriptionCard[] = [];
   for (const c of cards) {
     if (!c.published_at) { earlier.push(c); continue; }
     const t = new Date(c.published_at).getTime();
@@ -45,7 +45,7 @@ function bucketByDate(cards: PublishedCard[]): { today: PublishedCard[]; yesterd
   return { today, yesterday, thisWeek, earlier };
 }
 
-export default function MobilePublishedCardsView() {
+export default function MobileSubscriptionCardsView() {
   const [activeTab, setActiveTab] = useState<Tab>('published');
   const [stateFilter, setStateFilter] = useState<StateFilter>('all');
   const [publishedBy, setPublishedBy] = useState<string>('');
@@ -56,7 +56,7 @@ export default function MobilePublishedCardsView() {
   const isArchiveTab = activeTab === 'archive';
 
   const { data: cardsRes, isLoading } = useQuery({
-    queryKey: ['admin-published-cards', publishedBy, search, isArchiveTab ? 'archived' : 'active'],
+    queryKey: ['admin-subscription-cards', publishedBy, search, isArchiveTab ? 'archived' : 'active'],
     queryFn: () => {
       const params: Record<string, string> = {};
       if (publishedBy) params.published_by = publishedBy;
@@ -82,7 +82,7 @@ export default function MobilePublishedCardsView() {
   });
   const pendingRequestCount = (pendingReqsRes?.data || []).length;
 
-  const cards: PublishedCard[] = cardsRes?.data || [];
+  const cards: AdminSubscriptionCard[] = cardsRes?.data || [];
   const selectedCard = cards.find((c) => c.id === selectedCardId) || null;
 
   const stateCounts = useMemo(() => ({
@@ -122,7 +122,7 @@ export default function MobilePublishedCardsView() {
                     : `${cards.length} card${cards.length === 1 ? '' : 's'}`}
             </span>
             <h1 className="sh-display text-2xl">
-              {activeTab === 'archive' ? 'Archived Cards' : activeTab === 'requests' ? 'From Requests' : activeTab === 'custom' ? 'Custom Cards' : 'Published Cards'}
+              {activeTab === 'archive' ? 'Archived Cards' : activeTab === 'requests' ? 'From Requests' : activeTab === 'custom' ? 'Custom Cards' : 'Subscription Cards'}
             </h1>
           </div>
         </div>
@@ -242,7 +242,7 @@ export default function MobilePublishedCardsView() {
           ) : stateFilter !== 'all' ? (
             <div className="space-y-2">
               {filteredCards.map((card) => (
-                <PublishedCardRow
+                <SubscriptionCardRow
                   key={card.id}
                   card={card}
                   onOpen={() => setSelectedCardId(card.id)}
@@ -300,7 +300,7 @@ function CardGroup({
 }: {
   label: string;
   color: string;
-  items: PublishedCard[];
+  items: AdminSubscriptionCard[];
   onOpen: (id: string) => void;
   showCancelledTag: boolean;
   showArchivedTag?: boolean;
@@ -318,7 +318,7 @@ function CardGroup({
       </div>
       <div className="space-y-2">
         {items.map((card) => (
-          <PublishedCardRow
+          <SubscriptionCardRow
             key={card.id}
             card={card}
             onOpen={() => onOpen(card.id)}
@@ -331,13 +331,13 @@ function CardGroup({
   );
 }
 
-function PublishedCardRow({
+function SubscriptionCardRow({
   card,
   onOpen,
   showCancelledTag,
   showArchivedTag,
 }: {
-  card: PublishedCard;
+  card: AdminSubscriptionCard;
   onOpen: () => void;
   showCancelledTag: boolean;
   showArchivedTag?: boolean;

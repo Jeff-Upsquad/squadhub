@@ -21,7 +21,7 @@ export default function MobileLayout({ children }: { children: React.ReactNode }
       router.push('/m/login');
     }
     if (isAuthenticated && pathname === '/m/login') {
-      router.push('/m/published-cards');
+      router.push('/m/subscription-cards');
     }
   }, [hasHydrated, isAuthenticated, pathname, router]);
 
@@ -42,7 +42,7 @@ export default function MobileLayout({ children }: { children: React.ReactNode }
               SH
             </span>
             <h1 className="text-base font-semibold tracking-tight text-[var(--color-sh-ink)]">
-              Published Cards
+              Subscription Cards
             </h1>
           </div>
           <button

@@ -18,7 +18,7 @@ const VIEW_LABELS: Record<string, string> = {
   'day-planner': 'Day Planner',
   routines: 'Routines',
   opportunities: 'Opportunities',
-  'published-cards': 'Published Cards',
+  'subscription-cards': 'Subscription Cards',
 };
 const SECTION_LABELS: Record<string, string> = {
   cal: 'Calendar',

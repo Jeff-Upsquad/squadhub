@@ -481,7 +481,7 @@ export default function AdminCardEditor({
       return api.post(`/admin/subscription-cards/${cardId}/publish`, { distribution });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       onClose();
     },
   });
@@ -489,7 +489,7 @@ export default function AdminCardEditor({
   const archiveMutation = useMutation({
     mutationFn: () => api.post(`/admin/subscription-cards/${cardId}/archive`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       queryClient.invalidateQueries({ queryKey: ['admin-subscription-requests'] });
       queryClient.invalidateQueries({ queryKey: ['admin-custom-cards'] });
       queryClient.invalidateQueries({ queryKey: ['admin-custom-cards-drafts'] });
