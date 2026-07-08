@@ -30,6 +30,14 @@ type UnifiedRecipient = {
   // the Auto-accept flow can resolve a talent to a SquadHub user by matching
   // email. Null when SquadHire couldn't fetch it.
   email: string | null;
+  // Business-review funnel state, mirrored from Profiles (the business portal).
+  // 'shortlisted' | 'rejected' | null; drives the Shortlisted tab. Always null
+  // for partners (no business review) and until Profiles ships the field.
+  business_review_status: 'shortlisted' | 'rejected' | null;
+  // True when this recipient is the card's current assignee (matches
+  // card.selected_recipient_id/type). Drives the Assigned tab. Precomputed in
+  // buildUnifiedRecipients because it needs the card, not just the row.
+  assigned: boolean;
 };
 
 type SquadHireTalent = {
@@ -39,6 +47,11 @@ type SquadHireTalent = {
   responded_at: string | null;
   created_at: string;
   email?: string | null;
+  // Funnel state from Profiles' subscription_card_recipients (optional — older
+  // Profiles builds omit these, so treat as null).
+  business_review_status?: 'shortlisted' | 'rejected' | null;
+  selected_at?: string | null;
+  passed_over_at?: string | null;
 };
 
 // Read-only preview of who a published (not-yet-broadcast) card would reach.
@@ -65,6 +78,7 @@ const tierLabelOf = (c: PublishedCard): string | null =>
 function buildUnifiedRecipients(
   data: RecipientsResponse | undefined,
   squadhireTalents: SquadHireTalent[],
+  card: Pick<PublishedCard, 'selected_recipient_id' | 'selected_recipient_type'>,
 ): UnifiedRecipient[] {
   if (!data) return [];
 
@@ -74,6 +88,15 @@ function buildUnifiedRecipients(
   const partnerRows = Array.isArray(data.partners) ? data.partners : [];
   const talentRows = Array.isArray(data.talents) ? data.talents : [];
   const sqTalents = Array.isArray(squadhireTalents) ? squadhireTalents : [];
+
+  // Is this recipient the card's current assignee? Talents are keyed by
+  // external_user_id and partners by partner_id — both equal
+  // selected_recipient_id in their respective assign flows. selected_recipient_type
+  // can be null on legacy rows, so fall back to id-only matching then.
+  const assignedId = card.selected_recipient_id ?? null;
+  const assignedType = card.selected_recipient_type ?? null;
+  const isAssignee = (id: string, type: 'partner' | 'talent'): boolean =>
+    !!assignedId && assignedId === id && (assignedType === null || assignedType === type);
 
   const partners: UnifiedRecipient[] = partnerRows.map((p) => ({
     id: p.id,
@@ -86,25 +109,35 @@ function buildUnifiedRecipients(
     passed_over_at: p.passed_over_at ?? null,
     notified_at: null,
     email: null,
+    business_review_status: null,
+    assigned: isAssignee(p.id, 'partner'),
   }));
 
   const localTalentIds = new Set(talentRows.map((t) => t.external_user_id));
-  const emailByTalentId = new Map(
-    sqTalents.map((t) => [t.talent_user_id, t.email ?? null] as const),
-  );
+  // The live SquadHire list carries fields the local /recipients row doesn't:
+  // email, the business review status (shortlist), and the selection time. Keep
+  // the whole SquadHire row by id so any of them can be coalesced onto the
+  // preferred local row (which wins the dedup but lacks these).
+  const sqByTalentId = new Map(sqTalents.map((t) => [t.talent_user_id, t] as const));
 
-  const localTalents: UnifiedRecipient[] = talentRows.map((t) => ({
-    id: t.external_user_id,
-    name: t.name || 'Unknown talent',
-    type: 'talent',
-    status: t.status,
-    responded_at: t.responded_at,
-    assigned_manually: !!t.assigned_manually,
-    selected_at: t.selected_at ?? null,
-    passed_over_at: t.passed_over_at ?? null,
-    notified_at: t.notified_at ?? null,
-    email: t.email ?? emailByTalentId.get(t.external_user_id) ?? null,
-  }));
+  const localTalents: UnifiedRecipient[] = talentRows.map((t) => {
+    const sq = sqByTalentId.get(t.external_user_id);
+    return {
+      id: t.external_user_id,
+      name: t.name || 'Unknown talent',
+      type: 'talent',
+      status: t.status,
+      responded_at: t.responded_at,
+      assigned_manually: !!t.assigned_manually,
+      selected_at: t.selected_at ?? sq?.selected_at ?? null,
+      passed_over_at: t.passed_over_at ?? null,
+      notified_at: t.notified_at ?? null,
+      email: t.email ?? sq?.email ?? null,
+      // Shortlist lives only on SquadHire — the local row never carries it.
+      business_review_status: sq?.business_review_status ?? null,
+      assigned: isAssignee(t.external_user_id, 'talent'),
+    };
+  });
 
   const remoteTalents: UnifiedRecipient[] = sqTalents
     .filter((t) => !localTalentIds.has(t.talent_user_id))
@@ -115,10 +148,12 @@ function buildUnifiedRecipients(
       status: t.status,
       responded_at: t.responded_at,
       assigned_manually: false,
-      selected_at: null,
-      passed_over_at: null,
+      selected_at: t.selected_at ?? null,
+      passed_over_at: t.passed_over_at ?? null,
       notified_at: null,
       email: t.email ?? null,
+      business_review_status: t.business_review_status ?? null,
+      assigned: isAssignee(t.talent_user_id, 'talent'),
     }));
 
   return [...partners, ...localTalents, ...remoteTalents];
@@ -138,12 +173,20 @@ function formatRelative(iso: string | null): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-type StatusTab = 'all' | 'accepted' | 'rejected' | 'pending';
+// The SquadHire review funnel, layered over the talent's broadcast response.
+// Mutually exclusive — every recipient maps to exactly one bucket (see bucketOf)
+// so the tab counts sum to the total.
+type Bucket = 'accepted' | 'shortlisted' | 'selected' | 'assigned' | 'rejected' | 'pending';
 
-const STATUS_PILL: Record<'accepted' | 'rejected' | 'pending', { bg: string; color: string }> = {
-  accepted: { bg: '#D1FAE5', color: '#065F46' },
-  rejected: { bg: '#FEE2E2', color: '#B91C1C' },
-  pending: { bg: '#FEF3C7', color: '#92400E' },
+type StatusTab = 'all' | Bucket;
+
+const STATUS_PILL: Record<Bucket, { bg: string; color: string }> = {
+  accepted: { bg: '#D1FAE5', color: '#065F46' }, // accepted the offer — new for review
+  shortlisted: { bg: '#EDE9FE', color: '#6D28D9' }, // business shortlisted them
+  selected: { bg: '#DBEAFE', color: '#1E40AF' }, // business selected them
+  assigned: { bg: '#065F46', color: '#FFFFFF' }, // placed — the card's assignee
+  rejected: { bg: '#FEE2E2', color: '#B91C1C' }, // talent declined the broadcast
+  pending: { bg: '#FEF3C7', color: '#92400E' }, // awaiting the talent's response
 };
 
 // Neutral fallback for any recipient status outside the known set. Talent
@@ -151,6 +194,21 @@ const STATUS_PILL: Record<'accepted' | 'rejected' | 'pending', { bg: string; col
 // validated (the source DB column is unconstrained text), so an unexpected
 // value must degrade to a plain pill instead of crashing the whole card detail.
 const STATUS_PILL_FALLBACK = { bg: '#EEF2F6', color: '#475569' };
+
+// Map a recipient to exactly one funnel bucket, in precedence order. The
+// business-review states (assigned ▸ selected ▸ shortlisted) sit on top of the
+// broadcast response (rejected / pending / accepted). business_review_status
+// === 'rejected' (the business passed the talent over) is NOT its own bucket —
+// those stay under 'accepted' with the existing "Not selected" pill, mirroring
+// the business portal which hides them from the funnel.
+function bucketOf(r: UnifiedRecipient): Bucket {
+  if (r.assigned) return 'assigned';
+  if (r.selected_at) return 'selected';
+  if (r.status === 'rejected') return 'rejected';
+  if (r.status === 'pending') return 'pending';
+  if (r.business_review_status === 'shortlisted') return 'shortlisted';
+  return 'accepted';
+}
 
 const STATUS_NUMBER: Record<'accepted' | 'rejected' | 'pending', string> = {
   accepted: '#059669',
@@ -282,8 +340,8 @@ export default function AdminPublishedCardRecipientsView({
   const matchPreview = shRecipientsRes?.match_preview ?? null;
 
   const allRecipients = useMemo<UnifiedRecipient[]>(
-    () => buildUnifiedRecipients(data, squadhireTalents),
-    [data, squadhireTalents],
+    () => buildUnifiedRecipients(data, squadhireTalents, card),
+    [data, squadhireTalents, card],
   );
 
   // ── Cross-tier ("All tiers") aggregation ───────────────────────────────
@@ -336,16 +394,15 @@ export default function AdminPublishedCardRecipientsView({
       const shRaw = groupSquadhireQueries[i]?.data as { data?: SquadHireTalent[] } | SquadHireTalent[] | undefined;
       const sh: SquadHireTalent[] = Array.isArray(shRaw) ? shRaw : (shRaw?.data ?? []);
       const tier = tierLabelOf(c);
-      return buildUnifiedRecipients(recips, sh).map((r) => ({ ...r, tier }));
+      return buildUnifiedRecipients(recips, sh, c).map((r) => ({ ...r, tier }));
     });
   }, [isGrouped, groupSiblings, groupRecipientQueries, groupSquadhireQueries]);
 
-  const groupCounts = useMemo(() => ({
-    accepted: groupRecipients.filter((r) => r.status === 'accepted').length,
-    rejected: groupRecipients.filter((r) => r.status === 'rejected').length,
-    pending: groupRecipients.filter((r) => r.status === 'pending').length,
-    total: groupRecipients.length,
-  }), [groupRecipients]);
+  const groupCounts = useMemo(() => {
+    const c = { accepted: 0, shortlisted: 0, selected: 0, assigned: 0, rejected: 0, pending: 0, total: groupRecipients.length };
+    for (const r of groupRecipients) c[bucketOf(r)] += 1;
+    return c;
+  }, [groupRecipients]);
 
   const groupAssignees = useMemo<Array<AssigneeEntry & { tier: string | null; isPrevious: boolean }>>(() => {
     if (!isGrouped) return [];
@@ -655,12 +712,11 @@ export default function AdminPublishedCardRecipientsView({
   const partialFailure =
     !!broadcastResult && (broadcastResult.failed ?? 0) > 0 && (broadcastResult.notified ?? 0) > 0;
 
-  const counts = useMemo(() => ({
-    accepted: allRecipients.filter((r) => r.status === 'accepted').length,
-    rejected: allRecipients.filter((r) => r.status === 'rejected').length,
-    pending: allRecipients.filter((r) => r.status === 'pending').length,
-    total: allRecipients.length,
-  }), [allRecipients]);
+  const counts = useMemo(() => {
+    const c = { accepted: 0, shortlisted: 0, selected: 0, assigned: 0, rejected: 0, pending: 0, total: allRecipients.length };
+    for (const r of allRecipients) c[bucketOf(r)] += 1;
+    return c;
+  }, [allRecipients]);
 
   const selectedRecipients = useMemo(
     () => allRecipients.filter((r) => r.selected_at),
@@ -668,7 +724,7 @@ export default function AdminPublishedCardRecipientsView({
   );
 
   const filtered = useMemo(
-    () => activeTab === 'all' ? allRecipients : allRecipients.filter((r) => r.status === activeTab),
+    () => activeTab === 'all' ? allRecipients : allRecipients.filter((r) => bucketOf(r) === activeTab),
     [allRecipients, activeTab],
   );
 
@@ -808,7 +864,7 @@ export default function AdminPublishedCardRecipientsView({
   const displayTotal = allTiersMode ? groupCounts.total : recipientsTotal;
   const displayCounts = allTiersMode ? groupCounts : counts;
   const displayFiltered: TieredRecipient[] = allTiersMode
-    ? (activeTab === 'all' ? groupRecipients : groupRecipients.filter((r) => r.status === activeTab))
+    ? (activeTab === 'all' ? groupRecipients : groupRecipients.filter((r) => bucketOf(r) === activeTab))
     : [];
 
   // Partners are broadcast as a pool too — so the verb has to track the stage.
@@ -887,7 +943,8 @@ export default function AdminPublishedCardRecipientsView({
   // A merged "All tiers" recipient row — read-only (assignment happens per
   // tier), tagged with the tier it belongs to.
   const renderTierRecipientRow = (r: TieredRecipient) => {
-    const statusCfg = STATUS_PILL[r.status] ?? STATUS_PILL_FALLBACK;
+    const bucket = bucketOf(r);
+    const statusCfg = STATUS_PILL[bucket] ?? STATUS_PILL_FALLBACK;
     const isQueuedTalent = r.type === 'talent' && r.status === 'pending' && !r.notified_at && !r.responded_at;
     return (
       <div key={`all-${r.tier ?? ''}-${r.type}-${r.id}`} className="sh-card flex items-center gap-3 px-4 py-3">
@@ -913,7 +970,7 @@ export default function AdminPublishedCardRecipientsView({
           {isQueuedTalent ? (
             <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>queued</span>
           ) : (
-            <span className="sh-status-pill" style={{ backgroundColor: statusCfg.bg, color: statusCfg.color }}>{r.status}</span>
+            <span className="sh-status-pill" style={{ backgroundColor: statusCfg.bg, color: statusCfg.color }}>{bucket}</span>
           )}
           <span
             className="sh-status-pill"
@@ -1482,7 +1539,7 @@ export default function AdminPublishedCardRecipientsView({
             {/* Tab bar */}
             <div className="overflow-x-auto">
               <div className="sh-tab-bar">
-                {(['all', 'accepted', 'rejected', 'pending'] as const).map((tab) => {
+                {(['all', 'accepted', 'shortlisted', 'selected', 'assigned', 'rejected', 'pending'] as const).map((tab) => {
                   const count = tab === 'all' ? displayTotal : displayCounts[tab];
                   const label = tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1);
                   return (
@@ -1503,9 +1560,13 @@ export default function AdminPublishedCardRecipientsView({
             {/* Recipient list */}
             {allTiersMode ? renderAllTiersList() : (() => {
               const renderRow = (r: UnifiedRecipient) => {
-                const statusCfg = STATUS_PILL[r.status] ?? STATUS_PILL_FALLBACK;
+                const bucket = bucketOf(r);
+                const statusCfg = STATUS_PILL[bucket] ?? STATUS_PILL_FALLBACK;
                 const rowKey = `${r.type}-${r.id}`;
-                const showCheckbox = canAssign && r.status === 'accepted';
+                // Still-selectable candidates get a checkbox; already-selected /
+                // assigned / rejected / pending do not. (canAssign is already
+                // false once the card has an assignee.)
+                const showCheckbox = canAssign && (bucket === 'accepted' || bucket === 'shortlisted');
                 // A talent is only "pending a response" once the card has
                 // actually been broadcast to them. Before that they're just a
                 // matched candidate in the queue — show "queued", not the
@@ -1537,16 +1598,14 @@ export default function AdminPublishedCardRecipientsView({
                       ) : null}
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
-                      {activeTab === 'all' && (
-                        isQueuedTalent ? (
-                          <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
-                            queued
-                          </span>
-                        ) : (
-                          <span className="sh-status-pill" style={{ backgroundColor: statusCfg.bg, color: statusCfg.color }}>
-                            {r.status}
-                          </span>
-                        )
+                      {isQueuedTalent ? (
+                        <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
+                          queued
+                        </span>
+                      ) : (
+                        <span className="sh-status-pill" style={{ backgroundColor: statusCfg.bg, color: statusCfg.color }}>
+                          {bucket}
+                        </span>
                       )}
                       <span
                         className="sh-status-pill"
@@ -1573,11 +1632,6 @@ export default function AdminPublishedCardRecipientsView({
                       {r.assigned_manually && (
                         <span className="sh-status-pill" style={{ backgroundColor: '#EEF2F6', color: '#475569' }}>
                           Manual
-                        </span>
-                      )}
-                      {r.selected_at && (
-                        <span className="sh-status-pill" style={{ backgroundColor: '#DBEAFE', color: '#1E40AF' }}>
-                          Selected
                         </span>
                       )}
                       {r.passed_over_at && !r.selected_at && (
