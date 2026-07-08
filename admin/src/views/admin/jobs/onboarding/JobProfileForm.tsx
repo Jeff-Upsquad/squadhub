@@ -84,11 +84,15 @@ export default function JobProfileForm({
   });
   const countries: Country[] = countriesQuery.data || [];
 
-  // Same query key AdminCardEditor uses so the cache is shared. Coerce the
-  // proxied shape defensively — it's external-service data.
+  // Same query key AdminCardEditor uses so the cache is shared (both
+  // endpoints return the same proxied shape). This one hits the jobs-scoped
+  // route (plain requireAdmin) — the subscription picker's
+  // /admin/integrations/squadhire/categories is gated on Sales Leads module
+  // access, which a hiring-only admin may not have. Coerce defensively —
+  // it's external-service data.
   const squadhireCategoriesQuery = useQuery({
     queryKey: ['squadhire-categories'],
-    queryFn: () => api.get('/admin/integrations/squadhire/categories').then((r) => r.data?.data || []),
+    queryFn: () => api.get('/admin/job-cards/squadhire-categories').then((r) => r.data?.data || []),
     staleTime: 10 * 60 * 1000,
   });
   const squadhireCategories: Array<{ id: string; name: string; slug: string }> = useMemo(
