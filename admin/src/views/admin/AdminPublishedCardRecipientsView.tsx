@@ -68,7 +68,14 @@ function buildUnifiedRecipients(
 ): UnifiedRecipient[] {
   if (!data) return [];
 
-  const partners: UnifiedRecipient[] = (data.partners || []).map((p) => ({
+  // Coerce every source to an array before mapping. Inputs cross a JSON /
+  // React-Query-cache boundary and a shape drift here previously threw
+  // "map is not a function" and took down the whole card-detail screen.
+  const partnerRows = Array.isArray(data.partners) ? data.partners : [];
+  const talentRows = Array.isArray(data.talents) ? data.talents : [];
+  const sqTalents = Array.isArray(squadhireTalents) ? squadhireTalents : [];
+
+  const partners: UnifiedRecipient[] = partnerRows.map((p) => ({
     id: p.id,
     name: p.name,
     type: 'partner',
@@ -81,12 +88,12 @@ function buildUnifiedRecipients(
     email: null,
   }));
 
-  const localTalentIds = new Set((data.talents || []).map((t) => t.external_user_id));
+  const localTalentIds = new Set(talentRows.map((t) => t.external_user_id));
   const emailByTalentId = new Map(
-    squadhireTalents.map((t) => [t.talent_user_id, t.email ?? null] as const),
+    sqTalents.map((t) => [t.talent_user_id, t.email ?? null] as const),
   );
 
-  const localTalents: UnifiedRecipient[] = (data.talents || []).map((t) => ({
+  const localTalents: UnifiedRecipient[] = talentRows.map((t) => ({
     id: t.external_user_id,
     name: t.name || 'Unknown talent',
     type: 'talent',
@@ -99,7 +106,7 @@ function buildUnifiedRecipients(
     email: t.email ?? emailByTalentId.get(t.external_user_id) ?? null,
   }));
 
-  const remoteTalents: UnifiedRecipient[] = squadhireTalents
+  const remoteTalents: UnifiedRecipient[] = sqTalents
     .filter((t) => !localTalentIds.has(t.talent_user_id))
     .map((t) => ({
       id: t.talent_user_id,
@@ -301,8 +308,14 @@ export default function AdminPublishedCardRecipientsView({
   const groupSquadhireQueries = useQueries({
     queries: groupSiblings.map((c) => ({
       queryKey: ['admin-card-squadhire-recipients', c.id],
+      // Return the FULL response body — the SAME shape the single-tier
+      // `shRecipientsRes` query returns under this SAME queryKey. Returning a
+      // bare array here let the shared React Query cache hold two shapes for one
+      // key; when the single-tier query won the cache, `sh` below became the
+      // `{ data }` object and buildUnifiedRecipients did object.map() →
+      // "map is not a function" (crashed grouped/multi-tier cards).
       queryFn: () =>
-        api.get(`/admin/subscription-cards/${c.id}/squadhire-recipients`).then((r) => (r.data as { data: SquadHireTalent[] }).data),
+        api.get(`/admin/subscription-cards/${c.id}/squadhire-recipients`).then((r) => r.data as { data: SquadHireTalent[] }),
       enabled: Array.isArray(c.squadhire_category_ids) && c.squadhire_category_ids.length > 0,
     })),
   });
@@ -318,7 +331,10 @@ export default function AdminPublishedCardRecipientsView({
     if (!isGrouped) return [];
     return groupSiblings.flatMap((c, i) => {
       const recips = groupRecipientQueries[i]?.data as RecipientsResponse | undefined;
-      const sh = (groupSquadhireQueries[i]?.data as SquadHireTalent[] | undefined) ?? [];
+      // Tolerate either shape (response body `{ data }` or a bare array) — the
+      // shared cache key means the value can come from either query's queryFn.
+      const shRaw = groupSquadhireQueries[i]?.data as { data?: SquadHireTalent[] } | SquadHireTalent[] | undefined;
+      const sh: SquadHireTalent[] = Array.isArray(shRaw) ? shRaw : (shRaw?.data ?? []);
       const tier = tierLabelOf(c);
       return buildUnifiedRecipients(recips, sh).map((r) => ({ ...r, tier }));
     });
