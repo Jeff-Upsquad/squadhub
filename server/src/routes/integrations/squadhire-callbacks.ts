@@ -4,10 +4,7 @@ import { z } from 'zod';
 import { config } from '../../config';
 import { supabaseAdmin } from '../../supabase';
 import { logCardEvent } from '../../utils/cardEvents';
-import {
-  ensureActiveAssignmentTerm,
-  endActiveAssignmentTermsForCard,
-} from '../../utils/assignmentTerms';
+import { endActiveAssignmentTermsForCard } from '../../utils/assignmentTerms';
 
 /**
  * Inbound callbacks from SquadHire.
@@ -198,37 +195,26 @@ router.post(
         .eq('status', 'accepted')
         .is('passed_over_at', null);
 
-      // Mark the card assigned. Historically this set state='closed', which
-      // made SquadHire-selected cards second-class on the admin side: the UI
-      // buckets them as Assigned (selected_recipient wins), but every manage
-      // action (change plan/talent, pause, unassign, reopen) gated on
-      // state='assigned' and rejected them with "Card is closed". 'assigned'
-      // is the same lifecycle the admin finalize flow produces, and it maps to
-      // status 'assigned' (not 'archived') in the SquadHire payload builder.
+      // Move the card to the "Selected" (pending admin approval) stage — NOT
+      // straight to Assigned. state='assigned' with NO selected_recipient_id
+      // buckets the card as "Selected" on the admin side (selected_recipient_id
+      // is what flips it to "Assigned"), closes the slot to other talents, and
+      // maps to status 'assigned' in the SquadHire payload builder.
+      //
+      // We deliberately do NOT set selected_recipient_id / assigned_at, and do
+      // NOT open the billing term here. An admin must approve via
+      // /finalize-selection, which stamps the recipient + assigned_at, opens the
+      // assignment term (so the engagement START DATE = admin-assign time), and
+      // notifies SquadHire activation. See subscription-cards-admin-select.ts.
       await supabaseAdmin
         .from('subscription_cards')
         .update({
           state: 'assigned',
-          assigned_at: now,
           closed_at: null,
           // A fresh selection starts unpaused regardless of prior rounds.
           paused_at: null,
-          selected_recipient_type: 'talent',
-          selected_recipient_id: body.talent_user_id,
         })
         .eq('id', card.id);
-
-      // Open the billing ledger term so this engagement shows in the Active
-      // Subscriptions view (payments + hours). The card is "closed" only in the
-      // sense of being removed from the open offer pool — the talent is now the
-      // chosen recipient, so the term starts active. Best-effort (non-fatal).
-      await ensureActiveAssignmentTerm({
-        cardId: card.id,
-        recipientType: 'talent',
-        recipientId: body.talent_user_id,
-        recipientName: body.talent_name ?? null,
-        assignedDate: now,
-      });
 
       res.json({ success: true });
     } catch (err: any) {
