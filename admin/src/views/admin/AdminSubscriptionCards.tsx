@@ -6,14 +6,14 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { resolveFinalizedPrice } from '@squadhub/shared';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
-import AdminPublishedCardRecipientsPanel from './AdminPublishedCardRecipientsPanel';
-import AdminPublishedCardRecipientsView from './AdminPublishedCardRecipientsView';
+import AdminSubscriptionCardRecipientsPanel from './AdminSubscriptionCardRecipientsPanel';
+import AdminSubscriptionCardRecipientsView from './AdminSubscriptionCardRecipientsView';
 import AdminRequestsList from './AdminRequestsList';
 import AdminCustomCardsList from './AdminCustomCardsList';
 import SliderPanel from './clients/SliderPanel';
 import ClientBriefForm, { BRIEF_LAUNCHERS, type BriefType, type BriefProduct } from './ClientBriefForm';
 
-export type PublishedCard = {
+export type AdminSubscriptionCard = {
   id: string;
   state: 'published' | 'assigned' | 'closed';
   distribution: 'broadcast' | 'manual';
@@ -114,7 +114,7 @@ export type PublishedCard = {
  *  - 'pending'   — categories present, webhook not yet delivered (in retry loop).
  *  - 'delivered' — squadhire_synced_at set; nothing to surface (default, no chip).
  */
-export function squadhireDeliveryState(card: PublishedCard): 'skipped' | 'pending' | 'delivered' {
+export function squadhireDeliveryState(card: AdminSubscriptionCard): 'skipped' | 'pending' | 'delivered' {
   if (card.squadhire_synced_at) return 'delivered';
   const hasCategories =
     Array.isArray(card.squadhire_category_ids) && card.squadhire_category_ids.length > 0;
@@ -208,7 +208,7 @@ type Bucket = 'published' | 'broadcaster' | 'selected' | 'assigned' | 'paused' |
  * Closed cards land in "cancelled" and paused-but-still-assigned cards in
  * "paused", each surfaced by its own tab.
  */
-function categorize(card: PublishedCard): Bucket {
+function categorize(card: AdminSubscriptionCard): Bucket {
   // Cancelled wins over the recipient pointer: cancelling a LIVE assignment
   // keeps selected_recipient_id for audit, and without this check the card
   // would sit in the Assigned tab forever offering actions that all 409.
@@ -245,7 +245,7 @@ function bucketByDate<T extends { state: 'published' | 'assigned' | 'closed'; pu
   return { today, yesterday, thisWeek, earlier };
 }
 
-function publishedCardTitle(card: PublishedCard): string {
+function subscriptionCardTitle(card: AdminSubscriptionCard): string {
   const business = card.submission?.business_name || card.brand_name || 'Unknown business';
   const subName = card.submission_subscription?.subscription?.name || card.plan_name;
   return subName ? `${business} · ${subName}` : business;
@@ -253,7 +253,7 @@ function publishedCardTitle(card: PublishedCard): string {
 
 type Tab = 'requests' | 'published' | 'broadcaster' | 'selected' | 'assigned' | 'paused' | 'cancelled' | 'archive' | 'custom';
 
-// Tabs backed by the published-cards lists (as opposed to New deals / Custom,
+// Tabs backed by the subscription-cards lists (as opposed to New deals / Custom,
 // which render their own components). These share the active + archived card
 // queries and support the card detail view.
 const CARD_LIST_TABS = ['published', 'broadcaster', 'selected', 'assigned', 'paused', 'cancelled', 'archive'] as const;
@@ -342,7 +342,7 @@ const EMPTY_COPY: Record<(typeof CARD_LIST_TABS)[number], { title: string; hint:
   },
 };
 
-export default function AdminPublishedCards() {
+export default function AdminSubscriptionCards() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -385,7 +385,7 @@ export default function AdminPublishedCards() {
   // the Archive tab folds in); the archived query drives the rest of Archive.
   // Both run regardless of the active tab so every tab's count stays live.
   const { data: activeCardsRes, isLoading: activeLoading, isFetching: activeFetching } = useQuery({
-    queryKey: ['admin-published-cards', publishedBy, debouncedSearch, 'active', selectedCardId],
+    queryKey: ['admin-subscription-cards', publishedBy, debouncedSearch, 'active', selectedCardId],
     queryFn: () => {
       const params: Record<string, string> = {};
       if (publishedBy) params.published_by = publishedBy;
@@ -399,10 +399,10 @@ export default function AdminPublishedCards() {
     // Re-opening the tab within 30s reuses cached cards instantly.
     staleTime: 30_000,
   });
-  const activeCards: PublishedCard[] = activeCardsRes?.data || [];
+  const activeCards: AdminSubscriptionCard[] = activeCardsRes?.data || [];
 
   const { data: archivedCardsRes, isLoading: archivedLoading, isFetching: archivedFetching } = useQuery({
-    queryKey: ['admin-published-cards', publishedBy, debouncedSearch, 'archived', selectedCardId],
+    queryKey: ['admin-subscription-cards', publishedBy, debouncedSearch, 'archived', selectedCardId],
     queryFn: () => {
       const params: Record<string, string> = { archived: 'true' };
       if (publishedBy) params.published_by = publishedBy;
@@ -413,7 +413,7 @@ export default function AdminPublishedCards() {
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
-  const archivedCards: PublishedCard[] = archivedCardsRes?.data || [];
+  const archivedCards: AdminSubscriptionCard[] = archivedCardsRes?.data || [];
 
   // The Archive tab loads both queries; every other card-list tab only needs
   // the active one.
@@ -468,7 +468,7 @@ export default function AdminPublishedCards() {
     (pendingBriefRes?.data || []).length;
 
   const bucketed = useMemo(() => {
-    const out: Record<Bucket, PublishedCard[]> = { published: [], broadcaster: [], selected: [], assigned: [], paused: [], cancelled: [] };
+    const out: Record<Bucket, AdminSubscriptionCard[]> = { published: [], broadcaster: [], selected: [], assigned: [], paused: [], cancelled: [] };
     for (const c of activeCards) out[categorize(c)].push(c);
     return out;
   }, [activeCards]);
@@ -476,7 +476,7 @@ export default function AdminPublishedCards() {
   // Archive = only cards explicitly archived (archived_at set). Cancelled cards
   // now have their own tab, so they're no longer folded in here. Deduped by id.
   const archiveCards = useMemo(() => {
-    const byId = new Map<string, PublishedCard>();
+    const byId = new Map<string, AdminSubscriptionCard>();
     for (const c of archivedCards) byId.set(c.id, c);
     return [...byId.values()];
   }, [archivedCards]);
@@ -511,7 +511,7 @@ export default function AdminPublishedCards() {
       case 'paused': return bucketed.paused;
       case 'cancelled': return bucketed.cancelled;
       case 'archive': return archiveCards;
-      default: return [] as PublishedCard[];
+      default: return [] as AdminSubscriptionCard[];
     }
   }, [activeTab, bucketed, archiveCards]);
 
@@ -522,7 +522,7 @@ export default function AdminPublishedCards() {
   // A card opened via ?card= is force-included by the backend in BOTH the
   // active and archived responses, so dedupe by id to avoid a doubled tier chip.
   const allLoadedCards = useMemo(() => {
-    const byId = new Map<string, PublishedCard>();
+    const byId = new Map<string, AdminSubscriptionCard>();
     for (const c of [...activeCards, ...archivedCards]) byId.set(c.id, c);
     return [...byId.values()];
   }, [activeCards, archivedCards]);
@@ -534,7 +534,7 @@ export default function AdminPublishedCards() {
   // The per-tier sibling cards of the opened brief (tier-ordered), so the detail
   // view can show a tab per tier. Empty for single-tier / ungrouped cards.
   const selectedGroupCards = useMemo(() => {
-    if (!selectedCard?.brief_group_id) return [] as PublishedCard[];
+    if (!selectedCard?.brief_group_id) return [] as AdminSubscriptionCard[];
     return allLoadedCards
       .filter((c) => c.brief_group_id === selectedCard.brief_group_id)
       .sort((a, b) => tierRankOf(a) - tierRankOf(b));
@@ -729,10 +729,10 @@ export default function AdminPublishedCards() {
       )}
 
       {selectedCard ? (
-        <AdminPublishedCardRecipientsView
+        <AdminSubscriptionCardRecipientsView
           key={selectedCard.id}
           card={selectedCard}
-          title={publishedCardTitle(selectedCard)}
+          title={subscriptionCardTitle(selectedCard)}
           onBack={() => { setSelectedCardId(null); setShowPanel(false); }}
           onOpenPanel={() => setShowPanel(true)}
           groupCards={selectedGroupCards}
@@ -787,9 +787,9 @@ export default function AdminPublishedCards() {
       {!showDetailView && activeTab === 'custom' && <AdminCustomCardsList />}
 
       {selectedCard && showPanel && (
-        <AdminPublishedCardRecipientsPanel
+        <AdminSubscriptionCardRecipientsPanel
           card={selectedCard}
-          title={publishedCardTitle(selectedCard)}
+          title={subscriptionCardTitle(selectedCard)}
           onClose={() => setShowPanel(false)}
         />
       )}
@@ -848,7 +848,7 @@ function RefreshingBar({ show }: { show: boolean }) {
 }
 
 // Skeleton placeholder rows shown on the very first load (no cached data yet),
-// matching the real PublishedCardRow layout so the list doesn't jump when data
+// matching the real SubscriptionCardRow layout so the list doesn't jump when data
 // arrives.
 function CardListSkeleton() {
   return (
@@ -891,7 +891,7 @@ function CardGroup({
 }: {
   label: string;
   color: string;
-  items: PublishedCard[];
+  items: AdminSubscriptionCard[];
   onOpen: (id: string) => void;
   showCancelledTag: boolean;
   showArchivedTag?: boolean;
@@ -925,14 +925,14 @@ function CardGroup({
 // Customer-facing monthly price for a card: the finalized subscription price
 // (or proposed price) the client pays. Staged cards have neither, so fall back
 // to the plan's catalog pricing row.
-function priceLabelForCard(card: PublishedCard): string {
+function priceLabelForCard(card: AdminSubscriptionCard): string {
   const planPrice = card.submission_subscription?.plan?.pricing?.[0];
   const priceCurrency = planPrice?.country?.currency || '₹';
   const priceValue = resolveFinalizedPrice(card) ?? planPrice?.price ?? null;
   return priceValue ? `${priceCurrency}${Number(priceValue).toLocaleString()}/mo` : '';
 }
 
-function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag, onReinstate, reinstating, onPause, onCancel, pausing, cancelling }: { card: PublishedCard; onOpen: () => void; showCancelledTag: boolean; showArchivedTag?: boolean; onReinstate?: () => void; reinstating?: boolean; onPause?: () => void; onCancel?: () => void; pausing?: boolean; cancelling?: boolean }) {
+function SubscriptionCardRow({ card, onOpen, showCancelledTag, showArchivedTag, onReinstate, reinstating, onPause, onCancel, pausing, cancelling }: { card: AdminSubscriptionCard; onOpen: () => void; showCancelledTag: boolean; showArchivedTag?: boolean; onReinstate?: () => void; reinstating?: boolean; onPause?: () => void; onCancel?: () => void; pausing?: boolean; cancelling?: boolean }) {
   const business = card.submission?.business_name || card.brand_name || 'Unknown';
   const serviceType = card.service_type || '';
   const planName =
@@ -1068,8 +1068,8 @@ function PublishedCardRow({ card, onOpen, showCancelledTag, showArchivedTag, onR
 }
 
 // The right-hand cluster of status pills + accept/reject count chips. Shared
-// between the flat PublishedCardRow and the active tier of a grouped card.
-function CardStatusAndCounts({ card, showCancelledTag, showArchivedTag }: { card: PublishedCard; showCancelledTag: boolean; showArchivedTag?: boolean }) {
+// between the flat SubscriptionCardRow and the active tier of a grouped card.
+function CardStatusAndCounts({ card, showCancelledTag, showArchivedTag }: { card: AdminSubscriptionCard; showCancelledTag: boolean; showArchivedTag?: boolean }) {
   const partners = card.recipient_counts?.partners ?? { pending: 0, accepted: 0, rejected: 0 };
   const talents = card.recipient_counts?.talents ?? { accepted: 0, rejected: 0 };
   const deliveryState = squadhireDeliveryState(card);
@@ -1253,28 +1253,28 @@ const TIER_RANK: Record<string, number> = {
   'top talents': 2,
 };
 
-function tierOf(card: PublishedCard): string | null {
+function tierOf(card: AdminSubscriptionCard): string | null {
   return Array.isArray(card.target_tiers) && card.target_tiers.length > 0
     ? card.target_tiers[0]
     : null;
 }
 
-function tierRankOf(card: PublishedCard): number {
+function tierRankOf(card: AdminSubscriptionCard): number {
   const t = (tierOf(card) || '').toLowerCase();
   return TIER_RANK[t] ?? 99;
 }
 
 type CardListEntry =
-  | { kind: 'single'; card: PublishedCard }
-  | { kind: 'group'; groupId: string; cards: PublishedCard[] };
+  | { kind: 'single'; card: AdminSubscriptionCard }
+  | { kind: 'group'; groupId: string; cards: AdminSubscriptionCard[] };
 
 // Collapse cards sharing a brief_group_id into one group entry, preserving
 // first-appearance order. A group with only one sibling present in this list
 // (e.g. the other tiers fell into a different status bucket) degrades to a
 // normal single row.
-function buildCardListEntries(items: PublishedCard[]): CardListEntry[] {
+function buildCardListEntries(items: AdminSubscriptionCard[]): CardListEntry[] {
   const entries: CardListEntry[] = [];
-  const groupBuckets = new Map<string, PublishedCard[]>();
+  const groupBuckets = new Map<string, AdminSubscriptionCard[]>();
 
   for (const card of items) {
     const gid = card.brief_group_id || null;
@@ -1301,7 +1301,7 @@ function buildCardListEntries(items: PublishedCard[]): CardListEntry[] {
 }
 
 function CardList({ items, onOpen, canShowCancelled, canShowArchived }: {
-  items: PublishedCard[];
+  items: AdminSubscriptionCard[];
   onOpen: (id: string) => void;
   canShowCancelled: boolean;
   canShowArchived?: boolean;
@@ -1314,7 +1314,7 @@ function CardList({ items, onOpen, canShowCancelled, canShowArchived }: {
   const reinstate = useMutation({
     mutationFn: (cardId: string) => api.post(`/admin/subscription-cards/${cardId}/reinstate`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       showToast('Card reinstated to its previous state.', 'success');
     },
     onError: (err: any) => {
@@ -1327,7 +1327,7 @@ function CardList({ items, onOpen, canShowCancelled, canShowArchived }: {
   const pause = useMutation({
     mutationFn: (cardId: string) => api.post(`/admin/subscription-cards/${cardId}/pause`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       showToast('Subscription paused — billing stops today and the talent is released.', 'success');
     },
     onError: (err: any) => {
@@ -1337,7 +1337,7 @@ function CardList({ items, onOpen, canShowCancelled, canShowArchived }: {
   const cancel = useMutation({
     mutationFn: (cardId: string) => api.post(`/admin/subscription-cards/${cardId}/cancel`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       showToast('Subscription cancelled — billing stopped and the card is closed.', 'success');
     },
     onError: (err: any) => {
@@ -1348,7 +1348,7 @@ function CardList({ items, onOpen, canShowCancelled, canShowArchived }: {
     <div className="space-y-2">
       {entries.map((e) =>
         e.kind === 'single' ? (
-          <PublishedCardRow
+          <SubscriptionCardRow
             key={e.card.id}
             card={e.card}
             onOpen={() => onOpen(e.card.id)}
@@ -1370,7 +1370,7 @@ function CardList({ items, onOpen, canShowCancelled, canShowArchived }: {
             cancelling={cancel.isPending && cancel.variables === e.card.id}
           />
         ) : (
-          <GroupedPublishedCard
+          <GroupedSubscriptionCard
             key={e.groupId}
             cards={e.cards}
             onOpen={onOpen}
@@ -1383,15 +1383,15 @@ function CardList({ items, onOpen, canShowCancelled, canShowArchived }: {
   );
 }
 
-// One card, one tab per tier. The summary row mirrors a normal PublishedCardRow
+// One card, one tab per tier. The summary row mirrors a normal SubscriptionCardRow
 // but reflects the active tier; the tab bar switches which tier's card is
 // summarised, and clicking the summary opens that tier card's recipients.
 // A multi-tier brief in the list — ONE summary card. The per-tier tabs live in
 // the opened detail view (see DetailTierTabs), not here. Counts aggregate across
 // the group; opening it loads the group's first tier (the detail view then lets
 // the admin switch tiers and see each tier's matched talents).
-function GroupedPublishedCard({ cards, onOpen }: {
-  cards: PublishedCard[];
+function GroupedSubscriptionCard({ cards, onOpen }: {
+  cards: AdminSubscriptionCard[];
   onOpen: (id: string) => void;
   canShowCancelled: boolean;
   canShowArchived?: boolean;
@@ -1473,7 +1473,7 @@ function GroupedPublishedCard({ cards, onOpen }: {
 // tab is a tier sibling; selecting it swaps the active card so the recipients
 // below are that tier's matched talents.
 function DetailTierTabs({ cards, activeId, allActive, onSelect, onSelectAll }: {
-  cards: PublishedCard[];
+  cards: AdminSubscriptionCard[];
   activeId: string;
   allActive?: boolean;
   onSelect: (id: string) => void;

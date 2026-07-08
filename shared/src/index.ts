@@ -1875,7 +1875,7 @@ export interface AssignmentDetails {
 /**
  * `broadcast` (default) — at publish time the server fans out to all matching
  * partners and SquadHire broadcasts to its talents. `manual` — no fan-out;
- * the card is visible in admin Published Cards lists but recipients must be
+ * the card is visible in admin Subscription Cards lists but recipients must be
  * hand-picked via the assign endpoints.
  */
 export type SubscriptionCardDistribution = 'broadcast' | 'manual';
@@ -3253,4 +3253,475 @@ export interface InterviewInvitationsResponse {
   page: number;
   limit: number;
   total_pages: number;
+}
+
+// ---- Job Cards ----
+// The hiring service: businesses hire candidates into full-time/placed roles.
+// SquadHub owns business/brand/job profiles + job cards + stage + offer
+// TEMPLATES; SquadHire (Profiles) owns per-candidate funnel events
+// (applications, interviews, offers, Q&A), mirrored back via the inbound
+// events webhook. Tables live in migrations 158–162; these types mirror the
+// applied DDL exactly.
+
+/** Canonical stored card state — deliberately small. The nine admin pipeline
+ *  tabs are DERIVED buckets (JobCardStage) computed from state + lifecycle
+ *  stamps + candidate rollup counters (see server utils/jobStage.ts). */
+export type JobCardState = 'new' | 'onboarding' | 'published' | 'closed';
+
+/** Derived admin pipeline bucket. Precedence (first match wins):
+ *  trash → archive → cancelled → placed → hired → offer → interview →
+ *  short_listing → screening (keys on screening_started_at, NOT applicant
+ *  counts — contract §5) → broadcasted (published) → onboarding → new. */
+export type JobCardStage =
+  | 'new'
+  | 'onboarding'
+  | 'broadcasted'
+  | 'screening'
+  | 'short_listing'
+  | 'interview'
+  | 'offer'
+  | 'hired'
+  | 'placed'
+  | 'cancelled'
+  | 'archive'
+  | 'trash';
+export const JOB_CARD_STAGES: JobCardStage[] = [
+  'new', 'onboarding', 'broadcasted', 'screening', 'short_listing',
+  'interview', 'offer', 'hired', 'placed', 'cancelled', 'archive', 'trash',
+];
+
+export type JobCardSource = 'internal_brief' | 'shared_form' | 'landing_page_form';
+export type JobEmploymentType = 'full_time' | 'part_time' | 'contract' | 'internship';
+export type JobWorkMode = 'onsite' | 'remote' | 'hybrid';
+export type JobSalaryPeriod = 'monthly' | 'annual';
+export type JobCardClosedReason = 'filled' | 'cancelled' | 'expired';
+
+/**
+ * Candidate preference / match rules. Key vocabulary is BINDING per the
+ * cross-repo contract (§3, Profiles' matcher wins): job_profiles.
+ * preference_rules and job_cards.rule_overrides use the same keys, and
+ * mergeJobRules() output maps 1:1 onto the webhook match_rules.
+ */
+export interface JobMatchRules {
+  /** SquadHire category UUIDs (Designer / Video Editor). Sourced from
+   *  job_profiles.squadhire_category_ids by the payload builder. */
+  category_ids?: string[];
+  target_tiers?: string[];
+  min_experience_years?: number;
+  max_experience_years?: number;
+  target_languages?: string[];
+  target_country_names?: string[];
+  /** Region/state names ("blank = anywhere" on the Profiles matcher). */
+  target_regions?: string[];
+  min_age?: number;
+  max_age?: number;
+  target_genders?: string[];
+  target_districts?: string[];
+}
+
+/** Card-level overrides over the job profile's preference_rules. A key
+ *  present here wins; an EXPLICIT null means "clear this rule" (the profile
+ *  default is dropped from the effective rules). */
+export type JobRuleOverrides = { [K in keyof JobMatchRules]?: JobMatchRules[K] | null };
+
+export interface BusinessProfilePhoto {
+  url: string;
+  caption?: string | null;
+}
+
+export interface BusinessProfile {
+  id: string;
+  lead_submission_id: string | null;
+  client_id: string | null;
+  name: string;
+  about: string | null;
+  industry: string | null;
+  company_size: string | null; // e.g. '11-50'
+  website: string | null;
+  socials: Record<string, string>; // {linkedin, instagram, ...}
+  logo_url: string | null;
+  photos: BusinessProfilePhoto[];
+  culture: string | null;
+  perks: string[];
+  founded_year: number | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  // Joined (detail endpoint)
+  locations?: BusinessLocation[];
+  brands?: BrandProfile[];
+  job_profiles?: JobProfile[];
+}
+
+export interface BusinessLocation {
+  id: string;
+  business_profile_id: string;
+  label: string; // 'Head Office'
+  address: string;
+  city: string | null;
+  region: string | null;
+  country_id: string | null;
+  postal_code: string | null;
+  google_maps_url: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BrandProfile {
+  id: string;
+  business_profile_id: string;
+  name: string;
+  about: string | null;
+  industry: string | null;
+  website: string | null;
+  socials: Record<string, string>;
+  logo_url: string | null;
+  photos: BusinessProfilePhoto[];
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface JobWorkingHours {
+  start?: string; // '09:30'
+  end?: string; // '18:00'
+  timezone?: string; // 'Asia/Kolkata'
+}
+
+export interface JobProfile {
+  id: string;
+  business_profile_id: string;
+  /** NULL = job hangs directly off the business profile; set = off a brand. */
+  brand_profile_id: string | null;
+  title: string;
+  description: string | null;
+  responsibilities: string[];
+  requirements: string[];
+  skills: string[];
+  min_experience_years: number | null;
+  max_experience_years: number | null;
+  education: string | null;
+  employment_type: JobEmploymentType;
+  work_mode: JobWorkMode;
+  location_id: string | null;
+  working_days: string[];
+  working_hours: JobWorkingHours | null;
+  salary_min: number | null;
+  salary_max: number | null;
+  salary_currency: string;
+  salary_period: JobSalaryPeriod;
+  benefits: string[];
+  growth_path: string | null;
+  /** Default candidate preference rules (JobMatchRules vocabulary). Cards
+   *  override these key-by-key via job_cards.rule_overrides. */
+  preference_rules: JobMatchRules;
+  squadhire_category_ids: string[];
+  status: 'active' | 'archived';
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  // Joined
+  business_profile?: BusinessProfile | null;
+  brand_profile?: BrandProfile | null;
+  location?: BusinessLocation | null;
+}
+
+export interface JobCard {
+  id: string;
+  lead_submission_id: string | null;
+  client_id: string | null;
+  /** NULL while state='new' (brief exists, onboarding not done yet). */
+  job_profile_id: string | null;
+  source: JobCardSource;
+  state: JobCardState;
+  // Brief snapshot (pre-onboarding; the linked job profile supersedes these).
+  role_service_type: string | null; // 'Designers' | 'Editors'
+  brief_note: string | null;
+  customer_name: string | null;
+  customer_company: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  customer_location: string | null;
+  // Offered package on the card (can differ from the profile's advertised range).
+  package_min: number | null;
+  package_max: number | null;
+  package_currency: string;
+  package_period: JobSalaryPeriod;
+  package_notes: string | null;
+  openings_count: number;
+  expected_joining_date: string | null;
+  expires_at: string | null;
+  /** Card-level overrides over the profile's preference_rules (explicit null
+   *  = clear). Effective rules computed by mergeJobRules() — never stored. */
+  rule_overrides: JobRuleOverrides;
+  distribution: SubscriptionCardDistribution;
+  squadhire_match_preview: { count: number; talents: Array<{ talent_user_id: string; talent_name: string }>; refreshed_at: string } | null;
+  // Lifecycle stamps (subscription_cards vocabulary).
+  published_at: string | null;
+  published_by: string | null;
+  recalled_at: string | null;
+  archived_at: string | null;
+  paused_at: string | null;
+  cancelled_at: string | null;
+  closed_at: string | null;
+  closed_reason: JobCardClosedReason | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
+  /** Stamped from SquadHire's job_screening_started event; the "Applicant
+   *  Screening" tab keys on this (contract §5). */
+  screening_started_at: string | null;
+  // Outbound sync bookkeeping (own sweeper — startJobSyncSweeper).
+  squadhire_synced_at: string | null;
+  squadhire_sync_attempts: number;
+  squadhire_sync_last_error: string | null;
+  // Candidate rollups (recomputed by recountJobCardRollups — never incremental).
+  applicants_count: number;
+  screening_count: number;
+  shortlisted_count: number;
+  interview_count: number;
+  offer_count: number;
+  hired_count: number;
+  placed_count: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Derived / joined
+  stage?: JobCardStage;
+  job_profile?: JobProfile | null;
+  business_profile?: BusinessProfile | null;
+  brand_profile?: BrandProfile | null;
+}
+
+export interface JobCardEvent {
+  id: string;
+  card_id: string;
+  event_type: string;
+  actor_id: string | null;
+  actor_type: 'admin' | 'business' | 'talent' | 'system' | null;
+  actor_label: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export type JobCandidateStatus =
+  | 'matched'
+  | 'applied'
+  | 'screening'
+  | 'shortlisted'
+  | 'interview'
+  | 'offer'
+  | 'offer_accepted'
+  | 'hired'
+  | 'joined'
+  | 'rejected'
+  | 'withdrawn'
+  | 'on_hold';
+
+export interface JobCardCandidate {
+  id: string;
+  card_id: string;
+  external_system: string; // 'squadhire'
+  external_candidate_id: string; // Profiles' job_candidates row id
+  talent_user_id: string; // Profiles' talent user id
+  talent_name: string | null;
+  talent_email: string | null;
+  talent_phone: string | null;
+  status: JobCandidateStatus;
+  applied_at: string | null;
+  screening_started_at: string | null;
+  shortlisted_at: string | null;
+  first_interview_at: string | null;
+  offered_at: string | null;
+  offer_accepted_at: string | null;
+  hired_at: string | null;
+  joining_date: string | null;
+  joined_at: string | null;
+  rejected_at: string | null;
+  rejection_stage: string | null;
+  rejection_reason: string | null;
+  snapshot: Record<string, unknown>; // last full candidate payload from Profiles
+  created_at: string;
+  updated_at: string;
+}
+
+export type JobInterviewMode = 'virtual' | 'physical';
+export type JobInterviewStatus = 'proposed' | 'scheduled' | 'completed' | 'cancelled' | 'no_show';
+export type JobInterviewOutcome = 'selected' | 'rejected' | 'on_hold';
+
+export interface JobInterviewLocationSnapshot {
+  label?: string | null;
+  address?: string | null;
+  city?: string | null;
+  region?: string | null;
+  google_maps_url?: string | null;
+}
+
+export interface JobInterview {
+  id: string;
+  card_id: string;
+  candidate_id: string;
+  external_interview_id: string; // Profiles' invite id (idempotency key)
+  round_number: number;
+  round_label: string | null; // 'HR Round', 'Portfolio Review'
+  mode: JobInterviewMode;
+  scheduled_at: string | null;
+  duration_minutes: number | null;
+  /** Stored for admin visibility; reveal-on-start gating happens on Profiles. */
+  meeting_link: string | null;
+  meeting_link_revealed_at: string | null;
+  location_id: string | null;
+  location_snapshot: JobInterviewLocationSnapshot | null;
+  status: JobInterviewStatus;
+  outcome: JobInterviewOutcome | null;
+  outcome_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JobInterviewSlot {
+  id: string;
+  interview_id: string;
+  external_slot_id: string;
+  starts_at: string;
+  ends_at: string | null;
+  status: 'proposed' | 'accepted' | 'declined' | 'expired';
+  created_at: string;
+}
+
+/** Ordered editable template section; body_html carries {{merge}} fields. */
+export interface OfferTemplateSection {
+  key: string;
+  title: string;
+  body_html: string;
+}
+
+export interface OfferTemplateMergeField {
+  key: string;
+  label: string;
+  source: 'candidate' | 'card' | 'business' | 'manual';
+}
+
+/** Default compensation row, e.g. {component: 'Training Period', cadence: 'per_month'}. */
+export interface OfferCompensationRow {
+  key: string;
+  component: string;
+  cadence: 'per_month' | 'per_annum';
+}
+
+export interface OfferTemplateSignatory {
+  name?: string | null;
+  title?: string | null;
+  signature_image_url?: string | null;
+}
+
+/** Canonical on SquadHub ONLY (contract §1): admin authors templates here;
+ *  SquadHire's business composer pulls them via the signed integration GET. */
+export interface OfferLetterTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  /** Optional link — a template authored alongside a job profile. NULL = generic. */
+  job_profile_id: string | null;
+  sections: OfferTemplateSection[];
+  merge_fields: OfferTemplateMergeField[];
+  compensation_schema: OfferCompensationRow[];
+  signatory: OfferTemplateSignatory;
+  is_default: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
+export type JobOfferDeliveryMode = 'platform' | 'manual_email';
+export type JobOfferStatus =
+  | 'draft'
+  | 'sent'
+  | 'viewed'
+  | 'negotiation_requested'
+  | 'countered'
+  | 'accepted'
+  | 'declined'
+  | 'withdrawn'
+  | 'expired';
+
+export interface JobOfferCompensationComponent {
+  amount?: number | null;
+  cadence?: 'per_month' | 'per_annum';
+}
+
+/** {currency, training:{amount,cadence}, probation:{...}, confirmed:{...}} */
+export interface JobOfferCompensation {
+  currency?: string;
+  training?: JobOfferCompensationComponent | null;
+  probation?: JobOfferCompensationComponent | null;
+  confirmed?: JobOfferCompensationComponent | null;
+}
+
+export interface JobOffer {
+  id: string;
+  card_id: string;
+  candidate_id: string;
+  external_offer_id: string | null; // Profiles' offer id
+  template_id: string | null;
+  delivery_mode: JobOfferDeliveryMode;
+  /** Merged snapshot at send time — immutable per revision. */
+  rendered_body_html: string | null;
+  compensation: JobOfferCompensation;
+  total_ctc: number | null;
+  ctc_currency: string;
+  position_title: string | null;
+  effective_date: string | null;
+  join_by_date: string | null;
+  joining_date: string | null;
+  offer_expires_at: string | null;
+  /** Bumped per counteroffer. */
+  revision: number;
+  /** Final counteroffer — no further negotiation. */
+  is_final: boolean;
+  status: JobOfferStatus;
+  created_by_side: 'admin' | 'business';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JobOfferEvent {
+  id: string;
+  offer_id: string;
+  external_event_id: string | null; // Profiles' offer_events id (replay guard)
+  event_type: string; // sent|viewed|negotiation_requested|countered|final_countered|accepted|declined|withdrawn|expired|question_asked|question_answered
+  actor_type: 'admin' | 'business' | 'talent' | 'system' | null;
+  actor_label: string | null;
+  metadata: Record<string, unknown>; // e.g. {asked_amount, note}
+  created_at: string;
+}
+
+export interface JobCardQuestion {
+  id: string;
+  card_id: string;
+  /** Published Q&A lives on the profile (survives card re-publishes). */
+  job_profile_id: string | null;
+  external_question_id: string; // Profiles' question id
+  talent_user_id: string | null;
+  talent_name: string | null;
+  question: string;
+  answer: string | null;
+  /** answered ⇒ published (contract §7). */
+  answered_at: string | null;
+  answered_by_label: string | null;
+  /** Moderation tombstone — survives event replays. */
+  deleted_at: string | null;
+  deleted_by: string | null;
+  created_at: string;
+  updated_at: string;
 }

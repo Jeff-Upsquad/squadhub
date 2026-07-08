@@ -1,17 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
-import type { PublishedCard } from '../AdminPublishedCards';
+import type { AdminSubscriptionCard } from '../AdminSubscriptionCards';
 
 type Props = {
   submissionId: string;
 };
 
 // Pill styling + label mirror the precedence-based `categorize()` in
-// AdminPublishedCards so this drawer matches what the user sees on the detail
+// AdminSubscriptionCards so this drawer matches what the user sees on the detail
 // page. A pinned `selected_recipient_id` means the card is "Assigned" even when
 // state='closed' — the Profiles webhook closes the card and pins the selected
 // talent together, so a state-only lookup would mislabel it as "Cancelled".
-function pillFor(card: PublishedCard): { bg: string; fg: string; label: string } {
+function pillFor(card: AdminSubscriptionCard): { bg: string; fg: string; label: string } {
   if (card.selected_recipient_id) return { bg: '#D1FAE5', fg: '#065F46', label: 'Assigned' };
   if (card.state === 'assigned') return { bg: '#E0F2FE', fg: '#075985', label: 'Selected' };
   if (card.state === 'closed') return { bg: '#EEF2F6', fg: '#475569', label: 'Cancelled' };
@@ -38,7 +38,7 @@ export default function AdminLeadCardsSection({ submissionId }: Props) {
         .then((r) => r.data),
     enabled: !!submissionId,
   });
-  const cards: PublishedCard[] = cardsRes?.data || [];
+  const cards: AdminSubscriptionCard[] = cardsRes?.data || [];
 
   return (
     <div className="space-y-2">
@@ -60,7 +60,7 @@ export default function AdminLeadCardsSection({ submissionId }: Props) {
           {cards.map((card) => (
             <li key={card.id}>
               <a
-                href={`/admin/published-cards?card=${card.id}`}
+                href={`/admin/subscription-cards?card=${card.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-start justify-between gap-3 px-3 py-2.5 text-sm hover:bg-surface-alt transition"

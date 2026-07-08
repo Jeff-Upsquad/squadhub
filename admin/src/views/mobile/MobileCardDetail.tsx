@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
-import { squadhireDeliveryState, type PublishedCard } from '@/views/admin/AdminPublishedCards';
-import type { RecipientsResponse } from '@/views/admin/AdminPublishedCardRecipientsPanel';
+import { squadhireDeliveryState, type AdminSubscriptionCard } from '@/views/admin/AdminSubscriptionCards';
+import type { RecipientsResponse } from '@/views/admin/AdminSubscriptionCardRecipientsPanel';
 import MobileActionSheet from './MobileActionSheet';
 import MobileRecipientsList from './MobileRecipientsList';
 import MobileAssignModal from './MobileAssignModal';
@@ -36,7 +36,7 @@ export default function MobileCardDetail({
   card,
   onClose,
 }: {
-  card: PublishedCard;
+  card: AdminSubscriptionCard;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
@@ -63,7 +63,7 @@ export default function MobileCardDetail({
   const { data: secondaryCards } = useQuery({
     queryKey: ['admin-secondary-cards', card.id],
     queryFn: () =>
-      api.get(`/admin/subscription-cards/${card.id}/secondary-cards`).then((r) => r.data?.data as PublishedCard[]),
+      api.get(`/admin/subscription-cards/${card.id}/secondary-cards`).then((r) => r.data?.data as AdminSubscriptionCard[]),
     enabled: !card.parent_card_id,
   });
 
@@ -95,7 +95,7 @@ export default function MobileCardDetail({
 
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
-    qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+    qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
     qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
   };
 
@@ -184,7 +184,7 @@ export default function MobileCardDetail({
       api.post(`/admin/subscription-cards/${card.id}/secondary-cards`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       setCreateSecondaryOpen(false);
       setSecondaryPrice('');
       setSecondaryDistribution('manual');

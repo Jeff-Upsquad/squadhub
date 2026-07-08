@@ -3,7 +3,7 @@
 //
 // Bridges the two independent representations of a subscription:
 //   - client_subscriptions   — the client's plan row (Clients module)
-//   - subscription_cards      — the delivery/billing card (Published Cards)
+//   - subscription_cards      — the delivery/billing card (Subscription Cards)
 //
 // They have no direct FK. The link is the composite path:
 //   client_subscriptions(client_id, subscription_id, plan_id)

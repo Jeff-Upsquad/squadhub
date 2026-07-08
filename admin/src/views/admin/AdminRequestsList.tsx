@@ -134,10 +134,10 @@ export default function AdminRequestsList() {
 
   // Archived cards stay in the Archive tab — hide their originating
   // requests from Form Requests so the active queue isn't polluted by
-  // already-handled items. Same query key the published-cards module
+  // already-handled items. Same query key the subscription-cards module
   // uses, so the cache is shared and invalidations propagate.
   const { data: archivedRes } = useQuery({
-    queryKey: ['admin-published-cards', '', '', 'archived'],
+    queryKey: ['admin-subscription-cards', '', '', 'archived'],
     queryFn: () =>
       api
         .get('/admin/subscription-cards', { params: { archived: 'true' } })
@@ -202,7 +202,7 @@ export default function AdminRequestsList() {
           queryClient.invalidateQueries({ queryKey: ['admin-subscription-requests'] });
           queryClient.invalidateQueries({ queryKey: ['admin-shared-form-submissions'] });
           queryClient.invalidateQueries({ queryKey: ['admin-landing-page-submissions'] });
-          queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+          queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
         }}
       />
     );

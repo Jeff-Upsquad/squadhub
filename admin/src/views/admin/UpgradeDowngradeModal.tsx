@@ -54,7 +54,7 @@ export default function UpgradeDowngradeModal({
     onSuccess: (r: any) => {
       const warning = r?.data?.warning as string | undefined;
       if (warning) showToast(warning, 'error');
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', cardId] });
       qc.invalidateQueries({ queryKey: ['admin-subscription-requests'] });
       qc.invalidateQueries({ queryKey: ['admin-internal-brief-submissions'] });

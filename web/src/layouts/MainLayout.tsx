@@ -43,7 +43,8 @@ import ClientDashboard from '../views/app/client/ClientDashboard';
 import PartnerCashBook from '../views/app/partner/PartnerCashBook';
 import PartnerOpportunities from '../views/app/partner/PartnerOpportunities';
 import ClientCashBook from '../views/app/client/ClientCashBook';
-import ClientPublishedCards from '../views/app/client/ClientPublishedCards';
+import ClientSubscriptionCards from '../views/app/client/ClientSubscriptionCards';
+import ClientJobCards from '../views/app/client/ClientJobCards';
 import ClientDesignDashboard from '../views/app/pm/client-design/ClientDesignDashboard';
 import Home from '../views/app/home/Home';
 import GlobalTaskDetailPanel from '../views/app/home/GlobalTaskDetailPanel';
@@ -79,7 +80,7 @@ import { canonicalKey, buildHomeSnapshot, type TabSnapshot } from '../lib/tabSna
 
 // ---- Types ----
 export type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'published-cards' | 'day-planner' | 'routines' | 'clips' | 'meetings';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'subscription-cards' | 'job-cards' | 'day-planner' | 'routines' | 'clips' | 'meetings';
 
 // One entry in the in-app navigation history: everything needed to bring the
 // user back to a view. Views switch via local state rather than URLs, so the
@@ -1003,7 +1004,8 @@ export default function MainLayout() {
     if (hv === 'hub' && (userType === 'client' || userType === 'client_staff')) return <ClientDashboard />;
     if (hv === 'cashbook' && isPartner) return <PartnerCashBook />;
     if (hv === 'cashbook' && (userType === 'client' || userType === 'client_staff')) return <ClientCashBook />;
-    if (hv === 'published-cards' && (userType === 'client' || userType === 'client_staff')) return <ClientPublishedCards />;
+    if (hv === 'subscription-cards' && (userType === 'client' || userType === 'client_staff')) return <ClientSubscriptionCards />;
+    if (hv === 'job-cards' && (userType === 'client' || userType === 'client_staff')) return <ClientJobCards />;
     if (hv === 'opportunities' && isPartner) return <PartnerOpportunities />;
     return <Home onOpenInbox={() => { setActiveSection('home'); setHomeView('inbox'); }} />;
   };

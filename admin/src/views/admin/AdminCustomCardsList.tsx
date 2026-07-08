@@ -55,7 +55,7 @@ export default function AdminCustomCardsList() {
           setEditingCardId(null);
           queryClient.invalidateQueries({ queryKey: ['admin-custom-cards'] });
           queryClient.invalidateQueries({ queryKey: ['admin-custom-cards-drafts'] });
-          queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+          queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
         }}
       />
     );

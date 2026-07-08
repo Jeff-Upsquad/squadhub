@@ -9,8 +9,8 @@ import CardCodeChip from '@/components/CardCodeChip';
 import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import { openLeadInCRM } from '@/utils/squadCrm';
 import { resolveFinalizedPrice } from '@squadhub/shared';
-import type { PublishedCard } from './AdminPublishedCards';
-import type { RecipientsResponse } from './AdminPublishedCardRecipientsPanel';
+import type { AdminSubscriptionCard } from './AdminSubscriptionCards';
+import type { RecipientsResponse } from './AdminSubscriptionCardRecipientsPanel';
 
 type UnifiedRecipient = {
   id: string;
@@ -66,8 +66,8 @@ type MatchPreview = {
 type TieredRecipient = UnifiedRecipient & { tier: string | null };
 
 // A tier card's display tier (first entry of target_tiers). Mirrors tierOf in
-// AdminPublishedCards without a cross-file import.
-const tierLabelOf = (c: PublishedCard): string | null =>
+// AdminSubscriptionCards without a cross-file import.
+const tierLabelOf = (c: AdminSubscriptionCard): string | null =>
   Array.isArray(c.target_tiers) && c.target_tiers.length > 0 ? c.target_tiers[0] : null;
 
 // Merge SquadHub-local recipients (partners + responded/queued talents) with
@@ -78,7 +78,7 @@ const tierLabelOf = (c: PublishedCard): string | null =>
 function buildUnifiedRecipients(
   data: RecipientsResponse | undefined,
   squadhireTalents: SquadHireTalent[],
-  card: Pick<PublishedCard, 'selected_recipient_id' | 'selected_recipient_type'>,
+  card: Pick<AdminSubscriptionCard, 'selected_recipient_id' | 'selected_recipient_type'>,
 ): UnifiedRecipient[] {
   if (!data) return [];
 
@@ -262,7 +262,7 @@ function formatAssignmentPeriod(e: AssigneeEntry): string | null {
   return null;
 }
 
-export default function AdminPublishedCardRecipientsView({
+export default function AdminSubscriptionCardRecipientsView({
   card,
   title,
   onBack,
@@ -271,7 +271,7 @@ export default function AdminPublishedCardRecipientsView({
   groupCards,
   allTiersMode = false,
 }: {
-  card: PublishedCard;
+  card: AdminSubscriptionCard;
   title: string;
   onBack: () => void;
   onOpenPanel: () => void;
@@ -282,7 +282,7 @@ export default function AdminPublishedCardRecipientsView({
   // All sibling tier cards of a multi-tier brief (length > 1 when grouped).
   // Drives the merged "All tiers" recipients / former-assignees aggregation
   // and the "Broadcast all tiers" action.
-  groupCards?: PublishedCard[];
+  groupCards?: AdminSubscriptionCard[];
   // True when the "All" tier tab is active — render the merged cross-tier view.
   allTiersMode?: boolean;
 }) {
@@ -437,7 +437,7 @@ export default function AdminPublishedCardRecipientsView({
         queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', c.id] });
         queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', c.id] });
       });
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       if (failed === 0) {
         showToast(`Broadcast ${ok} tier${ok !== 1 ? 's' : ''}.`, 'success');
       } else {
@@ -498,7 +498,7 @@ export default function AdminPublishedCardRecipientsView({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
     },
   });
 
@@ -508,7 +508,7 @@ export default function AdminPublishedCardRecipientsView({
     onSuccess: () => {
       setCheckedIds(new Set());
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
       showToast('Selection cleared — card reopened.', 'success');
     },
@@ -523,7 +523,7 @@ export default function AdminPublishedCardRecipientsView({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       showToast('Broadcast sent — matching talents are being invited.', 'success');
     },
     onError: (err: any) => {
@@ -541,7 +541,7 @@ export default function AdminPublishedCardRecipientsView({
       if (warning) showToast(warning, 'error');
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       if (!warning) showToast('Offer sent to the previous talent — awaiting their accept.', 'success');
     },
     onError: (err: any) => {
@@ -560,7 +560,7 @@ export default function AdminPublishedCardRecipientsView({
       setCheckedIds(new Set());
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
       showToast('Resumed — moved to Published. Broadcast to the previous talent or all matching, then select & assign.', 'success');
     },
@@ -574,7 +574,7 @@ export default function AdminPublishedCardRecipientsView({
       api.post(`/admin/subscription-cards/${card.id}/cancel`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
       showToast('Subscription cancelled.', 'success');
     },
@@ -590,7 +590,7 @@ export default function AdminPublishedCardRecipientsView({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-subscription-requests'] });
       queryClient.invalidateQueries({ queryKey: ['admin-internal-brief-submissions'] });
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       showToast('Duplicated — a copy is waiting in New Deals (same details, no recipients).', 'success');
     },
     onError: (err: any) => {
@@ -614,7 +614,7 @@ export default function AdminPublishedCardRecipientsView({
     mutationFn: () =>
       api.post(`/admin/subscription-cards/${card.id}/mark-reviewed`),
     onSuccess: (res: any) => {
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
       queryClient.invalidateQueries({ queryKey: ['admin-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['admin-submissions-count'] });
@@ -647,7 +647,7 @@ export default function AdminPublishedCardRecipientsView({
       api.post(`/admin/subscription-cards/${card.id}/finalize-selection`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
       showToast('Card finalized — talent moved to Assigned.', 'success');
     },
@@ -662,7 +662,7 @@ export default function AdminPublishedCardRecipientsView({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
     },
   });
 
@@ -677,7 +677,7 @@ export default function AdminPublishedCardRecipientsView({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       setRemoveTarget(null);
       showToast('Recipient removed.', 'success');
     },
@@ -697,7 +697,7 @@ export default function AdminPublishedCardRecipientsView({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', card.id] });
-      queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       setAutoAcceptTarget(null);
       showToast('Talent accepted on their behalf.', 'success');
     },
@@ -770,7 +770,7 @@ export default function AdminPublishedCardRecipientsView({
     [allRecipients, isManual],
   );
 
-  // Bucket-aware state pill (mirrors AdminPublishedCards.categorize). Archived
+  // Bucket-aware state pill (mirrors AdminSubscriptionCards.categorize). Archived
   // wins over everything — an archived card keeps state='published', so without
   // this it would mislabel as "Active" and still offer Broadcast. A card with
   // selected_recipient_id otherwise shows "Assigned" regardless of state.
@@ -1021,7 +1021,7 @@ export default function AdminPublishedCardRecipientsView({
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
-            Back to Published Cards
+            Back to Subscription Cards
           </button>
           <button
             onClick={onOpenPanel}

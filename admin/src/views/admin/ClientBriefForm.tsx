@@ -31,7 +31,7 @@ export const BRIEF_TYPES: { key: BriefType; title: string; blurb: string }[] = [
 // Product line the brief belongs to. 'subscription' is the recurring-plan
 // brief; 'assignment' is a one-off freelance project (project budget + scope +
 // timeline instead of a weekly plan + monthly price). Both reuse this form and
-// land in the same All Deals → Published Cards pipeline.
+// land in the same All Deals → Subscription Cards pipeline.
 export type BriefProduct = 'subscription' | 'assignment';
 
 // Launcher options for the admin "New client brief" slider — the cartesian of
@@ -336,7 +336,7 @@ export default function ClientBriefForm({
       const n = selectedRoles.length;
       showToast(`${n} client brief${n > 1 ? 's' : ''} created — find ${n > 1 ? 'them' : 'it'} in New Deals`, 'success');
       qc.invalidateQueries({ queryKey: ['admin-internal-brief-submissions'] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       onCreated();
     } catch (err: any) {
       const msg = err?.response?.data?.error || err.message || 'Failed to create brief';
@@ -358,7 +358,7 @@ export default function ClientBriefForm({
           <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
-          Back to Published Cards
+          Back to Subscription Cards
         </button>
 
         <header className="mb-6 text-center sm:mb-8">

@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import type { ClientSubmissionSubscription, Country, SubscriptionCard } from '@squadhub/shared';
-import PublishedCardRecipientsPanel from '../sales/PublishedCardRecipientsPanel';
+import SubscriptionCardRecipientsPanel from '../sales/SubscriptionCardRecipientsPanel';
 
-type PublishedCard = SubscriptionCard & {
+type ClientSubscriptionCard = SubscriptionCard & {
   submission?: { id: string; business_name: string; country_id: string; country?: Country | null } | null;
   submission_subscription?: ClientSubmissionSubscription | null;
 };
@@ -23,21 +23,21 @@ function formatRelative(iso: string | null): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export default function ClientPublishedCards() {
-  const [openCard, setOpenCard] = useState<PublishedCard | null>(null);
+export default function ClientSubscriptionCards() {
+  const [openCard, setOpenCard] = useState<ClientSubscriptionCard | null>(null);
 
   const { data: res, isLoading, error } = useQuery({
-    queryKey: ['my-published-cards'],
-    queryFn: () => api.get('/users/me/published-cards').then((r) => r.data),
+    queryKey: ['my-subscription-cards'],
+    queryFn: () => api.get('/users/me/subscription-cards').then((r) => r.data),
   });
 
-  const cards: PublishedCard[] = res?.data || [];
+  const cards: ClientSubscriptionCard[] = res?.data || [];
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto p-6">
       <div className="mx-auto w-full max-w-4xl">
         <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">
-          Published Cards
+          Subscription Cards
         </h1>
         <p className="mt-1 text-sm text-foreground-muted">
           Subscription opportunities published for your business.
@@ -47,11 +47,11 @@ export default function ClientPublishedCards() {
           {isLoading ? (
             <p className="text-sm text-foreground-muted">Loading…</p>
           ) : error ? (
-            <p className="text-sm text-red-500">Failed to load published cards.</p>
+            <p className="text-sm text-red-500">Failed to load subscription cards.</p>
           ) : cards.length === 0 ? (
             <div className="rounded-lg border border-divider bg-surface-alt p-8 text-center">
               <p className="text-sm text-foreground-muted">
-                No published cards yet. They'll appear here once sales publishes one for you.
+                No subscription cards yet. They'll appear here once sales publishes one for you.
               </p>
             </div>
           ) : (
@@ -116,11 +116,11 @@ export default function ClientPublishedCards() {
       </div>
 
       {openCard && (
-        <PublishedCardRecipientsPanel
+        <SubscriptionCardRecipientsPanel
           card={openCard}
           title={`${openCard.submission?.business_name || 'Business'} · ${openCard.submission_subscription?.subscription?.name || 'Subscription'}`}
           onClose={() => setOpenCard(null)}
-          endpoint={`/users/me/published-cards/${openCard.id}/recipients`}
+          endpoint={`/users/me/subscription-cards/${openCard.id}/recipients`}
         />
       )}
     </div>

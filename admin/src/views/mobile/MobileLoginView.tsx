@@ -26,7 +26,7 @@ export default function MobileLoginView() {
         return;
       }
       setAuth(user, access_token, refresh_token);
-      router.push('/m/published-cards');
+      router.push('/m/subscription-cards');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Login failed');
     } finally {

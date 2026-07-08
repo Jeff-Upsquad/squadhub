@@ -88,7 +88,7 @@ export async function hydrateCard(card: any, parentCardId?: string): Promise<any
 /**
  * Batch variant of {@link hydrateCard} for the admin list endpoint. Hydrating a
  * list one card at a time fired 4 queries PER card (target countries/regions +
- * partner/talent recipients) — an N+1 that made Published Cards crawl as the org
+ * partner/talent recipients) — an N+1 that made Subscription Cards crawl as the org
  * grew. This pulls the same four relations for the WHOLE list in 4 queries total
  * and aggregates per card in memory.
  *

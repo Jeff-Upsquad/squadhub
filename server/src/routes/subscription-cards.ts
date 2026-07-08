@@ -328,7 +328,7 @@ router.post(
       }
 
       // Manual distribution skips the auto-fan-out. The card still flips to
-      // 'published' so it's visible in the admin Published Cards list and in
+      // 'published' so it's visible in the admin Subscription Cards list and in
       // the client portal; admins then hand-pick recipients via the
       // assign-partner / assign-talent endpoints.
       const matched =
@@ -519,7 +519,7 @@ router.post(
       // the pause marker. Closing it here would leave the term accruing
       // forever and the talent still seeing the client.
       if (loaded.card.state === 'assigned') {
-        res.status(409).json({ success: false, error: 'This subscription has an assigned talent — cancel it from Admin → Published Cards instead' });
+        res.status(409).json({ success: false, error: 'This subscription has an assigned talent — cancel it from Admin → Subscription Cards instead' });
         return;
       }
 

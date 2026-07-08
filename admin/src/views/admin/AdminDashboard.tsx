@@ -33,7 +33,7 @@ export default function AdminDashboard() {
       <h2 className="mb-6 font-[family-name:var(--font-display)] text-2xl font-bold text-foreground">Dashboard</h2>
       {unreviewed > 0 && (
         <Link
-          href="/admin/published-cards"
+          href="/admin/subscription-cards"
           className="mb-4 flex items-center justify-between rounded-lg border-2 border-emerald-200 bg-emerald-50 px-5 py-4 transition hover:bg-emerald-100"
         >
           <div className="flex items-center gap-3">

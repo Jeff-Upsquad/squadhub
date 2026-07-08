@@ -10,7 +10,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import CardCodeChip from '@/components/CardCodeChip';
 import { showToast } from '@/components/Toast';
 import { resolveFinalizedPrice, resolvePlanMargin, resolvePartnerPrice } from '@squadhub/shared';
-import type { PublishedCard } from './AdminPublishedCards';
+import type { AdminSubscriptionCard } from './AdminSubscriptionCards';
 
 export type PartnerRecipient = {
   id: string;
@@ -70,12 +70,12 @@ const STATUS_CHIP: Record<'pending' | 'accepted' | 'rejected', { bg: string; col
   pending: { bg: '#FEF3C7', color: '#92400E' },
 };
 
-export default function AdminPublishedCardRecipientsPanel({
+export default function AdminSubscriptionCardRecipientsPanel({
   card,
   title,
   onClose,
 }: {
-  card: PublishedCard;
+  card: AdminSubscriptionCard;
   title: string;
   onClose: () => void;
 }) {
@@ -84,7 +84,7 @@ export default function AdminPublishedCardRecipientsPanel({
   const { data: secondaryCards } = useQuery({
     queryKey: ['admin-secondary-cards', card.id],
     queryFn: () =>
-      api.get(`/admin/subscription-cards/${card.id}/secondary-cards`).then((r) => r.data?.data as PublishedCard[]),
+      api.get(`/admin/subscription-cards/${card.id}/secondary-cards`).then((r) => r.data?.data as AdminSubscriptionCard[]),
     enabled: !card.parent_card_id,
   });
 
@@ -147,11 +147,11 @@ function CardPanelContent({
   onViewSecondary,
   onClose,
 }: {
-  card: PublishedCard;
-  activeCard: PublishedCard;
+  card: AdminSubscriptionCard;
+  activeCard: AdminSubscriptionCard;
   activeCardId: string;
   isSecondaryView: boolean;
-  secondaryCards: PublishedCard[];
+  secondaryCards: AdminSubscriptionCard[];
   onViewSecondary: (id: string | null) => void;
   onClose: () => void;
 }) {
@@ -211,7 +211,7 @@ function CardPanelContent({
       api.post(`/admin/subscription-cards/${activeCardId}/select-partner`, { partner_id: partnerId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       clearConfirm();
     },
@@ -226,7 +226,7 @@ function CardPanelContent({
       api.post(`/admin/subscription-cards/${activeCardId}/auto-accept-partner`, { partner_id: partnerId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       clearConfirm();
       showToast('Partner-employee accepted on their behalf.', 'success');
@@ -242,7 +242,7 @@ function CardPanelContent({
       api.post(`/admin/subscription-cards/${activeCardId}/select-talent`, { talent_id: talentId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       clearConfirm();
     },
@@ -257,7 +257,7 @@ function CardPanelContent({
       api.post(`/admin/subscription-cards/${activeCardId}/undo-selection`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       clearConfirm();
     },
@@ -272,7 +272,7 @@ function CardPanelContent({
       api.post(`/admin/subscription-cards/${activeCardId}/recall`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       if (isSecondaryView) onViewSecondary(null);
       clearConfirm();
@@ -288,7 +288,7 @@ function CardPanelContent({
       api.post(`/admin/subscription-cards/${activeCardId}/cancel`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       if (isSecondaryView) onViewSecondary(null);
       clearConfirm();
@@ -308,7 +308,7 @@ function CardPanelContent({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
       qc.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       showToast('Resumed — moved to Published. Broadcast to the previous talent or all matching, then select & assign.', 'success');
       clearConfirm();
@@ -325,7 +325,7 @@ function CardPanelContent({
       api.post(`/admin/subscription-cards/${activeCardId}/pause`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       showToast('Paused — billing stopped. Resume from the Paused tab to re-broadcast and change the assignee.', 'success');
       clearConfirm();
@@ -345,7 +345,7 @@ function CardPanelContent({
       if (warning) showToast(warning, 'error');
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
       qc.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       if (!warning) showToast('Offer sent to the previous talent — awaiting their accept.', 'success');
       clearConfirm();
     },
@@ -360,7 +360,7 @@ function CardPanelContent({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
       qc.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       showToast('Broadcast sent — matching talents are being invited.', 'success');
       clearConfirm();
     },
@@ -375,7 +375,7 @@ function CardPanelContent({
       api.post(`/admin/subscription-cards/${activeCardId}/archive`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       if (isSecondaryView) onViewSecondary(null);
       clearConfirm();
@@ -392,7 +392,7 @@ function CardPanelContent({
       api.post(`/admin/subscription-cards/${activeCardId}/reinstate`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       if (isSecondaryView) onViewSecondary(null);
       clearConfirm();
@@ -410,7 +410,7 @@ function CardPanelContent({
       api.post(`/admin/subscription-cards/${activeCardId}/republish`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       if (isSecondaryView) onViewSecondary(null);
       clearConfirm();
@@ -427,7 +427,7 @@ function CardPanelContent({
     mutationFn: () =>
       api.delete(`/admin/subscription-cards/${activeCardId}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       clearConfirm();
       showToast('Card moved to Trash.', 'success');
@@ -444,7 +444,7 @@ function CardPanelContent({
       api.post(`/admin/subscription-cards/${activeCardId}/broadcast`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       clearConfirm();
     },
@@ -473,7 +473,7 @@ function CardPanelContent({
       }
       showToast(parts.length ? `Broadcast sent — ${parts.join(' + ')} notified.` : 'Broadcast sent.', 'success');
       qc.invalidateQueries({ queryKey: ['admin-card-recipients', activeCardId] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', card.id] });
       clearConfirm();
     },
@@ -1124,8 +1124,8 @@ function SecondaryCardsSection({
   secondaryCards,
   onViewSecondary,
 }: {
-  parentCard: PublishedCard;
-  secondaryCards: PublishedCard[];
+  parentCard: AdminSubscriptionCard;
+  secondaryCards: AdminSubscriptionCard[];
   onViewSecondary: (id: string) => void;
 }) {
   const [formOpen, setFormOpen] = useState(false);
@@ -1138,7 +1138,7 @@ function SecondaryCardsSection({
       api.post(`/admin/subscription-cards/${parentCard.id}/secondary-cards`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-secondary-cards', parentCard.id] });
-      qc.invalidateQueries({ queryKey: ['admin-published-cards'] });
+      qc.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       setFormOpen(false);
       setPrice('');
       setDistribution('manual');
@@ -1281,7 +1281,7 @@ function SecondaryCardsSection({
 // Card Details
 // ============================================================
 
-function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCategories }: { card: PublishedCard; activeCard: PublishedCard; isSecondaryView: boolean; countries: Country[]; squadhireCategories: Array<{ id: string; name: string }> }) {
+function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCategories }: { card: AdminSubscriptionCard; activeCard: AdminSubscriptionCard; isSecondaryView: boolean; countries: Country[]; squadhireCategories: Array<{ id: string; name: string }> }) {
   const plan = card.submission_subscription?.plan;
   const planLabel = plan ? `${plan.plan} · ${plan.tier}` : '';
   const fallbackPlanLabel = !planLabel
@@ -1553,14 +1553,14 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
 
 const EMPTY = '—';
 
-function sourceLabel(source: PublishedCard['source']): string {
+function sourceLabel(source: AdminSubscriptionCard['source']): string {
   if (source === 'request') return 'From request';
   if (source === 'custom') return 'Custom';
   if (source === 'submission') return 'From submission';
   return EMPTY;
 }
 
-function squadhireStatusLabel(card: PublishedCard): string {
+function squadhireStatusLabel(card: AdminSubscriptionCard): string {
   if (card.squadhire_synced_at) return 'Delivered';
   const hasCategories = (card.squadhire_category_ids?.length || 0) > 0;
   if (!hasCategories) return 'Skipped (no categories)';

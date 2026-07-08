@@ -51,6 +51,30 @@ export async function generatePresignedUploadUrl(
   return { uploadUrl, objectKey, publicUrl };
 }
 
+// Generate a pre-signed URL for Job Cards media uploads (business/brand
+// logos + office photos shown to candidates on SquadHire).
+// Path: jobs/<kind>/<timestamp>_<filename>
+export async function generateJobsUploadUrl(
+  kind: 'logo' | 'photo',
+  filename: string,
+  contentType: string,
+): Promise<{ uploadUrl: string; objectKey: string; publicUrl: string }> {
+  const timestamp = Date.now();
+  const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const objectKey = `jobs/${kind}/${timestamp}_${safeFilename}`;
+
+  const command = new PutObjectCommand({
+    Bucket: config.r2BucketName,
+    Key: objectKey,
+    ContentType: contentType,
+  });
+
+  const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 3600 });
+  const publicUrl = `${config.r2PublicUrl}/${objectKey}`;
+
+  return { uploadUrl, objectKey, publicUrl };
+}
+
 // Generate a pre-signed URL for LMS content-block media uploads.
 // Path: lms/<item_id>/<lesson_id>/<timestamp>_<filename>
 export async function generateLmsUploadUrl(

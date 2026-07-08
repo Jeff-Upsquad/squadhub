@@ -40,9 +40,9 @@ export default function MobileRequestsList() {
   const allRequests: SubscriptionRequest[] = res?.data || [];
 
   // Hide requests for archived cards. Same query-key shape as the
-  // published-cards module so the cache is shared.
+  // subscription-cards module so the cache is shared.
   const { data: archivedRes } = useQuery({
-    queryKey: ['admin-published-cards', '', '', 'archived'],
+    queryKey: ['admin-subscription-cards', '', '', 'archived'],
     queryFn: () =>
       api
         .get('/admin/subscription-cards', { params: { archived: 'true' } })
@@ -93,7 +93,7 @@ export default function MobileRequestsList() {
           onClose={() => {
             setEditingCardId(null);
             queryClient.invalidateQueries({ queryKey: ['admin-subscription-requests'] });
-            queryClient.invalidateQueries({ queryKey: ['admin-published-cards'] });
+            queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
           }}
         />
       </div>
