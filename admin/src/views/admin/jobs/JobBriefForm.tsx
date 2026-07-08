@@ -76,8 +76,8 @@ export default function JobBriefForm({
   // newest matching lead (same identity matching the submit-time
   // find-or-create uses) and prefill whatever is still empty. Uses refs for
   // the "still empty" check so the debounce doesn't retrigger on every field.
-  const prefillRef = useRef({ businessName, contactName, email, phone, countryId });
-  prefillRef.current = { businessName, contactName, email, phone, countryId };
+  const prefillRef = useRef({ businessName, contactName, email, phone, businessLocation, countryId });
+  prefillRef.current = { businessName, contactName, email, phone, businessLocation, countryId };
   useEffect(() => {
     const e = email.trim();
     const digits = phone.replace(/\D/g, '');
@@ -105,6 +105,7 @@ export default function JobBriefForm({
         if (!cur.businessName.trim() && d.business_name) setBusinessName(d.business_name);
         if (!cur.contactName.trim() && d.contact_person) setContactName(d.contact_person);
         if (!cur.email.trim() && d.email) setEmail(d.email);
+        if (!cur.businessLocation.trim() && d.business_location) setBusinessLocation(d.business_location);
         if (!cur.countryId && d.country_id) setCountryId(d.country_id);
         if (!cur.phone.trim() && d.phone) {
           // Split a stored "+91 98…" into the cc select + number input when

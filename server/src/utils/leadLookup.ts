@@ -67,6 +67,7 @@ export interface FindOrCreateSubmissionInput {
   phone?: string | null;
   contact_name?: string | null;
   business_name?: string | null;
+  business_location?: string | null;
   /** Optional; validated against countries. client_submissions.country_id is
    *  NOT NULL, so when absent we fall back to India (the hiring service's
    *  home market) and the admin can rebill later. */
@@ -116,6 +117,7 @@ export async function findOrCreateSubmissionByContact(
       contact_person: input.contact_name?.trim() || 'Unknown',
       contact_number: input.phone?.trim() || '',
       email: input.email?.trim().toLowerCase() || '',
+      business_address: input.business_location?.trim() || null,
       country_id: countryId,
       status: 'new',
     })

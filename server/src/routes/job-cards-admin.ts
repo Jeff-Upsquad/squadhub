@@ -189,6 +189,7 @@ router.post('/client-brief', async (req: Request, res: Response) => {
       phone: body.phone ?? null,
       contact_name: body.contact_name ?? null,
       business_name: body.business_name ?? null,
+      business_location: body.business_location ?? null,
       country_id: body.country_id ?? null,
     });
     const client = submission ? await findClientForSubmission(submission.id) : null;
@@ -265,6 +266,22 @@ router.get('/lead-lookup', async (req: Request, res: Response) => {
       return;
     }
 
+    // Location: the submission's business_address when set; else fall back to
+    // the newest job card's customer_location for this lead (earlier briefs
+    // stored location only on the card).
+    let businessLocation: string | null = submission.business_address ?? null;
+    if (!businessLocation) {
+      const { data: lastCard } = await supabaseAdmin
+        .from('job_cards')
+        .select('customer_location')
+        .eq('lead_submission_id', submission.id)
+        .not('customer_location', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      businessLocation = (lastCard as any)?.customer_location ?? null;
+    }
+
     res.json({
       success: true,
       data: {
@@ -273,6 +290,7 @@ router.get('/lead-lookup', async (req: Request, res: Response) => {
         contact_person: submission.contact_person ?? null,
         email: submission.email ?? null,
         phone: submission.contact_number ?? null,
+        business_location: businessLocation,
         country_id: submission.country_id ?? null,
       },
     });
