@@ -244,7 +244,7 @@ export default function JobProfileForm({
                   }
                   className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
                     on
-                      ? 'border-ink bg-[#F2FCBC] text-[#0a0a0a] shadow-[inset_0_0_0_1px_#0a0a0a]'
+                      ? 'border-ink bg-sh-lime-soft text-sh-ink shadow-[inset_0_0_0_1px_var(--sh-ink)]'
                       : 'border-divider bg-surface text-foreground-muted hover:border-ink hover:text-foreground'
                   }`}
                 >
@@ -317,7 +317,7 @@ export default function JobProfileForm({
                   }
                   className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
                     on
-                      ? 'border-ink bg-[#F2FCBC] text-[#0a0a0a] shadow-[inset_0_0_0_1px_#0a0a0a]'
+                      ? 'border-ink bg-sh-lime-soft text-sh-ink shadow-[inset_0_0_0_1px_var(--sh-ink)]'
                       : 'border-divider bg-surface text-foreground-muted hover:border-ink hover:text-foreground'
                   }`}
                 >

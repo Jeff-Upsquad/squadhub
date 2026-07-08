@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { BrandProfile, BusinessProfilePhoto } from '@squadhub/shared';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
+import ImageUploadField from '../ImageUploadField';
 import { Field, inputCls, PhotoListEditor } from './BusinessProfileForm';
 
 // Brand profile — optional 0..n per business. A job profile can hang off the
@@ -85,8 +86,8 @@ export default function BrandProfileForm({
           <input type="text" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" className={inputCls} />
         </Field>
       </div>
-      <Field label="Logo URL">
-        <input type="text" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://…" className={inputCls} />
+      <Field label="Logo">
+        <ImageUploadField kind="logo" variant="logo" value={logoUrl || null} onChange={(url) => setLogoUrl(url ?? '')} />
       </Field>
       <Field label="Social links">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

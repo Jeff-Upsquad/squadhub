@@ -104,9 +104,9 @@ export default function RuleOverridesEditor({
                     className={`px-2.5 py-1 transition ${
                       mode === m
                         ? m === 'cleared'
-                          ? 'bg-[#FEE2E2] text-[#B91C1C]'
+                          ? 'bg-red-500/10 text-red-600 dark:text-red-400'
                           : m === 'overridden'
-                            ? 'bg-[#F2FCBC] text-[#0a0a0a]'
+                            ? 'bg-sh-lime-soft text-sh-ink'
                             : 'bg-surface-alt text-foreground'
                         : 'bg-surface text-foreground-dim hover:text-foreground'
                     }`}
@@ -134,7 +134,7 @@ export default function RuleOverridesEditor({
               </div>
             )}
             {mode === 'cleared' && (
-              <p className="mt-2 text-[11px] text-[#B91C1C]">
+              <p className="mt-2 text-[11px] text-red-600 dark:text-red-400">
                 Rule cleared — the profile default is dropped and this axis matches anyone.
               </p>
             )}

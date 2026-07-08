@@ -131,7 +131,7 @@ export default function OnboardingPanel({
                   onClick={() => enabled && setStep(s)}
                   className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition ${
                     step === s
-                      ? 'border-ink bg-[#F2FCBC] text-[#0a0a0a]'
+                      ? 'border-ink bg-sh-lime-soft text-sh-ink'
                       : enabled
                         ? 'border-divider text-foreground-muted hover:border-ink hover:text-foreground'
                         : 'border-divider text-foreground-dim opacity-50'
@@ -192,14 +192,14 @@ export default function OnboardingPanel({
                               type="button"
                               onClick={() => setBusinessId(b.id)}
                               className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left transition ${
-                                active ? 'border-ink bg-[#F2FCBC]/40' : 'border-divider bg-surface hover:border-ink'
+                                active ? 'border-ink bg-sh-lime-soft/40' : 'border-divider bg-surface hover:border-ink'
                               }`}
                             >
                               <span className="min-w-0">
                                 <span className="flex items-center gap-2">
                                   <span className="truncate text-sm font-semibold text-foreground">{b.name}</span>
                                   {suggestedIds.has(b.id) && (
-                                    <span className="rounded-full bg-[#D1FAE5] px-2 py-0.5 text-[10px] font-semibold text-[#065F46]">
+                                    <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
                                       This lead
                                     </span>
                                   )}
@@ -209,7 +209,7 @@ export default function OnboardingPanel({
                                 </span>
                               </span>
                               {active && (
-                                <svg className="h-4 w-4 shrink-0 text-[#0a0a0a]" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                                <svg className="h-4 w-4 shrink-0 text-sh-ink" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                 </svg>
                               )}
@@ -351,7 +351,7 @@ export default function OnboardingPanel({
                               <p className="flex items-center gap-2 truncate text-sm font-semibold text-foreground">
                                 {p.title}
                                 {attached && (
-                                  <span className="rounded-full bg-[#D1FAE5] px-2 py-0.5 text-[10px] font-semibold text-[#065F46]">Attached</span>
+                                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">Attached</span>
                                 )}
                                 {p.status === 'archived' && (
                                   <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] font-semibold text-foreground-dim">Archived</span>

@@ -154,7 +154,7 @@ export default function CandidateDetailPanel({
             </button>
           )}
           {canHire && (
-            <button type="button" disabled={busy} onClick={() => setHireOpen(true)} className="rounded-md bg-[#065F46] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+            <button type="button" disabled={busy} onClick={() => setHireOpen(true)} className="rounded-md bg-emerald-800 px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
               Hire
             </button>
           )}
@@ -165,7 +165,7 @@ export default function CandidateDetailPanel({
               onClick={() => {
                 if (window.confirm(`Mark ${name} as joined? The candidate moves to Placed.`)) markJoined.mutate();
               }}
-              className="rounded-md bg-[#065F46] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              className="rounded-md bg-emerald-800 px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
             >
               Mark joined
             </button>

@@ -179,13 +179,13 @@ export default function OfferTemplateEditor() {
                   setSelectedId(t.id);
                 }}
                 className={`w-full rounded-lg border px-3 py-2.5 text-left transition ${
-                  selectedId === t.id && !creating ? 'border-ink bg-[#F2FCBC]/40' : 'border-divider bg-surface hover:border-ink'
+                  selectedId === t.id && !creating ? 'border-ink bg-sh-lime-soft/40' : 'border-divider bg-surface hover:border-ink'
                 }`}
               >
                 <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
                   <span className="truncate">{t.name}</span>
                   {t.is_default && (
-                    <span className="shrink-0 rounded-full bg-[#D1FAE5] px-2 py-0.5 text-[10px] font-semibold text-[#065F46]">Default</span>
+                    <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">Default</span>
                   )}
                 </p>
                 <p className="mt-0.5 truncate text-xs text-foreground-muted">
@@ -462,8 +462,9 @@ export default function OfferTemplateEditor() {
               {previewHtml && (
                 <div className="rounded-lg border border-divider bg-white p-4">
                   <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground-dim">Preview (sample values)</p>
+                  {/* Letter preview renders on constant white "paper" in both modes — keep constant near-black text */}
                   <div
-                    className="max-w-none text-[13px] leading-relaxed text-[#222] [&_h3]:mt-3 [&_h3]:text-sm [&_h3]:font-bold"
+                    className="max-w-none text-[13px] leading-relaxed text-neutral-800 [&_h3]:mt-3 [&_h3]:text-sm [&_h3]:font-bold"
                     dangerouslySetInnerHTML={{ __html: previewHtml }}
                   />
                 </div>

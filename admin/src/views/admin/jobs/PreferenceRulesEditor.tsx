@@ -84,7 +84,7 @@ function ChipToggleList({
             aria-pressed={on}
             className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
               on
-                ? 'border-ink bg-[#F2FCBC] text-[#0a0a0a] shadow-[inset_0_0_0_1px_#0a0a0a]'
+                ? 'border-ink bg-sh-lime-soft text-sh-ink shadow-[inset_0_0_0_1px_var(--sh-ink)]'
                 : 'border-divider bg-surface text-foreground-muted hover:border-ink hover:text-foreground'
             }`}
           >
@@ -124,14 +124,14 @@ function FreeChipList({
           {selected.map((v) => (
             <span
               key={v}
-              className="inline-flex items-center gap-1 rounded-full border border-ink bg-[#F2FCBC] px-2.5 py-0.5 text-xs font-medium text-[#0a0a0a]"
+              className="inline-flex items-center gap-1 rounded-full border border-ink bg-sh-lime-soft px-2.5 py-0.5 text-xs font-medium text-sh-ink"
             >
               {v}
               <button
                 type="button"
                 aria-label={`Remove ${v}`}
                 onClick={() => onChange(selected.filter((s) => s !== v))}
-                className="text-[#0a0a0a]/60 transition hover:text-[#0a0a0a]"
+                className="text-sh-ink/60 transition hover:text-sh-ink"
               >
                 ×
               </button>

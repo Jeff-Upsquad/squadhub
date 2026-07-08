@@ -223,7 +223,7 @@ export default function OfferComposer({
                   onClick={() => setDeliveryMode(m.value)}
                   aria-pressed={deliveryMode === m.value}
                   className={`flex-1 px-3 py-2 transition ${
-                    deliveryMode === m.value ? 'bg-[#F2FCBC] text-[#0a0a0a]' : 'bg-surface text-foreground-muted hover:text-foreground'
+                    deliveryMode === m.value ? 'bg-sh-lime-soft text-sh-ink' : 'bg-surface text-foreground-muted hover:text-foreground'
                   }`}
                 >
                   {m.label}
@@ -379,8 +379,9 @@ export default function OfferComposer({
               {previewHtml && (
                 <div className="rounded-lg border border-divider bg-white p-4">
                   <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground-dim">Preview (sample values)</p>
+                  {/* Letter preview renders on constant white "paper" in both modes — keep constant near-black text */}
                   <div
-                    className="prose prose-sm max-w-none text-[13px] leading-relaxed text-[#222] [&_h3]:mt-3 [&_h3]:text-sm [&_h3]:font-bold"
+                    className="prose prose-sm max-w-none text-[13px] leading-relaxed text-neutral-800 [&_h3]:mt-3 [&_h3]:text-sm [&_h3]:font-bold"
                     dangerouslySetInnerHTML={{ __html: previewHtml }}
                   />
                 </div>

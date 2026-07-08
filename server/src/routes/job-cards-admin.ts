@@ -132,9 +132,9 @@ const ruleOverridesSchema = z
   .strict();
 
 // One card per selected role, mirroring the subscription ClientBriefForm's
-// role checkboxes (phase 1 covers designers + video editors).
+// role options (Designers / Editors / the hybrid Designer plus Editor).
 const jobBriefSchema = z.object({
-  role_service_types: z.array(z.enum(['Designers', 'Editors'])).min(1).max(2)
+  role_service_types: z.array(z.enum(['Designers', 'Editors', 'Designer plus Editor'])).min(1).max(3)
     .refine((arr) => new Set(arr).size === arr.length, { message: 'Roles must be unique' }),
   contact_name: z.string().max(200).optional(),
   business_name: z.string().max(200).optional(),

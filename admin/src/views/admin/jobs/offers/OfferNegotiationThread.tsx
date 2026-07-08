@@ -124,7 +124,7 @@ export default function OfferNegotiationThread({
               </span>
             )}
             {offer.is_final && (
-              <span className="rounded-full bg-[#991B1B] px-2 py-0.5 text-[10px] font-semibold text-white" title="Final counteroffer — no further negotiation">
+              <span className="rounded-full bg-red-800 px-2 py-0.5 text-[10px] font-semibold text-white" title="Final counteroffer — no further negotiation">
                 FINAL
               </span>
             )}
@@ -152,8 +152,9 @@ export default function OfferNegotiationThread({
 
       {showLetter && offer.rendered_body_html && (
         <div className="mt-3 rounded-lg border border-divider bg-white p-4">
+          {/* Letter renders on constant white "paper" in both modes — keep constant near-black text */}
           <div
-            className="max-w-none text-[13px] leading-relaxed text-[#222] [&_h3]:mt-3 [&_h3]:text-sm [&_h3]:font-bold"
+            className="max-w-none text-[13px] leading-relaxed text-neutral-800 [&_h3]:mt-3 [&_h3]:text-sm [&_h3]:font-bold"
             dangerouslySetInnerHTML={{ __html: offer.rendered_body_html }}
           />
         </div>
@@ -184,7 +185,7 @@ export default function OfferNegotiationThread({
                   type="button"
                   disabled={busy}
                   onClick={() => setCounterOpen((v) => !v)}
-                  className="rounded-md border border-[#6D28D9]/30 bg-[#EDE9FE] px-2.5 py-1 text-[11px] font-semibold text-[#6D28D9] transition hover:bg-[#E4DEFC] disabled:opacity-50"
+                  className="rounded-md border border-violet-500/40 bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-700 transition hover:bg-violet-500/20 disabled:opacity-50 dark:text-violet-300"
                 >
                   Counteroffer (final)
                 </button>
@@ -207,8 +208,8 @@ export default function OfferNegotiationThread({
       )}
 
       {counterOpen && (
-        <div className="mt-2.5 space-y-2 rounded-md border border-[#6D28D9]/20 bg-[#EDE9FE]/30 p-3">
-          <p className="text-[11px] font-semibold text-[#6D28D9]">
+        <div className="mt-2.5 space-y-2 rounded-md border border-violet-500/20 bg-violet-500/5 p-3">
+          <p className="text-[11px] font-semibold text-violet-700 dark:text-violet-300">
             This counteroffer is FINAL — after it the candidate can only accept, decline, or ask a question.
           </p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -240,7 +241,7 @@ export default function OfferNegotiationThread({
               type="button"
               disabled={counter.isPending}
               onClick={() => counter.mutate()}
-              className="rounded-md bg-[#6D28D9] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              className="rounded-md bg-violet-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
             >
               {counter.isPending ? 'Sending…' : 'Send final counteroffer'}
             </button>

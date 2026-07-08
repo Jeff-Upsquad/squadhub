@@ -113,7 +113,7 @@ export default function JobCandidatesView({ card }: { card: JobCard }) {
                 data-active={activeTab === key}
                 className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition ${
                   activeTab === key
-                    ? 'border-transparent bg-[#F2FCBC] text-[#0a0a0a] shadow-[inset_0_0_0_1px_#0a0a0a]'
+                    ? 'border-transparent bg-sh-lime-soft text-sh-ink shadow-[inset_0_0_0_1px_var(--sh-ink)]'
                     : 'border-divider bg-surface text-foreground-muted hover:text-foreground'
                 }`}
               >

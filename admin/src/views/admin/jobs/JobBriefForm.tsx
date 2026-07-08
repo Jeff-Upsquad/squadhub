@@ -5,13 +5,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 
-// Hiring brief — the Job Cards clone of ClientBriefForm. Phase 1 covers
-// designers + video editors; each selected role becomes its own job card
+// Hiring brief — the Job Cards clone of ClientBriefForm. Covers designers,
+// video editors + the hybrid; each selected role becomes its own job card
 // (POST /admin/job-cards/client-brief with role_service_types[], one POST
 // creates one card per role server-side). The brief lands in New Deals and
 // find-or-creates the lead by contact identity.
 
-type JobRole = 'Designers' | 'Editors';
+type JobRole = 'Designers' | 'Editors' | 'Designer plus Editor';
 
 const ROLE_OPTIONS: { value: JobRole; title: string; description: string }[] = [
   {
@@ -23,6 +23,11 @@ const ROLE_OPTIONS: { value: JobRole; title: string; description: string }[] = [
     value: 'Editors',
     title: 'Video Editor',
     description: 'Motion & video — short-form reels, long-form edits, ads, corporate videos, animations.',
+  },
+  {
+    value: 'Designer plus Editor',
+    title: 'Designer + Editor',
+    description: 'One person who does both — design work and video editing — instead of hiring two separate specialists.',
   },
 ];
 
@@ -120,7 +125,7 @@ export default function JobBriefForm({
   }
 
   return (
-    <div className="connect-bg fixed inset-0 z-40 overflow-y-auto px-4 py-6 sm:py-10">
+    <div className="hire-bg fixed inset-0 z-40 overflow-y-auto px-4 py-6 sm:py-10">
       <div className="mx-auto max-w-2xl">
         <button
           type="button"
@@ -144,12 +149,12 @@ export default function JobBriefForm({
 
         <form onSubmit={handleSubmit} className="space-y-5 pb-8">
           {error && (
-            <div className="rounded-lg border border-[#E0B7A2] bg-[#FBEFE9] px-4 py-3 text-sm text-[#8B3A1A]">
+            <div className="rounded-lg border border-red-300/40 bg-red-500/10 px-4 py-3 text-sm text-red-500">
               {error}
             </div>
           )}
 
-          <Section eyebrow="Roles" title="Who are they hiring?" hint="One job card is created per selected role.">
+          <Section eyebrow="Roles" title="Role to hire" hint="One job card is created per selected role.">
             <div className="space-y-2">
               {ROLE_OPTIONS.map((opt) => {
                 const on = roles.includes(opt.value);
@@ -160,16 +165,17 @@ export default function JobBriefForm({
                     onClick={() => toggleRole(opt.value)}
                     aria-pressed={on}
                     className={`flex w-full items-start gap-3 rounded-xl border-2 px-4 py-3 text-left transition ${
-                      on ? 'border-[#0a0a0a] bg-[#F2FCBC]' : 'border-divider bg-surface hover:border-[#0a0a0a]'
+                      on ? 'border-sh-ink bg-sh-lime-soft' : 'border-divider bg-surface hover:border-sh-ink'
                     }`}
                   >
                     <span
                       className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                        on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-divider'
+                        on ? 'border-sh-ink bg-sh-lime' : 'border-divider'
                       }`}
                     >
                       {on && (
-                        <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                        // text-black: the dot stays constant lime in both modes, so the check stays near-black (sh-ink would flip light in dark).
+                        <svg className="h-2.5 w-2.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
                       )}
@@ -187,30 +193,30 @@ export default function JobBriefForm({
           <Section eyebrow="Customer" title="The business & contact" hint="Used to find-or-create the lead in the Clients module.">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Business name">
-                <input type="text" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Company / brand" className="connect-input" />
+                <input type="text" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Company / brand" className="hire-input" />
               </Field>
               <Field label="Contact person">
-                <input type="text" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Full name" className="connect-input" />
+                <input type="text" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Full name" className="hire-input" />
               </Field>
               <Field label="Email">
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" className="connect-input" />
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" className="hire-input" />
               </Field>
               <Field label="Phone" hint="Ideally a WhatsApp number">
-                <div className="connect-phone">
-                  <select value={countryCode} onChange={(e) => setCountryCode(e.target.value)} className="connect-phone-cc" aria-label="Country code">
+                <div className="hire-phone">
+                  <select value={countryCode} onChange={(e) => setCountryCode(e.target.value)} className="hire-phone-cc" aria-label="Country code">
                     {COUNTRY_CODES.map((c) => (
                       <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
                     ))}
                   </select>
-                  <span className="connect-phone-divider" />
-                  <input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" className="connect-phone-input" />
+                  <span className="hire-phone-divider" />
+                  <input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" className="hire-phone-input" />
                 </div>
               </Field>
               <Field label="Business location">
-                <input type="text" value={businessLocation} onChange={(e) => setBusinessLocation(e.target.value)} placeholder="City, area" className="connect-input" />
+                <input type="text" value={businessLocation} onChange={(e) => setBusinessLocation(e.target.value)} placeholder="City, area" className="hire-input" />
               </Field>
               <Field label="Country">
-                <select value={countryId} onChange={(e) => setCountryId(e.target.value)} className="connect-input">
+                <select value={countryId} onChange={(e) => setCountryId(e.target.value)} className="hire-input">
                   <option value="">{countries.length === 0 ? 'Loading…' : 'Select a country'}</option>
                   {countries.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
@@ -223,37 +229,37 @@ export default function JobBriefForm({
           <Section eyebrow="The role" title="Package & openings" hint="All optional — the details firm up during onboarding.">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Salary package — min">
-                <input type="number" min="0" inputMode="numeric" value={packageMin} onChange={(e) => setPackageMin(e.target.value)} placeholder="e.g. 25000" className="connect-input" />
+                <input type="number" min="0" inputMode="numeric" value={packageMin} onChange={(e) => setPackageMin(e.target.value)} placeholder="e.g. 25000" className="hire-input" />
               </Field>
               <Field label="Salary package — max">
-                <input type="number" min="0" inputMode="numeric" value={packageMax} onChange={(e) => setPackageMax(e.target.value)} placeholder="e.g. 40000" className="connect-input" />
+                <input type="number" min="0" inputMode="numeric" value={packageMax} onChange={(e) => setPackageMax(e.target.value)} placeholder="e.g. 40000" className="hire-input" />
               </Field>
               <Field label="Currency">
-                <input type="text" value={packageCurrency} onChange={(e) => setPackageCurrency(e.target.value)} placeholder="INR" className="connect-input" />
+                <input type="text" value={packageCurrency} onChange={(e) => setPackageCurrency(e.target.value)} placeholder="INR" className="hire-input" />
               </Field>
               <Field label="Period">
-                <select value={packagePeriod} onChange={(e) => setPackagePeriod(e.target.value as 'monthly' | 'annual')} className="connect-input">
+                <select value={packagePeriod} onChange={(e) => setPackagePeriod(e.target.value as 'monthly' | 'annual')} className="hire-input">
                   <option value="monthly">Monthly</option>
                   <option value="annual">Annual (CTC)</option>
                 </select>
               </Field>
               <Field label="Openings per role">
-                <input type="number" min="1" inputMode="numeric" value={openings} onChange={(e) => setOpenings(e.target.value)} className="connect-input" />
+                <input type="number" min="1" inputMode="numeric" value={openings} onChange={(e) => setOpenings(e.target.value)} className="hire-input" />
               </Field>
               <Field label="Expected joining date">
-                <input type="date" value={expectedJoiningDate} onChange={(e) => setExpectedJoiningDate(e.target.value)} className="connect-input" />
+                <input type="date" value={expectedJoiningDate} onChange={(e) => setExpectedJoiningDate(e.target.value)} className="hire-input" />
               </Field>
             </div>
             <Field label="Package notes">
-              <textarea rows={2} value={packageNotes} onChange={(e) => setPackageNotes(e.target.value)} placeholder="Incentives, variable pay, anything package-related." className="connect-input resize-none" />
+              <textarea rows={2} value={packageNotes} onChange={(e) => setPackageNotes(e.target.value)} placeholder="Incentives, variable pay, anything package-related." className="hire-input resize-none" />
             </Field>
             <Field label="Short note about the requirement">
-              <textarea rows={3} value={briefNote} onChange={(e) => setBriefNote(e.target.value)} placeholder="What kind of person they're hiring, context, urgency." className="connect-input resize-none" />
+              <textarea rows={3} value={briefNote} onChange={(e) => setBriefNote(e.target.value)} placeholder="What kind of person is needed, context, urgency." className="hire-input resize-none" />
             </Field>
           </Section>
 
-          <div className="connect-submit-wrap">
-            <button type="submit" disabled={submitting} className="connect-submit">
+          <div className="hire-submit-wrap">
+            <button type="submit" disabled={submitting} className="hire-submit">
               {submitting ? 'Submitting…' : 'Submit'}
             </button>
           </div>
@@ -290,46 +296,46 @@ function Field({
   );
 }
 
-// Same connect-* skin as ClientBriefForm so both briefs feel identical.
+// Same skin as ClientBriefForm, but namespaced hire-* (ClientBriefForm injects
+// identical GLOBAL connect-* classes — reusing those names would let whichever
+// form mounts last restyle the other) and rebuilt on the theme variables so
+// the form flips with .dark.
 const globalStyles = `
-.connect-bg {
-  background: #F8F6F0;
-  background-image:
-    radial-gradient(circle at 0% 0%, rgba(244, 241, 232, 0.8) 0%, transparent 40%),
-    radial-gradient(circle at 100% 100%, rgba(232, 229, 221, 0.6) 0%, transparent 40%);
+.hire-bg {
+  background: var(--sh-cream);
 }
-.connect-input {
+.hire-input {
   width: 100%;
   border-radius: 10px;
-  border: 1px solid #D9D5C7;
+  border: 1px solid var(--divider-strong);
   padding: 10px 12px;
   font-size: 16px;
-  color: #222;
-  background: #FBFAF6;
+  color: var(--foreground);
+  background: var(--surface);
   transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
 }
-.connect-input:focus {
+.hire-input:focus {
   outline: none;
-  border-color: #3A3A3A;
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(58, 58, 58, 0.08);
+  border-color: var(--foreground-muted);
+  background: var(--surface-alt);
+  box-shadow: 0 0 0 3px rgba(128, 128, 128, 0.15);
 }
-.connect-input::placeholder { color: #9C9486; }
-.connect-phone {
+.hire-input::placeholder { color: var(--foreground-dim); }
+.hire-phone {
   display: flex;
   align-items: stretch;
-  border: 1px solid #D9D5C7;
+  border: 1px solid var(--divider-strong);
   border-radius: 10px;
-  background: #FBFAF6;
+  background: var(--surface);
   overflow: hidden;
   transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
 }
-.connect-phone:focus-within {
-  border-color: #3A3A3A;
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(58, 58, 58, 0.08);
+.hire-phone:focus-within {
+  border-color: var(--foreground-muted);
+  background: var(--surface-alt);
+  box-shadow: 0 0 0 3px rgba(128, 128, 128, 0.15);
 }
-.connect-phone-cc {
+.hire-phone-cc {
   appearance: none;
   -webkit-appearance: none;
   border: none;
@@ -337,56 +343,60 @@ const globalStyles = `
   background: transparent;
   padding: 10px 24px 10px 12px;
   font-size: 15px;
-  color: #222;
+  color: var(--foreground);
   cursor: pointer;
 }
-.connect-phone-divider {
+.hire-phone-divider {
   width: 1px;
-  background: #E8E5DD;
+  background: var(--divider);
   margin: 8px 0;
   flex-shrink: 0;
 }
-.connect-phone-input {
+.hire-phone-input {
   flex: 1;
   border: none;
   outline: none;
   padding: 10px 12px;
   font-size: 16px;
-  color: #222;
+  color: var(--foreground);
   background: transparent;
   min-width: 0;
 }
-.connect-phone-input::placeholder { color: #9C9486; }
-.connect-submit-wrap {
+.hire-phone-input::placeholder { color: var(--foreground-dim); }
+.hire-submit-wrap {
   margin-top: 8px;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
-.connect-submit {
+/* Constant-lime exception: the submit stays lime in BOTH modes, so its text
+ * and border stay near-black (var(--sh-ink) would flip light in dark and
+ * vanish against the lime). The hard shadow uses var(--sh-offset), which
+ * flips to a light rgba in dark so the neo-brutalist pop survives. */
+.hire-submit {
   display: block;
   width: 100%;
   border-radius: 12px;
-  background: #FCF487;
+  background: var(--sh-lime);
   color: #0a0a0a;
   font-weight: 700;
   font-size: 16px;
   padding: 14px 16px;
   transition: background-color 0.15s, box-shadow 0.15s, transform 0.05s;
   border: 2px solid #0a0a0a;
-  box-shadow: 3px 3px 0 0 #0a0a0a;
+  box-shadow: 3px 3px 0 0 var(--sh-offset);
 }
-.connect-submit:hover:not(:disabled) {
-  background: #F0E660;
-  box-shadow: 4px 4px 0 0 #0a0a0a;
+.hire-submit:hover:not(:disabled) {
+  background: var(--sh-lime-hover);
+  box-shadow: 4px 4px 0 0 var(--sh-offset);
 }
-.connect-submit:active:not(:disabled) {
+.hire-submit:active:not(:disabled) {
   transform: translate(2px, 2px);
-  box-shadow: 1px 1px 0 0 #0a0a0a;
+  box-shadow: 1px 1px 0 0 var(--sh-offset);
 }
-.connect-submit:disabled {
-  background: #F2FCBC;
-  color: #6b6b6b;
-  border-color: #c0c0c0;
-  box-shadow: 3px 3px 0 0 #c0c0c0;
+.hire-submit:disabled {
+  background: var(--sh-lime-soft);
+  color: var(--sh-ink-subtle);
+  border-color: var(--divider-strong);
+  box-shadow: 3px 3px 0 0 var(--divider-strong);
   cursor: not-allowed;
 }
 `;

@@ -59,7 +59,7 @@ export default function CloseJobCardDialog({
             <label
               key={r.value}
               className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 transition ${
-                reason === r.value ? 'border-ink bg-[#F2FCBC]/40' : 'border-divider hover:border-ink'
+                reason === r.value ? 'border-ink bg-sh-lime-soft/40' : 'border-divider hover:border-ink'
               }`}
             >
               <input

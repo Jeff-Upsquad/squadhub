@@ -166,7 +166,7 @@ export default function InterviewScheduleDialog({
                   onClick={() => setMode(m)}
                   aria-pressed={mode === m}
                   className={`flex-1 px-3 py-2 transition ${
-                    mode === m ? 'bg-[#F2FCBC] text-[#0a0a0a]' : 'bg-surface text-foreground-muted hover:text-foreground'
+                    mode === m ? 'bg-sh-lime-soft text-sh-ink' : 'bg-surface text-foreground-muted hover:text-foreground'
                   }`}
                 >
                   {m === 'virtual' ? 'Virtual' : 'Physical (in person)'}

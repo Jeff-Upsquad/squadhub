@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { BusinessProfile, BusinessProfilePhoto } from '@squadhub/shared';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
+import ImageUploadField from '../ImageUploadField';
 
 // Business profile — the required parent of the onboarding hierarchy. Every
 // field is candidate-facing: the goal is that a candidate understands the
@@ -63,7 +64,7 @@ export function Field({
     <div>
       <label className="mb-1 block text-xs font-medium text-foreground">
         {label}
-        {required && <span className="text-[#C13515]"> *</span>}
+        {required && <span className="text-red-500"> *</span>}
       </label>
       {children}
       {hint && <p className="mt-1 text-[11px] text-foreground-dim">{hint}</p>}
@@ -132,19 +133,19 @@ export function PhotoListEditor({
     <div className="space-y-1.5">
       {photos.map((p, i) => (
         <div key={i} className="flex items-center gap-1.5">
-          <input
-            type="text"
-            value={p.url}
-            onChange={(e) => onChange(photos.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)))}
-            placeholder="Photo URL"
-            className={inputCls}
+          <ImageUploadField
+            kind="photo"
+            variant="photo"
+            value={p.url || null}
+            onChange={(url) => onChange(photos.map((x, j) => (j === i ? { ...x, url: url ?? '' } : x)))}
+            className="min-w-0 flex-1"
           />
           <input
             type="text"
             value={p.caption ?? ''}
             onChange={(e) => onChange(photos.map((x, j) => (j === i ? { ...x, caption: e.target.value } : x)))}
             placeholder="Caption (optional)"
-            className={inputCls}
+            className={`${inputCls} min-w-0 flex-1`}
           />
           <button
             type="button"
@@ -264,8 +265,8 @@ export default function BusinessProfileForm({
           <input type="number" min={1800} max={2100} value={form.founded_year} onChange={(e) => set('founded_year', e.target.value)} placeholder="e.g. 2015" className={inputCls} />
         </Field>
       </div>
-      <Field label="Logo URL">
-        <input type="text" value={form.logo_url} onChange={(e) => set('logo_url', e.target.value)} placeholder="https://…" className={inputCls} />
+      <Field label="Logo">
+        <ImageUploadField kind="logo" variant="logo" value={form.logo_url || null} onChange={(url) => set('logo_url', url ?? '')} />
       </Field>
       <Field label="Social links">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

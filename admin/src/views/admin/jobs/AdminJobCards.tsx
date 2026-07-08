@@ -604,7 +604,7 @@ function JobCardDetailView({
                         lifecycle.mutate({ action: 'publish' });
                       }
                     }}
-                    className="rounded-md bg-[#15803D] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                    className="rounded-md bg-green-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
                   >
                     Publish
                   </button>
@@ -828,7 +828,7 @@ function JobCardOverview({
                     (profile.squadhire_category_ids ?? []).length > 0 ? (
                       `${profile.squadhire_category_ids.length} selected`
                     ) : (
-                      <span className="font-semibold text-[#92400E]">None — cannot broadcast</span>
+                      <span className="font-semibold text-amber-700 dark:text-amber-400">None — cannot broadcast</span>
                     )
                   }
                 />
