@@ -32,6 +32,10 @@ export function categorizeJobCard(card: AdminJobCard): JobCardStage {
   if (card.archived_at) return 'archive';
   if (card.cancelled_at) return 'cancelled';
 
+  // Off the market: recalled cards file under Onboarding until re-published
+  // (publish clears recalled_at). Mirrors server utils/jobStage.ts.
+  if (card.recalled_at && card.state === 'onboarding') return 'onboarding';
+
   const openings = card.openings_count ?? 1;
   const placed = card.placed_count ?? 0;
   const hired = card.hired_count ?? 0;
