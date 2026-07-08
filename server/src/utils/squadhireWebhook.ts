@@ -935,6 +935,13 @@ export interface SquadhireRecipient {
   responded_at: string | null;
   created_at: string | null;
   email: string | null;
+  // Business-review funnel state, sourced from Profiles'
+  // subscription_card_recipients. Lets the admin recipients view mirror the
+  // business portal's Shortlisted / Selected buckets. Older Profiles builds
+  // omit these — treat as null (the field just won't populate those tabs).
+  business_review_status?: 'shortlisted' | 'rejected' | null;
+  selected_at?: string | null;
+  passed_over_at?: string | null;
 }
 
 export async function fetchSquadhireRecipients(cardId: string): Promise<SquadhireRecipient[]> {
