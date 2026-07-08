@@ -2,465 +2,128 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "Zealous Pike Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/zealous-pike-c2058c/web' && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3140"],
-      "port": 3140,
-      "autoPort": true
-    },
-    {
-      "name": "Cool Elbakyan Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/cool-elbakyan-f9fce2/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3123"],
-      "port": 3123,
-      "autoPort": true
-    },
-    {
-      "name": "Infallible Lumiere Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/infallible-lumiere-fd9eac/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3116"],
-      "port": 3116,
-      "autoPort": true
-    },
-    {
-      "name": "Competent Curran Admin",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/competent-curran-f5d0a6/admin' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3201"],
-      "port": 3201,
-      "autoPort": true
-    },
-    {
-      "name": "Sad McLaren Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/sad-mclaren-594ded/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3078"],
-      "port": 3078
-    },
-    {
       "name": "Backend Server",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "-w", "server"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "server"
+      ],
       "port": 4000
     },
     {
       "name": "Web App",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "-w", "web"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "web"
+      ],
       "port": 3000,
       "autoPort": true
     },
     {
       "name": "Admin App",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "-w", "admin"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "admin"
+      ],
       "port": 3001
-    },
-    {
-      "name": "Admin App Preview",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/admin && exec npx next dev -p 3010"],
-      "port": 3010,
-      "autoPort": true
     },
     {
       "name": "Worktree Web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "-w", "web", "--", "-p", "3003"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "web",
+        "--",
+        "-p",
+        "3003"
+      ],
       "port": 3003
-    },
-    {
-      "name": "Sidebar Redesign Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/sidebar-spaces-redesign/web && exec npx next dev -p 3005"],
-      "port": 3005
-    },
-    {
-      "name": "Task Dates Picker Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/task-dates-picker/web && PORT=3006 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3006"],
-      "port": 3006
-    },
-    {
-      "name": "Sales Invite Dropdown Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-sales-invite-dropdown/web && PORT=3002 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3002"],
-      "port": 3002
-    },
-    {
-      "name": "Task Emergency Priority Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-task-emergency-priority/web && PORT=3010 INTERNAL_API_URL=http://localhost:4010 exec npx next dev -p 3010"],
-      "port": 3010
-    },
-    {
-      "name": "Clickable Today Tasks Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-clickable-today-tasks/web && PORT=3004 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3004"],
-      "port": 3004
-    },
-    {
-      "name": "Home Groupby Tabs Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-home-groupby-tabs/web && PORT=3005 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3005"],
-      "port": 3005
-    },
-    {
-      "name": "Home Heading Single Line Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-home-heading-single-line/web && PORT=3006 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3006"],
-      "port": 3006
-    },
-    {
-      "name": "Lead Email Move Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-lead-email-move/web && PORT=3008 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3008"],
-      "port": 3008
-    },
-    {
-      "name": "Universal New Task Button Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/universal-new-task-button/web && PORT=3007 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3007"],
-      "port": 3007
-    },
-    {
-      "name": "Folder Task View Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-folder-task-view/web && PORT=3009 INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3009"],
-      "port": 3009
-    },
-    {
-      "name": "Home Subtasks Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-home-subtasks/web && PORT=3010 INTERNAL_API_URL=http://localhost:4010 exec npx next dev -p 3010"],
-      "port": 3010
-    },
-    {
-      "name": "Fix Task List Invalidation Server",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-fix-task-list-invalidation && PORT=4020 exec npm run dev -w server"],
-      "port": 4020
-    },
-    {
-      "name": "Fix Task List Invalidation Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-fix-task-list-invalidation/web && INTERNAL_API_URL=http://localhost:4020 exec npx next dev -p 3020"],
-      "port": 3020
-    },
-    {
-      "name": "Move List Folder Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-move-list-folder/web && PORT=3099 INTERNAL_API_URL=http://localhost:4010 exec npx next dev -p 3099"],
-      "port": 3099
-    },
-    {
-      "name": "Time Sheet Module Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-time-sheet-module/web && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3030"],
-      "port": 3030
-    },
-    {
-      "name": "Completed Section Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-completed-section/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3040"],
-      "port": 3040
-    },
-    {
-      "name": "Task Filters Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-task-filters/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3050"],
-      "port": 3050
-    },
-    {
-      "name": "Clients Archive Sections Admin",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-clients-archive-sections/admin && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3002"],
-      "port": 3002
-    },
-    {
-      "name": "Clients Status Tabs Admin",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-clients-status-tabs/admin && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3004"],
-      "port": 3004
-    },
-    {
-      "name": "Gross Profit Admin Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-admin-gross-profit/admin && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3001"],
-      "port": 3001
-    },
-    {
-      "name": "Partner Employee Admin Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-partner-employee/admin && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3060"],
-      "port": 3060
-    },
-    {
-      "name": "Profile Access Worktree Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-profile-access/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3000"],
-      "port": 3000,
-      "autoPort": true
-    },
-    {
-      "name": "Task Open View Redesign Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/flamboyant-allen-509af1/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3072"],
-      "port": 3072,
-      "autoPort": true
-    },
-    {
-      "name": "Card List View Worktree",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/condescending-cannon-cbc4a2/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3003"],
-      "port": 3003
-    },
-    {
-      "name": "Create Panel Redesign",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/vigilant-stonebraker-65e4b4/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3080"],
-      "port": 3080
-    },
-    {
-      "name": "Mobile Published Cards Server",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/strange-lumiere-e8b376/server && exec npx tsx watch src/index.ts"],
-      "port": 4000
-    },
-    {
-      "name": "Mobile Published Cards Admin",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/strange-lumiere-e8b376/admin && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3003"],
-      "port": 3003
-    },
-    {
-      "name": "Video Editing Space Server",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/zen-visvesvaraya-964e46/server && PORT=4002 exec npm run dev"],
-      "port": 4002
-    },
-    {
-      "name": "Video Editing Space Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/zen-visvesvaraya-964e46/web && INTERNAL_API_URL=http://localhost:4002 exec npx next dev -p 3092"],
-      "port": 3092
     },
     {
       "name": "UpSquad Website Client",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/upsquad website/upsquad/client' && exec npx next dev -p 3110"],
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/upsquad website/upsquad/client' && exec npx next dev -p 3110"
+      ],
       "port": 3110
-    },
-    {
-      "name": "Determined Haibt Admin",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/determined-haibt-695fe3/admin && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3002"],
-      "port": 3002
-    },
-    {
-      "name": "Sharp Ishizaka Server",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/sharp-ishizaka-f9ead2 && PORT=4001 exec npm run dev -w server"],
-      "port": 4001
-    },
-    {
-      "name": "Sharp Ishizaka Admin",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/sharp-ishizaka-f9ead2/admin && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3005"],
-      "port": 3005
-    },
-    {
-      "name": "Elastic Borg Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/elastic-borg-6e91d2/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3011"],
-      "port": 3011
-    },
-    {
-      "name": "Loving Mendel Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/loving-mendel-40036e/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3002"],
-      "port": 3002
-    },
-    {
-      "name": "Description Links Worktree Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/condescending-babbage-306cbc/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3081"],
-      "port": 3081
-    },
-    {
-      "name": "Musing Agnesi Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/musing-agnesi-f8ebbd/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3071"],
-      "port": 3071
-    },
-    {
-      "name": "Loving Rosalind Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/loving-rosalind-6113b9/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3070"],
-      "port": 3070,
-      "autoPort": true
-    },
-    {
-      "name": "Dreamy Carson Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/dreamy-carson-4dcb73/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3013"],
-      "port": 3013,
-      "autoPort": true
-    },
-    {
-      "name": "Gifted Johnson Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/gifted-johnson-35108d/web && INTERNAL_API_URL=http://localhost:4010 exec npx next dev -p 3010"],
-      "port": 3010
-    },
-    {
-      "name": "Gifted Johnson Admin",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/gifted-johnson-35108d/admin && INTERNAL_API_URL=http://localhost:4010 exec npx next dev -p 3011"],
-      "port": 3011
-    },
-    {
-      "name": "Adoring Lederberg Server",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/adoring-lederberg-f2d1b1/server && PORT=4001 exec npm run dev"],
-      "port": 4001
-    },
-    {
-      "name": "Adoring Lederberg Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/adoring-lederberg-f2d1b1/web && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3001"],
-      "port": 3001
-    },
-    {
-      "name": "Zealous Chaplygin Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/zealous-chaplygin-6fe926/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3001"],
-      "port": 3001
-    },
-    {
-      "name": "Eager Hamilton Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/eager-hamilton-5ed9e9/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3001"],
-      "port": 3001
-    },
-    {
-      "name": "Youthful Rubin Admin",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/youthful-rubin-fd968b/admin && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3001"],
-      "port": 3001
-    },
-    {
-      "name": "Stupefied Edison Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/stupefied-edison-5be1be/web && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3082"],
-      "port": 3082,
-      "autoPort": true
-    },
-    {
-      "name": "Musing Leavitt Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/musing-leavitt-1df196/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3001"],
-      "port": 3001
-    },
-    {
-      "name": "Clever Poincare Server",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/clever-poincare-b90980/server && PORT=4005 exec npm run dev"],
-      "port": 4005
-    },
-    {
-      "name": "Clever Poincare Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/clever-poincare-b90980/web && INTERNAL_API_URL=http://localhost:4005 exec npx next dev -p 3003"],
-      "port": 3003
-    },
-    {
-      "name": "Funny Curran Admin",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/funny-curran-d6d2bf/admin && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3014"],
-      "port": 3014
-    },
-    {
-      "name": "Thirsty Raman Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/thirsty-raman-33b539/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3088"],
-      "port": 3088
-    },
-    {
-      "name": "Objective Goodall Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/objective-goodall-ab758f/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3015"],
-      "port": 3015
-    },
-    {
-      "name": "Festive Bell Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub/.claude/worktrees/festive-bell-ac1473/web && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3001"],
-      "port": 3001
-    },
-    {
-      "name": "Convert From Cards Admin",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd /Users/jeffzeena/squadhub-convert-from-cards/admin && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3003"],
-      "port": 3003
-    },
-    {
-      "name": "Squadnotes Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/squadnotes/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3120"],
-      "port": 3120,
-      "autoPort": true
-    },
-    {
-      "name": "Daily Timesheet Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/adoring-shaw-005a72/web' && INTERNAL_API_URL=http://localhost:4001 exec npx next dev -p 3131"],
-      "port": 3131,
-      "autoPort": true
-    },
-    {
-      "name": "Zealous Payne Server",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/zealous-payne-bbbb5e' && PORT=4031 exec npm run dev -w server"],
-      "port": 4031
-    },
-    {
-      "name": "Zealous Payne Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/zealous-payne-bbbb5e/web' && INTERNAL_API_URL=http://localhost:4031 exec npx next dev -p 3145"],
-      "port": 3145,
-      "autoPort": true
-    },
-    {
-      "name": "Laughing Cerf Web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/laughing-cerf-df8ea6/web' && INTERNAL_API_URL=http://localhost:4000 exec npx next dev -p 3150"],
-      "port": 3150,
-      "autoPort": true
-    },
-    {
-      "name": "Keen Margulis Server",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/keen-margulis-226629/server' && PORT=4033 DISABLE_CRONS=true exec npx tsx watch src/index.ts"],
-      "port": 4033
     },
     {
       "name": "Keen Margulis Web",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/keen-margulis-226629/web' && INTERNAL_API_URL=http://localhost:4033 exec npx next dev -p 3160"],
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/keen-margulis-226629/web' && INTERNAL_API_URL=http://localhost:4033 exec npx next dev -p 3160"
+      ],
       "port": 3160,
       "autoPort": true
     },
     {
       "name": "Elegant Herschel Admin",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/elegant-herschel-3a5cdc/admin' && INTERNAL_API_URL=http://localhost:4034 exec npx next dev -p 3170"],
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/elegant-herschel-3a5cdc/admin' && INTERNAL_API_URL=http://localhost:4034 exec npx next dev -p 3170"
+      ],
       "port": 3170,
       "autoPort": true
     },
     {
       "name": "Elegant Herschel Server",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-lc", "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/elegant-herschel-3a5cdc/server' && PORT=4034 DISABLE_CRONS=true exec npx tsx watch src/index.ts"],
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/elegant-herschel-3a5cdc/server' && PORT=4034 DISABLE_CRONS=true exec npx tsx watch src/index.ts"
+      ],
       "port": 4034
+    },
+    {
+      "name": "Goofy Wu Server",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/goofy-wu-a02d4d/server' && PORT=4040 DISABLE_CRONS=true exec npx tsx watch src/index.ts"
+      ],
+      "port": 4040
+    },
+    {
+      "name": "Goofy Wu Admin",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/squadhub web/.claude/worktrees/goofy-wu-a02d4d/admin' && INTERNAL_API_URL=http://localhost:4040 exec npx next dev -p 3180"
+      ],
+      "port": 3180,
+      "autoPort": true
+    },
+    {
+      "name": "Squad CRM Server",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/Squad CRM/server' && exec npm run dev"
+      ],
+      "port": 4100
+    },
+    {
+      "name": "Squad CRM Web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd '/Users/jeffzeena/Squad CRM/web' && exec npx next dev -p 3100"
+      ],
+      "port": 3100,
+      "autoPort": true
     }
   ]
 }
