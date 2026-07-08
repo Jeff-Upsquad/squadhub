@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
@@ -64,12 +64,67 @@ export default function JobBriefForm({
   const [expectedJoiningDate, setExpectedJoiningDate] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [leadMatch, setLeadMatch] = useState<{ id: string; business_name: string | null } | null>(null);
 
   const countriesQuery = useQuery({
     queryKey: ['admin-countries'],
     queryFn: () => api.get('/admin/countries').then((r) => r.data?.data || []),
   });
   const countries: Country[] = countriesQuery.data || [];
+
+  // Live lead autofill: once a plausible email or phone is typed, look up the
+  // newest matching lead (same identity matching the submit-time
+  // find-or-create uses) and prefill whatever is still empty. Uses refs for
+  // the "still empty" check so the debounce doesn't retrigger on every field.
+  const prefillRef = useRef({ businessName, contactName, email, phone, countryId });
+  prefillRef.current = { businessName, contactName, email, phone, countryId };
+  useEffect(() => {
+    const e = email.trim();
+    const digits = phone.replace(/\D/g, '');
+    const hasEmail = e.includes('@') && e.includes('.');
+    const hasPhone = digits.length >= 6;
+    if (!hasEmail && !hasPhone) {
+      setLeadMatch(null);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const r = await api.get('/admin/job-cards/lead-lookup', {
+          params: {
+            email: hasEmail ? e : undefined,
+            phone: hasPhone ? `${countryCode} ${phone.trim()}` : undefined,
+          },
+        });
+        const d = r.data?.data;
+        if (!d) {
+          setLeadMatch(null);
+          return;
+        }
+        setLeadMatch({ id: d.submission_id, business_name: d.business_name });
+        const cur = prefillRef.current;
+        if (!cur.businessName.trim() && d.business_name) setBusinessName(d.business_name);
+        if (!cur.contactName.trim() && d.contact_person) setContactName(d.contact_person);
+        if (!cur.email.trim() && d.email) setEmail(d.email);
+        if (!cur.countryId && d.country_id) setCountryId(d.country_id);
+        if (!cur.phone.trim() && d.phone) {
+          // Split a stored "+91 98…" into the cc select + number input when
+          // the code is one we render; otherwise drop the whole string in.
+          const known = COUNTRY_CODES.find((c) => String(d.phone).trim().startsWith(c.code));
+          if (known) {
+            setCountryCode(known.code);
+            setPhone(String(d.phone).trim().slice(known.code.length).trim());
+          } else {
+            setPhone(String(d.phone).trim());
+          }
+        }
+      } catch {
+        // soft-fail: autofill is a convenience, never an error state
+      }
+    }, 600);
+    return () => clearTimeout(t);
+    // countryCode omitted intentionally: changing it alone shouldn't refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, phone]);
 
   const toggleRole = (r: JobRole) =>
     setRoles((prev) => (prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]));
@@ -190,17 +245,8 @@ export default function JobBriefForm({
             </div>
           </Section>
 
-          <Section eyebrow="Customer" title="The business & contact" hint="Used to find-or-create the lead in the Clients module.">
+          <Section eyebrow="Customer" title="The business & contact" hint="Phone or email first — existing leads autofill the rest.">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Business name">
-                <input type="text" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Company / brand" className="hire-input" />
-              </Field>
-              <Field label="Contact person">
-                <input type="text" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Full name" className="hire-input" />
-              </Field>
-              <Field label="Email">
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" className="hire-input" />
-              </Field>
               <Field label="Phone" hint="Ideally a WhatsApp number">
                 <div className="hire-phone">
                   <select value={countryCode} onChange={(e) => setCountryCode(e.target.value)} className="hire-phone-cc" aria-label="Country code">
@@ -211,6 +257,15 @@ export default function JobBriefForm({
                   <span className="hire-phone-divider" />
                   <input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" className="hire-phone-input" />
                 </div>
+              </Field>
+              <Field label="Email">
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" className="hire-input" />
+              </Field>
+              <Field label="Business name">
+                <input type="text" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Company / brand" className="hire-input" />
+              </Field>
+              <Field label="Contact person">
+                <input type="text" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Full name" className="hire-input" />
               </Field>
               <Field label="Business location">
                 <input type="text" value={businessLocation} onChange={(e) => setBusinessLocation(e.target.value)} placeholder="City, area" className="hire-input" />
@@ -224,6 +279,14 @@ export default function JobBriefForm({
                 </select>
               </Field>
             </div>
+            {leadMatch && (
+              <p className="mt-3 flex items-center gap-1.5 text-xs text-foreground-muted">
+                <svg className="h-3.5 w-3.5 text-sh-success" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Matched existing lead{leadMatch.business_name ? ` — ${leadMatch.business_name}` : ''}. Empty fields were prefilled; the brief links to this lead.
+              </p>
+            )}
           </Section>
 
           <Section eyebrow="The role" title="Package & openings" hint="All optional — the details firm up during onboarding.">
