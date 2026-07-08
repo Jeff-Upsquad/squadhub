@@ -19,6 +19,7 @@ import SliderPanel from './SliderPanel';
 import LeadStatusChips, { STATUS_META } from '../../../components/LeadStatusChips';
 import AdminLeadSubscriptionsSection from './AdminLeadSubscriptionsSection';
 import AdminLeadCardsSection from './AdminLeadCardsSection';
+import AdminLeadJobCardsSection from './AdminLeadJobCardsSection';
 import { openLeadInCRM } from '../../../utils/squadCrm';
 
 const SERVICE_TYPE_LABEL: Record<string, string> = {
@@ -319,6 +320,8 @@ export default function NewClientsModule() {
             />
 
             <AdminLeadCardsSection submissionId={selectedSubmission.id} />
+
+            <AdminLeadJobCardsSection submissionId={selectedSubmission.id} />
 
             <div className="space-y-3">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Sales Attribution</h4>

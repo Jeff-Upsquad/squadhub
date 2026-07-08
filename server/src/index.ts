@@ -102,6 +102,12 @@ import partnerPushRoutes from './routes/push';
 import adminChatGroupsRoutes from './routes/admin/chat-groups';
 import adminChatBroadcastsRoutes from './routes/admin/chat-broadcasts';
 import adminChatAppConfigRoutes from './routes/admin/chat-app-config';
+import jobProfilesAdminRoutes from './routes/job-profiles-admin';
+import jobCardsAdminRoutes from './routes/job-cards-admin';
+import jobCardsAdminCandidatesRoutes from './routes/job-cards-admin-candidates';
+import jobOfferTemplatesAdminRoutes from './routes/job-offer-templates-admin';
+import jobCardsRoutes from './routes/job-cards';
+import squadhireJobCallbacksRoutes from './routes/integrations/squadhire-job-callbacks';
 import squadhireCallbacksRoutes from './routes/integrations/squadhire-callbacks';
 import squadhireCategoriesRoutes from './routes/integrations/squadhire-categories';
 import ssoSquadhireRoutes from './routes/sso-squadhire';
@@ -122,6 +128,7 @@ import { startTaskMirrorCron } from './cron/task-mirror-cron';
 import { startElapsedTimeCron } from './cron/elapsed-time-cron';
 import { startHoursCompletionCron } from './cron/hours-completion-cron';
 import { startSquadhireSyncSweeper, startManualAssignmentSweeper, startSelectionNotifySweeper, startActivationNotifySweeper, startTalentAcceptedNotifySweeper } from './utils/squadhireWebhook';
+import { startJobSyncSweeper } from './utils/squadhireJobWebhook';
 import { startProfileAccessGrantsSyncSweeper } from './utils/squadhireGrantsWebhook';
 
 // Validate env vars before starting
@@ -208,6 +215,13 @@ app.use('/partner/opportunities', subscriptionCardsPartnerRoutes);
 app.use('/admin/subscriptions', subscriptionsAdminRoutes);
 app.use('/admin/subscription-assignments', subscriptionAssignmentsAdminRoutes);
 app.use('/admin/subscriptions', subscriptionSquadhireProfilesAdminRoutes);
+// Job Cards (hiring service) — admin pipeline + onboarding profiles +
+// candidate proxies + offer templates, and the client-facing view.
+app.use('/admin/jobs', jobProfilesAdminRoutes);
+app.use('/admin/job-cards', jobCardsAdminRoutes);
+app.use('/admin/job-cards', jobCardsAdminCandidatesRoutes);
+app.use('/admin/job-offer-templates', jobOfferTemplatesAdminRoutes);
+app.use('/job-cards', jobCardsRoutes);
 app.use('/admin/countries', countriesAdminRoutes);
 app.use('/admin/gross-profit', grossProfitAdminRoutes);
 app.use('/timer', timerRoutes);
@@ -253,6 +267,9 @@ app.use('/admin/chat/broadcasts', adminChatBroadcastsRoutes);
 app.use('/admin/chat/app-config', adminChatAppConfigRoutes);
 
 // Integrations — inbound callbacks from sister products (SquadHire etc.)
+// Jobs mounts first: its literal /jobs/* paths must win over any future
+// param routes on the generic callbacks router.
+app.use('/integrations/squadhire/jobs', squadhireJobCallbacksRoutes);
 app.use('/integrations/squadhire', squadhireCallbacksRoutes);
 // Admin-facing read-through proxy for SquadHire metadata (categories etc.)
 app.use('/admin/integrations/squadhire', squadhireCategoriesRoutes);
@@ -305,6 +322,9 @@ server.listen(config.port, () => {
     // Outbound SquadHire webhook retry sweeper. No-ops when SQUADHIRE_WEBHOOK_URL
     // is unset, so dev environments without SquadHire configured are unaffected.
     startSquadhireSyncSweeper();
+    // Job Cards retry sweeper — queries job_cards ONLY (its own sync
+    // columns), so it can never cross-leak with the subscription sweeper.
+    startJobSyncSweeper();
     startManualAssignmentSweeper();
     startSelectionNotifySweeper();
     startActivationNotifySweeper();
