@@ -514,13 +514,17 @@ router.post('/subscription-cards/:id/finalize-selection', async (req: Request, r
       .update({
         selected_recipient_type: recipientType,
         selected_recipient_id: recipientId,
+        // Stamp the assignment moment at admin approval (not at client-select),
+        // so "Assigned at" and the billing term's start date agree.
+        assigned_at: new Date().toISOString(),
       })
       .eq('id', cardId);
     if (updErr) { res.status(500).json({ success: false, error: updErr.message }); return; }
 
     // Record the assignment term. Routed through the shared helper so the term
     // captures its frozen plan/price snapshot (migration 152). Best-effort: the
-    // assignment itself already succeeded.
+    // assignment itself already succeeded. No assignedDate passed → the term's
+    // work_start_date defaults to now (admin-approval time) = the engagement start.
     await ensureActiveAssignmentTerm({ cardId, recipientType, recipientId });
 
     notifySquadhireOfActivation(cardId).catch((err) => {

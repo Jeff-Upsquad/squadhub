@@ -1288,6 +1288,25 @@ export default function AdminPublishedCardRecipientsView({
                     </div>
                   ))}
                 </div>
+                {/* Approval gate: the client picked this talent (card is in the
+                    Selected stage — state='assigned', no selected_recipient_id).
+                    An admin clicks Assign to confirm, which stamps the recipient,
+                    opens the billing term (start date = today), and notifies
+                    SquadHire so the client + talent flip to Assigned. */}
+                {bucket === 'selected' && canAssign && (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-emerald-200 pt-4 dark:border-emerald-500/30">
+                    <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                      The client selected this talent. Assign to confirm — this starts the engagement and billing from today.
+                    </p>
+                    <button
+                      onClick={() => finalizeMutation.mutate()}
+                      disabled={finalizeMutation.isPending}
+                      className="sh-btn-primary shrink-0"
+                    >
+                      {finalizeMutation.isPending ? 'Assigning…' : 'Assign'}
+                    </button>
+                  </div>
+                )}
                 {bucket === 'assigned' && (
                   <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-emerald-200 pt-4 dark:border-emerald-500/30">
                     {card.paused_at ? (
@@ -1836,8 +1855,10 @@ export default function AdminPublishedCardRecipientsView({
         )}
       </div>
 
-      {/* Floating Assign bar */}
-      {!allTiersMode && canAssign && checkedIds.size > 0 && (() => {
+      {/* Floating Assign bar. Suppressed for the Selected stage when the inline
+          "Assign" button is shown in the Selected-talent block above, to avoid a
+          duplicate Assign action. */}
+      {!allTiersMode && canAssign && checkedIds.size > 0 && !(bucket === 'selected' && selectedRecipients.length > 0) && (() => {
         const isSelectedBucket = bucket === 'selected';
         const mutation = isSelectedBucket ? finalizeMutation : assignMutation;
         const idleLabel = isSelectedBucket
