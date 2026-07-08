@@ -5,6 +5,7 @@ import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import { categorizeJobCard } from '../utils/jobStage';
 import { logJobCardEvent } from '../utils/jobCardEvents';
+import { fetchSquadhireCategories } from '../utils/squadhireCategories';
 import {
   findOrCreateSubmissionByContact,
   findSubmissionByContact,
@@ -242,6 +243,27 @@ router.post('/client-brief', async (req: Request, res: Response) => {
     }
     console.error('Create job brief error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
+// GET /admin/job-cards/squadhire-categories — category picker for jobs
+// onboarding. Same cached SquadHire fetch the subscription picker uses, but
+// behind this router's plain requireAdmin gate: the subscription variant
+// (/admin/integrations/squadhire/categories) is gated on Sales Leads module
+// access, which a hiring-only admin may not have — and categories are
+// REQUIRED to publish a job card. (Registered before /:id.)
+// ============================================================
+router.get('/squadhire-categories', async (_req: Request, res: Response) => {
+  try {
+    const { data, cached } = await fetchSquadhireCategories();
+    res.json({ success: true, data, cached });
+  } catch (err: any) {
+    console.error('[job-cards] categories fetch failed:', err);
+    res.status(502).json({
+      success: false,
+      error: err?.message || 'Failed to load SquadHire categories',
+    });
   }
 });
 
