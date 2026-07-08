@@ -37,10 +37,10 @@ export type RuleRow = {
 };
 
 export const RULE_ROWS: RuleRow[] = [
-  { id: 'tiers', label: 'Experience tiers', hint: 'SquadHire talent tiers to match. Empty = any tier.', keys: ['target_tiers'] },
+  { id: 'tiers', label: 'Experience tiers', hint: 'SquadHire talent tiers to match.', keys: ['target_tiers'] },
   { id: 'experience', label: 'Experience (years)', hint: 'Minimum and/or maximum years of experience.', keys: ['min_experience_years', 'max_experience_years'] },
   { id: 'age', label: 'Age range', hint: 'Candidate age bounds. A bounded rule fails closed when the talent has no age on file.', keys: ['min_age', 'max_age'] },
-  { id: 'genders', label: 'Gender', hint: 'Match only these genders. Empty = any.', keys: ['target_genders'] },
+  { id: 'genders', label: 'Gender', hint: 'Match only these genders.', keys: ['target_genders'] },
   { id: 'languages', label: 'Languages', hint: 'Languages the candidate should speak.', keys: ['target_languages'] },
   { id: 'countries', label: 'Countries', hint: 'Country names the candidate should be based in.', keys: ['target_country_names'] },
   { id: 'regions', label: 'States / regions', hint: 'Region names within the selected countries. Blank = anywhere.', keys: ['target_regions'] },
@@ -61,19 +61,45 @@ const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
 // Small field primitives
 // ------------------------------------------------------------
 
+// Explicit "Any" state pill — selected (highlighted) when the rule is unset,
+// clicking it clears the rule back to unset. Same visual language as the
+// selected chips.
+function AnyPill({ active, onClick }: { active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+        active
+          ? 'border-ink bg-sh-lime-soft text-sh-ink shadow-[inset_0_0_0_1px_var(--sh-ink)]'
+          : 'border-divider bg-surface text-foreground-muted hover:border-ink hover:text-foreground'
+      }`}
+    >
+      {active ? '✓ ' : ''}
+      Any
+    </button>
+  );
+}
+
 function ChipToggleList({
   options,
   selected,
   onToggle,
   labels,
+  onAny,
 }: {
   options: string[];
   selected: string[];
   onToggle: (value: string) => void;
   labels?: Record<string, string>;
+  /** When provided, prepends an "Any" pill — active when nothing is
+   *  selected; clicking it clears the selection. */
+  onAny?: () => void;
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
+      {onAny && <AnyPill active={selected.length === 0} onClick={onAny} />}
       {options.map((opt) => {
         const on = selected.includes(opt);
         return (
@@ -190,6 +216,7 @@ function RangeInputs({
   onMax,
   minPlaceholder,
   maxPlaceholder,
+  onAny,
 }: {
   minValue: number | undefined;
   maxValue: number | undefined;
@@ -197,6 +224,9 @@ function RangeInputs({
   onMax: (v: number | undefined) => void;
   minPlaceholder: string;
   maxPlaceholder: string;
+  /** When provided, prepends an "Any" pill — active when both bounds are
+   *  empty; clicking it clears both in one patch. */
+  onAny?: () => void;
 }) {
   const parse = (raw: string): number | undefined => {
     if (!raw.trim()) return undefined;
@@ -205,6 +235,7 @@ function RangeInputs({
   };
   return (
     <div className="flex items-center gap-2">
+      {onAny && <AnyPill active={minValue == null && maxValue == null} onClick={onAny} />}
       <input
         type="number"
         min={0}
@@ -236,11 +267,16 @@ export function RuleRowValueEditor({
   value,
   onChange,
   countries,
+  showAnyDefault,
 }: {
   row: RuleRow;
   value: JobMatchRules;
   onChange: (patch: JobMatchRules) => void;
   countries: Country[];
+  /** Show an explicit "Any" pill (active when the rule is unset) on the
+   *  tiers/experience/age/genders rows. Off for the card override rows —
+   *  they carry their own Inherited/Overridden/Cleared semantics. */
+  showAnyDefault?: boolean;
 }) {
   const toggleIn = (key: keyof JobMatchRules, v: string) => {
     const cur = (value[key] as string[] | undefined) ?? [];
@@ -255,6 +291,7 @@ export function RuleRowValueEditor({
           options={TIER_OPTIONS}
           selected={value.target_tiers ?? []}
           onToggle={(v) => toggleIn('target_tiers', v)}
+          onAny={showAnyDefault ? () => onChange({ target_tiers: [] }) : undefined}
         />
       );
     case 'experience':
@@ -266,6 +303,9 @@ export function RuleRowValueEditor({
           onMax={(v) => onChange({ max_experience_years: v })}
           minPlaceholder="Min yrs"
           maxPlaceholder="Max yrs"
+          // Both bounds in ONE patch — two calls would clobber each other
+          // through the stale `value` closure in the parent's merge.
+          onAny={showAnyDefault ? () => onChange({ min_experience_years: undefined, max_experience_years: undefined }) : undefined}
         />
       );
     case 'age':
@@ -277,6 +317,7 @@ export function RuleRowValueEditor({
           onMax={(v) => onChange({ max_age: v })}
           minPlaceholder="Min age"
           maxPlaceholder="Max age"
+          onAny={showAnyDefault ? () => onChange({ min_age: undefined, max_age: undefined }) : undefined}
         />
       );
     case 'genders':
@@ -286,6 +327,7 @@ export function RuleRowValueEditor({
           labels={Object.fromEntries(GENDER_OPTIONS.map((g) => [g.value, g.label]))}
           selected={value.target_genders ?? []}
           onToggle={(v) => toggleIn('target_genders', v)}
+          onAny={showAnyDefault ? () => onChange({ target_genders: [] }) : undefined}
         />
       );
     case 'languages':
@@ -399,7 +441,7 @@ export default function PreferenceRulesEditor({
         <div key={row.id}>
           <p className="text-sm font-medium text-foreground">{row.label}</p>
           <p className="mb-2 text-xs text-foreground-muted">{row.hint}</p>
-          <RuleRowValueEditor row={row} value={value} onChange={applyPatch} countries={countries} />
+          <RuleRowValueEditor row={row} value={value} onChange={applyPatch} countries={countries} showAnyDefault />
         </div>
       ))}
     </div>
