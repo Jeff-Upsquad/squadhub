@@ -6,6 +6,7 @@ import type { JobCard } from '@squadhub/shared';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 import SliderPanel from '../../clients/SliderPanel';
+import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import InterviewConsole from './InterviewConsole';
 import InterviewScheduleDialog from './InterviewScheduleDialog';
 import HireDialog from './HireDialog';
@@ -129,6 +130,7 @@ export default function CandidateDetailPanel({
               <p className="mt-1 text-[11px] text-foreground-muted">Joining date: {candidate.joining_date}</p>
             )}
           </div>
+          <SquadhireProfileLink talentUserId={candidate.talent_user_id} />
         </div>
 
         {/* Actions */}
@@ -260,5 +262,25 @@ export default function CandidateDetailPanel({
       )}
       {hireOpen && <HireDialog card={card} candidate={candidate} onClose={() => setHireOpen(false)} />}
     </SliderPanel>
+  );
+}
+
+// External link to the talent's full profile on the SquadHire admin — the
+// same pattern the subscription recipients view uses.
+function SquadhireProfileLink({ talentUserId }: { talentUserId: string | null }) {
+  const { adminUrl } = useSquadhireConfig();
+  if (!adminUrl || !talentUserId) return null;
+  return (
+    <a
+      href={`${adminUrl}/admin/users/${talentUserId}`}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-divider px-2.5 py-1 text-xs font-medium text-foreground-muted transition hover:bg-surface-alt hover:text-foreground"
+    >
+      View profile
+      <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H18v4.5M18 6l-7.5 7.5M18 13.5V18H6V6h4.5" />
+      </svg>
+    </a>
   );
 }
