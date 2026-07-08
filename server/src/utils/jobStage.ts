@@ -23,6 +23,7 @@ export interface JobStageSource {
   cancelled_at?: string | null;
   closed_at?: string | null;
   closed_reason?: string | null;
+  recalled_at?: string | null;
   screening_started_at?: string | null;
   published_at?: string | null;
   openings_count?: number | null;
@@ -37,6 +38,12 @@ export function categorizeJobCard(card: JobStageSource): JobCardStage {
   if (card.deleted_at) return 'trash';
   if (card.archived_at) return 'archive';
   if (card.cancelled_at) return 'cancelled';
+
+  // A recalled card is off the market — it files under Onboarding (its
+  // stored state) until re-published, even when its funnel has progress.
+  // The Recalled pill + the Candidates tab keep the in-flight work visible.
+  // (Publish clears recalled_at, so a re-published card leaves this branch.)
+  if (card.recalled_at && card.state === 'onboarding') return 'onboarding';
 
   const openings = card.openings_count ?? 1;
   const placed = card.placed_count ?? 0;
