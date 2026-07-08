@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BrandProfile, BusinessProfile, JobCard, JobProfile } from '@squadhub/shared';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
@@ -11,7 +11,9 @@ import BrandProfileForm from './BrandProfileForm';
 import JobProfileForm from './JobProfileForm';
 
 // Onboarding builder — the 3-step profile hierarchy behind a job card:
-//   1. Business Profile (required parent) + saved interview locations
+//   1. Business Profile (required parent, exactly ONE per lead) + saved
+//      interview locations — brands and locations multiply beneath it,
+//      the business itself doesn't
 //   2. Brand Profile   (optional, 0..n per business)
 //   3. Job Profile     (linked to the business OR one of its brands)
 // Finishing attaches the job profile to the card (new → onboarding) via
@@ -50,13 +52,18 @@ export default function OnboardingPanel({
     return () => document.removeEventListener('keydown', handleEsc);
   }, [onClose]);
 
-  // Existing business profiles to pick from — the card's lead/client ones
-  // first (server filters when the param is present), otherwise all.
+  // A lead has exactly ONE business profile — find the card's lead/client one
+  // and auto-select it. The list endpoint returns all, filter client-side.
   const { data: businessesRes, isLoading: businessesLoading } = useQuery({
     queryKey: ['admin-job-business-profiles'],
     queryFn: () => api.get('/admin/jobs/business-profiles').then((r) => r.data),
   });
   const businesses: BusinessProfile[] = businessesRes?.data || [];
+  const leadBusinesses = businesses.filter(
+    (b) =>
+      (card.lead_submission_id && b.lead_submission_id === card.lead_submission_id) ||
+      (card.client_id && b.client_id === card.client_id),
+  );
 
   // If the card is already mid-onboarding, resume with its profile's business.
   useEffect(() => {
@@ -64,6 +71,34 @@ export default function OnboardingPanel({
       setBusinessId(card.job_profile.business_profile_id);
     }
   }, [businessId, card.job_profile]);
+
+  // Legacy data may hold duplicate business profiles for one lead. Fetch each
+  // candidate's detail (same queryKey as the detail query below, so the cache
+  // is shared) and auto-select the best one: most dependents
+  // (brands + locations + job profiles), tiebreak newest. The rest are
+  // silently ignored — data cleanup is handled elsewhere.
+  const leadBusinessQueries = useQueries({
+    queries: leadBusinesses.map((b) => ({
+      queryKey: ['admin-job-business-profile', b.id],
+      queryFn: () => api.get(`/admin/jobs/business-profiles/${b.id}`).then((r) => r.data),
+    })),
+  });
+  const resolvingLeadBusiness =
+    businessesLoading || (leadBusinesses.length > 0 && leadBusinessQueries.some((q) => q.isPending));
+
+  useEffect(() => {
+    if (businessId || creatingBusiness || resolvingLeadBusiness || leadBusinesses.length === 0) return;
+    const dependents = (i: number) => {
+      const d: BusinessProfile | undefined = leadBusinessQueries[i]?.data?.data;
+      return (d?.brands?.length ?? 0) + (d?.locations?.length ?? 0) + (d?.job_profiles?.length ?? 0);
+    };
+    let best = 0;
+    for (let i = 1; i < leadBusinesses.length; i++) {
+      const gap = dependents(i) - dependents(best);
+      if (gap > 0 || (gap === 0 && leadBusinesses[i].created_at > leadBusinesses[best].created_at)) best = i;
+    }
+    setBusinessId(leadBusinesses[best].id);
+  }, [businessId, creatingBusiness, resolvingLeadBusiness, leadBusinesses, leadBusinessQueries]);
 
   // Detail (locations + brands + job profiles) for the chosen business.
   const { data: businessRes } = useQuery({
@@ -88,18 +123,6 @@ export default function OnboardingPanel({
       showToast(err?.response?.data?.error || err.message || 'Failed to attach the job profile', 'error');
     },
   });
-
-  // Lead/client suggestion: businesses already linked to this card's lead.
-  const suggestedIds = new Set(
-    businesses
-      .filter(
-        (b) =>
-          (card.lead_submission_id && b.lead_submission_id === card.lead_submission_id) ||
-          (card.client_id && b.client_id === card.client_id),
-      )
-      .map((b) => b.id),
-  );
-  const orderedBusinesses = [...businesses].sort((a, b) => Number(suggestedIds.has(b.id)) - Number(suggestedIds.has(a.id)));
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -166,74 +189,44 @@ export default function OnboardingPanel({
                 />
               ) : (
                 <>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-foreground">Pick the business profile</p>
-                    <button
-                      type="button"
-                      onClick={() => setCreatingBusiness(true)}
-                      className="rounded-md bg-ink px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
-                    >
-                      + New business profile
-                    </button>
-                  </div>
-                  {businessesLoading ? (
+                  {resolvingLeadBusiness || (businessId && !business) ? (
                     <p className="py-4 text-center text-xs text-foreground-dim">Loading…</p>
-                  ) : orderedBusinesses.length === 0 ? (
-                    <p className="rounded-lg border border-dashed border-divider px-4 py-6 text-center text-xs text-foreground-dim">
-                      No business profiles yet — create the first one for this card.
-                    </p>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {orderedBusinesses.map((b) => {
-                        const active = businessId === b.id;
-                        return (
-                          <li key={b.id}>
-                            <button
-                              type="button"
-                              onClick={() => setBusinessId(b.id)}
-                              className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left transition ${
-                                active ? 'border-ink bg-sh-lime-soft/40' : 'border-divider bg-surface hover:border-ink'
-                              }`}
-                            >
-                              <span className="min-w-0">
-                                <span className="flex items-center gap-2">
-                                  <span className="truncate text-sm font-semibold text-foreground">{b.name}</span>
-                                  {suggestedIds.has(b.id) && (
-                                    <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
-                                      This lead
-                                    </span>
-                                  )}
-                                </span>
-                                <span className="mt-0.5 block truncate text-xs text-foreground-muted">
-                                  {[b.industry, b.company_size && `${b.company_size} people`].filter(Boolean).join(' · ') || '—'}
-                                </span>
-                              </span>
-                              {active && (
-                                <svg className="h-4 w-4 shrink-0 text-sh-ink" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-
-                  {businessId && business && (
+                  ) : businessId && business ? (
+                    // The lead's ONE business profile — auto-selected, no picking.
                     <div className="space-y-4 rounded-lg border border-divider bg-surface-alt p-4">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold text-foreground">{business.name}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-foreground">{business.name}</p>
+                          <p className="mt-0.5 truncate text-xs text-foreground-muted">
+                            {[business.industry, business.company_size && `${business.company_size} people`].filter(Boolean).join(' · ') || '—'}
+                          </p>
+                        </div>
                         <button
                           type="button"
                           onClick={() => setEditingBusiness(true)}
-                          className="rounded-md border border-divider px-3 py-1.5 text-xs font-semibold text-foreground-muted transition hover:border-ink hover:text-foreground"
+                          className="shrink-0 rounded-md border border-divider px-3 py-1.5 text-xs font-semibold text-foreground-muted transition hover:border-ink hover:text-foreground"
                         >
                           Edit profile
                         </button>
                       </div>
                       <BusinessLocationsEditor businessProfileId={business.id} />
                     </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-foreground">Business profile</p>
+                        <button
+                          type="button"
+                          onClick={() => setCreatingBusiness(true)}
+                          className="rounded-md bg-ink px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+                        >
+                          + New business profile
+                        </button>
+                      </div>
+                      <p className="rounded-lg border border-dashed border-divider px-4 py-6 text-center text-xs text-foreground-dim">
+                        No business profile yet — create the one for this lead.
+                      </p>
+                    </>
                   )}
 
                   <div className="flex justify-end border-t border-divider pt-4">
@@ -317,6 +310,7 @@ export default function OnboardingPanel({
                   businessProfileId={businessId}
                   brands={brands}
                   locations={locations}
+                  cardRoleServiceType={card.role_service_type}
                   profile={jobProfileForm.profile}
                   onSaved={(saved) => {
                     setJobProfileForm({ open: false, profile: null });

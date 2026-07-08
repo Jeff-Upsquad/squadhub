@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   BrandProfile,
@@ -35,11 +35,22 @@ const WORK_MODES: { value: JobWorkMode; label: string }[] = [
 
 const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+// Card role_service_type → SquadHire category name, both sides matched
+// NORMALIZED (trim + lowercase) — the live SquadHire category names carry
+// trailing spaces (e.g. "Video Editor ", "Accountant ").
+const normalizeName = (s: string) => s.trim().toLowerCase();
+const ROLE_SERVICE_TYPE_CATEGORY: Record<string, string> = {
+  designers: 'designer',
+  editors: 'video editor',
+  'designer plus editor': 'designer + editor',
+};
+
 export default function JobProfileForm({
   businessProfileId,
   brands,
   locations,
   profile,
+  cardRoleServiceType,
   onSaved,
   onCancel,
 }: {
@@ -48,6 +59,10 @@ export default function JobProfileForm({
   locations: BusinessLocation[];
   /** Existing job profile to edit, or null to create. */
   profile: JobProfile | null;
+  /** The job card's role_service_type when the form was opened from a card
+   *  (e.g. 'Designers' | 'Editors' | 'Designer plus Editor') — used to
+   *  pre-select the matching SquadHire category when creating. */
+  cardRoleServiceType?: string | null;
   onSaved: (profile: JobProfile) => void;
   onCancel?: () => void;
 }) {
@@ -102,6 +117,23 @@ export default function JobProfileForm({
       ),
     [squadhireCategoriesQuery.data],
   );
+
+  // Auto-match from the brief: when CREATING (not editing) and nothing is
+  // selected yet, pre-select the category matching the card's role once the
+  // categories query resolves. At most once (ref guard) so the user can
+  // still remove it.
+  const preselectedCategoryRef = useRef(false);
+  useEffect(() => {
+    if (preselectedCategoryRef.current || profile) return;
+    if (!cardRoleServiceType || squadhireCategories.length === 0 || categoryIds.length > 0) return;
+    preselectedCategoryRef.current = true;
+    const wanted = ROLE_SERVICE_TYPE_CATEGORY[normalizeName(cardRoleServiceType)];
+    if (!wanted) return;
+    const match = squadhireCategories.find((c) => normalizeName(c.name) === wanted);
+    if (match) setCategoryIds([match.id]);
+  }, [profile, cardRoleServiceType, squadhireCategories, categoryIds.length]);
+
+  const unselectedCategories = squadhireCategories.filter((c) => !categoryIds.includes(c.id));
 
   const parseInt0 = (raw: string): number | null => {
     if (!raw.trim()) return null;
@@ -308,28 +340,46 @@ export default function JobProfileForm({
         {squadhireCategories.length === 0 ? (
           <p className="text-xs text-foreground-dim">No categories loaded.</p>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {squadhireCategories.map((c) => {
-              const on = categoryIds.includes(c.id);
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() =>
-                    setCategoryIds((prev) => (prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id]))
-                  }
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                    on
-                      ? 'border-ink bg-sh-lime-soft text-sh-ink shadow-[inset_0_0_0_1px_var(--sh-ink)]'
-                      : 'border-divider bg-surface text-foreground-muted hover:border-ink hover:text-foreground'
-                  }`}
-                >
-                  {on ? '✓ ' : ''}
-                  {c.name}
-                </button>
-              );
-            })}
+          <div className="space-y-2">
+            {categoryIds.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {categoryIds.map((id) => {
+                  const name = (squadhireCategories.find((c) => c.id === id)?.name ?? id).trim();
+                  return (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1 rounded-full border border-ink bg-sh-lime-soft px-2.5 py-0.5 text-xs font-medium text-sh-ink"
+                    >
+                      {name}
+                      <button
+                        type="button"
+                        aria-label={`Remove ${name}`}
+                        onClick={() => setCategoryIds((prev) => prev.filter((x) => x !== id))}
+                        className="text-sh-ink/60 transition hover:text-sh-ink"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            {unselectedCategories.length > 0 && (
+              <select
+                value=""
+                aria-label="Add category"
+                onChange={(e) => {
+                  const id = e.target.value;
+                  if (id) setCategoryIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+                }}
+                className="rounded-md border border-divider bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
+              >
+                <option value="">Add category…</option>
+                {unselectedCategories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name.trim()}</option>
+                ))}
+              </select>
+            )}
           </div>
         )}
       </section>
