@@ -85,6 +85,12 @@ export default function RuleOverridesEditor({
     <div className="space-y-2">
       {RULE_ROWS.map((row) => {
         const mode = rowMode(row, overrides);
+        // Whether the job profile actually sets this rule — clearing an
+        // already-"Any" rule is a no-op, so don't alarm with the red warning.
+        const hasProfileDefault = row.keys.some((k) => {
+          const v = (profileRules as Record<string, unknown>)[k];
+          return Array.isArray(v) ? v.length > 0 : v != null;
+        });
         return (
           <div key={row.id} className="rounded-lg border border-divider bg-surface p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -133,11 +139,16 @@ export default function RuleOverridesEditor({
                 />
               </div>
             )}
-            {mode === 'cleared' && (
-              <p className="mt-2 text-[11px] text-red-600 dark:text-red-400">
-                Rule cleared — the profile default is dropped and this axis matches anyone.
-              </p>
-            )}
+            {mode === 'cleared' &&
+              (hasProfileDefault ? (
+                <p className="mt-2 text-[11px] text-red-600 dark:text-red-400">
+                  Rule cleared — the profile default is dropped and this axis matches anyone.
+                </p>
+              ) : (
+                <p className="mt-2 text-[11px] text-foreground-dim">
+                  Same as Inherited here — the profile default is already Any.
+                </p>
+              ))}
           </div>
         );
       })}
