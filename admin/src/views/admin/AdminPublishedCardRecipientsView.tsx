@@ -139,6 +139,12 @@ const STATUS_PILL: Record<'accepted' | 'rejected' | 'pending', { bg: string; col
   pending: { bg: '#FEF3C7', color: '#92400E' },
 };
 
+// Neutral fallback for any recipient status outside the known set. Talent
+// `status` from SquadHire's live recipients endpoint is type-asserted, not
+// validated (the source DB column is unconstrained text), so an unexpected
+// value must degrade to a plain pill instead of crashing the whole card detail.
+const STATUS_PILL_FALLBACK = { bg: '#EEF2F6', color: '#475569' };
+
 const STATUS_NUMBER: Record<'accepted' | 'rejected' | 'pending', string> = {
   accepted: '#059669',
   rejected: '#DC2626',
@@ -865,7 +871,7 @@ export default function AdminPublishedCardRecipientsView({
   // A merged "All tiers" recipient row — read-only (assignment happens per
   // tier), tagged with the tier it belongs to.
   const renderTierRecipientRow = (r: TieredRecipient) => {
-    const statusCfg = STATUS_PILL[r.status];
+    const statusCfg = STATUS_PILL[r.status] ?? STATUS_PILL_FALLBACK;
     const isQueuedTalent = r.type === 'talent' && r.status === 'pending' && !r.notified_at && !r.responded_at;
     return (
       <div key={`all-${r.tier ?? ''}-${r.type}-${r.id}`} className="sh-card flex items-center gap-3 px-4 py-3">
@@ -1481,7 +1487,7 @@ export default function AdminPublishedCardRecipientsView({
             {/* Recipient list */}
             {allTiersMode ? renderAllTiersList() : (() => {
               const renderRow = (r: UnifiedRecipient) => {
-                const statusCfg = STATUS_PILL[r.status];
+                const statusCfg = STATUS_PILL[r.status] ?? STATUS_PILL_FALLBACK;
                 const rowKey = `${r.type}-${r.id}`;
                 const showCheckbox = canAssign && r.status === 'accepted';
                 // A talent is only "pending a response" once the card has
