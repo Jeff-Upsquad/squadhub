@@ -244,13 +244,9 @@ router.get('/:id/candidates', async (req: Request, res: Response) => {
       if (snap) {
         const mirrorByExternal = new Map<string, MirrorCandidateRow>();
         for (const m of mirrorRows) mirrorByExternal.set(m.external_candidate_id, m);
-        let built = buildLiveCandidates({
-          cardId,
-          live: snap,
-          mirrorByExternal,
-          interviewsByMirrorId: interviewsByCandidate,
-          offersByMirrorId: offersByCandidate,
-        });
+        // Interviews + offers now come from the live snapshot (not the mirror
+        // join); the mirror only supplies per-stage timestamps.
+        let built = buildLiveCandidates({ cardId, live: snap, mirrorByExternal });
         void repairCountersFromLive(cardId, built, snap);
         if (statusFilter) built = built.filter((c) => c.status === statusFilter);
         res.json({ success: true, source: 'live', data: built });

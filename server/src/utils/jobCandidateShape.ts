@@ -47,6 +47,41 @@ export function mapProfilesStageToStatus(stage: string | null | undefined): JobC
 }
 
 // ── Live snapshot payload (mirror of Profiles getCardFunnelSnapshotByExternalId)
+export interface LiveFunnelInterview {
+  invite_id: string;
+  round_number: number | null;
+  round_label: string | null;
+  mode: string | null;
+  window_start: string | null;
+  minutes_per_interview: number | null;
+  meeting_link: string | null;
+  started_at: string | null;
+  location_id: string | null;
+  location_snapshot: Record<string, unknown> | null;
+  rsvp: string | null;
+  queue_status: string | null;
+  outcome: string | null;
+  round_status: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface LiveFunnelOffer {
+  offer_id: string;
+  squadhub_template_id: string | null;
+  delivery_mode: string | null;
+  position_title: string | null;
+  effective_date: string | null;
+  join_by_date: string | null;
+  expires_on: string | null;
+  compensation: Record<string, unknown> | null;
+  letter: Record<string, unknown> | null;
+  status: string;
+  is_final_counter: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 export interface LiveFunnelCandidate {
   candidate_id: string;
   recipient_id: string;
@@ -60,6 +95,109 @@ export interface LiveFunnelCandidate {
   joined_at: string | null;
   joining_date: string | null;
   rejected_reason: string | null;
+  interviews: LiveFunnelInterview[];
+  offers: LiveFunnelOffer[];
+}
+
+// ── Interview mapping (canonical invite+round → JobInterview) ────────────────
+// Status is derived from rsvp + queue_status + outcome (Profiles has no single
+// interview status). Precedence: cancelled → no_show → completed → scheduled.
+// An invited-but-not-yet-responded interview is 'scheduled' to match the
+// event-mirror convention (handleInterviewEvent sets invited/scheduled events
+// to 'scheduled'), so the live view and the mirror agree.
+function deriveInterviewStatus(iv: LiveFunnelInterview): JobInterview['status'] {
+  if (iv.rsvp === 'declined' || iv.round_status === 'cancelled' || iv.queue_status === 'removed') return 'cancelled';
+  if (iv.queue_status === 'no_show' || iv.queue_status === 'not_joined') return 'no_show';
+  if (iv.outcome != null || iv.queue_status === 'done') return 'completed';
+  return 'scheduled';
+}
+
+function mapLiveInterview(cardId: string, candidateId: string, iv: LiveFunnelInterview): JobInterview {
+  const outcome =
+    iv.outcome === 'selected' || iv.outcome === 'rejected' || iv.outcome === 'on_hold' ? iv.outcome : null;
+  return {
+    id: iv.invite_id,
+    card_id: cardId,
+    candidate_id: candidateId,
+    external_interview_id: iv.invite_id,
+    round_number: iv.round_number ?? 1,
+    round_label: iv.round_label ?? null,
+    mode: iv.mode === 'physical' ? 'physical' : 'virtual',
+    scheduled_at: iv.window_start ?? null,
+    duration_minutes: iv.minutes_per_interview ?? null,
+    meeting_link: iv.meeting_link ?? null, // admin always sees it
+    meeting_link_revealed_at: iv.started_at ?? null,
+    location_id: iv.location_id ?? null,
+    location_snapshot: (iv.location_snapshot ?? null) as JobInterview['location_snapshot'],
+    status: deriveInterviewStatus(iv),
+    outcome,
+    outcome_notes: null, // not stored per-invite on Profiles
+    created_at: iv.created_at ?? '',
+    updated_at: iv.updated_at ?? iv.created_at ?? '',
+  };
+}
+
+// ── Offer mapping (canonical job_offers → JobOffer) ──────────────────────────
+const OFFER_STATUS_MAP: Record<string, JobOffer['status']> = {
+  draft: 'draft',
+  sent: 'sent',
+  negotiating: 'negotiation_requested',
+  countered: 'countered',
+  accepted: 'accepted',
+  declined: 'declined',
+  withdrawn: 'withdrawn',
+  expired: 'expired',
+};
+
+function num(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/** Total CTC isn't stored on Profiles — derive the annualised confirmed salary. */
+function deriveTotalCtc(comp: Record<string, unknown> | null): number | null {
+  const confirmed = (comp?.confirmed ?? null) as { amount?: unknown; cadence?: unknown } | null;
+  const amount = num(confirmed?.amount);
+  if (amount == null) return null;
+  return confirmed?.cadence === 'per_month' ? amount * 12 : amount;
+}
+
+function mapLiveOffer(
+  cardId: string,
+  candidateId: string,
+  o: LiveFunnelOffer,
+  revision: number,
+): JobOffer {
+  const comp = (o.compensation ?? {}) as Record<string, unknown>;
+  const letter = (o.letter ?? {}) as Record<string, unknown>;
+  const rendered =
+    typeof letter.rendered_html === 'string'
+      ? (letter.rendered_html as string)
+      : typeof letter.html === 'string'
+        ? (letter.html as string)
+        : null;
+  return {
+    id: o.offer_id,
+    card_id: cardId,
+    candidate_id: candidateId,
+    external_offer_id: o.offer_id,
+    template_id: o.squadhub_template_id ?? null,
+    delivery_mode: o.delivery_mode === 'manual_email' ? 'manual_email' : 'platform',
+    rendered_body_html: rendered,
+    compensation: comp as JobOffer['compensation'],
+    total_ctc: deriveTotalCtc(o.compensation),
+    ctc_currency: typeof comp.currency === 'string' ? (comp.currency as string) : 'INR',
+    position_title: o.position_title ?? null,
+    effective_date: o.effective_date ?? null,
+    join_by_date: o.join_by_date ?? null,
+    joining_date: null, // populated from the candidate row at hire, not the offer
+    offer_expires_at: o.expires_on ?? null,
+    revision,
+    is_final: o.is_final_counter ?? false,
+    status: OFFER_STATUS_MAP[o.status] ?? 'sent',
+    created_by_side: 'admin',
+    created_at: o.created_at ?? '',
+    updated_at: o.updated_at ?? o.created_at ?? '',
+  };
 }
 
 export interface LiveFunnelSnapshot {
@@ -107,26 +245,26 @@ export interface BuildLiveCandidatesInput {
   live: LiveFunnelSnapshot;
   /** Mirror rows keyed by external_candidate_id (= Profiles candidate id). */
   mirrorByExternal: Map<string, MirrorCandidateRow>;
-  /** Interviews/offers keyed by mirror row id (job_card_candidates.id). */
-  interviewsByMirrorId: Record<string, JobInterview[]>;
-  offersByMirrorId: Record<string, JobOffer[]>;
 }
 
 /**
- * Merge the live funnel (authoritative for presence + current status) with the
- * mirror (per-stage timestamps + interview/offer detail). A candidate present
- * live but not yet mirrored — the exact drift case that hid Jeff — still
- * renders, with detail arrays empty until its events land.
+ * Merge the live funnel (authoritative for presence, status, interviews and
+ * offers) with the mirror (per-stage timestamps only). A candidate present
+ * live but not yet mirrored — the exact drift case that hid Jeff — renders in
+ * full, interviews/offers included, because those now come from live too.
  */
 export function buildLiveCandidates(input: BuildLiveCandidatesInput): CandidateWithDetail[] {
-  const { cardId, live, mirrorByExternal, interviewsByMirrorId, offersByMirrorId } = input;
+  const { cardId, live, mirrorByExternal } = input;
   return live.candidates.map((c) => {
     const m = mirrorByExternal.get(c.candidate_id);
     const status = mapProfilesStageToStatus(c.funnel_stage);
-    const mirrorId = m?.id ?? c.candidate_id;
+    const candidateId = m?.id ?? c.candidate_id;
     const isRejected = status === 'rejected';
+    // Offers arrive oldest-first from Profiles; revision = 1-based position.
+    const offers = c.offers.map((o, i) => mapLiveOffer(cardId, candidateId, o, i + 1));
+    const interviews = c.interviews.map((iv) => mapLiveInterview(cardId, candidateId, iv));
     return {
-      id: mirrorId,
+      id: candidateId,
       card_id: cardId,
       external_system: 'squadhire',
       external_candidate_id: c.candidate_id,
@@ -152,8 +290,11 @@ export function buildLiveCandidates(input: BuildLiveCandidatesInput): CandidateW
       snapshot: m?.snapshot ?? {},
       created_at: m?.created_at ?? c.applied_at ?? c.stage_changed_at ?? '',
       updated_at: m?.updated_at ?? c.stage_changed_at ?? '',
-      interviews: interviewsByMirrorId[mirrorId] ?? [],
-      offers: offersByMirrorId[mirrorId] ?? [],
+      interviews,
+      // joining_date on an accepted offer is the candidate's, mirror it through.
+      offers: offers.map((o) =>
+        o.status === 'accepted' ? { ...o, joining_date: c.joining_date ?? o.joining_date } : o,
+      ),
     };
   });
 }
