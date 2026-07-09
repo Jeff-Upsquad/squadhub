@@ -9,6 +9,9 @@ import {
   type JobCardEventType,
 } from '../../utils/jobCardEvents';
 import { DEFAULT_OFFER_LETTER_TEMPLATE } from '../../utils/offerTemplate';
+// Single source of truth for the funnel_stage → mirror status map, shared with
+// the live-read shaper so the event path and live path never disagree.
+import { PROFILES_STAGE_TO_STATUS } from '../../utils/jobCandidateShape';
 
 /**
  * Inbound job events from SquadHire (Profiles).
@@ -193,24 +196,8 @@ async function upsertCandidateMirror(
 // Handlers (each returns the ignored-reason or null on success)
 // ------------------------------------------------------------
 
-// Profiles funnel_stage → mirror status (for generic status updates).
-const PROFILES_STAGE_TO_STATUS: Record<string, string> = {
-  matched: 'matched',
-  applied: 'applied',
-  screening: 'screening',
-  shortlisted: 'shortlisted',
-  interview_invited: 'interview',
-  interview: 'interview',
-  on_hold: 'on_hold',
-  selected: 'interview', // post-interview selection sits in the Interview bucket until an offer goes out
-  offer: 'offer',
-  offer_accepted: 'offer_accepted',
-  hired: 'hired',
-  placed: 'joined',
-  joined: 'joined',
-  rejected: 'rejected',
-  withdrawn: 'withdrawn',
-};
+// Profiles funnel_stage → mirror status: imported from jobCandidateShape (the
+// live-read shaper uses the same map).
 
 const CANDIDATE_EVENTS: Record<string, { patch: CandidatePatch; log: JobCardEventType }> = {
   job_candidate_applied: { patch: { status: 'applied', stampField: 'applied_at' }, log: 'candidate_applied' },

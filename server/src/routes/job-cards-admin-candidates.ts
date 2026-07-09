@@ -4,6 +4,13 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
+import {
+  buildLiveCandidates,
+  rollupCountersFromCandidates,
+  type LiveFunnelSnapshot,
+  type MirrorCandidateRow,
+} from '../utils/jobCandidateShape';
+import type { JobInterview, JobOffer } from '@squadhub/shared';
 
 /**
  * Job Cards — admin candidate/funnel actions.
@@ -54,6 +61,66 @@ function buildUrl(suffix: string): string {
   url.pathname = `${UPSTREAM_BASE_PATH}${suffix}`;
   url.search = '';
   return url.toString();
+}
+
+// ---- Live funnel read (drives GET /:id/candidates) --------------------------
+const LIVE_TIMEOUT_MS = 5_000;
+
+/**
+ * Pull the canonical candidate funnel from Profiles. Returns null on a 4xx
+ * (e.g. card not found — Profiles is up, just fall back to the mirror); throws
+ * on timeout / network / 5xx so the caller can trip the breaker and fall back.
+ */
+async function fetchLiveFunnel(externalId: string): Promise<LiveFunnelSnapshot | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LIVE_TIMEOUT_MS);
+  try {
+    const upstream = await fetch(buildUrl('/snapshot'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SquadHub-Signature': config.squadhireWebhookSecret,
+      },
+      body: JSON.stringify({ external_id: externalId, source: 'squadhub' }),
+      signal: controller.signal,
+    });
+    if (upstream.status >= 500) throw new Error(`upstream ${upstream.status}`);
+    if (!upstream.ok) return null;
+    const json = (await upstream.json()) as { success?: boolean; snapshot?: LiveFunnelSnapshot };
+    return json?.snapshot ?? null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Read-repair the job_cards rollup counters from live truth so the pipeline
+ * list buckets self-heal when an admin opens a drifted card. Fire-and-forget:
+ * a failure here must never break the candidate view. screening_started_at is
+ * first-occurrence-wins (matches the event handler — contract §5).
+ */
+async function repairCountersFromLive(
+  cardId: string,
+  candidates: ReturnType<typeof buildLiveCandidates>,
+  snap: LiveFunnelSnapshot,
+): Promise<void> {
+  try {
+    const patch: Record<string, unknown> = { ...rollupCountersFromCandidates(candidates) };
+    if (snap.card.screening_started_at) {
+      const { data: card } = await supabaseAdmin
+        .from('job_cards')
+        .select('screening_started_at')
+        .eq('id', cardId)
+        .maybeSingle();
+      if (card && !card.screening_started_at) {
+        patch.screening_started_at = snap.card.screening_started_at;
+      }
+    }
+    const { error } = await supabaseAdmin.from('job_cards').update(patch).eq('id', cardId);
+    if (error) console.error('[job-candidates] counter read-repair failed', error.message);
+  } catch (err) {
+    console.error('[job-candidates] counter read-repair error', (err as Error)?.message);
+  }
 }
 
 /**
@@ -128,51 +195,75 @@ async function cardExists(cardId: string): Promise<boolean> {
 }
 
 // ============================================================
-// GET /admin/job-cards/:id/candidates?status= — LOCAL mirror funnel list
+// GET /admin/job-cards/:id/candidates?status= — candidate funnel.
+//
+// Reads the funnel LIVE from SquadHire (canonical owner) so a missed/late
+// outbox event can't hide an applicant, then merges the local mirror for
+// per-stage timestamps + interview/offer detail. Falls back to the mirror
+// alone when SquadHire is unreachable, and read-repairs the rollup counters
+// from live truth so the pipeline list buckets self-heal on view.
 // ============================================================
 router.get('/:id/candidates', async (req: Request, res: Response) => {
   try {
-    let query = supabaseAdmin
-      .from('job_card_candidates')
-      .select('*')
-      .eq('card_id', req.params.id)
-      .order('created_at', { ascending: false });
-    if (typeof req.query.status === 'string' && req.query.status) {
-      query = query.eq('status', req.query.status);
-    }
-    const { data: candidates, error } = await query;
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
+    const cardId = req.params.id as string;
+    const statusFilter =
+      typeof req.query.status === 'string' && req.query.status ? req.query.status : null;
+
+    // Mirror candidates + interviews + offers — the detail store, used by both
+    // the live merge and the fallback path.
+    const [candRes, ivRes, offRes] = await Promise.all([
+      supabaseAdmin.from('job_card_candidates').select('*').eq('card_id', cardId).order('created_at', { ascending: false }),
+      supabaseAdmin.from('job_interviews').select('*').eq('card_id', cardId).order('round_number', { ascending: true }),
+      supabaseAdmin.from('job_offers').select('*').eq('card_id', cardId).order('created_at', { ascending: false }),
+    ]);
+    if (candRes.error) {
+      res.status(500).json({ success: false, error: candRes.error.message });
       return;
     }
-    const list = candidates ?? [];
-    const candidateIds = list.map((c: any) => c.id);
-    const [{ data: interviews }, { data: offers }] = await Promise.all([
-      candidateIds.length > 0
-        ? supabaseAdmin
-            .from('job_interviews')
-            .select('*')
-            .eq('card_id', req.params.id)
-            .order('round_number', { ascending: true })
-        : Promise.resolve({ data: [] } as { data: any[] }),
-      candidateIds.length > 0
-        ? supabaseAdmin
-            .from('job_offers')
-            .select('*')
-            .eq('card_id', req.params.id)
-            .order('created_at', { ascending: false })
-        : Promise.resolve({ data: [] } as { data: any[] }),
-    ]);
-    const interviewsByCandidate: Record<string, any[]> = {};
-    (interviews ?? []).forEach((i: any) => {
-      (interviewsByCandidate[i.candidate_id] = interviewsByCandidate[i.candidate_id] || []).push(i);
+    const mirrorRows = (candRes.data ?? []) as MirrorCandidateRow[];
+    const interviewsByCandidate: Record<string, JobInterview[]> = {};
+    (ivRes.data ?? []).forEach((i: any) => {
+      (interviewsByCandidate[i.candidate_id] = interviewsByCandidate[i.candidate_id] || []).push(i as JobInterview);
     });
-    const offersByCandidate: Record<string, any[]> = {};
-    (offers ?? []).forEach((o: any) => {
-      (offersByCandidate[o.candidate_id] = offersByCandidate[o.candidate_id] || []).push(o);
+    const offersByCandidate: Record<string, JobOffer[]> = {};
+    (offRes.data ?? []).forEach((o: any) => {
+      (offersByCandidate[o.candidate_id] = offersByCandidate[o.candidate_id] || []).push(o as JobOffer);
     });
+
+    // ---- Live-first ---------------------------------------------------------
+    if (configured() && !breakerIsOpen()) {
+      let snap: LiveFunnelSnapshot | null = null;
+      try {
+        snap = await fetchLiveFunnel(cardId);
+        recordSuccess();
+      } catch (err) {
+        recordFailure();
+        console.error('[job-candidates] live funnel fetch failed, using mirror:', (err as Error)?.message);
+        snap = null;
+      }
+      if (snap) {
+        const mirrorByExternal = new Map<string, MirrorCandidateRow>();
+        for (const m of mirrorRows) mirrorByExternal.set(m.external_candidate_id, m);
+        let built = buildLiveCandidates({
+          cardId,
+          live: snap,
+          mirrorByExternal,
+          interviewsByMirrorId: interviewsByCandidate,
+          offersByMirrorId: offersByCandidate,
+        });
+        void repairCountersFromLive(cardId, built, snap);
+        if (statusFilter) built = built.filter((c) => c.status === statusFilter);
+        res.json({ success: true, source: 'live', data: built });
+        return;
+      }
+    }
+
+    // ---- Fallback: local mirror only ---------------------------------------
+    let list = mirrorRows as any[];
+    if (statusFilter) list = list.filter((c) => c.status === statusFilter);
     res.json({
       success: true,
+      source: 'mirror',
       data: list.map((c: any) => ({
         ...c,
         interviews: interviewsByCandidate[c.id] ?? [],
