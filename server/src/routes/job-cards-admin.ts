@@ -1037,59 +1037,110 @@ router.get('/:id/events', async (req: Request, res: Response) => {
 // Q&A — list + moderation delete (proxy + tombstone both sides; the local
 // tombstone survives event replays, contract §7)
 // ============================================================
+// Q&A read: live from SquadHire (so a missed job_question_asked event can't
+// hide a question), falling back to the local mirror. Admin moderation
+// tombstones on the mirror are always honoured — a deleted question never
+// reappears even if the Profiles delete-proxy once failed. id =
+// external_question_id everywhere so DELETE keys the same in both modes.
 router.get('/:id/questions', async (req: Request, res: Response) => {
   try {
-    const { data, error } = await supabaseAdmin
+    const cardId = req.params.id as string;
+    const { data: mirrorRows } = await supabaseAdmin
       .from('job_card_questions')
       .select('*')
-      .eq('card_id', req.params.id)
-      .is('deleted_at', null)
+      .eq('card_id', cardId)
       .order('created_at', { ascending: false });
-    if (error) {
-      res.status(500).json({ success: false, error: error.message });
+    const rows = (mirrorRows ?? []) as any[];
+    const tombstoned = new Set(
+      rows.filter((q) => q.deleted_at).map((q) => q.external_question_id as string),
+    );
+
+    const live = await postJobsWebhook('/questions/list', { external_id: cardId, source: 'squadhub' });
+    if (live.ok && live.body?.success && Array.isArray(live.body.questions)) {
+      const data = (live.body.questions as any[])
+        .filter((q) => !tombstoned.has(q.question_id))
+        .map((q) => ({
+          id: q.question_id,
+          card_id: cardId,
+          job_profile_id: q.job_profile_id ?? null,
+          external_question_id: q.question_id,
+          talent_user_id: q.talent_user_id ?? null,
+          talent_name: q.talent_name ?? null,
+          question: q.question,
+          answer: q.answer ?? null,
+          answered_at: q.answered_at ?? null,
+          answered_by_label: q.answered_by_label ?? null,
+          deleted_at: null,
+          deleted_by: null,
+          created_at: q.created_at ?? '',
+          updated_at: q.updated_at ?? q.created_at ?? '',
+        }));
+      res.json({ success: true, source: 'live', data });
       return;
     }
-    res.json({ success: true, data: data ?? [] });
+
+    // Fallback: local mirror (id = external_question_id to match the live path).
+    const data = rows
+      .filter((q) => !q.deleted_at)
+      .map((q) => ({ ...q, id: q.external_question_id }));
+    res.json({ success: true, source: 'mirror', data });
   } catch (err: any) {
     console.error('List job card questions error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
 
+// :questionId is the external_question_id (Profiles' question id) — that's what
+// the live read returns as `id`. Tombstone the mirror (inserting a tombstone row
+// for a live-only question that was never mirrored) so the deletion holds
+// regardless of the proxy, then proxy the soft-delete to Profiles.
 router.delete('/:id/questions/:questionId', async (req: Request, res: Response) => {
   try {
+    const cardId = req.params.id as string;
+    const externalQuestionId = req.params.questionId as string;
     const { data: question } = await supabaseAdmin
       .from('job_card_questions')
-      .select('id, card_id, external_question_id, deleted_at')
-      .eq('id', req.params.questionId)
-      .eq('card_id', req.params.id)
+      .select('id, deleted_at')
+      .eq('card_id', cardId)
+      .eq('external_question_id', externalQuestionId)
       .maybeSingle();
-    if (!question) {
-      res.status(404).json({ success: false, error: 'Question not found' });
-      return;
-    }
-    if (!question.deleted_at) {
-      const { error } = await supabaseAdmin
-        .from('job_card_questions')
-        .update({ deleted_at: new Date().toISOString(), deleted_by: req.userId! })
-        .eq('id', question.id);
-      if (error) {
-        res.status(500).json({ success: false, error: error.message });
-        return;
+
+    if (question) {
+      if (!question.deleted_at) {
+        const { error } = await supabaseAdmin
+          .from('job_card_questions')
+          .update({ deleted_at: new Date().toISOString(), deleted_by: req.userId! })
+          .eq('id', question.id);
+        if (error) {
+          res.status(500).json({ success: false, error: error.message });
+          return;
+        }
       }
+    } else {
+      // Live-only question (event never mirrored) — record the tombstone so the
+      // live read excludes it even if the proxy below fails. Best-effort.
+      const { error: insErr } = await supabaseAdmin.from('job_card_questions').insert({
+        card_id: cardId,
+        external_question_id: externalQuestionId,
+        question: '[deleted]',
+        deleted_at: new Date().toISOString(),
+        deleted_by: req.userId!,
+      });
+      if (insErr) console.error('[job-questions] tombstone insert failed', insErr.message);
     }
+
     // Best-effort proxy so Profiles tombstones its canonical row too.
     const result = await postJobsWebhook('/questions/delete', {
-      external_id: question.card_id,
-      question_id: question.external_question_id,
+      external_id: cardId,
+      question_id: externalQuestionId,
       source: 'squadhub',
       actor: { type: 'admin', email: req.userEmail ?? null, name: req.userName ?? null },
     });
     await logJobCardEvent({
-      cardId: question.card_id,
+      cardId,
       eventType: 'question_deleted',
       ...adminActor(req),
-      metadata: { question_id: question.id, squadhire_notified: result.ok },
+      metadata: { question_id: externalQuestionId, squadhire_notified: result.ok },
     });
     res.json({ success: true, squadhire_notified: result.ok });
   } catch (err: any) {
