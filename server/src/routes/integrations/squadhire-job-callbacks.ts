@@ -227,18 +227,41 @@ const CANDIDATE_EVENTS: Record<string, { patch: CandidatePatch; log: JobCardEven
   job_candidate_joined: { patch: { status: 'joined', stampField: 'joined_at' }, log: 'candidate_joined' },
 };
 
+const STAGE_STAMP: Record<string, CandidatePatch['stampField']> = {
+  applied: 'applied_at',
+  screening: 'screening_started_at',
+  shortlisted: 'shortlisted_at',
+  interview: 'first_interview_at',
+  offer: 'offered_at',
+  offer_accepted: 'offer_accepted_at',
+  hired: 'hired_at',
+  joined: 'joined_at',
+  rejected: 'rejected_at',
+};
+
 async function handleCandidateEvent(cardId: string, env: Envelope): Promise<string | null> {
   let mapped = CANDIDATE_EVENTS[env.event];
-  if (!mapped && env.event === 'job_candidate_updated') {
-    const stage = str(env.data?.status);
+  // Generic stage-carrying events: `job_candidate_updated` puts the resulting
+  // stage in data.status; `job_candidate_reviewed` (business shortlist /
+  // reject / on-hold / select) puts it in data.to_stage. Both map through
+  // PROFILES_STAGE_TO_STATUS so a single business "review" reaches the mirror.
+  if (!mapped && (env.event === 'job_candidate_updated' || env.event === 'job_candidate_reviewed')) {
+    const stage = str(env.data?.to_stage) || str(env.data?.status);
     const status = stage ? PROFILES_STAGE_TO_STATUS[stage] : undefined;
-    mapped = { patch: status ? { status } : {}, log: 'candidate_updated' };
+    mapped = {
+      patch: status ? { status, stampField: STAGE_STAMP[status] } : {},
+      log: 'candidate_updated',
+    };
   }
   if (!mapped) return 'unknown_event';
 
   const patch: CandidatePatch = { ...mapped.patch, extra: { ...(mapped.patch.extra ?? {}) } };
-  if (env.event === 'job_candidate_rejected') {
-    if (str(env.data?.stage)) patch.extra!.rejection_stage = env.data.stage;
+  // Capture rejection context from an explicit reject OR a review that
+  // resulted in a rejection.
+  const isReviewReject = env.event === 'job_candidate_reviewed' && str(env.data?.to_stage) === 'rejected';
+  if (env.event === 'job_candidate_rejected' || isReviewReject) {
+    const stage = str(env.data?.stage) || str(env.data?.from_stage);
+    if (stage) patch.extra!.rejection_stage = stage;
     if (str(env.data?.reason)) patch.extra!.rejection_reason = env.data.reason;
   }
   if (env.event === 'job_candidate_hired' && str(env.data?.joining_date)) {
