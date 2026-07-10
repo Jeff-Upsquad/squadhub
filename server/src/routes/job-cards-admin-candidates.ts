@@ -407,6 +407,23 @@ router.post('/:id/call-for-interview', async (req: Request, res: Response) => {
         ? PROVIDER_MAP[body.meeting_provider.trim().toLowerCase()] ?? 'other'
         : undefined;
 
+    // Physical rounds: freeze the venue snapshot here. Profiles can't resolve
+    // our business_locations id (different project), so it uses this snapshot
+    // ({label,address,city,region,google_maps_url} — the shape both views read).
+    let locationSnapshot: Record<string, unknown> | null = null;
+    if (body.mode === 'physical' && body.location_id) {
+      const { data: loc } = await supabaseAdmin
+        .from('business_locations')
+        .select('label, address, city, region, google_maps_url')
+        .eq('id', body.location_id)
+        .maybeSingle();
+      if (!loc) {
+        res.status(404).json({ success: false, error: 'Location not found' });
+        return;
+      }
+      locationSnapshot = loc as Record<string, unknown>;
+    }
+
     // Profiles contract (jobsInterviewRoundsWebhookSchema): op + nested round +
     // candidate_ids. Field names are Profiles' (round_no / title).
     await proxyJobAction(req, res, '/interview-rounds', {
@@ -422,6 +439,7 @@ router.post('/:id/call-for-interview', async (req: Request, res: Response) => {
         ...(meetingProvider ? { meeting_provider: meetingProvider } : {}),
         ...(body.mode === 'virtual' && body.meeting_link ? { meeting_link: body.meeting_link } : {}),
         ...(body.location_id ? { location_id: body.location_id } : {}),
+        ...(locationSnapshot ? { location_snapshot: locationSnapshot } : {}),
       },
       candidate_ids: candidateIds,
     });
