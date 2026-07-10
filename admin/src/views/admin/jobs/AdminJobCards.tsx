@@ -559,9 +559,11 @@ function JobCardDetailView({
   const isDraft = card.state === 'new' || card.state === 'onboarding';
   const isPublished = card.state === 'published';
 
-  const candidateTotal =
-    (card.applicants_count ?? 0) + (card.screening_count ?? 0) + (card.shortlisted_count ?? 0) +
-    (card.interview_count ?? 0) + (card.offer_count ?? 0) + (card.hired_count ?? 0) + (card.placed_count ?? 0);
+  // Distinct candidates on the card = everyone who applied. The per-stage
+  // counters (screening/shortlisted/interview/…) are SUBSETS of this as a
+  // candidate progresses, so summing them double-counts (e.g. applied + now
+  // shortlisted = one person, not two).
+  const candidateTotal = card.applicants_count ?? 0;
 
   const actionBtn =
     'rounded-md border border-divider px-3 py-1.5 text-xs font-semibold text-foreground-muted transition hover:border-ink hover:text-foreground disabled:opacity-50';
