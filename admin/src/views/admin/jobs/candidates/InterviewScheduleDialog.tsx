@@ -42,6 +42,9 @@ export default function InterviewScheduleDialog({
   const [provider, setProvider] = useState(PROVIDERS[0]);
   const [meetingLink, setMeetingLink] = useState('');
   const [locationId, setLocationId] = useState('');
+  // Inline "add a new venue" — so admins aren't dead-ended when none are saved.
+  const [addingLocation, setAddingLocation] = useState(false);
+  const [newLoc, setNewLoc] = useState({ label: '', address: '', city: '', region: '', google_maps_url: '' });
 
   const businessProfileId = card.job_profile?.business_profile_id ?? card.business_profile?.id ?? null;
   const { data: locationsRes } = useQuery({
@@ -51,6 +54,27 @@ export default function InterviewScheduleDialog({
     enabled: !!businessProfileId && mode === 'physical',
   });
   const locations: BusinessLocation[] = locationsRes?.data || [];
+
+  const createLocation = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post(`/admin/jobs/business-profiles/${businessProfileId}/locations`, {
+        label: newLoc.label.trim(),
+        address: newLoc.address.trim(),
+        city: newLoc.city.trim() || undefined,
+        region: newLoc.region.trim() || undefined,
+        google_maps_url: newLoc.google_maps_url.trim() || undefined,
+      });
+      return data.data as BusinessLocation;
+    },
+    onSuccess: (loc) => {
+      qc.invalidateQueries({ queryKey: ['admin-job-business-locations', businessProfileId] });
+      setLocationId(loc.id);
+      setAddingLocation(false);
+      setNewLoc({ label: '', address: '', city: '', region: '', google_maps_url: '' });
+      showToast('Location saved.', 'success');
+    },
+    onError: (err: any) => showToast(err?.response?.data?.error || 'Failed to save the location', 'error'),
+  });
 
   // Capacity preview: floor(window / minutes) — mirrors the Profiles-side
   // computation (00104), purely informational here.
@@ -200,17 +224,95 @@ export default function InterviewScheduleDialog({
           ) : (
             <div>
               <label className="mb-1 block text-xs font-medium text-foreground">Location</label>
-              <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className={inputCls}>
-                <option value="">{locations.length === 0 ? 'No saved locations — add one on the business profile' : 'Pick a location'}</option>
-                {locations.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.label} — {[l.address, l.city].filter(Boolean).join(', ')}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-[11px] text-foreground-dim">
-                The venue snapshot (address + Google Maps link) is frozen into the round. Candidates get a reminder a day before.
-              </p>
+              {!addingLocation && locations.length > 0 ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className={inputCls}>
+                      <option value="">Pick a location</option>
+                      {locations.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.label} — {[l.address, l.city].filter(Boolean).join(', ')}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setAddingLocation(true)}
+                      className="shrink-0 whitespace-nowrap rounded-md border border-divider px-3 py-2 text-sm font-medium text-foreground-muted transition hover:text-foreground"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[11px] text-foreground-dim">
+                    The venue snapshot (address + Google Maps link) is frozen into the round. Candidates get a reminder a day before.
+                  </p>
+                </>
+              ) : (
+                <div className="space-y-2 rounded-md border border-divider p-3">
+                  {locations.length === 0 && (
+                    <p className="text-[11px] text-foreground-dim">No saved venues yet — add one below.</p>
+                  )}
+                  <input
+                    type="text"
+                    value={newLoc.label}
+                    onChange={(e) => setNewLoc((s) => ({ ...s, label: e.target.value }))}
+                    placeholder="Venue name (e.g. Head office)"
+                    className={inputCls}
+                  />
+                  <input
+                    type="text"
+                    value={newLoc.address}
+                    onChange={(e) => setNewLoc((s) => ({ ...s, address: e.target.value }))}
+                    placeholder="Full address"
+                    className={inputCls}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={newLoc.city}
+                      onChange={(e) => setNewLoc((s) => ({ ...s, city: e.target.value }))}
+                      placeholder="City"
+                      className={inputCls}
+                    />
+                    <input
+                      type="text"
+                      value={newLoc.region}
+                      onChange={(e) => setNewLoc((s) => ({ ...s, region: e.target.value }))}
+                      placeholder="State / region"
+                      className={inputCls}
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    value={newLoc.google_maps_url}
+                    onChange={(e) => setNewLoc((s) => ({ ...s, google_maps_url: e.target.value }))}
+                    placeholder="Google Maps link (optional)"
+                    className={inputCls}
+                  />
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    {locations.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setAddingLocation(false)}
+                        className="rounded-md px-3 py-1.5 text-sm font-medium text-foreground-muted transition hover:text-foreground"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => createLocation.mutate()}
+                      disabled={!newLoc.label.trim() || !newLoc.address.trim() || createLocation.isPending}
+                      className="rounded-md bg-ink px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                    >
+                      {createLocation.isPending ? 'Saving…' : 'Save & use'}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-foreground-dim">
+                    Saved to this business so you can reuse it. The snapshot is frozen into the round; candidates get a reminder a day before.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
