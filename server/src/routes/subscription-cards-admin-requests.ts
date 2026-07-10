@@ -424,6 +424,10 @@ const clientBriefSchema = z.object({
   start_date: z.string().optional(),
   deadline: z.string().optional(),
   scope_type: z.string().optional(),
+  // How an assignment card is priced to talents. 'priced' shows the budget as
+  // an offer (accept/decline/counter); 'unpriced' invites talents to submit
+  // their own offer. Stored in assignment_details.pricing_mode.
+  pricing_mode: z.enum(['priced', 'unpriced']).optional(),
 });
 
 router.post('/subscription-cards/client-brief', async (req: Request, res: Response) => {
@@ -478,6 +482,7 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
                 start_date: body.start_date || null,
                 deadline: body.deadline || null,
                 scope_type: body.scope_type || null,
+                pricing_mode: body.pricing_mode || 'priced',
               }
             : null,
         working_days: body.working_days || [],

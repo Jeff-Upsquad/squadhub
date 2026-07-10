@@ -81,7 +81,7 @@ export type AdminSubscriptionCard = {
   // + project budget/timeline instead of plan/monthly price). Defaults to
   // 'subscription' on legacy rows.
   card_type?: 'subscription' | 'assignment' | 'hiring' | null;
-  assignment_details?: { duration?: string | null; start_date?: string | null; deadline?: string | null; scope_type?: string | null } | null;
+  assignment_details?: { duration?: string | null; start_date?: string | null; deadline?: string | null; scope_type?: string | null; pricing_mode?: 'priced' | 'unpriced' | null } | null;
   source?: 'submission' | 'request' | 'custom' | null;
   submission?: {
     id: string;

@@ -1871,7 +1871,17 @@ export interface AssignmentDetails {
   deadline?: string | null;
   /** Optional engagement shape, e.g. "one-off", "ongoing". */
   scope_type?: string | null;
+  /**
+   * How the assignment is priced when broadcast to talents.
+   * `priced` (default) — the client budget (proposed_price) is shown to talents
+   * as the offered price; they can accept, decline, or counter-offer.
+   * `unpriced` — no price is shown; talents submit an offer, and the business
+   * reviews/counters/accepts. Drives the offer/negotiation flow in SquadHire.
+   */
+  pricing_mode?: AssignmentPricingMode | null;
 }
+export type AssignmentPricingMode = 'priced' | 'unpriced';
+export const ASSIGNMENT_PRICING_MODES: AssignmentPricingMode[] = ['priced', 'unpriced'];
 /**
  * `broadcast` (default) — at publish time the server fans out to all matching
  * partners and SquadHire broadcasts to its talents. `manual` — no fan-out;
