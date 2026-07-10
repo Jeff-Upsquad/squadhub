@@ -381,16 +381,16 @@ router.post('/:id/call-for-interview', async (req: Request, res: Response) => {
       return;
     }
 
-    // Resolve the audience: "all shortlisted" → the shortlisted mirror rows'
-    // external ids (= Profiles job_candidates ids, which createRound validates).
+    // Resolve the audience. The UI now sends explicit candidate_ids (the live
+    // shortlisted list it displays); "all_shortlisted" is only a fallback and
+    // MUST resolve from live truth, not the mirror (which drifts under
+    // live-read — a shortlist done on SquadHire may still read 'applied' here).
     let candidateIds = body.candidate_ids ?? [];
-    if (body.all_shortlisted) {
-      const { data: sl } = await supabaseAdmin
-        .from('job_card_candidates')
-        .select('external_candidate_id')
-        .eq('card_id', req.params.id)
-        .eq('status', 'shortlisted');
-      candidateIds = (sl ?? []).map((r: any) => r.external_candidate_id as string);
+    if (candidateIds.length === 0 && body.all_shortlisted) {
+      const snap = await fetchLiveFunnel(req.params.id as string).catch(() => null);
+      candidateIds = (snap?.candidates ?? [])
+        .filter((c) => c.funnel_stage === 'shortlisted')
+        .map((c) => c.candidate_id);
     }
     if (candidateIds.length === 0) {
       res.status(400).json({ success: false, error: 'No shortlisted candidates to invite for this round' });

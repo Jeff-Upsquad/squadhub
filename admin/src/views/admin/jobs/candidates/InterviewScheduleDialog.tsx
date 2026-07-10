@@ -94,7 +94,9 @@ export default function InterviewScheduleDialog({
     mutationFn: () => {
       const roundNum = Math.round(Number(roundNumber));
       return api.post(`/admin/job-cards/${card.id}/call-for-interview`, {
-        ...(allShortlisted ? { all_shortlisted: true } : { candidate_ids: candidateIds }),
+        // Send the actual (live) candidate ids the dialog is showing — the
+        // server must not re-resolve "all shortlisted" from its stale mirror.
+        candidate_ids: allShortlisted ? shortlisted.map((c) => c.external_candidate_id) : candidateIds,
         round_number: Number.isFinite(roundNum) && roundNum >= 1 ? roundNum : 1,
         round_label: roundLabel.trim() || undefined,
         mode,
