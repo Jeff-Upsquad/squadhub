@@ -49,11 +49,14 @@ export function mapProfilesStageToStatus(stage: string | null | undefined): JobC
 // ── Live snapshot payload (mirror of Profiles getCardFunnelSnapshotByExternalId)
 export interface LiveFunnelInterview {
   invite_id: string;
+  round_id: string | null;
   round_number: number | null;
   round_label: string | null;
   mode: string | null;
   window_start: string | null;
+  window_end: string | null;
   minutes_per_interview: number | null;
+  meeting_provider: string | null;
   meeting_link: string | null;
   started_at: string | null;
   location_id: string | null;
@@ -120,11 +123,14 @@ function mapLiveInterview(cardId: string, candidateId: string, iv: LiveFunnelInt
     card_id: cardId,
     candidate_id: candidateId,
     external_interview_id: iv.invite_id,
+    external_round_id: iv.round_id ?? null,
     round_number: iv.round_number ?? 1,
     round_label: iv.round_label ?? null,
     mode: iv.mode === 'physical' ? 'physical' : 'virtual',
     scheduled_at: iv.window_start ?? null,
+    window_end: iv.window_end ?? null,
     duration_minutes: iv.minutes_per_interview ?? null,
+    meeting_provider: iv.meeting_provider ?? null,
     meeting_link: iv.meeting_link ?? null, // admin always sees it
     meeting_link_revealed_at: iv.started_at ?? null,
     location_id: iv.location_id ?? null,

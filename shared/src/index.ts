@@ -3581,11 +3581,17 @@ export interface JobInterview {
   card_id: string;
   candidate_id: string;
   external_interview_id: string; // Profiles' invite id (idempotency key)
+  /** Profiles' interview_rounds.id — present only on the live-read path; the
+   *  admin uses it to target a round for edit/reschedule (mirror rows omit it). */
+  external_round_id?: string | null;
   round_number: number;
   round_label: string | null; // 'HR Round', 'Portfolio Review'
   mode: JobInterviewMode;
   scheduled_at: string | null;
+  /** Round window end — for reschedule prefill (live-read path only). */
+  window_end?: string | null;
   duration_minutes: number | null;
+  meeting_provider?: string | null;
   /** Stored for admin visibility; reveal-on-start gating happens on Profiles. */
   meeting_link: string | null;
   meeting_link_revealed_at: string | null;

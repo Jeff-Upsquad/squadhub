@@ -454,6 +454,72 @@ router.post('/:id/call-for-interview', async (req: Request, res: Response) => {
 });
 
 // ============================================================
+// PATCH /admin/job-cards/:id/interview-rounds/:roundId — edit a SCHEDULED
+// round: set/replace the meeting link (before Start Interview) or reschedule
+// the date/time window. Reschedule re-notifies invited candidates on the
+// Profiles side. :roundId is the Profiles interview_rounds.id, surfaced on the
+// live snapshot (JobInterview.external_round_id).
+// ============================================================
+const updateRoundSchema = z
+  .object({
+    meeting_provider: z.string().max(60).optional(),
+    meeting_link: z.string().max(1000).nullable().optional(),
+    window_start: z.string().datetime().optional(),
+    window_end: z.string().datetime().optional(),
+    minutes_per_interview: z.number().int().min(5).max(240).optional(),
+  })
+  .refine(
+    (v) =>
+      v.meeting_link !== undefined ||
+      v.meeting_provider !== undefined ||
+      v.window_start !== undefined ||
+      v.window_end !== undefined ||
+      v.minutes_per_interview !== undefined,
+    { message: 'Provide a meeting link or a new time window' },
+  );
+
+router.patch('/:id/interview-rounds/:roundId', async (req: Request, res: Response) => {
+  try {
+    const body = updateRoundSchema.parse(req.body);
+    if (!(await cardExists(req.params.id as string))) {
+      res.status(404).json({ success: false, error: 'Job card not found' });
+      return;
+    }
+    // Display provider ("Google Meet") → Profiles enum (meet|zoom|teams|other).
+    const PROVIDER_MAP: Record<string, string> = {
+      'google meet': 'meet', meet: 'meet', zoom: 'zoom',
+      'microsoft teams': 'teams', teams: 'teams', other: 'other',
+    };
+    const meetingProvider = body.meeting_provider
+      ? PROVIDER_MAP[body.meeting_provider.trim().toLowerCase()] ?? 'other'
+      : undefined;
+
+    const round: Record<string, unknown> = {
+      ...(body.meeting_link !== undefined ? { meeting_link: body.meeting_link } : {}),
+      ...(meetingProvider ? { meeting_provider: meetingProvider } : {}),
+      ...(body.window_start ? { window_start: body.window_start } : {}),
+      ...(body.window_end ? { window_end: body.window_end } : {}),
+      ...(body.minutes_per_interview ? { minutes_per_interview: body.minutes_per_interview } : {}),
+    };
+
+    // Profiles contract (jobsInterviewRoundsWebhookSchema): op:'update' + round_id + partial round.
+    await proxyJobAction(req, res, '/interview-rounds', {
+      external_id: req.params.id,
+      op: 'update',
+      round_id: req.params.roundId,
+      round,
+    });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Update interview round error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// ============================================================
 // Interview-day actions (mirror of the Profiles day console): showed-up /
 // start (reveals the link to THAT candidate only) / no-show / didn't-join,
 // plus the per-candidate round outcome.
