@@ -270,6 +270,9 @@ export default function ConnectBriefForm({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+  // Assignment only: whether the card is broadcast WITH a price (talents
+  // accept/decline/counter) or WITHOUT (talents submit an offer). Brief-level.
+  const [pricingMode, setPricingMode] = useState<'priced' | 'unpriced'>('priced');
   const [countries, setCountries] = useState<Country[]>([]);
   // Autofill state — silent single-field lookup (email OR phone). On match,
   // pre-fill contact + latest brand + talent prefs. The user can edit
@@ -484,6 +487,7 @@ export default function ConnectBriefForm({
         note?: string; tiers?: string[]; plan?: string;
         tier_budgets?: Record<string, number>;
         budget?: number; duration?: string; start_date?: string; deadline?: string;
+        pricing_mode?: 'priced' | 'unpriced';
       }
     > = {};
     for (const r of roles) {
@@ -506,6 +510,7 @@ export default function ConnectBriefForm({
             ...(duration ? { duration } : {}),
             ...(startDate ? { start_date: startDate } : {}),
             ...(deadline ? { deadline } : {}),
+            pricing_mode: pricingMode,
           };
         }
         continue;
@@ -808,6 +813,37 @@ export default function ConnectBriefForm({
                   : 'Pick the talent experience and a weekly plan per role, add a short note, and a monthly budget per level. All optional — we can finalize on the call.'
               }
             >
+              {product === 'assignment' && (
+                <div className="mb-5 rounded-xl border border-[#E0DCCE] bg-white p-4">
+                  <label className="mb-1 block text-sm font-medium text-[#222]">How do you want to price this?</label>
+                  <p className="mb-3 text-xs text-[#7A7568]">Choose whether talents see a set price or submit their own offers.</p>
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    {([
+                      { value: 'priced' as const, title: 'Send with a price', desc: 'Talents see your budget and can accept, decline, or counter-offer.' },
+                      { value: 'unpriced' as const, title: 'Invite offers', desc: 'No price shown — talents submit an offer and you review, counter, or accept.' },
+                    ]).map((o) => {
+                      const on = pricingMode === o.value;
+                      return (
+                        <button
+                          key={o.value}
+                          type="button"
+                          onClick={() => setPricingMode(o.value)}
+                          aria-pressed={on}
+                          className={`flex items-start gap-3 rounded-xl border p-3.5 text-left transition ${on ? 'border-[#0a0a0a] bg-[#F2FCBC]/50' : 'border-[#E0DCCE] bg-white'}`}
+                        >
+                          <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5] bg-white'}`}>
+                            {on && <span className="h-2 w-2 rounded-full bg-[#0a0a0a]" />}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-[#0a0a0a]">{o.title}</span>
+                            <span className="mt-0.5 block text-xs leading-relaxed text-[#7A7568]">{o.desc}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {ROLE_OPTIONS.filter((o) => roles.includes(o.slug)).map((opt) => {
                 const req = roleRequirements[opt.slug];
                 return (
@@ -845,7 +881,7 @@ export default function ConnectBriefForm({
                             })}
                           </div>
                         </div>
-                        <Field label="Project budget" optional hint={`Total budget for this project in ${currencySymbol}.`}>
+                        <Field label={pricingMode === 'unpriced' ? 'Budget ceiling' : 'Project budget'} optional hint={pricingMode === 'unpriced' ? `Internal maximum — not shown to talents, they submit their own offer. In ${currencySymbol}.` : `Total budget for this project in ${currencySymbol}.`}>
                           <input type="text" inputMode="numeric" pattern="[0-9]*" value={req.budget} onChange={(e) => updateRoleReq(opt.slug, 'budget', e.target.value.replace(/[^0-9]/g, ''))} placeholder={`e.g. ${currencySymbol}50000`} className="connect-input" />
                         </Field>
                         <Field label="Duration / timeline" optional hint="Rough length of the engagement.">

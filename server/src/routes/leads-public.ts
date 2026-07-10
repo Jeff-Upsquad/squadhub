@@ -363,6 +363,10 @@ const submissionSchema = z.object({
         start_date: z.string().trim().max(40).optional(),
         deadline: z.string().trim().max(40).optional(),
         scope_type: z.string().trim().max(100).optional(),
+        // Assignment path: how the card is priced to talents. 'priced' shows the
+        // budget as an offer (accept/decline/counter); 'unpriced' hides it and
+        // invites talents to submit their own offer.
+        pricing_mode: z.enum(['priced', 'unpriced']).optional(),
       }),
     )
     .optional()
@@ -571,6 +575,7 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
                   start_date: roleReq?.start_date || null,
                   deadline: roleReq?.deadline || null,
                   scope_type: roleReq?.scope_type || null,
+                  pricing_mode: roleReq?.pricing_mode || 'priced',
                 }
               : null,
           // Subscriptions: per-tier budgets → tier_pricing (multi-tier fan-out).

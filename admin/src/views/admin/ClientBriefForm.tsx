@@ -206,6 +206,9 @@ export default function ClientBriefForm({
   const [form, setForm] = useState<FormData>(initialForm);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Assignment only: whether the card is broadcast WITH a price (talents
+  // accept/decline/counter) or WITHOUT (talents submit an offer). Brief-level.
+  const [pricingMode, setPricingMode] = useState<'priced' | 'unpriced'>('priced');
 
   const countriesQuery = useQuery({
     queryKey: ['admin-countries'],
@@ -328,6 +331,7 @@ export default function ClientBriefForm({
                   duration: req.duration.trim() || undefined,
                   start_date: req.startDate || undefined,
                   deadline: req.deadline || undefined,
+                  pricing_mode: pricingMode,
                 }
               : {}),
           });
@@ -557,6 +561,37 @@ export default function ClientBriefForm({
                   : 'Pick the talent experience and a weekly plan per role, add a short note, and name a monthly budget. All optional — we can finalize on the call.'
               }
             >
+              {product === 'assignment' && (
+                <div className="mb-5 rounded-xl border border-[#E0DCCE] bg-surface p-4">
+                  <label className="mb-1 block text-sm font-medium text-foreground">How do you want to price this?</label>
+                  <p className="mb-3 text-xs text-foreground-muted">Choose whether talents see a set price or submit their own offers.</p>
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    {([
+                      { value: 'priced' as const, title: 'Send with a price', desc: 'Talents see your budget and can accept, decline, or counter-offer.' },
+                      { value: 'unpriced' as const, title: 'Invite offers', desc: 'No price shown — talents submit an offer and you review, counter, or accept.' },
+                    ]).map((o) => {
+                      const on = pricingMode === o.value;
+                      return (
+                        <button
+                          key={o.value}
+                          type="button"
+                          onClick={() => setPricingMode(o.value)}
+                          aria-pressed={on}
+                          className={`flex items-start gap-3 rounded-xl border p-3.5 text-left transition ${on ? 'border-[#0a0a0a] bg-[#F2FCBC]/50' : 'border-[#E0DCCE] bg-surface'}`}
+                        >
+                          <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5] bg-surface'}`}>
+                            {on && <span className="h-2 w-2 rounded-full bg-[#0a0a0a]" />}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-foreground">{o.title}</span>
+                            <span className="mt-0.5 block text-xs leading-relaxed text-foreground-muted">{o.desc}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {selectedRoles.map((opt) => {
                 const req = getReq(opt.slug);
                 return (
@@ -662,9 +697,9 @@ export default function ClientBriefForm({
                       {product === 'assignment' ? (
                         <>
                           <Field
-                            label="Project budget"
+                            label={pricingMode === 'unpriced' ? 'Budget ceiling' : 'Project budget'}
                             optional
-                            hint={`Total budget for this project in ${currencySymbol}.`}
+                            hint={pricingMode === 'unpriced' ? `Internal maximum — not shown to talents, they submit their own offer. In ${currencySymbol}.` : `Total budget for this project in ${currencySymbol}.`}
                           >
                             <input
                               type="number"

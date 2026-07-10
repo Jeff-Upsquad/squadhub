@@ -775,6 +775,13 @@ export async function buildSquadhirePayloadForCard(
     if (ad && typeof ad === 'object') {
       content.assignment_details = ad;
     }
+    // Unpriced assignments: the client budget is an INTERNAL ceiling the talent
+    // must never see (they submit their own offer). Strip the price fields from
+    // the payload so nothing leaks to the talent card / business portal.
+    if (cardType === 'assignment' && ad?.pricing_mode === 'unpriced') {
+      delete content.monthly_price;
+      delete content.customer_monthly_price;
+    }
   }
 
   const distribution: 'broadcast' | 'manual' =

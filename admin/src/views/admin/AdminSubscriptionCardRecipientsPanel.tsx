@@ -1384,13 +1384,31 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
         )}
       </div>
 
-      <DetailSection title="Plan">
-        <DetailRow label="Plan" value={planNameDisplay} />
-        <DetailRow label="Tier" value={planTierDisplay} />
-        <DetailRow label="Service" value={serviceDisplay} />
-        <DetailRow label="Hours" value={planHoursDisplay} />
-        <DetailRow label="Price" value={planPriceDisplay} />
-      </DetailSection>
+      {card.card_type === 'assignment' ? (
+        <DetailSection title="Assignment">
+          <DetailRow
+            label="Pricing"
+            value={card.assignment_details?.pricing_mode === 'unpriced' ? 'Invite offers — no price shown' : 'Priced — accept / decline / counter'}
+          />
+          <DetailRow
+            label={card.assignment_details?.pricing_mode === 'unpriced' ? 'Budget ceiling' : 'Project budget'}
+            value={card.proposed_price ? `${cur} ${card.proposed_price.toLocaleString()}` : EMPTY}
+          />
+          <DetailRow label="Service" value={serviceDisplay} />
+          <DetailRow label="Duration" value={card.assignment_details?.duration || EMPTY} />
+          <DetailRow label="Start date" value={card.assignment_details?.start_date || EMPTY} />
+          <DetailRow label="Deadline" value={card.assignment_details?.deadline || EMPTY} />
+          <DetailRow label="Scope type" value={card.assignment_details?.scope_type || EMPTY} />
+        </DetailSection>
+      ) : (
+        <DetailSection title="Plan">
+          <DetailRow label="Plan" value={planNameDisplay} />
+          <DetailRow label="Tier" value={planTierDisplay} />
+          <DetailRow label="Service" value={serviceDisplay} />
+          <DetailRow label="Hours" value={planHoursDisplay} />
+          <DetailRow label="Price" value={planPriceDisplay} />
+        </DetailSection>
+      )}
 
       <DetailSection title="Working & business">
         <DetailRow label="Working days" value={card.working_days?.length ? card.working_days.join(' · ') : EMPTY} />

@@ -9,6 +9,7 @@ import CardCodeChip from '@/components/CardCodeChip';
 import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import { openLeadInCRM } from '@/utils/squadCrm';
 import { resolveFinalizedPrice } from '@squadhub/shared';
+import AdminAssignmentOffers from './AdminAssignmentOffers';
 import type { AdminSubscriptionCard } from './AdminSubscriptionCards';
 import type { RecipientsResponse } from './AdminSubscriptionCardRecipientsPanel';
 
@@ -1208,6 +1209,12 @@ export default function AdminSubscriptionCardRecipientsView({
 
             {/* Tier tabs (incl. "All") pinned to the top of the detail. */}
             {tierTabs}
+
+            {/* Assignment offer negotiations — read LIVE from SquadHire (no
+                mirror). Admin can counter / accept (accept = select) / decline. */}
+            {card.card_type === 'assignment' && !allTiersMode && (
+              <AdminAssignmentOffers cardId={card.id} />
+            )}
 
             {/* One-click broadcast for every tier still awaiting broadcast. */}
             {allTiersMode && (
