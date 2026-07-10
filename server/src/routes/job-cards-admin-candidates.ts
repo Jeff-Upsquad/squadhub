@@ -381,34 +381,49 @@ router.post('/:id/call-for-interview', async (req: Request, res: Response) => {
       return;
     }
 
-    let locationSnapshot: Record<string, unknown> | null = null;
-    if (body.mode === 'physical' && body.location_id) {
-      const { data: location } = await supabaseAdmin
-        .from('business_locations')
-        .select('label, address, city, region, google_maps_url, latitude, longitude')
-        .eq('id', body.location_id)
-        .maybeSingle();
-      if (!location) {
-        res.status(404).json({ success: false, error: 'Location not found' });
-        return;
-      }
-      locationSnapshot = location as Record<string, unknown>;
+    // Resolve the audience: "all shortlisted" → the shortlisted mirror rows'
+    // external ids (= Profiles job_candidates ids, which createRound validates).
+    let candidateIds = body.candidate_ids ?? [];
+    if (body.all_shortlisted) {
+      const { data: sl } = await supabaseAdmin
+        .from('job_card_candidates')
+        .select('external_candidate_id')
+        .eq('card_id', req.params.id)
+        .eq('status', 'shortlisted');
+      candidateIds = (sl ?? []).map((r: any) => r.external_candidate_id as string);
+    }
+    if (candidateIds.length === 0) {
+      res.status(400).json({ success: false, error: 'No shortlisted candidates to invite for this round' });
+      return;
     }
 
+    // Display provider ("Google Meet") → Profiles enum (meet|zoom|teams|other).
+    const PROVIDER_MAP: Record<string, string> = {
+      'google meet': 'meet', meet: 'meet', zoom: 'zoom',
+      'microsoft teams': 'teams', teams: 'teams', other: 'other',
+    };
+    const meetingProvider =
+      body.mode === 'virtual' && body.meeting_provider
+        ? PROVIDER_MAP[body.meeting_provider.trim().toLowerCase()] ?? 'other'
+        : undefined;
+
+    // Profiles contract (jobsInterviewRoundsWebhookSchema): op + nested round +
+    // candidate_ids. Field names are Profiles' (round_no / title).
     await proxyJobAction(req, res, '/interview-rounds', {
       external_id: req.params.id,
-      candidate_ids: body.candidate_ids ?? null,
-      all_shortlisted: body.all_shortlisted ?? false,
-      round_number: body.round_number ?? 1,
-      round_label: body.round_label ?? null,
-      mode: body.mode,
-      window_start: body.window_start,
-      window_end: body.window_end,
-      minutes_per_interview: body.minutes_per_interview,
-      meeting_provider: body.meeting_provider ?? null,
-      meeting_link: body.meeting_link ?? null,
-      location_id: body.location_id ?? null,
-      location_snapshot: locationSnapshot,
+      op: 'create',
+      round: {
+        round_no: body.round_number ?? 1,
+        ...(body.round_label ? { title: body.round_label } : {}),
+        mode: body.mode,
+        window_start: body.window_start,
+        window_end: body.window_end,
+        minutes_per_interview: body.minutes_per_interview,
+        ...(meetingProvider ? { meeting_provider: meetingProvider } : {}),
+        ...(body.mode === 'virtual' && body.meeting_link ? { meeting_link: body.meeting_link } : {}),
+        ...(body.location_id ? { location_id: body.location_id } : {}),
+      },
+      candidate_ids: candidateIds,
     });
   } catch (err: any) {
     if (err instanceof z.ZodError) {

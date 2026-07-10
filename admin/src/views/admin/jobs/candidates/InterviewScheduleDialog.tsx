@@ -34,8 +34,10 @@ export default function InterviewScheduleDialog({
   const [roundNumber, setRoundNumber] = useState('1');
   const [roundLabel, setRoundLabel] = useState('');
   const [mode, setMode] = useState<JobInterviewMode>('virtual');
-  const [windowStart, setWindowStart] = useState('');
-  const [windowEnd, setWindowEnd] = useState('');
+  // Interview slot = one date + a start/end time window on that day.
+  const [interviewDate, setInterviewDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
   const [minutes, setMinutes] = useState('30');
   const [provider, setProvider] = useState(PROVIDERS[0]);
   const [meetingLink, setMeetingLink] = useState('');
@@ -53,13 +55,13 @@ export default function InterviewScheduleDialog({
   // Capacity preview: floor(window / minutes) — mirrors the Profiles-side
   // computation (00104), purely informational here.
   const capacity = useMemo(() => {
-    if (!windowStart || !windowEnd) return null;
-    const start = new Date(windowStart).getTime();
-    const end = new Date(windowEnd).getTime();
+    if (!interviewDate || !startTime || !endTime) return null;
+    const start = new Date(`${interviewDate}T${startTime}`).getTime();
+    const end = new Date(`${interviewDate}T${endTime}`).getTime();
     const mins = Number(minutes);
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || !Number.isFinite(mins) || mins <= 0) return null;
     return Math.floor((end - start) / 60000 / mins);
-  }, [windowStart, windowEnd, minutes]);
+  }, [interviewDate, startTime, endTime, minutes]);
 
   const toggleCandidate = (id: string) =>
     setCandidateIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -72,8 +74,8 @@ export default function InterviewScheduleDialog({
         round_number: Number.isFinite(roundNum) && roundNum >= 1 ? roundNum : 1,
         round_label: roundLabel.trim() || undefined,
         mode,
-        window_start: new Date(windowStart).toISOString(),
-        window_end: new Date(windowEnd).toISOString(),
+        window_start: new Date(`${interviewDate}T${startTime}`).toISOString(),
+        window_end: new Date(`${interviewDate}T${endTime}`).toISOString(),
         minutes_per_interview: Math.round(Number(minutes)),
         ...(mode === 'virtual'
           ? { meeting_provider: provider, meeting_link: meetingLink.trim() }
@@ -93,8 +95,10 @@ export default function InterviewScheduleDialog({
 
   const canSubmit =
     (allShortlisted || candidateIds.length > 0) &&
-    !!windowStart &&
-    !!windowEnd &&
+    !!interviewDate &&
+    !!startTime &&
+    !!endTime &&
+    endTime > startTime &&
     Number(minutes) >= 5 &&
     (mode === 'virtual' ? !!meetingLink.trim() : !!locationId);
 
@@ -211,20 +215,27 @@ export default function InterviewScheduleDialog({
           )}
 
           {/* Window + capacity */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-foreground">Interview date</label>
+            <input type="date" value={interviewDate} onChange={(e) => setInterviewDate(e.target.value)} className={inputCls} />
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-foreground">Window start</label>
-              <input type="datetime-local" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} className={inputCls} />
+              <label className="mb-1 block text-xs font-medium text-foreground">Start time</label>
+              <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-foreground">Window end</label>
-              <input type="datetime-local" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} className={inputCls} />
+              <label className="mb-1 block text-xs font-medium text-foreground">End time</label>
+              <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-foreground">Minutes / interview</label>
               <input type="number" min={5} max={240} value={minutes} onChange={(e) => setMinutes(e.target.value)} className={inputCls} />
             </div>
           </div>
+          {startTime && endTime && endTime <= startTime && (
+            <p className="text-[11px] text-red-500">End time must be after the start time.</p>
+          )}
           {capacity != null && (
             <p className="rounded-md bg-canvas px-3 py-2 text-xs text-foreground-muted">
               Capacity: <span className="font-semibold text-foreground">{capacity}</span> interview{capacity === 1 ? '' : 's'} fit in this
