@@ -273,34 +273,20 @@ export default function ClientBriefForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (!form.contact_name.trim() || !form.email.trim() || !form.phone.trim()) {
-      setError('Contact name, email, and phone are required.');
-      return;
-    }
-    if (!form.brand_name.trim() || !form.business_nature.trim() || !form.business_note.trim()) {
-      setError('Brand name, nature of business, and a short note are required.');
-      return;
-    }
-    if (!form.country_id) {
-      setError('Please select a country.');
-      return;
-    }
-    if (form.languages.length === 0) {
-      setError('Please select at least one language.');
-      return;
-    }
-    if (product !== 'assignment' && form.working_days.length === 0) {
-      setError('Please select at least one working day.');
-      return;
-    }
+    // Admin-only clone: no field is mandatory here (unlike the public /connect
+    // form). The salesperson may only have partial client details and fill the
+    // rest in later, so we skip required-field checks. The backend accepts
+    // every field as optional — only service_type is required server-side.
 
     const shared = {
-      brand_name: form.brand_name.trim(),
-      business_nature: form.business_nature.trim(),
-      business_note: form.business_note.trim(),
-      contact_name: form.contact_name.trim(),
-      email: form.email.trim(),
-      phone: `${form.country_code} ${form.phone.trim()}`.trim(),
+      brand_name: form.brand_name.trim() || undefined,
+      business_nature: form.business_nature.trim() || undefined,
+      business_note: form.business_note.trim() || undefined,
+      contact_name: form.contact_name.trim() || undefined,
+      // Send undefined (not "") when blank — the backend's email() check
+      // would otherwise reject an empty string.
+      email: form.email.trim() || undefined,
+      phone: form.phone.trim() ? `${form.country_code} ${form.phone.trim()}`.trim() : undefined,
       business_location: form.business_location.trim() || undefined,
       country_id: form.country_id || undefined,
       state_regions: form.state_regions,
@@ -465,7 +451,7 @@ export default function ClientBriefForm({
               hint="How we'll reach you to confirm and schedule the kickoff call."
             >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Email" required>
+                <Field label="Email" optional>
                   <input
                     type="email"
                     value={form.email}
@@ -474,7 +460,7 @@ export default function ClientBriefForm({
                     className="connect-input"
                   />
                 </Field>
-                <Field label="Phone" required hint="Ideally a WhatsApp number">
+                <Field label="Phone" optional hint="Ideally a WhatsApp number">
                   <div className="connect-phone">
                     <select
                       value={form.country_code}
@@ -497,7 +483,7 @@ export default function ClientBriefForm({
                     />
                   </div>
                 </Field>
-                <Field label="Contact Person Name" required>
+                <Field label="Contact Person Name" optional>
                   <input
                     type="text"
                     value={form.contact_name}
@@ -514,7 +500,7 @@ export default function ClientBriefForm({
               title="About your brand"
               hint="Helps creators understand your space and pitch ideas that fit."
             >
-              <Field label="Brand Name" required>
+              <Field label="Brand Name" optional>
                 <input
                   type="text"
                   value={form.brand_name}
@@ -523,7 +509,7 @@ export default function ClientBriefForm({
                   className="connect-input"
                 />
               </Field>
-              <Field label="Nature of Business" required>
+              <Field label="Nature of Business" optional>
                 <input
                   type="text"
                   value={form.business_nature}
@@ -532,7 +518,7 @@ export default function ClientBriefForm({
                   className="connect-input"
                 />
               </Field>
-              <Field label="Short Note About the Business" required>
+              <Field label="Short Note About the Business" optional>
                 <textarea
                   rows={3}
                   value={form.business_note}
@@ -781,7 +767,7 @@ export default function ClientBriefForm({
               title="Who you'd like to work with"
               hint="Where the talent should be based, what they should speak, and when they should work."
             >
-              <Field label="Country" required hint="India is the default. Pick a different country if your talent should be elsewhere.">
+              <Field label="Country" optional hint="India is the default. Pick a different country if your talent should be elsewhere.">
                 <select
                   value={form.country_id}
                   onChange={(e) => changeCountry(e.target.value)}
@@ -807,7 +793,7 @@ export default function ClientBriefForm({
               <ChipField
                 label="Languages"
                 hint="Languages the talent should be fluent in. Pick all that apply."
-                required
+                optional
                 options={languageOptions}
                 selected={form.languages}
                 onToggle={(v) => toggle('languages', v)}
@@ -1061,7 +1047,7 @@ function WorkingDaysSelector({
   return (
     <div>
       <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-foreground">
-        <span>Working Days<span className="text-[#C13515]">*</span></span>
+        <span>Working Days <span className="text-xs font-normal text-foreground-muted">(optional)</span></span>
       </label>
       <p className="mb-2 text-xs text-foreground-muted">
         Days you need the talent to be available — we&apos;ll match people whose schedule fits yours.
