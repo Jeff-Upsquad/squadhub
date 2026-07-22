@@ -38,14 +38,23 @@ interface SubscriptionRequest {
   verified_at?: string | null;
 }
 
-export default function AdminRequestsList() {
+export default function AdminRequestsList({
+  cardType = 'subscription',
+}: {
+  // Product line this New Deals queue is scoped to. The Assignments module
+  // passes 'assignment' so only assignment briefs show; the legacy upsquad
+  // subscription-request source is subscription-only and hidden for assignments.
+  cardType?: 'subscription' | 'assignment';
+} = {}) {
   const [search, setSearch] = useState<string>('');
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [shareCardId, setShareCardId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const isAssignment = cardType === 'assignment';
 
   // Server returns all statuses; sub-tabs filter client-side so counts stay
-  // accurate without a per-tab fetch.
+  // accurate without a per-tab fetch. The legacy upsquad subscription-request
+  // queue has no product line, so it's only shown in the Subscription module.
   const { data: res, isLoading } = useQuery({
     queryKey: ['admin-subscription-requests', search],
     queryFn: () => {
@@ -53,10 +62,11 @@ export default function AdminRequestsList() {
       if (search.trim()) params.search = search.trim();
       return api.get('/admin/subscription-requests', { params }).then((r) => r.data);
     },
+    enabled: !isAssignment,
   });
-  const upsquadRequests: SubscriptionRequest[] = (res?.data || []).map(
-    (r: any) => ({ ...r, source: 'request' as const }),
-  );
+  const upsquadRequests: SubscriptionRequest[] = isAssignment
+    ? []
+    : (res?.data || []).map((r: any) => ({ ...r, source: 'request' as const }));
 
   // Form submissions (Shared Form via /connect, plus Landing Page entries
   // from the marketing site) live in subscription_cards. New Deals only shows
@@ -94,26 +104,26 @@ export default function AdminRequestsList() {
   }
 
   const { data: sharedRes, isLoading: sharedLoading } = useQuery({
-    queryKey: ['admin-shared-form-submissions', search],
+    queryKey: ['admin-shared-form-submissions', cardType, search],
     queryFn: () => {
-      const params: Record<string, string> = { source: 'shared_form', state: 'new,draft' };
+      const params: Record<string, string> = { source: 'shared_form', state: 'new,draft', card_type: cardType };
       if (search.trim()) params.search = search.trim();
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
   });
   const { data: lpRes, isLoading: lpLoading } = useQuery({
-    queryKey: ['admin-landing-page-submissions', search],
+    queryKey: ['admin-landing-page-submissions', cardType, search],
     queryFn: () => {
-      const params: Record<string, string> = { source: 'landing_page_form', state: 'new,draft' };
+      const params: Record<string, string> = { source: 'landing_page_form', state: 'new,draft', card_type: cardType };
       if (search.trim()) params.search = search.trim();
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },
   });
   // Internal client briefs (Workflow 1) also land in the New Deals queue.
   const { data: briefRes, isLoading: briefLoading } = useQuery({
-    queryKey: ['admin-internal-brief-submissions', search],
+    queryKey: ['admin-internal-brief-submissions', cardType, search],
     queryFn: () => {
-      const params: Record<string, string> = { source: 'internal_brief', state: 'new,draft' };
+      const params: Record<string, string> = { source: 'internal_brief', state: 'new,draft', card_type: cardType };
       if (search.trim()) params.search = search.trim();
       return api.get('/admin/subscription-cards', { params }).then((r) => r.data);
     },

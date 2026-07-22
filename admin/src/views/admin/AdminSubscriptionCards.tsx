@@ -342,7 +342,15 @@ const EMPTY_COPY: Record<(typeof CARD_LIST_TABS)[number], { title: string; hint:
   },
 };
 
-export default function AdminSubscriptionCards() {
+export default function AdminSubscriptionCards({
+  productLine = 'subscription',
+}: {
+  // Which product line this module renders. 'subscription' (default) is the
+  // Subscription Cards module; 'assignment' is the separate Assignments module.
+  // Every card query is scoped to it so the two modules never show each other's
+  // cards, and the brief launcher only offers the matching brief types.
+  productLine?: 'subscription' | 'assignment';
+} = {}) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -385,9 +393,9 @@ export default function AdminSubscriptionCards() {
   // the Archive tab folds in); the archived query drives the rest of Archive.
   // Both run regardless of the active tab so every tab's count stays live.
   const { data: activeCardsRes, isLoading: activeLoading, isFetching: activeFetching } = useQuery({
-    queryKey: ['admin-subscription-cards', publishedBy, debouncedSearch, 'active', selectedCardId],
+    queryKey: ['admin-subscription-cards', productLine, publishedBy, debouncedSearch, 'active', selectedCardId],
     queryFn: () => {
-      const params: Record<string, string> = {};
+      const params: Record<string, string> = { card_type: productLine };
       if (publishedBy) params.published_by = publishedBy;
       if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
       if (selectedCardId) params.card_id = selectedCardId;
@@ -402,9 +410,9 @@ export default function AdminSubscriptionCards() {
   const activeCards: AdminSubscriptionCard[] = activeCardsRes?.data || [];
 
   const { data: archivedCardsRes, isLoading: archivedLoading, isFetching: archivedFetching } = useQuery({
-    queryKey: ['admin-subscription-cards', publishedBy, debouncedSearch, 'archived', selectedCardId],
+    queryKey: ['admin-subscription-cards', productLine, publishedBy, debouncedSearch, 'archived', selectedCardId],
     queryFn: () => {
-      const params: Record<string, string> = { archived: 'true' };
+      const params: Record<string, string> = { archived: 'true', card_type: productLine };
       if (publishedBy) params.published_by = publishedBy;
       if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
       if (selectedCardId) params.card_id = selectedCardId;
@@ -783,8 +791,8 @@ export default function AdminSubscriptionCards() {
         </div>
       ) : null}
 
-      {!showDetailView && activeTab === 'requests' && <AdminRequestsList />}
-      {!showDetailView && activeTab === 'custom' && <AdminCustomCardsList />}
+      {!showDetailView && activeTab === 'requests' && <AdminRequestsList cardType={productLine} />}
+      {!showDetailView && activeTab === 'custom' && <AdminCustomCardsList cardType={productLine} />}
 
       {selectedCard && showPanel && (
         <AdminSubscriptionCardRecipientsPanel
@@ -804,7 +812,7 @@ export default function AdminSubscriptionCards() {
           Pick a brief type. You&apos;ll fill out the client brief form, and it lands in New Deals.
         </p>
         <div className="space-y-3">
-          {BRIEF_LAUNCHERS.map((t) => (
+          {BRIEF_LAUNCHERS.filter((t) => t.product === productLine).map((t) => (
             <button
               key={t.key}
               type="button"
