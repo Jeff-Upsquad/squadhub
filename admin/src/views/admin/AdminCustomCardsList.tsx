@@ -17,21 +17,25 @@ interface CustomCard {
   created_at: string;
 }
 
-export default function AdminCustomCardsList() {
+export default function AdminCustomCardsList({
+  cardType = 'subscription',
+}: {
+  cardType?: 'subscription' | 'assignment';
+} = {}) {
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: res, isLoading } = useQuery({
-    queryKey: ['admin-custom-cards'],
+    queryKey: ['admin-custom-cards', cardType],
     queryFn: () =>
-      api.get('/admin/subscription-cards', { params: { source: 'custom' } }).then((r) => r.data),
+      api.get('/admin/subscription-cards', { params: { source: 'custom', card_type: cardType } }).then((r) => r.data),
   });
 
   // Also fetch drafts (the main endpoint defaults to published+closed)
   const { data: draftsRes } = useQuery({
-    queryKey: ['admin-custom-cards-drafts'],
+    queryKey: ['admin-custom-cards-drafts', cardType],
     queryFn: () =>
-      api.get('/admin/subscription-cards', { params: { source: 'custom', state: 'draft' } }).then((r) => r.data),
+      api.get('/admin/subscription-cards', { params: { source: 'custom', state: 'draft', card_type: cardType } }).then((r) => r.data),
   });
 
   const publishedCards: CustomCard[] = res?.data || [];

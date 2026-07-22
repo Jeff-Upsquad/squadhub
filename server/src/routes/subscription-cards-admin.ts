@@ -48,6 +48,10 @@ router.get('/', async (req: Request, res: Response) => {
     const showArchived = archivedParam === 'true';
     const submissionIdParam = String(req.query.submission_id || '').trim();
     const cardIdParam = String(req.query.card_id || '').trim();
+    // Product-line filter for the separate admin modules: 'assignment' shows
+    // only freelance assignment cards; 'subscription' excludes them (the
+    // Subscription Cards module). Absent = all types (back-compat).
+    const cardTypeParam = String(req.query.card_type || '').trim();
 
     let query = supabaseAdmin
       .from('subscription_cards')
@@ -90,6 +94,13 @@ router.get('/', async (req: Request, res: Response) => {
       query = query.eq('source', sourceParam);
     }
     if (publishedBy) query = query.eq('published_by', publishedBy);
+
+    // Product-line scoping for the separate admin modules.
+    if (cardTypeParam === 'assignment') {
+      query = query.eq('card_type', 'assignment');
+    } else if (cardTypeParam === 'subscription') {
+      query = query.neq('card_type', 'assignment');
+    }
 
     // Scope to a single lead's cards. The Lead detail panel calls this to
     // list every card associated with a submission via any of the known
