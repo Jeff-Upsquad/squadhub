@@ -10,10 +10,11 @@ import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import { openLeadInCRM } from '@/utils/squadCrm';
 import { resolveFinalizedPrice } from '@squadhub/shared';
 import AdminAssignmentOffers from './AdminAssignmentOffers';
+import CardViewToggle, { type CardViewMode } from './CardViewToggle';
 import type { AdminSubscriptionCard } from './AdminSubscriptionCards';
 import type { RecipientsResponse } from './AdminSubscriptionCardRecipientsPanel';
 
-type UnifiedRecipient = {
+export type UnifiedRecipient = {
   id: string;
   name: string;
   type: 'partner' | 'talent';
@@ -41,7 +42,7 @@ type UnifiedRecipient = {
   assigned: boolean;
 };
 
-type SquadHireTalent = {
+export type SquadHireTalent = {
   talent_user_id: string;
   talent_name: string;
   status: 'pending' | 'accepted' | 'rejected';
@@ -76,7 +77,7 @@ const tierLabelOf = (c: AdminSubscriptionCard): string | null =>
 // are deduped in favour of the local row (it carries response + selection
 // state); SquadHire supplies emails and the not-yet-responded pool. Shared by
 // the single-tier view and the per-sibling "All" aggregation.
-function buildUnifiedRecipients(
+export function buildUnifiedRecipients(
   data: RecipientsResponse | undefined,
   squadhireTalents: SquadHireTalent[],
   card: Pick<AdminSubscriptionCard, 'selected_recipient_id' | 'selected_recipient_type'>,
@@ -160,7 +161,7 @@ function buildUnifiedRecipients(
   return [...partners, ...localTalents, ...remoteTalents];
 }
 
-function formatRelative(iso: string | null): string {
+export function formatRelative(iso: string | null): string {
   if (!iso) return '';
   const then = new Date(iso).getTime();
   const diff = Date.now() - then;
@@ -177,7 +178,7 @@ function formatRelative(iso: string | null): string {
 // The SquadHire review funnel, layered over the talent's broadcast response.
 // Mutually exclusive — every recipient maps to exactly one bucket (see bucketOf)
 // so the tab counts sum to the total.
-type Bucket = 'accepted' | 'shortlisted' | 'selected' | 'assigned' | 'rejected' | 'pending';
+export type Bucket = 'accepted' | 'shortlisted' | 'selected' | 'assigned' | 'rejected' | 'pending';
 
 type StatusTab = 'all' | Bucket;
 
@@ -202,7 +203,7 @@ const STATUS_PILL_FALLBACK = { bg: '#EEF2F6', color: '#475569' };
 // === 'rejected' (the business passed the talent over) is NOT its own bucket —
 // those stay under 'accepted' with the existing "Not selected" pill, mirroring
 // the business portal which hides them from the funnel.
-function bucketOf(r: UnifiedRecipient): Bucket {
+export function bucketOf(r: UnifiedRecipient): Bucket {
   if (r.assigned) return 'assigned';
   if (r.selected_at) return 'selected';
   if (r.status === 'rejected') return 'rejected';
@@ -271,6 +272,8 @@ export default function AdminSubscriptionCardRecipientsView({
   tierTabs,
   groupCards,
   allTiersMode = false,
+  viewMode,
+  onSetViewMode,
 }: {
   card: AdminSubscriptionCard;
   title: string;
@@ -286,6 +289,10 @@ export default function AdminSubscriptionCardRecipientsView({
   groupCards?: AdminSubscriptionCard[];
   // True when the "All" tier tab is active — render the merged cross-tier view.
   allTiersMode?: boolean;
+  // Card-detail view switcher (Admin funnel ↔ read-only Client view). When
+  // provided, a CardViewToggle renders in the header. Undefined = no toggle.
+  viewMode?: CardViewMode;
+  onSetViewMode?: (m: CardViewMode) => void;
 }) {
   const [activeTab, setActiveTab] = useState<StatusTab>('all');
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
@@ -1024,15 +1031,20 @@ export default function AdminSubscriptionCardRecipientsView({
             </svg>
             Back to Subscription Cards
           </button>
-          <button
-            onClick={onOpenPanel}
-            className="sh-btn-ghost sh-btn-ghost-sm"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
-            </svg>
-            Card Details
-          </button>
+          <div className="flex items-center gap-2">
+            {viewMode && onSetViewMode && (
+              <CardViewToggle viewMode={viewMode} onSetViewMode={onSetViewMode} />
+            )}
+            <button
+              onClick={onOpenPanel}
+              className="sh-btn-ghost sh-btn-ghost-sm"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+              </svg>
+              Card Details
+            </button>
+          </div>
         </div>
         <div className="sh-card p-6">
           <div className="flex flex-wrap items-center gap-2 mb-3">

@@ -8,6 +8,8 @@ import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 import AdminSubscriptionCardRecipientsPanel from './AdminSubscriptionCardRecipientsPanel';
 import AdminSubscriptionCardRecipientsView from './AdminSubscriptionCardRecipientsView';
+import AdminCardClientPreview from './AdminCardClientPreview';
+import type { CardViewMode } from './CardViewToggle';
 import AdminRequestsList from './AdminRequestsList';
 import AdminCustomCardsList from './AdminCustomCardsList';
 import SliderPanel from './clients/SliderPanel';
@@ -367,6 +369,10 @@ export default function AdminSubscriptionCards({
   }, [search]);
   const [groupBy, setGroupBy] = useState<GroupBy>('status');
   const [showPanel, setShowPanel] = useState(false);
+  // Card-detail view mode: the admin recipients funnel ('admin') or the
+  // read-only "Client view" ('client') that mirrors the SquadHire business
+  // review screen. Reset to 'admin' whenever the detail collapses to the list.
+  const [cardViewMode, setCardViewMode] = useState<CardViewMode>('admin');
   const [showBriefSlider, setShowBriefSlider] = useState(false);
   // The chosen launcher: which product (subscription/assignment) + role type
   // the brief form opens with. null = no form open.
@@ -538,6 +544,13 @@ export default function AdminSubscriptionCards({
     () => allLoadedCards.find((c) => c.id === selectedCardId) || null,
     [allLoadedCards, selectedCardId],
   );
+
+  // Collapsing the detail back to the list resets the view mode, so the next
+  // card always opens in the admin funnel (not whatever the last card used).
+  // Switching tiers keeps selectedCardId non-null, so the mode persists there.
+  useEffect(() => {
+    if (!selectedCardId) setCardViewMode('admin');
+  }, [selectedCardId]);
 
   // The per-tier sibling cards of the opened brief (tier-ordered), so the detail
   // view can show a tab per tier. Empty for single-tier / ungrouped cards.
@@ -737,24 +750,47 @@ export default function AdminSubscriptionCards({
       )}
 
       {selectedCard ? (
-        <AdminSubscriptionCardRecipientsView
-          key={selectedCard.id}
-          card={selectedCard}
-          title={subscriptionCardTitle(selectedCard)}
-          onBack={() => { setSelectedCardId(null); setShowPanel(false); }}
-          onOpenPanel={() => setShowPanel(true)}
-          groupCards={selectedGroupCards}
-          allTiersMode={allTiersMode}
-          tierTabs={selectedGroupCards.length > 1 ? (
-            <DetailTierTabs
-              cards={selectedGroupCards}
-              activeId={selectedCard.id}
-              allActive={allTiersMode}
-              onSelect={selectTierCard}
-              onSelectAll={selectAllTiers}
-            />
-          ) : undefined}
-        />
+        cardViewMode === 'client' ? (
+          <AdminCardClientPreview
+            key={`client-${selectedCard.id}`}
+            card={selectedCard}
+            title={subscriptionCardTitle(selectedCard)}
+            onBack={() => { setSelectedCardId(null); setShowPanel(false); }}
+            onOpenPanel={() => setShowPanel(true)}
+            viewMode={cardViewMode}
+            onSetViewMode={setCardViewMode}
+            tierTabs={selectedGroupCards.length > 1 ? (
+              <DetailTierTabs
+                cards={selectedGroupCards}
+                activeId={selectedCard.id}
+                allActive={allTiersMode}
+                onSelect={selectTierCard}
+                onSelectAll={selectAllTiers}
+              />
+            ) : undefined}
+          />
+        ) : (
+          <AdminSubscriptionCardRecipientsView
+            key={selectedCard.id}
+            card={selectedCard}
+            title={subscriptionCardTitle(selectedCard)}
+            onBack={() => { setSelectedCardId(null); setShowPanel(false); }}
+            onOpenPanel={() => setShowPanel(true)}
+            groupCards={selectedGroupCards}
+            allTiersMode={allTiersMode}
+            viewMode={cardViewMode}
+            onSetViewMode={setCardViewMode}
+            tierTabs={selectedGroupCards.length > 1 ? (
+              <DetailTierTabs
+                cards={selectedGroupCards}
+                activeId={selectedCard.id}
+                allActive={allTiersMode}
+                onSelect={selectTierCard}
+                onSelectAll={selectAllTiers}
+              />
+            ) : undefined}
+          />
+        )
       ) : isCardListTab ? (
         <div className="flex-1 overflow-y-auto px-6 pb-8">
           <RefreshingBar show={isFetching && !isLoading} />
