@@ -198,7 +198,7 @@ type GroupBy = 'status' | 'date';
 // webhook closes the card and pins a selection together), and the published-state
 // cards split into "published" (live, not yet broadcast) vs "broadcaster"
 // (already broadcast to recipients).
-type Bucket = 'published' | 'broadcaster' | 'selected' | 'assigned' | 'paused' | 'cancelled';
+export type Bucket = 'published' | 'broadcaster' | 'selected' | 'assigned' | 'paused' | 'cancelled';
 
 /**
  * Precedence-based bucketing. A card with `selected_recipient_id` set always
@@ -210,7 +210,7 @@ type Bucket = 'published' | 'broadcaster' | 'selected' | 'assigned' | 'paused' |
  * Closed cards land in "cancelled" and paused-but-still-assigned cards in
  * "paused", each surfaced by its own tab.
  */
-function categorize(card: AdminSubscriptionCard): Bucket {
+export function categorize(card: AdminSubscriptionCard): Bucket {
   // Cancelled wins over the recipient pointer: cancelling a LIVE assignment
   // keeps selected_recipient_id for audit, and without this check the card
   // would sit in the Assigned tab forever offering actions that all 409.
@@ -382,15 +382,22 @@ export default function AdminSubscriptionCards({
   // browser back button collapses the detail back to the list rather than
   // skipping out of the module entirely.
   const selectedCardId = searchParams.get('card');
+  // Other query params are preserved — in the admin panel there usually aren't
+  // any, but the Leads mini app keeps its active tab in the URL and the two
+  // must travel together or opening a card would reset the tab.
   const setSelectedCardId = useCallback((id: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
     if (id) {
-      router.push(`${pathname}?card=${id}`);
+      params.set('card', id);
+      router.push(`${pathname}?${params.toString()}`);
     } else if (typeof window !== 'undefined' && window.history.length > 1) {
       router.back();
     } else {
-      router.push(pathname);
+      params.delete('card');
+      const qs = params.toString();
+      router.push(qs ? `${pathname}?${qs}` : pathname);
     }
-  }, [router, pathname]);
+  }, [router, pathname, searchParams]);
 
   const isCardListTab = (CARD_LIST_TABS as readonly string[]).includes(activeTab);
 
@@ -441,42 +448,51 @@ export default function AdminSubscriptionCards({
   });
   const salesPeople: SalesPerson[] = peopleRes?.data || [];
 
-  // Pending-request count drives the badge on the "Form Requests" tab.
-  // Three sources feed the queue: upsquad subscription_requests + draft
-  // subscription_cards from the public Shared Form (/connect) and from
-  // the future embedded Landing Page form. Same query keys as
-  // AdminRequestsList so its mutations invalidate these counts too.
+  // Pending-request count drives the badge on the "New deals" tab.
+  // Four sources feed the queue: upsquad subscription_requests + draft
+  // subscription_cards from the public Shared Form (/connect), from the
+  // embedded Landing Page form, and from internal client briefs.
+  //
+  // All of these are scoped to this module's product line and use the exact
+  // query keys AdminRequestsList uses, so the badge counts the same rows the
+  // tab actually lists (an unscoped badge made Assignments claim a new deal
+  // that belonged to Subscriptions) and its mutations invalidate these too.
   const { data: pendingReqsRes } = useQuery({
-    queryKey: ['admin-subscription-requests', 'pending', ''],
-    queryFn: () =>
-      api
-        .get('/admin/subscription-requests', { params: { status: 'pending' } })
-        .then((r) => r.data),
+    queryKey: ['admin-subscription-requests', ''],
+    queryFn: () => api.get('/admin/subscription-requests').then((r) => r.data),
+    // The legacy upsquad queue predates product lines, so it only belongs to
+    // Subscriptions — same guard AdminRequestsList applies.
+    enabled: productLine === 'subscription',
   });
   const { data: pendingSharedRes } = useQuery({
-    queryKey: ['admin-shared-form-submissions', ''],
+    queryKey: ['admin-shared-form-submissions', productLine, ''],
     queryFn: () =>
       api
-        .get('/admin/subscription-cards', { params: { source: 'shared_form', state: 'new,draft' } })
+        .get('/admin/subscription-cards', { params: { source: 'shared_form', state: 'new,draft', card_type: productLine } })
         .then((r) => r.data),
   });
   const { data: pendingLandingRes } = useQuery({
-    queryKey: ['admin-landing-page-submissions', ''],
+    queryKey: ['admin-landing-page-submissions', productLine, ''],
     queryFn: () =>
       api
-        .get('/admin/subscription-cards', { params: { source: 'landing_page_form', state: 'new,draft' } })
+        .get('/admin/subscription-cards', { params: { source: 'landing_page_form', state: 'new,draft', card_type: productLine } })
         .then((r) => r.data),
   });
   // Internal client briefs (Workflow 1) also land in the New Deals queue.
   const { data: pendingBriefRes } = useQuery({
-    queryKey: ['admin-internal-brief-submissions', ''],
+    queryKey: ['admin-internal-brief-submissions', productLine, ''],
     queryFn: () =>
       api
-        .get('/admin/subscription-cards', { params: { source: 'internal_brief', state: 'new,draft' } })
+        .get('/admin/subscription-cards', { params: { source: 'internal_brief', state: 'new,draft', card_type: productLine } })
         .then((r) => r.data),
   });
+  // The upsquad endpoint returns every status, so narrow it to the two the
+  // New deals tab actually lists. The other three queues already fetch only
+  // state='new,draft' rows, which are pending by definition.
   const pendingRequestCount =
-    (pendingReqsRes?.data || []).length +
+    (pendingReqsRes?.data || []).filter(
+      (r: { status?: string }) => r.status === 'pending' || r.status === 'in_review',
+    ).length +
     (pendingSharedRes?.data || []).length +
     (pendingLandingRes?.data || []).length +
     (pendingBriefRes?.data || []).length;

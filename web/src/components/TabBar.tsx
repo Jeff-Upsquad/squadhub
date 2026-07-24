@@ -20,6 +20,7 @@ const VIEW_LABELS: Record<string, string> = {
   opportunities: 'Opportunities',
   'subscription-cards': 'Subscription Cards',
   'job-cards': 'Job Cards',
+  leads: 'Leads',
 };
 const SECTION_LABELS: Record<string, string> = {
   cal: 'Calendar',

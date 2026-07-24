@@ -9,9 +9,19 @@ import type { UserType } from '@squadhub/shared';
 
 const router = Router();
 
-// All admin routes require auth + admin role
-router.use(requireAuth);
-router.use(requireAdmin);
+// All routes in THIS router require auth + admin role.
+//
+// The gate is scoped to the paths this router actually serves rather than
+// applied bare. This router is mounted at '/admin', so a bare `router.use()`
+// runs for EVERY /admin/* request — including sibling routers mounted under
+// the same prefix (subscription-cards, job-cards, checkin, …). Those siblings
+// have their own, deliberately looser gates (requireMiniAppOrAdmin), and a
+// bare admin gate here would 403 their mini-app users before those gates ever
+// ran. Scoping keeps this fail-closed: a path missing from the list below is
+// still handled by its own router's gate, never left ungated.
+const OWN_PATHS = ['/users', '/stats', '/pending-users', '/trash'];
+router.use(OWN_PATHS, requireAuth);
+router.use(OWN_PATHS, requireAdmin);
 
 // GET /admin/users — list all users with optional search, includes custom role
 router.get('/users', async (req: Request, res: Response) => {

@@ -20,6 +20,10 @@ RUN npm install
 # Copy source
 COPY shared/ shared/
 COPY web/ web/
+# The Leads mini app compiles the admin panel's lead-pipeline modules from
+# source (see the `@` alias in web/next.config.mjs), so this image needs the
+# admin tree too — without it the web build fails to resolve `@/views/admin/*`.
+COPY admin/ admin/
 
 # Build shared first, then web
 ARG INTERNAL_API_URL=http://server:4000

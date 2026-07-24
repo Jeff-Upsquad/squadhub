@@ -9,6 +9,15 @@ import { userHasMiniApp } from '../utils/miniAppAccess';
  * to non-admin users who have been given the corresponding mini app.
  */
 export function requireMiniAppOrAdmin(slug: string) {
+  return requireAnyMiniAppOrAdmin([slug]);
+}
+
+/**
+ * Same gate, but satisfied by ANY of several mini apps. Use where one endpoint
+ * legitimately serves more than one module — e.g. the SquadHire category
+ * picker, which both Sales Leads and Leads need.
+ */
+export function requireAnyMiniAppOrAdmin(slugs: string[]) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (!req.userId) {
       res.status(401).json({ success: false, error: 'Not authenticated' });
@@ -28,12 +37,16 @@ export function requireMiniAppOrAdmin(slug: string) {
       }
     }
 
-    // Otherwise require the mini app grant.
-    if (await userHasMiniApp(req.userId, slug)) {
-      next();
-      return;
+    // Otherwise require a grant to at least one of the listed mini apps.
+    for (const slug of slugs) {
+      if (await userHasMiniApp(req.userId, slug)) {
+        next();
+        return;
+      }
     }
 
-    res.status(403).json({ success: false, error: `Access denied: requires the ${slug} app` });
+    res
+      .status(403)
+      .json({ success: false, error: `Access denied: requires the ${slugs.join(' or ')} app` });
   };
 }

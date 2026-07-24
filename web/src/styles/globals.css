@@ -8024,3 +8024,350 @@ ol.sqc-list {
    (the surrounding app chrome is gone). */
 .lv-canvas:fullscreen { background: var(--surface-alt); }
 .lv-canvas:-webkit-full-screen { background: var(--surface-alt); }
+
+
+/* ============================================================
+ * SquadHire design system — shared with the admin panel
+ *
+ * The Leads mini app renders the SAME module source the admin panel
+ * does (see the `@` alias in next.config.mjs, which falls back to
+ * admin/src). Those modules style themselves with `sh-*` classes and
+ * `--sh-*` tokens, so this file must provide them here too.
+ *
+ * Kept in sync with admin/src/styles/globals.css. Purely additive:
+ * web defines no `.sh-*` classes of its own, and the only token it
+ * already had (`--sh-ink`) carries the same value in both apps.
+ * ============================================================ */
+
+:root {
+  /* Fonts — web loads both families via the Google Fonts @import at the
+     top of this file; admin exposes them through next/font. Name them
+     here so the shared `sh-*` classes resolve the right faces. */
+  --font-jakarta:     'Plus Jakarta Sans';
+  --font-inter:       'Inter';
+
+  --sh-lime:          #FCF487;
+  --sh-lime-hover:    #E8DD68;
+  --sh-lime-soft:     #FDFAC2;
+  --sh-cream:         #F7F6F3;
+  --sh-warm-border:   #E8E5DE;
+  --sh-ink-muted:     #525252;
+  --sh-ink-subtle:    #737373;
+  --sh-ink-faint:     #a3a3a3;
+  --sh-mint:          #a8e8e8;
+  --sh-success:       #42cc77;
+  --sh-warning:       #F76808;
+  --sh-offset:        #000000;  /* neo-brutalist hard-shadow color */
+}
+
+.dark {
+  --sh-lime:          #FCF487;
+  --sh-lime-hover:    #E8DD68;
+  --sh-lime-soft:     #2c2a18;  /* soft lime tint -> dark olive wash */
+  --sh-cream:         #14161c;  /* warm cream page -> near-black */
+  --sh-warm-border:   #2a2d33;
+  --sh-ink-muted:     #b8b8b8;
+  --sh-ink-subtle:    #9a9a9a;
+  --sh-ink-faint:     #6a6a6a;
+  --sh-mint:          #2a4a4a;
+  --sh-success:       #42cc77;
+  --sh-warning:       #F76808;
+  --sh-offset:        rgba(255, 255, 255, 0.22);  /* light hard edge so the 3D pop survives on dark */
+}
+
+/* Tailwind colour aliases. `--color-sh-ink` is already mapped above, so
+   only the tokens web was missing are added here. */
+@theme inline {
+  --color-sh-lime:          var(--sh-lime);
+  --color-sh-lime-hover:    var(--sh-lime-hover);
+  --color-sh-lime-soft:     var(--sh-lime-soft);
+  --color-sh-cream:         var(--sh-cream);
+  --color-sh-warm-border:   var(--sh-warm-border);
+  --color-sh-ink-muted:     var(--sh-ink-muted);
+  --color-sh-ink-subtle:    var(--sh-ink-subtle);
+  --color-sh-ink-faint:     var(--sh-ink-faint);
+  --color-sh-mint:          var(--sh-mint);
+  --color-sh-success:       var(--sh-success);
+  --color-sh-warning:       var(--sh-warning);
+}
+
+/* ============================================================
+ * SquadHire-flavored design system (scoped to Subscription Cards module)
+ * Opt-in classes — applied only inside the Subscription Cards files.
+ *
+ * Wrapped in @layer components so Tailwind utilities (in @layer
+ * utilities) always win over these defaults. That way `pl-8`,
+ * `w-auto`, `text-xl`, etc. behave as expected when applied
+ * alongside `.sh-input`, `.sh-card`, etc.
+ * ============================================================ */
+
+@layer components {
+
+/* Display heading — Plus Jakarta Sans, tight tracking */
+.sh-display {
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  color: var(--color-sh-ink);
+}
+
+/* Page surface — warm cream */
+.sh-surface { background: var(--color-sh-cream); }
+
+/* Card — rounded-14, warm border, soft shadow */
+.sh-card {
+  border-radius: 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-sh-warm-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+.sh-card-interactive { cursor: pointer; }
+.sh-card-interactive:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+.sh-card-flat {
+  border-radius: 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-sh-warm-border);
+}
+
+/* Eyebrow pill — white pill, lime dot, dark border, 2px black offset */
+.sh-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-sh-ink);
+  box-shadow: 2px 2px 0 0 var(--sh-offset);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-sh-ink);
+}
+.sh-eyebrow-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--color-sh-lime);
+  display: inline-block;
+}
+
+/* Status pill — colored soft tint, dot + label, no shadow */
+.sh-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Tab bar */
+.sh-tab-bar {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-sh-warm-border);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.sh-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.875rem;
+  border-radius: 9px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-sh-ink-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.sh-tab:hover { color: var(--color-sh-ink); }
+.sh-tab[data-active="true"] {
+  background: var(--color-sh-lime-soft);
+  color: var(--color-sh-ink);
+  box-shadow: inset 0 0 0 1px var(--color-sh-ink);
+}
+
+/* Form input/select shell */
+.sh-input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--color-sh-warm-border);
+  background: var(--color-surface);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--color-sh-ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.sh-input::placeholder { color: var(--color-sh-ink-faint); }
+.sh-input:focus {
+  outline: none;
+  border-color: var(--color-sh-ink);
+  box-shadow: 0 0 0 3px rgba(10, 10, 10, 0.08);
+}
+.sh-input:disabled {
+  background: var(--color-sh-cream);
+  color: var(--color-sh-ink-faint);
+  cursor: not-allowed;
+}
+/* Compact variant — apply alongside .sh-input for filter strips */
+.sh-input-sm {
+  padding: 0.375rem 0.625rem;
+  font-size: 0.8125rem;
+  border-radius: 8px;
+}
+
+/* Primary button — lime + dark border + 3D black offset shadow */
+.sh-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.125rem;
+  border-radius: 12px;
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-sh-ink);
+  background: var(--color-sh-lime);
+  border: 2px solid var(--color-sh-ink);
+  box-shadow: 4px 4px 0 0 var(--sh-offset);
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.18s ease, background-color 0.2s ease;
+  white-space: nowrap;
+}
+.sh-btn-primary:hover:not(:disabled) {
+  transform: translate(-2px, -2px);
+  background: var(--color-sh-lime-hover);
+  box-shadow: 6px 6px 0 0 var(--sh-offset);
+}
+.sh-btn-primary:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 0 var(--sh-offset);
+}
+.sh-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.sh-btn-primary-sm { padding: 0.4rem 0.875rem; font-size: 0.8125rem; box-shadow: 3px 3px 0 0 var(--sh-offset); }
+.sh-btn-primary-sm:hover:not(:disabled) { box-shadow: 5px 5px 0 0 var(--sh-offset); }
+
+/* Ghost button — white with warm border + ink text, no shadow */
+.sh-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: 10px;
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-sh-ink);
+  background: var(--color-surface);
+  border: 1px solid var(--color-sh-warm-border);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+.sh-btn-ghost:hover:not(:disabled) { background: var(--color-sh-cream); border-color: var(--color-sh-ink); }
+.sh-btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+.sh-btn-ghost-sm { padding: 0.3rem 0.7rem; font-size: 0.75rem; border-radius: 8px; }
+
+/* Tinted action buttons (semantic — destructive, warning, etc.) */
+.sh-btn-warning {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  padding: 0.4rem 0.75rem; border-radius: 10px;
+  font-size: 0.75rem; font-weight: 600;
+  background: #FFF4E5; color: #C04A05; border: 1px solid #FCD9B6;
+  cursor: pointer; transition: background-color 0.15s ease;
+  white-space: nowrap;
+}
+.sh-btn-warning:hover:not(:disabled) { background: #FDE3C5; }
+.sh-btn-warning:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.sh-btn-danger {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  padding: 0.4rem 0.75rem; border-radius: 10px;
+  font-size: 0.75rem; font-weight: 600;
+  background: #FDECEC; color: #B42318; border: 1px solid #FBCFCB;
+  cursor: pointer; transition: background-color 0.15s ease;
+  white-space: nowrap;
+}
+.sh-btn-danger:hover:not(:disabled) { background: #FAD7D4; }
+.sh-btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.sh-btn-success {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  padding: 0.4rem 0.75rem; border-radius: 10px;
+  font-size: 0.75rem; font-weight: 600;
+  background: #E6F8EC; color: #1F7E36; border: 1px solid #BFE7CB;
+  cursor: pointer; transition: background-color 0.15s ease;
+  white-space: nowrap;
+}
+.sh-btn-success:hover:not(:disabled) { background: #D2F0DD; }
+.sh-btn-success:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.sh-btn-info {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  padding: 0.4rem 0.75rem; border-radius: 10px;
+  font-size: 0.75rem; font-weight: 600;
+  background: #E8F0FE; color: #1A56DB; border: 1px solid #C7DBFD;
+  cursor: pointer; transition: background-color 0.15s ease;
+  white-space: nowrap;
+}
+.sh-btn-info:hover:not(:disabled) { background: #D6E4FC; }
+.sh-btn-info:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.sh-btn-violet {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  padding: 0.4rem 0.75rem; border-radius: 10px;
+  font-size: 0.75rem; font-weight: 600;
+  background: #F2EBFE; color: #6B21A8; border: 1px solid #DCC9F8;
+  cursor: pointer; transition: background-color 0.15s ease;
+  white-space: nowrap;
+}
+.sh-btn-violet:hover:not(:disabled) { background: #E8DBFC; }
+.sh-btn-violet:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Section heading — uppercase, tight tracking */
+.sh-section-heading {
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-sh-ink-subtle);
+}
+
+/* ── Dark-mode treatment for the tinted SquadHire action buttons ──
+ * The light pastel tints glow on a dark canvas; swap to translucent
+ * tints of the same hue with brighter text so they stay legible. */
+.dark .sh-btn-warning { background: rgba(247, 104, 8, 0.16); color: #F6A560; border-color: rgba(247, 104, 8, 0.3); }
+.dark .sh-btn-warning:hover:not(:disabled) { background: rgba(247, 104, 8, 0.26); }
+.dark .sh-btn-danger { background: rgba(239, 68, 68, 0.16); color: #F58A82; border-color: rgba(239, 68, 68, 0.3); }
+.dark .sh-btn-danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.26); }
+.dark .sh-btn-success { background: rgba(34, 197, 94, 0.16); color: #5FD98A; border-color: rgba(34, 197, 94, 0.3); }
+.dark .sh-btn-success:hover:not(:disabled) { background: rgba(34, 197, 94, 0.26); }
+.dark .sh-btn-info { background: rgba(59, 130, 246, 0.18); color: #7FA6F5; border-color: rgba(59, 130, 246, 0.32); }
+.dark .sh-btn-info:hover:not(:disabled) { background: rgba(59, 130, 246, 0.28); }
+.dark .sh-btn-violet { background: rgba(147, 51, 234, 0.18); color: #C08CF0; border-color: rgba(147, 51, 234, 0.32); }
+.dark .sh-btn-violet:hover:not(:disabled) { background: rgba(147, 51, 234, 0.28); }
+
+/* Primary stays bright lime in dark mode (brand accent — --sh-lime doesn't
+ * flip), so its ink text must stay dark. The global ink var flips light and
+ * would vanish on the yellow fill otherwise. */
+.dark .sh-btn-primary { color: #0a0a0a; }
+
+} /* end @layer components */

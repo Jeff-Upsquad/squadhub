@@ -94,6 +94,17 @@ export const APPS: AppDef[] = [
     paths: ['M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z'],
   },
   {
+    slug: 'leads',
+    name: 'Leads',
+    category: 'Sales',
+    description: 'New deals across job cards, subscription cards & assignments.',
+    view: 'leads',
+    paths: [
+      'M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859',
+      'M3.75 6.75h16.5M4.5 10.5h15M2.25 15.75v2.625a2.625 2.625 0 002.625 2.625h14.25a2.625 2.625 0 002.625-2.625V15.75',
+    ],
+  },
+  {
     slug: 'candidates',
     name: 'Candidates',
     category: 'Hiring',

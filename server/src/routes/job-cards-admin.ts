@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
-import { requireAdmin } from '../middleware/admin';
+import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
 import { categorizeJobCard } from '../utils/jobStage';
 import { logJobCardEvent } from '../utils/jobCardEvents';
@@ -32,7 +32,9 @@ import {
 const router = Router();
 
 router.use(requireAuth);
-router.use(requireAdmin);
+// Internal admins, plus anyone granted the Leads mini app — the web app
+// renders these same modules for the team (see migration 164).
+router.use(requireMiniAppOrAdmin('leads'));
 
 // ------------------------------------------------------------
 // Helpers
@@ -249,7 +251,7 @@ router.post('/client-brief', async (req: Request, res: Response) => {
 // ============================================================
 // GET /admin/job-cards/squadhire-categories — category picker for jobs
 // onboarding. Same cached SquadHire fetch the subscription picker uses, but
-// behind this router's plain requireAdmin gate: the subscription variant
+// behind this router's own Leads gate: the subscription variant
 // (/admin/integrations/squadhire/categories) is gated on Sales Leads module
 // access, which a hiring-only admin may not have — and categories are
 // REQUIRED to publish a job card. (Registered before /:id.)

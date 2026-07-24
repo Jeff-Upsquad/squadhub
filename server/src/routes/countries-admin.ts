@@ -2,12 +2,21 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
+import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
 
 const router = Router();
 
 router.use(requireAuth);
-router.use(requireAdmin);
+
+// Reading the country list is needed by the Leads mini app (brief forms target
+// countries/regions), so GET / also accepts the 'leads' grant. Mutating the
+// country catalogue stays admin-only.
+router.use((req, res, next) =>
+  req.method === 'GET' && req.path === '/'
+    ? requireMiniAppOrAdmin('leads')(req, res, next)
+    : requireAdmin(req, res, next),
+);
 
 // GET /admin/countries
 router.get('/', async (_req: Request, res: Response) => {

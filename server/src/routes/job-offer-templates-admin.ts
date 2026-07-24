@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
-import { requireAdmin } from '../middleware/admin';
+import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
 import {
   DEFAULT_OFFER_LETTER_TEMPLATE,
@@ -19,7 +19,9 @@ import {
 const router = Router();
 
 router.use(requireAuth);
-router.use(requireAdmin);
+// Internal admins, plus anyone granted the Leads mini app — the web app
+// renders these same modules for the team (see migration 164).
+router.use(requireMiniAppOrAdmin('leads'));
 
 // ------------------------------------------------------------
 // Lazy seed: the very first read plants the default template extracted from

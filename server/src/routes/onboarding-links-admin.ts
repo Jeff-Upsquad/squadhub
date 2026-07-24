@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
+import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
 import {
   getEligibleSalesUserIds,
@@ -14,7 +15,16 @@ import {
 const router = Router();
 
 router.use(requireAuth);
-router.use(requireAdmin);
+
+// This router is admin-only by default. The one exception is the sales-people
+// pool, which the Leads mini app reads to populate its "Published by" filter —
+// so it also accepts the 'leads' grant. Everything else stays admin-only.
+const LEADS_READABLE = new Set(['/sales-people']);
+router.use((req, res, next) =>
+  req.method === 'GET' && LEADS_READABLE.has(req.path)
+    ? requireMiniAppOrAdmin('leads')(req, res, next)
+    : requireAdmin(req, res, next),
+);
 
 // GET /admin/onboarding-links/sales-people — admin can always see the pool
 router.get('/sales-people', async (_req: Request, res: Response) => {

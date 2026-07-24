@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
-import { requireAdmin } from '../middleware/admin';
+import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
@@ -25,13 +25,20 @@ import {
  *   GET  /admin/partners/search
  *   GET  /admin/talents/search
  *
- * All gated by requireAuth + requireAdmin (consistent with the rest of
- * /admin/*).
+ * All gated by requireAuth + requireMiniAppOrAdmin('leads') (consistent with
+ * the rest of the lead-pipeline routers).
  */
 
 const router = Router();
-router.use(requireAuth);
-router.use(requireAdmin);
+// Internal admins, plus anyone granted the Leads mini app — the web app
+// renders these same modules for the team (see migration 164).
+//
+// Scoped to the paths this router owns: it is mounted at bare '/admin', so an
+// unscoped gate would impose a Leads requirement on every other /admin/*
+// router too (see the note in admin.ts).
+const OWN_PATHS = ['/subscription-cards', '/partners', '/talents'];
+router.use(OWN_PATHS, requireAuth);
+router.use(OWN_PATHS, requireMiniAppOrAdmin('leads'));
 
 // ============================================================
 // POST /admin/subscription-cards/:id/assign-partner

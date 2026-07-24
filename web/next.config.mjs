@@ -59,10 +59,27 @@ const nextConfig = {
     ],
   }),
 
+  // The Leads mini app renders the admin panel's Job Cards / Subscription
+  // Cards / Assignments modules from source rather than keeping a second copy
+  // in this app, and those files live outside web/. Next needs this to compile
+  // TSX from an external directory.
+  experimental: {
+    externalDir: true,
+  },
+
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@': path.resolve(__dirname, './src'),
+      // Two source roots for `@`, tried in order. web/src always wins, so no
+      // import that resolves today can change meaning; admin/src only catches
+      // specifiers that would otherwise fail to resolve — which is exactly the
+      // shared module tree (`@/views/admin/*`) and the few infra leaves it
+      // depends on (ConfirmDialog, CardCodeChip, useSquadhireConfig, squadCrm).
+      //
+      // Because those admin files import `@/services/api`, `@/components/Toast`
+      // and `@/stores/authStore`, and web/src has all three, each app injects
+      // its OWN api client, toast and auth store into the shared modules.
+      '@': [path.resolve(__dirname, './src'), path.resolve(__dirname, '../admin/src')],
     };
     return config;
   },

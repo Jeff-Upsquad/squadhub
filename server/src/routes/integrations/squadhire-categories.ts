@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/admin';
-import { requireSalesLeadsAccess } from '../onboarding-links';
+import { requireMiniAppOrAdmin, requireAnyMiniAppOrAdmin } from '../../middleware/miniApp';
 import {
   fetchSquadhireCategories,
   clearSquadhireCategoriesCache,
@@ -22,22 +22,32 @@ const router = Router();
 
 router.use(requireAuth);
 
-router.get('/categories', requireSalesLeadsAccess, async (_req: Request, res: Response) => {
+// Categories are REQUIRED to publish a card, and three modules need them:
+// Sales Leads, the Leads mini app, and admins. The old sales-leads-only gate
+// locked out admins who lack that module (see the note on
+// /admin/job-cards/squadhire-categories, which exists to work around it).
+router.get(
+  '/categories',
+  requireAnyMiniAppOrAdmin(['sales-leads', 'leads']),
+  async (_req: Request, res: Response) => {
   try {
     const { data, cached } = await fetchSquadhireCategories();
     res.json({ success: true, data, cached });
-  } catch (err: any) {
-    console.error('[squadhire-categories] fetch failed:', err);
-    res.status(502).json({
-      success: false,
-      error: err?.message || 'Failed to load SquadHire categories',
-    });
-  }
-});
+    } catch (err: any) {
+      console.error('[squadhire-categories] fetch failed:', err);
+      res.status(502).json({
+        success: false,
+        error: err?.message || 'Failed to load SquadHire categories',
+      });
+    }
+  },
+);
 
-// ── SquadHire config (admin-only) ──
+// ── SquadHire config (admin + Leads mini app) ──
+// Reports whether SquadHire linking is available; the Leads modules read it to
+// decide whether to offer the "open in SquadHire" affordances.
 
-router.get('/config', requireAdmin, (_req: Request, res: Response) => {
+router.get('/config', requireMiniAppOrAdmin('leads'), (_req: Request, res: Response) => {
   const adminUrl = config.squadhireAdminUrl || null;
   const configured = !!(adminUrl && config.squadhireWebhookUrl && config.squadhireWebhookSecret);
   res.json({ success: true, data: { admin_url: adminUrl, configured } });

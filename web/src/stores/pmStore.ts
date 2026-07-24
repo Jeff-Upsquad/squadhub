@@ -45,7 +45,7 @@ export function effectiveFocusBucket(
   if (parent && recurringFocusBuckets[parent]) return recurringFocusBuckets[parent];
   return undefined;
 }
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'subscription-cards' | 'job-cards' | 'day-planner';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'mentions' | 'later' | 'checkin' | 'checkin-partners' | 'time-management' | 'sales-leads' | 'leads' | 'cashbook' | 'opportunities' | 'subscription-cards' | 'job-cards' | 'day-planner';
 
 export interface TimerState {
   taskId: string;

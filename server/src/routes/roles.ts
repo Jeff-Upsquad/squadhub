@@ -6,9 +6,11 @@ import { supabaseAdmin } from '../supabase';
 
 const router = Router();
 
-// All role routes require auth + admin
-router.use(requireAuth);
-router.use(requireAdmin);
+// All role routes require auth + admin. Scoped to '/roles' because this router
+// is mounted at '/admin' — see the note in admin.ts: a bare gate here would
+// also intercept every sibling /admin/* router and 403 their mini-app users.
+router.use('/roles', requireAuth);
+router.use('/roles', requireAdmin);
 
 const permissionsSchema = z
   .object({
