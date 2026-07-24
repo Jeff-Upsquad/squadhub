@@ -1,5 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import api from '../services/api';
+// Import via the '@' alias, not a relative path. This hook is also compiled by
+// the web app (the Leads mini app renders these modules), where '@' resolves to
+// web/src so each app injects its own api client. A relative path would always
+// bind to admin's client and send requests to admin's '/api' base URL.
+import api from '@/services/api';
 
 interface SquadhireConfig {
   admin_url: string | null;

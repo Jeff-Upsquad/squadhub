@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
+import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
 import { config } from '../config';
 import {
@@ -17,7 +18,16 @@ import { cancelCardCore, archiveCardCore, reinstateCardCore } from './subscripti
 const router = Router();
 
 router.use(requireAuth);
-router.use(requireAdmin);
+
+// The Clients module is admin-only. The single exception is the CRM lead
+// lookup, which the Leads mini app's brief form calls to prefill a customer
+// from an existing CRM lead — a read, so it also accepts the 'leads' grant.
+const LEADS_READABLE = new Set(['/lookup-crm-lead']);
+router.use((req, res, next) =>
+  req.method === 'GET' && LEADS_READABLE.has(req.path)
+    ? requireMiniAppOrAdmin('leads')(req, res, next)
+    : requireAdmin(req, res, next),
+);
 
 /** Actor for propagating a Clients-module action onto the linked card. */
 function cardActor(req: Request) {

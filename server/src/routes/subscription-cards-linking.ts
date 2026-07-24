@@ -5,8 +5,11 @@ import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 
 const router = Router();
-router.use(requireAuth);
-router.use(requireAdmin);
+// Scoped to the paths this router owns — it is mounted at '/admin', and a bare
+// gate would intercept sibling routers (see the note in admin.ts). Linking a
+// card to a client space stays admin-only; it is not part of the Leads module.
+router.use('/subscription-cards', requireAuth);
+router.use('/subscription-cards', requireAdmin);
 
 // Maps a subscription slug to compatible client_space_template slugs.
 const SUBSCRIPTION_TO_TEMPLATE_SLUGS: Record<string, string[]> = {

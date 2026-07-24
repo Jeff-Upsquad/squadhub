@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "check:shared-imports": "node scripts/check-shared-admin-imports.mjs",
+    "prebuild": "node scripts/check-shared-admin-imports.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint src/"

@@ -34,6 +34,7 @@ import NotesShell from '../views/app/notes/NotesShell';
 import { useHasMiniApp } from '../hooks/useMiniApps';
 import TimeManagementPage from '../views/app/time-management/TimeManagementPage';
 import SalesLeadsPage from '../views/app/sales/SalesLeadsPage';
+import LeadsPage from '../views/app/leads/LeadsPage';
 import ThemeToggle from '../components/ThemeToggle';
 import RailTimer from './RailTimer';
 import ActiveTimer from '../components/ActiveTimer';
@@ -80,7 +81,7 @@ import { canonicalKey, buildHomeSnapshot, type TabSnapshot } from '../lib/tabSna
 
 // ---- Types ----
 export type ActiveSection = 'home' | 'cal' | 'docs' | 'teams' | 'apps' | 'learning' | 'more';
-export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'cashbook' | 'opportunities' | 'subscription-cards' | 'job-cards' | 'day-planner' | 'routines' | 'clips' | 'meetings';
+export type HomeView = 'hub' | 'chat' | 'tasks' | 'inbox' | 'my-tasks' | 'checkin' | 'checkin-partners' | 'check-ins' | 'candidates' | 'time-management' | 'sales-leads' | 'leads' | 'cashbook' | 'opportunities' | 'subscription-cards' | 'job-cards' | 'day-planner' | 'routines' | 'clips' | 'meetings';
 
 // One entry in the in-app navigation history: everything needed to bring the
 // user back to a view. Views switch via local state rather than URLs, so the
@@ -959,6 +960,7 @@ export default function MainLayout() {
       if (hv === 'candidates') return <CandidatesPage />;
       if (hv === 'time-management') return <TimeManagementPage />;
       if (hv === 'sales-leads') return <SalesLeadsPage />;
+      if (hv === 'leads') return <LeadsPage />;
       if (hv === 'clips') return <ClipsView />;
       if (hv === 'meetings') return <MeetingsView />;
       if (hv === 'cashbook' && isPartner) return <PartnerCashBook />;
@@ -999,6 +1001,7 @@ export default function MainLayout() {
     if (hv === 'candidates') return <CandidatesPage />;
     if (hv === 'time-management') return <TimeManagementPage />;
     if (hv === 'sales-leads') return <SalesLeadsPage />;
+    if (hv === 'leads') return <LeadsPage />;
     if (hv === 'clips') return <ClipsView />;
     if (hv === 'meetings') return <MeetingsView />;
     if (hv === 'hub' && (userType === 'client' || userType === 'client_staff')) return <ClientDashboard />;

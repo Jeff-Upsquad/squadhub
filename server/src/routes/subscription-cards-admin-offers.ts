@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
-import { requireAdmin } from '../middleware/admin';
+import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
 
@@ -23,7 +23,9 @@ import { supabaseAdmin } from '../supabase';
 
 const router = Router();
 router.use(requireAuth);
-router.use(requireAdmin);
+// Internal admins, plus anyone granted the Leads mini app — the web app
+// renders these same modules for the team (see migration 164).
+router.use(requireMiniAppOrAdmin('leads'));
 
 const UPSTREAM_BASE_PATH = '/api/webhooks/squadhub/cards';
 const LIVE_TIMEOUT_MS = 5_000;

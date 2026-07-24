@@ -2,7 +2,8 @@
 
 import { useSyncExternalStore } from 'react';
 
-type TextToast = { id: number; kind: 'text'; message: string; leaving: boolean };
+export type ToastType = 'success' | 'error' | 'info';
+type TextToast = { id: number; kind: 'text'; message: string; type: ToastType; leaving: boolean };
 type CardToast = {
   id: number;
   kind: 'card';
@@ -34,11 +35,15 @@ function dismiss(id: number) {
   }, EXIT_MS);
 }
 
-export function showToast(message: string) {
+/**
+ * `type` is optional — the shared admin modules (rendered here by the Leads
+ * mini app) pass a severity, and errors stay up longer so they can be read.
+ */
+export function showToast(message: string, type: ToastType = 'info') {
   const id = nextId++;
-  toasts = [...toasts, { id, kind: 'text', message, leaving: false }];
+  toasts = [...toasts, { id, kind: 'text', message, type, leaving: false }];
   emit();
-  setTimeout(() => dismiss(id), 2500);
+  setTimeout(() => dismiss(id), type === 'error' ? 4000 : 2500);
 }
 
 export function showToastCard(opts: {
@@ -101,7 +106,7 @@ export default function ToastContainer() {
               key={t.id}
               className="pointer-events-auto flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-medium shadow-lg"
               style={{
-                background: 'var(--sh-ink)',
+                background: t.type === 'error' ? '#B91C1C' : 'var(--sh-ink)',
                 color: 'var(--surface)',
                 animation: t.leaving
                   ? `sh-toast-out ${EXIT_MS}ms ${EXIT_EASE} forwards`
@@ -116,8 +121,16 @@ export default function ToastContainer() {
                 stroke="currentColor"
                 strokeWidth="2.5"
                 strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                <path d="M5 12l5 5 9-11" />
+                {t.type === 'error' ? (
+                  <>
+                    <path d="M12 8v5" />
+                    <path d="M12 16.5v.01" />
+                  </>
+                ) : (
+                  <path d="M5 12l5 5 9-11" />
+                )}
               </svg>
               {t.message}
             </div>

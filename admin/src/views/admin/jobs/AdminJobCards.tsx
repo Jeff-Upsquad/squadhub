@@ -175,17 +175,23 @@ export default function AdminJobCards() {
   // Card detail is URL-driven (?card=<id>) so the browser back button
   // collapses the detail back to the list — same idiom as Subscription Cards.
   const selectedCardId = searchParams.get('card');
+  // Other query params are preserved — see the matching note in
+  // AdminSubscriptionCards (the Leads mini app keeps its tab in the URL).
   const setSelectedCardId = useCallback(
     (id: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
       if (id) {
-        router.push(`${pathname}?card=${id}`);
+        params.set('card', id);
+        router.push(`${pathname}?${params.toString()}`);
       } else if (typeof window !== 'undefined' && window.history.length > 1) {
         router.back();
       } else {
-        router.push(pathname);
+        params.delete('card');
+        const qs = params.toString();
+        router.push(qs ? `${pathname}?${qs}` : pathname);
       }
     },
-    [router, pathname],
+    [router, pathname, searchParams],
   );
 
   // One list query feeds every tab (the server returns all non-deleted cards;

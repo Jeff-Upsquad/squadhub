@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
-import { requireAdmin } from '../middleware/admin';
+import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
 import {
   notifySquadhireOfSelection,
@@ -33,8 +33,14 @@ import {
 import crypto from 'crypto';
 
 const router = Router();
-router.use(requireAuth);
-router.use(requireAdmin);
+// Internal admins, plus anyone granted the Leads mini app — the web app
+// renders these same modules for the team (see migration 164).
+//
+// Scoped to the path this router owns: it is mounted at bare '/admin', so an
+// unscoped gate would impose a Leads requirement on every other /admin/*
+// router too (see the note in admin.ts).
+router.use('/subscription-cards', requireAuth);
+router.use('/subscription-cards', requireMiniAppOrAdmin('leads'));
 
 // Day before an ISO date (YYYY-MM-DD), UTC-safe. When a change takes effect ON
 // `date`, the outgoing term is billed through the day before so the boundary day
