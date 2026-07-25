@@ -107,6 +107,13 @@ fi
 if echo "$CHANGED_FILES" | grep -qE '^admin/'; then
     REBUILD_ADMIN=true
 fi
+# The web app renders the Leads, Check-Ins and Candidates mini apps from the
+# admin module source (admin/src/**) via the @-alias shared-source bridge, so a
+# change there ships in the web bundle too and MUST rebuild web — otherwise the
+# mini apps keep running stale code while the standalone admin app looks updated.
+if echo "$CHANGED_FILES" | grep -qE '^admin/src/'; then
+    REBUILD_WEB=true
+fi
 
 rm -f web/next.config.js admin/next.config.js 2>/dev/null || true
 

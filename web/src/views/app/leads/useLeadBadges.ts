@@ -97,6 +97,24 @@ function useCardPipelineBadge(productLine: 'subscription' | 'assignment'): LeadB
     ...LIVE,
   });
 
+  // upsquad status is external and doesn't track local archival, so a request
+  // can stay 'pending' after its card is archived. AdminRequestsList hides
+  // those rows (they belong in Archive), so this badge must too or it
+  // over-counts. Same key as AdminSubscriptionCards' archived query so the
+  // cache is shared; subscription-only, mirroring the upsquad scope above.
+  const { data: archivedRes } = useQuery({
+    queryKey: ['admin-subscription-cards', productLine, '', '', 'archived', null],
+    queryFn: () =>
+      api
+        .get('/admin/subscription-cards', { params: { archived: 'true', card_type: productLine } })
+        .then((r) => r.data),
+    enabled: productLine === 'subscription',
+    ...LIVE,
+  });
+  const archivedCardIds = new Set(
+    ((archivedRes?.data || []) as { id: string }[]).map((c) => c.id),
+  );
+
   const cards: AdminSubscriptionCard[] = activeRes?.data || [];
   let awaitingBroadcast = 0;
   let awaitingAssign = 0;
@@ -108,8 +126,11 @@ function useCardPipelineBadge(productLine: 'subscription' | 'assignment'): LeadB
 
   // That endpoint returns every status, so narrow it to the two the New deals
   // tab lists. The other three queues fetch only state='new,draft' rows.
+  // Archived-linked requests are dropped — see archivedCardIds above.
   const upsquadPending = (reqRes?.data || []).filter(
-    (r: { status?: string }) => r.status === 'pending' || r.status === 'in_review',
+    (r: { status?: string; card_id?: string | null }) =>
+      (r.status === 'pending' || r.status === 'in_review') &&
+      !(r.card_id && archivedCardIds.has(r.card_id)),
   ).length;
 
   const newDeals =
