@@ -3,7 +3,12 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
-import { hydrateCard, hydrateCardsBatch, matchPartnersForCard } from '../utils/subscriptionCards';
+import {
+  hydrateCard,
+  hydrateCardsBatch,
+  matchPartnersForCard,
+  reunifyTierGroupToDraft,
+} from '../utils/subscriptionCards';
 import {
   buildSquadhirePayloadForCard,
   deliverCardToSquadhire,
@@ -1243,7 +1248,7 @@ router.post('/:id/recall', async (req: Request, res: Response) => {
 
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, parent_card_id')
+      .select('id, state, parent_card_id, brief_group_id')
       .eq('id', cardId)
       .maybeSingle();
     if (!card) {
@@ -1253,6 +1258,38 @@ router.post('/:id/recall', async (req: Request, res: Response) => {
     if (card.state !== 'published') {
       res.status(409).json({ success: false, error: 'Only published cards can be recalled' });
       return;
+    }
+
+    // Grouped (multi-tier) recall. A multi-tier brief is fanned out into one
+    // published card per tier, linked by brief_group_id and shown to the admin
+    // as a SINGLE card — so a recall must pull back EVERY tier, reunifying them
+    // into one editable draft. Recalling only the active tier (the old
+    // behaviour) left the other tier siblings published; the next publish then
+    // minted a fresh group, stranding them as an orphaned duplicate card in
+    // Broadcasted. Primary cards only — secondaries never carry a group.
+    if (!card.parent_card_id && card.brief_group_id) {
+      const anchorId = await reunifyTierGroupToDraft(
+        card.brief_group_id,
+        (req as any).userId ?? null,
+      );
+      if (anchorId) {
+        const { data: anchor } = await supabaseAdmin
+          .from('subscription_cards')
+          .select('*')
+          .eq('id', anchorId)
+          .single();
+        await logCardEvent({
+          cardId: anchorId,
+          eventType: 'recalled',
+          actorId: (req as any).userId ?? null,
+          actorType: 'admin',
+          actorLabel: (req as any).userName ?? null,
+          metadata: { returned_to_draft: true, grouped: true, brief_group_id: card.brief_group_id },
+        });
+        res.json({ success: true, data: await hydrateCard(anchor) });
+        return;
+      }
+      // Single live member left in the group — fall through to plain recall.
     }
 
     const [{ count: acceptedPartners }, { count: acceptedTalents }] = await Promise.all([

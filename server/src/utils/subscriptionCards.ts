@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '../supabase';
 import { buildPlanSnapshotForCard } from './cardPlanSnapshot';
+import { notifySquadhireOfCardRecall } from './squadhireWebhook';
 
 /**
  * Hydrate a subscription_cards row into the shape the UI expects:
@@ -578,6 +579,123 @@ export async function fanOutTierCards(
   }
 
   return [originalCardId, ...siblingIds];
+}
+
+/**
+ * Inverse of fanOutTierCards. Collapse a published multi-tier brief group back
+ * into a single editable draft, so a recall → edit → re-publish cycle
+ * reproduces the original grouped card instead of stranding tier siblings.
+ *
+ * A multi-tier brief is fanned out into one published card per tier, all
+ * sharing a `brief_group_id` and shown to the admin as a SINGLE card. Recall,
+ * however, is card-scoped — it only ever pulled back the one tier the admin's
+ * active tab was on, leaving the other tier siblings published. The next
+ * publish then minted a fresh group, so the untouched siblings lingered as an
+ * orphaned duplicate card in Broadcasted. This helper is what makes recall act
+ * on the whole group:
+ *   - picks the group's ORIGINAL row (the one still carrying
+ *     submission_subscription_id — fan-out keeps it only on the first tier) as
+ *     the anchor draft, falling back to the earliest-created member;
+ *   - rebuilds the anchor's target_tiers + tier_pricing from every member so
+ *     the re-publish fans the same tiers out again;
+ *   - returns the anchor to `draft` (recipients dropped, SquadHire mirror
+ *     pulled, brief_group_id cleared — a fresh group id is minted on republish);
+ *   - retires the other tier rows: recipients dropped, SquadHire mirror pulled,
+ *     soft-deleted into Trash (state=closed) so they leave every feed and the
+ *     sync sweeper skips them.
+ *
+ * Returns the anchor draft id, or null when the group has ≤1 live member (the
+ * caller should fall back to a plain single-card recall).
+ */
+export async function reunifyTierGroupToDraft(
+  briefGroupId: string,
+  actorId: string | null,
+): Promise<string | null> {
+  const { data: members, error } = await supabaseAdmin
+    .from('subscription_cards')
+    .select(
+      'id, target_tiers, proposed_price, markup, subscription_price, submission_subscription_id, created_at',
+    )
+    .eq('brief_group_id', briefGroupId)
+    .eq('state', 'published')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  if (!members || members.length <= 1) return null;
+
+  // Anchor = the original fan-out row (keeps the submission/upsquad wiring that
+  // fan-out leaves only on the first tier); fall back to the earliest member.
+  const anchor = members.find((m) => m.submission_subscription_id) ?? members[0];
+  const siblings = members.filter((m) => m.id !== anchor.id);
+
+  // Rebuild the multi-tier draft shape: ordered tier union (anchor first) plus a
+  // tier_pricing map keyed by tier, reconstructed from each member's row.
+  const orderedTiers: string[] = [];
+  const tierPricing: Record<
+    string,
+    { proposed_price: number | null; markup: number | null; subscription_price: number | null }
+  > = {};
+  for (const m of [anchor, ...siblings]) {
+    const tier =
+      Array.isArray(m.target_tiers) && m.target_tiers.length ? String(m.target_tiers[0]) : null;
+    if (!tier || tierPricing[tier]) continue;
+    orderedTiers.push(tier);
+    tierPricing[tier] = {
+      proposed_price: m.proposed_price ?? null,
+      markup: m.markup ?? null,
+      subscription_price: m.subscription_price ?? null,
+    };
+  }
+
+  const now = new Date().toISOString();
+
+  // Retire the sibling tier rows. state=closed makes the SquadHire payload a
+  // takedown; deleted_at moves them to Trash and keeps the sweeper away.
+  for (const s of siblings) {
+    await supabaseAdmin.from('subscription_card_recipients').delete().eq('card_id', s.id);
+    await supabaseAdmin.from('subscription_card_external_recipients').delete().eq('card_id', s.id);
+    notifySquadhireOfCardRecall(s.id).catch((err) =>
+      console.error('[reunify-tier-group] squadhire mirror drop error (sibling)', err),
+    );
+    await supabaseAdmin
+      .from('subscription_cards')
+      .update({
+        state: 'closed',
+        closed_at: now,
+        squadhire_synced_at: null,
+        squadhire_sync_attempts: 0,
+        squadhire_sync_last_error: null,
+        deleted_at: now,
+        deleted_by: actorId,
+      })
+      .eq('id', s.id);
+  }
+
+  // Return the anchor to an editable multi-tier draft. Pull it from everyone
+  // (a recall rebuilds a fresh recipient list on republish) and clear the
+  // frozen plan snapshot + group id.
+  await supabaseAdmin.from('subscription_card_recipients').delete().eq('card_id', anchor.id);
+  await supabaseAdmin.from('subscription_card_external_recipients').delete().eq('card_id', anchor.id);
+  await supabaseAdmin
+    .from('subscription_cards')
+    .update({
+      state: 'draft',
+      published_at: null,
+      published_by: null,
+      squadhire_synced_at: null,
+      squadhire_sync_attempts: 0,
+      squadhire_sync_last_error: null,
+      plan_snapshot: null,
+      brief_group_id: null,
+      target_tiers: orderedTiers,
+      tier_pricing: tierPricing,
+    })
+    .eq('id', anchor.id);
+  notifySquadhireOfCardRecall(anchor.id).catch((err) =>
+    console.error('[reunify-tier-group] squadhire mirror drop error (anchor)', err),
+  );
+
+  return anchor.id;
 }
 
 /**

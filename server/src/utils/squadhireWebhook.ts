@@ -1057,6 +1057,7 @@ export function startSquadhireSyncSweeper(): NodeJS.Timeout {
         .eq('distribution', 'broadcast')
         .not('squadhire_category_ids', 'eq', '{}')
         .is('squadhire_synced_at', null)
+        .is('deleted_at', null)
         .lt('squadhire_sync_attempts', MAX_SYNC_ATTEMPTS)
         .order('updated_at', { ascending: true })
         .limit(SWEEPER_BATCH_SIZE);
