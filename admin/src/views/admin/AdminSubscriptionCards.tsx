@@ -489,9 +489,21 @@ export default function AdminSubscriptionCards({
   // The upsquad endpoint returns every status, so narrow it to the two the
   // New deals tab actually lists. The other three queues already fetch only
   // state='new,draft' rows, which are pending by definition.
+  //
+  // The upsquad status is external and doesn't track local archival, so a
+  // request can stay 'pending' after its card is archived. AdminRequestsList
+  // hides those rows (they belong in Archive), so the badge must subtract them
+  // too or it over-counts (e.g. badge 6 while the list shows 1). The three
+  // card-backed queues already fetch only non-archived rows server-side.
+  const archivedCardIdSet = useMemo(
+    () => new Set(archivedCards.map((c) => c.id)),
+    [archivedCards],
+  );
   const pendingRequestCount =
     (pendingReqsRes?.data || []).filter(
-      (r: { status?: string }) => r.status === 'pending' || r.status === 'in_review',
+      (r: { status?: string; card_id?: string | null }) =>
+        (r.status === 'pending' || r.status === 'in_review') &&
+        !(r.card_id && archivedCardIdSet.has(r.card_id)),
     ).length +
     (pendingSharedRes?.data || []).length +
     (pendingLandingRes?.data || []).length +
