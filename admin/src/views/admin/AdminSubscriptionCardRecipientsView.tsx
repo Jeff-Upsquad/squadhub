@@ -1018,7 +1018,7 @@ export default function AdminSubscriptionCardRecipientsView({
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col overflow-y-auto">
       {/* Header */}
       <div className="px-6 pt-6 pb-4 space-y-4">
         <div className="flex items-center justify-between">
@@ -1187,7 +1187,7 @@ export default function AdminSubscriptionCardRecipientsView({
       </div>
 
       {/* Stat cards + tabs + list */}
-      <div className="flex-1 overflow-y-auto px-6 pb-8 space-y-5">
+      <div className="flex-1 px-6 pb-8 space-y-5">
         {isLoading ? (
           <div className="sh-card py-16 text-center">
             <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading recipients…</p>
