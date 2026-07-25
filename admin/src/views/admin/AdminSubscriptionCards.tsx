@@ -596,14 +596,28 @@ export default function AdminSubscriptionCards({
 
   // Switch the active tier inside the opened card. Uses replace (not push) so
   // the back button still returns to the list, not the previously-viewed tier.
+  // Preserves the other query params (like the Leads mini app's ?leadTab=) the
+  // same way setSelectedCardId does — building a bare URL here dropped leadTab,
+  // which bounced the view back to Job Cards so the tier "wouldn't load".
   const selectTierCard = useCallback(
-    (id: string) => { router.replace(`${pathname}?card=${id}&rv=tier`); },
-    [router, pathname],
+    (id: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('card', id);
+      params.set('rv', 'tier');
+      router.replace(`${pathname}?${params.toString()}`);
+    },
+    [router, pathname, searchParams],
   );
   // Back to the merged "All tiers" overview (drops the ?rv=tier marker).
   const selectAllTiers = useCallback(
-    () => { if (selectedCardId) router.replace(`${pathname}?card=${selectedCardId}`); },
-    [router, pathname, selectedCardId],
+    () => {
+      if (!selectedCardId) return;
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('card', selectedCardId);
+      params.delete('rv');
+      router.replace(`${pathname}?${params.toString()}`);
+    },
+    [router, pathname, selectedCardId, searchParams],
   );
 
   // The card detail view is driven purely by ?card= (whichever tab is active).
