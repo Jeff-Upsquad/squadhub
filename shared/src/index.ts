@@ -878,7 +878,13 @@ export type NotificationType =
   | 'meeting_suggestion'
   | 'meeting_suggestion_resolved'
   | 'meeting_confirmed'
-  | 'meeting_cancelled';
+  | 'meeting_cancelled'
+  | 'lms_assigned'
+  | 'lms_updated'
+  | 'lms_shared'
+  | 'lms_review_requested'
+  | 'lms_review_decided'
+  | 'lms_comment';
 
 export interface Notification {
   id: string;
@@ -2453,12 +2459,22 @@ export interface LmsItem {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // Contributor "submit for review" flow (migration 165). When origin_item_id
+  // is set this item is a draft CLONE proposing changes to that live item.
+  origin_item_id?: string | null;
+  review_state?: LmsReviewState;
+  review_note?: string | null;
+  submitted_by?: string | null;
+  submitted_at?: string | null;
   // Joined (populated by API as needed)
   category?: LmsCategory | null;
   lessons?: LmsLesson[];
   audience_types?: UserType[];
   audience_user_ids?: string[];
   assignment_count?: number;
+  // The requesting user's effective access level (populated by the web/collab
+  // API — see LmsAccessLevel / getItemAccess).
+  my_access?: LmsAccessLevel;
 }
 
 export interface LmsLesson {
@@ -2612,6 +2628,72 @@ export interface LmsQuizAttempt {
 export interface LmsAudienceInput {
   user_types: UserType[];
   user_ids: string[];
+}
+
+// ============================================================
+// Content sharing & access levels (migration 165)
+//
+// Each item can be shared with any user or role at one of four levels.
+// Ranking: admin > contributor > commenter > viewer. A user's effective
+// access is the highest grant across direct shares, role shares, ownership,
+// global-admin, and (legacy) assignment.
+// ============================================================
+export type LmsAccessLevel = 'viewer' | 'commenter' | 'contributor' | 'admin';
+export type LmsPrincipalType = 'user' | 'role';
+export type LmsReviewState = 'none' | 'draft' | 'submitted' | 'changes_requested';
+
+export interface LmsItemShare {
+  id: string;
+  item_id: string;
+  principal_type: LmsPrincipalType;
+  principal_id: string;
+  access_level: LmsAccessLevel;
+  granted_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined for display (one of these, keyed by principal_type)
+  user?: Pick<User, 'id' | 'display_name' | 'email' | 'avatar_url' | 'user_type'> | null;
+  role?: Pick<Role, 'id' | 'name' | 'color'> | null;
+}
+
+// One grant in a replace-set PUT (admin/collab share management).
+export interface LmsShareInput {
+  principal_type: LmsPrincipalType;
+  principal_id: string;
+  access_level: LmsAccessLevel;
+}
+
+// Staff-only comment on a page (lesson) of an item. Visible to commenter+.
+export interface LmsItemComment {
+  id: string;
+  item_id: string;
+  lesson_id: string | null;
+  parent_id: string | null;
+  author_id: string;
+  body: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  author?: Pick<User, 'id' | 'display_name' | 'avatar_url' | 'user_type'> | null;
+}
+
+// A pending contributor submission, as surfaced in the admin Review Queue.
+export interface LmsReviewSubmission {
+  id: string;            // the draft/clone item id
+  origin_item_id: string | null;
+  kind: LmsItemKind;
+  track: LmsTrack;
+  title: string;
+  slug: string;
+  review_state: LmsReviewState;
+  review_note: string | null;
+  submitted_at: string | null;
+  submitted_by: string | null;
+  submitter?: Pick<User, 'id' | 'display_name' | 'avatar_url' | 'email'> | null;
+  // The live item this proposes to change (null for brand-new content).
+  origin?: Pick<LmsItem, 'id' | 'title' | 'slug' | 'status'> | null;
 }
 
 // ============================================================

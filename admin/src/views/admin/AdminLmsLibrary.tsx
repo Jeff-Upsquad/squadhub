@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import type { LmsItem, LmsItemStatus, LmsItemKind, LmsTrack, LmsCategory } from '@squadhub/shared';
+import ShareModal from '../../components/lms/ShareModal';
 
 const STATUS_COLORS: Record<LmsItemStatus, string> = {
   draft: 'bg-canvas text-foreground-muted',
@@ -32,6 +33,7 @@ export default function AdminLmsLibrary() {
   // published post's assignments, so those must be unpublished first.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAddToCourse, setShowAddToCourse] = useState(false);
+  const [shareItem, setShareItem] = useState<LmsItem | null>(null);
 
   const queryParams = new URLSearchParams();
   if (kindFilter) queryParams.set('kind', kindFilter);
@@ -117,6 +119,12 @@ export default function AdminLmsLibrary() {
           <p className="mt-1 text-sm text-foreground-muted">Publish training posts and courses to internal team, clients and partners.</p>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/admin/learning/review"
+            className="rounded-lg border border-divider bg-surface px-4 py-2 text-sm font-medium text-foreground-muted hover:bg-surface-alt"
+          >
+            Review queue
+          </Link>
           <Link
             href="/admin/learning/categories"
             className="rounded-lg border border-divider bg-surface px-4 py-2 text-sm font-medium text-foreground-muted hover:bg-surface-alt"
@@ -247,12 +255,20 @@ export default function AdminLmsLibrary() {
                   <td className="px-4 py-3 text-foreground-muted">{item.assignment_count ?? 0}</td>
                   <td className="px-4 py-3 text-foreground-muted">{new Date(item.updated_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => { if (confirm(`Delete "${item.title}"?`)) deleteItem.mutate(item.id); }}
-                      className="text-[12px] text-red-600 hover:underline"
-                    >
-                      Delete
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setShareItem(item)}
+                        className="text-[12px] text-foreground-muted hover:text-foreground hover:underline"
+                      >
+                        Share
+                      </button>
+                      <button
+                        onClick={() => { if (confirm(`Delete "${item.title}"?`)) deleteItem.mutate(item.id); }}
+                        className="text-[12px] text-red-600 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -346,6 +362,10 @@ export default function AdminLmsLibrary() {
             router.push(`/admin/learning/${courseId}`);
           }}
         />
+      )}
+
+      {shareItem && (
+        <ShareModal itemId={shareItem.id} itemTitle={shareItem.title} onClose={() => setShareItem(null)} />
       )}
     </div>
   );

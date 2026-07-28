@@ -7,6 +7,7 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import { mirrorCourseItem } from '../services/taskMirror';
+import { applyRevision, discardClone, notifyLms } from '../services/lmsAuthoring';
 
 const router = Router();
 router.use(requireAuth);
@@ -154,6 +155,8 @@ router.get('/items', async (req: Request, res: Response) => {
         *,
         category:lms_categories(id, name, color, slug)
       `)
+      // Draft clones (contributor revisions) live only in the Review Queue.
+      .is('origin_item_id', null)
       .order('updated_at', { ascending: false });
 
     if (kindFilter) query = query.eq('kind', kindFilter);
@@ -683,6 +686,240 @@ router.get('/items/:id/assignments', async (req: Request, res: Response) => {
     res.json({ success: true, data: data || [] });
   } catch (err) {
     console.error('List assignments error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// Sharing (per-item access levels) — migration 165
+// ============================================================
+
+const ACCESS_LEVELS = ['viewer', 'commenter', 'contributor', 'admin'] as const;
+
+// GET /admin/lms/items/:id/shares — current grants with user/role details.
+// principal_id is polymorphic (no FK), so users + roles are stitched in code.
+router.get('/items/:id/shares', async (req: Request, res: Response) => {
+  try {
+    const { data: shares, error } = await supabaseAdmin
+      .from('lms_item_shares')
+      .select('*')
+      .eq('item_id', req.params.id)
+      .order('created_at', { ascending: true });
+    if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+
+    const userIds = (shares || []).filter((s: any) => s.principal_type === 'user').map((s: any) => s.principal_id);
+    const roleIds = (shares || []).filter((s: any) => s.principal_type === 'role').map((s: any) => s.principal_id);
+
+    const [{ data: users }, { data: roles }] = await Promise.all([
+      userIds.length
+        ? supabaseAdmin.from('users').select('id, display_name, email, avatar_url, user_type').in('id', userIds)
+        : Promise.resolve({ data: [] as any[] }),
+      roleIds.length
+        ? supabaseAdmin.from('roles').select('id, name, color').in('id', roleIds)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const userMap = new Map((users || []).map((u: any) => [u.id, u]));
+    const roleMap = new Map((roles || []).map((r: any) => [r.id, r]));
+
+    const data = (shares || []).map((s: any) => ({
+      ...s,
+      user: s.principal_type === 'user' ? userMap.get(s.principal_id) ?? null : null,
+      role: s.principal_type === 'role' ? roleMap.get(s.principal_id) ?? null : null,
+    }));
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('List shares error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+const sharesPutSchema = z.object({
+  shares: z.array(z.object({
+    principal_type: z.enum(['user', 'role']),
+    principal_id: z.string().uuid(),
+    access_level: z.enum(ACCESS_LEVELS),
+  })).default([]),
+});
+
+// PUT /admin/lms/items/:id/shares — replace the full share set. Notifies any
+// newly added USER principals (role members aren't pinged to avoid spam).
+router.put('/items/:id/shares', async (req: Request, res: Response) => {
+  try {
+    const itemId = req.params.id as string;
+    const { shares } = sharesPutSchema.parse(req.body);
+
+    const { data: existing } = await supabaseAdmin
+      .from('lms_item_shares').select('principal_type, principal_id').eq('item_id', itemId);
+    const existingUserIds = new Set(
+      (existing || []).filter((s: any) => s.principal_type === 'user').map((s: any) => s.principal_id),
+    );
+
+    // Replace-set: clear then insert (dedupe on principal within the payload).
+    await supabaseAdmin.from('lms_item_shares').delete().eq('item_id', itemId);
+    if (shares.length) {
+      const seen = new Set<string>();
+      const rows = shares
+        .filter((s) => { const k = `${s.principal_type}:${s.principal_id}`; if (seen.has(k)) return false; seen.add(k); return true; })
+        .map((s) => ({
+          item_id: itemId,
+          principal_type: s.principal_type,
+          principal_id: s.principal_id,
+          access_level: s.access_level,
+          granted_by: req.userId!,
+        }));
+      const { error: insErr } = await supabaseAdmin.from('lms_item_shares').insert(rows);
+      if (insErr) { res.status(500).json({ success: false, error: insErr.message }); return; }
+    }
+
+    const { data: item } = await supabaseAdmin.from('lms_items').select('title').eq('id', itemId).maybeSingle();
+    const newlyAdded = shares.filter((s) => s.principal_type === 'user' && !existingUserIds.has(s.principal_id));
+    if (newlyAdded.length) {
+      await notifyLms(
+        newlyAdded.map((s) => ({ user_id: s.principal_id, type: 'lms_shared' as const, title: `You were given access to ${(item as any)?.title ?? 'content'}` })),
+        itemId,
+        req.userId!,
+      );
+    }
+    res.json({ success: true });
+  } catch (err) {
+    if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
+    console.error('Set shares error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// Contributor review queue — migration 165
+// ============================================================
+
+// GET /admin/lms/review-queue — submissions awaiting approval.
+router.get('/review-queue', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('lms_items')
+      .select(`
+        id, origin_item_id, kind, track, title, slug, review_state, review_note, submitted_at, submitted_by,
+        submitter:users!lms_items_submitted_by_fkey(id, display_name, avatar_url, email),
+        origin:lms_items!lms_items_origin_item_id_fkey(id, title, slug, status)
+      `)
+      .eq('review_state', 'submitted')
+      .order('submitted_at', { ascending: true });
+    if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+    res.json({ success: true, data: data || [] });
+  } catch (err) {
+    console.error('Review queue error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /admin/lms/items/:id/approve — apply a clone onto its origin, or publish
+// brand-new contributor content.
+router.post('/items/:id/approve', async (req: Request, res: Response) => {
+  try {
+    const draftId = req.params.id as string;
+    const { data: draft } = await supabaseAdmin
+      .from('lms_items').select('id, title, origin_item_id, submitted_by, review_state').eq('id', draftId).single();
+    if (!draft) { res.status(404).json({ success: false, error: 'Not found' }); return; }
+    if ((draft as any).review_state !== 'submitted') {
+      res.status(400).json({ success: false, error: 'Not awaiting review' });
+      return;
+    }
+
+    let liveId = draftId;
+    if ((draft as any).origin_item_id) {
+      // Apply the proposed changes onto the live item.
+      liveId = await applyRevision(draftId);
+    } else {
+      // Brand-new content — publish it (mirrors POST /items/:id/publish).
+      await supabaseAdmin
+        .from('lms_items')
+        .update({ status: 'published', published_at: new Date().toISOString(), review_state: 'none', review_note: null })
+        .eq('id', draftId);
+      const userIds = await resolveAudienceUserIds(draftId);
+      if (userIds.length) {
+        await supabaseAdmin
+          .from('lms_assignments')
+          .upsert(userIds.map((uid) => ({ item_id: draftId, user_id: uid })), { onConflict: 'item_id,user_id', ignoreDuplicates: true });
+      }
+      mirrorCourseItem(draftId).catch((e) => console.error('[lms-admin] mirror sync failed (approve):', e));
+    }
+
+    if ((draft as any).submitted_by) {
+      await notifyLms(
+        [{ user_id: (draft as any).submitted_by, type: 'lms_review_decided', title: `Approved: ${(draft as any).title}` }],
+        liveId,
+        req.userId!,
+        { decision: 'approved' },
+      );
+    }
+    res.json({ success: true, data: { live_item_id: liveId } });
+  } catch (err) {
+    console.error('Approve error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+const requestChangesSchema = z.object({ note: z.string().max(2000).optional() });
+
+// POST /admin/lms/items/:id/request-changes — bounce back to the contributor.
+router.post('/items/:id/request-changes', async (req: Request, res: Response) => {
+  try {
+    const draftId = req.params.id as string;
+    const { note } = requestChangesSchema.parse(req.body);
+    const { data: draft } = await supabaseAdmin
+      .from('lms_items').select('id, title, submitted_by').eq('id', draftId).single();
+    if (!draft) { res.status(404).json({ success: false, error: 'Not found' }); return; }
+
+    await supabaseAdmin
+      .from('lms_items')
+      .update({ review_state: 'changes_requested', review_note: note ?? null })
+      .eq('id', draftId);
+
+    if ((draft as any).submitted_by) {
+      await notifyLms(
+        [{ user_id: (draft as any).submitted_by, type: 'lms_review_decided', title: `Changes requested: ${(draft as any).title}`, body: note ?? null }],
+        draftId,
+        req.userId!,
+        { decision: 'changes_requested' },
+      );
+    }
+    res.json({ success: true });
+  } catch (err) {
+    if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /admin/lms/items/:id/reject — discard a clone, or park new content.
+router.post('/items/:id/reject', async (req: Request, res: Response) => {
+  try {
+    const draftId = req.params.id as string;
+    const { data: draft } = await supabaseAdmin
+      .from('lms_items').select('id, title, origin_item_id, submitted_by').eq('id', draftId).single();
+    if (!draft) { res.status(404).json({ success: false, error: 'Not found' }); return; }
+
+    const submittedBy = (draft as any).submitted_by;
+    if ((draft as any).origin_item_id) {
+      await discardClone(draftId);
+    } else {
+      // Keep the draft but take it out of the queue so it can be revised/deleted.
+      await supabaseAdmin
+        .from('lms_items')
+        .update({ review_state: 'none', review_note: null, submitted_by: null, submitted_at: null })
+        .eq('id', draftId);
+    }
+
+    if (submittedBy) {
+      await notifyLms(
+        [{ user_id: submittedBy, type: 'lms_review_decided', title: `Not approved: ${(draft as any).title}` }],
+        (draft as any).origin_item_id || draftId,
+        req.userId!,
+        { decision: 'rejected' },
+      );
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Reject error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

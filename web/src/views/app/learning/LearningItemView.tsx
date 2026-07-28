@@ -1,8 +1,14 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { LmsAssignment, LmsItem, LmsLesson } from '@squadhub/shared';
+import type { LmsAccessLevel, LmsAssignment, LmsItem, LmsLesson } from '@squadhub/shared';
 import { useLmsItem, useStartAssignment, useCompleteLesson } from '../../../hooks/useLms';
+import { useStartEditDraft } from '../../../hooks/useLmsCollab';
 import BlockRenderer from './blocks/BlockRenderer';
+import LmsEditor from './LmsEditor';
+import LmsCommentsPanel from './LmsCommentsPanel';
+
+const RANK: Record<LmsAccessLevel, number> = { viewer: 1, commenter: 2, contributor: 3, admin: 4 };
+const can = (a: LmsAccessLevel | undefined, min: LmsAccessLevel) => !!a && RANK[a] >= RANK[min];
 
 // Three-pane reader for a Resources item (help-center style):
 //   • left  — the catalog (lives in LearningSidebar / LearningShell)
@@ -15,9 +21,13 @@ type ItemFull = LmsItem & { lessons: Lesson[]; category?: { name: string; color:
 type AssignmentFull = (LmsAssignment & { completed_lesson_ids: string[] }) | null;
 
 export default function LearningItemView({ itemId, onBack }: { itemId: string; onBack: () => void }) {
-  const { data, isLoading } = useLmsItem(itemId);
+  const { data, isLoading, refetch } = useLmsItem(itemId);
   const start = useStartAssignment();
+  const startEdit = useStartEditDraft();
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ draftItemId: string; isClone: boolean } | null>(null);
+  const [showComments, setShowComments] = useState(false);
+  const [submittedNote, setSubmittedNote] = useState(false);
   const contentRef = useRef<HTMLElement>(null);
 
   // Mark in_progress on first open (if still not_started)
@@ -48,8 +58,28 @@ export default function LearningItemView({ itemId, onBack }: { itemId: string; o
     contentRef.current?.scrollTo({ top: 0 });
   }, [activeLessonId]);
 
+  const access = item?.my_access;
+
+  async function onEdit() {
+    if (!item) return;
+    const res = await startEdit.mutateAsync(item.id);
+    setEditing({ draftItemId: res.draft_item_id, isClone: res.is_clone });
+  }
+
   if (isLoading || !item) {
     return <div className="flex h-full items-center justify-center text-sm text-[var(--sh-ink-3)]">Loading…</div>;
+  }
+
+  // Full-screen editing mode (admins edit live; contributors edit a draft clone).
+  if (editing) {
+    return (
+      <LmsEditor
+        draftItemId={editing.draftItemId}
+        isClone={editing.isClone}
+        onExit={() => { setEditing(null); refetch(); }}
+        onSubmitted={() => { setEditing(null); setSubmittedNote(true); refetch(); }}
+      />
+    );
   }
 
   const isSop = item.track === 'sop';
@@ -69,15 +99,41 @@ export default function LearningItemView({ itemId, onBack }: { itemId: string; o
           </svg>
         </button>
         <span className="truncate text-[12.5px] font-medium text-[var(--sh-ink)]">{item.title}</span>
-        {assignment && !isSop && (
-          <span className="ml-auto flex items-center gap-2">
-            <span className="text-[11px] text-[var(--sh-ink-3)]">{assignment.progress_percent}%</span>
-            <div className="h-1 w-24 overflow-hidden rounded-full bg-[var(--sh-hair)]">
-              <div className={`h-full ${assignment.status === 'completed' ? 'bg-emerald-500' : 'bg-[var(--sh-ink)]'}`} style={{ width: `${assignment.progress_percent}%` }} />
-            </div>
-          </span>
-        )}
+        <span className="ml-auto flex items-center gap-2">
+          {assignment && !isSop && (
+            <>
+              <span className="text-[11px] text-[var(--sh-ink-3)]">{assignment.progress_percent}%</span>
+              <div className="h-1 w-24 overflow-hidden rounded-full bg-[var(--sh-hair)]">
+                <div className={`h-full ${assignment.status === 'completed' ? 'bg-emerald-500' : 'bg-[var(--sh-ink)]'}`} style={{ width: `${assignment.progress_percent}%` }} />
+              </div>
+            </>
+          )}
+          {can(access, 'commenter') && (
+            <button
+              onClick={() => setShowComments(true)}
+              className="rounded-[6px] border border-[var(--sh-hair)] bg-[var(--surface)] px-2.5 py-1 text-[12px] text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)]"
+            >
+              Comments
+            </button>
+          )}
+          {can(access, 'contributor') && (
+            <button
+              onClick={onEdit}
+              disabled={startEdit.isPending}
+              className="rounded-[6px] bg-[var(--sh-ink)] px-3 py-1 text-[12px] font-semibold text-[var(--sidebar)] hover:opacity-90 disabled:opacity-60"
+            >
+              {startEdit.isPending ? 'Opening…' : access === 'admin' ? 'Edit' : 'Suggest edit'}
+            </button>
+          )}
+        </span>
       </div>
+
+      {submittedNote && (
+        <div className="flex items-center gap-2 border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-[12.5px] text-emerald-900">
+          <span>✓ Submitted for review. An admin will approve it before it goes live.</span>
+          <button onClick={() => setSubmittedNote(false)} className="ml-auto text-emerald-700 hover:underline">Dismiss</button>
+        </div>
+      )}
 
       {/* Middle content + right sections rail */}
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_248px]">
@@ -109,6 +165,16 @@ export default function LearningItemView({ itemId, onBack }: { itemId: string; o
           )}
         </aside>
       </div>
+
+      {/* Comments slide-over (commenter+ only) */}
+      {showComments && can(access, 'commenter') && (
+        <div className="fixed inset-0 z-40 flex justify-end" onClick={() => setShowComments(false)}>
+          <div className="absolute inset-0 bg-black/20" />
+          <div className="relative z-10 h-full w-[340px] max-w-[85vw] border-l border-[var(--sh-hair)] bg-[var(--surface)] shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <LmsCommentsPanel itemId={item.id} access={access!} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

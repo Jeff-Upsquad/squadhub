@@ -21,6 +21,9 @@ const nextConfig = {
       { source: '/api/auth/:path*', destination: `${API_URL}/auth/:path*` },
       { source: '/api/admin/clients/:path*', destination: `${API_URL}/admin/clients/:path*` },
       { source: '/api/admin/:path*', destination: `${API_URL}/admin/:path*` },
+      // Collaborative LMS endpoints (shares/comments/review) — admins pass the
+      // per-item access gate, so the admin editor reuses the same routes.
+      { source: '/api/lms/:path*', destination: `${API_URL}/lms/:path*` },
       { source: '/api/users/:path*', destination: `${API_URL}/users/:path*` },
       { source: '/api/workspaces/:path*', destination: `${API_URL}/workspaces/:path*` },
       { source: '/api/health/:path*', destination: `${API_URL}/health/:path*` },
