@@ -7,6 +7,8 @@ import type { LmsItem, LmsLesson, LmsCategory, UserType } from '@squadhub/shared
 import BlockList from '../../components/lms/BlockList';
 import AudiencePicker from '../../components/lms/AudiencePicker';
 import MediaUploader from '../../components/lms/MediaUploader';
+import ShareModal from '../../components/lms/ShareModal';
+import CommentsPanel from '../../components/lms/CommentsPanel';
 
 interface Props {
   itemId: string;
@@ -27,6 +29,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [publishBusy, setPublishBusy] = useState(false);
   const [showLessonAudience, setShowLessonAudience] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   // Lightweight autosave indicator. Every tracked mutation calls markSaved() on
   // success so authors get explicit "Saving…/Saved" feedback for the otherwise
@@ -190,6 +193,12 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <SaveStatus saving={isSaving} savedAt={savedAt} />
+            <button
+              onClick={() => setShowShare(true)}
+              className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt"
+            >
+              Share
+            </button>
             <Link
               href={`/admin/learning/${itemId}/assignments`}
               className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt"
@@ -300,6 +309,10 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
               userIds={item.audience_user_ids || []}
               onChange={(next) => setAudience.mutate(next)}
             />
+          </Section>
+
+          <Section title="Comments" hint="Staff-only review notes. Visible to people with Commenter access or higher — not learners.">
+            <CommentsPanel itemId={item.id} />
           </Section>
         </aside>
 
@@ -459,6 +472,10 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
           )}
         </main>
       </div>
+
+      {showShare && (
+        <ShareModal itemId={item.id} itemTitle={item.title} onClose={() => setShowShare(false)} />
+      )}
     </div>
   );
 }

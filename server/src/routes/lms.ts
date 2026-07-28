@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../supabase';
 import { mirrorCourseAssignment } from '../services/taskMirror';
+import { getItemAccess } from '../services/lmsAccess';
+import { getUserRoleIds } from '../utils/roles';
 
 const router = Router();
 router.use(requireAuth);
@@ -138,6 +140,58 @@ router.get('/my-due', async (req: Request, res: Response) => {
 });
 
 // ------------------------------------------------------------
+// GET /lms/shared-with-me — published items shared with the user (directly or
+// via a role) that they can access. Powers a "Shared with me" catalog group,
+// including items with no learner assignment. Excludes draft clones.
+// ------------------------------------------------------------
+router.get('/shared-with-me', async (req: Request, res: Response) => {
+  try {
+    const roleIds = await getUserRoleIds(req.userId!);
+
+    const orFilters = [`and(principal_type.eq.user,principal_id.eq.${req.userId!})`];
+    if (roleIds.length) {
+      orFilters.push(`and(principal_type.eq.role,principal_id.in.(${roleIds.join(',')}))`);
+    }
+
+    const { data: shares, error } = await supabaseAdmin
+      .from('lms_item_shares')
+      .select('item_id, access_level')
+      .or(orFilters.join(','));
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    // Highest access per item.
+    const rank: Record<string, number> = { viewer: 1, commenter: 2, contributor: 3, admin: 4 };
+    const bestByItem = new Map<string, string>();
+    for (const s of shares || []) {
+      const cur = bestByItem.get((s as any).item_id);
+      if (!cur || rank[(s as any).access_level] > rank[cur]) bestByItem.set((s as any).item_id, (s as any).access_level);
+    }
+    const itemIds = Array.from(bestByItem.keys());
+    if (!itemIds.length) { res.json({ success: true, data: [] }); return; }
+
+    const { data: items } = await supabaseAdmin
+      .from('lms_items')
+      .select(`
+        id, kind, track, title, slug, summary, cover_image_url, status, published_at, origin_item_id,
+        category:lms_categories(id, name, slug, color)
+      `)
+      .in('id', itemIds)
+      .eq('status', 'published')
+      .is('origin_item_id', null)
+      .order('updated_at', { ascending: false });
+
+    const data = (items || []).map((it: any) => ({ item: it, access_level: bestByItem.get(it.id) || 'viewer' }));
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('List shared-with-me error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ------------------------------------------------------------
 // GET /lms/categories — for filter chips in the UI
 // ------------------------------------------------------------
 router.get('/categories', async (_req: Request, res: Response) => {
@@ -163,7 +217,7 @@ router.get('/categories', async (_req: Request, res: Response) => {
 // ------------------------------------------------------------
 router.get('/items/:id', async (req: Request, res: Response) => {
   try {
-    const itemId = req.params.id;
+    const itemId = req.params.id as string;
 
     // Load the requesting user's profile once — user_type drives lesson-level
     // audience filtering, is_admin gates access + preview.
@@ -175,18 +229,22 @@ router.get('/items/:id', async (req: Request, res: Response) => {
     const isAdmin = !!(profile as any)?.is_admin;
     const userType = (profile as any)?.user_type ?? null;
 
-    // Check access: either there's an assignment or the user is admin
+    // Effective access: global admin, owner, direct/role share, or (legacy)
+    // assignment. Null = no access at all.
+    const accessLevel = await getItemAccess(itemId, req.userId!);
+    if (!accessLevel) {
+      res.status(403).json({ success: false, error: 'Not assigned to this content' });
+      return;
+    }
+
+    // Progress + lesson-audience filtering are assignment-scoped; share-only
+    // viewers simply have none.
     const { data: assignment } = await supabaseAdmin
       .from('lms_assignments')
       .select('id, status, progress_percent, started_at, completed_at')
       .eq('item_id', itemId)
       .eq('user_id', req.userId!)
       .maybeSingle();
-
-    if (!assignment && !isAdmin) {
-      res.status(403).json({ success: false, error: 'Not assigned to this content' });
-      return;
-    }
 
     const { data: item, error: itemErr } = await supabaseAdmin
       .from('lms_items')
@@ -202,7 +260,8 @@ router.get('/items/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    if ((item as any).status !== 'published' && !isAdmin) {
+    // Unpublished drafts are visible only to admins (global or per-item).
+    if ((item as any).status !== 'published' && accessLevel !== 'admin') {
       res.status(403).json({ success: false, error: 'Not published' });
       return;
     }
@@ -290,7 +349,7 @@ router.get('/items/:id', async (req: Request, res: Response) => {
     res.json({
       success: true,
       data: {
-        item: { ...item, lessons: fullLessons },
+        item: { ...item, lessons: fullLessons, my_access: accessLevel },
         assignment: assignment ? { ...assignment, completed_lesson_ids: completedLessonIds } : null,
       },
     });

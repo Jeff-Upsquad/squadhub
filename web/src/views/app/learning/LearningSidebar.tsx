@@ -1,6 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { useMyLearning, type MyLearningEntry } from '../../../hooks/useLms';
+import { useSharedWithMe } from '../../../hooks/useLmsCollab';
 
 // Module side menu for the Resources section. Mirrors AppsSidebar conventions:
 // a header, a search field, and a scrollable list of items grouped by category.
@@ -53,10 +54,27 @@ function groupByCategory(entries: MyLearningEntry[], keyPrefix = ''): Group[] {
 
 export default function LearningSidebar({ activeItemId, onSelectItem }: LearningSidebarProps) {
   const { data: assignments, isLoading } = useMyLearning();
+  const { data: shared } = useSharedWithMe();
   const [query, setQuery] = useState('');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const all = assignments || [];
+
+  // Shared-but-unassigned items become synthetic entries so they render in the
+  // catalog. Dedupe against assignments (assigned wins — it carries progress).
+  const assignedIds = useMemo(() => new Set(all.map((a) => a.item.id)), [all]);
+  const sharedEntries = useMemo<MyLearningEntry[]>(
+    () =>
+      (shared || [])
+        .filter((s) => !assignedIds.has(s.item.id))
+        .map((s) => ({
+          id: `shared-${s.item.id}`,
+          item: s.item,
+          status: 'not_started',
+          progress_percent: 0,
+        }) as MyLearningEntry),
+    [shared, assignedIds],
+  );
 
   const q = query.trim().toLowerCase();
   const matchesQuery = (a: MyLearningEntry) =>
@@ -74,10 +92,14 @@ export default function LearningSidebar({ activeItemId, onSelectItem }: Learning
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const sopVisible = useMemo(() => all.filter((a) => a.item.track === 'sop').filter(matchesQuery), [all, q]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const sharedVisible = useMemo(() => sharedEntries.filter(matchesQuery), [sharedEntries, q]);
+
   const courseGroups = useMemo(() => groupByCategory(courseVisible), [courseVisible]);
   const sopGroups = useMemo(() => groupByCategory(sopVisible, 'sop::'), [sopVisible]);
+  const sharedGroups = useMemo(() => groupByCategory(sharedVisible, 'shared::'), [sharedVisible]);
 
-  const nothing = courseVisible.length === 0 && sopVisible.length === 0;
+  const nothing = courseVisible.length === 0 && sopVisible.length === 0 && sharedVisible.length === 0;
 
   return (
     <div className="flex h-full w-full flex-col text-[var(--sh-ink-2)]">
@@ -160,6 +182,28 @@ export default function LearningSidebar({ activeItemId, onSelectItem }: Learning
               >
                 <GroupList
                   groups={sopGroups}
+                  collapsed={collapsed}
+                  setCollapsed={setCollapsed}
+                  activeItemId={activeItemId}
+                  onSelectItem={onSelectItem}
+                />
+              </Section>
+            )}
+
+            {/* Shared with me — items shared directly or via a role (no assignment) */}
+            {sharedGroups.length > 0 && (
+              <Section
+                className={courseGroups.length > 0 || sopGroups.length > 0 ? 'mt-3 border-t border-[var(--sh-hair)] pt-3' : ''}
+                icon={
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+                    <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+                  </svg>
+                }
+                title="Shared with me"
+              >
+                <GroupList
+                  groups={sharedGroups}
                   collapsed={collapsed}
                   setCollapsed={setCollapsed}
                   activeItemId={activeItemId}
