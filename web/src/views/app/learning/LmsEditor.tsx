@@ -91,7 +91,7 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
         </span>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[220px_1fr]">
+      <div className={`grid min-h-0 flex-1 grid-cols-1 ${isCourse ? 'lg:grid-cols-[220px_1fr]' : ''}`}>
         {/* Lesson list (courses) */}
         {isCourse && (
           <aside className="hidden min-h-0 overflow-y-auto border-r border-[var(--sh-hair)] bg-[var(--sidebar)] p-2 lg:block">
