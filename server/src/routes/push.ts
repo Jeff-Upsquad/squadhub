@@ -37,6 +37,16 @@ const webUnregisterSchema = z.object({
 router.post('/register', async (req: Request, res: Response) => {
   try {
     const body = registerSchema.parse(req.body);
+    // A device's FCM token identifies one physical install, so it must belong to
+    // exactly one user. When the app switches accounts on the same device it
+    // re-registers the same token under the new user; evict any prior owner here
+    // or the previous account keeps receiving this device's pushes (a logged-out
+    // user's chat notifications leaking onto whoever logged in next).
+    await supabaseAdmin
+      .from('partner_push_tokens')
+      .delete()
+      .eq('token', body.token)
+      .neq('user_id', req.userId!);
     const { error } = await supabaseAdmin
       .from('partner_push_tokens')
       .upsert(
@@ -93,6 +103,14 @@ router.get('/vapid-public-key', (_req: Request, res: Response) => {
 router.post('/web-register', async (req: Request, res: Response) => {
   try {
     const body = webRegisterSchema.parse(req.body);
+    // A browser PushSubscription endpoint is per-browser-install, not per-user:
+    // logging in as a different account in the same PWA reuses it. Evict any
+    // prior owner so a signed-out account stops getting this browser's pushes.
+    await supabaseAdmin
+      .from('web_push_subscriptions')
+      .delete()
+      .eq('endpoint', body.endpoint)
+      .neq('user_id', req.userId!);
     const { error } = await supabaseAdmin
       .from('web_push_subscriptions')
       .upsert(
