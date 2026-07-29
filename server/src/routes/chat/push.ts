@@ -21,6 +21,16 @@ router.post('/register', requireAuth, async (req: Request, res: Response) => {
   try {
     const body = registerSchema.parse(req.body);
 
+    // A device token identifies one physical install, so it must map to exactly
+    // one user. Switching accounts on the same device re-registers the same
+    // token under the new user; evict any prior owner or the previous account
+    // keeps receiving this device's chat pushes.
+    await supabaseAdmin
+      .from('chat_push_tokens')
+      .delete()
+      .eq('token', body.token)
+      .neq('user_id', req.userId!);
+
     const { error } = await supabaseAdmin
       .from('chat_push_tokens')
       .upsert(
