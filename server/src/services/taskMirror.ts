@@ -344,9 +344,96 @@ export async function mirrorCourseItem(itemId: string): Promise<void> {
   for (const a of assignments || []) await mirrorCourseAssignment((a as any).id);
 }
 
+// ---- resource "send as task" mirrors (migration 166) ------------------------
+// A finer-grained source than whole-item course assignments: an admin sends an
+// item / lesson / section to a chosen set of users. Each lms_task_send_recipients
+// row becomes one personal task — source_kind 'course' | 'sop' | 'post' (drives
+// the Home card), source_id = recipient id. Unlike the course/meeting mirrors, a
+// RESEND may reopen a completed task (opts.reopen) so recipients re-acknowledge
+// updated content; steady-state syncing still never touches status.
+
+export async function mirrorResourceRecipient(
+  recipientId: string,
+  opts: { reopen?: boolean } = {},
+): Promise<void> {
+  const { data: r } = await supabaseAdmin
+    .from('lms_task_send_recipients')
+    .select('id, user_id, send:lms_task_sends(id, title, due_date, source_kind)')
+    .eq('id', recipientId)
+    .maybeSingle();
+  const send = (r as any)?.send;
+  if (!r || !send) return;
+
+  const userId = (r as any).user_id as string;
+  const title = send.title as string;
+  const dueDate = (send.due_date as string | null) ?? null;
+  const sourceKind = send.source_kind as string; // 'course' | 'sop' | 'post'
+
+  const { data: existing } = await supabaseAdmin
+    .from('tasks')
+    .select('id, title, due_date')
+    .eq('source_id', recipientId)
+    .eq('source_user_id', userId)
+    .maybeSingle();
+
+  if (existing) {
+    const patch: Record<string, any> = {};
+    if ((existing as any).title !== title) patch.title = title;
+    if (((existing as any).due_date ?? null) !== dueDate) patch.due_date = dueDate;
+    // Reopen only on an explicit resend — never in steady-state reconcile.
+    if (opts.reopen) {
+      const target = await personalTarget(userId);
+      if (target) patch.status = target.status;
+    }
+    if (Object.keys(patch).length) {
+      await supabaseAdmin.from('tasks').update(patch).eq('id', (existing as any).id);
+    }
+    return;
+  }
+
+  const target = await personalTarget(userId);
+  if (!target) return;
+  const typeId = await getTypeId(sourceKind);
+  const { error } = await supabaseAdmin.from('tasks').insert({
+    list_id: target.listId,
+    title,
+    status: target.status,
+    priority: 'none',
+    due_date: dueDate,
+    assignee_ids: [userId],
+    created_by: userId,
+    task_type_id: typeId,
+    source_kind: sourceKind,
+    source_id: recipientId,
+    source_user_id: userId,
+  });
+  if (error && (error as any).code !== '23505') {
+    console.error('[taskMirror] insert resource task failed:', error.message);
+  }
+}
+
+// Mirror every recipient of a send (after create / resend / auto-resend).
+export async function mirrorResourceSend(
+  sendId: string,
+  opts: { reopen?: boolean } = {},
+): Promise<void> {
+  const { data: recipients } = await supabaseAdmin
+    .from('lms_task_send_recipients')
+    .select('id')
+    .eq('send_id', sendId);
+  for (const r of recipients || []) await mirrorResourceRecipient((r as any).id, opts);
+}
+
+// Delete the mirror tasks for the given recipient ids (unsend / prune). Capture
+// recipient ids BEFORE deleting the send rows (the FK cascade removes them).
+export async function deleteResourceRecipientTasks(recipientIds: string[]): Promise<void> {
+  if (!recipientIds.length) return;
+  await supabaseAdmin.from('tasks').delete().in('source_id', recipientIds);
+}
+
 // ---- full reconcile (boot backfill + drift correction) ----------------------
 
-async function cleanupOrphans(kind: MirrorKind, validIds: string[]): Promise<number> {
+async function cleanupOrphans(kind: string, validIds: string[]): Promise<number> {
   const valid = new Set(validIds);
   const { data: rows } = await supabaseAdmin
     .from('tasks')
@@ -359,7 +446,7 @@ async function cleanupOrphans(kind: MirrorKind, validIds: string[]): Promise<num
   return stale.length;
 }
 
-export async function reconcileAllMirrors(): Promise<{ meetings: number; courses: number }> {
+export async function reconcileAllMirrors(): Promise<{ meetings: number; courses: number; resources: number }> {
   // Meetings: all currently scheduled.
   const { data: meetings } = await supabaseAdmin
     .from('meetings')
@@ -369,8 +456,21 @@ export async function reconcileAllMirrors(): Promise<{ meetings: number; courses
   for (const id of meetingIds) await mirrorMeeting(id);
   await cleanupOrphans('meeting', meetingIds);
 
-  // Courses: assigned, not completed, with a due date (item-published is checked
-  // per-row inside mirrorCourseAssignment).
+  // Resource sends (item/lesson/section): create missing recipient tasks + refresh
+  // presentation. Never reopens here. Group recipient ids by source_kind so orphan
+  // cleanup can run per Home-card bucket.
+  const { data: recips } = await supabaseAdmin
+    .from('lms_task_send_recipients')
+    .select('id, send:lms_task_sends(source_kind)');
+  const recipByKind: Record<string, string[]> = { course: [], sop: [], post: [] };
+  for (const r of recips || []) {
+    const kind = (r as any).send?.source_kind as string | undefined;
+    if (kind && recipByKind[kind]) recipByKind[kind].push((r as any).id);
+    await mirrorResourceRecipient((r as any).id);
+  }
+
+  // Courses: legacy whole-item assignment mirror (published, assigned, not
+  // completed, with a due date — item-published checked inside the fn).
   const { data: assignments } = await supabaseAdmin
     .from('lms_assignments')
     .select('id')
@@ -378,7 +478,12 @@ export async function reconcileAllMirrors(): Promise<{ meetings: number; courses
     .not('due_date', 'is', null);
   const assignmentIds = (assignments || []).map((a: any) => a.id);
   for (const id of assignmentIds) await mirrorCourseAssignment(id);
-  await cleanupOrphans('course', assignmentIds);
+  // A source_kind='course' task is valid if its source_id is a live assignment
+  // OR a live resource-send course recipient — both share the 'course' kind, so
+  // union before cleanup to avoid deleting resource-send course tasks.
+  await cleanupOrphans('course', [...assignmentIds, ...recipByKind.course]);
+  await cleanupOrphans('sop', recipByKind.sop);
+  await cleanupOrphans('post', recipByKind.post);
 
-  return { meetings: meetingIds.length, courses: assignmentIds.length };
+  return { meetings: meetingIds.length, courses: assignmentIds.length, resources: (recips || []).length };
 }

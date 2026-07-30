@@ -8,10 +8,33 @@ import { requireAdmin } from '../middleware/admin';
 import { supabaseAdmin } from '../supabase';
 import { mirrorCourseItem } from '../services/taskMirror';
 import { applyRevision, discardClone, notifyLms } from '../services/lmsAuthoring';
+import {
+  createSend,
+  resendSend,
+  deleteSend,
+  autoResendForItem,
+  listSendsForItem,
+  recipientsForSend,
+  type Principal,
+  type SendScope,
+} from '../services/lmsTaskSends';
 
 const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
+
+// Fire auto-resend for an item's auto_resend sends after a content mutation
+// (fire-and-forget, like the course mirror sync).
+function fireAutoResend(itemId: string | null | undefined, lessonId?: string | null): void {
+  if (!itemId) return;
+  autoResendForItem(itemId, lessonId ?? null).catch((e) =>
+    console.error('[lms-admin] auto-resend failed:', e),
+  );
+}
+async function lessonItemId(lessonId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin.from('lms_lessons').select('item_id').eq('id', lessonId).maybeSingle();
+  return (data as any)?.item_id ?? null;
+}
 
 // Repo root (server/src/routes -> ../../..). Used to locate the SOP generator.
 const REPO_ROOT = path.resolve(__dirname, '../../..');
@@ -1098,6 +1121,8 @@ router.post('/items/:id/lessons', async (req: Request, res: Response) => {
       return;
     }
 
+    // New page/lesson added — re-fire item-scope auto-resend sends.
+    fireAutoResend(itemId as string, (data as any).id);
     res.status(201).json({ success: true, data: { ...data, blocks: [] } });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -1134,6 +1159,7 @@ router.patch('/lessons/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    fireAutoResend((data as any).item_id, (data as any).id);
     res.json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -1290,6 +1316,7 @@ router.post('/lessons/:id/blocks', async (req: Request, res: Response) => {
       return;
     }
 
+    fireAutoResend(await lessonItemId(lessonId as string), lessonId as string);
     res.status(201).json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -1327,6 +1354,7 @@ router.patch('/blocks/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    fireAutoResend(await lessonItemId((data as any).lesson_id), (data as any).lesson_id);
     res.json({ success: true, data });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -1494,6 +1522,101 @@ router.get('/users/search', async (req: Request, res: Response) => {
     res.json({ success: true, data: data || [] });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// Send as task (migration 166) — push an item/lesson/section to users/roles.
+// ============================================================
+
+const principalSchema = z.object({
+  type: z.enum(['user', 'role']),
+  id: z.string().uuid(),
+});
+const sendCreateSchema = z.object({
+  scope: z.enum(['item', 'lesson', 'section']),
+  lesson_id: z.string().uuid().nullable().optional(),
+  section: z
+    .object({
+      anchor: z.string().min(1),
+      label: z.string().min(1),
+      index: z.number().int().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+  title: z.string().min(1).max(300),
+  due_date: z.string().datetime().nullable().optional(),
+  auto_resend: z.boolean().optional(),
+  principals: z.array(principalSchema).min(1),
+});
+
+// POST /admin/lms/items/:id/task-sends — create a send.
+router.post('/items/:id/task-sends', async (req: Request, res: Response) => {
+  try {
+    const body = sendCreateSchema.parse(req.body);
+    const result = await createSend({
+      itemId: req.params.id as string,
+      scope: body.scope as SendScope,
+      lessonId: body.lesson_id ?? null,
+      section: body.section ?? null,
+      title: body.title,
+      dueDate: body.due_date ?? null,
+      autoResend: body.auto_resend ?? false,
+      principals: body.principals as Principal[],
+      createdBy: req.userId ?? null,
+    });
+    res.status(201).json({ success: true, data: result });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Create task-send error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// GET /admin/lms/items/:id/task-sends — sends + completed/total counts.
+router.get('/items/:id/task-sends', async (req: Request, res: Response) => {
+  try {
+    const data = await listSendsForItem(req.params.id as string);
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('List task-sends error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /admin/lms/task-sends/:sendId/recipients — per-user completion roster.
+router.get('/task-sends/:sendId/recipients', async (req: Request, res: Response) => {
+  try {
+    const data = await recipientsForSend(req.params.sendId as string);
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Send recipients error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /admin/lms/task-sends/:sendId/resend — reopen + re-notify recipients.
+router.post('/task-sends/:sendId/resend', async (req: Request, res: Response) => {
+  try {
+    const result = await resendSend(req.params.sendId as string);
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    console.error('Resend task-send error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+  }
+});
+
+// DELETE /admin/lms/task-sends/:sendId — unsend (removes recipients' tasks).
+router.delete('/task-sends/:sendId', async (req: Request, res: Response) => {
+  try {
+    await deleteSend(req.params.sendId as string);
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Delete task-send error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
   }
 });
 

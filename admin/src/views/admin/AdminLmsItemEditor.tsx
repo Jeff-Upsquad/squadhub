@@ -8,6 +8,8 @@ import BlockList from '../../components/lms/BlockList';
 import AudiencePicker from '../../components/lms/AudiencePicker';
 import MediaUploader from '../../components/lms/MediaUploader';
 import ShareModal from '../../components/lms/ShareModal';
+import SendTaskModal from '../../components/lms/SendTaskModal';
+import TaskSendsPanel from '../../components/lms/TaskSendsPanel';
 import CommentsPanel from '../../components/lms/CommentsPanel';
 
 interface Props {
@@ -30,6 +32,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
   const [publishBusy, setPublishBusy] = useState(false);
   const [showLessonAudience, setShowLessonAudience] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showSendTask, setShowSendTask] = useState(false);
 
   // Lightweight autosave indicator. Every tracked mutation calls markSaved() on
   // success so authors get explicit "Saving…/Saved" feedback for the otherwise
@@ -199,6 +202,13 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
             >
               Share
             </button>
+            <button
+              onClick={() => setShowSendTask(true)}
+              className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt"
+              title="Assign this content (or part of it) as a trackable task"
+            >
+              Send as task
+            </button>
             <Link
               href={`/admin/learning/${itemId}/assignments`}
               className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt"
@@ -309,6 +319,10 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
               userIds={item.audience_user_ids || []}
               onChange={(next) => setAudience.mutate(next)}
             />
+          </Section>
+
+          <Section title="Tasks sent" hint="Content sent as a task. Track who has completed it; resend to reopen, or unsend to remove.">
+            <TaskSendsPanel itemId={item.id} />
           </Section>
 
           <Section title="Comments" hint="Staff-only review notes. Visible to people with Commenter access or higher — not learners.">
@@ -475,6 +489,16 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
 
       {showShare && (
         <ShareModal itemId={item.id} itemTitle={item.title} onClose={() => setShowShare(false)} />
+      )}
+      {showSendTask && (
+        <SendTaskModal
+          itemId={item.id}
+          itemTitle={item.title}
+          itemKind={item.kind}
+          itemTrack={item.track}
+          lessons={item.lessons as any}
+          onClose={() => setShowSendTask(false)}
+        />
       )}
     </div>
   );
