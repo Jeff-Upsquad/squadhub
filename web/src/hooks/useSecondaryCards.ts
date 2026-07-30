@@ -29,6 +29,12 @@ export interface SecondaryCardsResult {
   recordings: SecondaryCardData;
   meetings: SecondaryCardData;
   calls: SecondaryCardData;
+  // Resource "send as task" cards — driven by the mirror task's source_kind,
+  // which is set from the source Resources item's (kind, track). See migration
+  // 166 + server/services/lmsTaskSends.ts (sourceKindForItem).
+  courses: SecondaryCardData;
+  sops: SecondaryCardData;
+  posts: SecondaryCardData;
 }
 
 // Label names (case-insensitive, singular or plural) per label-driven card.
@@ -57,7 +63,10 @@ export function useSecondaryCards(): SecondaryCardsResult {
 
   return useMemo<SecondaryCardsResult>(() => {
     const empty: SecondaryCardData = { items: [], isLoading };
-    if (!data) return { urgent: empty, recordings: empty, meetings: empty, calls: empty };
+    if (!data) return {
+      urgent: empty, recordings: empty, meetings: empty, calls: empty,
+      courses: empty, sops: empty, posts: empty,
+    };
 
     // Union every bucket (these cards are lenses over ALL my tasks, not the
     // starred focus list), deduped by id.
@@ -100,11 +109,22 @@ export function useSecondaryCards(): SecondaryCardsResult {
         )
         .map((t) => toItem(t, kind));
 
+    // Resource cards: every incorporated resource task of that source_kind,
+    // regardless of date (like Urgent), except one whose work_date is still in
+    // the future. `all` already excludes done tasks (my-tasks include_done=false).
+    const sourceCard = (kind: string) =>
+      all
+        .filter((t) => t.source_kind === kind && !isFutureDay(t.work_date, tz))
+        .map((t) => toItem(t, kind));
+
     return {
       urgent: { items: urgent, isLoading },
       recordings: { items: labelCard(RECORDING_LABELS, 'recordings'), isLoading },
       meetings: { items: labelCard(MEETING_LABELS, 'meetings'), isLoading },
       calls: { items: labelCard(CALL_LABELS, 'calls'), isLoading },
+      courses: { items: sourceCard('course'), isLoading },
+      sops: { items: sourceCard('sop'), isLoading },
+      posts: { items: sourceCard('post'), isLoading },
     };
   }, [data, isLoading, tz, setActiveTask, setActiveSecondaryCard, updateTask]);
 }

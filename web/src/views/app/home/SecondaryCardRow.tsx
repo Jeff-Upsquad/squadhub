@@ -32,6 +32,16 @@ const MeetingIcon = () => (
 const CallIcon = () => (
   <svg {...icoProps}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" /></svg>
 );
+// Resource "send as task" cards.
+const CourseIcon = () => (
+  <svg {...icoProps}><path d="M22 10 12 5 2 10l10 5 10-5Z" /><path d="M6 12v5c0 1 2.7 2.5 6 2.5s6-1.5 6-2.5v-5" /></svg>
+);
+const SopIcon = () => (
+  <svg {...icoProps}><rect x="8" y="3" width="8" height="4" rx="1" /><path d="M16 5h2a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2" /><path d="M9 12l1.5 1.5L13 11" /><path d="M9 17h6" /></svg>
+);
+const PostIcon = () => (
+  <svg {...icoProps}><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z" /><path d="M9 12h6M9 16h6" /></svg>
+);
 
 // A card spec resolves a data source (the hook result) to display chrome. To
 // add a card, add it to useSecondaryCards and one entry here.
@@ -50,13 +60,16 @@ export interface SecondaryCardConfig {
 export default function SecondaryCardRow() {
   const setActiveSecondaryCard = usePMStore((s) => s.setActiveSecondaryCard);
   const activeSecondaryCard = usePMStore((s) => s.activeSecondaryCard);
-  const { urgent, recordings, meetings, calls } = useSecondaryCards();
+  const { urgent, recordings, meetings, calls, courses, sops, posts } = useSecondaryCards();
 
   const cards: SecondaryCardConfig[] = [
     { key: 'urgent', name: 'Urgent', eyebrow: 'Priority: urgent', icon: <UrgentIcon />, data: urgent },
     { key: 'recordings', name: 'Recordings', eyebrow: 'Label: recording', icon: <RecordingIcon />, data: recordings },
     { key: 'meetings', name: 'Meetings', eyebrow: 'Label: meeting', icon: <MeetingIcon />, data: meetings },
     { key: 'calls', name: 'Calls', eyebrow: 'Label: calls', icon: <CallIcon />, data: calls },
+    { key: 'courses', name: 'Courses', eyebrow: 'From Resources', icon: <CourseIcon />, data: courses },
+    { key: 'sops', name: 'SOPs', eyebrow: 'From Resources', icon: <SopIcon />, data: sops },
+    { key: 'posts', name: 'Posts', eyebrow: 'From Resources', icon: <PostIcon />, data: posts },
   ];
 
   const visible = cards.filter((c) => c.data.items.length > 0);
