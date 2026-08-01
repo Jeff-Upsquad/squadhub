@@ -436,23 +436,24 @@ export default function AdminSubscriptionCardRecipientsView({
   }, [groupRecipients]);
 
   // In the merged "All tiers" view the per-tier emerald "Selected Talent" panel
-  // (and its Assign button) is otherwise hidden — yet a client selection lands
-  // on ONE tier sibling and still needs an admin Assign. Surface each tier
-  // sibling still awaiting that approval (stage 'selected') with its selected
-  // talent(s), so the admin can Assign from the overview instead of first
-  // drilling into that tier's own tab.
-  const tierSelections = useMemo(
+  // is otherwise hidden — yet a client selection / assignment lands on ONE tier
+  // sibling. Surface each tier sibling that has a placed talent: stage 'selected'
+  // still needs an admin Assign (shown with the Assign button), stage 'assigned'
+  // is confirmed (shown read-only) — so both appear at the top of the overview
+  // instead of only inside that tier's own tab. The chosen talent keeps
+  // selected_at through assignment, so the same filter captures both stages.
+  const tierPlacements = useMemo(
     () =>
       !isGrouped
         ? []
         : groupSiblings
-            .filter((c) => cardStageBucket(c) === 'selected')
             .map((c) => ({
               card: c,
               tier: tierLabelOf(c),
+              stage: cardStageBucket(c),
               selected: groupRecipients.filter((r) => r.cardId === c.id && r.selected_at),
             }))
-            .filter((s) => s.selected.length > 0),
+            .filter((s) => (s.stage === 'selected' || s.stage === 'assigned') && s.selected.length > 0),
     [isGrouped, groupSiblings, groupRecipients],
   );
 
@@ -1287,23 +1288,27 @@ export default function AdminSubscriptionCardRecipientsView({
               </div>
             )}
 
-            {/* Pending client selections across tiers. The per-tier emerald
-                block below is hidden in the merged view, so surface each tier's
-                selected talent + Assign here (tagged with its tier) — otherwise
-                a selection made on one tier has no visible Assign action from
+            {/* Placed talents across tiers. The per-tier emerald block below is
+                hidden in the merged view, so surface each tier's chosen talent
+                here (tagged with its tier): a 'selected' tier still needs the
+                admin Assign; an 'assigned' tier is confirmed and shown read-only
+                — otherwise a selection/assignment on one tier is invisible from
                 the default "All tiers" overview. */}
-            {allTiersMode && tierSelections.length > 0 && (
+            {allTiersMode && tierPlacements.length > 0 && (
               <div className="space-y-3">
-                {tierSelections.map((s) => (
+                {tierPlacements.map((s) => {
+                  const isAssigned = s.stage === 'assigned';
+                  const noun = isAssigned ? 'Assigned Talent' : 'Selected Talent';
+                  return (
                   <div
-                    key={`tier-selected-${s.card.id}`}
+                    key={`tier-placement-${s.card.id}`}
                     className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/50 p-5 sm:p-6 dark:border-emerald-500/30 dark:bg-emerald-500/10"
                   >
                     <h2 className="mb-3 flex flex-wrap items-center gap-2 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      {s.selected.length === 1 ? 'Selected Talent' : `Selected Talents (${s.selected.length})`}
+                      {s.selected.length === 1 ? noun : `${noun}s (${s.selected.length})`}
                       {s.tier && (
                         <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
                           {s.tier}
@@ -1312,7 +1317,7 @@ export default function AdminSubscriptionCardRecipientsView({
                     </h2>
                     <div className="space-y-3">
                       {s.selected.map((r) => (
-                        <div key={`tier-selected-${s.card.id}-${r.type}-${r.id}`} className="flex items-center gap-4">
+                        <div key={`tier-placement-${s.card.id}-${r.type}-${r.id}`} className="flex items-center gap-4">
                           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface text-[var(--color-sh-ink)] text-base font-bold ring-1 ring-emerald-200 dark:ring-emerald-500/40">
                             {r.name.charAt(0).toUpperCase()}
                           </div>
@@ -1348,27 +1353,42 @@ export default function AdminSubscriptionCardRecipientsView({
                                 </svg>
                               </a>
                             )}
-                            <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
-                              Selected
+                            <span
+                              className="shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                              style={isAssigned
+                                ? { backgroundColor: '#065F46', color: '#FFFFFF' }
+                                : { backgroundColor: '#D1FAE5', color: '#047857' }}
+                            >
+                              {isAssigned ? 'Assigned' : 'Selected'}
                             </span>
                           </div>
                         </div>
                       ))}
                     </div>
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-emerald-200 pt-4 dark:border-emerald-500/30">
-                      <p className="text-xs text-emerald-800 dark:text-emerald-300">
-                        The client selected this talent{s.tier ? ` for the ${s.tier} tier` : ''}. Assign to confirm — this starts the engagement and billing from today.
-                      </p>
-                      <button
-                        onClick={() => finalizeMutation.mutate(s.card.id)}
-                        disabled={finalizeMutation.isPending && finalizeMutation.variables === s.card.id}
-                        className="sh-btn-primary shrink-0"
-                      >
-                        {finalizeMutation.isPending && finalizeMutation.variables === s.card.id ? 'Assigning…' : 'Assign'}
-                      </button>
+                      {isAssigned ? (
+                        <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                          Assigned{s.tier ? ` on the ${s.tier} tier` : ''} — the engagement is live. Open the
+                          {s.tier ? ` ${s.tier}` : ''} tier tab to Pause, Upgrade / downgrade, Cancel or Unassign.
+                        </p>
+                      ) : (
+                        <>
+                          <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                            The client selected this talent{s.tier ? ` for the ${s.tier} tier` : ''}. Assign to confirm — this starts the engagement and billing from today.
+                          </p>
+                          <button
+                            onClick={() => finalizeMutation.mutate(s.card.id)}
+                            disabled={finalizeMutation.isPending && finalizeMutation.variables === s.card.id}
+                            className="sh-btn-primary shrink-0"
+                          >
+                            {finalizeMutation.isPending && finalizeMutation.variables === s.card.id ? 'Assigning…' : 'Assign'}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
