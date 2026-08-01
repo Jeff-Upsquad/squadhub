@@ -64,13 +64,36 @@ type MatchPreview = {
 };
 
 // A recipient tagged with the tier (tile) it belongs to — used by the "All"
-// tier view to show a merged, cross-tier list. tier is null for legacy rows.
-type TieredRecipient = UnifiedRecipient & { tier: string | null };
+// tier view to show a merged, cross-tier list. tier is null for legacy rows;
+// cardId is the sibling tier card this recipient came from (so the merged view
+// can act on the right card, e.g. Assign the pending selection of one tier).
+type TieredRecipient = UnifiedRecipient & { tier: string | null; cardId: string };
 
 // A tier card's display tier (first entry of target_tiers). Mirrors tierOf in
 // AdminSubscriptionCards without a cross-file import.
 const tierLabelOf = (c: AdminSubscriptionCard): string | null =>
   Array.isArray(c.target_tiers) && c.target_tiers.length > 0 ? c.target_tiers[0] : null;
+
+// Lifecycle stage of a single card (mirrors AdminSubscriptionCards.categorize).
+// Archived wins over everything — an archived card keeps state='published', so
+// without this it would mislabel as "Active". A selected_recipient_id means
+// Assigned; a bare state='assigned' (no recipient stamped yet) is the pending
+// "Selected" stage awaiting admin approval. Reused for the active card's pill
+// and, in the merged "All tiers" view, for each sibling tier.
+type CardStageBucket = 'active' | 'selected' | 'assigned' | 'cancelled' | 'archived';
+function cardStageBucket(
+  c: Pick<AdminSubscriptionCard, 'archived_at' | 'cancelled_at' | 'state' | 'selected_recipient_id'>,
+): CardStageBucket {
+  return c.archived_at
+    ? 'archived'
+    : c.cancelled_at || c.state === 'closed'
+      ? 'cancelled'
+      : c.selected_recipient_id
+        ? 'assigned'
+        : c.state === 'assigned'
+          ? 'selected'
+          : 'active';
+}
 
 // Merge SquadHub-local recipients (partners + responded/queued talents) with
 // the live SquadHire match list into one unified list. Talents in both sources
@@ -402,7 +425,7 @@ export default function AdminSubscriptionCardRecipientsView({
       const shRaw = groupSquadhireQueries[i]?.data as { data?: SquadHireTalent[] } | SquadHireTalent[] | undefined;
       const sh: SquadHireTalent[] = Array.isArray(shRaw) ? shRaw : (shRaw?.data ?? []);
       const tier = tierLabelOf(c);
-      return buildUnifiedRecipients(recips, sh, c).map((r) => ({ ...r, tier }));
+      return buildUnifiedRecipients(recips, sh, c).map((r) => ({ ...r, tier, cardId: c.id }));
     });
   }, [isGrouped, groupSiblings, groupRecipientQueries, groupSquadhireQueries]);
 
@@ -411,6 +434,27 @@ export default function AdminSubscriptionCardRecipientsView({
     for (const r of groupRecipients) c[bucketOf(r)] += 1;
     return c;
   }, [groupRecipients]);
+
+  // In the merged "All tiers" view the per-tier emerald "Selected Talent" panel
+  // (and its Assign button) is otherwise hidden — yet a client selection lands
+  // on ONE tier sibling and still needs an admin Assign. Surface each tier
+  // sibling still awaiting that approval (stage 'selected') with its selected
+  // talent(s), so the admin can Assign from the overview instead of first
+  // drilling into that tier's own tab.
+  const tierSelections = useMemo(
+    () =>
+      !isGrouped
+        ? []
+        : groupSiblings
+            .filter((c) => cardStageBucket(c) === 'selected')
+            .map((c) => ({
+              card: c,
+              tier: tierLabelOf(c),
+              selected: groupRecipients.filter((r) => r.cardId === c.id && r.selected_at),
+            }))
+            .filter((s) => s.selected.length > 0),
+    [isGrouped, groupSiblings, groupRecipients],
+  );
 
   const groupAssignees = useMemo<Array<AssigneeEntry & { tier: string | null; isPrevious: boolean }>>(() => {
     if (!isGrouped) return [];
@@ -650,11 +694,14 @@ export default function AdminSubscriptionCardRecipientsView({
     },
   });
 
+  // Accepts the card id to finalize so the merged "All tiers" view can Assign a
+  // specific tier sibling; the single-tier caller passes its own card.id.
   const finalizeMutation = useMutation({
-    mutationFn: () =>
-      api.post(`/admin/subscription-cards/${card.id}/finalize-selection`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', card.id] });
+    mutationFn: (cardId: string) =>
+      api.post(`/admin/subscription-cards/${cardId}/finalize-selection`),
+    onSuccess: (_res, cardId) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-card-recipients', cardId] });
+      queryClient.invalidateQueries({ queryKey: ['admin-card-squadhire-recipients', cardId] });
       queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
       showToast('Card finalized — talent moved to Assigned.', 'success');
@@ -782,15 +829,7 @@ export default function AdminSubscriptionCardRecipientsView({
   // wins over everything — an archived card keeps state='published', so without
   // this it would mislabel as "Active" and still offer Broadcast. A card with
   // selected_recipient_id otherwise shows "Assigned" regardless of state.
-  const bucket: 'active' | 'selected' | 'assigned' | 'cancelled' | 'archived' = card.archived_at
-    ? 'archived'
-    : card.cancelled_at || card.state === 'closed'
-      ? 'cancelled'
-      : card.selected_recipient_id
-        ? 'assigned'
-        : card.state === 'assigned'
-          ? 'selected'
-          : 'active';
+  const bucket = cardStageBucket(card);
   const stateColor =
     bucket === 'active' ? '#10B981'
       : bucket === 'selected' ? '#0EA5E9'
@@ -1248,6 +1287,91 @@ export default function AdminSubscriptionCardRecipientsView({
               </div>
             )}
 
+            {/* Pending client selections across tiers. The per-tier emerald
+                block below is hidden in the merged view, so surface each tier's
+                selected talent + Assign here (tagged with its tier) — otherwise
+                a selection made on one tier has no visible Assign action from
+                the default "All tiers" overview. */}
+            {allTiersMode && tierSelections.length > 0 && (
+              <div className="space-y-3">
+                {tierSelections.map((s) => (
+                  <div
+                    key={`tier-selected-${s.card.id}`}
+                    className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/50 p-5 sm:p-6 dark:border-emerald-500/30 dark:bg-emerald-500/10"
+                  >
+                    <h2 className="mb-3 flex flex-wrap items-center gap-2 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {s.selected.length === 1 ? 'Selected Talent' : `Selected Talents (${s.selected.length})`}
+                      {s.tier && (
+                        <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
+                          {s.tier}
+                        </span>
+                      )}
+                    </h2>
+                    <div className="space-y-3">
+                      {s.selected.map((r) => (
+                        <div key={`tier-selected-${s.card.id}-${r.type}-${r.id}`} className="flex items-center gap-4">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface text-[var(--color-sh-ink)] text-base font-bold ring-1 ring-emerald-200 dark:ring-emerald-500/40">
+                            {r.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-[15px] font-semibold text-foreground">{r.name}</p>
+                              <span
+                                className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                                style={r.type === 'partner'
+                                  ? { backgroundColor: '#DBEAFE', color: '#1E40AF' }
+                                  : { backgroundColor: '#F2EBFE', color: '#6B21A8' }}
+                              >
+                                {r.type === 'partner' ? 'Partner' : 'Talent'}
+                              </span>
+                            </div>
+                            {r.responded_at && (
+                              <p className="mt-0.5 truncate text-xs text-foreground-dim">
+                                Responded {formatRelative(r.responded_at)}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {r.type === 'talent' && adminUrl && (
+                              <a
+                                href={`${adminUrl}/admin/users/${r.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="View profile in SquadHire"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-emerald-700 hover:bg-emerald-100 transition dark:text-emerald-300 dark:hover:bg-emerald-500/20"
+                              >
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                                </svg>
+                              </a>
+                            )}
+                            <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
+                              Selected
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-emerald-200 pt-4 dark:border-emerald-500/30">
+                      <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                        The client selected this talent{s.tier ? ` for the ${s.tier} tier` : ''}. Assign to confirm — this starts the engagement and billing from today.
+                      </p>
+                      <button
+                        onClick={() => finalizeMutation.mutate(s.card.id)}
+                        disabled={finalizeMutation.isPending && finalizeMutation.variables === s.card.id}
+                        className="sh-btn-primary shrink-0"
+                      >
+                        {finalizeMutation.isPending && finalizeMutation.variables === s.card.id ? 'Assigning…' : 'Assign'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Per-tier summary blocks — hidden in the merged "All tiers" view. */}
             {!allTiersMode && (
               <>
@@ -1318,11 +1442,11 @@ export default function AdminSubscriptionCardRecipientsView({
                       The client selected this talent. Assign to confirm — this starts the engagement and billing from today.
                     </p>
                     <button
-                      onClick={() => finalizeMutation.mutate()}
-                      disabled={finalizeMutation.isPending}
+                      onClick={() => finalizeMutation.mutate(card.id)}
+                      disabled={finalizeMutation.isPending && finalizeMutation.variables === card.id}
                       className="sh-btn-primary shrink-0"
                     >
-                      {finalizeMutation.isPending ? 'Assigning…' : 'Assign'}
+                      {finalizeMutation.isPending && finalizeMutation.variables === card.id ? 'Assigning…' : 'Assign'}
                     </button>
                   </div>
                 )}
@@ -1890,7 +2014,7 @@ export default function AdminSubscriptionCardRecipientsView({
               {checkedIds.size} recipient{checkedIds.size !== 1 ? 's' : ''} selected
             </span>
             <button
-              onClick={() => mutation.mutate()}
+              onClick={() => (isSelectedBucket ? finalizeMutation.mutate(card.id) : assignMutation.mutate())}
               disabled={mutation.isPending}
               className="sh-btn-primary"
             >
