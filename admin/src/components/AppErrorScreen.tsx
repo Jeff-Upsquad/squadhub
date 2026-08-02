@@ -146,6 +146,29 @@ export default function AppErrorScreen({
                 Reload page
               </button>
             </div>
+            {error?.message && (
+              <pre
+                style={{
+                  marginTop: 18,
+                  padding: '10px 12px',
+                  background: '#F1F5F9',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: 8,
+                  fontSize: 11,
+                  lineHeight: 1.5,
+                  color: '#334155',
+                  textAlign: 'left',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  maxHeight: 180,
+                  overflow: 'auto',
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                }}
+              >
+                {error.name ? `${error.name}: ` : ''}
+                {error.message}
+              </pre>
+            )}
             {error?.digest && (
               <p style={{ fontSize: 11, color: '#94A3B8', margin: '18px 0 0' }}>
                 Reference: {error.digest}
