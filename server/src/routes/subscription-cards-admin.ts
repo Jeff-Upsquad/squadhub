@@ -1315,6 +1315,19 @@ router.post('/:id/recall', async (req: Request, res: Response) => {
     // no draft state, so they go terminal (+ recalled_at when accepted).
     const returnsToDraft = !isSecondary;
 
+    // SquadHire takedown for primary → draft MUST run while the card still
+    // has published_at / state='published'. The draft update below clears
+    // both, and buildSquadhirePayloadForCard's never-published guard then
+    // returns null — leaving the SquadHire mirror live (talents keep seeing
+    // the card). Await so a failed network hop still doesn't race the wipe.
+    if (returnsToDraft) {
+      try {
+        await notifySquadhireOfCardRecall(cardId);
+      } catch (err) {
+        console.error('[admin-recall] squadhire pre-draft takedown error', err);
+      }
+    }
+
     if (returnsToDraft) {
       // Pull from EVERYONE so a re-publish rebuilds a fresh recipient list.
       await supabaseAdmin
@@ -1377,18 +1390,13 @@ router.post('/:id/recall', async (req: Request, res: Response) => {
       return;
     }
 
-    // Re-deliver card to SquadHire with the new state (and recalled_at if set).
-    buildSquadhirePayloadForCard(updated.id)
-      .then((payload) => payload && deliverCardToSquadhire(updated.id, payload))
-      .catch((err) => console.error('[admin-recall] squadhire delivery error', err));
-
-    // Drop SquadHire mirror rows whenever the card is fully pulled — a primary
-    // returning to draft (now including ones that had acceptances), or a clean
-    // secondary recall with no acceptances.
-    if (returnsToDraft || !hasAcceptances) {
-      notifySquadhireOfCardRecall(updated.id).catch((err) => {
-        console.error('[admin-recall] squadhire recall notification error', err);
-      });
+    // Secondary (or any non-draft) path: re-deliver with the new state so
+    // SquadHire picks up closed + recalled_at. Primary draft returns already
+    // took the mirror down above — a post-wipe re-deliver would no-op.
+    if (!returnsToDraft) {
+      buildSquadhirePayloadForCard(updated.id)
+        .then((payload) => payload && deliverCardToSquadhire(updated.id, payload))
+        .catch((err) => console.error('[admin-recall] squadhire delivery error', err));
     }
 
     // Cascade-close published secondaries when a primary card is recalled.

@@ -1925,53 +1925,41 @@ export async function notifySquadhireOfFreshBroadcast(
 }
 
 // ------------------------------------------------------------
-// Public: outbound notification when a card is recalled. The
-// archived-status re-delivery already hides the card from talent
-// queries on SquadHire, but mirror recipient rows on SquadHire's
-// side persist and would re-surface on the next publish. This
-// asks SquadHire to drop those mirror rows in one shot. Best-
-// effort, single attempt; idempotent on the receiving side.
+// Public: take a card off SquadHire (recall / reunify / trash).
+//
+// Re-delivers via the main cards webhook with status='archived'.
+// Profiles' ingest treats active|assigned → archived as a recall:
+// it stamps cancelled_at on every still-active recipient row so
+// talents stop seeing the offer (and accepted ones keep a tag).
+//
+// MUST be called while the card still passes the never-published
+// guard (published_at set, or state is published/assigned/closed).
+// Callers that convert a primary card back to draft MUST invoke
+// this BEFORE clearing published_at — otherwise build returns null
+// and the SquadHire mirror stays live (the bug that made assignment
+// + subscription recalls look like no-ops on the talent side).
+//
+// Historically this POSTed to a /cards/recall side-channel that
+// Profiles never implemented; the archived re-delivery is the real
+// contract (same path archive/cancel already use).
 // ------------------------------------------------------------
 
 export async function notifySquadhireOfCardRecall(cardId: string): Promise<void> {
-  const baseUrl = config.squadhireWebhookUrl;
-  if (!baseUrl) {
-    console.warn('[squadhire-webhook] card-recall skipped: url not configured');
-    return;
-  }
-  if (!config.squadhireWebhookSecret) {
-    console.warn('[squadhire-webhook] card-recall skipped: secret not configured');
-    return;
-  }
-
-  const url = baseUrl.endsWith('/')
-    ? `${baseUrl}cards/recall`
-    : `${baseUrl}/cards/recall`;
-  const body = {
-    type: 'card_recall',
-    card_id: cardId,
-    recalled_at: new Date().toISOString(),
-  };
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-SquadHub-Signature': config.squadhireWebhookSecret,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      console.warn(`[squadhire-webhook] card-recall http_${res.status}`);
+    const payload = await buildSquadhirePayloadForCard(cardId);
+    if (!payload) {
+      // No mirror to take down (never published, no categories, no tiers).
+      console.warn('[squadhire-webhook] card-recall skipped: no payload', { cardId });
+      return;
     }
+    // Force archived even if the local row is still state='published' —
+    // we deliberately call this *before* the draft conversion so the
+    // never-published guard still allows the build. Forcing status is
+    // what makes isRecall fire on Profiles regardless of local state.
+    payload.status = 'archived';
+    await deliverCardToSquadhire(cardId, payload);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn('[squadhire-webhook] card-recall failed', msg);
-  } finally {
-    clearTimeout(timer);
   }
 }

@@ -649,14 +649,18 @@ export async function reunifyTierGroupToDraft(
 
   const now = new Date().toISOString();
 
-  // Retire the sibling tier rows. state=closed makes the SquadHire payload a
-  // takedown; deleted_at moves them to Trash and keeps the sweeper away.
+  // Retire the sibling tier rows. Take the SquadHire mirror down WHILE each
+  // sibling is still published — after the draft/closed wipe, the never-
+  // published guard would skip delivery and leave talents seeing the card.
+  // state=closed + deleted_at then moves them to Trash and keeps the sweeper away.
   for (const s of siblings) {
+    try {
+      await notifySquadhireOfCardRecall(s.id);
+    } catch (err) {
+      console.error('[reunify-tier-group] squadhire mirror drop error (sibling)', err);
+    }
     await supabaseAdmin.from('subscription_card_recipients').delete().eq('card_id', s.id);
     await supabaseAdmin.from('subscription_card_external_recipients').delete().eq('card_id', s.id);
-    notifySquadhireOfCardRecall(s.id).catch((err) =>
-      console.error('[reunify-tier-group] squadhire mirror drop error (sibling)', err),
-    );
     await supabaseAdmin
       .from('subscription_cards')
       .update({
@@ -671,9 +675,14 @@ export async function reunifyTierGroupToDraft(
       .eq('id', s.id);
   }
 
-  // Return the anchor to an editable multi-tier draft. Pull it from everyone
-  // (a recall rebuilds a fresh recipient list on republish) and clear the
-  // frozen plan snapshot + group id.
+  // Return the anchor to an editable multi-tier draft. Takedown first (while
+  // still published), then pull recipients and clear the frozen plan snapshot
+  // + group id. A post-draft notify would no-op on the never-published guard.
+  try {
+    await notifySquadhireOfCardRecall(anchor.id);
+  } catch (err) {
+    console.error('[reunify-tier-group] squadhire mirror drop error (anchor)', err);
+  }
   await supabaseAdmin.from('subscription_card_recipients').delete().eq('card_id', anchor.id);
   await supabaseAdmin.from('subscription_card_external_recipients').delete().eq('card_id', anchor.id);
   await supabaseAdmin
@@ -691,9 +700,6 @@ export async function reunifyTierGroupToDraft(
       tier_pricing: tierPricing,
     })
     .eq('id', anchor.id);
-  notifySquadhireOfCardRecall(anchor.id).catch((err) =>
-    console.error('[reunify-tier-group] squadhire mirror drop error (anchor)', err),
-  );
 
   return anchor.id;
 }

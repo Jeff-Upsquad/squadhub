@@ -424,6 +424,16 @@ router.post(
           .eq('status', 'accepted'),
       ]);
       const hasAcceptances = (acceptedPartners || 0) + (acceptedTalents || 0) > 0;
+      // Clean recall returns to draft and clears published_at. Take SquadHire
+      // down FIRST while the card still looks published — a post-wipe delivery
+      // is skipped by the never-published guard and leaves talents seeing it.
+      if (!hasAcceptances) {
+        try {
+          await notifySquadhireOfCardRecall(cardId);
+        } catch (err) {
+          console.error('[recall] squadhire pre-draft takedown error', err);
+        }
+      }
 
       // Drop only pending recipients. Accepted/rejected stay so:
       //   - history is preserved
@@ -474,18 +484,15 @@ router.post(
         return;
       }
 
-      buildSquadhirePayloadForCard(updated.id)
-        .then((payload) => payload && deliverCardToSquadhire(updated.id, payload))
-        .catch((err) => {
-          console.error('[recall] squadhire delivery threw unexpectedly', err);
-        });
-
-      // Only drop SquadHire mirror rows on a CLEAN recall (no acceptances).
-      // Partial recall keeps acceptees in their feed with the Recalled tag.
-      if (!hasAcceptances) {
-        notifySquadhireOfCardRecall(updated.id).catch((err) => {
-          console.error('[recall] squadhire recall notification threw', err);
-        });
+      // Partial recall (has acceptances → closed + recalled_at): re-deliver so
+      // SquadHire picks up the terminal state. Clean draft return already took
+      // the mirror down above.
+      if (hasAcceptances) {
+        buildSquadhirePayloadForCard(updated.id)
+          .then((payload) => payload && deliverCardToSquadhire(updated.id, payload))
+          .catch((err) => {
+            console.error('[recall] squadhire delivery threw unexpectedly', err);
+          });
       }
 
       cascadeCloseSecondaryCards(updated.id).catch((err) => {
