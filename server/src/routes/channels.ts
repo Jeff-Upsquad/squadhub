@@ -7,6 +7,11 @@ import { supabaseAdmin } from '../supabase';
 const router = Router();
 
 type ContainerType = 'space' | 'folder' | 'list';
+type CrmEntityType = 'crm_deal' | 'crm_contact' | 'crm_lead';
+const CRM_ENTITY_TYPES: CrmEntityType[] = ['crm_deal', 'crm_contact', 'crm_lead'];
+function isCrmEntityType(t: string): t is CrmEntityType {
+  return (CRM_ENTITY_TYPES as string[]).includes(t);
+}
 
 // Resolve the workspace a container belongs to (for channel creation).
 async function getContainerWorkspaceId(type: ContainerType, id: string): Promise<string | null> {
@@ -430,6 +435,307 @@ router.post('/unlink', requireAuth, async (req: Request, res: Response) => {
       return;
     }
     console.error('Unlink channel error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// --- CRM entity chats ------------------------------------------------------
+
+const crmEnsureSchema = z.object({
+  workspace_id: z.string().uuid(),
+  entity_type: z.enum(['crm_deal', 'crm_contact', 'crm_lead']),
+  entity_id: z.string().uuid(),
+  label: z.string().min(1).max(200),
+  subtitle: z.string().max(200).optional().nullable(),
+});
+
+async function assertWorkspaceMember(userId: string, workspaceId: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from('workspace_members')
+    .select('user_id')
+    .eq('workspace_id', workspaceId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  return !!data;
+}
+
+async function grantWorkspaceMembersChannelAccess(channelId: string, workspaceId: string): Promise<void> {
+  const { data: members } = await supabaseAdmin
+    .from('workspace_members')
+    .select('user_id')
+    .eq('workspace_id', workspaceId);
+  if (!members?.length) return;
+
+  const { data: existing } = await supabaseAdmin
+    .from('resource_memberships')
+    .select('user_id')
+    .eq('resource_type', 'channel')
+    .eq('resource_id', channelId);
+  const have = new Set((existing || []).map((r) => r.user_id as string));
+  const rows = members
+    .filter((m) => !have.has(m.user_id as string))
+    .map((m) => ({
+      resource_type: 'channel',
+      resource_id: channelId,
+      user_id: m.user_id,
+      access_level: 'member',
+    }));
+  if (rows.length) await supabaseAdmin.from('resource_memberships').insert(rows);
+}
+
+// POST /channels/crm/ensure — get-or-create the team-chat channel for a CRM entity.
+// Called by CRM (same JWT) or SquadHub. Any workspace member may open a chat.
+router.post('/crm/ensure', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const body = crmEnsureSchema.parse(req.body);
+    if (!(await assertWorkspaceMember(req.userId!, body.workspace_id))) {
+      res.status(403).json({ success: false, error: 'Not a member of this workspace' });
+      return;
+    }
+
+    const { data: existing } = await supabaseAdmin
+      .from('channels')
+      .select('*')
+      .eq('linked_resource_type', body.entity_type)
+      .eq('linked_resource_id', body.entity_id)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (existing) {
+      // Refresh label/subtitle and make sure caller has membership.
+      await supabaseAdmin
+        .from('channels')
+        .update({
+          linked_label: body.label,
+          linked_subtitle: body.subtitle ?? null,
+        })
+        .eq('id', existing.id);
+      await grantWorkspaceMembersChannelAccess(existing.id, body.workspace_id);
+      // Opening a chat clears this user's closed state.
+      await supabaseAdmin
+        .from('crm_chat_user_state')
+        .delete()
+        .eq('channel_id', existing.id)
+        .eq('user_id', req.userId!);
+      const { data: refreshed } = await supabaseAdmin.from('channels').select('*').eq('id', existing.id).single();
+      res.json({ success: true, data: refreshed });
+      return;
+    }
+
+    const base = slugifyChannelName(body.label);
+    // Keep channel names unique within the workspace (append entity id fragment).
+    const name = (`${base}-${body.entity_id.slice(0, 8)}`).slice(0, 80) || 'crm-chat';
+    const { data: created, error } = await supabaseAdmin
+      .from('channels')
+      .insert({
+        workspace_id: body.workspace_id,
+        name,
+        description: body.subtitle || `CRM team chat: ${body.label}`,
+        is_private: true,
+        created_by: req.userId,
+        linked_resource_type: body.entity_type,
+        linked_resource_id: body.entity_id,
+        linked_label: body.label,
+        linked_subtitle: body.subtitle ?? null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      // Race: another request linked the same entity — re-fetch.
+      if (error.code === '23505') {
+        const { data: raced } = await supabaseAdmin
+          .from('channels')
+          .select('*')
+          .eq('linked_resource_type', body.entity_type)
+          .eq('linked_resource_id', body.entity_id)
+          .is('deleted_at', null)
+          .maybeSingle();
+        if (raced) {
+          await grantWorkspaceMembersChannelAccess(raced.id, body.workspace_id);
+          res.json({ success: true, data: raced });
+          return;
+        }
+      }
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    await grantWorkspaceMembersChannelAccess(created.id, body.workspace_id);
+    res.status(201).json({ success: true, data: created });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('CRM ensure channel error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /channels/crm?workspace_id= — open CRM chats for the current user.
+// "Open" = CRM-linked channel the user can access AND has not closed (or has
+// a message newer than their closed_at — handled by deleting state on send).
+router.get('/crm', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspace_id as string;
+    if (!workspaceId) {
+      res.status(400).json({ success: false, error: 'workspace_id is required' });
+      return;
+    }
+    if (!(await assertWorkspaceMember(req.userId!, workspaceId))) {
+      res.status(403).json({ success: false, error: 'Not a member of this workspace' });
+      return;
+    }
+
+    const { data: channels, error } = await supabaseAdmin
+      .from('channels')
+      .select('id, name, linked_resource_type, linked_resource_id, linked_label, linked_subtitle, created_at')
+      .eq('workspace_id', workspaceId)
+      .in('linked_resource_type', CRM_ENTITY_TYPES)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    if (!channels?.length) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const channelIds = channels.map((c) => c.id);
+    const { data: closedRows } = await supabaseAdmin
+      .from('crm_chat_user_state')
+      .select('channel_id, closed_at')
+      .eq('user_id', req.userId!)
+      .in('channel_id', channelIds);
+    const closedMap = new Map((closedRows || []).map((r) => [r.channel_id as string, r.closed_at as string]));
+
+    // Latest message per channel (preview + last_message_at).
+    const { data: latestMsgs } = await supabaseAdmin
+      .from('messages')
+      .select('channel_id, content, created_at, is_deleted')
+      .in('channel_id', channelIds)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: false });
+
+    const lastByChannel = new Map<string, { content: string | null; created_at: string }>();
+    for (const m of latestMsgs || []) {
+      const cid = m.channel_id as string;
+      if (!lastByChannel.has(cid)) {
+        lastByChannel.set(cid, { content: m.content as string | null, created_at: m.created_at as string });
+      }
+    }
+
+    const items = channels
+      .filter((c) => {
+        // Closed for this user with no newer message → hide. (New messages
+        // delete the close row, so closedMap presence alone means closed.)
+        return !closedMap.has(c.id);
+      })
+      .map((c) => {
+        const last = lastByChannel.get(c.id);
+        return {
+          channel_id: c.id,
+          channel_name: c.name,
+          entity_type: c.linked_resource_type as CrmEntityType,
+          entity_id: c.linked_resource_id as string,
+          label: (c.linked_label as string) || c.name,
+          subtitle: (c.linked_subtitle as string) || null,
+          closed: false,
+          unread_count: 0,
+          last_message_at: last?.created_at ?? null,
+          last_message_preview: last?.content ?? null,
+        };
+      })
+      // Most recently active first.
+      .sort((a, b) => {
+        const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+        const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+        return tb - ta;
+      });
+
+    res.json({ success: true, data: items });
+  } catch (err) {
+    console.error('List CRM chats error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /channels/crm/:channelId/close — hide from this user's CRM Chats list.
+router.post('/crm/:channelId/close', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const channelId = Array.isArray(req.params.channelId) ? req.params.channelId[0] : req.params.channelId;
+    const { data: channel } = await supabaseAdmin
+      .from('channels')
+      .select('id, linked_resource_type')
+      .eq('id', channelId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (!channel || !isCrmEntityType(channel.linked_resource_type || '')) {
+      res.status(404).json({ success: false, error: 'CRM chat not found' });
+      return;
+    }
+    const level = await checkResourceAccess(req.userId!, 'channel', channelId);
+    if (!level) {
+      res.status(403).json({ success: false, error: 'No access to this chat' });
+      return;
+    }
+    await supabaseAdmin.from('crm_chat_user_state').upsert(
+      { user_id: req.userId!, channel_id: channelId, closed_at: new Date().toISOString() },
+      { onConflict: 'user_id,channel_id' },
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Close CRM chat error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /channels/crm/:channelId/reopen — clear this user's close state.
+router.post('/crm/:channelId/reopen', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const channelId = Array.isArray(req.params.channelId) ? req.params.channelId[0] : req.params.channelId;
+    await supabaseAdmin
+      .from('crm_chat_user_state')
+      .delete()
+      .eq('channel_id', channelId)
+      .eq('user_id', req.userId!);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Reopen CRM chat error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /channels/crm/linked?entity_type=&entity_id= — lookup without creating.
+router.get('/crm/linked', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const entityType = req.query.entity_type as string;
+    const entityId = req.query.entity_id as string;
+    if (!entityType || !entityId || !isCrmEntityType(entityType)) {
+      res.status(400).json({ success: false, error: 'entity_type and entity_id required' });
+      return;
+    }
+    const { data } = await supabaseAdmin
+      .from('channels')
+      .select('*')
+      .eq('linked_resource_type', entityType)
+      .eq('linked_resource_id', entityId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (data) {
+      const level = await checkResourceAccess(req.userId!, 'channel', data.id);
+      if (!level) {
+        res.json({ success: true, data: null });
+        return;
+      }
+    }
+    res.json({ success: true, data: data || null });
+  } catch (err) {
+    console.error('Get CRM linked channel error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

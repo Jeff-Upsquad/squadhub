@@ -77,10 +77,38 @@ export interface Channel {
   is_private: boolean;
   created_by: string;
   created_at: string;
-  // When set, this channel is linked to a PM container (space/folder/list) — the
-  // container header opens it in a side panel, and the channel links back to it.
-  linked_resource_type?: 'space' | 'folder' | 'list' | null;
+  // When set, this channel is linked to a PM container (space/folder/list) or a
+  // CRM entity (deal/contact/lead). Container headers open PM links in a side
+  // panel; CRM links appear under "CRM Chats" in the home sidebar.
+  linked_resource_type?:
+    | 'space'
+    | 'folder'
+    | 'list'
+    | 'crm_deal'
+    | 'crm_contact'
+    | 'crm_lead'
+    | null;
   linked_resource_id?: string | null;
+  /** Human label for CRM-linked channels (deal/contact name). */
+  linked_label?: string | null;
+  /** Secondary line for CRM-linked channels (stage, date, etc.). */
+  linked_subtitle?: string | null;
+}
+
+/** CRM entity kinds that can host a SquadHub team-chat channel. */
+export type CrmChatEntityType = 'crm_deal' | 'crm_contact' | 'crm_lead';
+
+export interface CrmChatListItem {
+  channel_id: string;
+  channel_name: string;
+  entity_type: CrmChatEntityType;
+  entity_id: string;
+  label: string;
+  subtitle: string | null;
+  closed: boolean;
+  unread_count: number;
+  last_message_at: string | null;
+  last_message_preview: string | null;
 }
 
 // ---- Messages ----

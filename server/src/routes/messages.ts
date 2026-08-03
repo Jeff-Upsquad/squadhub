@@ -235,6 +235,15 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       }
     }
 
+    // CRM entity chats: a new message reopens the chat for everyone who closed it
+    // (delete close-state rows so it reappears under CRM Chats).
+    if (body.channel_id) {
+      await supabaseAdmin
+        .from('crm_chat_user_state')
+        .delete()
+        .eq('channel_id', body.channel_id);
+    }
+
     res.status(201).json({ success: true, data: message });
   } catch (err) {
     if (err instanceof z.ZodError) {

@@ -20,6 +20,8 @@ import { useIsClient, useIsPartner } from '../../hooks/useUserType';
 import { useDms } from '../../hooks/useDms';
 import NewDmModal from './chat/NewDmModal';
 import DmListItem from './chat/DmListItem';
+import { useCloseCrmChat, useCrmChats } from '../../hooks/useCrmChats';
+import { useChatSidePanelStore } from '../../stores/chatSidePanelStore';
 
 // ---- Props ----
 interface HomeSidebarProps {
@@ -248,7 +250,12 @@ export default function HomeSidebar({
     spaces: true,
     channels: true,
     dms: true,
+    crmChats: true,
   });
+  const { data: crmChats = [] } = useCrmChats(workspaceId);
+  const closeCrmChat = useCloseCrmChat(workspaceId);
+  const openChatPanel = useChatSidePanelStore((s) => s.open);
+  const activePanelChannelId = useChatSidePanelStore((s) => (s.isOpen ? s.channelId : null));
 
   const toggleSection = (key: keyof typeof expandedSections) => {
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -763,6 +770,76 @@ export default function HomeSidebar({
         {showNewDm && (
           <NewDmModal workspaceId={workspaceId} onClose={() => setShowNewDm(false)} />
         )}
+
+        {/* CRM Chats — open team discussions linked to CRM deals / contacts / leads */}
+        <div className="mx-2 border-t border-[var(--sh-hair)]" />
+        <div className="pb-1">
+          <SectionHeader
+            title="CRM Chats"
+            expanded={expandedSections.crmChats}
+            onToggle={() => toggleSection('crmChats')}
+          />
+          {expandedSections.crmChats && (
+            <div className="px-2 pb-1">
+              {crmChats.length === 0 ? (
+                <p className="px-2 py-2 text-[11.5px] leading-snug text-[var(--sh-ink-4)]">
+                  No open CRM chats. Open a deal or contact in CRM and start a team chat.
+                </p>
+              ) : (
+                crmChats.map((ch) => {
+                  const isActive = activePanelChannelId === ch.channel_id;
+                  return (
+                    <div
+                      key={ch.channel_id}
+                      className={`mb-[1px] group flex w-full items-center rounded-[6px] transition ${
+                        isActive
+                          ? 'bg-[var(--surface)] text-[var(--sh-ink)] font-medium border border-[var(--sh-hair)]'
+                          : 'text-[var(--sh-ink-2)] hover:bg-[var(--sh-hair-3)] hover:text-[var(--sh-ink)]'
+                      }`}
+                      style={isActive ? { boxShadow: 'var(--sh-shadow-sm)' } : undefined}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openChatPanel({
+                            channelId: ch.channel_id,
+                            containerLabel: ch.subtitle
+                              ? `${ch.label} · ${ch.subtitle}`
+                              : ch.label,
+                            isCrmChat: true,
+                          })
+                        }
+                        className="flex min-w-0 flex-1 items-center gap-2 px-2 py-[5px] text-left text-[13px]"
+                      >
+                        <span
+                          className={`h-2 w-2 shrink-0 rounded-full ${
+                            ch.entity_type === 'crm_deal'
+                              ? 'bg-indigo-500'
+                              : ch.entity_type === 'crm_contact'
+                                ? 'bg-sky-500'
+                                : 'bg-emerald-600'
+                          }`}
+                        />
+                        <span className="truncate">{ch.label}</span>
+                      </button>
+                      <button
+                        type="button"
+                        title="Close chat"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closeCrmChat.mutate(ch.channel_id);
+                        }}
+                        className="mr-1 grid h-[18px] w-[18px] shrink-0 place-items-center rounded text-[var(--sh-ink-4)] opacity-0 transition hover:bg-[var(--sh-hair)] hover:text-[var(--sh-ink)] group-hover:opacity-100"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
     </div>
