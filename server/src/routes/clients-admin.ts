@@ -18,6 +18,10 @@ import {
   resolveCrmLead,
   resolveSquadhireBusiness,
 } from '../utils/clientExternalLinks';
+import {
+  diagnoseIdentityConflicts,
+  runIdentityBackfill,
+} from '../utils/identityBackfill';
 
 const router = Router();
 
@@ -552,6 +556,21 @@ router.get('/submissions', async (_req: Request, res: Response) => {
   }
 });
 
+// POST /admin/clients/backfill-links
+// One-shot / chunked identity backfill (admin only). Safe to re-run.
+// Body: { limit?: number (default 100, max 500), skip_hire?: boolean }
+router.post('/backfill-links', async (req: Request, res: Response) => {
+  try {
+    const limit = typeof req.body?.limit === 'number' ? req.body.limit : 100;
+    const skip_hire = !!req.body?.skip_hire;
+    const stats = await runIdentityBackfill({ limit, skip_hire });
+    res.json({ success: true, data: stats });
+  } catch (err: any) {
+    console.error('POST /backfill-links error:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Backfill failed' });
+  }
+});
+
 // GET /admin/clients/lookup-squadhire-business?email=&phone=&submission_id= —
 // resolves email/phone (or a stored squadhire_business_user_id on the
 // submission) to a SquadHire business_users row. When submission_id is set
@@ -1050,6 +1069,61 @@ router.get('/:id', async (req: Request, res: Response) => {
     res.json({ success: true, data: enriched });
   } catch (err) {
     console.error('Get client error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /admin/clients/:id/identity-diagnosis
+// Surface email/phone conflicts across CRM, Hub contacts, and SquadHire.
+router.get('/:id/identity-diagnosis', async (req: Request, res: Response) => {
+  try {
+    const clientId = String(req.params.id);
+    const { data: client, error } = await supabaseAdmin
+      .from('clients')
+      .select('email, contact_number, submission_id, crm_lead_id, squadhire_business_user_id')
+      .eq('id', clientId)
+      .single();
+    if (error || !client) {
+      res.status(404).json({ success: false, error: 'Client not found' });
+      return;
+    }
+    const diagnosis = await diagnoseIdentityConflicts({
+      email: client.email,
+      phone: client.contact_number,
+      submission_id: client.submission_id,
+      crm_lead_id: client.crm_lead_id,
+      squadhire_business_user_id: client.squadhire_business_user_id,
+    });
+    res.json({ success: true, data: diagnosis });
+  } catch (err) {
+    console.error('GET /:id/identity-diagnosis error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /admin/clients/submissions/:id/identity-diagnosis — same for a Contact.
+router.get('/submissions/:id/identity-diagnosis', async (req: Request, res: Response) => {
+  try {
+    const submissionId = String(req.params.id);
+    const { data: sub, error } = await supabaseAdmin
+      .from('client_submissions')
+      .select('email, contact_number, crm_lead_id, squadhire_business_user_id')
+      .eq('id', submissionId)
+      .single();
+    if (error || !sub) {
+      res.status(404).json({ success: false, error: 'Contact not found' });
+      return;
+    }
+    const diagnosis = await diagnoseIdentityConflicts({
+      email: sub.email,
+      phone: sub.contact_number,
+      submission_id: submissionId,
+      crm_lead_id: sub.crm_lead_id,
+      squadhire_business_user_id: sub.squadhire_business_user_id,
+    });
+    res.json({ success: true, data: diagnosis });
+  } catch (err) {
+    console.error('GET /submissions/:id/identity-diagnosis error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

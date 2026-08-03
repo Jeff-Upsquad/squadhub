@@ -450,6 +450,14 @@ function ClientDetail({
       api.get(`/admin/clients/${clientId}/squadbooks-customer`).then((r) => r.data.data as SquadBooksMatch),
   });
 
+  const { data: identityDiag } = useQuery<{
+    conflicts: Array<{ kind: string; message: string; email_id: string | null; phone_id: string | null }>;
+  }>({
+    queryKey: ['client-identity-diagnosis', clientId],
+    queryFn: () =>
+      api.get(`/admin/clients/${clientId}/identity-diagnosis`).then((r) => r.data.data),
+  });
+
   const openInSquadBooks = () => {
     if (!booksMatch?.found || !booksMatch.squadbooksUrl) return;
     const token = useAuthStore.getState().accessToken;
@@ -643,6 +651,45 @@ function ClientDetail({
       <div className="max-w-3xl">
         {tab === 'overview' && (
           <div className="space-y-6">
+            {/* Connections summary + identity conflicts */}
+            <div>
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-foreground-dim">Connections</h4>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <ConnectionChip
+                  label="Squad CRM"
+                  ok={!!crmMatch?.found}
+                  detail={crmMatch?.matched_by ? `via ${crmMatch.matched_by}` : undefined}
+                />
+                <ConnectionChip
+                  label="SquadHire"
+                  ok={!!hireMatch?.found}
+                  detail={hireMatch?.matched_by ? `via ${hireMatch.matched_by}` : undefined}
+                />
+                <ConnectionChip
+                  label="SquadBooks"
+                  ok={!!booksMatch?.found}
+                  detail={booksMatch?.matchedBy ? `via ${booksMatch.matchedBy}` : undefined}
+                />
+              </div>
+              {(identityDiag?.conflicts?.length ?? 0) > 0 && (
+                <div className="mt-3 space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                  <p className="text-xs font-semibold text-amber-900">Identity conflicts</p>
+                  {identityDiag!.conflicts.map((c, i) => (
+                    <p key={i} className="text-xs text-amber-800">
+                      <span className="font-medium uppercase tracking-wide">{c.kind.replace('_', ' ')}</span>
+                      {' — '}
+                      {c.message}
+                      {c.email_id && c.phone_id && (
+                        <span className="mt-0.5 block font-mono text-[10px] text-amber-700">
+                          email→{c.email_id.slice(0, 8)}… · phone→{c.phone_id.slice(0, 8)}…
+                        </span>
+                      )}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Client Info</h4>
@@ -749,6 +796,31 @@ function BackBar({ onBack }: { onBack: () => void }) {
       </svg>
       Clients
     </button>
+  );
+}
+
+function ConnectionChip({
+  label,
+  ok,
+  detail,
+}: {
+  label: string;
+  ok: boolean;
+  detail?: string;
+}) {
+  return (
+    <div
+      className={`rounded-lg border px-3 py-2 ${
+        ok ? 'border-emerald-200 bg-emerald-50/60' : 'border-divider bg-surface'
+      }`}
+    >
+      <p className={`text-xs font-semibold ${ok ? 'text-emerald-800' : 'text-foreground-muted'}`}>
+        {ok ? '●' : '○'} {label}
+      </p>
+      <p className="mt-0.5 text-[10px] text-foreground-dim">
+        {ok ? detail || 'Linked' : 'Not linked'}
+      </p>
+    </div>
   );
 }
 

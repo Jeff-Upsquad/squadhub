@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import api from '../../../services/api';
 import NewClientsModule from './NewClientsModule';
 import ClientsModule from './ClientsModule';
@@ -14,6 +14,30 @@ export default function AdminClients() {
   const searchParams = useSearchParams();
   const initialTab: Tab = searchParams.get('submission') ? 'contacts' : 'clients';
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+
+  // Phase 4: chunked identity backfill (CRM/Hire ids + orphan card links).
+  const backfillMutation = useMutation({
+    mutationFn: () =>
+      api.post('/admin/clients/backfill-links', { limit: 200 }).then((r) => r.data),
+    onSuccess: (res) => {
+      const d = res?.data;
+      if (!d) {
+        setBackfillMsg('Backfill finished (no stats).');
+        return;
+      }
+      setBackfillMsg(
+        `Synced ${d.submissions_crm_stamped + d.clients_crm_stamped} CRM · ` +
+          `${d.submissions_hire_stamped + d.clients_hire_stamped} Hire · ` +
+          `${d.cards_linked + d.job_cards_linked} cards` +
+          (d.conflicts_seen ? ` · ${d.conflicts_seen} conflicts` : '') +
+          (d.errors?.length ? ` · ${d.errors.length} errors` : ''),
+      );
+    },
+    onError: (err: any) => {
+      setBackfillMsg(err?.response?.data?.error || err?.message || 'Backfill failed');
+    },
+  });
 
   // Counts for badges
   const { data: subCountRes } = useQuery({
@@ -70,6 +94,23 @@ export default function AdminClients() {
             </button>
           ))}
         </nav>
+        <div className="border-t border-divider p-2">
+          <button
+            type="button"
+            disabled={backfillMutation.isPending}
+            onClick={() => {
+              setBackfillMsg(null);
+              backfillMutation.mutate();
+            }}
+            title="Stamp missing CRM/Hire links and attach orphan cards to contacts"
+            className="w-full rounded-md border border-divider bg-surface px-3 py-2 text-left text-xs font-medium text-foreground-muted transition hover:bg-surface-alt hover:text-foreground disabled:opacity-50"
+          >
+            {backfillMutation.isPending ? 'Syncing connections…' : 'Sync connections'}
+          </button>
+          {backfillMsg && (
+            <p className="mt-1.5 px-1 text-[10px] leading-snug text-foreground-dim">{backfillMsg}</p>
+          )}
+        </div>
       </div>
 
       {/* Main content */}

@@ -188,6 +188,18 @@ export default function NewClientsModule() {
     staleTime: 2 * 60 * 1000,
   });
 
+  const { data: contactDiag } = useQuery<{
+    conflicts: Array<{ kind: string; message: string; email_id: string | null; phone_id: string | null }>;
+  }>({
+    queryKey: ['contact-identity-diagnosis', selectedSubmission?.id],
+    queryFn: () =>
+      api
+        .get(`/admin/clients/submissions/${selectedSubmission!.id}/identity-diagnosis`)
+        .then((r) => r.data.data),
+    enabled: !!selectedSubmission,
+    staleTime: 2 * 60 * 1000,
+  });
+
   return (
     <div>
       <div className="mb-6">
@@ -318,6 +330,19 @@ export default function NewClientsModule() {
                 </button>
               )}
             </div>
+
+            {(contactDiag?.conflicts?.length ?? 0) > 0 && (
+              <div className="space-y-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                <p className="text-xs font-semibold text-amber-900">Identity conflicts</p>
+                {contactDiag!.conflicts.map((c, i) => (
+                  <p key={i} className="text-xs text-amber-800">
+                    <span className="font-medium uppercase tracking-wide">{c.kind.replace('_', ' ')}</span>
+                    {' — '}
+                    {c.message}
+                  </p>
+                ))}
+              </div>
+            )}
 
             <div className="space-y-2">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground-dim">Pipeline</h4>
