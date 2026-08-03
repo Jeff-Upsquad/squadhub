@@ -807,6 +807,8 @@ export default function HomeSidebar({
                               ? `${ch.label} · ${ch.subtitle}`
                               : ch.label,
                             isCrmChat: true,
+                            crmEntityType: ch.entity_type,
+                            crmEntityId: ch.entity_id,
                           })
                         }
                         className="flex min-w-0 flex-1 items-center gap-2 px-2 py-[5px] text-left text-[13px]"

@@ -188,6 +188,60 @@ router.post('/', requireAuth, requirePermission('can_create_channels'), async (r
   }
 });
 
+// GET /channels/:id/members — list people in a channel (any access level).
+// Used by the CRM chat header facepile so every participant can see who else
+// is in the conversation. ManageMembers still requires manager via /memberships.
+router.get('/:id/members', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const userLevel = await checkResourceAccess(req.userId!, 'channel', id);
+    if (!userLevel) {
+      res.status(403).json({ success: false, error: 'No access to this channel' });
+      return;
+    }
+
+    const { data: memberships, error: memErr } = await supabaseAdmin
+      .from('resource_memberships')
+      .select('user_id')
+      .eq('resource_type', 'channel')
+      .eq('resource_id', id);
+    if (memErr) {
+      res.status(500).json({ success: false, error: memErr.message });
+      return;
+    }
+
+    const ids = [...new Set((memberships || []).map((m) => m.user_id as string))];
+    // Include the channel creator even if membership row is missing.
+    const { data: channel } = await supabaseAdmin
+      .from('channels')
+      .select('created_by')
+      .eq('id', id)
+      .maybeSingle();
+    if (channel?.created_by && !ids.includes(channel.created_by as string)) {
+      ids.push(channel.created_by as string);
+    }
+
+    if (!ids.length) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const { data: users, error } = await supabaseAdmin
+      .from('users')
+      .select('id, display_name, email, avatar_url')
+      .in('id', ids)
+      .order('display_name', { ascending: true });
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+    res.json({ success: true, data: users || [] });
+  } catch (err) {
+    console.error('List channel members error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
 // PUT /channels/:id — update channel settings (requires manager access)
 router.put('/:id', requireAuth, async (req: Request, res: Response) => {
   try {
