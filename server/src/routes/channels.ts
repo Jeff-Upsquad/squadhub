@@ -459,25 +459,23 @@ async function assertWorkspaceMember(userId: string, workspaceId: string): Promi
   return !!data;
 }
 
-async function grantWorkspaceMembersChannelAccess(channelId: string, workspaceId: string): Promise<void> {
-  const { data: members } = await supabaseAdmin
-    .from('workspace_members')
-    .select('user_id')
-    .eq('workspace_id', workspaceId);
-  if (!members?.length) return;
-
+/** Grant membership to specific users only (CRM chats: opener/assignee/@mention). */
+async function grantChannelMembers(channelId: string, userIds: string[]): Promise<void> {
+  const unique = [...new Set(userIds.filter(Boolean))];
+  if (!unique.length) return;
   const { data: existing } = await supabaseAdmin
     .from('resource_memberships')
     .select('user_id')
     .eq('resource_type', 'channel')
-    .eq('resource_id', channelId);
+    .eq('resource_id', channelId)
+    .in('user_id', unique);
   const have = new Set((existing || []).map((r) => r.user_id as string));
-  const rows = members
-    .filter((m) => !have.has(m.user_id as string))
-    .map((m) => ({
+  const rows = unique
+    .filter((id) => !have.has(id))
+    .map((user_id) => ({
       resource_type: 'channel',
       resource_id: channelId,
-      user_id: m.user_id,
+      user_id,
       access_level: 'member',
     }));
   if (rows.length) await supabaseAdmin.from('resource_memberships').insert(rows);
@@ -510,7 +508,8 @@ router.post('/crm/ensure', requireAuth, async (req: Request, res: Response) => {
           linked_subtitle: body.subtitle ?? null,
         })
         .eq('id', existing.id);
-      await grantWorkspaceMembersChannelAccess(existing.id, body.workspace_id);
+      // Opener only here; CRM ensure adds assignee. Mentions add others.
+      await grantChannelMembers(existing.id, [req.userId!]);
       // Opening a chat clears this user's closed state.
       await supabaseAdmin
         .from('crm_chat_user_state')
@@ -552,7 +551,7 @@ router.post('/crm/ensure', requireAuth, async (req: Request, res: Response) => {
           .is('deleted_at', null)
           .maybeSingle();
         if (raced) {
-          await grantWorkspaceMembersChannelAccess(raced.id, body.workspace_id);
+          await grantChannelMembers(raced.id, [req.userId!]);
           res.json({ success: true, data: raced });
           return;
         }
@@ -561,7 +560,7 @@ router.post('/crm/ensure', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    await grantWorkspaceMembersChannelAccess(created.id, body.workspace_id);
+    await grantChannelMembers(created.id, [req.userId!]);
     res.status(201).json({ success: true, data: created });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -606,6 +605,16 @@ router.get('/crm', requireAuth, async (req: Request, res: Response) => {
     }
 
     const channelIds = channels.map((c) => c.id);
+
+    // Only show CRM chats this user is a member of (opener, assignee, or @mentioned).
+    const { data: memberships } = await supabaseAdmin
+      .from('resource_memberships')
+      .select('resource_id')
+      .eq('resource_type', 'channel')
+      .eq('user_id', req.userId!)
+      .in('resource_id', channelIds);
+    const memberSet = new Set((memberships || []).map((m) => m.resource_id as string));
+
     const { data: closedRows } = await supabaseAdmin
       .from('crm_chat_user_state')
       .select('channel_id, closed_at')
@@ -630,11 +639,7 @@ router.get('/crm', requireAuth, async (req: Request, res: Response) => {
     }
 
     const items = channels
-      .filter((c) => {
-        // Closed for this user with no newer message → hide. (New messages
-        // delete the close row, so closedMap presence alone means closed.)
-        return !closedMap.has(c.id);
-      })
+      .filter((c) => memberSet.has(c.id) && !closedMap.has(c.id))
       .map((c) => {
         const last = lastByChannel.get(c.id);
         return {

@@ -236,12 +236,31 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
     }
 
     // CRM entity chats: a new message reopens the chat for everyone who closed it
-    // (delete close-state rows so it reappears under CRM Chats).
+    // (delete close-state rows so it reappears under CRM Chats). Mentions also
+    // grant channel membership so @someone is brought into the CRM chat.
     if (body.channel_id) {
       await supabaseAdmin
         .from('crm_chat_user_state')
         .delete()
         .eq('channel_id', body.channel_id);
+      if (body.mentions?.length) {
+        const { data: existing } = await supabaseAdmin
+          .from('resource_memberships')
+          .select('user_id')
+          .eq('resource_type', 'channel')
+          .eq('resource_id', body.channel_id)
+          .in('user_id', body.mentions);
+        const have = new Set((existing || []).map((r) => r.user_id as string));
+        const rows = body.mentions
+          .filter((id) => !have.has(id))
+          .map((user_id) => ({
+            resource_type: 'channel',
+            resource_id: body.channel_id!,
+            user_id,
+            access_level: 'member',
+          }));
+        if (rows.length) await supabaseAdmin.from('resource_memberships').insert(rows);
+      }
     }
 
     res.status(201).json({ success: true, data: message });
