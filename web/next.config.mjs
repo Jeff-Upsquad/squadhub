@@ -13,6 +13,24 @@ const nextConfig = {
     position: 'bottom-right',
   },
 
+  // Allow CRM (and local CRM) to iframe the SquadHub chat embed.
+  async headers() {
+    return [
+      {
+        source: '/embed/crm-chat',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value:
+              "frame-ancestors 'self' https://crm.squadhub.in http://localhost:3100 http://127.0.0.1:3100",
+          },
+          // Clear any global DENY so iframe works (Caddy may also set this — keep in sync).
+          { key: 'X-Frame-Options', value: '' },
+        ],
+      },
+    ];
+  },
+
   rewrites: async () => ({
     beforeFiles: [
       // Dev-only in practice: prod nginx proxies /socket.io before Next sees it

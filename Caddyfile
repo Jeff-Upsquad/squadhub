@@ -1,5 +1,17 @@
 squadhub.in {
-	reverse_proxy web:3000
+	# CRM embeds the real ChatPanel at /embed/crm-chat (iframe). Override CSP
+	# so crm.squadhub.in (and local CRM) can frame it; everything else proxies
+	# through with the app's default headers.
+	@crm_chat_embed path /embed/crm-chat /embed/crm-chat/*
+	handle @crm_chat_embed {
+		reverse_proxy web:3000 {
+			header_down Content-Security-Policy "frame-ancestors 'self' https://crm.squadhub.in http://localhost:3100 http://127.0.0.1:3100"
+			header_down -X-Frame-Options
+		}
+	}
+	handle {
+		reverse_proxy web:3000
+	}
 }
 
 admin.squadhub.in {
