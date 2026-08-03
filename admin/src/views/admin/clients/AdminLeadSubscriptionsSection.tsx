@@ -118,7 +118,7 @@ export default function AdminLeadSubscriptionsSection({ submissionId, country, c
         open={!!rowBeingConfirmed}
         title="Remove subscription"
         description={rowBeingConfirmed
-          ? `${rowBeingConfirmed.subscription?.name || 'Subscription'} · ${rowBeingConfirmed.plan?.plan || ''} · ${rowBeingConfirmed.plan?.tier || ''} will be removed from this lead.`
+          ? `${rowBeingConfirmed.subscription?.name || 'Subscription'} · ${rowBeingConfirmed.plan?.plan || ''} · ${rowBeingConfirmed.plan?.tier || ''} will be removed from this contact.`
           : ''}
         loading={deleteMutation.isPending}
         onClose={() => setConfirmRowId(null)}
@@ -265,7 +265,7 @@ function AddSubscriptionInline({
             Plan {country ? `(${country.currency} for ${country.name})` : ''}
           </label>
           {!country ? (
-            <p className="rounded-md bg-surface px-2 py-1.5 text-xs text-foreground-dim">Lead has no country.</p>
+            <p className="rounded-md bg-surface px-2 py-1.5 text-xs text-foreground-dim">Contact has no country.</p>
           ) : sortedPlans.length === 0 ? (
             <p className="rounded-md bg-surface px-2 py-1.5 text-xs text-foreground-dim">
               No plans priced for {country.name}.

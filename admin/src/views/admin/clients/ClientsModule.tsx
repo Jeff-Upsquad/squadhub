@@ -10,6 +10,8 @@ import SliderPanel from './SliderPanel';
 import { PlanPicker } from './NewClientsModule';
 import ClientSubscriptionsPanel from './ClientSubscriptionsPanel';
 import ClientAccessPanel from './ClientAccessPanel';
+import { openCrmLeadById } from '../../../utils/squadCrm';
+import { openSquadhireBusiness, type SquadhireBusinessMatch } from '../../../utils/squadHire';
 
 interface SquadBooksMatch {
   found: boolean;
@@ -19,6 +21,14 @@ interface SquadBooksMatch {
   matchedBy?: string;
   squadbooksUrl?: string;
 }
+
+interface CrmLeadMatch {
+  found: boolean;
+  lead_id?: string;
+  matched_by?: string;
+}
+
+interface HireBusinessMatch extends SquadhireBusinessMatch {}
 
 const STATUS_BADGE: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700',
@@ -420,7 +430,20 @@ function ClientDetail({
 
   const country = client ? (client.country || countries.find((c) => c.id === client.country_id) || null) : null;
 
-  // Cross-app link: does this client also exist as a SquadBooks customer?
+  // Cross-app connections (lookup-only Phase 1): CRM lead, SquadHire business
+  // user, SquadBooks customer. Soft-match by submission_id / email / phone.
+  const { data: crmMatch } = useQuery<CrmLeadMatch>({
+    queryKey: ['client-crm-lead', clientId],
+    queryFn: () =>
+      api.get(`/admin/clients/${clientId}/crm-lead`).then((r) => r.data.data as CrmLeadMatch),
+  });
+
+  const { data: hireMatch } = useQuery<HireBusinessMatch>({
+    queryKey: ['client-squadhire-business', clientId],
+    queryFn: () =>
+      api.get(`/admin/clients/${clientId}/squadhire-business`).then((r) => r.data.data as HireBusinessMatch),
+  });
+
   const { data: booksMatch } = useQuery<SquadBooksMatch>({
     queryKey: ['client-squadbooks-customer', clientId],
     queryFn: () =>
@@ -440,6 +463,11 @@ function ClientDetail({
       `&w=${encodeURIComponent(booksMatch.orgId || '')}&wn=&next=${next}`;
     window.open(url, '_blank', 'noopener');
   };
+
+  const connBtn =
+    'rounded-md border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:bg-canvas';
+  const connBtnDisabled =
+    'cursor-not-allowed rounded-md border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-foreground-dim opacity-50';
 
   const statusMutation = useMutation({
     mutationFn: (status: ClientStatus) => api.put(`/admin/clients/${clientId}/status`, { status }),
@@ -515,24 +543,58 @@ function ClientDetail({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {crmMatch?.found && crmMatch.lead_id ? (
+            <button
+              type="button"
+              onClick={() => openCrmLeadById(crmMatch.lead_id)}
+              title={`Open this contact in Squad CRM${crmMatch.matched_by ? ` (matched by ${crmMatch.matched_by})` : ''}`}
+              className={connBtn}
+            >
+              Open in Squad CRM ↗
+            </button>
+          ) : (
+            <button type="button" disabled title="No matching lead in Squad CRM" className={connBtnDisabled}>
+              Open in Squad CRM
+            </button>
+          )}
+          {hireMatch?.found && (hireMatch.admin_url || (hireMatch.squadhireAdminUrl && hireMatch.business_user_id)) ? (
+            <button
+              type="button"
+              onClick={() => openSquadhireBusiness(hireMatch)}
+              title={
+                hireMatch.company_name
+                  ? `Open ${hireMatch.company_name} in SquadHire${hireMatch.matched_by ? ` (matched by ${hireMatch.matched_by})` : ''}`
+                  : 'Open business user in SquadHire'
+              }
+              className={connBtn}
+            >
+              Open in SquadHire ↗
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled
+              title="No matching business user in SquadHire"
+              className={connBtnDisabled}
+            >
+              Open in SquadHire
+            </button>
+          )}
           {booksMatch?.found ? (
             <button
+              type="button"
               onClick={openInSquadBooks}
               title={
                 booksMatch.matchedBy === 'name'
                   ? 'Matched by name — open in SquadBooks (verify it is the same customer)'
                   : 'Open this customer in SquadBooks'
               }
-              className="rounded-md border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:bg-canvas"
+              className={connBtn}
             >
               Open in SquadBooks{booksMatch.matchedBy === 'name' ? ' (by name)' : ''} ↗
             </button>
           ) : (
-            <button
-              disabled
-              title="No matching customer in SquadBooks"
-              className="cursor-not-allowed rounded-md border border-divider bg-surface px-3 py-1.5 text-xs font-medium text-foreground-dim opacity-50"
-            >
+            <button type="button" disabled title="No matching customer in SquadBooks" className={connBtnDisabled}>
               Open in SquadBooks
             </button>
           )}

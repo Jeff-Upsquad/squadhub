@@ -6,13 +6,13 @@ import NewClientsModule from './NewClientsModule';
 import ClientsModule from './ClientsModule';
 import OnboardingLinksModule from './OnboardingLinksModule';
 
-type Tab = 'clients' | 'leads' | 'invite-links';
+type Tab = 'clients' | 'contacts' | 'invite-links';
 
 export default function AdminClients() {
   // Deep-link query params: ?client=<id> lands on the Clients tab, ?submission=<id>
-  // lands on the Leads tab. The downstream modules handle the actual row open.
+  // lands on the Contacts tab. The downstream modules handle the actual row open.
   const searchParams = useSearchParams();
-  const initialTab: Tab = searchParams.get('submission') ? 'leads' : 'clients';
+  const initialTab: Tab = searchParams.get('submission') ? 'contacts' : 'clients';
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
   // Counts for badges
@@ -32,7 +32,7 @@ export default function AdminClients() {
 
   const tabs: { id: Tab; label: string; count: number; highlight?: boolean }[] = [
     { id: 'clients', label: 'Clients', count: clientCount },
-    { id: 'leads', label: 'Leads', count: pendingCount, highlight: true },
+    { id: 'contacts', label: 'Contacts', count: pendingCount, highlight: true },
     { id: 'invite-links', label: 'Invite Links', count: 0 },
   ];
 
@@ -75,7 +75,7 @@ export default function AdminClients() {
       {/* Main content */}
       <div className="flex-1 overflow-y-auto bg-canvas p-6">
         {activeTab === 'clients' && <ClientsModule />}
-        {activeTab === 'leads' && <NewClientsModule />}
+        {activeTab === 'contacts' && <NewClientsModule />}
         {activeTab === 'invite-links' && <OnboardingLinksModule />}
       </div>
     </div>

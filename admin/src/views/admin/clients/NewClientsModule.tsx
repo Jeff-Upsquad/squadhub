@@ -21,6 +21,11 @@ import AdminLeadSubscriptionsSection from './AdminLeadSubscriptionsSection';
 import AdminLeadCardsSection from './AdminLeadCardsSection';
 import AdminLeadJobCardsSection from './AdminLeadJobCardsSection';
 import { openLeadInCRM } from '../../../utils/squadCrm';
+import {
+  lookupSquadhireBusiness,
+  openSquadhireBusiness,
+  type SquadhireBusinessMatch,
+} from '../../../utils/squadHire';
 
 const SERVICE_TYPE_LABEL: Record<string, string> = {
   designer: 'Designers',
@@ -89,7 +94,7 @@ export default function NewClientsModule() {
 
   // Reuses the same query key as AdminLeadCardsSection so the cache is shared
   // and we don't double-fetch. Needed here so the Convert button can enable
-  // when the lead has Assigned cards but no staged subs.
+  // when the contact has Assigned cards but no staged subs.
   const { data: selectedCardsRes } = useQuery({
     queryKey: ['admin-submission-cards', selectedSubmissionId],
     queryFn: () =>
@@ -125,7 +130,7 @@ export default function NewClientsModule() {
       queryClient.invalidateQueries({ queryKey: ['admin-clients'] });
       queryClient.invalidateQueries({ queryKey: ['admin-clients-count'] });
       // Auto-staging from Assigned cards back-fills submission_subscription_id
-      // on those cards, so refresh the per-lead card list too.
+      // on those cards, so refresh the per-contact card list too.
       queryClient.invalidateQueries({ queryKey: ['admin-submission-cards'] });
       setStatusError(null);
     },
@@ -164,17 +169,33 @@ export default function NewClientsModule() {
   const selectedSubs = selectedSubmission?.selected_subscriptions || [];
   const subsLocked = selectedSubmission?.status === 'converted' || selectedSubmission?.status === 'closed';
 
+  // Soft-match SquadHire business user for the Connections deep-link.
+  const { data: hireMatch } = useQuery<SquadhireBusinessMatch>({
+    queryKey: [
+      'contact-squadhire-business',
+      selectedSubmission?.email,
+      selectedSubmission?.contact_number,
+    ],
+    queryFn: () =>
+      lookupSquadhireBusiness({
+        email: selectedSubmission!.email,
+        phone: selectedSubmission!.contact_number,
+      }),
+    enabled: !!selectedSubmission,
+    staleTime: 2 * 60 * 1000,
+  });
+
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">New Leads</h1>
-        <p className="mt-1 text-sm text-foreground-muted">Track lead pipeline and assign subscriptions</p>
+        <h1 className="font-[family-name:var(--font-display)] text-xl font-bold text-foreground">Contacts</h1>
+        <p className="mt-1 text-sm text-foreground-muted">Track contact pipeline and assign subscriptions</p>
       </div>
 
       <div className="mb-4">
         <input
           type="text"
-          placeholder="Search submissions..."
+          placeholder="Search contacts..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full max-w-sm rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground placeholder-foreground-dim focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
@@ -185,7 +206,7 @@ export default function NewClientsModule() {
         <p className="py-8 text-center text-sm text-foreground-dim">Loading...</p>
       ) : grouped.length === 0 ? (
         <div className="rounded-lg border border-divider bg-surface py-12 text-center">
-          <p className="text-sm text-foreground-dim">{search ? 'No matching submissions.' : 'No submissions yet.'}</p>
+          <p className="text-sm text-foreground-dim">{search ? 'No matching contacts.' : 'No contacts yet.'}</p>
         </div>
       ) : (
         <div className="space-y-6">
@@ -248,10 +269,10 @@ export default function NewClientsModule() {
         </div>
       )}
 
-      <SliderPanel open={!!selectedSubmission} onClose={closeSlider} title="Lead" width="w-[520px]">
+      <SliderPanel open={!!selectedSubmission} onClose={closeSlider} title="Contact" width="w-[520px]">
         {selectedSubmission && (
           <div className="space-y-6">
-            <div>
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => openLeadInCRM({
@@ -259,7 +280,7 @@ export default function NewClientsModule() {
                   phone: selectedSubmission.contact_number,
                   email: selectedSubmission.email,
                 })}
-                title="Open this lead in Squad CRM"
+                title="Open this contact in Squad CRM"
                 className="inline-flex items-center gap-1.5 rounded-md border border-divider bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-alt transition"
               >
                 Open in Squad CRM
@@ -267,6 +288,32 @@ export default function NewClientsModule() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                 </svg>
               </button>
+              {hireMatch?.found && (hireMatch.admin_url || (hireMatch.squadhireAdminUrl && hireMatch.business_user_id)) ? (
+                <button
+                  type="button"
+                  onClick={() => openSquadhireBusiness(hireMatch)}
+                  title={
+                    hireMatch.company_name
+                      ? `Open ${hireMatch.company_name} in SquadHire${hireMatch.matched_by ? ` (matched by ${hireMatch.matched_by})` : ''}`
+                      : 'Open business user in SquadHire'
+                  }
+                  className="inline-flex items-center gap-1.5 rounded-md border border-divider bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-alt transition"
+                >
+                  Open in SquadHire
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  title="No matching business user in SquadHire"
+                  className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-md border border-divider bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground-dim opacity-50"
+                >
+                  Open in SquadHire
+                </button>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -299,7 +346,7 @@ export default function NewClientsModule() {
                         { onSuccess: () => closeSlider() },
                       );
                     }}
-                    title={disabledReason || 'Materialise this lead into a client and copy its subscriptions over.'}
+                    title={disabledReason || 'Materialise this contact into a client and copy its subscriptions over.'}
                     className="w-full rounded-md bg-[#15803D] px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#166534] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {statusMutation.isPending ? 'Converting…' : 'Convert to Client'}
@@ -420,7 +467,7 @@ function BrandCard({ brand, countries }: { brand: ClientSubmissionBrand; countri
 
   // Per-role requirement details live on subscription_cards now. Only show
   // cards that actually have something to display, so the section stays
-  // tight when leads skip the optional fields.
+  // tight when contacts skip the optional fields.
   const cards = (brand.cards || []).filter(
     (c) => c.requirement_note || c.hours_note,
   );

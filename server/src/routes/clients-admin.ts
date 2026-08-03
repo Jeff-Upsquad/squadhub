@@ -14,15 +14,18 @@ import { hydrateCardsBatch } from '../utils/subscriptionCards';
 import { findCardIdForClientSubscription } from '../utils/clientCardLink';
 import { pauseCardCore, resumeCardCore } from './subscription-cards-admin-select';
 import { cancelCardCore, archiveCardCore, reinstateCardCore } from './subscription-cards-admin';
+import { lookupSquadhireBusinessUser } from '../utils/squadhireBusinessLookup';
 
 const router = Router();
 
 router.use(requireAuth);
 
-// The Clients module is admin-only. The single exception is the CRM lead
-// lookup, which the Leads mini app's brief form calls to prefill a customer
-// from an existing CRM lead — a read, so it also accepts the 'leads' grant.
-const LEADS_READABLE = new Set(['/lookup-crm-lead']);
+// The Clients module is admin-only. Read-only cross-app lookups are also
+// available to the Leads mini app (brief form / connections deep-links).
+const LEADS_READABLE = new Set([
+  '/lookup-crm-lead',
+  '/lookup-squadhire-business',
+]);
 router.use((req, res, next) =>
   req.method === 'GET' && LEADS_READABLE.has(req.path)
     ? requireMiniAppOrAdmin('leads')(req, res, next)
@@ -546,6 +549,43 @@ router.get('/submissions', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /admin/clients/lookup-squadhire-business?email=&phone= —
+// resolves email/phone to a SquadHire business_users row for deep-linking
+// from the Contacts panel (or any surface that has contact fields but no
+// client id yet). Returns { found, ... } same shape as /:id/squadhire-business.
+router.get('/lookup-squadhire-business', async (req: Request, res: Response) => {
+  try {
+    const email = (req.query.email as string | undefined)?.trim();
+    const phone = (req.query.phone as string | undefined)?.trim();
+    if (!email && !phone) {
+      res.json({ success: true, data: { found: false } });
+      return;
+    }
+
+    const match = await lookupSquadhireBusinessUser({ email, phone });
+    if (!match) {
+      res.json({ success: true, data: { found: false } });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        found: true,
+        business_user_id: match.business_user_id,
+        company_name: match.company_name,
+        contact_person_name: match.contact_person_name,
+        matched_by: match.matched_by,
+        admin_url: match.admin_url,
+        squadhireAdminUrl: config.squadhireAdminUrl || null,
+      },
+    });
+  } catch (err) {
+    console.error('GET /lookup-squadhire-business error:', err);
+    res.json({ success: true, data: { found: false } });
+  }
+});
+
 // GET /admin/clients/lookup-crm-lead?submission_id=&phone=&email= —
 // resolves a published card's customer to its corresponding Squad CRM
 // lead. The CRM (`crm_leads` table) shares this Supabase project, so we
@@ -1032,6 +1072,131 @@ router.get('/:id', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('Get client error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /admin/clients/:id/squadhire-business
+// Resolves this client to a SquadHire business_users row by email then phone
+// (same soft-match strategy used when cards are published). Used by the client
+// Connections panel ("Open in SquadHire"). Returns { found:false } when there's
+// no match or the integration is unconfigured/unreachable.
+router.get('/:id/squadhire-business', async (req: Request, res: Response) => {
+  try {
+    const { data: client, error } = await supabaseAdmin
+      .from('clients')
+      .select('email, contact_number, business_name')
+      .eq('id', req.params.id)
+      .single();
+    if (error || !client) {
+      res.status(404).json({ success: false, error: 'Client not found' });
+      return;
+    }
+
+    const match = await lookupSquadhireBusinessUser({
+      email: client.email,
+      phone: client.contact_number,
+    });
+    if (!match) {
+      res.json({ success: true, data: { found: false } });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        found: true,
+        business_user_id: match.business_user_id,
+        company_name: match.company_name,
+        contact_person_name: match.contact_person_name,
+        matched_by: match.matched_by,
+        admin_url: match.admin_url,
+        squadhireAdminUrl: config.squadhireAdminUrl || null,
+      },
+    });
+  } catch (err) {
+    console.error('GET /:id/squadhire-business error:', err);
+    res.json({ success: true, data: { found: false } });
+  }
+});
+
+// GET /admin/clients/:id/crm-lead
+// Resolves this client to a Squad CRM lead (submission_id → phone → email).
+// Same matching as /lookup-crm-lead, scoped to a client so the Connections
+// panel can enable/disable "Open in Squad CRM" without the UI inventing params.
+router.get('/:id/crm-lead', async (req: Request, res: Response) => {
+  try {
+    const { data: client, error } = await supabaseAdmin
+      .from('clients')
+      .select('submission_id, email, contact_number')
+      .eq('id', req.params.id)
+      .single();
+    if (error || !client) {
+      res.status(404).json({ success: false, error: 'Client not found' });
+      return;
+    }
+
+    const submissionId = (client.submission_id as string | null) || null;
+    const phone = (client.contact_number as string | null) || null;
+    const email = (client.email as string | null) || null;
+
+    // 1. Submission link
+    if (submissionId) {
+      const { data } = await supabaseAdmin
+        .from('crm_leads')
+        .select('id')
+        .eq('sh_client_submission_id', submissionId)
+        .is('merged_into_lead_id', null)
+        .maybeSingle();
+      if (data) {
+        res.json({
+          success: true,
+          data: { found: true, lead_id: data.id, matched_by: 'submission_id' },
+        });
+        return;
+      }
+    }
+
+    // 2. Phone suffix-match
+    if (phone) {
+      const cleaned = phone.replace(/\D/g, '');
+      if (cleaned.length >= 7) {
+        const { data } = await supabaseAdmin
+          .from('crm_leads')
+          .select('id')
+          .ilike('phone_e164', `%${cleaned}`)
+          .is('merged_into_lead_id', null)
+          .limit(1);
+        if (data && data.length > 0) {
+          res.json({
+            success: true,
+            data: { found: true, lead_id: data[0].id, matched_by: 'phone' },
+          });
+          return;
+        }
+      }
+    }
+
+    // 3. Email
+    if (email && email.includes('@')) {
+      const { data } = await supabaseAdmin
+        .from('crm_leads')
+        .select('id')
+        .ilike('email', email)
+        .is('merged_into_lead_id', null)
+        .limit(1);
+      if (data && data.length > 0) {
+        res.json({
+          success: true,
+          data: { found: true, lead_id: data[0].id, matched_by: 'email' },
+        });
+        return;
+      }
+    }
+
+    res.json({ success: true, data: { found: false } });
+  } catch (err) {
+    console.error('GET /:id/crm-lead error:', err);
+    res.json({ success: true, data: { found: false } });
   }
 });
 
