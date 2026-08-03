@@ -151,7 +151,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, distribution, card_type, assignment_details, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, paused_at, cancelled_at, source, proposed_price, subscription_price, markup, customer_company, customer_email, customer_phone, customer_name, service_type, plan_name, plan_snapshot, lead_submission_id',
+      'id, state, distribution, card_type, assignment_details, submission_subscription_id, working_days, brand_name, business_nature, notes, requirement_note, customer_location, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, paused_at, cancelled_at, source, proposed_price, subscription_price, markup, customer_company, customer_email, customer_phone, customer_name, service_type, plan_name, plan_snapshot, lead_submission_id',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -176,7 +176,7 @@ export async function buildSquadhirePayloadForCard(
     const { data: parent } = await supabaseAdmin
       .from('subscription_cards')
       .select(
-        'id, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, proposed_price, subscription_price, markup, partner_price_override',
+        'id, submission_subscription_id, working_days, brand_name, business_nature, notes, requirement_note, customer_location, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, proposed_price, subscription_price, markup, partner_price_override',
       )
       .eq('id', card.parent_card_id)
       .maybeSingle();
@@ -702,37 +702,48 @@ export async function buildSquadhirePayloadForCard(
   const publishedAtRaw = (card.published_at as string | null) ?? new Date().toISOString();
   const publishedAt = new Date(publishedAtRaw).toISOString();
 
+  // Client-brief "Short Note About the Requirement" — surfaces on the talent
+  // card as Deliverables. Keep as its own field too so consumers can use it
+  // without overloading deliverables_label.
+  const requirementNote = String((contentSource as any).requirement_note ?? '').trim();
+
+  const mergedCustomDeliverables = (() => {
+    const cardDelivs: any[] = Array.isArray(contentSource.custom_deliverables)
+      ? (contentSource.custom_deliverables as any[])
+      : [];
+    if (planItemDeliverables.length === 0) return cardDelivs;
+    const cardItemTypeIds = new Set(
+      cardDelivs
+        .filter((d) => d?.kind === 'item' && d?.deliverable_type_id)
+        .map((d) => d.deliverable_type_id),
+    );
+    const planOnly = planItemDeliverables.filter(
+      (d) => !d.deliverable_type_id || !cardItemTypeIds.has(d.deliverable_type_id),
+    );
+    return [...cardDelivs, ...planOnly];
+  })();
+  const hasItemDeliverables = mergedCustomDeliverables.some((d: any) => d?.kind === 'item');
+
   const content: Record<string, unknown> = {
     title,
     description,
     brand_name: contentSource.brand_name ?? null,
+    // About-the-client fields — keep nature vs location separate so SquadHire
+    // never labels a place name as "Nature of business".
     business_nature: contentSource.business_nature ?? null,
+    customer_location: (contentSource as any).customer_location ?? null,
     working_days: contentSource.working_days ?? [],
     notes: contentSource.notes ?? null,
+    requirement_note: requirementNote || null,
     subscription_name: subscriptionName,
     plan_name: planName,
     // Tier is the partner-skill bracket (Junior/Pro/Top Talents). Sent as a
     // separate field so SquadHire can show it next to plan_name on the
     // business dashboard ("Pro · Top Talents") without parsing a combined string.
     plan_tier: planTier,
-    custom_deliverables: (() => {
-      const cardDelivs: any[] = Array.isArray(contentSource.custom_deliverables)
-        ? (contentSource.custom_deliverables as any[])
-        : [];
-      if (planItemDeliverables.length === 0) return cardDelivs;
-      const cardItemTypeIds = new Set(
-        cardDelivs
-          .filter((d) => d?.kind === 'item' && d?.deliverable_type_id)
-          .map((d) => d.deliverable_type_id),
-      );
-      const planOnly = planItemDeliverables.filter(
-        (d) => !d.deliverable_type_id || !cardItemTypeIds.has(d.deliverable_type_id),
-      );
-      return [...cardDelivs, ...planOnly];
-    })(),
+    custom_deliverables: mergedCustomDeliverables,
     // Customer-facing context the talent finds useful before accepting:
     customer_company: leadCompany,
-    customer_location: (contentSource as any).customer_location ?? null,
   };
   // Attach the resolved partner price only when we have both amount and
   // currency — Profiles' renderer hides the Payment section on missing data.
@@ -756,17 +767,20 @@ export async function buildSquadhirePayloadForCard(
     content.hours_label = hoursLabel;
   }
 
-  // For non-staged cards, default to "No specific deliverables" so the
-  // talent's Work Commitment panel renders even when the admin didn't add
-  // any custom deliverables. Skip if custom_deliverables already has items.
-  if (!staged && cardSource && NON_STAGED_SOURCES.has(cardSource)) {
-    const customDelivs = Array.isArray(contentSource.custom_deliverables)
-      ? (contentSource.custom_deliverables as any[])
-      : [];
-    const hasItems = customDelivs.some((d) => d?.kind === 'item');
-    if (!hasItems) {
-      content.deliverables_label = 'No specific deliverables';
-    }
+  // Deliverables priority for the talent Work Commitment panel:
+  //   1. Client-brief requirement_note (assignment + subscription)
+  //   2. Structured custom/plan item deliverables (rendered as a list)
+  //   3. "No specific deliverables" fallback so the panel still renders
+  //      for non-staged cards with nothing else to show.
+  if (requirementNote) {
+    content.deliverables_label = requirementNote;
+  } else if (
+    !hasItemDeliverables &&
+    !staged &&
+    cardSource &&
+    NON_STAGED_SOURCES.has(cardSource)
+  ) {
+    content.deliverables_label = 'No specific deliverables';
   }
 
   // Assignment cards: stamp the type + project timeline into content so the
