@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin, supabase } from '../supabase';
 import { getDefaultRoleIdForUserType } from '../utils/defaultRole';
+import { grantClientUserAccess } from '../utils/ensureClientPortalAccess';
 import type { UserType } from '@squadhub/shared';
 
 const router = Router();
@@ -169,6 +170,19 @@ router.post('/register', async (req: Request, res: Response) => {
         await supabaseAdmin.from('partner_client_assignments').insert({
           user_id: authData.user.id,
           client_id: invitation.client_id,
+        });
+      }
+
+      // Phase 5: client / client_staff invitations grant client_user_access so
+      // the client appears under Areas / Shared with me after signup.
+      if (
+        invitation.client_id &&
+        (userType === 'client' || userType === 'client_staff')
+      ) {
+        await grantClientUserAccess({
+          clientId: invitation.client_id,
+          userId: authData.user.id,
+          createdBy: invitation.invited_by,
         });
       }
 

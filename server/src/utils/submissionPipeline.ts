@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../supabase';
 import { copyExternalLinksToClient } from './clientExternalLinks';
+import { ensureClientPortalAccess } from './ensureClientPortalAccess';
 
 export const PIPELINE_STATUSES = [
   'new',
@@ -252,6 +253,13 @@ async function materialiseClientFromSubmission(submission: any, stagedSubs: any[
   // Safety net if the insert columns weren't present yet (pre-migration race).
   await copyExternalLinksToClient(submission.id, client.id);
 
+  // Phase 5: auto-grant Squad Hub client portal access (or invite if no user yet).
+  await ensureClientPortalAccess({
+    clientId: client.id,
+    email: submission.email,
+    displayName: submission.contact_person,
+  });
+
   return { clientId: client.id as string, created: true };
 }
 
@@ -436,6 +444,13 @@ export async function attachSubmissionToExistingClient(
 
   // Carry CRM / Hire ids onto the existing client when still null.
   await copyExternalLinksToClient(submissionId, clientId);
+
+  // Phase 5: ensure contact has portal access on this (existing) client.
+  await ensureClientPortalAccess({
+    clientId,
+    email: submission.email,
+    displayName: submission.contact_person,
+  });
 
   if (submission.status !== 'converted') {
     const { error: updErr } = await supabaseAdmin

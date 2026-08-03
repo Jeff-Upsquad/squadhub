@@ -22,6 +22,7 @@ import {
   diagnoseIdentityConflicts,
   runIdentityBackfill,
 } from '../utils/identityBackfill';
+import { ensureClientPortalAccess } from '../utils/ensureClientPortalAccess';
 
 const router = Router();
 
@@ -1001,6 +1002,14 @@ router.post('/', async (req: Request, res: Response) => {
       res.status(500).json({ success: false, error: assignErr });
       return;
     }
+
+    // Phase 5: invite / grant the contact person as a Client User.
+    await ensureClientPortalAccess({
+      clientId: client.id,
+      email: body.email,
+      displayName: body.contact_person,
+      createdBy: (req as any).userId || null,
+    });
 
     const enriched = await enrichClient(client);
     res.json({ success: true, data: enriched });
