@@ -4,7 +4,7 @@ import { useChatSidePanelStore } from '../../../stores/chatSidePanelStore';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { useCloseCrmChat, useReopenCrmChat } from '../../../hooks/useCrmChats';
 import { useChannelMembers } from '../../../hooks/useChannelMembers';
-import { openCrmEntity } from '../../../utils/squadCrm';
+import { openCrmEntity } from '../../../utils/crmLinks';
 import ChatPanel from './ChatPanel';
 
 // Same gradient hash as MessageBubble / ChatPanel — stable color when no avatar.

@@ -1,5 +1,13 @@
 import type { CrmChatEntityType } from '@squadhub/shared';
 
+/**
+ * Deep links into Squad CRM from SquadHub (CRM Chat panel, etc.).
+ *
+ * Named crmLinks (not squadCrm) on purpose: web's `@/` alias prefers web/src
+ * over admin/src, so a web/src/utils/squadCrm.ts would shadow admin's
+ * openLeadInCRM helper used by shared Leads modules and break the web build.
+ */
+
 /** Squad CRM base URL (prod default; override with NEXT_PUBLIC_CRM_URL for local). */
 export const SQUAD_CRM_URL = (
   process.env.NEXT_PUBLIC_CRM_URL || 'https://crm.squadhub.in'
