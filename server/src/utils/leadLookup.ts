@@ -1,4 +1,9 @@
 import { supabaseAdmin } from '../supabase';
+import {
+  resolveCrmLead,
+  resolveSquadhireBusiness,
+  copyExternalLinksToClient,
+} from './clientExternalLinks';
 
 /**
  * Lead (client_submissions) lookup + find-or-create by contact identity.
@@ -8,6 +13,11 @@ import { supabaseAdmin } from '../supabase';
  * first, then last-10-digit phone suffix. Job cards then link DIRECTLY via
  * job_cards.lead_submission_id (no read-time email re-matching — that
  * fragility is what this module exists to avoid).
+ *
+ * Phase 3 — ensureHubContact() is the Stage-B entry point: first card
+ * (subscription / assignment / job) find-or-creates the Hub contact and
+ * stamps CRM + SquadHire soft refs so Hub is the single source of truth
+ * from that moment on.
  */
 
 // Last 10 digits is the universal phone identity in this system (the admin
@@ -142,4 +152,61 @@ export async function findClientForSubmission(submissionId: string): Promise<{ i
     .eq('submission_id', submissionId)
     .maybeSingle();
   return (data as any) ?? null;
+}
+
+export type HubContactResult = {
+  submission: any | null;
+  client: { id: string } | null;
+};
+
+/**
+ * Stage B trigger — call when a subscription, assignment, or job card is
+ * created. Ensures a Hub contact (client_submissions) exists for this person
+ * and best-effort stamps CRM + SquadHire ids so Connections deep-links use
+ * stored refs. Never throws: card creation must succeed even if Hire is down.
+ */
+export async function ensureHubContact(
+  input: FindOrCreateSubmissionInput,
+): Promise<HubContactResult> {
+  try {
+    const submission = await findOrCreateSubmissionByContact(input);
+    if (!submission) return { submission: null, client: null };
+
+    // Fire both external resolvers in parallel; each only writes null columns.
+    await Promise.all([
+      resolveCrmLead(
+        {
+          submission_id: submission.id,
+          email: submission.email || input.email,
+          contact_number: submission.contact_number || input.phone,
+          crm_lead_id: submission.crm_lead_id ?? null,
+        },
+        { persistTo: { table: 'client_submissions', id: submission.id } },
+      ).catch((err) => {
+        console.warn('[ensureHubContact] CRM resolve failed:', err?.message);
+      }),
+      resolveSquadhireBusiness(
+        {
+          email: submission.email || input.email,
+          contact_number: submission.contact_number || input.phone,
+          squadhire_business_user_id: submission.squadhire_business_user_id ?? null,
+        },
+        { persistTo: { table: 'client_submissions', id: submission.id } },
+      ).catch((err) => {
+        console.warn('[ensureHubContact] Hire resolve failed:', err?.message);
+      }),
+    ]);
+
+    // If this contact is already a converted client, copy any newly stamped
+    // external ids onto the client row (null-only).
+    const client = await findClientForSubmission(submission.id);
+    if (client) {
+      await copyExternalLinksToClient(submission.id, client.id);
+    }
+
+    return { submission, client };
+  } catch (err: any) {
+    console.error('[ensureHubContact] unexpected error:', err?.message);
+    return { submission: null, client: null };
+  }
 }

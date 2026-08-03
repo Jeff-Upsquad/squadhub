@@ -15,6 +15,7 @@ import {
 } from '../utils/upsquadApi';
 import { config } from '../config';
 import { logCardEvent } from '../utils/cardEvents';
+import { ensureHubContact } from '../utils/leadLookup';
 
 const router = Router();
 
@@ -263,6 +264,16 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
         ? states.map((region) => ({ country_id: countryId, region }))
         : [];
 
+    // Stage B: Hub contact is SSOT from the first card onward.
+    const { submission: hubContact } = await ensureHubContact({
+      email: requestData.email || null,
+      phone: requestData.phone || null,
+      contact_name: requestData.name || null,
+      business_name: requestData.company || null,
+      business_location: (requestData as any).location_of_business || null,
+      country_id: countryId,
+    });
+
     const { data: card, error } = await supabaseAdmin
       .from('subscription_cards')
       .insert({
@@ -289,6 +300,7 @@ router.post('/subscription-cards/from-request', async (req: Request, res: Respon
         requirement_note: (requestData as any).requirement_note || null,
         hours_note: (requestData as any).hours_note || null,
         publish_targets: ['partner', 'talent'],
+        lead_submission_id: hubContact?.id ?? null,
       })
       .select('*')
       .single();
@@ -353,6 +365,14 @@ router.post('/subscription-cards/custom', async (req: Request, res: Response) =>
     }
     const body = parsed.data;
 
+    // Stage B: ensure Hub contact when any contact identity is present.
+    const { submission: hubContact } = await ensureHubContact({
+      email: body.customer_email || null,
+      phone: body.customer_phone || null,
+      contact_name: body.customer_name || null,
+      business_name: body.customer_company || null,
+    });
+
     const { data: card, error } = await supabaseAdmin
       .from('subscription_cards')
       .insert({
@@ -367,6 +387,7 @@ router.post('/subscription-cards/custom', async (req: Request, res: Response) =>
         service_type: body.service_type || null,
         plan_name: body.plan_name || null,
         publish_targets: ['partner', 'talent'],
+        lead_submission_id: hubContact?.id ?? null,
       })
       .select('*')
       .single();
@@ -457,6 +478,16 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
       countryId = (countryRow as any)?.id ?? null;
     }
 
+    // Stage B: ensure Hub contact + CRM/Hire soft refs for this brief.
+    const { submission: hubContact } = await ensureHubContact({
+      email: body.email || null,
+      phone: body.phone || null,
+      contact_name: body.contact_name || null,
+      business_name: body.brand_name || null,
+      business_location: body.business_location || null,
+      country_id: countryId,
+    });
+
     const { data: card, error } = await supabaseAdmin
       .from('subscription_cards')
       .insert({
@@ -500,6 +531,7 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
         customer_phone: body.phone || null,
         customer_location: body.business_location || null,
         publish_targets: ['partner', 'talent'],
+        lead_submission_id: hubContact?.id ?? null,
       })
       .select('*')
       .single();

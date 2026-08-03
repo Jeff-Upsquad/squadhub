@@ -7,9 +7,8 @@ import { categorizeJobCard } from '../utils/jobStage';
 import { logJobCardEvent } from '../utils/jobCardEvents';
 import { fetchSquadhireCategories } from '../utils/squadhireCategories';
 import {
-  findOrCreateSubmissionByContact,
+  ensureHubContact,
   findSubmissionByContact,
-  findClientForSubmission,
 } from '../utils/leadLookup';
 import {
   buildSquadhireJobPayload,
@@ -185,9 +184,9 @@ router.post('/client-brief', async (req: Request, res: Response) => {
   try {
     const body = jobBriefSchema.parse(req.body);
 
-    // Find-or-create the lead by contact identity (best-effort: the brief
-    // still lands without a lead when no contact identity was given).
-    const submission = await findOrCreateSubmissionByContact({
+    // Stage B: ensure Hub contact exists + stamp CRM/Hire soft refs.
+    // Brief still lands without a lead when no contact identity was given.
+    const { submission, client } = await ensureHubContact({
       email: body.email ?? null,
       phone: body.phone ?? null,
       contact_name: body.contact_name ?? null,
@@ -195,7 +194,6 @@ router.post('/client-brief', async (req: Request, res: Response) => {
       business_location: body.business_location ?? null,
       country_id: body.country_id ?? null,
     });
-    const client = submission ? await findClientForSubmission(submission.id) : null;
 
     const cards: any[] = [];
     for (const role of body.role_service_types) {

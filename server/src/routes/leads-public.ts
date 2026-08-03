@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../supabase';
+import { ensureHubContact } from '../utils/leadLookup';
 
 const router = Router();
 
@@ -399,32 +400,22 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
       .maybeSingle();
     const countryId: string | null = (countryRow as any)?.id ?? null;
 
-    // 1. Find or create the lead.
-    let submission = await findSubmissionByContact(body.email, body.phone);
-    if (!submission) {
-      // country_id is NOT NULL on client_submissions, so fall back to the
-      // form's country_id (talent country) when we have no other signal.
-      // Admin can rebill later.
-      const fallbackCountry = countryId || body.country_id;
-      const { data: created, error: leadErr } = await supabaseAdmin
-        .from('client_submissions')
-        .insert({
-          business_name: body.brand_name,
-          contact_person: body.contact_name,
-          contact_number: body.phone,
-          email: body.email,
-          country_id: fallbackCountry,
-          status: 'new',
-        })
-        .select('*')
-        .single();
-      if (leadErr || !created) {
-        console.error('Lead create error:', leadErr);
-        res.status(500).json({ success: false, error: 'Failed to submit. Please try again.' });
-        return;
-      }
-      submission = created;
+    // 1. Stage B — ensure Hub contact (find-or-create) + stamp CRM/Hire soft refs.
+    // country_id is NOT NULL on client_submissions; fall back to the form's
+    // talent country when we have no other signal. Admin can rebill later.
+    const { submission: ensured } = await ensureHubContact({
+      email: body.email,
+      phone: body.phone,
+      contact_name: body.contact_name,
+      business_name: body.brand_name,
+      business_location: body.business_location || null,
+      country_id: countryId || body.country_id,
+    });
+    if (!ensured) {
+      res.status(500).json({ success: false, error: 'Failed to submit. Please try again.' });
+      return;
     }
+    const submission = ensured;
 
     // 2. Find or create the brand for this (lead, brand_name).
     const { data: existingBrand } = await supabaseAdmin
@@ -602,6 +593,7 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
           hours_note: roleReq?.hours || null,
           publish_targets: ['partner', 'talent'],
           brand_id: brandId,
+          lead_submission_id: submission.id,
         })
         .select('id')
         .single();
@@ -940,23 +932,14 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
     //    admin > Clients > New Clients and /leads/lookup autofill stays fresh.
     //    A failure here must NOT fail the card update — that's the contract.
     try {
-      let submission = await findSubmissionByContact(body.email, body.phone);
-      if (!submission) {
-        const fallbackCountry = countryId || body.country_id;
-        const { data: created } = await supabaseAdmin
-          .from('client_submissions')
-          .insert({
-            business_name: body.brand_name,
-            contact_person: body.contact_name,
-            contact_number: body.phone,
-            email: body.email,
-            country_id: fallbackCountry,
-            status: 'new',
-          })
-          .select('*')
-          .single();
-        submission = created;
-      }
+      const { submission } = await ensureHubContact({
+        email: body.email,
+        phone: body.phone,
+        contact_name: body.contact_name,
+        business_name: body.brand_name,
+        business_location: body.business_location || null,
+        country_id: countryId || body.country_id,
+      });
       if (submission) {
         const brandId = await upsertBrandForLead(
           submission.id,
@@ -972,12 +955,14 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
           countryId,
           body.state_regions,
         );
-        if (brandId) {
-          await supabaseAdmin
-            .from('subscription_cards')
-            .update({ brand_id: brandId })
-            .eq('id', card.id);
-        }
+        const cardPatch: Record<string, string> = {
+          lead_submission_id: submission.id,
+        };
+        if (brandId) cardPatch.brand_id = brandId;
+        await supabaseAdmin
+          .from('subscription_cards')
+          .update(cardPatch)
+          .eq('id', card.id);
       }
     } catch (linkErr) {
       console.error('Card share submit lead/brand link error (non-fatal):', linkErr);

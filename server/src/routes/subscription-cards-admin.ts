@@ -109,15 +109,13 @@ router.get('/', async (req: Request, res: Response) => {
       query = query.neq('card_type', 'assignment');
     }
 
-    // Scope to a single lead's cards. The Lead detail panel calls this to
+    // Scope to a single lead's cards. The Contact detail panel calls this to
     // list every card associated with a submission via any of the known
     // linking paths:
-    //   1. submission_subscription_id — the canonical link for cards
-    //      published from a staged subscription on the lead.
-    //   2. customer_email — request/shared_form/landing_page_form cards
-    //      from /connect carry the customer's email but do not point at
-    //      a submission row, so we have to match on that field.
-    //   3. customer_phone (digit suffix) — same as (2) for phone-led leads.
+    //   0. lead_submission_id — Stage B direct FK (preferred).
+    //   1. submission_subscription_id — staged subscription path.
+    //   2. customer_email — legacy request/shared_form cards.
+    //   3. customer_phone (digit suffix) — same for phone-led leads.
     if (submissionIdParam) {
       const { data: leadRow } = await supabaseAdmin
         .from('client_submissions')
@@ -137,7 +135,11 @@ router.get('/', async (req: Request, res: Response) => {
         : '';
       const phoneSuffix = phoneDigits.length >= 7 ? phoneDigits : '';
 
-      const [byStaged, byEmail, byPhone] = await Promise.all([
+      const [byDirect, byStaged, byEmail, byPhone] = await Promise.all([
+        supabaseAdmin
+          .from('subscription_cards')
+          .select('id')
+          .eq('lead_submission_id', submissionIdParam),
         allowedStagedIds.length > 0
           ? supabaseAdmin
               .from('subscription_cards')
@@ -157,6 +159,7 @@ router.get('/', async (req: Request, res: Response) => {
               .ilike('customer_phone', `%${phoneSuffix}`)
           : Promise.resolve({ data: [] as { id: string }[] }),
       ]);
+      (byDirect.data || []).forEach((r: any) => matchingCardIds.add(r.id));
       (byStaged.data || []).forEach((r: any) => matchingCardIds.add(r.id));
       (byEmail.data || []).forEach((r: any) => matchingCardIds.add(r.id));
       (byPhone.data || []).forEach((r: any) => matchingCardIds.add(r.id));

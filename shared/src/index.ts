@@ -1925,6 +1925,8 @@ export interface SubscriptionCardTargetRegion {
 export interface SubscriptionCard {
   id: string;
   submission_subscription_id: string;
+  /** Direct Hub contact link (Stage B). Null on legacy cards pre-migration 168. */
+  lead_submission_id?: string | null;
   state: SubscriptionCardState;
   /** Product line: 'subscription' (default), 'assignment' (freelance) or 'hiring'. */
   card_type: SubscriptionCardType;
