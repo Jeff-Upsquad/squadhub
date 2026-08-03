@@ -1763,6 +1763,10 @@ export interface ClientSubmission {
   primary_sales_person_id: string | null;
   secondary_sales_person_id: string | null;
   onboarding_link_id: string | null;
+  /** Soft ref → Squad CRM crm_leads.id (persisted on first successful match). */
+  crm_lead_id?: string | null;
+  /** Soft ref → SquadHire business_users.id (persisted on first successful match). */
+  squadhire_business_user_id?: string | null;
   // Joined
   country?: Country;
   primary_sales_person?: SalesPerson | null;
@@ -2189,6 +2193,10 @@ export interface Client {
   updated_at: string;
   primary_sales_person_id: string | null;
   secondary_sales_person_id: string | null;
+  /** Soft ref → Squad CRM crm_leads.id (persisted on first successful match). */
+  crm_lead_id?: string | null;
+  /** Soft ref → SquadHire business_users.id (persisted on first successful match). */
+  squadhire_business_user_id?: string | null;
   // Joined
   country?: Country;
   subscriptions?: ClientSubscription[];

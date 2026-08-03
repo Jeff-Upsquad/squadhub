@@ -14,7 +14,10 @@ import { hydrateCardsBatch } from '../utils/subscriptionCards';
 import { findCardIdForClientSubscription } from '../utils/clientCardLink';
 import { pauseCardCore, resumeCardCore } from './subscription-cards-admin-select';
 import { cancelCardCore, archiveCardCore, reinstateCardCore } from './subscription-cards-admin';
-import { lookupSquadhireBusinessUser } from '../utils/squadhireBusinessLookup';
+import {
+  resolveCrmLead,
+  resolveSquadhireBusiness,
+} from '../utils/clientExternalLinks';
 
 const router = Router();
 
@@ -549,37 +552,48 @@ router.get('/submissions', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /admin/clients/lookup-squadhire-business?email=&phone= —
-// resolves email/phone to a SquadHire business_users row for deep-linking
-// from the Contacts panel (or any surface that has contact fields but no
-// client id yet). Returns { found, ... } same shape as /:id/squadhire-business.
+// GET /admin/clients/lookup-squadhire-business?email=&phone=&submission_id= —
+// resolves email/phone (or a stored squadhire_business_user_id on the
+// submission) to a SquadHire business_users row. When submission_id is set
+// and a soft match succeeds, the id is backfilled onto the submission.
 router.get('/lookup-squadhire-business', async (req: Request, res: Response) => {
   try {
     const email = (req.query.email as string | undefined)?.trim();
     const phone = (req.query.phone as string | undefined)?.trim();
+    const submissionId = (req.query.submission_id as string | undefined)?.trim();
+
+    let storedId: string | null = null;
+    if (submissionId) {
+      const { data: sub } = await supabaseAdmin
+        .from('client_submissions')
+        .select('squadhire_business_user_id, email, contact_number')
+        .eq('id', submissionId)
+        .maybeSingle();
+      if (sub?.squadhire_business_user_id) {
+        storedId = sub.squadhire_business_user_id as string;
+      }
+      // Prefer submission contact fields when the query params are empty.
+      const match = await resolveSquadhireBusiness(
+        {
+          email: email || (sub?.email as string | null) || null,
+          contact_number: phone || (sub?.contact_number as string | null) || null,
+          squadhire_business_user_id: storedId,
+        },
+        submissionId
+          ? { persistTo: { table: 'client_submissions', id: submissionId } }
+          : undefined,
+      );
+      res.json({ success: true, data: match });
+      return;
+    }
+
     if (!email && !phone) {
       res.json({ success: true, data: { found: false } });
       return;
     }
 
-    const match = await lookupSquadhireBusinessUser({ email, phone });
-    if (!match) {
-      res.json({ success: true, data: { found: false } });
-      return;
-    }
-
-    res.json({
-      success: true,
-      data: {
-        found: true,
-        business_user_id: match.business_user_id,
-        company_name: match.company_name,
-        contact_person_name: match.contact_person_name,
-        matched_by: match.matched_by,
-        admin_url: match.admin_url,
-        squadhireAdminUrl: config.squadhireAdminUrl || null,
-      },
-    });
+    const match = await resolveSquadhireBusiness({ email, contact_number: phone });
+    res.json({ success: true, data: match });
   } catch (err) {
     console.error('GET /lookup-squadhire-business error:', err);
     res.json({ success: true, data: { found: false } });
@@ -587,81 +601,46 @@ router.get('/lookup-squadhire-business', async (req: Request, res: Response) => 
 });
 
 // GET /admin/clients/lookup-crm-lead?submission_id=&phone=&email= —
-// resolves a published card's customer to its corresponding Squad CRM
-// lead. The CRM (`crm_leads` table) shares this Supabase project, so we
-// can query it directly. Tries identifiers in order:
-//   1. sh_client_submission_id  — strongest link; set when CRM converted
-//      the lead into a SquadHub client_submission.
-//   2. phone_e164 (suffix-match) — covers leads that came in via WhatsApp
-//      first and were never explicitly linked to a submission. Cards
-//      typically store a local phone like "9447402340"; CRM stores E.164
-//      "+919447402340". Strip non-digits from the input and suffix-match.
-//   3. email (case-insensitive)  — last-resort fallback.
-// Returns { lead_id, matched_by } on hit, or null if nothing matches.
+// Prefer stored crm_lead_id on the submission when submission_id is given;
+// else match sh_client_submission_id → phone → email. Soft matches backfill
+// crm_lead_id onto the submission. Response keeps the legacy shape
+// `{ lead_id, matched_by }` (or null) for existing callers.
 router.get('/lookup-crm-lead', async (req: Request, res: Response) => {
   try {
     const submissionId = (req.query.submission_id as string | undefined)?.trim();
     const phone = (req.query.phone as string | undefined)?.trim();
     const email = (req.query.email as string | undefined)?.trim();
 
-    // 1. Submission link
+    let storedCrmLeadId: string | null = null;
     if (submissionId) {
-      const { data, error } = await supabaseAdmin
-        .from('crm_leads')
-        .select('id')
-        .eq('sh_client_submission_id', submissionId)
-        .is('merged_into_lead_id', null)
+      const { data: sub } = await supabaseAdmin
+        .from('client_submissions')
+        .select('crm_lead_id')
+        .eq('id', submissionId)
         .maybeSingle();
-      if (error) {
-        res.status(500).json({ success: false, error: error.message });
-        return;
-      }
-      if (data) {
-        res.json({ success: true, data: { lead_id: data.id, matched_by: 'submission_id' } });
-        return;
-      }
+      storedCrmLeadId = (sub?.crm_lead_id as string | null) ?? null;
     }
 
-    // 2. Phone suffix-match
-    if (phone) {
-      const cleaned = phone.replace(/\D/g, '');
-      if (cleaned.length >= 7) {
-        const { data, error } = await supabaseAdmin
-          .from('crm_leads')
-          .select('id')
-          .ilike('phone_e164', `%${cleaned}`)
-          .is('merged_into_lead_id', null)
-          .limit(1);
-        if (error) {
-          res.status(500).json({ success: false, error: error.message });
-          return;
-        }
-        if (data && data.length > 0) {
-          res.json({ success: true, data: { lead_id: data[0].id, matched_by: 'phone' } });
-          return;
-        }
-      }
-    }
+    const match = await resolveCrmLead(
+      {
+        submission_id: submissionId,
+        email,
+        contact_number: phone,
+        crm_lead_id: storedCrmLeadId,
+      },
+      submissionId
+        ? { persistTo: { table: 'client_submissions', id: submissionId } }
+        : undefined,
+    );
 
-    // 3. Email
-    if (email && email.includes('@')) {
-      const { data, error } = await supabaseAdmin
-        .from('crm_leads')
-        .select('id')
-        .ilike('email', email)
-        .is('merged_into_lead_id', null)
-        .limit(1);
-      if (error) {
-        res.status(500).json({ success: false, error: error.message });
-        return;
-      }
-      if (data && data.length > 0) {
-        res.json({ success: true, data: { lead_id: data[0].id, matched_by: 'email' } });
-        return;
-      }
+    if (!match.found) {
+      res.json({ success: true, data: null });
+      return;
     }
-
-    res.json({ success: true, data: null });
+    res.json({
+      success: true,
+      data: { lead_id: match.lead_id, matched_by: match.matched_by },
+    });
   } catch (err) {
     console.error('GET /lookup-crm-lead error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -1076,15 +1055,13 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // GET /admin/clients/:id/squadhire-business
-// Resolves this client to a SquadHire business_users row by email then phone
-// (same soft-match strategy used when cards are published). Used by the client
-// Connections panel ("Open in SquadHire"). Returns { found:false } when there's
-// no match or the integration is unconfigured/unreachable.
+// Prefer stored squadhire_business_user_id; else soft-match email/phone and
+// backfill. Used by the client Connections panel ("Open in SquadHire").
 router.get('/:id/squadhire-business', async (req: Request, res: Response) => {
   try {
     const { data: client, error } = await supabaseAdmin
       .from('clients')
-      .select('email, contact_number, business_name')
+      .select('email, contact_number, squadhire_business_user_id')
       .eq('id', req.params.id)
       .single();
     if (error || !client) {
@@ -1092,27 +1069,16 @@ router.get('/:id/squadhire-business', async (req: Request, res: Response) => {
       return;
     }
 
-    const match = await lookupSquadhireBusinessUser({
-      email: client.email,
-      phone: client.contact_number,
-    });
-    if (!match) {
-      res.json({ success: true, data: { found: false } });
-      return;
-    }
-
-    res.json({
-      success: true,
-      data: {
-        found: true,
-        business_user_id: match.business_user_id,
-        company_name: match.company_name,
-        contact_person_name: match.contact_person_name,
-        matched_by: match.matched_by,
-        admin_url: match.admin_url,
-        squadhireAdminUrl: config.squadhireAdminUrl || null,
+    const clientId = String(req.params.id);
+    const match = await resolveSquadhireBusiness(
+      {
+        email: client.email,
+        contact_number: client.contact_number,
+        squadhire_business_user_id: client.squadhire_business_user_id,
       },
-    });
+      { persistTo: { table: 'clients', id: clientId } },
+    );
+    res.json({ success: true, data: match });
   } catch (err) {
     console.error('GET /:id/squadhire-business error:', err);
     res.json({ success: true, data: { found: false } });
@@ -1120,80 +1086,30 @@ router.get('/:id/squadhire-business', async (req: Request, res: Response) => {
 });
 
 // GET /admin/clients/:id/crm-lead
-// Resolves this client to a Squad CRM lead (submission_id → phone → email).
-// Same matching as /lookup-crm-lead, scoped to a client so the Connections
-// panel can enable/disable "Open in Squad CRM" without the UI inventing params.
+// Prefer stored crm_lead_id; else submission_id → phone → email and backfill.
 router.get('/:id/crm-lead', async (req: Request, res: Response) => {
   try {
+    const clientId = String(req.params.id);
     const { data: client, error } = await supabaseAdmin
       .from('clients')
-      .select('submission_id, email, contact_number')
-      .eq('id', req.params.id)
+      .select('submission_id, email, contact_number, crm_lead_id')
+      .eq('id', clientId)
       .single();
     if (error || !client) {
       res.status(404).json({ success: false, error: 'Client not found' });
       return;
     }
 
-    const submissionId = (client.submission_id as string | null) || null;
-    const phone = (client.contact_number as string | null) || null;
-    const email = (client.email as string | null) || null;
-
-    // 1. Submission link
-    if (submissionId) {
-      const { data } = await supabaseAdmin
-        .from('crm_leads')
-        .select('id')
-        .eq('sh_client_submission_id', submissionId)
-        .is('merged_into_lead_id', null)
-        .maybeSingle();
-      if (data) {
-        res.json({
-          success: true,
-          data: { found: true, lead_id: data.id, matched_by: 'submission_id' },
-        });
-        return;
-      }
-    }
-
-    // 2. Phone suffix-match
-    if (phone) {
-      const cleaned = phone.replace(/\D/g, '');
-      if (cleaned.length >= 7) {
-        const { data } = await supabaseAdmin
-          .from('crm_leads')
-          .select('id')
-          .ilike('phone_e164', `%${cleaned}`)
-          .is('merged_into_lead_id', null)
-          .limit(1);
-        if (data && data.length > 0) {
-          res.json({
-            success: true,
-            data: { found: true, lead_id: data[0].id, matched_by: 'phone' },
-          });
-          return;
-        }
-      }
-    }
-
-    // 3. Email
-    if (email && email.includes('@')) {
-      const { data } = await supabaseAdmin
-        .from('crm_leads')
-        .select('id')
-        .ilike('email', email)
-        .is('merged_into_lead_id', null)
-        .limit(1);
-      if (data && data.length > 0) {
-        res.json({
-          success: true,
-          data: { found: true, lead_id: data[0].id, matched_by: 'email' },
-        });
-        return;
-      }
-    }
-
-    res.json({ success: true, data: { found: false } });
+    const match = await resolveCrmLead(
+      {
+        submission_id: client.submission_id,
+        email: client.email,
+        contact_number: client.contact_number,
+        crm_lead_id: client.crm_lead_id,
+      },
+      { persistTo: { table: 'clients', id: clientId } },
+    );
+    res.json({ success: true, data: match });
   } catch (err) {
     console.error('GET /:id/crm-lead error:', err);
     res.json({ success: true, data: { found: false } });

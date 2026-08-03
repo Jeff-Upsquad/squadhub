@@ -169,10 +169,12 @@ export default function NewClientsModule() {
   const selectedSubs = selectedSubmission?.selected_subscriptions || [];
   const subsLocked = selectedSubmission?.status === 'converted' || selectedSubmission?.status === 'closed';
 
-  // Soft-match SquadHire business user for the Connections deep-link.
+  // Resolve + persist SquadHire business user for the Connections deep-link.
+  // Passing submission_id lets the server use/store squadhire_business_user_id.
   const { data: hireMatch } = useQuery<SquadhireBusinessMatch>({
     queryKey: [
       'contact-squadhire-business',
+      selectedSubmission?.id,
       selectedSubmission?.email,
       selectedSubmission?.contact_number,
     ],
@@ -180,6 +182,7 @@ export default function NewClientsModule() {
       lookupSquadhireBusiness({
         email: selectedSubmission!.email,
         phone: selectedSubmission!.contact_number,
+        submission_id: selectedSubmission!.id,
       }),
     enabled: !!selectedSubmission,
     staleTime: 2 * 60 * 1000,

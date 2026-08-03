@@ -17,10 +17,12 @@ export type SquadhireBusinessMatch = {
 export async function lookupSquadhireBusiness(input: {
   email?: string | null;
   phone?: string | null;
+  submission_id?: string | null;
 }): Promise<SquadhireBusinessMatch> {
   const params = new URLSearchParams();
   if (input.email) params.set('email', input.email);
   if (input.phone) params.set('phone', input.phone);
+  if (input.submission_id) params.set('submission_id', input.submission_id);
   if (params.toString().length === 0) return { found: false };
 
   try {

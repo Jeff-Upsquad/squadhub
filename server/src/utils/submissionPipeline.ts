@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../supabase';
+import { copyExternalLinksToClient } from './clientExternalLinks';
 
 export const PIPELINE_STATUSES = [
   'new',
@@ -236,6 +237,9 @@ async function materialiseClientFromSubmission(submission: any, stagedSubs: any[
       country_id: submission.country_id,
       primary_sales_person_id: submission.primary_sales_person_id || null,
       secondary_sales_person_id: submission.secondary_sales_person_id || null,
+      // Persist cross-app identity if the contact already resolved them.
+      crm_lead_id: submission.crm_lead_id || null,
+      squadhire_business_user_id: submission.squadhire_business_user_id || null,
     })
     .select()
     .single();
@@ -245,6 +249,8 @@ async function materialiseClientFromSubmission(submission: any, stagedSubs: any[
   }
 
   await attachStagedSubsToClient(client.id, stagedSubs);
+  // Safety net if the insert columns weren't present yet (pre-migration race).
+  await copyExternalLinksToClient(submission.id, client.id);
 
   return { clientId: client.id as string, created: true };
 }
@@ -427,6 +433,9 @@ export async function attachSubmissionToExistingClient(
       .eq('id', clientId)
       .is('submission_id', null);
   }
+
+  // Carry CRM / Hire ids onto the existing client when still null.
+  await copyExternalLinksToClient(submissionId, clientId);
 
   if (submission.status !== 'converted') {
     const { error: updErr } = await supabaseAdmin
