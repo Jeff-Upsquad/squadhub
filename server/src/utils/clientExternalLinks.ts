@@ -182,6 +182,69 @@ export async function resolveSquadhireBusiness(
 }
 
 /**
+ * Resolve which SquadHire business_users.id should own a card on delivery.
+ *
+ * Prefer a live soft-match on email+phone (Profiles prefers an activated
+ * account over an invite shell when both exist). That fixes the common
+ * "email invite row vs phone login" split that leaves cards invisible on
+ * the business portal. Fall back to the stored stamp when Hire is down or
+ * no soft-match exists. When soft-match wins and differs from the stamp,
+ * re-stamp contact + client so Hub identity stays aligned.
+ */
+export async function resolveHireBusinessUserIdForCardDelivery(input: {
+  submissionId?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}): Promise<string | null> {
+  const submissionId = input.submissionId?.trim() || null;
+  let storedId: string | null = null;
+
+  if (submissionId) {
+    try {
+      const { data } = await supabaseAdmin
+        .from('client_submissions')
+        .select('squadhire_business_user_id')
+        .eq('id', submissionId)
+        .maybeSingle();
+      storedId = (data?.squadhire_business_user_id as string | null) ?? null;
+    } catch (err: any) {
+      console.warn(
+        '[clientExternalLinks] load stored hire id failed:',
+        err?.message,
+      );
+    }
+  }
+
+  const soft = await lookupSquadhireBusinessUser({
+    email: input.email,
+    phone: input.phone,
+  });
+
+  if (soft?.business_user_id) {
+    if (submissionId && soft.business_user_id !== storedId) {
+      try {
+        await supabaseAdmin
+          .from('client_submissions')
+          .update({ squadhire_business_user_id: soft.business_user_id })
+          .eq('id', submissionId);
+        await supabaseAdmin
+          .from('clients')
+          .update({ squadhire_business_user_id: soft.business_user_id })
+          .eq('submission_id', submissionId);
+      } catch (err: any) {
+        console.warn(
+          '[clientExternalLinks] re-stamp hire id after soft-match failed:',
+          err?.message,
+        );
+      }
+    }
+    return soft.business_user_id;
+  }
+
+  return storedId;
+}
+
+/**
  * Copy external link columns from a submission onto a newly materialised
  * client (or fill nulls on an existing client). Call on convert.
  */

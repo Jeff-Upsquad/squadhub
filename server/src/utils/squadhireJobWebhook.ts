@@ -1,6 +1,7 @@
 import type { JobMatchRules, JobRuleOverrides } from '@squadhub/shared';
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
+import { resolveHireBusinessUserIdForCardDelivery } from './clientExternalLinks';
 import { mergeJobRules } from './jobRules';
 
 /**
@@ -51,6 +52,9 @@ export interface SquadhireJobCardPayload {
   business_phone?: string;
   business_contact_name?: string;
   business_company?: string;
+  // Canonical SquadHire business_users.id (Hub identity link). Same contract
+  // as subscription-card delivery — Profiles attaches the card to this id.
+  business_user_id?: string;
   recalled_at?: string;
   archived_at?: string | null;
   paused_at?: string | null;
@@ -298,6 +302,21 @@ export async function buildSquadhireJobPayload(
 
   const publishedAt = new Date(card.published_at as string).toISOString();
 
+  let businessUserId: string | undefined;
+  try {
+    const resolved = await resolveHireBusinessUserIdForCardDelivery({
+      submissionId: (card.lead_submission_id as string | null | undefined) ?? null,
+      email: businessEmail ?? leadEmail,
+      phone: businessPhone ?? leadPhone,
+    });
+    if (resolved) businessUserId = resolved;
+  } catch (err: any) {
+    console.warn(
+      '[squadhire-jobs] hire business_user_id resolve failed (continuing with email/phone only)',
+      { cardId, error: err?.message },
+    );
+  }
+
   return {
     external_id: card.id as string,
     content,
@@ -309,6 +328,7 @@ export async function buildSquadhireJobPayload(
     is_secondary: false,
     group_id: null,
     card_type: 'hiring',
+    ...(businessUserId ? { business_user_id: businessUserId } : {}),
     ...(businessEmail ? { business_email: businessEmail } : {}),
     ...(businessPhone ? { business_phone: businessPhone } : {}),
     ...(leadContactName ? { business_contact_name: leadContactName } : {}),

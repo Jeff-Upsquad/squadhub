@@ -1,6 +1,7 @@
 import { formatDeliverableCadence, resolveFinalizedPrice, resolvePartnerPrice } from '@squadhub/shared';
 import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
+import { resolveHireBusinessUserIdForCardDelivery } from './clientExternalLinks';
 
 /**
  * Outbound delivery of a published subscription card to SquadHire's webhook.
@@ -81,6 +82,12 @@ export interface SquadhireCardPayload {
   business_phone?: string;
   business_contact_name?: string;
   business_company?: string;
+  // Canonical SquadHire business_users.id from Hub's cross-app identity
+  // link (stored stamp + activated-preferring soft-match). Profiles should
+  // attach the card to this id when present so email-invite vs phone-login
+  // splits don't hide the card on the business portal. Optional for
+  // backwards compat with older Profiles deploys (unknown keys are stripped).
+  business_user_id?: string;
   // ISO timestamp set when an admin recalled a card that already had
   // acceptances. SquadHire renders a "Recalled" tag on the talent's
   // accepted view but otherwise keeps the card visible. Absent on
@@ -144,7 +151,7 @@ export async function buildSquadhirePayloadForCard(
   const { data: card } = await supabaseAdmin
     .from('subscription_cards')
     .select(
-      'id, state, distribution, card_type, assignment_details, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, paused_at, cancelled_at, source, proposed_price, subscription_price, markup, customer_company, customer_email, service_type, plan_name, plan_snapshot',
+      'id, state, distribution, card_type, assignment_details, submission_subscription_id, working_days, brand_name, business_nature, notes, custom_deliverables, disabled_default_deliverable_ids, target_tiers, min_experience_years, target_languages, squadhire_category_ids, published_at, partner_price_override, parent_card_id, brief_group_id, recalled_at, archived_at, paused_at, cancelled_at, source, proposed_price, subscription_price, markup, customer_company, customer_email, customer_phone, customer_name, service_type, plan_name, plan_snapshot, lead_submission_id',
     )
     .eq('id', cardId)
     .maybeSingle();
@@ -802,6 +809,27 @@ export async function buildSquadhirePayloadForCard(
   const businessContactName = leadContactName && leadContactName.length > 0 ? leadContactName : undefined;
   const businessCompany = leadCompany && leadCompany.length > 0 ? leadCompany : undefined;
 
+  // Cross-app identity: prefer activated Hire user (email+phone soft-match)
+  // over a stale invite-shell stamp so the business portal sees the card.
+  const submissionIdForHire =
+    ((card as any).lead_submission_id as string | null | undefined) ||
+    (staged?.submission_id as string | null | undefined) ||
+    null;
+  let businessUserId: string | undefined;
+  try {
+    const resolved = await resolveHireBusinessUserIdForCardDelivery({
+      submissionId: submissionIdForHire,
+      email: businessEmail ?? leadEmail,
+      phone: businessPhone ?? leadPhone,
+    });
+    if (resolved) businessUserId = resolved;
+  } catch (err: any) {
+    console.warn(
+      '[squadhire] hire business_user_id resolve failed (continuing with email/phone only)',
+      { cardId, error: err?.message },
+    );
+  }
+
   return {
     external_id: card.id as string,
     content,
@@ -812,6 +840,7 @@ export async function buildSquadhirePayloadForCard(
     is_secondary: card.parent_card_id != null,
     group_id: ((card as any).brief_group_id as string | null) ?? null,
     card_type: cardType,
+    ...(businessUserId ? { business_user_id: businessUserId } : {}),
     ...(businessEmail ? { business_email: businessEmail } : {}),
     ...(businessPhone ? { business_phone: businessPhone } : {}),
     ...(businessContactName ? { business_contact_name: businessContactName } : {}),
