@@ -13,6 +13,13 @@ function isCrmEntityType(t: string): t is CrmEntityType {
   return (CRM_ENTITY_TYPES as string[]).includes(t);
 }
 
+// CRM entity chats live only in the sidebar's "CRM Chats" section (GET /channels/crm).
+// Keep them out of the general channel list so opening a CRM deal/contact/lead
+// doesn't spawn a channel in the regular Channels list.
+function isCrmChannel(c: { linked_resource_type?: string | null }): boolean {
+  return !!c.linked_resource_type && isCrmEntityType(c.linked_resource_type);
+}
+
 // Resolve the workspace a container belongs to (for channel creation).
 async function getContainerWorkspaceId(type: ContainerType, id: string): Promise<string | null> {
   if (type === 'space') {
@@ -106,7 +113,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
         res.status(500).json({ success: false, error: error.message });
         return;
       }
-      res.json({ success: true, data });
+      res.json({ success: true, data: (data || []).filter((c) => !isCrmChannel(c)) });
       return;
     }
 
@@ -148,7 +155,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    res.json({ success: true, data });
+    res.json({ success: true, data: (data || []).filter((c) => !isCrmChannel(c)) });
   } catch (err) {
     console.error('Get channels error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
