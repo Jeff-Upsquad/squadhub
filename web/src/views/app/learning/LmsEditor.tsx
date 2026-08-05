@@ -29,10 +29,14 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
 
   const lessons = useMemo(() => item?.lessons || [], [item]);
   const isCourse = item?.kind === 'course';
+  const isSop = item?.track === 'sop';
+  const hasNav = isCourse || isSop;
 
   useEffect(() => {
-    if (!activeLessonId && lessons.length) setActiveLessonId(lessons[0].id);
-  }, [lessons, activeLessonId]);
+    if (activeLessonId || !lessons.length) return;
+    const first = isSop ? (lessons.find((l) => !l.parent_lesson_id) || lessons[0]) : lessons[0];
+    setActiveLessonId(first.id);
+  }, [lessons, activeLessonId, isSop]);
 
   if (isLoading || !item) {
     return <div className="flex h-full items-center justify-center text-sm text-[var(--sh-ink-3)]">Loading editor…</div>;
@@ -91,8 +95,8 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
         </span>
       </div>
 
-      <div className={`grid min-h-0 flex-1 grid-cols-1 ${isCourse ? 'lg:grid-cols-[220px_1fr]' : ''}`}>
-        {/* Lesson list (courses) */}
+      <div className={`grid min-h-0 flex-1 grid-cols-1 ${hasNav ? 'lg:grid-cols-[240px_1fr]' : ''}`}>
+        {/* Course: flat lesson list */}
         {isCourse && (
           <aside className="hidden min-h-0 overflow-y-auto border-r border-[var(--sh-hair)] bg-[var(--sidebar)] p-2 lg:block">
             <div className="flex items-center justify-between px-2 py-1.5">
@@ -114,6 +118,24 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
                 </li>
               ))}
             </ul>
+          </aside>
+        )}
+
+        {/* SOP: nested page tree */}
+        {isSop && (
+          <aside className="hidden min-h-0 overflow-y-auto border-r border-[var(--sh-hair)] bg-[var(--sidebar)] p-2 lg:block">
+            <div className="flex items-center justify-between px-2 py-1.5">
+              <span className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--sh-ink-3)]">Pages</span>
+              <button
+                onClick={() => m.addLesson.mutate({ title: 'Untitled' }, { onSuccess: (r: any) => setActiveLessonId(r?.data?.data?.id ?? null) })}
+                className="text-[16px] leading-none text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)]" title="Add top-level page">+</button>
+            </div>
+            <EditorTree
+              lessons={lessons}
+              activeId={activeLessonId}
+              onPick={setActiveLessonId}
+              onAddSub={(parentId) => m.addLesson.mutate({ title: 'Untitled', parent_lesson_id: parentId }, { onSuccess: (r: any) => setActiveLessonId(r?.data?.data?.id ?? null) })}
+            />
           </aside>
         )}
 
@@ -148,6 +170,43 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
                     className="text-[12px] text-red-600 hover:underline"
                   >
                     Delete lesson
+                  </button>
+                )}
+              </div>
+            )}
+
+            {isSop && activeLesson && (
+              <div className="mt-6 flex items-center gap-2">
+                {/* Emoji icon — type any emoji; blank clears it. */}
+                <input
+                  key={`${activeLesson.id}-icon`}
+                  defaultValue={activeLesson.icon || ''}
+                  onBlur={(e) => { const v = e.target.value.trim(); if (v !== (activeLesson.icon || '')) m.patchLesson.mutate({ id: activeLesson.id, icon: v || null }); }}
+                  placeholder="🙂"
+                  maxLength={4}
+                  className="w-12 rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] px-2 py-2 text-center text-[18px] outline-none focus:border-[var(--sh-ink)]"
+                  title="Page icon (emoji)"
+                />
+                <input
+                  key={activeLesson.id}
+                  defaultValue={activeLesson.title}
+                  onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== activeLesson.title) m.patchLesson.mutate({ id: activeLesson.id, title: v }); }}
+                  placeholder="Untitled"
+                  className="flex-1 rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] px-3 py-2 text-[16px] font-semibold text-[var(--sh-ink)] outline-none focus:border-[var(--sh-ink)]"
+                />
+                <button
+                  onClick={() => m.addLesson.mutate({ title: 'Untitled', parent_lesson_id: activeLesson.id }, { onSuccess: (r: any) => setActiveLessonId(r?.data?.data?.id ?? null) })}
+                  className="whitespace-nowrap rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] px-2.5 py-2 text-[12px] text-[var(--sh-ink-2)] hover:border-[var(--sh-ink)]"
+                  title="Add a sub-page under this page"
+                >
+                  + Sub-page
+                </button>
+                {lessons.length > 1 && (
+                  <button
+                    onClick={() => { if (confirm(`Delete "${activeLesson.title}" and all its sub-pages?`)) { m.deleteLesson.mutate(activeLesson.id); setActiveLessonId(null); } }}
+                    className="text-[12px] text-red-600 hover:underline"
+                  >
+                    Delete
                   </button>
                 )}
               </div>
@@ -285,6 +344,56 @@ function AddBlock({ onAdd }: { onAdd: (type: string) => void }) {
       <button onClick={() => setOpen(false)} className="mt-2 text-[11px] text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)]">Cancel</button>
     </div>
   );
+}
+
+/* ---- SOP page tree (editor) ---- */
+interface ETreeNode { lesson: any; children: ETreeNode[]; }
+function buildEditorTree(lessons: any[]): ETreeNode[] {
+  const byId = new Map<string, ETreeNode>();
+  for (const l of lessons) byId.set(l.id, { lesson: l, children: [] });
+  const roots: ETreeNode[] = [];
+  for (const l of lessons) {
+    const node = byId.get(l.id)!;
+    const parent = l.parent_lesson_id ? byId.get(l.parent_lesson_id) : null;
+    if (parent) parent.children.push(node); else roots.push(node);
+  }
+  const sortRec = (ns: ETreeNode[]) => { ns.sort((a, b) => a.lesson.position - b.lesson.position); ns.forEach((n) => sortRec(n.children)); };
+  sortRec(roots);
+  return roots;
+}
+
+function EditorTree({ lessons, activeId, onPick, onAddSub }: {
+  lessons: any[]; activeId: string | null; onPick: (id: string) => void; onAddSub: (parentId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const tree = useMemo(() => buildEditorTree(lessons), [lessons]);
+  const toggle = (id: string) => setExpanded((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const render = (nodes: ETreeNode[], depth: number): React.ReactNode => (
+    <ul>
+      {nodes.map((n) => {
+        const has = n.children.length > 0;
+        const open = expanded.has(n.lesson.id);
+        const active = activeId === n.lesson.id;
+        return (
+          <li key={n.lesson.id}>
+            <div className={`group flex items-center gap-1 rounded-md pr-1 ${active ? 'bg-[var(--sh-hair-3)]' : 'hover:bg-[var(--sh-hair-3)]'}`} style={{ paddingLeft: `${depth * 14}px` }}>
+              <button onClick={() => has && toggle(n.lesson.id)} className={`grid h-5 w-5 shrink-0 place-items-center text-[var(--sh-ink-3)] ${has ? '' : 'invisible'}`}>
+                <svg className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
+              </button>
+              <button onClick={() => onPick(n.lesson.id)} className="flex min-w-0 flex-1 items-center gap-1.5 py-[5px] text-left">
+                <span className="text-[12px] leading-none">{n.lesson.icon || '📄'}</span>
+                <span className={`truncate text-[12.5px] ${active ? 'font-medium text-[var(--sh-ink)]' : 'text-[var(--sh-ink-2)]'}`}>{n.lesson.title}</span>
+              </button>
+              <button onClick={() => { onAddSub(n.lesson.id); setExpanded((p) => new Set([...p, n.lesson.id])); }}
+                className="shrink-0 rounded px-1 text-[14px] leading-none text-[var(--sh-ink-3)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--sh-ink)]" title="Add sub-page">+</button>
+            </div>
+            {has && open && render(n.children, depth + 1)}
+          </li>
+        );
+      })}
+    </ul>
+  );
+  return <>{render(tree, 0)}</>;
 }
 
 /* ---- Editable Tiptap (mirrors the read-only TextBlock styling) ---- */

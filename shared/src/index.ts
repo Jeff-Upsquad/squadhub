@@ -2504,6 +2504,8 @@ export interface LmsItem {
   review_note?: string | null;
   submitted_by?: string | null;
   submitted_at?: string | null;
+  // Optional emoji icon for the catalog card / reader header (migration 170).
+  icon?: string | null;
   // Joined (populated by API as needed)
   category?: LmsCategory | null;
   lessons?: LmsLesson[];
@@ -2523,6 +2525,10 @@ export interface LmsLesson {
   // Inactive lessons are hidden from learners but stay visible/editable in the
   // admin editor. Existing rows default to active (see migration 100).
   is_active: boolean;
+  // Notion-style page tree (migration 170). parent_lesson_id NULL = top-level
+  // page; `position` orders siblings within the same parent. `icon` = emoji.
+  parent_lesson_id?: string | null;
+  icon?: string | null;
   position: number;
   created_at: string;
   updated_at: string;

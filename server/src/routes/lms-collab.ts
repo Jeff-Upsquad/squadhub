@@ -168,6 +168,9 @@ const lessonSchema = z.object({
   summary: z.string().max(2000).nullable().optional(),
   is_active: z.boolean().optional(),
   position: z.number().int().min(0).optional(),
+  // Notion-style nesting (migration 170): parent page + emoji icon.
+  parent_lesson_id: z.string().uuid().nullable().optional(),
+  icon: z.string().max(16).nullable().optional(),
 });
 
 router.post('/items/:id/lessons', async (req: Request, res: Response) => {
@@ -175,13 +178,25 @@ router.post('/items/:id/lessons', async (req: Request, res: Response) => {
     const itemId = param(req.params.id);
     if (!(await gate(itemId, req.userId!, 'admin', res))) return;
     const body = lessonSchema.parse(req.body);
-    const { data: maxRow } = await supabaseAdmin
+    const parentId = body.parent_lesson_id ?? null;
+    // Position is scoped to siblings under the same parent (NULL = top level).
+    const siblingQ = supabaseAdmin
       .from('lms_lessons').select('position').eq('item_id', itemId)
-      .order('position', { ascending: false }).limit(1).maybeSingle();
+      .order('position', { ascending: false }).limit(1);
+    const { data: maxRow } = await (parentId
+      ? siblingQ.eq('parent_lesson_id', parentId)
+      : siblingQ.is('parent_lesson_id', null)).maybeSingle();
     const nextPos = ((maxRow as any)?.position ?? -1) + 1;
     const { data, error } = await supabaseAdmin
       .from('lms_lessons')
-      .insert({ item_id: itemId, title: body.title || `Lesson ${nextPos + 1}`, summary: body.summary ?? null, position: nextPos })
+      .insert({
+        item_id: itemId,
+        title: body.title || (parentId ? 'Untitled' : `Page ${nextPos + 1}`),
+        summary: body.summary ?? null,
+        parent_lesson_id: parentId,
+        icon: body.icon ?? null,
+        position: nextPos,
+      })
       .select().single();
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
     res.status(201).json({ success: true, data: { ...data, blocks: [] } });
@@ -197,8 +212,20 @@ router.patch('/lessons/:lessonId', async (req: Request, res: Response) => {
     const itemId = await itemIdForLesson(lessonId);
     if (!(await gate(itemId, req.userId!, 'admin', res))) return;
     const body = lessonSchema.parse(req.body);
+    // Guard against a page becoming its own ancestor (would orphan the subtree).
+    if (body.parent_lesson_id) {
+      if (body.parent_lesson_id === lessonId) { res.status(400).json({ success: false, error: 'A page cannot be its own parent' }); return; }
+      let cur: string | null = body.parent_lesson_id;
+      const guard = new Set<string>();
+      while (cur && !guard.has(cur)) {
+        if (cur === lessonId) { res.status(400).json({ success: false, error: 'Cannot move a page into its own descendant' }); return; }
+        guard.add(cur);
+        const row: any = (await supabaseAdmin.from('lms_lessons').select('parent_lesson_id').eq('id', cur).maybeSingle()).data;
+        cur = row?.parent_lesson_id ?? null;
+      }
+    }
     const patch: Record<string, any> = {};
-    for (const k of ['title', 'summary', 'is_active', 'position'] as const) {
+    for (const k of ['title', 'summary', 'is_active', 'position', 'parent_lesson_id', 'icon'] as const) {
       if ((body as any)[k] !== undefined) patch[k] = (body as any)[k];
     }
     const { data, error } = await supabaseAdmin.from('lms_lessons').update(patch).eq('id', lessonId).select().single();

@@ -192,6 +192,135 @@ router.get('/shared-with-me', async (req: Request, res: Response) => {
 });
 
 // ------------------------------------------------------------
+// GET /lms/search?q= — cross-content search over everything the user can
+// access: item (course/SOP/post) titles + summaries, page (lesson) titles,
+// and page body text. Returns ranked hits with a breadcrumb path + snippet so
+// the Resources page can render inline results that deep-link to the exact page.
+// ------------------------------------------------------------
+function tiptapText(node: any): string {
+  if (!node) return '';
+  if (typeof node === 'string') return node;
+  let out = node.text ? node.text + ' ' : '';
+  if (Array.isArray(node.content)) for (const k of node.content) out += tiptapText(k);
+  return out;
+}
+function snippetAround(text: string, q: string): string {
+  const i = text.toLowerCase().indexOf(q);
+  if (i < 0) return '';
+  const s = Math.max(0, i - 40);
+  return (s > 0 ? '…' : '') + text.slice(s, i + q.length + 70).trim() + '…';
+}
+
+router.get('/search', async (req: Request, res: Response) => {
+  try {
+    const q = String(req.query.q || '').trim().toLowerCase();
+    if (q.length < 2) { res.json({ success: true, data: [] }); return; }
+
+    // 1. Accessible published, non-clone item ids: owner, assignment, direct or
+    //    role share, or (global admin) everything.
+    const { data: profile } = await supabaseAdmin
+      .from('users').select('is_admin').eq('id', req.userId!).single();
+    const isAdmin = !!(profile as any)?.is_admin;
+
+    const accessible = new Set<string>();
+    if (isAdmin) {
+      const { data: all } = await supabaseAdmin
+        .from('lms_items').select('id').eq('status', 'published').is('origin_item_id', null);
+      for (const r of all || []) accessible.add((r as any).id);
+    } else {
+      const [{ data: owned }, { data: assigned }] = await Promise.all([
+        supabaseAdmin.from('lms_items').select('id').eq('created_by', req.userId!).eq('status', 'published').is('origin_item_id', null),
+        supabaseAdmin.from('lms_assignments').select('item_id').eq('user_id', req.userId!),
+      ]);
+      for (const r of owned || []) accessible.add((r as any).id);
+      for (const r of assigned || []) accessible.add((r as any).item_id);
+
+      const roleIds = await getUserRoleIds(req.userId!);
+      const orFilters = [`and(principal_type.eq.user,principal_id.eq.${req.userId!})`];
+      if (roleIds.length) orFilters.push(`and(principal_type.eq.role,principal_id.in.(${roleIds.join(',')}))`);
+      const { data: shares } = await supabaseAdmin
+        .from('lms_item_shares').select('item_id').or(orFilters.join(','));
+      for (const r of shares || []) accessible.add((r as any).item_id);
+    }
+    const itemIds = Array.from(accessible);
+    if (!itemIds.length) { res.json({ success: true, data: [] }); return; }
+
+    // 2. Load items + their active lessons + text blocks.
+    const [{ data: items }, { data: lessons }] = await Promise.all([
+      supabaseAdmin.from('lms_items')
+        .select('id, kind, track, title, summary, icon')
+        .in('id', itemIds).eq('status', 'published').is('origin_item_id', null),
+      supabaseAdmin.from('lms_lessons')
+        .select('id, item_id, title, parent_lesson_id, icon, position')
+        .in('item_id', itemIds).eq('is_active', true).order('position', { ascending: true }),
+    ]);
+    const lessonIds = (lessons || []).map((l: any) => l.id);
+    const { data: blocks } = lessonIds.length
+      ? await supabaseAdmin.from('lms_content_blocks').select('lesson_id, text_content').in('lesson_id', lessonIds).eq('type', 'text')
+      : { data: [] as any[] };
+
+    const itemById = new Map<string, any>((items || []).map((it: any) => [it.id, it]));
+    const lessonById = new Map<string, any>((lessons || []).map((l: any) => [l.id, l]));
+    const bodyByLesson = new Map<string, string>();
+    for (const b of blocks || []) {
+      const t = tiptapText((b as any).text_content);
+      if (!t) continue;
+      bodyByLesson.set((b as any).lesson_id, (bodyByLesson.get((b as any).lesson_id) || '') + t);
+    }
+
+    // Breadcrumb path for a lesson: item title → ancestor page titles.
+    function lessonPath(l: any): string[] {
+      const trail: string[] = [];
+      let cur = l;
+      const guard = new Set<string>();
+      while (cur?.parent_lesson_id && !guard.has(cur.parent_lesson_id)) {
+        guard.add(cur.parent_lesson_id);
+        const p = lessonById.get(cur.parent_lesson_id);
+        if (!p) break;
+        trail.unshift(p.title);
+        cur = p;
+      }
+      const item = itemById.get(l.item_id);
+      return [item?.title || '', ...trail].filter(Boolean);
+    }
+    const kindLabel = (it: any) => (it.track === 'sop' ? 'SOP' : it.kind === 'post' ? 'Post' : 'Course');
+
+    // 3. Rank: item title (0) > page title (1) > body (2).
+    const out: any[] = [];
+    for (const it of items || []) {
+      const hay = `${it.title} ${it.summary || ''}`.toLowerCase();
+      if (hay.includes(q)) out.push({
+        match_kind: 'item', rank: 0, item_id: it.id, item_kind: it.kind, item_track: it.track,
+        item_title: it.title, icon: it.icon, lesson_id: null, title: it.title,
+        path: [kindLabel(it)], snippet: null,
+      });
+    }
+    for (const l of lessons || []) {
+      const it = itemById.get(l.item_id); if (!it) continue;
+      if (l.title.toLowerCase().includes(q)) {
+        out.push({
+          match_kind: 'page', rank: 1, item_id: it.id, item_kind: it.kind, item_track: it.track,
+          item_title: it.title, icon: l.icon || it.icon, lesson_id: l.id, title: l.title,
+          path: [kindLabel(it), ...lessonPath(l)], snippet: null,
+        });
+      } else {
+        const body = bodyByLesson.get(l.id) || '';
+        if (body.toLowerCase().includes(q)) out.push({
+          match_kind: 'text', rank: 2, item_id: it.id, item_kind: it.kind, item_track: it.track,
+          item_title: it.title, icon: l.icon || it.icon, lesson_id: l.id, title: l.title,
+          path: [kindLabel(it), ...lessonPath(l)], snippet: snippetAround(body, q),
+        });
+      }
+    }
+    out.sort((a, b) => a.rank - b.rank);
+    res.json({ success: true, data: out.slice(0, 50) });
+  } catch (err) {
+    console.error('LMS search error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ------------------------------------------------------------
 // GET /lms/categories — for filter chips in the UI
 // ------------------------------------------------------------
 router.get('/categories', async (_req: Request, res: Response) => {
@@ -249,7 +378,7 @@ router.get('/items/:id', async (req: Request, res: Response) => {
     const { data: item, error: itemErr } = await supabaseAdmin
       .from('lms_items')
       .select(`
-        id, kind, track, title, slug, summary, cover_image_url, status, published_at, created_at, updated_at,
+        id, kind, track, title, slug, summary, cover_image_url, icon, status, published_at, created_at, updated_at,
         category:lms_categories(id, name, slug, color)
       `)
       .eq('id', itemId)
