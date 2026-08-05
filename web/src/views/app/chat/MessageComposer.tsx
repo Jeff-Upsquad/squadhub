@@ -140,6 +140,12 @@ interface Props {
   parentMessageId?: string;
   placeholder?: string;
   onSend: () => void;
+  /**
+   * Opt-in (CRM team chat): when true and the user is the only member, sending
+   * from the main composer first prompts "you're the only one here — send anyway
+   * or @mention someone". Off everywhere else, so normal chat is unaffected.
+   */
+  soloGuard?: boolean;
 }
 
 export interface MessageComposerHandle {
@@ -153,8 +159,14 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
   parentMessageId,
   placeholder,
   onSend,
+  soloGuard = false,
 }: Props, ref) {
   const [sending, setSending] = useState(false);
+  // Solo-send guard (CRM team chat). Only the main composer prompts, never
+  // thread replies. `onConfirm` runs the real send when the user picks
+  // "Send anyway".
+  const [soloPrompt, setSoloPrompt] = useState<{ onConfirm: () => void } | null>(null);
+  const needsSoloConfirm = soloGuard && !parentMessageId;
   const [showEmoji, setShowEmoji] = useState(false);
   const [recording, setRecording] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -360,8 +372,25 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
     onSend();
   };
 
-  const submitMessage = async () => {
+  // Insert an `@` (with a leading space when needed) and focus — opens the
+  // mention typeahead. Shared by the Mention toolbar button and the solo prompt.
+  const insertMentionTrigger = () => {
+    if (!editor) return;
+    const { $from } = editor.state.selection;
+    const prev =
+      $from.parentOffset > 0
+        ? $from.parent.textBetween($from.parentOffset - 1, $from.parentOffset)
+        : '';
+    editor.chain().focus().insertContent(prev && !/\s/.test(prev) ? ' @' : '@').run();
+  };
+
+  const submitMessage = async (skipSoloGuard = false) => {
     if (sending) return;
+    // Only member? Prompt before sending (send anyway / mention someone).
+    if (needsSoloConfirm && !skipSoloGuard && (hasText || !!pendingFile)) {
+      setSoloPrompt({ onConfirm: () => void submitMessage(true) });
+      return;
+    }
     if (pendingFile) {
       setSending(true);
       setSendError(null);
@@ -457,6 +486,15 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
 
   const handleVoiceComplete = async (blob: Blob, durationMs: number) => {
     setRecording(false);
+    // Only member? Prompt before sending the voice note too.
+    if (needsSoloConfirm) {
+      setSoloPrompt({ onConfirm: () => void doVoiceSend(blob, durationMs) });
+      return;
+    }
+    await doVoiceSend(blob, durationMs);
+  };
+
+  const doVoiceSend = async (blob: Blob, durationMs: number) => {
     setSending(true);
     setSendError(null);
     try {
@@ -560,6 +598,45 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
               <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+        </div>
+      )}
+
+      {/* Solo-send guard prompt (CRM team chat) */}
+      {soloPrompt && (
+        <div className="mb-2 flex w-full flex-col gap-2 rounded-[8px] border border-divider bg-surface px-3 py-2.5 shadow-lg">
+          <div className="text-[12.5px] text-foreground">
+            You’re the only one in this chat. Send anyway, or @mention a teammate to bring them in?
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const fn = soloPrompt.onConfirm;
+                setSoloPrompt(null);
+                fn();
+              }}
+              className="rounded-md bg-[#007A5A] px-3 py-1 text-[12px] font-semibold text-white transition hover:brightness-95"
+            >
+              Send anyway
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSoloPrompt(null);
+                insertMentionTrigger();
+              }}
+              className="rounded-md border border-divider px-3 py-1 text-[12px] font-medium text-foreground transition hover:bg-surface-alt"
+            >
+              Mention someone
+            </button>
+            <button
+              type="button"
+              onClick={() => setSoloPrompt(null)}
+              className="ml-auto text-[12px] text-foreground-muted transition hover:text-foreground"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
@@ -671,18 +748,7 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
                     </div>
                   )}
                 </div>
-                <ToolBtn
-                  title="Mention"
-                  onClick={() => {
-                    if (!editor) return;
-                    const { $from } = editor.state.selection;
-                    const prev =
-                      $from.parentOffset > 0
-                        ? $from.parent.textBetween($from.parentOffset - 1, $from.parentOffset)
-                        : '';
-                    editor.chain().focus().insertContent(prev && !/\s/.test(prev) ? ' @' : '@').run();
-                  }}
-                >
+                <ToolBtn title="Mention" onClick={insertMentionTrigger}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="4" />
                     <path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94" />

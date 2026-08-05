@@ -16,6 +16,7 @@ import type { Channel, User } from '@squadhub/shared';
 import { useAuthStore } from '../../../stores/authStore';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { connectSocket } from '../../../services/socket';
+import { useChannelMembers } from '../../../hooks/useChannelMembers';
 import ChatPanel from '../../../views/app/chat/ChatPanel';
 
 const ALLOWED_PARENT_ORIGINS = [
@@ -42,10 +43,18 @@ function EmbedCrmChatInner() {
   const workspaceIdParam = params.get('workspaceId') || 'embed';
   const setAuth = useAuthStore((s) => s.setAuth);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const meId = useAuthStore((s) => s.user?.id);
   const setChannels = useWorkspaceStore((s) => s.setChannels);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const [status, setStatus] = useState<'waiting' | 'loading' | 'ready' | 'error'>('waiting');
   const [error, setError] = useState('');
+
+  // "You're the only one here" guard: enabled when no other members are in the
+  // channel yet, so sending prompts the user to @mention a teammate.
+  const { data: members = [] } = useChannelMembers(
+    status === 'ready' && channelId ? channelId : null,
+  );
+  const soloGuard = members.length > 0 && members.every((m) => m.id === meId);
 
   const postParent = useCallback((payload: Record<string, unknown>) => {
     if (typeof window === 'undefined' || !window.parent || window.parent === window) return;
@@ -164,10 +173,10 @@ function EmbedCrmChatInner() {
     }
     return (
       <div className="squadhub-chat flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-        <ChatPanel channelId={channelId} kind="channel" />
+        <ChatPanel channelId={channelId} kind="channel" soloGuard={soloGuard} />
       </div>
     );
-  }, [channelId, status, error, isAuthenticated]);
+  }, [channelId, status, error, isAuthenticated, soloGuard]);
 
   return (
     <div className="flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-surface text-foreground">

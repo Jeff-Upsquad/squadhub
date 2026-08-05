@@ -133,7 +133,15 @@ function formatDateLabel(dateStr: string): string {
   });
 }
 
-export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: string; kind?: ChatKind }) {
+export default function ChatPanel({
+  channelId,
+  kind = 'channel',
+  soloGuard = false,
+}: {
+  channelId: string;
+  kind?: ChatKind;
+  soloGuard?: boolean;
+}) {
   const queryClient = useQueryClient();
   const activeThreadParentId = useWorkspaceStore((s) => s.activeThreadParentId);
   const setActiveThread = useWorkspaceStore((s) => s.setActiveThread);
@@ -532,6 +540,7 @@ export default function ChatPanel({ channelId, kind = 'channel' }: { channelId: 
           channelId={channelId}
           kind={kind}
           placeholder={composerPlaceholder}
+          soloGuard={soloGuard}
           onSend={() => queryClient.invalidateQueries({ queryKey })}
         />
       </div>
