@@ -99,6 +99,13 @@ export function useEditorMutations(draftItemId: string) {
     mutationFn: (id: string) => api.delete(`/lms/collab/lessons/${id}`),
     onSuccess: invalidate,
   });
+  // Replace a page's "hidden from" set (roles/users). Overrides come back in
+  // the next /full, so just invalidate.
+  const setLessonAccess = useMutation({
+    mutationFn: ({ lessonId, overrides }: { lessonId: string; overrides: { principal_type: 'user' | 'role'; principal_id: string }[] }) =>
+      api.put(`/lms/collab/lessons/${lessonId}/access`, { overrides }),
+    onSuccess: invalidate,
+  });
   const addBlock = useMutation({
     mutationFn: ({ lessonId, type }: { lessonId: string; type: string }) =>
       api.post(`/lms/collab/lessons/${lessonId}/blocks`, { type }),
@@ -117,5 +124,23 @@ export function useEditorMutations(draftItemId: string) {
       api.put(`/lms/collab/lessons/${lessonId}/blocks/reorder`, { items }),
     onSuccess: invalidate,
   });
-  return { patchItem, addLesson, patchLesson, deleteLesson, addBlock, patchBlock, deleteBlock, reorderBlocks };
+  return { patchItem, addLesson, patchLesson, deleteLesson, setLessonAccess, addBlock, patchBlock, deleteBlock, reorderBlocks };
+}
+
+// Roles + user search for the per-page "hide from" picker.
+export function useCollabRoles(enabled: boolean) {
+  return useQuery<{ id: string; name: string; color: string | null }[]>({
+    queryKey: ['lms-collab-roles'],
+    queryFn: async () => (await api.get('/lms/collab/principals/roles')).data.data,
+    enabled,
+    staleTime: 5 * 60_000,
+  });
+}
+export function useCollabUserSearch(q: string, enabled: boolean) {
+  return useQuery<{ id: string; display_name: string | null; email: string | null; avatar_url: string | null }[]>({
+    queryKey: ['lms-collab-users', q],
+    queryFn: async () => (await api.get(`/lms/collab/principals/users?q=${encodeURIComponent(q)}`)).data.data,
+    enabled,
+    staleTime: 30_000,
+  });
 }

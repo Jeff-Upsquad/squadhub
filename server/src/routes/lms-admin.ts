@@ -588,10 +588,15 @@ router.post('/items/:id/publish', async (req: Request, res: Response) => {
   try {
     const itemId = req.params.id as string;
 
+    // Was this ever published before? First publish is when we ping shared users.
+    const { data: prev } = await supabaseAdmin
+      .from('lms_items').select('kind, published_at').eq('id', itemId).maybeSingle();
+    const firstPublish = !(prev as any)?.published_at;
+
     // 1. Flip status
     const { data: updated, error: updateErr } = await supabaseAdmin
       .from('lms_items')
-      .update({ status: 'published', published_at: new Date().toISOString() })
+      .update({ status: 'published', published_at: (prev as any)?.published_at || new Date().toISOString() })
       .eq('id', itemId)
       .select()
       .single();
@@ -599,6 +604,12 @@ router.post('/items/:id/publish', async (req: Request, res: Response) => {
     if (updateErr || !updated) {
       res.status(500).json({ success: false, error: updateErr?.message || 'Item not found' });
       return;
+    }
+
+    // A post is a single document — publishing it publishes its page. (Courses
+    // and SOPs keep per-page draft control.)
+    if ((updated as any).kind === 'post') {
+      await supabaseAdmin.from('lms_lessons').update({ is_active: true }).eq('item_id', itemId);
     }
 
     // 2. Expand audience into user_ids
@@ -613,6 +624,23 @@ router.post('/items/:id/publish', async (req: Request, res: Response) => {
       if (insErr) {
         res.status(500).json({ success: false, error: insErr.message });
         return;
+      }
+    }
+
+    // 4. First publish → notify the USERS it's shared with (covers SOPs, which
+    //    have no audience/assignments). Role members aren't pinged (no spam);
+    //    skip anyone already notified via an assignment above.
+    if (firstPublish) {
+      const { data: shareUsers } = await supabaseAdmin
+        .from('lms_item_shares').select('principal_id').eq('item_id', itemId).eq('principal_type', 'user');
+      const assignedSet = new Set(userIds);
+      const ids = Array.from(new Set((shareUsers || []).map((s: any) => s.principal_id))).filter((id) => !assignedSet.has(id));
+      if (ids.length) {
+        await notifyLms(
+          ids.map((uid) => ({ user_id: uid, type: 'lms_shared' as const, title: `New: ${(updated as any).title}` })),
+          itemId,
+          req.userId!,
+        );
       }
     }
 
@@ -794,9 +822,12 @@ router.put('/items/:id/shares', async (req: Request, res: Response) => {
       if (insErr) { res.status(500).json({ success: false, error: insErr.message }); return; }
     }
 
-    const { data: item } = await supabaseAdmin.from('lms_items').select('title').eq('id', itemId).maybeSingle();
+    const { data: item } = await supabaseAdmin.from('lms_items').select('title, status').eq('id', itemId).maybeSingle();
+    // Only ping people once the content is actually published — sharing a DRAFT
+    // stays silent; those users are notified when it's published.
+    const isPublished = (item as any)?.status === 'published';
     const newlyAdded = shares.filter((s) => s.principal_type === 'user' && !existingUserIds.has(s.principal_id));
-    if (newlyAdded.length) {
+    if (isPublished && newlyAdded.length) {
       await notifyLms(
         newlyAdded.map((s) => ({ user_id: s.principal_id, type: 'lms_shared' as const, title: `You were given access to ${(item as any)?.title ?? 'content'}` })),
         itemId,
@@ -1112,6 +1143,8 @@ router.post('/items/:id/lessons', async (req: Request, res: Response) => {
         title: body.title || `Lesson ${nextPos + 1}`,
         summary: body.summary ?? null,
         position: nextPos,
+        // New chapters/pages start as DRAFT (hidden) until published.
+        is_active: false,
       })
       .select()
       .single();
@@ -1257,6 +1290,60 @@ router.put('/lessons/:id/audience', async (req: Request, res: Response) => {
       return;
     }
     console.error('Set lesson audience error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ------------------------------------------------------------
+// Per-page access overrides — hide a lesson from specific roles/users
+// (migration 171). A page inherits the item's Share by default.
+// ------------------------------------------------------------
+const lessonAccessSchema = z.object({
+  overrides: z.array(z.object({
+    principal_type: z.enum(['user', 'role']),
+    principal_id: z.string().uuid(),
+  })),
+});
+
+async function loadLessonOverridesAdmin(lessonId: string): Promise<any[]> {
+  const { data: rows } = await supabaseAdmin
+    .from('lms_lesson_access_overrides').select('principal_type, principal_id, mode').eq('lesson_id', lessonId);
+  const list = rows || [];
+  const userIds = list.filter((r: any) => r.principal_type === 'user').map((r: any) => r.principal_id);
+  const roleIds = list.filter((r: any) => r.principal_type === 'role').map((r: any) => r.principal_id);
+  const [{ data: users }, { data: roles }] = await Promise.all([
+    userIds.length ? supabaseAdmin.from('users').select('id, display_name, email, avatar_url').in('id', userIds) : Promise.resolve({ data: [] as any[] }),
+    roleIds.length ? supabaseAdmin.from('roles').select('id, name, color').in('id', roleIds) : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const uById = new Map((users || []).map((u: any) => [u.id, u]));
+  const rById = new Map((roles || []).map((r: any) => [r.id, r]));
+  return list.map((r: any) => ({
+    principal_type: r.principal_type, principal_id: r.principal_id, mode: r.mode,
+    user: r.principal_type === 'user' ? uById.get(r.principal_id) ?? null : null,
+    role: r.principal_type === 'role' ? rById.get(r.principal_id) ?? null : null,
+  }));
+}
+
+router.get('/lessons/:id/access', async (req: Request, res: Response) => {
+  res.json({ success: true, data: await loadLessonOverridesAdmin(req.params.id as string) });
+});
+
+router.put('/lessons/:id/access', async (req: Request, res: Response) => {
+  try {
+    const lessonId = req.params.id as string;
+    const { overrides } = lessonAccessSchema.parse(req.body);
+    await supabaseAdmin.from('lms_lesson_access_overrides').delete().eq('lesson_id', lessonId);
+    if (overrides.length) {
+      const seen = new Set<string>();
+      const rows = overrides
+        .filter((o) => { const k = `${o.principal_type}:${o.principal_id}`; if (seen.has(k)) return false; seen.add(k); return true; })
+        .map((o) => ({ lesson_id: lessonId, principal_type: o.principal_type, principal_id: o.principal_id, mode: 'exclude' }));
+      const { error } = await supabaseAdmin.from('lms_lesson_access_overrides').insert(rows);
+      if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+    }
+    res.json({ success: true, data: await loadLessonOverridesAdmin(lessonId) });
+  } catch (err) {
+    if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
-import { useCollabFull, useEditorMutations, useSubmitReview, useDiscardDraft } from '../../../hooks/useLmsCollab';
+import { useCollabFull, useEditorMutations, useSubmitReview, useDiscardDraft, useCollabRoles, useCollabUserSearch } from '../../../hooks/useLmsCollab';
 import NotionEditor from './NotionEditor';
 
 type Props = {
@@ -114,7 +114,8 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
                     }`}
                   >
                     <span className="w-4 text-right text-[11px] text-[var(--sh-ink-3)]">{i + 1}</span>
-                    <span className="flex-1 truncate">{l.title}</span>
+                    <span className={`flex-1 truncate ${l.is_active === false ? 'opacity-60' : ''}`}>{l.title}</span>
+                    {l.is_active === false && <span className="shrink-0 rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-700">Draft</span>}
                   </button>
                 </li>
               ))}
@@ -212,6 +213,9 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
                 )}
               </div>
             )}
+
+            {/* Draft state + per-page access (SOP pages & course chapters) */}
+            {(isSop || isCourse) && activeLesson && <PageAccessBar key={activeLesson.id} lesson={activeLesson} m={m} />}
 
             {/* Content */}
             {isSop ? (
@@ -404,6 +408,89 @@ function AddBlock({ onAdd }: { onAdd: (type: string) => void }) {
   );
 }
 
+/* ---- Draft toggle + per-page "hide from" access ---- */
+function PageAccessBar({ lesson, m }: { lesson: any; m: any }) {
+  const isDraft = lesson.is_active === false;
+  const [open, setOpen] = useState(false);
+  const [uq, setUq] = useState('');
+  const roles = useCollabRoles(open);
+  const users = useCollabUserSearch(uq, open && uq.trim().length > 0);
+  const overrides: any[] = lesson.access_overrides || [];
+  const has = (type: string, id: string) => overrides.some((o) => o.principal_type === type && o.principal_id === id);
+  const bare = () => overrides.map((o) => ({ principal_type: o.principal_type, principal_id: o.principal_id }));
+  const toggle = (type: 'user' | 'role', id: string) => {
+    const next = has(type, id)
+      ? bare().filter((o) => !(o.principal_type === type && o.principal_id === id))
+      : [...bare(), { principal_type: type, principal_id: id }];
+    m.setLessonAccess.mutate({ lessonId: lesson.id, overrides: next });
+  };
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-2 border-y border-[var(--sh-hair)] py-2.5">
+      <button
+        onClick={() => m.patchLesson.mutate({ id: lesson.id, is_active: isDraft })}
+        title={isDraft ? 'Click to publish this page' : 'Click to move back to draft (hide from users)'}
+        className={`rounded-full border px-2.5 py-1 text-[11.5px] font-semibold ${isDraft ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-emerald-300 bg-emerald-50 text-emerald-800'}`}
+      >
+        {isDraft ? '● Draft — hidden' : '● Published'}
+      </button>
+
+      <div className="relative">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="rounded-full border border-[var(--sh-hair)] bg-[var(--surface)] px-2.5 py-1 text-[11.5px] text-[var(--sh-ink-2)] hover:border-[var(--sh-ink-3)]"
+        >
+          🚫 Hidden from {overrides.length ? `(${overrides.length})` : '…'}
+        </button>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+            <div className="absolute left-0 top-full z-40 mt-1 w-72 rounded-xl border border-[var(--sh-hair)] bg-[var(--surface)] p-2 shadow-[0_12px_32px_rgba(16,24,40,.14)]">
+              <p className="px-1.5 pb-1.5 pt-1 text-[11px] leading-snug text-[var(--sh-ink-3)]">
+                Hide this page from specific roles or people. Everyone else who can see this content keeps access.
+              </p>
+              <div className="px-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--sh-ink-4)]">Roles</div>
+              <div className="max-h-32 overflow-y-auto">
+                {(roles.data || []).map((r) => (
+                  <label key={r.id} className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 hover:bg-[var(--sh-hair-3)]">
+                    <input type="checkbox" checked={has('role', r.id)} onChange={() => toggle('role', r.id)} className="accent-[var(--sh-ink)]" />
+                    <span className="h-2 w-2 rounded-full" style={{ background: r.color || '#9ca3af' }} />
+                    <span className="text-[12.5px] text-[var(--sh-ink)]">{r.name}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="px-1.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--sh-ink-4)]">People</div>
+              <input
+                value={uq}
+                onChange={(e) => setUq(e.target.value)}
+                placeholder="Search people…"
+                className="mb-1 w-full rounded-md border border-[var(--sh-hair)] bg-[var(--surface)] px-2 py-1.5 text-[12px] outline-none focus:border-[var(--sh-ink)]"
+              />
+              <div className="max-h-28 overflow-y-auto">
+                {(users.data || []).map((u) => (
+                  <label key={u.id} className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 hover:bg-[var(--sh-hair-3)]">
+                    <input type="checkbox" checked={has('user', u.id)} onChange={() => toggle('user', u.id)} className="accent-[var(--sh-ink)]" />
+                    <span className="truncate text-[12.5px] text-[var(--sh-ink)]">{u.display_name || u.email}</span>
+                  </label>
+                ))}
+                {uq.trim() && (users.data || []).length === 0 && <p className="px-1.5 py-1 text-[11.5px] text-[var(--sh-ink-3)]">No matches.</p>}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Current exclusions as chips */}
+      {overrides.map((o) => (
+        <span key={`${o.principal_type}:${o.principal_id}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--sh-hair-3)] px-2 py-0.5 text-[11px] text-[var(--sh-ink-2)]">
+          {o.role ? o.role.name : (o.user?.display_name || o.user?.email || 'Unknown')}
+          <button onClick={() => toggle(o.principal_type, o.principal_id)} className="text-[var(--sh-ink-3)] hover:text-[var(--sh-ink)]">×</button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /* ---- SOP page tree (editor) ---- */
 interface ETreeNode { lesson: any; children: ETreeNode[]; }
 function buildEditorTree(lessons: any[]): ETreeNode[] {
@@ -440,7 +527,8 @@ function EditorTree({ lessons, activeId, onPick, onAddSub }: {
               </button>
               <button onClick={() => onPick(n.lesson.id)} className="flex min-w-0 flex-1 items-center gap-1.5 py-[5px] text-left">
                 <span className="text-[12px] leading-none">{n.lesson.icon || '📄'}</span>
-                <span className={`truncate text-[12.5px] ${active ? 'font-medium text-[var(--sh-ink)]' : 'text-[var(--sh-ink-2)]'}`}>{n.lesson.title}</span>
+                <span className={`truncate text-[12.5px] ${active ? 'font-medium text-[var(--sh-ink)]' : 'text-[var(--sh-ink-2)]'} ${n.lesson.is_active === false ? 'opacity-60' : ''}`}>{n.lesson.title}</span>
+                {n.lesson.is_active === false && <span className="shrink-0 rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-700">Draft</span>}
               </button>
               <button onClick={() => { onAddSub(n.lesson.id); setExpanded((p) => new Set([...p, n.lesson.id])); }}
                 className="shrink-0 rounded px-1 text-[14px] leading-none text-[var(--sh-ink-3)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--sh-ink)]" title="Add sub-page">+</button>

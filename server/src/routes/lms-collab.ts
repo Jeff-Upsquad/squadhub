@@ -39,6 +39,30 @@ async function itemIdForBlock(blockId: string): Promise<string | null> {
   return lessonId ? itemIdForLesson(lessonId) : null;
 }
 
+// A page's "hidden from" list, with user/role details joined for display.
+async function loadLessonOverrides(lessonId: string): Promise<any[]> {
+  const { data: rows } = await supabaseAdmin
+    .from('lms_lesson_access_overrides')
+    .select('principal_type, principal_id, mode')
+    .eq('lesson_id', lessonId);
+  const list = rows || [];
+  const userIds = list.filter((r: any) => r.principal_type === 'user').map((r: any) => r.principal_id);
+  const roleIds = list.filter((r: any) => r.principal_type === 'role').map((r: any) => r.principal_id);
+  const [{ data: users }, { data: roles }] = await Promise.all([
+    userIds.length ? supabaseAdmin.from('users').select('id, display_name, email, avatar_url').in('id', userIds) : Promise.resolve({ data: [] as any[] }),
+    roleIds.length ? supabaseAdmin.from('roles').select('id, name, color').in('id', roleIds) : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const uById = new Map((users || []).map((u: any) => [u.id, u]));
+  const rById = new Map((roles || []).map((r: any) => [r.id, r]));
+  return list.map((r: any) => ({
+    principal_type: r.principal_type,
+    principal_id: r.principal_id,
+    mode: r.mode,
+    user: r.principal_type === 'user' ? uById.get(r.principal_id) ?? null : null,
+    role: r.principal_type === 'role' ? rById.get(r.principal_id) ?? null : null,
+  }));
+}
+
 /** Resolve access and enforce a minimum. Returns the level, or sends 403/404. */
 async function gate(
   itemId: string | null,
@@ -102,7 +126,18 @@ router.get('/items/:id/full', async (req: Request, res: Response) => {
       list.push((b as any).type === 'quiz' ? { ...(b as any), quiz_questions: qByBlock.get((b as any).id) || [] } : b);
       bByLesson.set((b as any).lesson_id, list);
     }
-    const fullLessons = (lessons || []).map((l: any) => ({ ...l, blocks: bByLesson.get(l.id) || [] }));
+    // Per-page access overrides (who this page is hidden from), joined for display.
+    const { data: overrides } = lessonIds.length
+      ? await supabaseAdmin.from('lms_lesson_access_overrides').select('lesson_id, principal_type, principal_id, mode').in('lesson_id', lessonIds)
+      : { data: [] as any[] };
+    const ovByLesson = new Map<string, any[]>();
+    for (const o of overrides || []) {
+      const list = ovByLesson.get((o as any).lesson_id) || [];
+      list.push({ principal_type: (o as any).principal_type, principal_id: (o as any).principal_id, mode: (o as any).mode });
+      ovByLesson.set((o as any).lesson_id, list);
+    }
+
+    const fullLessons = (lessons || []).map((l: any) => ({ ...l, blocks: bByLesson.get(l.id) || [], access_overrides: ovByLesson.get(l.id) || [] }));
 
     res.json({ success: true, data: { ...item, lessons: fullLessons } });
   } catch (err) {
@@ -196,10 +231,13 @@ router.post('/items/:id/lessons', async (req: Request, res: Response) => {
         parent_lesson_id: parentId,
         icon: body.icon ?? null,
         position: nextPos,
+        // New pages/chapters start as DRAFT (hidden from learners) until the
+        // author publishes them.
+        is_active: false,
       })
       .select().single();
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
-    res.status(201).json({ success: true, data: { ...data, blocks: [] } });
+    res.status(201).json({ success: true, data: { ...data, blocks: [], access_overrides: [] } });
   } catch (err) {
     if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -257,6 +295,44 @@ router.put('/items/:id/lessons/reorder', async (req: Request, res: Response) => 
       await supabaseAdmin.from('lms_lessons').update({ position: it.position }).eq('id', it.id).eq('item_id', itemId);
     }
     res.json({ success: true });
+  } catch (err) {
+    if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// --- Per-page access overrides (hide a page from specific roles/users) -------
+const accessPutSchema = z.object({
+  overrides: z.array(z.object({
+    principal_type: z.enum(['user', 'role']),
+    principal_id: z.string().uuid(),
+  })),
+});
+
+router.get('/lessons/:lessonId/access', async (req: Request, res: Response) => {
+  const lessonId = param(req.params.lessonId);
+  const itemId = await itemIdForLesson(lessonId);
+  if (!(await gate(itemId, req.userId!, 'admin', res))) return;
+  const rows = await loadLessonOverrides(lessonId);
+  res.json({ success: true, data: rows });
+});
+
+router.put('/lessons/:lessonId/access', async (req: Request, res: Response) => {
+  try {
+    const lessonId = param(req.params.lessonId);
+    const itemId = await itemIdForLesson(lessonId);
+    if (!(await gate(itemId, req.userId!, 'admin', res))) return;
+    const { overrides } = accessPutSchema.parse(req.body);
+    await supabaseAdmin.from('lms_lesson_access_overrides').delete().eq('lesson_id', lessonId);
+    if (overrides.length) {
+      const seen = new Set<string>();
+      const rows = overrides
+        .filter((o) => { const k = `${o.principal_type}:${o.principal_id}`; if (seen.has(k)) return false; seen.add(k); return true; })
+        .map((o) => ({ lesson_id: lessonId, principal_type: o.principal_type, principal_id: o.principal_id, mode: 'exclude' }));
+      const { error } = await supabaseAdmin.from('lms_lesson_access_overrides').insert(rows);
+      if (error) { res.status(500).json({ success: false, error: error.message }); return; }
+    }
+    res.json({ success: true, data: await loadLessonOverrides(lessonId) });
   } catch (err) {
     if (err instanceof z.ZodError) { res.status(400).json({ success: false, error: err.errors[0].message }); return; }
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -493,6 +569,23 @@ router.delete('/comments/:commentId', async (req: Request, res: Response) => {
   const { error } = await supabaseAdmin.from('lms_item_comments').delete().eq('id', commentId);
   if (error) { res.status(500).json({ success: false, error: error.message }); return; }
   res.json({ success: true });
+});
+
+// --- Principals for the per-page "hide from" picker (authed staff) -----------
+router.get('/principals/roles', async (_req: Request, res: Response) => {
+  const { data } = await supabaseAdmin.from('roles').select('id, name, color').order('name', { ascending: true });
+  res.json({ success: true, data: data || [] });
+});
+
+router.get('/principals/users', async (req: Request, res: Response) => {
+  const q = String(req.query.q || '').trim();
+  let query = supabaseAdmin
+    .from('users').select('id, display_name, email, avatar_url')
+    .neq('status', 'banned').neq('status', 'suspended')
+    .order('display_name', { ascending: true }).limit(20);
+  if (q) query = query.or(`display_name.ilike.%${q}%,email.ilike.%${q}%`);
+  const { data } = await query;
+  res.json({ success: true, data: data || [] });
 });
 
 export default router;

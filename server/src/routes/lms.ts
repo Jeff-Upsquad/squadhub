@@ -58,6 +58,23 @@ async function getVisibleLessonIds(
   return visible;
 }
 
+// Which of these lessons is the user EXPLICITLY hidden from — directly, or via
+// one of their roles (lms_lesson_access_overrides, mode 'exclude').
+async function getExcludedLessonIds(lessonIds: string[], userId: string): Promise<Set<string>> {
+  const excluded = new Set<string>();
+  if (lessonIds.length === 0) return excluded;
+  const roleIds = await getUserRoleIds(userId);
+  const orFilters = [`and(principal_type.eq.user,principal_id.eq.${userId})`];
+  if (roleIds.length) orFilters.push(`and(principal_type.eq.role,principal_id.in.(${roleIds.join(',')}))`);
+  const { data } = await supabaseAdmin
+    .from('lms_lesson_access_overrides')
+    .select('lesson_id')
+    .in('lesson_id', lessonIds)
+    .or(orFilters.join(','));
+  for (const r of data || []) excluded.add((r as any).lesson_id);
+  return excluded;
+}
+
 // ------------------------------------------------------------
 // GET /lms/my-items — assignments for the current user
 // ------------------------------------------------------------
@@ -245,8 +262,8 @@ router.get('/search', async (req: Request, res: Response) => {
     const itemIds = Array.from(accessible);
     if (!itemIds.length) { res.json({ success: true, data: [] }); return; }
 
-    // 2. Load items + their active lessons + text blocks.
-    const [{ data: items }, { data: lessons }] = await Promise.all([
+    // 2. Load items + their active (published) lessons + text blocks.
+    const [{ data: items }, { data: lessonsRaw }] = await Promise.all([
       supabaseAdmin.from('lms_items')
         .select('id, kind, track, title, summary, icon')
         .in('id', itemIds).eq('status', 'published').is('origin_item_id', null),
@@ -254,6 +271,13 @@ router.get('/search', async (req: Request, res: Response) => {
         .select('id, item_id, title, parent_lesson_id, icon, position')
         .in('item_id', itemIds).eq('is_active', true).order('position', { ascending: true }),
     ]);
+    // Drop pages this searcher is explicitly hidden from (item admins/global
+    // admins see everything, so only filter non-admins).
+    let lessons = lessonsRaw || [];
+    if (!isAdmin && lessons.length) {
+      const excluded = await getExcludedLessonIds(lessons.map((l: any) => l.id), req.userId!);
+      if (excluded.size) lessons = lessons.filter((l: any) => !excluded.has(l.id));
+    }
     const lessonIds = (lessons || []).map((l: any) => l.id);
     const { data: blocks } = lessonIds.length
       ? await supabaseAdmin.from('lms_content_blocks').select('lesson_id, text_content').in('lesson_id', lessonIds).eq('type', 'text')
@@ -413,6 +437,13 @@ router.get('/items/:id', async (req: Request, res: Response) => {
         userType,
       );
       lessons = lessons.filter((l: any) => visibleIds.has(l.id));
+    }
+
+    // Per-page "hidden from" overrides (migration 171): drop pages this viewer
+    // (or one of their roles) is excluded from. Item admins see every page.
+    if (accessLevel !== 'admin') {
+      const excluded = await getExcludedLessonIds(lessons.map((l: any) => l.id), req.userId!);
+      if (excluded.size) lessons = lessons.filter((l: any) => !excluded.has(l.id));
     }
 
     const lessonIds = lessons.map((l: any) => l.id);
