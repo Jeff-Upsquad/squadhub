@@ -146,7 +146,9 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
     : (item.lessons[0]?.blocks?.length ?? 0) > 0;
   const hasAudience = (item.audience_types?.length ?? 0) + (item.audience_user_ids?.length ?? 0) > 0;
   const hasTitle = !!item.title?.trim();
-  const readyToPublish = hasContent && hasAudience && hasTitle;
+  // SOPs are reference docs — who sees them is driven purely by Share (roles &
+  // people), not the learner Audience, so they never require an audience.
+  const readyToPublish = hasContent && hasTitle && (isSop || hasAudience);
 
   const checklist = [
     { ok: hasTitle, label: 'Has a title' },
@@ -154,14 +156,14 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
       ok: hasContent,
       label: isCourse ? 'At least one active lesson with content' : 'At least one content block',
     },
-    { ok: hasAudience, label: 'Audience selected', hint: 'Empty audience = nobody can see it' },
+    ...(isSop ? [] : [{ ok: hasAudience, label: 'Audience selected', hint: 'Empty audience = nobody can see it' }]),
   ];
 
   function onPublish() {
     if (!readyToPublish) {
       const missing: string[] = [];
       if (!hasContent) missing.push('• It has no content yet.');
-      if (!hasAudience) missing.push('• No audience is selected — nobody will see it.');
+      if (!isSop && !hasAudience) missing.push('• No audience is selected — nobody will see it.');
       if (!confirm(`This isn't fully ready:\n\n${missing.join('\n')}\n\nPublish anyway?`)) return;
     }
     setPublishBusy(true);
@@ -215,7 +217,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
             >
               View roster ({item.assignment_count ?? 0})
             </Link>
-            {item.status === 'published' && (
+            {item.status === 'published' && !isSop && (
               <button
                 onClick={() => resync.mutate()}
                 className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-foreground-muted hover:bg-surface-alt"
@@ -299,27 +301,43 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
             </Field>
           </Section>
 
-          <Section
-            title="Audience"
-            hint="Who this is shared with. Anyone matching sees it once published."
-          >
-            {!hasAudience && (
-              <div className="mb-2.5 flex items-center justify-between gap-2 rounded-md bg-amber-50 px-2.5 py-2 text-[11.5px] leading-snug text-amber-800">
-                <span>No audience yet — nobody will see this.</span>
-                <button
-                  onClick={() => setAudience.mutate({ user_types: ALL_USER_TYPES, user_ids: item.audience_user_ids || [] })}
-                  className="shrink-0 rounded border border-amber-300 bg-white px-2 py-0.5 font-medium text-amber-800 hover:bg-amber-100"
-                >
-                  Everyone
-                </button>
-              </div>
-            )}
-            <AudiencePicker
-              userTypes={item.audience_types || []}
-              userIds={item.audience_user_ids || []}
-              onChange={(next) => setAudience.mutate(next)}
-            />
-          </Section>
+          {isSop ? (
+            <Section title="Access" hint="Who can see and edit this guide.">
+              <p className="text-[12.5px] leading-relaxed text-foreground-muted">
+                Access is managed with <span className="font-medium text-foreground">Share</span> — grant
+                roles or people <span className="font-medium">Viewer</span>, <span className="font-medium">Commenter</span>,{' '}
+                <span className="font-medium">Contributor</span> or <span className="font-medium">Admin</span> access.
+              </p>
+              <button
+                onClick={() => setShowShare(true)}
+                className="mt-3 w-full rounded-md border border-divider bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-alt"
+              >
+                Manage sharing…
+              </button>
+            </Section>
+          ) : (
+            <Section
+              title="Audience"
+              hint="Who this is shared with. Anyone matching sees it once published."
+            >
+              {!hasAudience && (
+                <div className="mb-2.5 flex items-center justify-between gap-2 rounded-md bg-amber-50 px-2.5 py-2 text-[11.5px] leading-snug text-amber-800">
+                  <span>No audience yet — nobody will see this.</span>
+                  <button
+                    onClick={() => setAudience.mutate({ user_types: ALL_USER_TYPES, user_ids: item.audience_user_ids || [] })}
+                    className="shrink-0 rounded border border-amber-300 bg-white px-2 py-0.5 font-medium text-amber-800 hover:bg-amber-100"
+                  >
+                    Everyone
+                  </button>
+                </div>
+              )}
+              <AudiencePicker
+                userTypes={item.audience_types || []}
+                userIds={item.audience_user_ids || []}
+                onChange={(next) => setAudience.mutate(next)}
+              />
+            </Section>
+          )}
 
           <Section title="Tasks sent" hint="Content sent as a task. Track who has completed it; resend to reopen, or unsend to remove.">
             <TaskSendsPanel itemId={item.id} />
