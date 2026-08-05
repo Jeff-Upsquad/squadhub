@@ -1,14 +1,23 @@
 'use client';
-import { useMemo, useState } from 'react';
-import { useMyLearning, type MyLearningEntry } from '../../../hooks/useLms';
+import { useMemo } from 'react';
+import { useMyLearning, useLmsSearch, type MyLearningEntry, type LmsSearchHit } from '../../../hooks/useLms';
 
-// Content-panel landing shown when no item is selected. Gives an at-a-glance
-// summary plus quick entry points, and a search field (top) for finding any
-// course or procedure shared with the user.
-export default function LearningOverview({ onSelectItem }: { onSelectItem: (id: string) => void }) {
+// The Resources "web page": an at-a-glance catalog plus a cross-content search
+// that returns inline results (item titles, page titles and page body text)
+// which deep-link straight to the matching page. `query` is lifted to the shell
+// so returning from an item keeps the same results.
+export default function LearningOverview({
+  query,
+  setQuery,
+  onSelectItem,
+}: {
+  query: string;
+  setQuery: (q: string) => void;
+  onSelectItem: (itemId: string, lessonId?: string | null) => void;
+}) {
   const { data: assignments, isLoading } = useMyLearning();
-  const [query, setQuery] = useState('');
   const all = assignments || [];
+  const search = useLmsSearch(query);
 
   // Courses are track 'learning' (the active ones, i.e. not completed, drive the
   // "Courses" list); Systems and Procedures are track 'sop' reference docs.
@@ -82,28 +91,109 @@ export default function LearningOverview({ onSelectItem }: { onSelectItem: (id: 
           )}
         </header>
 
-        {visibleCourses.length > 0 && (
-          <Section title="Courses" entries={visibleCourses} onSelectItem={onSelectItem} />
-        )}
-        {visibleSops.length > 0 && (
-          <Section title="Systems and Procedures" entries={visibleSops} onSelectItem={onSelectItem} />
-        )}
-
-        {/* Empty / no-match states */}
-        {q && visibleCourses.length === 0 && visibleSops.length === 0 && (
-          <p className="mt-10 text-center text-[13px] text-[var(--sh-ink-3)]">No matches for “{query.trim()}”.</p>
-        )}
-        {!q && all.length === 0 && (
-          <p className="mt-10 text-center text-[13px] text-[var(--sh-ink-3)]">
-            Courses, systems and procedures shared with you will appear here.
-          </p>
-        )}
-        {!q && all.length > 0 && visibleCourses.length === 0 && visibleSops.length === 0 && (
-          <p className="mt-10 text-center text-[13px] text-[var(--sh-ink-3)]">
-            🎉 You&apos;re all caught up. Search above to revisit anything shared with you.
-          </p>
+        {/* Search mode — inline cross-content results that deep-link to a page. */}
+        {q ? (
+          <SearchResults query={query} hits={search.data || []} loading={search.isFetching} onSelectItem={onSelectItem} />
+        ) : (
+          <>
+            {visibleCourses.length > 0 && (
+              <Section title="Courses" entries={visibleCourses} onSelectItem={onSelectItem} />
+            )}
+            {visibleSops.length > 0 && (
+              <Section title="Systems and Procedures" entries={visibleSops} onSelectItem={onSelectItem} />
+            )}
+            {all.length === 0 && (
+              <p className="mt-10 text-center text-[13px] text-[var(--sh-ink-3)]">
+                Courses, systems and procedures shared with you will appear here.
+              </p>
+            )}
+            {all.length > 0 && visibleCourses.length === 0 && visibleSops.length === 0 && (
+              <p className="mt-10 text-center text-[13px] text-[var(--sh-ink-3)]">
+                🎉 You&apos;re all caught up. Search above to revisit anything shared with you.
+              </p>
+            )}
+          </>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Cross-content search results                                        */
+/* ------------------------------------------------------------------ */
+
+const KIND_META: Record<string, { bg: string; label: string }> = {
+  item: { bg: 'var(--sh-hair-3)', label: '' },
+  page: { bg: '#eef3ff', label: 'Page' },
+  text: { bg: '#f1f7f2', label: 'In page' },
+};
+
+function highlight(text: string, q: string) {
+  const i = text.toLowerCase().indexOf(q.toLowerCase());
+  if (i < 0) return text;
+  return (
+    <>
+      {text.slice(0, i)}
+      <mark className="rounded-[3px] bg-amber-200 px-0.5 text-inherit">{text.slice(i, i + q.length)}</mark>
+      {text.slice(i + q.length)}
+    </>
+  );
+}
+
+function SearchResults({
+  query, hits, loading, onSelectItem,
+}: {
+  query: string; hits: LmsSearchHit[]; loading: boolean;
+  onSelectItem: (itemId: string, lessonId?: string | null) => void;
+}) {
+  const q = query.trim();
+  return (
+    <div className="mt-6">
+      <div className="mb-3 flex items-baseline gap-2">
+        <h2 className="text-[15px] font-semibold text-[var(--sh-ink)]">Search results</h2>
+        <span className="text-[12.5px] text-[var(--sh-ink-3)]">
+          {loading ? 'Searching…' : `${hits.length} for “${q}”`}
+        </span>
+      </div>
+      {!loading && hits.length === 0 ? (
+        <div className="mt-10 text-center text-[13px] text-[var(--sh-ink-3)]">
+          <div className="mb-1 text-2xl">🔍</div>No matches. Try another term.
+        </div>
+      ) : (
+        <ul className="space-y-1">
+          {hits.map((h, i) => {
+            const meta = KIND_META[h.match_kind] || KIND_META.text;
+            return (
+              <li key={`${h.item_id}-${h.lesson_id ?? 'item'}-${i}`}>
+                <button
+                  onClick={() => onSelectItem(h.item_id, h.lesson_id)}
+                  className="flex w-full items-start gap-3 rounded-[12px] border border-transparent px-3 py-3 text-left transition hover:border-[var(--sh-hair)] hover:bg-[var(--sh-hair-3)]"
+                >
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] text-[16px]" style={{ background: meta.bg }}>
+                    {h.icon || (h.item_track === 'sop' ? '🗂️' : h.item_kind === 'post' ? '📣' : '📚')}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-medium text-[var(--sh-ink)]">{highlight(h.title, q)}</span>
+                    <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-[var(--sh-ink-3)]">
+                      {h.path.map((p, idx) => (
+                        <span key={idx} className="flex items-center gap-1.5">
+                          {idx > 0 && <span>›</span>}
+                          <span className="rounded-[6px] bg-[var(--sh-hair-3)] px-1.5 py-px">{p}</span>
+                        </span>
+                      ))}
+                    </span>
+                    {h.snippet && <span className="mt-1 block text-[12.5px] leading-snug text-[var(--sh-ink-3)]">{highlight(h.snippet, q)}</span>}
+                  </span>
+                  {meta.label && (
+                    <span className="shrink-0 text-[10.5px] font-semibold uppercase tracking-wider text-[var(--sh-ink-3)]">{meta.label}</span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

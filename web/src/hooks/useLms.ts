@@ -55,6 +55,34 @@ export function useLmsItem(itemId: string | null) {
   });
 }
 
+// Cross-content search hit (server /lms/search). match_kind ranks item > page > body.
+export interface LmsSearchHit {
+  match_kind: 'item' | 'page' | 'text';
+  item_id: string;
+  item_kind: 'post' | 'course';
+  item_track: 'learning' | 'sop';
+  item_title: string;
+  icon: string | null;
+  lesson_id: string | null;
+  title: string;
+  path: string[];
+  snippet: string | null;
+}
+
+// Debounced cross-content search across everything shared with the user.
+export function useLmsSearch(query: string) {
+  const q = query.trim();
+  return useQuery<LmsSearchHit[]>({
+    queryKey: ['lms-search', q],
+    queryFn: async () => {
+      const res = await api.get(`/lms/search?q=${encodeURIComponent(q)}`);
+      return res.data.data;
+    },
+    enabled: q.length >= 2,
+    staleTime: 15_000,
+  });
+}
+
 export function useStartAssignment() {
   const qc = useQueryClient();
   return useMutation({
