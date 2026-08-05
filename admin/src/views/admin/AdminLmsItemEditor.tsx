@@ -382,7 +382,7 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                           <span className="shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700" title="No content yet">Empty</span>
                         )}
                         {inactive && (
-                          <span className="shrink-0 rounded-full bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted">Inactive</span>
+                          <span className="shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">Draft</span>
                         )}
                       </button>
                     </li>
@@ -446,9 +446,9 @@ export default function AdminLmsItemEditor({ itemId }: Props) {
                       onChange={(e) => patchLesson.mutate({ id: activeLesson.id, is_active: e.target.checked })}
                       className="h-4 w-4 rounded border-divider-strong accent-[#0F172B]"
                     />
-                    <span className="text-[13px] font-medium text-foreground">Active</span>
+                    <span className="text-[13px] font-medium text-foreground">Published</span>
                     <span className="text-[12px] text-foreground-dim">
-                      {(activeLesson.is_active ?? true) ? 'Visible to learners' : 'Hidden from learners — only visible here'}
+                      {(activeLesson.is_active ?? true) ? 'Visible to learners' : 'Draft — hidden from users until published'}
                     </span>
                   </label>
                 </div>

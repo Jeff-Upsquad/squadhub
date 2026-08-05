@@ -2533,6 +2533,10 @@ export interface LmsLesson {
   created_at: string;
   updated_at: string;
   blocks?: LmsContentBlock[];
+  // Per-page access overrides (migration 171). A page inherits the item's
+  // sharing; these rows HIDE it from specific roles/users. Populated by the
+  // editor APIs. (is_active doubles as the page's draft flag — false = draft.)
+  access_overrides?: LmsLessonAccessOverride[];
   // Lesson-level audience override. Empty on both = visible to everyone
   // enrolled in the course; otherwise the lesson is hidden from users who
   // don't match a type or aren't listed individually. (Populated by admin API.)
@@ -2705,6 +2709,17 @@ export interface LmsShareInput {
   principal_type: LmsPrincipalType;
   principal_id: string;
   access_level: LmsAccessLevel;
+}
+
+// Per-page (lesson) access override (migration 171). Presence = the principal
+// is EXCLUDED (hidden) from that page, even though they can access the item.
+export interface LmsLessonAccessOverride {
+  principal_type: LmsPrincipalType;
+  principal_id: string;
+  mode: 'exclude';
+  // Joined for display (one of these, keyed by principal_type)
+  user?: Pick<User, 'id' | 'display_name' | 'email' | 'avatar_url'> | null;
+  role?: Pick<Role, 'id' | 'name' | 'color'> | null;
 }
 
 // Staff-only comment on a page (lesson) of an item. Visible to commenter+.
