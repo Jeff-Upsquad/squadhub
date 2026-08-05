@@ -52,19 +52,46 @@ router.get('/search', requireAuth, async (req: Request, res: Response) => {
     // scope param the search stays global (other callers rely on that).
     let allowedIds: string[] | null = null;
     if (channelId) {
-      const { data: members } = await supabaseAdmin
-        .from('resource_memberships')
-        .select('user_id')
-        .eq('resource_type', 'channel')
-        .eq('resource_id', channelId);
-      const ids = new Set<string>((members || []).map((m: any) => m.user_id));
       const { data: ch } = await supabaseAdmin
         .from('channels')
-        .select('created_by')
+        .select('created_by, workspace_id, linked_resource_type')
         .eq('id', channelId)
         .single();
-      if ((ch as any)?.created_by) ids.add((ch as any).created_by);
-      allowedIds = [...ids];
+      const linkedType = (ch as any)?.linked_resource_type as string | null;
+      if (linkedType && linkedType.startsWith('crm_')) {
+        // CRM team chats: let @mention reach the whole CRM roster so a teammate
+        // who isn't in the chat yet can be pulled in (not just existing members).
+        // Mirrors the CRM's own /team-chats/mentionable: crm_app_access, then
+        // fall back to workspace members.
+        const wsId = (ch as any)?.workspace_id as string | undefined;
+        let rosterIds: string[] = [];
+        if (wsId) {
+          const { data: grants } = await supabaseAdmin
+            .from('crm_app_access')
+            .select('user_id')
+            .eq('workspace_id', wsId)
+            .eq('app', 'squadcrm')
+            .eq('enabled', true);
+          rosterIds = (grants || []).map((g: any) => g.user_id);
+          if (!rosterIds.length) {
+            const { data: wm } = await supabaseAdmin
+              .from('workspace_members')
+              .select('user_id')
+              .eq('workspace_id', wsId);
+            rosterIds = (wm || []).map((m: any) => m.user_id);
+          }
+        }
+        allowedIds = [...new Set<string>(rosterIds)];
+      } else {
+        const { data: members } = await supabaseAdmin
+          .from('resource_memberships')
+          .select('user_id')
+          .eq('resource_type', 'channel')
+          .eq('resource_id', channelId);
+        const ids = new Set<string>((members || []).map((m: any) => m.user_id));
+        if ((ch as any)?.created_by) ids.add((ch as any).created_by);
+        allowedIds = [...ids];
+      }
     } else if (dmConversationId) {
       const { data: parts } = await supabaseAdmin
         .from('dm_participants')
