@@ -1,10 +1,11 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import { useCollabFull, useEditorMutations, useSubmitReview, useDiscardDraft } from '../../../hooks/useLmsCollab';
+import NotionEditor from './NotionEditor';
 
 type Props = {
   draftItemId: string;
@@ -212,31 +213,88 @@ export default function LmsEditor({ draftItemId, isClone, onExit, onSubmitted }:
               </div>
             )}
 
-            {/* Blocks */}
-            <div className="mt-6 space-y-3">
-              {activeLesson?.blocks?.map((block: any, i: number) => (
-                <BlockCard
-                  key={block.id}
-                  block={block}
-                  canMoveUp={i > 0}
-                  canMoveDown={i < (activeLesson.blocks!.length - 1)}
-                  onMove={(dir) => {
-                    const arr = [...activeLesson.blocks!];
-                    const t = i + dir;
-                    if (t < 0 || t >= arr.length) return;
-                    [arr[i], arr[t]] = [arr[t], arr[i]];
-                    m.reorderBlocks.mutate({ lessonId: activeLesson.id, items: arr.map((b, idx) => ({ id: b.id, position: idx })) });
-                  }}
-                  onPatch={(patch) => m.patchBlock.mutate({ id: block.id, ...patch })}
-                  onDelete={() => { if (confirm('Delete this block?')) m.deleteBlock.mutate(block.id); }}
-                />
-              ))}
-              {activeLesson && <AddBlock onAdd={(type) => m.addBlock.mutate({ lessonId: activeLesson.id, type })} />}
-              {!activeLesson && <p className="text-center text-sm text-[var(--sh-ink-3)]">No lesson selected.</p>}
-            </div>
+            {/* Content */}
+            {isSop ? (
+              activeLesson ? (
+                <div className="mt-6"><SopPageContent item={item} lesson={activeLesson} m={m} /></div>
+              ) : (
+                <p className="mt-6 text-center text-sm text-[var(--sh-ink-3)]">No page selected.</p>
+              )
+            ) : (
+              <div className="mt-6 space-y-3">
+                {activeLesson?.blocks?.map((block: any, i: number) => (
+                  <BlockCard
+                    key={block.id}
+                    block={block}
+                    canMoveUp={i > 0}
+                    canMoveDown={i < (activeLesson.blocks!.length - 1)}
+                    onMove={(dir) => {
+                      const arr = [...activeLesson.blocks!];
+                      const t = i + dir;
+                      if (t < 0 || t >= arr.length) return;
+                      [arr[i], arr[t]] = [arr[t], arr[i]];
+                      m.reorderBlocks.mutate({ lessonId: activeLesson.id, items: arr.map((b, idx) => ({ id: b.id, position: idx })) });
+                    }}
+                    onPatch={(patch) => m.patchBlock.mutate({ id: block.id, ...patch })}
+                    onDelete={() => { if (confirm('Delete this block?')) m.deleteBlock.mutate(block.id); }}
+                  />
+                ))}
+                {activeLesson && <AddBlock onAdd={(type) => m.addBlock.mutate({ lessonId: activeLesson.id, type })} />}
+                {!activeLesson && <p className="text-center text-sm text-[var(--sh-ink-3)]">No lesson selected.</p>}
+              </div>
+            )}
           </div>
         </main>
       </div>
+    </div>
+  );
+}
+
+/* ---- SOP page content: one Notion-style document (+ any legacy media) ---- */
+function SopPageContent({ item, lesson, m }: { item: any; lesson: any; m: any }) {
+  const blocks: any[] = lesson.blocks || [];
+  const primary = blocks.find((b) => b.type === 'text');
+  const attachments = blocks.filter((b) => b.type !== 'text');
+  const initRef = useRef<Set<string>>(new Set());
+
+  // Every SOP page is backed by a single text block used as its document.
+  useEffect(() => {
+    if (!primary && !initRef.current.has(lesson.id)) {
+      initRef.current.add(lesson.id);
+      m.addBlock.mutate({ lessonId: lesson.id, type: 'text' });
+    }
+  }, [lesson.id, primary, m]);
+
+  return (
+    <div>
+      {primary ? (
+        <NotionEditor
+          key={primary.id}
+          itemId={item.id}
+          lessonId={lesson.id}
+          content={primary.text_content}
+          onChange={(doc) => m.patchBlock.mutate({ id: primary.id, text_content: doc })}
+        />
+      ) : (
+        <p className="text-[13px] text-[var(--sh-ink-3)]">Preparing page…</p>
+      )}
+
+      {attachments.length > 0 && (
+        <div className="mt-8 space-y-3 border-t border-[var(--sh-hair)] pt-5">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--sh-ink-3)]">Attachments</p>
+          {attachments.map((block) => (
+            <BlockCard
+              key={block.id}
+              block={block}
+              canMoveUp={false}
+              canMoveDown={false}
+              onMove={() => {}}
+              onPatch={(patch) => m.patchBlock.mutate({ id: block.id, ...patch })}
+              onDelete={() => { if (confirm('Delete this block?')) m.deleteBlock.mutate(block.id); }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
