@@ -1,16 +1,14 @@
 'use client';
 import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Link from '@tiptap/extension-link';
-import Image from '@tiptap/extension-image';
 import { useEffect } from 'react';
+import { sharedExtensions } from './notionExtensions';
 
 export default function TextBlock({ content }: { content: unknown }) {
   const editor = useEditor({
     editable: false,
-    // StarterKit bundles its own Link — disable it so the explicit
-    // Link.configure is the only registration (duplicates warn on mount).
-    extensions: [StarterKit.configure({ link: false }), Link.configure({ openOnClick: true }), Image],
+    // Same schema the Notion editor authors with, so headings, lists, to-dos,
+    // images and video embeds render identically here in the reader.
+    extensions: sharedExtensions(),
     content: content || '',
     immediatelyRender: false,
   });
@@ -39,6 +37,12 @@ export default function TextBlock({ content }: { content: unknown }) {
         .lms-prose :global(pre code) { background: transparent; color: inherit; }
         .lms-prose :global(a) { color: #2563eb; text-decoration: underline; }
         .lms-prose :global(img) { max-width: 100%; border-radius: 6px; }
+        .lms-prose :global(mark) { background: #fde68a; border-radius: 2px; padding: 0 2px; }
+        .lms-prose :global(hr) { border: none; border-top: 1px solid var(--sh-hair); margin: 1em 0; }
+        .lms-prose :global(ul[data-type="taskList"]) { list-style: none; padding-left: 0.2em; }
+        .lms-prose :global(ul[data-type="taskList"] li) { display: flex; gap: 0.5em; align-items: flex-start; }
+        .lms-prose :global(.lms-embed) { position: relative; width: 100%; aspect-ratio: 16 / 9; margin: 0.6em 0; border-radius: 8px; overflow: hidden; background: #000; border: 1px solid var(--sh-hair); }
+        .lms-prose :global(.lms-embed iframe) { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
       `}</style>
     </div>
   );
