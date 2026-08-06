@@ -1066,9 +1066,15 @@ export default function AdminSubscriptionCardRecipientsView({
   };
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
-      {/* Header */}
-      <div className="px-6 pt-6 pb-4 space-y-4">
+    <div className="flex h-full flex-col">
+      {/* Header, plan/customer, tiers, broadcast and recipients all share ONE
+          scroll region so they scroll together — the header no longer stays
+          pinned while only the list moves. Scroll is owned by this inner
+          flex-1/min-h-0 box (not the root), so in the web/Leads shell it stays
+          contained and never bubbles up to scroll the app sidebar. */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {/* Header */}
+        <div className="px-6 pt-6 pb-4 space-y-4">
         <div className="flex items-center justify-between">
           <button
             onClick={onBack}
@@ -1255,7 +1261,7 @@ export default function AdminSubscriptionCardRecipientsView({
       </div>
 
       {/* Stat cards + tabs + list */}
-      <div className="flex-1 px-6 pb-8 space-y-5">
+      <div className="px-6 pb-8 space-y-5">
         {isLoading ? (
           <div className="sh-card py-16 text-center">
             <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading recipients…</p>
@@ -2044,6 +2050,7 @@ export default function AdminSubscriptionCardRecipientsView({
             })()}
           </>
         )}
+      </div>
       </div>
 
       {/* Floating Assign bar. Suppressed for the Selected stage when the inline
