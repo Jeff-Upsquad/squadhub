@@ -1816,19 +1816,59 @@ router.post('/:id/reinstate', async (req: Request, res: Response) => {
 // cancelled) into a fresh DRAFT in New Deals with all the same details but NONE
 // of its recipients, assignees, terms, or linked space. The admin edits it there
 // and publishes it as a brand-new deal.
+//
+// Optional body { card_type: 'subscription' | 'assignment' } RE-TARGETS the copy
+// into the other product line (e.g. duplicate a subscription brief as a freelance
+// assignment, or vice versa). When the type flips we clear the source-type-only
+// fields so they don't carry misleading data — the admin fills in the
+// destination-type fields (plan/tiers, or budget + timeline) in New Deals before
+// publishing. The copy lands in the target module's New Deals queue.
 // ============================================================
 router.post('/:id/duplicate', async (req: Request, res: Response) => {
   try {
     const cardId = req.params.id as string;
     const { data: card } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id')
+      .select('id, card_type')
       .eq('id', cardId)
       .maybeSingle();
     if (!card) { res.status(404).json({ success: false, error: 'Card not found' }); return; }
 
+    const sourceType = ((card as any).card_type as string) || 'subscription';
+    const rawTarget = (req.body?.card_type ?? sourceType) as string;
+    if (!['subscription', 'assignment'].includes(rawTarget)) {
+      res.status(400).json({ success: false, error: 'Invalid card_type' });
+      return;
+    }
+    const targetType = rawTarget as 'subscription' | 'assignment';
+
+    // When re-targeting to another product line, drop the fields that belong
+    // only to the source type so the draft starts clean for the destination.
+    const overrides: Record<string, unknown> = { card_type: targetType };
+    if (targetType !== sourceType) {
+      if (targetType === 'assignment') {
+        // Subscriptions carry a weekly plan + monthly price; assignments don't.
+        overrides.plan_name = null;
+        overrides.plan_snapshot = null;
+        overrides.subscription_price = null;
+        overrides.working_days = [];
+        // Seed the same shape a natively-created assignment brief starts with
+        // (empty scope/timeline the admin fills in), rather than a null blob.
+        overrides.assignment_details = {
+          duration: null,
+          start_date: null,
+          deadline: null,
+          scope_type: null,
+          pricing_mode: 'priced',
+        };
+      } else {
+        // Assignments carry a one-off project scope/timeline; subscriptions don't.
+        overrides.assignment_details = null;
+      }
+    }
+
     const actorId = (req as any).user?.id ?? (req as any).userId ?? null;
-    const result = await copyCardToNewDraft(cardId, {}, actorId);
+    const result = await copyCardToNewDraft(cardId, overrides, actorId);
     if ('error' in result) { res.status(500).json({ success: false, error: result.error }); return; }
 
     await logCardEvent({
@@ -1837,10 +1877,10 @@ router.post('/:id/duplicate', async (req: Request, res: Response) => {
       actorId,
       actorType: 'admin',
       actorLabel: (req as any).userName ?? null,
-      metadata: { duplicated_from: cardId },
+      metadata: { duplicated_from: cardId, source_card_type: sourceType, card_type: targetType },
     });
 
-    res.json({ success: true, data: { id: result.id } });
+    res.json({ success: true, data: { id: result.id, card_type: targetType } });
   } catch (err: any) {
     console.error('Duplicate card error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });

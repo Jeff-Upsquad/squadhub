@@ -636,15 +636,23 @@ export default function AdminSubscriptionCardRecipientsView({
     },
   });
 
-  // Duplicate: copy this card (minus recipients/assignees) into a fresh New Deals draft.
+  // Duplicate: copy this card (minus recipients/assignees) into a fresh New Deals
+  // draft. An optional targetType re-targets the copy into the OTHER product line
+  // (subscription ⇄ assignment); the copy lands in that module's New Deals queue.
   const duplicateMutation = useMutation({
-    mutationFn: () =>
-      api.post(`/admin/subscription-cards/${card.id}/duplicate`),
-    onSuccess: () => {
+    mutationFn: (targetType?: 'subscription' | 'assignment') =>
+      api.post(`/admin/subscription-cards/${card.id}/duplicate`, targetType ? { card_type: targetType } : {}),
+    onSuccess: (_res, targetType) => {
       queryClient.invalidateQueries({ queryKey: ['admin-subscription-requests'] });
       queryClient.invalidateQueries({ queryKey: ['admin-internal-brief-submissions'] });
       queryClient.invalidateQueries({ queryKey: ['admin-subscription-cards'] });
-      showToast('Duplicated — a copy is waiting in New Deals (same details, no recipients).', 'success');
+      const crossType = targetType && targetType !== (card.card_type || 'subscription');
+      showToast(
+        crossType
+          ? `Copied into New Deals as ${targetType === 'assignment' ? 'an Assignment' : 'a Subscription'} — open it there to fill in the ${targetType === 'assignment' ? 'budget & timeline' : 'plan & tiers'}.`
+          : 'Duplicated — a copy is waiting in New Deals (same details, no recipients).',
+        'success',
+      );
     },
     onError: (err: any) => {
       showToast(err?.response?.data?.error || err.message || 'Failed to duplicate card', 'error');
@@ -1162,7 +1170,7 @@ export default function AdminSubscriptionCardRecipientsView({
             {!card.archived_at && (
               <button
                 onClick={() => {
-                  if (window.confirm('Duplicate this module?\n\nA copy with the same details (no recipients or assignees) is created in New Deals.')) duplicateMutation.mutate();
+                  if (window.confirm('Duplicate this module?\n\nA copy with the same details (no recipients or assignees) is created in New Deals.')) duplicateMutation.mutate(undefined);
                 }}
                 disabled={duplicateMutation.isPending}
                 className="sh-btn-ghost sh-btn-ghost-sm"
@@ -1171,6 +1179,26 @@ export default function AdminSubscriptionCardRecipientsView({
                 {duplicateMutation.isPending ? 'Duplicating…' : 'Duplicate'}
               </button>
             )}
+            {!card.archived_at && (() => {
+              // Cross-line copy: a subscription brief → freelance assignment, or
+              // vice versa. Lands in the OTHER module's New Deals queue.
+              const otherType: 'subscription' | 'assignment' =
+                (card.card_type === 'assignment') ? 'subscription' : 'assignment';
+              const otherLabel = otherType === 'assignment' ? 'Assignment' : 'Subscription';
+              const fillHint = otherType === 'assignment' ? 'budget & timeline' : 'plan & tiers';
+              return (
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Duplicate as ${otherLabel}?\n\nA copy is created in the ${otherLabel} module's New Deals queue with the same client & requirement details (no recipients or assignees). You'll fill in the ${fillHint} there before publishing.`)) duplicateMutation.mutate(otherType);
+                  }}
+                  disabled={duplicateMutation.isPending}
+                  className="sh-btn-ghost sh-btn-ghost-sm"
+                  title={`Copy this card's details into a fresh ${otherLabel} draft in New Deals`}
+                >
+                  {duplicateMutation.isPending ? 'Duplicating…' : `Duplicate as ${otherLabel}`}
+                </button>
+              );
+            })()}
           </div>
           <h1 className="sh-display text-2xl sm:text-3xl truncate">{title}</h1>
           {card.card_code && (
