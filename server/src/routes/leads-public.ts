@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { supabaseAdmin } from '../supabase';
 import { ensureHubContact } from '../utils/leadLookup';
+import { generateBriefVoiceUploadUrl } from '../r2';
 
 const router = Router();
 
@@ -324,9 +325,13 @@ const submissionSchema = z.object({
   email: z.string().trim().email().max(200),
   phone: z.string().trim().min(4).max(30),
   business_location: z.string().trim().max(500).optional().or(z.literal('')),
-  country_id: z.string().uuid(),
+  // Location is opt-in now — the client can leave country empty ("Anywhere").
+  country_id: z.string().uuid().optional(),
   state_regions: z.array(z.string().trim().min(1).max(100)).max(60).default([]),
   languages: z.array(z.string().trim().min(1).max(60)).min(1).max(20),
+  // Optional voice note describing the requirement — public R2 URL from
+  // /leads/voice-upload-url. Stored on every card alongside requirement_note.
+  requirement_voice_url: z.string().trim().url().max(1000).optional().or(z.literal('')),
   // Subscriptions need ≥1 working day; assignments don't use working days at
   // all. The min-1 rule is enforced conditionally (subscription only) below.
   working_days: z
@@ -386,30 +391,74 @@ const submissionSchema = z.object({
   }
 });
 
+// POST /leads/voice-upload-url — hand the public brief form a presigned R2
+// PUT URL for the requirement voice note. The browser uploads the blob
+// directly, then sends the returned publicUrl back in /landing.
+const voiceUploadSchema = z.object({
+  filename: z.string().trim().min(1).max(200).optional().default('voice-note.webm'),
+  content_type: z
+    .string()
+    .trim()
+    .regex(/^audio\/[a-z0-9.+-]+$/i, 'content_type must be an audio MIME type')
+    .max(100),
+});
+
+router.post('/voice-upload-url', ipRateLimit, async (req: Request, res: Response) => {
+  try {
+    const body = voiceUploadSchema.parse(req.body);
+    const { uploadUrl, publicUrl } = await generateBriefVoiceUploadUrl(
+      body.filename,
+      body.content_type,
+    );
+    res.json({ success: true, data: { upload_url: uploadUrl, public_url: publicUrl } });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: err.errors[0].message });
+      return;
+    }
+    console.error('Voice upload URL error:', err);
+    res.status(500).json({ success: false, error: 'Could not prepare upload.' });
+  }
+});
+
 router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
   try {
     const body = submissionSchema.parse(req.body);
 
-    // Validate the country_id exists. Drop it (and the associated regions)
-    // rather than fail the submission outright if the lookup misses — admin
-    // can fix on review.
-    const { data: countryRow } = await supabaseAdmin
-      .from('countries')
-      .select('id')
-      .eq('id', body.country_id)
-      .maybeSingle();
-    const countryId: string | null = (countryRow as any)?.id ?? null;
+    // Validate the country_id exists (when the client chose one). Location is
+    // opt-in — an empty country means "match anywhere", so we drop it rather
+    // than fail. Region/country targeting is skipped when countryId is null.
+    const countryId: string | null = await (async () => {
+      if (!body.country_id) return null;
+      const { data: countryRow } = await supabaseAdmin
+        .from('countries')
+        .select('id')
+        .eq('id', body.country_id)
+        .maybeSingle();
+      return (countryRow as any)?.id ?? null;
+    })();
+
+    // client_submissions.country_id is NOT NULL — when the client picked no
+    // location, fall back to a default (India, else the first served country)
+    // purely for the contact row. Card-level targeting stays empty (anywhere).
+    let submissionCountryId: string | null = countryId;
+    if (!submissionCountryId) {
+      const { data: fallbackCountry } = await supabaseAdmin
+        .from('countries')
+        .select('id, name')
+        .order('sort_order', { ascending: true });
+      const rows = (fallbackCountry as any[]) || [];
+      submissionCountryId = rows.find((c) => c.name === 'India')?.id ?? rows[0]?.id ?? null;
+    }
 
     // 1. Stage B — ensure Hub contact (find-or-create) + stamp CRM/Hire soft refs.
-    // country_id is NOT NULL on client_submissions; fall back to the form's
-    // talent country when we have no other signal. Admin can rebill later.
     const { submission: ensured } = await ensureHubContact({
       email: body.email,
       phone: body.phone,
       contact_name: body.contact_name,
       business_name: body.brand_name,
       business_location: body.business_location || null,
-      country_id: countryId || body.country_id,
+      country_id: submissionCountryId as string,
     });
     if (!ensured) {
       res.status(500).json({ success: false, error: 'Failed to submit. Please try again.' });
@@ -590,6 +639,7 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
           business_nature: body.business_nature,
           notes: body.business_note,
           requirement_note: roleReq?.note || null,
+          requirement_voice_url: body.requirement_voice_url || null,
           hours_note: roleReq?.hours || null,
           publish_targets: ['partner', 'talent'],
           brand_id: brandId,

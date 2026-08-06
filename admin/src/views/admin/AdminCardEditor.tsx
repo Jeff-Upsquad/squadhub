@@ -69,6 +69,7 @@ interface CardData {
   business_nature: string | null;
   notes: string | null;
   requirement_note: string | null;
+  requirement_voice_url: string | null;
   hours_note: string | null;
   target_tiers: string[];
   min_experience_years: number;
@@ -182,6 +183,8 @@ export default function AdminCardEditor({
   const [businessNature, setBusinessNature] = useState('');
   const [notes, setNotes] = useState('');
   const [requirementNote, setRequirementNote] = useState('');
+  // Read-only: the client's recorded requirement voice note (if any).
+  const [requirementVoiceUrl, setRequirementVoiceUrl] = useState<string | null>(null);
   const [hoursNote, setHoursNote] = useState('');
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [targetCountryIds, setTargetCountryIds] = useState<string[]>([]);
@@ -239,6 +242,7 @@ export default function AdminCardEditor({
     setBusinessNature(card.business_nature || '');
     setNotes(card.notes || '');
     setRequirementNote(card.requirement_note || '');
+    setRequirementVoiceUrl(card.requirement_voice_url || null);
     setHoursNote(card.hours_note || '');
     setDeliverables(card.custom_deliverables || []);
     setTargetCountryIds(card.target_country_ids || []);
@@ -1270,6 +1274,17 @@ export default function AdminCardEditor({
                   className="sh-input resize-none"
                 />
               </Field>
+              {requirementVoiceUrl && (
+                <Field label="Requirement Voice Note">
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+                    <svg className="h-4 w-4 flex-shrink-0 text-foreground-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m0 0h-3.75m3.75 0h3.75M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                    </svg>
+                    {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                    <audio controls src={requirementVoiceUrl} className="h-9 w-full" />
+                  </div>
+                </Field>
+              )}
               <Field label="Hours" optional>
                 <input
                   type="text"

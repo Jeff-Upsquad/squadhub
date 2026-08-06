@@ -492,6 +492,7 @@ export async function fanOutTierCards(
     'business_nature',
     'notes',
     'requirement_note',
+    'requirement_voice_url',
     'hours_note',
     'min_experience_years',
     'target_languages',

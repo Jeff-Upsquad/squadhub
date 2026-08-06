@@ -53,6 +53,65 @@ const LANGUAGES = [
   'Arabic', 'Spanish', 'French', 'German', 'Mandarin',
 ];
 
+// Region-aware language options. When a client narrows talent to a specific
+// country + state, the language chips re-order to that region's languages so
+// the relevant choice is front-and-centre. English is always offered.
+// Leaving country/state empty falls back to the full LANGUAGES list.
+const LANGUAGES_BY_INDIAN_STATE: Record<string, string[]> = {
+  'Tamil Nadu': ['Tamil', 'English'],
+  Kerala: ['Malayalam', 'English'],
+  Karnataka: ['Kannada', 'English'],
+  'Andhra Pradesh': ['Telugu', 'English'],
+  Telangana: ['Telugu', 'Urdu', 'English'],
+  Maharashtra: ['Marathi', 'Hindi', 'English'],
+  Goa: ['Konkani', 'Marathi', 'English'],
+  Gujarat: ['Gujarati', 'Hindi', 'English'],
+  Punjab: ['Punjabi', 'Hindi', 'English'],
+  Haryana: ['Hindi', 'Punjabi', 'English'],
+  'West Bengal': ['Bengali', 'Hindi', 'English'],
+  Odisha: ['Odia', 'Hindi', 'English'],
+  Assam: ['Assamese', 'Bengali', 'English'],
+  Delhi: ['Hindi', 'Punjabi', 'Urdu', 'English'],
+  'Jammu and Kashmir': ['Urdu', 'Hindi', 'English'],
+};
+// Default languages per country when only the country is chosen (no state).
+const LANGUAGES_BY_COUNTRY_NAME: Record<string, string[]> = {
+  India: ['Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada', 'Marathi', 'Bengali', 'Gujarati', 'Punjabi', 'Urdu'],
+  'United States': ['English', 'Spanish'],
+  'United Kingdom': ['English'],
+  'United Arab Emirates': ['Arabic', 'English', 'Hindi', 'Urdu'],
+  Singapore: ['English', 'Mandarin', 'Malay', 'Tamil'],
+  Australia: ['English'],
+  Canada: ['English', 'French'],
+};
+
+// Resolve the language chip options for the current location selection.
+// Union of every selected state's languages, else the country default, else
+// the full list — always with English, and always keeping already-picked
+// languages visible so a location change never silently drops a choice.
+function languageOptionsFor(
+  countryName: string,
+  selectedStates: string[],
+  alreadySelected: string[],
+): string[] {
+  let base: string[];
+  if (countryName === 'India' && selectedStates.length > 0) {
+    const set = new Set<string>();
+    for (const st of selectedStates) {
+      for (const lang of LANGUAGES_BY_INDIAN_STATE[st] || ['Hindi', 'English']) set.add(lang);
+    }
+    base = [...set];
+  } else if (countryName && LANGUAGES_BY_COUNTRY_NAME[countryName]) {
+    base = [...LANGUAGES_BY_COUNTRY_NAME[countryName]];
+  } else {
+    base = [...LANGUAGES];
+  }
+  const out = [...base];
+  if (!out.includes('English')) out.push('English');
+  for (const l of alreadySelected) if (!out.includes(l)) out.push(l);
+  return out;
+}
+
 // Build-your-own-subscription workflow (mirrors upsquadconnect.com/pricing):
 // experience level(s) → plan → budget. Display labels are plural; stored
 // values match subscription_cards.target_tiers' CHECK (Junior/Pro/Top Talents).
@@ -155,6 +214,28 @@ const ROLE_OPTIONS: {
     description: 'One person who does both — design work and video editing — instead of hiring two separate specialists.',
   },
 ];
+
+// Upload a recorded voice note to R2 via a server-issued presigned PUT URL,
+// returning the public URL to store on the brief. Throws on any failure so
+// the caller can fall back to the typed note.
+async function uploadVoiceNote(blob: Blob): Promise<string> {
+  const contentType = blob.type || 'audio/webm';
+  const ext = contentType.includes('mp4') ? 'mp4' : contentType.includes('ogg') ? 'ogg' : 'webm';
+  const presign = await fetch('/leads/voice-upload-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: `voice-note.${ext}`, content_type: contentType }),
+  });
+  const pj = await presign.json();
+  if (!pj?.success || !pj.data?.upload_url) throw new Error('presign failed');
+  const put = await fetch(pj.data.upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: blob,
+  });
+  if (!put.ok) throw new Error('upload failed');
+  return pj.data.public_url as string;
+}
 
 function rolesToServiceType(roles: RoleSlug[]): ServiceType | null {
   const hasDesigner = roles.includes('designer');
@@ -274,6 +355,15 @@ export default function ConnectBriefForm({
   // accept/decline/counter) or WITHOUT (talents submit an offer). Brief-level.
   const [pricingMode, setPricingMode] = useState<'priced' | 'unpriced'>('priced');
   const [countries, setCountries] = useState<Country[]>([]);
+  // Optional voice note describing the requirement in the client's own words.
+  // Captured client-side (MediaRecorder); the blob is uploaded on submit and
+  // surfaced to talent in SquadHire. UI-only for now — wiring the upload +
+  // storage column comes after the design is approved.
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const audioBlobRef = useRef<Blob | null>(null);
+  // Typed requirement description — the text companion to the voice note.
+  // Brief-level (applies across every selected role); sent as each role's note.
+  const [requirementNote, setRequirementNote] = useState('');
   // Autofill state — silent single-field lookup (email OR phone). On match,
   // pre-fill contact + latest brand + talent prefs. The user can edit
   // brand_name to start a fresh brand; that path clears brand-specific
@@ -289,12 +379,9 @@ export default function ConnectBriefForm({
       .then((r) => r.json())
       .then((data) => {
         if (data.success && Array.isArray(data.data)) {
+          // Location is opt-in — leave country empty ("Anywhere") by default
+          // so a client only narrows by location when they deliberately pick one.
           setCountries(data.data);
-          const india = data.data.find((c: Country) => c.name === 'India');
-          setForm((prev) => ({
-            ...prev,
-            country_id: prev.country_id || india?.id || data.data[0]?.id || '',
-          }));
         }
       })
       .catch(() => {/* non-fatal — admin can fix country on review */});
@@ -371,6 +458,8 @@ export default function ConnectBriefForm({
 
   const selectedCountryName = countries.find((c) => c.id === form.country_id)?.name || '';
   const stateOptions = STATES_BY_COUNTRY_NAME[selectedCountryName] || [];
+  // Language chips re-tuned to the chosen location (falls back to full list).
+  const languageOptions = languageOptionsFor(selectedCountryName, form.state_regions, form.languages);
   // ₹ for India (default), $ for the other countries we serve.
   const currencySymbol = selectedCountryName && selectedCountryName !== 'India' ? '$' : '₹';
 
@@ -434,13 +523,6 @@ export default function ConnectBriefForm({
     }));
   }
 
-  function updateRoleTierBudget(slug: RoleSlug, tier: string, value: string) {
-    setRoleRequirements((prev) => ({
-      ...prev,
-      [slug]: { ...prev[slug], tierBudgets: { ...prev[slug].tierBudgets, [tier]: value } },
-    }));
-  }
-
   function toggleRoleReqTier(slug: RoleSlug, value: string) {
     setRoleRequirements((prev) => {
       const cur = prev[slug];
@@ -468,6 +550,12 @@ export default function ConnectBriefForm({
     }
     setError('');
 
+    // Requirement is mandatory — a voice note OR a typed note (either is fine).
+    if (!audioBlobRef.current && !requirementNote.trim()) {
+      setError('Please describe your requirement — record a voice note or type it in.');
+      if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+      return;
+    }
     if (form.languages.length === 0) {
       setError('Please pick at least one language.');
       return;
@@ -492,7 +580,9 @@ export default function ConnectBriefForm({
     > = {};
     for (const r of roles) {
       const entry = roleRequirements[r];
-      const note = entry.note.trim();
+      // The requirement note is now brief-level (one description across all
+      // roles), captured alongside the voice note.
+      const note = requirementNote.trim();
       const tiers = entry.tiers;
 
       if (isAssignment) {
@@ -517,27 +607,40 @@ export default function ConnectBriefForm({
       }
 
       const plan = entry.plan;
-      // Per-tier budgets — only for selected tiers with a positive amount. A
-      // budget of 0 means "not stated" and must not be sent.
+      // Every subscription brief now goes out to all experience tiers by
+      // default — the client no longer picks levels.
+      const allTiers = EXPERIENCE_LEVELS.map((l) => l.value);
+      // Single monthly budget for the chosen plan (0 / blank = not stated).
+      const bn = entry.budget.trim() ? Math.round(Number(entry.budget)) : NaN;
+      const budget = Number.isFinite(bn) && bn > 0 ? bn : undefined;
+      // Replicate across every tier so downstream per-tier consumers still
+      // resolve a number until the backend adopts the single-budget shape.
       const tierBudgets: Record<string, number> = {};
-      for (const t of tiers) {
-        const raw = entry.tierBudgets[t]?.trim();
-        const n = raw ? Math.round(Number(raw)) : NaN;
-        if (Number.isFinite(n) && n > 0) tierBudgets[t] = n;
-      }
-      const hasBudgets = Object.keys(tierBudgets).length > 0;
-      if (note || tiers.length || plan || hasBudgets) {
-        roleReqsPayload[roleToServiceTypeSlug(r)] = {
-          ...(note ? { note } : {}),
-          ...(tiers.length ? { tiers } : {}),
-          ...(plan ? { plan } : {}),
-          ...(hasBudgets ? { tier_budgets: tierBudgets } : {}),
-        };
-      }
+      if (budget !== undefined) for (const t of allTiers) tierBudgets[t] = budget;
+      roleReqsPayload[roleToServiceTypeSlug(r)] = {
+        ...(note ? { note } : {}),
+        tiers: allTiers,
+        ...(plan ? { plan } : {}),
+        ...(budget !== undefined ? { budget } : {}),
+        ...(Object.keys(tierBudgets).length ? { tier_budgets: tierBudgets } : {}),
+      };
     }
 
     setSubmitting(true);
     try {
+      // Upload the voice note first (if any) so we can send its public URL
+      // with the brief. A failed upload isn't fatal — we fall back to the
+      // typed note, which validation already guarantees is present when the
+      // voice note is absent.
+      let requirementVoiceUrl = '';
+      if (audioBlobRef.current) {
+        try {
+          requirementVoiceUrl = await uploadVoiceNote(audioBlobRef.current);
+        } catch {
+          // Non-fatal; brief still submits with the typed note.
+        }
+      }
+
       const res = await fetch('/leads/landing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -550,9 +653,11 @@ export default function ConnectBriefForm({
           email: form.email.trim(),
           phone: `${form.country_code} ${form.phone.trim()}`.trim(),
           business_location: form.business_location.trim() || undefined,
-          country_id: form.country_id,
-          state_regions: form.state_regions,
+          // Location is optional — omit country when "Anywhere" is chosen.
+          ...(form.country_id ? { country_id: form.country_id } : {}),
+          state_regions: form.country_id ? form.state_regions : [],
           languages: form.languages,
+          ...(requirementVoiceUrl ? { requirement_voice_url: requirementVoiceUrl } : {}),
           // Assignments don't use working days — send none.
           working_days: product === 'assignment' ? [] : form.working_days,
           card_type: product,
@@ -700,6 +805,22 @@ export default function ConnectBriefForm({
               </div>
             )}
 
+            {/* Selected category — always visible at the top so the client
+                (and, mirrored downstream, admin + SquadHire talent) can see
+                what this brief is for without scrolling back to Step 1. */}
+            <CategoryBanner
+              product={product}
+              roles={ROLE_OPTIONS.filter((o) => roles.includes(o.slug))}
+              onEdit={() => setStep(1)}
+            />
+
+            {/* ── GROUP 1: Business details ─────────────────────────────── */}
+            <GroupHeader
+              index={1}
+              title="Business details"
+              subtitle="Who you are and how we reach you."
+            />
+
             {/* Section: Contact (first so we can autofill on email/phone) */}
             <Section
               eyebrow="Customer"
@@ -790,15 +911,57 @@ export default function ConnectBriefForm({
                   className="connect-input resize-none"
                 />
               </Field>
-              <Field label="Location of Business" optional>
+              <Field label="Location of Business" required hint="Where your business is based — city and area.">
                 <input
                   type="text"
+                  required
                   value={form.business_location}
                   onChange={(e) => update('business_location', e.target.value)}
                   placeholder="City, area"
                   className="connect-input"
                 />
               </Field>
+            </Section>
+
+            {/* ── GROUP 2: Requirement details ──────────────────────────── */}
+            <GroupHeader
+              index={2}
+              title="Requirement details"
+              subtitle="What you need done, your budget, and who you'd like to work with."
+            />
+
+            {/* Requirement description — voice note + typed note together, so
+                the client can explain in their own words either way. Surfaced
+                to talent in SquadHire so nuance isn't lost. */}
+            <Section
+              eyebrow="Requirement"
+              title="Describe your requirement"
+              hint="Required — add at least one: record a voice note or type it out (or both). Your matched talent can listen to the voice note in their app."
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium text-[#222]">
+                    <span>Voice note</span>
+                    <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+                  </label>
+                  <AudioNote
+                    audioUrl={audioUrl}
+                    onChange={(blob, url) => {
+                      audioBlobRef.current = blob;
+                      setAudioUrl(url);
+                    }}
+                  />
+                </div>
+                <Field label="Requirement note" optional hint="Explain the kind of work you're looking to get done.">
+                  <textarea
+                    rows={3}
+                    value={requirementNote}
+                    onChange={(e) => setRequirementNote(e.target.value)}
+                    placeholder="e.g. Weekly social media creatives, one brand video a month, occasional pitch decks…"
+                    className="connect-input resize-none"
+                  />
+                </Field>
+              </div>
             </Section>
 
             {/* Section: Subscription — build-your-own-plan per role, mirroring
@@ -895,9 +1058,6 @@ export default function ConnectBriefForm({
                             <input type="date" value={req.deadline} onChange={(e) => updateRoleReq(opt.slug, 'deadline', e.target.value)} className="connect-input" />
                           </Field>
                         </div>
-                        <Field label="Scope & deliverables" optional>
-                          <textarea rows={2} value={req.note} onChange={(e) => updateRoleReq(opt.slug, 'note', e.target.value)} placeholder="Describe the project scope, deliverables, and any context." className="connect-input resize-none" />
-                        </Field>
                       </>
                       ) : (
                       <>
@@ -966,70 +1126,26 @@ export default function ConnectBriefForm({
                         </div>
                       </div>
 
-                      <div>
-                        <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
-                          <span>Experience level(s)</span>
-                          <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
-                        </label>
-                        <p className="mb-3 text-xs text-[#7A7568]">
-                          Select one or more — we&apos;ll match talent across all chosen levels. For each level you pick, tell us your monthly budget for that level.
-                        </p>
-                        <div className="space-y-2.5">
-                          {EXPERIENCE_LEVELS.map((lvl) => {
-                            const on = req.tiers.includes(lvl.value);
-                            return (
-                              <div
-                                key={lvl.value}
-                                className={`overflow-hidden rounded-xl border transition ${on ? 'border-[#0a0a0a] bg-[#F2FCBC]/50' : 'border-[#E0DCCE] bg-white'}`}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => toggleRoleReqTier(opt.slug, lvl.value)}
-                                  aria-pressed={on}
-                                  className="flex w-full items-start gap-3 p-3.5 text-left"
-                                >
-                                  <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5] bg-white'}`}>
-                                    {on && (
-                                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                      </svg>
-                                    )}
-                                  </span>
-                                  <span className="min-w-0">
-                                    <span className="block text-sm font-semibold text-[#0a0a0a]">{lvl.label}</span>
-                                    <span className="mt-0.5 block text-xs leading-relaxed text-[#7A7568]">{lvl.desc}</span>
-                                  </span>
-                                </button>
-                                {on && (
-                                  <div className="border-t border-[#E0DCCE] px-3.5 py-3 sm:pl-11">
-                                    <label className="mb-1 block text-xs font-medium text-[#222]">
-                                      Monthly budget for {lvl.label} <span className="font-normal text-[#9C9486]">(optional)</span>
-                                    </label>
-                                    <input
-                                      type="text"
-                                      inputMode="numeric"
-                                      pattern="[0-9]*"
-                                      value={req.tierBudgets[lvl.value] ?? ''}
-                                      onChange={(e) => updateRoleTierBudget(opt.slug, lvl.value, e.target.value.replace(/[^0-9]/g, ''))}
-                                      placeholder={`e.g. ${currencySymbol}25000`}
-                                      className="connect-input"
-                                    />
-                                    <p className="mt-1 text-[11px] text-[#9C9486]">How much you&apos;re willing to pay per month for this level.</p>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <Field label="Short note" optional>
-                        <textarea
-                          rows={2}
-                          value={req.note}
-                          onChange={(e) => updateRoleReq(opt.slug, 'note', e.target.value)}
-                          placeholder="Explain the kind of work you're looking to get done."
-                          className="connect-input resize-none"
+                      {/* Single monthly budget for the chosen plan. Experience
+                          tiers (Junior / Pro / Top Talent) are no longer picked
+                          here — every brief goes out to all tiers by default. */}
+                      <Field
+                        label={req.plan ? `Monthly budget for the ${req.plan} plan` : 'Monthly budget'}
+                        optional
+                        hint={
+                          req.plan
+                            ? `What you're willing to pay per month for the ${req.plan} plan. We'll match talent across all experience levels.`
+                            : 'Pick a plan above, then tell us your monthly budget for it. We’ll match talent across all experience levels.'
+                        }
+                      >
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          value={req.budget}
+                          onChange={(e) => updateRoleReq(opt.slug, 'budget', e.target.value.replace(/[^0-9]/g, ''))}
+                          placeholder={`e.g. ${currencySymbol}25000`}
+                          className="connect-input"
                         />
                       </Field>
                       </>
@@ -1046,35 +1162,54 @@ export default function ConnectBriefForm({
               title="Who you'd like to work with"
               hint="Where the talent should be based, what they should speak, and when they should work."
             >
-              <Field label="Country" required hint="India is the default. Pick a different country if your talent should be elsewhere.">
-                <select
-                  required
-                  value={form.country_id}
-                  onChange={(e) => changeCountry(e.target.value)}
-                  className="connect-input"
-                >
-                  {countries.length === 0 && <option value="">Loading…</option>}
-                  {countries.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </Field>
+              {/* Location targeting is opt-in and grouped together. Empty
+                  country/state = match talent anywhere. Picking a location
+                  narrows the language chips to that region below. */}
+              <div className="rounded-xl border border-[#E0DCCE] bg-[#FBFAF6] p-4">
+                <div className="mb-1 flex items-baseline gap-2">
+                  <h3 className="text-sm font-semibold text-[#0a0a0a]">Preferred location</h3>
+                  <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+                </div>
+                <p className="mb-4 text-xs leading-relaxed text-[#7A7568]">
+                  Want talent based in a specific place? Pick a country and state.
+                  Prefer no location constraint? Leave them empty — we&apos;ll match great talent anywhere.
+                </p>
 
-              {stateOptions.length > 0 && (
-                <ChipField
-                  label="States / regions"
-                  hint="Preferred states for the talent. Helpful when local context or culture matters."
-                  optional
-                  options={stateOptions}
-                  selected={form.state_regions}
-                  onToggle={(v) => toggle('state_regions', v)}
-                />
-              )}
+                <div className="space-y-4">
+                  <Field label="Country">
+                    <select
+                      value={form.country_id}
+                      onChange={(e) => changeCountry(e.target.value)}
+                      className="connect-input"
+                    >
+                      <option value="">Anywhere (no preference)</option>
+                      {countries.length === 0 && <option value="" disabled>Loading…</option>}
+                      {countries.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  {stateOptions.length > 0 && (
+                    <ChipField
+                      label="States / regions"
+                      hint="Narrow to specific states. Picking a state tailors the language options below to that region."
+                      options={stateOptions}
+                      selected={form.state_regions}
+                      onToggle={(v) => toggle('state_regions', v)}
+                    />
+                  )}
+                </div>
+              </div>
               <ChipField
                 label="Languages"
-                hint="Languages the talent should be fluent in. Pick all that apply."
+                hint={
+                  form.state_regions.length > 0 || selectedCountryName
+                    ? 'Required — languages the talent should be fluent in, tuned to your chosen location. Pick all that apply.'
+                    : 'Required — languages the talent should be fluent in. Pick all that apply.'
+                }
                 required
-                options={LANGUAGES}
+                options={languageOptions}
                 selected={form.languages}
                 onToggle={(v) => toggle('languages', v)}
               />
@@ -1274,6 +1409,170 @@ function PlanCompareModal({
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Sticky summary of what the brief is for — the selected service category
+// (Designer / Editor / hybrid) plus product (Subscription vs Assignment).
+// Mirrored on the admin form-creation view and SquadHire talent view so the
+// category is always the first thing anyone sees.
+function CategoryBanner({
+  product, roles, onEdit,
+}: {
+  product: 'subscription' | 'assignment';
+  roles: { slug: RoleSlug; title: string }[];
+  onEdit: () => void;
+}) {
+  return (
+    <div className="connect-category-banner">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A7568]">
+          {product === 'assignment' ? 'Assignment brief' : 'Subscription brief'} · Category
+        </p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {roles.length === 0 ? (
+            <span className="text-sm text-[#7A7568]">No category selected</span>
+          ) : (
+            roles.map((r) => (
+              <span key={r.slug} className="connect-category-chip">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                {r.title}
+              </span>
+            ))
+          )}
+        </div>
+      </div>
+      <button type="button" onClick={onEdit} className="connect-category-edit">
+        Change
+      </button>
+    </div>
+  );
+}
+
+// Big numbered divider that splits the form into its two top-level groups:
+// Business details vs Requirement details.
+function GroupHeader({
+  index, title, subtitle,
+}: { index: number; title: string; subtitle: string }) {
+  return (
+    <div className="flex items-center gap-3 pt-3">
+      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border-2 border-[#0a0a0a] bg-[#FCF487] text-sm font-extrabold text-[#0a0a0a] shadow-[2px_2px_0_0_#0a0a0a]">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <h2 className="text-lg font-bold tracking-tight text-[#0a0a0a]">{title}</h2>
+        <p className="text-xs text-[#7A7568]">{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+// Record / play / re-record a short voice note using the browser's
+// MediaRecorder. Fully client-side here — the blob is handed to the parent
+// via onChange; upload + persistence lands once the design is approved.
+function AudioNote({
+  audioUrl, onChange,
+}: {
+  audioUrl: string | null;
+  onChange: (blob: Blob | null, url: string | null) => void;
+}) {
+  const [recording, setRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [error, setError] = useState('');
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<number | null>(null);
+
+  function fmt(s: number) {
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${r.toString().padStart(2, '0')}`;
+  }
+
+  async function start() {
+    setError('');
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setError('Recording is not supported in this browser.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      rec.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        onChange(blob, url);
+        stream.getTracks().forEach((t) => t.stop());
+      };
+      rec.start();
+      recorderRef.current = rec;
+      setRecording(true);
+      setElapsed(0);
+      timerRef.current = window.setInterval(() => setElapsed((e) => e + 1), 1000);
+    } catch {
+      setError('Microphone access was blocked. Allow it and try again.');
+    }
+  }
+
+  function stop() {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setRecording(false);
+    if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
+  }
+
+  function clear() {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    onChange(null, null);
+    setElapsed(0);
+  }
+
+  useEffect(() => () => { if (timerRef.current) window.clearInterval(timerRef.current); }, []);
+
+  return (
+    <div className="rounded-xl border border-[#E0DCCE] bg-white p-4">
+      {!audioUrl && !recording && (
+        <button type="button" onClick={start} className="connect-audio-btn">
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m0 0h-3.75m3.75 0h3.75M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+          </svg>
+          Record a voice note
+        </button>
+      )}
+
+      {recording && (
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2 text-sm font-semibold text-[#0a0a0a]">
+            <span className="relative flex h-3 w-3">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#D1573B] opacity-75" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-[#D1573B]" />
+            </span>
+            Recording… {fmt(elapsed)}
+          </span>
+          <button type="button" onClick={stop} className="connect-audio-stop">
+            <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+            Stop
+          </button>
+        </div>
+      )}
+
+      {audioUrl && !recording && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <audio controls src={audioUrl} className="h-9 w-full sm:max-w-xs" />
+          <div className="flex gap-2">
+            <button type="button" onClick={start} className="connect-audio-secondary">Re-record</button>
+            <button type="button" onClick={clear} className="connect-audio-secondary connect-audio-danger">Remove</button>
+          </div>
+        </div>
+      )}
+
+      {error && <p className="mt-2 text-xs font-medium text-[#8B3A1A]">{error}</p>}
     </div>
   );
 }
@@ -1576,6 +1875,93 @@ const globalStyles = `
   padding: 14px 16px;
   box-shadow: 3px 3px 0 0 #0a0a0a;
 }
+
+/* Selected-category banner — sticky at the top of Step 2 so the brief's
+   category stays visible while scrolling. */
+.connect-category-banner {
+  position: sticky;
+  top: 8px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 2px solid #0a0a0a;
+  border-radius: 14px;
+  background: #FBFAF6;
+  padding: 12px 14px;
+  box-shadow: 3px 3px 0 0 #0a0a0a;
+}
+.connect-category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 9999px;
+  border: 1px solid #0a0a0a;
+  background: #F2FCBC;
+  padding: 3px 11px 3px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0a0a0a;
+}
+.connect-category-edit {
+  flex-shrink: 0;
+  border-radius: 9px;
+  border: 1.5px solid #0a0a0a;
+  background: #fff;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0a0a0a;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.connect-category-edit:hover { background: #F2FCBC; }
+
+/* Voice-note recorder controls */
+.connect-audio-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  border: 2px solid #0a0a0a;
+  background: #F2FCBC;
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0a0a0a;
+  box-shadow: 2px 2px 0 0 #0a0a0a;
+  cursor: pointer;
+  transition: background-color 0.15s, box-shadow 0.15s, transform 0.05s;
+}
+.connect-audio-btn:hover { background: #FCF487; box-shadow: 3px 3px 0 0 #0a0a0a; }
+.connect-audio-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 0 #0a0a0a; }
+.connect-audio-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 9px;
+  border: 2px solid #0a0a0a;
+  background: #D1573B;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+}
+.connect-audio-secondary {
+  border-radius: 9px;
+  border: 1px solid #D9D5C7;
+  background: #fff;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3A3A3A;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.connect-audio-secondary:hover { border-color: #0a0a0a; color: #0a0a0a; }
+.connect-audio-danger:hover { border-color: #C13515; color: #C13515; }
 
 /* Per-role row inside the Requirement section. Lighter than the Step 1
    role card — it's a sub-block inside an existing Section, not its own
