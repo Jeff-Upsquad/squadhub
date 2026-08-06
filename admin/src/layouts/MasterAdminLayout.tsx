@@ -25,8 +25,11 @@ function NavLink({ href, end, children }: { href: string; end?: boolean; childre
 export default function MasterAdminLayout({ children }: { children: React.ReactNode }) {
   const logout = useAuthStore((s) => s.logout);
 
+  // Bound the shell to the viewport (h-screen, not min-h-screen) so <main>'s own
+  // overflow-y-auto actually scrolls the content instead of growing the page and
+  // body-scrolling the sidebar along with it. The sidebar stays put.
   return (
-    <div className="flex min-h-screen bg-surface text-foreground">
+    <div className="flex h-screen bg-surface text-foreground">
       {/* Sidebar */}
       <aside className="flex w-56 flex-col border-r border-divider bg-surface">
         <div className="flex flex-col gap-1 border-b border-divider px-5 py-4">
@@ -37,7 +40,7 @@ export default function MasterAdminLayout({ children }: { children: React.ReactN
           </div>
           <p className="pl-8 text-[11px] text-foreground-muted">Powered by UpSquad</p>
         </div>
-        <nav className="flex-1 p-3 space-y-0.5">
+        <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-0.5">
           <NavLink href="/admin" end>
             <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
