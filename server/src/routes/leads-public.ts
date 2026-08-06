@@ -832,7 +832,8 @@ const cardSubmitSchema = z.object({
   email: z.string().trim().email().max(200),
   phone: z.string().trim().min(4).max(30),
   business_location: z.string().trim().max(500).optional().or(z.literal('')),
-  country_id: z.string().uuid(),
+  // Location is opt-in — the client can leave country empty ("Anywhere").
+  country_id: z.string().uuid().optional(),
   state_regions: z.array(z.string().trim().min(1).max(100)).max(60).default([]),
   languages: z.array(z.string().trim().min(1).max(60)).min(1).max(20),
   // Subscriptions need ≥1 working day; assignments don't use working days at
@@ -845,6 +846,7 @@ const cardSubmitSchema = z.object({
     })
     .default([]),
   requirement_note: z.string().trim().max(2000).optional().or(z.literal('')),
+  requirement_voice_url: z.string().trim().url().max(1000).optional().or(z.literal('')),
   hours_note: z.string().trim().max(200).optional().or(z.literal('')),
   // Subscription choices — the client's own selections. tiers enum-guarded so
   // they can't trip the subscription_cards.target_tiers CHECK; budget > 0 maps
@@ -905,13 +907,17 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
       return;
     }
 
-    // Validate the country (soft — fall back to the submitted id; admin can fix).
-    const { data: countryRow } = await supabaseAdmin
-      .from('countries')
-      .select('id')
-      .eq('id', body.country_id)
-      .maybeSingle();
-    const countryId: string | null = (countryRow as any)?.id ?? null;
+    // Validate the country when one was chosen (soft — location is opt-in, so
+    // an empty country simply means "match anywhere").
+    const countryId: string | null = await (async () => {
+      if (!body.country_id) return null;
+      const { data: countryRow } = await supabaseAdmin
+        .from('countries')
+        .select('id')
+        .eq('id', body.country_id)
+        .maybeSingle();
+      return (countryRow as any)?.id ?? null;
+    })();
 
     // The client's per-tier budgets → tier_pricing (each tier's proposed_price),
     // so a multi-tier publish fans out with each level's own price. Only
@@ -940,6 +946,7 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
         business_nature: body.business_nature,
         notes: body.business_note,
         requirement_note: body.requirement_note || null,
+        requirement_voice_url: body.requirement_voice_url || null,
         hours_note: body.hours_note || null,
         working_days: body.working_days,
         target_languages: body.languages,

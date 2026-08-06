@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 
 // Web has no shared component lib by design — these constants/components mirror
@@ -98,12 +98,6 @@ const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
 // plural; stored values match subscription_cards.target_tiers' CHECK.
 // Descriptions mirror the UpSquad landing page so the client knows what each
 // level means before choosing.
-const EXPERIENCE_LEVELS: { label: string; value: string; desc: string }[] = [
-  { label: 'Juniors', value: 'Junior', desc: 'Less than 2 years of experience. Great for straightforward tasks and cost-effective output.' },
-  { label: 'Pros', value: 'Pro', desc: 'More than 2 years of experience with strong, well-rounded skill sets. Reliable quality across a wide range of work.' },
-  { label: 'Top Talents', value: 'Top Talents', desc: 'Top talents with 5+ years of experience. Best for high-stakes, complex, or premium creative work.' },
-];
-
 // Same five availability bands as /connect; stored as plan_name on the card.
 const PLAN_OPTIONS: { name: string; dailyHours: number; weeklyHours: number; monthlyHours: number }[] = [
   { name: 'Starter', dailyHours: 1, weeklyHours: 5, monthlyHours: 20 },
@@ -160,7 +154,10 @@ type FormData = {
   hours_note: string;
   tiers: string[];
   plan: string;
-  // Per-tier budget as the client types it, keyed by tier value.
+  // Single monthly budget for the chosen plan (as the client types it).
+  budget: string;
+  // Per-tier budget as the client types it, keyed by tier value. Retained for
+  // prefill back-compat; the UI now captures one budget for the whole plan.
   tierBudgets: Record<string, string>;
 };
 
@@ -183,6 +180,7 @@ const emptyForm: FormData = {
   hours_note: '',
   tiers: [],
   plan: '',
+  budget: '',
   tierBudgets: {},
 };
 
@@ -197,6 +195,9 @@ export default function CardShareTokenPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+  // Optional requirement voice note (uploaded to R2 on submit).
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const audioBlobRef = useRef<Blob | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -229,6 +230,11 @@ export default function CardShareTokenPage() {
               hours_note: pf.hours_note || '',
               tiers: pf.tiers || [],
               plan: pf.plan_name || '',
+              // Collapse any prefilled per-tier budgets to one plan budget.
+              budget: (() => {
+                const vals = Object.values(pf.tier_budgets || {}).filter((v) => v > 0);
+                return vals.length ? String(vals[0]) : '';
+              })(),
               tierBudgets: Object.fromEntries(
                 Object.entries(pf.tier_budgets || {}).map(([t, v]) => [t, String(v)]),
               ),
@@ -279,14 +285,15 @@ export default function CardShareTokenPage() {
     });
   }
 
-  function updateTierBudget(tier: string, value: string) {
-    setForm((prev) => ({ ...prev, tierBudgets: { ...prev.tierBudgets, [tier]: value } }));
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
 
+    // Requirement is mandatory — a voice note OR a typed note (either is fine).
+    if (!audioBlobRef.current && !form.requirement_note.trim()) {
+      setError('Please describe your requirement — record a voice note or type it in.');
+      return;
+    }
     if (form.languages.length === 0) {
       setError('Please select at least one language.');
       return;
@@ -298,6 +305,19 @@ export default function CardShareTokenPage() {
 
     setSubmitting(true);
     try {
+      // Upload the voice note first (if any) so its URL rides with the brief.
+      let requirementVoiceUrl = '';
+      if (audioBlobRef.current) {
+        try { requirementVoiceUrl = await uploadVoiceNote(audioBlobRef.current); } catch { /* non-fatal */ }
+      }
+      // Every brief now targets all experience tiers; the single plan budget is
+      // replicated across them for the backend's per-tier pricing.
+      const allTiers = ['Junior', 'Pro', 'Top Talents'];
+      const bn = form.budget.trim() ? Math.round(Number(form.budget)) : NaN;
+      const budget = Number.isFinite(bn) && bn > 0 ? bn : undefined;
+      const tierBudgets: Record<string, number> = {};
+      if (budget !== undefined) for (const t of allTiers) tierBudgets[t] = budget;
+
       const res = await fetch(`/leads/card-link/${token}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -309,24 +329,17 @@ export default function CardShareTokenPage() {
           email: form.email.trim(),
           phone: `${form.country_code} ${form.phone.trim()}`.trim(),
           business_location: form.business_location.trim() || undefined,
-          country_id: form.country_id,
-          state_regions: form.state_regions,
+          // Location is optional — omit country when "Anywhere" is chosen.
+          ...(form.country_id ? { country_id: form.country_id } : {}),
+          state_regions: form.country_id ? form.state_regions : [],
           languages: form.languages,
           working_days: form.working_days,
           requirement_note: form.requirement_note.trim() || undefined,
+          ...(requirementVoiceUrl ? { requirement_voice_url: requirementVoiceUrl } : {}),
           hours_note: form.hours_note.trim() || undefined,
-          tiers: form.tiers,
+          tiers: allTiers,
           plan: form.plan || undefined,
-          // Per-tier budgets — only for selected tiers with a positive amount.
-          tier_budgets: Object.fromEntries(
-            form.tiers
-              .map((t) => {
-                const raw = form.tierBudgets[t]?.trim();
-                const n = raw ? Math.round(Number(raw)) : NaN;
-                return [t, Number.isFinite(n) && n > 0 ? n : null] as const;
-              })
-              .filter(([, v]) => v != null),
-          ),
+          tier_budgets: tierBudgets,
         }),
       });
       const data = await res.json();
@@ -410,12 +423,23 @@ export default function CardShareTokenPage() {
             </div>
           )}
 
-          {linkMeta.prefill?.service_type && (
-            <div className="rounded-2xl border border-[#E8E5DD] bg-white px-5 py-4 shadow-sm">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A7568]">You're requesting</p>
-              <p className="mt-1 text-lg font-semibold text-[#222]">{linkMeta.prefill.service_type}</p>
+          {/* Selected category — always on top. */}
+          <div className="connect-category-banner">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A7568]">Category</p>
+              <div className="mt-1.5">
+                <span className="connect-category-chip">
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  {linkMeta.prefill?.service_type || 'Your brief'}
+                </span>
+              </div>
             </div>
-          )}
+          </div>
+
+          {/* ── GROUP 1: Business details ─────────────────────────────── */}
+          <GroupHeader index={1} title="Business details" subtitle="Confirm who you are and how we reach you." />
 
           <Section eyebrow="About you" title="Your details" hint="Confirm how we should reach you.">
             <Field label="Contact name" required>
@@ -462,7 +486,7 @@ export default function CardShareTokenPage() {
             </Field>
           </Section>
 
-          <Section eyebrow="Your brand" title="Brand & requirement" hint="Review what we have — edit anything that's off.">
+          <Section eyebrow="Your brand" title="About your brand" hint="Review what we have — edit anything that's off.">
             <Field label="Brand / business name" required>
               <input
                 type="text"
@@ -493,22 +517,14 @@ export default function CardShareTokenPage() {
                 className="connect-input resize-none"
               />
             </Field>
-            <Field label="Business location" optional>
+            <Field label="Business location" required hint="Where your business is based — city and area.">
               <input
                 type="text"
+                required
                 value={form.business_location}
                 onChange={(e) => update('business_location', e.target.value)}
                 placeholder="City / area"
                 className="connect-input"
-              />
-            </Field>
-            <Field label="Specific requirements" optional hint="Anything specific the talent should know.">
-              <textarea
-                rows={2}
-                value={form.requirement_note}
-                onChange={(e) => update('requirement_note', e.target.value)}
-                placeholder="Tools, style, deliverables, references…"
-                className="connect-input resize-none"
               />
             </Field>
             <Field label="Hours / availability" optional>
@@ -522,10 +538,41 @@ export default function CardShareTokenPage() {
             </Field>
           </Section>
 
+          {/* ── GROUP 2: Requirement details ──────────────────────────── */}
+          <GroupHeader index={2} title="Requirement details" subtitle="What you need, your budget, and who you'd like to work with." />
+
+          <Section
+            eyebrow="Requirement"
+            title="Describe your requirement"
+            hint="Required — add at least one: record a voice note or type it out (or both). Your matched talent can listen to the voice note in their app."
+          >
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium text-[#222]">
+                  <span>Voice note</span>
+                  <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+                </label>
+                <AudioNote
+                  audioUrl={audioUrl}
+                  onChange={(blob, url) => { audioBlobRef.current = blob; setAudioUrl(url); }}
+                />
+              </div>
+              <Field label="Requirement note" optional hint="Tools, style, deliverables, references — anything specific the talent should know.">
+                <textarea
+                  rows={3}
+                  value={form.requirement_note}
+                  onChange={(e) => update('requirement_note', e.target.value)}
+                  placeholder="Describe the work you need help with"
+                  className="connect-input resize-none"
+                />
+              </Field>
+            </div>
+          </Section>
+
           <Section
             eyebrow="Subscription"
-            title="Experience level & plan"
-            hint="Confirm the talent experience, weekly plan, and a monthly budget per level. All optional — we can finalize on the call."
+            title="Plan & budget"
+            hint="Confirm the weekly plan and your monthly budget. We'll match talent across all experience levels."
           >
             <div>
               <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
@@ -579,90 +626,63 @@ export default function CardShareTokenPage() {
               </div>
             </div>
 
-            <div>
-              <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
-                <span>Experience level(s)</span>
-                <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
-              </label>
-              <p className="mb-3 text-xs text-[#7A7568]">
-                Select one or more — we&apos;ll match talent across all chosen levels. For each level you pick, tell us your monthly budget for that level.
-              </p>
-              <div className="space-y-2.5">
-                {EXPERIENCE_LEVELS.map((lvl) => {
-                  const on = form.tiers.includes(lvl.value);
-                  return (
-                    <div
-                      key={lvl.value}
-                      className={`overflow-hidden rounded-xl border transition ${on ? 'border-[#0a0a0a] bg-[#F2FCBC]/50' : 'border-[#E0DCCE] bg-white'}`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => toggle('tiers', lvl.value)}
-                        aria-pressed={on}
-                        className="flex w-full items-start gap-3 p-3.5 text-left"
-                      >
-                        <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5] bg-white'}`}>
-                          {on && (
-                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block text-sm font-semibold text-[#0a0a0a]">{lvl.label}</span>
-                          <span className="mt-0.5 block text-xs leading-relaxed text-[#7A7568]">{lvl.desc}</span>
-                        </span>
-                      </button>
-                      {on && (
-                        <div className="border-t border-[#E0DCCE] px-3.5 py-3 sm:pl-11">
-                          <label className="mb-1 block text-xs font-medium text-[#222]">
-                            Monthly budget for {lvl.label} <span className="font-normal text-[#9C9486]">(optional)</span>
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            inputMode="numeric"
-                            value={form.tierBudgets[lvl.value] ?? ''}
-                            onChange={(e) => updateTierBudget(lvl.value, e.target.value)}
-                            placeholder="e.g. ₹25000"
-                            className="connect-input"
-                          />
-                          <p className="mt-1 text-[11px] text-[#9C9486]">How much you&apos;re willing to pay per month for this level.</p>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
+            <Field
+              label={form.plan ? `Monthly budget for the ${form.plan} plan` : 'Monthly budget'}
+              optional
+              hint={
+                form.plan
+                  ? `What you're willing to pay per month for the ${form.plan} plan. We'll match talent across all experience levels.`
+                  : 'Pick a plan above, then tell us your monthly budget. We’ll match talent across all experience levels.'
+              }
+            >
+              <input
+                type="number"
+                min="0"
+                inputMode="numeric"
+                value={form.budget}
+                onChange={(e) => update('budget', e.target.value)}
+                placeholder="e.g. ₹25000"
+                className="connect-input"
+              />
+            </Field>
           </Section>
 
           <Section eyebrow="Preferences" title="Talent preferences" hint="Where the talent should be, languages, and working days.">
-            <Field label="Country" required>
-              <select
-                required
-                value={form.country_id}
-                onChange={(e) => changeCountry(e.target.value)}
-                className="connect-input"
-              >
-                <option value="">Select a country</option>
-                {countries.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </Field>
+            {/* Location targeting is opt-in and grouped. Empty = anywhere. */}
+            <div className="rounded-xl border border-[#E0DCCE] bg-[#FBFAF6] p-4">
+              <div className="mb-1 flex items-baseline gap-2">
+                <h3 className="text-sm font-semibold text-[#0a0a0a]">Preferred location</h3>
+                <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+              </div>
+              <p className="mb-4 text-xs leading-relaxed text-[#7A7568]">
+                Want talent based in a specific place? Pick a country and state.
+                Prefer no location constraint? Leave them empty — we&apos;ll match great talent anywhere.
+              </p>
+              <div className="space-y-4">
+                <Field label="Country">
+                  <select
+                    value={form.country_id}
+                    onChange={(e) => changeCountry(e.target.value)}
+                    className="connect-input"
+                  >
+                    <option value="">Anywhere (no preference)</option>
+                    {countries.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </Field>
 
-            {regionOptions.length > 0 && (
-              <ChipField
-                label="States / regions"
-                optional
-                hint="Leave empty to consider the whole country."
-                options={regionOptions}
-                selected={form.state_regions}
-                onToggle={(v) => toggle('state_regions', v)}
-              />
-            )}
+                {regionOptions.length > 0 && (
+                  <ChipField
+                    label="States / regions"
+                    hint="Narrow to specific states, or leave empty for the whole country."
+                    options={regionOptions}
+                    selected={form.state_regions}
+                    onToggle={(v) => toggle('state_regions', v)}
+                  />
+                )}
+              </div>
+            </div>
 
             <ChipField
               label="Languages"
@@ -688,6 +708,134 @@ export default function CardShareTokenPage() {
       </div>
 
       <style jsx global>{globalStyles}</style>
+    </div>
+  );
+}
+
+// Upload a recorded voice note to R2 via the public presigned-URL endpoint.
+async function uploadVoiceNote(blob: Blob): Promise<string> {
+  const contentType = blob.type || 'audio/webm';
+  const ext = contentType.includes('mp4') ? 'mp4' : contentType.includes('ogg') ? 'ogg' : 'webm';
+  const presign = await fetch('/leads/voice-upload-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: `voice-note.${ext}`, content_type: contentType }),
+  });
+  const pj = await presign.json();
+  if (!pj?.success || !pj.data?.upload_url) throw new Error('presign failed');
+  const put = await fetch(pj.data.upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: blob,
+  });
+  if (!put.ok) throw new Error('upload failed');
+  return pj.data.public_url as string;
+}
+
+function GroupHeader({ index, title, subtitle }: { index: number; title: string; subtitle: string }) {
+  return (
+    <div className="flex items-center gap-3 pt-3">
+      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border-2 border-[#0a0a0a] bg-[#FCF487] text-sm font-extrabold text-[#0a0a0a] shadow-[2px_2px_0_0_#0a0a0a]">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <h2 className="text-lg font-bold tracking-tight text-[#0a0a0a]">{title}</h2>
+        <p className="text-xs text-[#7A7568]">{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+// Record / play / re-record a short voice note using the browser MediaRecorder.
+function AudioNote({
+  audioUrl, onChange,
+}: {
+  audioUrl: string | null;
+  onChange: (blob: Blob | null, url: string | null) => void;
+}) {
+  const [recording, setRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [err, setErr] = useState('');
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<number | null>(null);
+
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+  async function start() {
+    setErr('');
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setErr('Recording is not supported in this browser.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      rec.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' });
+        onChange(blob, URL.createObjectURL(blob));
+        stream.getTracks().forEach((t) => t.stop());
+      };
+      rec.start();
+      recorderRef.current = rec;
+      setRecording(true);
+      setElapsed(0);
+      timerRef.current = window.setInterval(() => setElapsed((e) => e + 1), 1000);
+    } catch {
+      setErr('Microphone access was blocked. Allow it and try again.');
+    }
+  }
+  function stop() {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setRecording(false);
+    if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
+  }
+  function clear() {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    onChange(null, null);
+    setElapsed(0);
+  }
+  useEffect(() => () => { if (timerRef.current) window.clearInterval(timerRef.current); }, []);
+
+  return (
+    <div className="rounded-xl border border-[#E0DCCE] bg-white p-4">
+      {!audioUrl && !recording && (
+        <button type="button" onClick={start} className="connect-audio-btn">
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m0 0h-3.75m3.75 0h3.75M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+          </svg>
+          Record a voice note
+        </button>
+      )}
+      {recording && (
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2 text-sm font-semibold text-[#0a0a0a]">
+            <span className="relative flex h-3 w-3">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#D1573B] opacity-75" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-[#D1573B]" />
+            </span>
+            Recording… {fmt(elapsed)}
+          </span>
+          <button type="button" onClick={stop} className="connect-audio-stop">
+            <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+            Stop
+          </button>
+        </div>
+      )}
+      {audioUrl && !recording && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <audio controls src={audioUrl} className="h-9 w-full sm:max-w-xs" />
+          <div className="flex gap-2">
+            <button type="button" onClick={start} className="connect-audio-secondary">Re-record</button>
+            <button type="button" onClick={clear} className="connect-audio-secondary connect-audio-danger">Remove</button>
+          </div>
+        </div>
+      )}
+      {err && <p className="mt-2 text-xs font-medium text-[#8B3A1A]">{err}</p>}
     </div>
   );
 }
@@ -928,6 +1076,72 @@ const globalStyles = `
   box-shadow: 3px 3px 0 0 #c0c0c0;
   cursor: not-allowed;
 }
+.connect-category-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 2px solid #0a0a0a;
+  border-radius: 14px;
+  background: #FBFAF6;
+  padding: 12px 14px;
+  box-shadow: 3px 3px 0 0 #0a0a0a;
+}
+.connect-category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 9999px;
+  border: 1px solid #0a0a0a;
+  background: #F2FCBC;
+  padding: 3px 11px 3px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0a0a0a;
+}
+.connect-audio-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  border: 2px solid #0a0a0a;
+  background: #F2FCBC;
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0a0a0a;
+  box-shadow: 2px 2px 0 0 #0a0a0a;
+  cursor: pointer;
+  transition: background-color 0.15s, box-shadow 0.15s, transform 0.05s;
+}
+.connect-audio-btn:hover { background: #FCF487; box-shadow: 3px 3px 0 0 #0a0a0a; }
+.connect-audio-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 0 #0a0a0a; }
+.connect-audio-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 9px;
+  border: 2px solid #0a0a0a;
+  background: #D1573B;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+}
+.connect-audio-secondary {
+  border-radius: 9px;
+  border: 1px solid #D9D5C7;
+  background: #fff;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3A3A3A;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.connect-audio-secondary:hover { border-color: #0a0a0a; color: #0a0a0a; }
+.connect-audio-danger:hover { border-color: #C13515; color: #C13515; }
 .connect-chip {
   min-height: 36px;
   padding: 6px 14px;
