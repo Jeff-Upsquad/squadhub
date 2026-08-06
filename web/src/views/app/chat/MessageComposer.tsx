@@ -386,8 +386,19 @@ const MessageComposer = forwardRef<MessageComposerHandle, Props>(function Messag
 
   const submitMessage = async (skipSoloGuard = false) => {
     if (sending) return;
-    // Only member? Prompt before sending (send anyway / mention someone).
-    if (needsSoloConfirm && !skipSoloGuard && (hasText || !!pendingFile)) {
+    // Only member? Prompt before sending (send anyway / mention someone) —
+    // unless the draft already @mentions a teammate, which is exactly what the
+    // prompt would ask for. "Valid mention" is the same set the send payload
+    // uses, so a hand-typed @name (never picked from the menu) still prompts.
+    const draftMentions = editor
+      ? reconcileMentions(editor.getText(), mentionsRef.current, resolveRef.current)
+      : [];
+    if (
+      needsSoloConfirm &&
+      !skipSoloGuard &&
+      (hasText || !!pendingFile) &&
+      draftMentions.length === 0
+    ) {
       setSoloPrompt({ onConfirm: () => void submitMessage(true) });
       return;
     }
