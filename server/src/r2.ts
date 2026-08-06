@@ -75,6 +75,31 @@ export async function generateJobsUploadUrl(
   return { uploadUrl, objectKey, publicUrl };
 }
 
+// Generate a pre-signed URL for client-brief voice notes (/connect + admin
+// ClientBriefForm). Public, unauthenticated flow — the object key is
+// timestamp-prefixed and random so it isn't guessable.
+// Path: briefs/voice/<timestamp>_<rand>_<filename>
+export async function generateBriefVoiceUploadUrl(
+  filename: string,
+  contentType: string,
+): Promise<{ uploadUrl: string; objectKey: string; publicUrl: string }> {
+  const timestamp = Date.now();
+  const rand = Math.random().toString(36).slice(2, 10);
+  const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const objectKey = `briefs/voice/${timestamp}_${rand}_${safeFilename}`;
+
+  const command = new PutObjectCommand({
+    Bucket: config.r2BucketName,
+    Key: objectKey,
+    ContentType: contentType,
+  });
+
+  const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 3600 });
+  const publicUrl = `${config.r2PublicUrl}/${objectKey}`;
+
+  return { uploadUrl, objectKey, publicUrl };
+}
+
 // Generate a pre-signed URL for LMS content-block media uploads.
 // Path: lms/<item_id>/<lesson_id>/<timestamp>_<filename>
 export async function generateLmsUploadUrl(

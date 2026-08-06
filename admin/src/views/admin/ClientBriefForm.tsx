@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
@@ -209,6 +209,11 @@ export default function ClientBriefForm({
   // Assignment only: whether the card is broadcast WITH a price (talents
   // accept/decline/counter) or WITHOUT (talents submit an offer). Brief-level.
   const [pricingMode, setPricingMode] = useState<'priced' | 'unpriced'>('priced');
+  // Requirement description — voice note + typed note, brief-level (applies to
+  // every selected role).
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const audioBlobRef = useRef<Blob | null>(null);
+  const [requirementNote, setRequirementNote] = useState('');
 
   const countriesQuery = useQuery({
     queryKey: ['admin-countries'],
@@ -297,6 +302,16 @@ export default function ClientBriefForm({
 
     setSubmitting(true);
     try {
+      // Upload the requirement voice note (if any) before creating the cards.
+      let requirementVoiceUrl = '';
+      if (audioBlobRef.current) {
+        try { requirementVoiceUrl = await uploadVoiceNote(audioBlobRef.current); } catch { /* non-fatal */ }
+      }
+      const briefNote = requirementNote.trim() || undefined;
+      // Subscriptions always target all experience tiers now; assignments keep
+      // their optional per-brief tier picks.
+      const allTiers = EXPERIENCE_LEVELS.map((l) => l.value);
+
       // One card per selected role — mirrors /connect creating a card per service_type.
       await Promise.all(
         selectedRoles.map((r) => {
@@ -306,8 +321,11 @@ export default function ClientBriefForm({
             ...shared,
             service_type: r.service_type,
             card_type: product,
-            requirement_note: req.note.trim() || undefined,
-            target_tiers: req.tiers.length ? req.tiers : undefined,
+            requirement_note: briefNote,
+            ...(requirementVoiceUrl ? { requirement_voice_url: requirementVoiceUrl } : {}),
+            target_tiers: product === 'assignment'
+              ? (req.tiers.length ? req.tiers : undefined)
+              : allTiers,
             // Assignments have no weekly plan; budget is the one-time project budget.
             plan_name: product === 'assignment' ? undefined : req.plan || undefined,
             proposed_price:
@@ -445,6 +463,13 @@ export default function ClientBriefForm({
               </div>
             )}
 
+            {/* Selected category — always visible on top (mirrors /connect and
+                what the client sees). */}
+            <CategoryBanner product={product} roles={selectedRoles} onEdit={() => setStep(1)} />
+
+            {/* ── GROUP 1: Business details ─────────────────────────────── */}
+            <GroupHeader index={1} title="Business details" subtitle="Who the client is and how to reach them." />
+
             <Section
               eyebrow="Customer"
               title="Your contact"
@@ -536,6 +561,37 @@ export default function ClientBriefForm({
                   className="connect-input"
                 />
               </Field>
+            </Section>
+
+            {/* ── GROUP 2: Requirement details ──────────────────────────── */}
+            <GroupHeader index={2} title="Requirement details" subtitle="What the client needs, budget, and who they'd like to work with." />
+
+            <Section
+              eyebrow="Requirement"
+              title="Describe the requirement"
+              hint="Record a voice note, type it out, or both. Talent can listen to the voice note in SquadHire."
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium text-foreground">
+                    <span>Voice note</span>
+                    <span className="text-xs font-normal text-foreground-muted">(optional)</span>
+                  </label>
+                  <AudioNote
+                    audioUrl={audioUrl}
+                    onChange={(blob, url) => { audioBlobRef.current = blob; setAudioUrl(url); }}
+                  />
+                </div>
+                <Field label="Requirement note" optional hint="Explain the kind of work the client is looking to get done.">
+                  <textarea
+                    rows={3}
+                    value={requirementNote}
+                    onChange={(e) => setRequirementNote(e.target.value)}
+                    placeholder="e.g. Weekly social creatives, one brand video a month, occasional pitch decks…"
+                    className="connect-input resize-none"
+                  />
+                </Field>
+              </div>
             </Section>
 
             <Section
@@ -654,6 +710,9 @@ export default function ClientBriefForm({
                       </div>
                       )}
 
+                      {/* Subscriptions go out to all experience tiers by
+                          default — only assignments narrow by level. */}
+                      {product === 'assignment' && (
                       <div>
                         <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-foreground">
                           <span>Experience level(s)</span>
@@ -679,6 +738,7 @@ export default function ClientBriefForm({
                           })}
                         </div>
                       </div>
+                      )}
 
                       {product === 'assignment' ? (
                         <>
@@ -727,9 +787,13 @@ export default function ClientBriefForm({
                         </>
                       ) : (
                         <Field
-                          label="Monthly budget"
+                          label={req.plan ? `Monthly budget for the ${req.plan} plan` : 'Monthly budget'}
                           optional
-                          hint={`Your target monthly spend in ${currencySymbol}.`}
+                          hint={
+                            req.plan
+                              ? `Target monthly spend for the ${req.plan} plan in ${currencySymbol}. Matches talent across all experience levels.`
+                              : `Pick a plan above, then set the monthly budget in ${currencySymbol}. Matches talent across all experience levels.`
+                          }
                         >
                           <input
                             type="number"
@@ -742,20 +806,6 @@ export default function ClientBriefForm({
                           />
                         </Field>
                       )}
-
-                      <Field label={product === 'assignment' ? 'Scope & deliverables' : 'Short note'} optional>
-                        <textarea
-                          rows={2}
-                          value={req.note}
-                          onChange={(e) => setReq(opt.slug, 'note', e.target.value)}
-                          placeholder={
-                            product === 'assignment'
-                              ? 'Describe the project scope, deliverables, and any context.'
-                              : "Explain the kind of work you're looking to get done."
-                          }
-                          className="connect-input resize-none"
-                        />
-                      </Field>
                     </div>
                   </div>
                 );
@@ -767,29 +817,40 @@ export default function ClientBriefForm({
               title="Who you'd like to work with"
               hint="Where the talent should be based, what they should speak, and when they should work."
             >
-              <Field label="Country" optional hint="India is the default. Pick a different country if your talent should be elsewhere.">
-                <select
-                  value={form.country_id}
-                  onChange={(e) => changeCountry(e.target.value)}
-                  className="connect-input"
-                >
-                  <option value="">{countries.length === 0 ? 'Loading…' : 'Select a country'}</option>
-                  {countries.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </Field>
+              {/* Location targeting is opt-in and grouped. Empty = anywhere. */}
+              <div className="rounded-xl border border-[#E0DCCE] bg-surface p-4">
+                <div className="mb-1 flex items-baseline gap-2">
+                  <h3 className="text-sm font-semibold text-foreground">Preferred location</h3>
+                  <span className="text-xs font-normal text-foreground-muted">(optional)</span>
+                </div>
+                <p className="mb-4 text-xs leading-relaxed text-foreground-muted">
+                  Set a country and state only if the talent must be in a specific place. Leave empty to match anywhere.
+                </p>
+                <div className="space-y-4">
+                  <Field label="Country">
+                    <select
+                      value={form.country_id}
+                      onChange={(e) => changeCountry(e.target.value)}
+                      className="connect-input"
+                    >
+                      <option value="">{countries.length === 0 ? 'Loading…' : 'Anywhere (no preference)'}</option>
+                      {countries.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </Field>
 
-              {stateOptions.length > 0 && (
-                <ChipField
-                  label="States / regions"
-                  hint="Preferred states for the talent. Helpful when local context or culture matters."
-                  optional
-                  options={stateOptions}
-                  selected={form.state_regions}
-                  onToggle={(v) => toggle('state_regions', v)}
-                />
-              )}
+                  {stateOptions.length > 0 && (
+                    <ChipField
+                      label="States / regions"
+                      hint="Narrow to specific states when local context matters."
+                      options={stateOptions}
+                      selected={form.state_regions}
+                      onToggle={(v) => toggle('state_regions', v)}
+                    />
+                  )}
+                </div>
+              </div>
               <ChipField
                 label="Languages"
                 hint="Languages the talent should be fluent in. Pick all that apply."
@@ -829,6 +890,169 @@ export default function ClientBriefForm({
       })()}
 
       <style jsx global>{globalStyles}</style>
+    </div>
+  );
+}
+
+// Upload a recorded voice note to R2 via the admin presigned-URL endpoint.
+// Returns the public URL; throws on failure so the caller falls back to text.
+async function uploadVoiceNote(blob: Blob): Promise<string> {
+  const contentType = blob.type || 'audio/webm';
+  const ext = contentType.includes('mp4') ? 'mp4' : contentType.includes('ogg') ? 'ogg' : 'webm';
+  const { data } = await api.post('/admin/subscription-cards/voice-upload-url', {
+    filename: `voice-note.${ext}`,
+    content_type: contentType,
+  });
+  if (!data?.success || !data.data?.upload_url) throw new Error('presign failed');
+  const put = await fetch(data.data.upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: blob,
+  });
+  if (!put.ok) throw new Error('upload failed');
+  return data.data.public_url as string;
+}
+
+// Sticky summary of the brief's selected service category — mirrors /connect
+// and what the client sees, so admins always see what the brief is for.
+function CategoryBanner({
+  product, roles, onEdit,
+}: {
+  product: BriefProduct;
+  roles: { slug: string; title: string }[];
+  onEdit: () => void;
+}) {
+  return (
+    <div className="connect-category-banner">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground-muted">
+          {product === 'assignment' ? 'Assignment brief' : 'Subscription brief'} · Category
+        </p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {roles.length === 0 ? (
+            <span className="text-sm text-foreground-muted">No category selected</span>
+          ) : (
+            roles.map((r) => (
+              <span key={r.slug} className="connect-category-chip">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                {r.title}
+              </span>
+            ))
+          )}
+        </div>
+      </div>
+      <button type="button" onClick={onEdit} className="connect-category-edit">Change</button>
+    </div>
+  );
+}
+
+// Big numbered divider splitting the form into Business vs Requirement groups.
+function GroupHeader({ index, title, subtitle }: { index: number; title: string; subtitle: string }) {
+  return (
+    <div className="flex items-center gap-3 pt-3">
+      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border-2 border-ink bg-[#FCF487] text-sm font-extrabold text-[#0a0a0a] shadow-[2px_2px_0_0_#0a0a0a]">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <h2 className="text-lg font-bold tracking-tight text-foreground">{title}</h2>
+        <p className="text-xs text-foreground-muted">{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+// Record / play / re-record a short voice note using the browser MediaRecorder.
+function AudioNote({
+  audioUrl, onChange,
+}: {
+  audioUrl: string | null;
+  onChange: (blob: Blob | null, url: string | null) => void;
+}) {
+  const [recording, setRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [err, setErr] = useState('');
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<number | null>(null);
+
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+  async function start() {
+    setErr('');
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setErr('Recording is not supported in this browser.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      rec.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' });
+        onChange(blob, URL.createObjectURL(blob));
+        stream.getTracks().forEach((t) => t.stop());
+      };
+      rec.start();
+      recorderRef.current = rec;
+      setRecording(true);
+      setElapsed(0);
+      timerRef.current = window.setInterval(() => setElapsed((e) => e + 1), 1000);
+    } catch {
+      setErr('Microphone access was blocked. Allow it and try again.');
+    }
+  }
+  function stop() {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setRecording(false);
+    if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
+  }
+  function clear() {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    onChange(null, null);
+    setElapsed(0);
+  }
+  useEffect(() => () => { if (timerRef.current) window.clearInterval(timerRef.current); }, []);
+
+  return (
+    <div className="rounded-xl border border-[#E0DCCE] bg-surface p-4">
+      {!audioUrl && !recording && (
+        <button type="button" onClick={start} className="connect-audio-btn">
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m0 0h-3.75m3.75 0h3.75M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+          </svg>
+          Record a voice note
+        </button>
+      )}
+      {recording && (
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <span className="relative flex h-3 w-3">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#D1573B] opacity-75" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-[#D1573B]" />
+            </span>
+            Recording… {fmt(elapsed)}
+          </span>
+          <button type="button" onClick={stop} className="connect-audio-stop">
+            <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+            Stop
+          </button>
+        </div>
+      )}
+      {audioUrl && !recording && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <audio controls src={audioUrl} className="h-9 w-full sm:max-w-xs" />
+          <div className="flex gap-2">
+            <button type="button" onClick={start} className="connect-audio-secondary">Re-record</button>
+            <button type="button" onClick={clear} className="connect-audio-secondary connect-audio-danger">Remove</button>
+          </div>
+        </div>
+      )}
+      {err && <p className="mt-2 text-xs font-medium text-[#8B3A1A]">{err}</p>}
     </div>
   );
 }
@@ -1264,6 +1488,88 @@ const globalStyles = `
   padding: 14px 16px;
   box-shadow: 3px 3px 0 0 #0a0a0a;
 }
+.connect-category-banner {
+  position: sticky;
+  top: 8px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 2px solid #0a0a0a;
+  border-radius: 14px;
+  background: #FBFAF6;
+  padding: 12px 14px;
+  box-shadow: 3px 3px 0 0 #0a0a0a;
+}
+.connect-category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 9999px;
+  border: 1px solid #0a0a0a;
+  background: #F2FCBC;
+  padding: 3px 11px 3px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0a0a0a;
+}
+.connect-category-edit {
+  flex-shrink: 0;
+  border-radius: 9px;
+  border: 1.5px solid #0a0a0a;
+  background: #fff;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0a0a0a;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.connect-category-edit:hover { background: #F2FCBC; }
+.connect-audio-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  border: 2px solid #0a0a0a;
+  background: #F2FCBC;
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0a0a0a;
+  box-shadow: 2px 2px 0 0 #0a0a0a;
+  cursor: pointer;
+  transition: background-color 0.15s, box-shadow 0.15s, transform 0.05s;
+}
+.connect-audio-btn:hover { background: #FCF487; box-shadow: 3px 3px 0 0 #0a0a0a; }
+.connect-audio-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 0 #0a0a0a; }
+.connect-audio-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 9px;
+  border: 2px solid #0a0a0a;
+  background: #D1573B;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+}
+.connect-audio-secondary {
+  border-radius: 9px;
+  border: 1px solid #D9D5C7;
+  background: #fff;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3A3A3A;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.connect-audio-secondary:hover { border-color: #0a0a0a; color: #0a0a0a; }
+.connect-audio-danger:hover { border-color: #C13515; color: #C13515; }
 .connect-role-req {
   background: #FBFAF6;
   border: 1px solid #E8E5DD;

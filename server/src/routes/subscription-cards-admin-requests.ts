@@ -16,6 +16,7 @@ import {
 import { config } from '../config';
 import { logCardEvent } from '../utils/cardEvents';
 import { ensureHubContact } from '../utils/leadLookup';
+import { generateBriefVoiceUploadUrl } from '../r2';
 
 const router = Router();
 
@@ -434,6 +435,7 @@ const clientBriefSchema = z.object({
   languages: z.array(z.string()).optional().default([]),
   working_days: z.array(z.string()).optional().default([]),
   requirement_note: z.string().optional(),
+  requirement_voice_url: z.string().url().max(1000).optional(),
   hours_note: z.string().optional(),
   // Build-your-own-subscription: experience level(s), weekly plan, and the
   // client's stated monthly budget. Enum-guarded so target_tiers can't trip
@@ -456,6 +458,23 @@ const clientBriefSchema = z.object({
   // an offer (accept/decline/counter); 'unpriced' invites talents to submit
   // their own offer. Stored in assignment_details.pricing_mode.
   pricing_mode: z.enum(['priced', 'unpriced']).optional(),
+});
+
+// POST /admin/subscription-cards/voice-upload-url — presigned R2 PUT URL for
+// the admin brief form's requirement voice note (same storage as /connect).
+router.post('/subscription-cards/voice-upload-url', async (req: Request, res: Response) => {
+  try {
+    const filename = String(req.body?.filename || 'voice-note.webm').slice(0, 200);
+    const contentType = String(req.body?.content_type || '');
+    if (!/^audio\/[a-z0-9.+-]+$/i.test(contentType)) {
+      res.status(400).json({ success: false, error: 'content_type must be an audio MIME type' });
+      return;
+    }
+    const { uploadUrl, publicUrl } = await generateBriefVoiceUploadUrl(filename, contentType);
+    res.json({ success: true, data: { upload_url: uploadUrl, public_url: publicUrl } });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Could not prepare upload.' });
+  }
 });
 
 router.post('/subscription-cards/client-brief', async (req: Request, res: Response) => {
@@ -504,6 +523,7 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
         business_nature: body.business_nature || null,
         notes: body.business_note || null,
         requirement_note: body.requirement_note || null,
+        requirement_voice_url: body.requirement_voice_url || null,
         hours_note: body.hours_note || null,
         target_tiers: body.target_tiers || [],
         // Assignment cards have no weekly plan; proposed_price is the one-time
