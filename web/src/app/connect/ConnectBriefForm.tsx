@@ -1485,6 +1485,7 @@ function AudioNote({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   function fmt(s: number) {
     const m = Math.floor(s / 60);
@@ -1492,10 +1493,33 @@ function AudioNote({
     return `${m}:${r.toString().padStart(2, '0')}`;
   }
 
+  // In-browser recording needs a secure context + getUserMedia. Many mobile
+  // in-app browsers / WebViews don't grant the mic — the file/native-recorder
+  // fallback below covers those.
+  const canRecord =
+    typeof navigator !== 'undefined' &&
+    !!navigator.mediaDevices?.getUserMedia &&
+    (typeof window === 'undefined' || window.isSecureContext);
+
+  function pickFile() {
+    setError('');
+    fileInputRef.current?.click();
+  }
+
+  function onFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('audio/')) { setError('Please choose an audio file.'); return; }
+    setError('');
+    onChange(file, URL.createObjectURL(file));
+  }
+
   async function start() {
     setError('');
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setError('Recording is not supported in this browser.');
+    if (!canRecord) {
+      // No in-browser recording here — hand off to the OS recorder/file picker.
+      pickFile();
       return;
     }
     try {
@@ -1514,8 +1538,15 @@ function AudioNote({
       setRecording(true);
       setElapsed(0);
       timerRef.current = window.setInterval(() => setElapsed((e) => e + 1), 1000);
-    } catch {
-      setError('Microphone access was blocked. Allow it and try again.');
+    } catch (e) {
+      const name = (e as { name?: string })?.name || '';
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        setError('Microphone permission is off. Allow it in your browser settings — or use “Upload audio” to record with your phone instead.');
+      } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+        setError('No microphone found. Use “Upload audio” to attach a recording instead.');
+      } else {
+        setError('Couldn’t start recording here. Use “Upload audio” to record with your phone instead.');
+      }
     }
   }
 
@@ -1536,13 +1567,17 @@ function AudioNote({
 
   return (
     <div className="rounded-xl border border-[#E0DCCE] bg-white p-4">
+      <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={onFilePicked} />
       {!audioUrl && !recording && (
-        <button type="button" onClick={start} className="connect-audio-btn">
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m0 0h-3.75m3.75 0h3.75M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
-          </svg>
-          Record a voice note
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={start} className="connect-audio-btn">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m0 0h-3.75m3.75 0h3.75M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+            </svg>
+            Record a voice note
+          </button>
+          <button type="button" onClick={pickFile} className="connect-audio-secondary">Upload audio</button>
+        </div>
       )}
 
       {recording && (

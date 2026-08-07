@@ -976,13 +976,35 @@ function AudioNote({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
+  // In-browser recording needs a secure context + getUserMedia. The file /
+  // native-recorder fallback below covers browsers/WebViews that don't grant it.
+  const canRecord =
+    typeof navigator !== 'undefined' &&
+    !!navigator.mediaDevices?.getUserMedia &&
+    (typeof window === 'undefined' || window.isSecureContext);
+
+  function pickFile() {
+    setErr('');
+    fileInputRef.current?.click();
+  }
+
+  function onFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('audio/')) { setErr('Please choose an audio file.'); return; }
+    setErr('');
+    onChange(file, URL.createObjectURL(file));
+  }
+
   async function start() {
     setErr('');
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setErr('Recording is not supported in this browser.');
+    if (!canRecord) {
+      pickFile();
       return;
     }
     try {
@@ -1000,8 +1022,15 @@ function AudioNote({
       setRecording(true);
       setElapsed(0);
       timerRef.current = window.setInterval(() => setElapsed((e) => e + 1), 1000);
-    } catch {
-      setErr('Microphone access was blocked. Allow it and try again.');
+    } catch (e) {
+      const name = (e as { name?: string })?.name || '';
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        setErr('Microphone permission is off. Allow it — or use “Upload audio” to attach a recording instead.');
+      } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+        setErr('No microphone found. Use “Upload audio” to attach a recording instead.');
+      } else {
+        setErr('Couldn’t start recording here. Use “Upload audio” to attach a recording instead.');
+      }
     }
   }
   function stop() {
@@ -1019,13 +1048,17 @@ function AudioNote({
 
   return (
     <div className="rounded-xl border border-[#E0DCCE] bg-surface p-4">
+      <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={onFilePicked} />
       {!audioUrl && !recording && (
-        <button type="button" onClick={start} className="connect-audio-btn">
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m0 0h-3.75m3.75 0h3.75M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
-          </svg>
-          Record a voice note
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={start} className="connect-audio-btn">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m0 0h-3.75m3.75 0h3.75M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+            </svg>
+            Record a voice note
+          </button>
+          <button type="button" onClick={pickFile} className="connect-audio-secondary">Upload audio</button>
+        </div>
       )}
       {recording && (
         <div className="flex items-center justify-between gap-3">
