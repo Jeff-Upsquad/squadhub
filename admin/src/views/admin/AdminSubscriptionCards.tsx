@@ -24,6 +24,8 @@ export type AdminSubscriptionCard = {
   brand_name: string | null;
   business_nature: string | null;
   notes: string | null;
+  requirement_note?: string | null;
+  requirement_voice_url?: string | null;
   target_tiers: string[];
   min_experience_years: number;
   target_languages: string[];
