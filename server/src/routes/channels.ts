@@ -520,6 +520,55 @@ async function assertWorkspaceMember(userId: string, workspaceId: string): Promi
   return !!data;
 }
 
+/**
+ * A qualified lead's chat is physically carried onto its spawned deal (CRM does
+ * the re-link at conversion). Resolve a lead entity to its current deal so
+ * SquadHub opens the one carried-forward channel — never a stale lead. Refreshes
+ * the label/subtitle to the deal when it hops.
+ */
+async function canonicalizeCrmEntity(
+  entityType: CrmEntityType,
+  entityId: string,
+  workspaceId: string,
+  label: string,
+  subtitle: string | null,
+): Promise<{ entityType: CrmEntityType; entityId: string; label: string; subtitle: string | null }> {
+  if (entityType !== 'crm_lead') return { entityType, entityId, label, subtitle };
+  const { data: deal } = await supabaseAdmin
+    .from('crm_deals')
+    .select('id, name, status')
+    .eq('workspace_id', workspaceId)
+    .eq('source_lead_id', entityId)
+    .limit(1)
+    .maybeSingle();
+  if (!deal?.id) return { entityType, entityId, label, subtitle };
+  return {
+    entityType: 'crm_deal',
+    entityId: deal.id as string,
+    label: ((deal.name as string | null) || '').trim() || label,
+    subtitle: deal.status ? `Deal · ${deal.status}` : 'Deal',
+  };
+}
+
+/** The contact a linked CRM channel belongs to (deal/lead → contact_id; contact → itself). */
+async function resolveCrmContactId(
+  linkedType: string | null,
+  linkedId: string | null,
+  workspaceId: string,
+): Promise<string | null> {
+  if (!linkedType || !linkedId) return null;
+  if (linkedType === 'crm_contact') return linkedId;
+  const table = linkedType === 'crm_deal' ? 'crm_deals' : linkedType === 'crm_lead' ? 'crm_leads' : null;
+  if (!table) return null;
+  const { data } = await supabaseAdmin
+    .from(table)
+    .select('contact_id, workspace_id')
+    .eq('id', linkedId)
+    .maybeSingle();
+  if (!data || data.workspace_id !== workspaceId) return null;
+  return (data.contact_id as string | null) ?? null;
+}
+
 /** Grant membership to specific users only (CRM chats: opener/assignee/@mention). */
 async function grantChannelMembers(channelId: string, userIds: string[]): Promise<void> {
   const unique = [...new Set(userIds.filter(Boolean))];
@@ -552,11 +601,20 @@ router.post('/crm/ensure', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
+    // Open a qualified lead's chat on its deal, not the stale lead.
+    const { entityType, entityId, label, subtitle } = await canonicalizeCrmEntity(
+      body.entity_type,
+      body.entity_id,
+      body.workspace_id,
+      body.label,
+      body.subtitle ?? null,
+    );
+
     const { data: existing } = await supabaseAdmin
       .from('channels')
       .select('*')
-      .eq('linked_resource_type', body.entity_type)
-      .eq('linked_resource_id', body.entity_id)
+      .eq('linked_resource_type', entityType)
+      .eq('linked_resource_id', entityId)
       .is('deleted_at', null)
       .maybeSingle();
 
@@ -565,8 +623,8 @@ router.post('/crm/ensure', requireAuth, async (req: Request, res: Response) => {
       await supabaseAdmin
         .from('channels')
         .update({
-          linked_label: body.label,
-          linked_subtitle: body.subtitle ?? null,
+          linked_label: label,
+          linked_subtitle: subtitle,
         })
         .eq('id', existing.id);
       // Opener only here; CRM ensure adds assignee. Mentions add others.
@@ -582,21 +640,21 @@ router.post('/crm/ensure', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    const base = slugifyChannelName(body.label);
+    const base = slugifyChannelName(label);
     // Keep channel names unique within the workspace (append entity id fragment).
-    const name = (`${base}-${body.entity_id.slice(0, 8)}`).slice(0, 80) || 'crm-chat';
+    const name = (`${base}-${entityId.slice(0, 8)}`).slice(0, 80) || 'crm-chat';
     const { data: created, error } = await supabaseAdmin
       .from('channels')
       .insert({
         workspace_id: body.workspace_id,
         name,
-        description: body.subtitle || `CRM team chat: ${body.label}`,
+        description: subtitle || `CRM team chat: ${label}`,
         is_private: true,
         created_by: req.userId,
-        linked_resource_type: body.entity_type,
-        linked_resource_id: body.entity_id,
-        linked_label: body.label,
-        linked_subtitle: body.subtitle ?? null,
+        linked_resource_type: entityType,
+        linked_resource_id: entityId,
+        linked_label: label,
+        linked_subtitle: subtitle,
       })
       .select()
       .single();
@@ -607,8 +665,8 @@ router.post('/crm/ensure', requireAuth, async (req: Request, res: Response) => {
         const { data: raced } = await supabaseAdmin
           .from('channels')
           .select('*')
-          .eq('linked_resource_type', body.entity_type)
-          .eq('linked_resource_id', body.entity_id)
+          .eq('linked_resource_type', entityType)
+          .eq('linked_resource_id', entityId)
           .is('deleted_at', null)
           .maybeSingle();
         if (raced) {
@@ -726,6 +784,128 @@ router.get('/crm', requireAuth, async (req: Request, res: Response) => {
     res.json({ success: true, data: items });
   } catch (err) {
     console.error('List CRM chats error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /channels/crm/group?workspace_id=&channel_id= — sibling CRM chats for the
+// same contact as channel_id, so the user can switch between the chats on a
+// contact's different leads/deals. Only chats the user is a member of.
+router.get('/crm/group', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspace_id as string;
+    const channelId = req.query.channel_id ? String(req.query.channel_id) : null;
+    if (!workspaceId || !channelId) {
+      res.status(400).json({ success: false, error: 'workspace_id and channel_id are required' });
+      return;
+    }
+    if (!(await assertWorkspaceMember(req.userId!, workspaceId))) {
+      res.status(403).json({ success: false, error: 'Not a member of this workspace' });
+      return;
+    }
+
+    const { data: base } = await supabaseAdmin
+      .from('channels')
+      .select('id, name, linked_resource_type, linked_resource_id, linked_label, linked_subtitle')
+      .eq('id', channelId)
+      .eq('workspace_id', workspaceId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (!base) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const contactId = await resolveCrmContactId(
+      base.linked_resource_type as string | null,
+      base.linked_resource_id as string | null,
+      workspaceId,
+    );
+    if (!contactId) {
+      res.json({
+        success: true,
+        data: [
+          {
+            channel_id: base.id,
+            channel_name: base.name,
+            entity_type: base.linked_resource_type as CrmEntityType,
+            entity_id: base.linked_resource_id as string,
+            label: (base.linked_label as string) || base.name,
+            subtitle: (base.linked_subtitle as string) || null,
+            last_message_at: null,
+            active: true,
+          },
+        ],
+      });
+      return;
+    }
+
+    const [{ data: leads }, { data: deals }] = await Promise.all([
+      supabaseAdmin.from('crm_leads').select('id').eq('workspace_id', workspaceId).eq('contact_id', contactId),
+      supabaseAdmin.from('crm_deals').select('id').eq('workspace_id', workspaceId).eq('contact_id', contactId),
+    ]);
+    const entityIds = [
+      ...new Set<string>([
+        contactId,
+        ...((leads || []).map((l) => l.id as string)),
+        ...((deals || []).map((d) => d.id as string)),
+      ]),
+    ];
+
+    const { data: channels } = await supabaseAdmin
+      .from('channels')
+      .select('id, name, linked_resource_type, linked_resource_id, linked_label, linked_subtitle')
+      .eq('workspace_id', workspaceId)
+      .in('linked_resource_type', CRM_ENTITY_TYPES)
+      .in('linked_resource_id', entityIds)
+      .is('deleted_at', null);
+    if (!channels?.length) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const ids = channels.map((c) => c.id as string);
+    const { data: memberships } = await supabaseAdmin
+      .from('resource_memberships')
+      .select('resource_id')
+      .eq('resource_type', 'channel')
+      .eq('user_id', req.userId!)
+      .in('resource_id', ids);
+    const memberSet = new Set((memberships || []).map((m) => m.resource_id as string));
+
+    const { data: latestMsgs } = await supabaseAdmin
+      .from('messages')
+      .select('channel_id, created_at')
+      .in('channel_id', ids)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: false });
+    const lastAt = new Map<string, string>();
+    for (const m of latestMsgs || []) {
+      const cid = m.channel_id as string;
+      if (!lastAt.has(cid)) lastAt.set(cid, m.created_at as string);
+    }
+
+    const group = channels
+      .filter((c) => memberSet.has(c.id as string))
+      .map((c) => ({
+        channel_id: c.id,
+        channel_name: c.name,
+        entity_type: c.linked_resource_type as CrmEntityType,
+        entity_id: c.linked_resource_id as string,
+        label: (c.linked_label as string) || c.name,
+        subtitle: (c.linked_subtitle as string) || null,
+        last_message_at: lastAt.get(c.id as string) ?? null,
+        active: (c.id as string) === channelId,
+      }))
+      .sort((a, b) => {
+        const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+        const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+        return tb - ta;
+      });
+
+    res.json({ success: true, data: group });
+  } catch (err) {
+    console.error('CRM chat group error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

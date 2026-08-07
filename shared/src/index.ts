@@ -111,6 +111,18 @@ export interface CrmChatListItem {
   last_message_preview: string | null;
 }
 
+/** One entry in a contact's CRM-chat group (the side-panel switcher). */
+export interface CrmChatGroupItem {
+  channel_id: string;
+  channel_name: string;
+  entity_type: CrmChatEntityType;
+  entity_id: string;
+  label: string;
+  subtitle: string | null;
+  last_message_at: string | null;
+  active: boolean;
+}
+
 // ---- Messages ----
 export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'file';
 
