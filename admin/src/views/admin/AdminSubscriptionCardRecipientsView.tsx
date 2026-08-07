@@ -1258,6 +1258,26 @@ export default function AdminSubscriptionCardRecipientsView({
             </div>
           </div>
         </div>
+
+        {/* Requirement — the client's brief note + recorded voice note (if any).
+            Same content talent see on their accept/decline card. */}
+        {(card.requirement_note || card.requirement_voice_url) && (
+          <div className="sh-card mt-4 p-5">
+            <h4 className="sh-section-heading mb-3">Requirement</h4>
+            {card.requirement_note && (
+              <p className="whitespace-pre-line text-sm text-[var(--color-sh-ink)]">{card.requirement_note}</p>
+            )}
+            {card.requirement_voice_url && (
+              <div className={`flex items-center gap-2 rounded-lg border border-[var(--color-sh-warm-border)] px-3 py-2 ${card.requirement_note ? 'mt-3' : ''}`}>
+                <svg className="h-4 w-4 flex-shrink-0 text-[var(--color-sh-ink-faint)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m0 0h-3.75m3.75 0h3.75M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                </svg>
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <audio controls preload="none" src={card.requirement_voice_url} className="h-9 w-full" />
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Stat cards + tabs + list */}
