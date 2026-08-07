@@ -545,7 +545,7 @@ export default function AdminCardEditor({
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center sh-surface">
+      <div className="flex min-h-0 flex-1 items-center justify-center sh-surface">
         <p className="text-sm text-[var(--color-sh-ink-faint)]">Loading card…</p>
       </div>
     );
@@ -553,7 +553,7 @@ export default function AdminCardEditor({
 
   if (!card) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 sh-surface">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 sh-surface">
         <p className="text-sm text-[var(--color-sh-ink-faint)]">Card not found.</p>
         <button onClick={onClose} className="sh-btn-ghost sh-btn-ghost-sm">Go back</button>
       </div>
@@ -561,9 +561,14 @@ export default function AdminCardEditor({
   }
 
   return (
-    <div className="flex h-full flex-col sh-surface">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 pt-6 pb-4">
+    // Root takes remaining space (flex-1/min-h-0), not h-full, so on desktop it
+    // fits beside the still-visible New Deals list header instead of overflowing.
+    <div className="flex min-h-0 flex-1 flex-col sh-surface">
+      {/* Header + form share ONE scroll region so they scroll together, contained
+          within the content area — the outer app shell/sidebar never scrolls. */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-6 pb-4">
         <div className="space-y-2">
           <button onClick={onClose} className="sh-btn-ghost sh-btn-ghost-sm">
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -657,7 +662,7 @@ export default function AdminCardEditor({
       />
 
       {/* Form */}
-      <div className="flex-1 overflow-y-auto px-6 pb-10">
+      <div className="px-6 pb-10">
         <div className="mx-auto max-w-3xl space-y-6">
           {/* Publish Settings */}
           <Section title="Publish Settings">
@@ -1304,6 +1309,7 @@ export default function AdminCardEditor({
           </Section>
 
         </div>
+      </div>
       </div>
     </div>
   );
