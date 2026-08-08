@@ -99,6 +99,7 @@ interface CardData {
   squadhire_category_ids: string[] | null;
   target_country_ids: string[];
   target_regions: { country_id: string; region: string }[];
+  created_by_user?: { id: string; display_name: string | null; email: string | null } | null;
 }
 
 interface Deliverable {
@@ -594,6 +595,14 @@ export default function AdminCardEditor({
               </span>
             )}
           </h1>
+          {card.source === 'internal_brief' && (
+            <p className="text-sm font-medium text-[var(--color-sh-ink-muted)]">
+              Filled out by{' '}
+              {card.created_by_user?.display_name ||
+                card.created_by_user?.email ||
+                'a team member'}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {isEditable && (
