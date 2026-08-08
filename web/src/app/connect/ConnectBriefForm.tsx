@@ -1,6 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+
+// Imperative handle the parent form uses to flush a still-running recording at
+// submit time — so forgetting to press Stop can't drop the voice note.
+type AudioNoteHandle = { flush: () => Promise<void> };
 
 // Kept in sync with admin/locationLanguageOptions.ts.
 // Inlined here because /web has no /admin dependency by design.
@@ -365,6 +369,7 @@ export default function ConnectBriefForm({
   // storage column comes after the design is approved.
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const audioBlobRef = useRef<Blob | null>(null);
+  const audioNoteRef = useRef<AudioNoteHandle>(null);
   // Typed requirement description — the text companion to the voice note.
   // Brief-level (applies across every selected role); sent as each role's note.
   const [requirementNote, setRequirementNote] = useState('');
@@ -553,6 +558,10 @@ export default function ConnectBriefForm({
       return;
     }
     setError('');
+
+    // If the client is still mid-recording, capture it now so forgetting to
+    // press Stop doesn't silently drop the voice note.
+    await audioNoteRef.current?.flush();
 
     // Requirement is mandatory — a voice note OR a typed note (either is fine).
     if (!audioBlobRef.current && !requirementNote.trim()) {
@@ -954,6 +963,7 @@ export default function ConnectBriefForm({
                     <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
                   </label>
                   <AudioNote
+                    ref={audioNoteRef}
                     audioUrl={audioUrl}
                     onChange={(blob, url) => {
                       audioBlobRef.current = blob;
@@ -1482,12 +1492,10 @@ function GroupHeader({
 // Record / play / re-record a short voice note using the browser's
 // MediaRecorder. Fully client-side here — the blob is handed to the parent
 // via onChange; upload + persistence lands once the design is approved.
-function AudioNote({
-  audioUrl, onChange,
-}: {
+const AudioNote = forwardRef<AudioNoteHandle, {
   audioUrl: string | null;
   onChange: (blob: Blob | null, url: string | null) => void;
-}) {
+}>(function AudioNote({ audioUrl, onChange }, ref) {
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState('');
@@ -1495,6 +1503,8 @@ function AudioNote({
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Resolved by onstop once a flush()-triggered stop has committed the blob.
+  const flushResolveRef = useRef<(() => void) | null>(null);
 
   function fmt(s: number) {
     const m = Math.floor(s / 60);
@@ -1541,6 +1551,12 @@ function AudioNote({
         const url = URL.createObjectURL(blob);
         onChange(blob, url);
         stream.getTracks().forEach((t) => t.stop());
+        // A flush() is awaiting this stop — release it now the blob is committed.
+        if (flushResolveRef.current) {
+          const resolve = flushResolveRef.current;
+          flushResolveRef.current = null;
+          resolve();
+        }
       };
       rec.start();
       recorderRef.current = rec;
@@ -1574,6 +1590,20 @@ function AudioNote({
 
   useEffect(() => () => { if (timerRef.current) window.clearInterval(timerRef.current); }, []);
 
+  // Parent calls this at submit: if a recording is still running, stop it and
+  // wait for the blob to commit before the form reads it. Otherwise no-op.
+  useImperativeHandle(ref, () => ({
+    flush: () =>
+      new Promise<void>((resolve) => {
+        if (recorderRef.current) {
+          flushResolveRef.current = resolve;
+          stop();
+        } else {
+          resolve();
+        }
+      }),
+  }), []);
+
   return (
     <div className="rounded-xl border border-[#E0DCCE] bg-white p-4">
       <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={onFilePicked} />
@@ -1606,12 +1636,20 @@ function AudioNote({
       )}
 
       {audioUrl && !recording && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-          <audio controls src={audioUrl} className="h-9 w-full sm:max-w-xs" />
-          <div className="flex gap-2">
-            <button type="button" onClick={start} className="connect-audio-secondary">Re-record</button>
-            <button type="button" onClick={clear} className="connect-audio-secondary connect-audio-danger">Remove</button>
+        <div className="space-y-2">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-[#2E7D32]">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+            Voice note attached — it&apos;ll be sent with your brief.
+          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <audio controls src={audioUrl} className="h-9 w-full sm:max-w-xs" />
+            <div className="flex gap-2">
+              <button type="button" onClick={start} className="connect-audio-secondary">Re-record</button>
+              <button type="button" onClick={clear} className="connect-audio-secondary connect-audio-danger">Remove</button>
+            </div>
           </div>
         </div>
       )}
@@ -1619,7 +1657,7 @@ function AudioNote({
       {error && <p className="mt-2 text-xs font-medium text-[#8B3A1A]">{error}</p>}
     </div>
   );
-}
+});
 
 function Section({
   eyebrow, title, hint, children,
