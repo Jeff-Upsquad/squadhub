@@ -1,10 +1,22 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import { isValidStoredPhone, normalizeStoredPhone } from '@squadhub/shared';
 import { supabaseAdmin } from '../supabase';
 import { ensureHubContact } from '../utils/leadLookup';
 import { generateBriefVoiceUploadUrl } from '../r2';
 
 const router = Router();
+
+/** Required phone: normalize leading trunk 0s, then enforce country length. */
+const phoneSchema = z
+  .string()
+  .trim()
+  .min(4)
+  .max(30)
+  .transform((v) => normalizeStoredPhone(v))
+  .refine((v) => isValidStoredPhone(v), {
+    message: 'Enter a valid phone number (10 digits for India)',
+  });
 
 // Map the form's service_type slug back to the upsquad-style display label
 // the rest of the system already uses (AdminCardEditor + plan resolution
@@ -263,7 +275,8 @@ async function upsertBrandForLead(
 router.get('/lookup', ipRateLimit, async (req: Request, res: Response) => {
   try {
     const email = typeof req.query.email === 'string' ? req.query.email.trim() : '';
-    const phone = typeof req.query.phone === 'string' ? req.query.phone.trim() : '';
+    const phoneRaw = typeof req.query.phone === 'string' ? req.query.phone.trim() : '';
+    const phone = phoneRaw ? normalizeStoredPhone(phoneRaw) : '';
 
     if (!email && !phone) {
       res.json({ success: true, data: { found: false, lead: null, brands: [] } });
@@ -323,7 +336,7 @@ const submissionSchema = z.object({
   business_note: z.string().trim().min(1).max(2000),
   contact_name: z.string().trim().min(1).max(200),
   email: z.string().trim().email().max(200),
-  phone: z.string().trim().min(4).max(30),
+  phone: phoneSchema,
   business_location: z.string().trim().max(500).optional().or(z.literal('')),
   // Location is opt-in now — the client can leave country empty ("Anywhere").
   country_id: z.string().uuid().optional(),
@@ -838,7 +851,7 @@ const cardSubmitSchema = z.object({
   business_note: z.string().trim().min(1).max(2000),
   contact_name: z.string().trim().min(1).max(200),
   email: z.string().trim().email().max(200),
-  phone: z.string().trim().min(4).max(30),
+  phone: phoneSchema,
   business_location: z.string().trim().max(500).optional().or(z.literal('')),
   // Location is opt-in — the client can leave country empty ("Anywhere").
   country_id: z.string().uuid().optional(),

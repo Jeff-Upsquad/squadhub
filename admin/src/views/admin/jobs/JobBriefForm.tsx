@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  formatStoredPhone,
+  normalizeNationalNumber,
+  splitStoredPhone,
+} from '@squadhub/shared';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 
@@ -92,7 +97,7 @@ export default function JobBriefForm({
         const r = await api.get('/admin/job-cards/lead-lookup', {
           params: {
             email: hasEmail ? e : undefined,
-            phone: hasPhone ? `${countryCode} ${phone.trim()}` : undefined,
+            phone: hasPhone ? formatStoredPhone(countryCode, phone) : undefined,
           },
         });
         const d = r.data?.data;
@@ -108,15 +113,9 @@ export default function JobBriefForm({
         if (!cur.businessLocation.trim() && d.business_location) setBusinessLocation(d.business_location);
         if (!cur.countryId && d.country_id) setCountryId(d.country_id);
         if (!cur.phone.trim() && d.phone) {
-          // Split a stored "+91 98…" into the cc select + number input when
-          // the code is one we render; otherwise drop the whole string in.
-          const known = COUNTRY_CODES.find((c) => String(d.phone).trim().startsWith(c.code));
-          if (known) {
-            setCountryCode(known.code);
-            setPhone(String(d.phone).trim().slice(known.code.length).trim());
-          } else {
-            setPhone(String(d.phone).trim());
-          }
+          const parts = splitStoredPhone(d.phone);
+          setCountryCode(parts.code);
+          setPhone(normalizeNationalNumber(parts.number, parts.code));
         }
       } catch {
         // soft-fail: autofill is a convenience, never an error state
@@ -155,7 +154,7 @@ export default function JobBriefForm({
         contact_name: contactName.trim() || undefined,
         business_name: businessName.trim() || undefined,
         email: email.trim() || undefined,
-        phone: phone.trim() ? `${countryCode} ${phone.trim()}`.trim() : undefined,
+        phone: phone.trim() ? formatStoredPhone(countryCode, phone) : undefined,
         business_location: businessLocation.trim() || undefined,
         country_id: countryId || undefined,
         brief_note: briefNote.trim() || undefined,
@@ -250,13 +249,29 @@ export default function JobBriefForm({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Phone" hint="Ideally a WhatsApp number">
                 <div className="hire-phone">
-                  <select value={countryCode} onChange={(e) => setCountryCode(e.target.value)} className="hire-phone-cc" aria-label="Country code">
+                  <select
+                    value={countryCode}
+                    onChange={(e) => {
+                      const code = e.target.value;
+                      setCountryCode(code);
+                      setPhone((prev) => normalizeNationalNumber(prev, code));
+                    }}
+                    className="hire-phone-cc"
+                    aria-label="Country code"
+                  >
                     {COUNTRY_CODES.map((c) => (
                       <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
                     ))}
                   </select>
                   <span className="hire-phone-divider" />
-                  <input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" className="hire-phone-input" />
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    value={phone}
+                    onChange={(e) => setPhone(normalizeNationalNumber(e.target.value, countryCode))}
+                    placeholder="Phone number"
+                    className="hire-phone-input"
+                  />
                 </div>
               </Field>
               <Field label="Email">

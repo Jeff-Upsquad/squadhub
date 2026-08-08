@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import {
+  formatStoredPhone,
+  isValidNationalNumber,
+  normalizeNationalNumber,
+} from '@squadhub/shared';
 
 type OnboardCountry = { id: string; name: string; currency: 'INR' | 'USD'; sort_order: number };
 type SalesPerson = { id: string; display_name: string; email: string; avatar_url: string | null };
@@ -119,6 +124,14 @@ export default function OnboardTokenPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    if (!isValidNationalNumber(form.contact_number, form.country_code)) {
+      setError(
+        form.country_code === '+91'
+          ? 'Enter a valid 10-digit phone number.'
+          : 'Enter a valid phone number.',
+      );
+      return;
+    }
     setSubmitting(true);
 
     try {
@@ -129,7 +142,7 @@ export default function OnboardTokenPage() {
           business_name: form.business_name,
           contact_person: form.contact_person,
           designation: form.designation || undefined,
-          contact_number: form.contact_number,
+          contact_number: formatStoredPhone(form.country_code, form.contact_number),
           email: form.email,
           business_address: form.business_address,
           gst_registered: form.gst_registered,
@@ -259,13 +272,32 @@ export default function OnboardTokenPage() {
 
           <Field label="Contact Number" required helper="Ideally a WhatsApp number">
             <div className="phone-group" style={{ display: 'flex', alignItems: 'center', border: '1px solid #B0B0B0', borderRadius: 8, overflow: 'hidden', transition: 'border-color 0.2s, box-shadow 0.2s' }}>
-              <select value={form.country_code} onChange={(e) => update('country_code', e.target.value)} style={{ appearance: 'none', WebkitAppearance: 'none', border: 'none', outline: 'none', background: '#F7F7F7', padding: '10px 28px 10px 12px', fontSize: 15, color: '#222', cursor: 'pointer' }}>
+              <select
+                value={form.country_code}
+                onChange={(e) => {
+                  const code = e.target.value;
+                  setForm((prev) => ({
+                    ...prev,
+                    country_code: code,
+                    contact_number: normalizeNationalNumber(prev.contact_number, code),
+                  }));
+                }}
+                style={{ appearance: 'none', WebkitAppearance: 'none', border: 'none', outline: 'none', background: '#F7F7F7', padding: '10px 28px 10px 12px', fontSize: 15, color: '#222', cursor: 'pointer' }}
+              >
                 {COUNTRY_CODES.map((c) => (
                   <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
                 ))}
               </select>
               <div style={{ width: 1, height: 24, background: '#DDDDDD', flexShrink: 0 }} />
-              <input type="tel" required placeholder="Phone number" value={form.contact_number} onChange={(e) => update('contact_number', e.target.value)} style={{ flex: 1, border: 'none', outline: 'none', padding: '10px 12px', fontSize: 16, color: '#222', background: 'transparent' }} />
+              <input
+                type="tel"
+                inputMode="numeric"
+                required
+                placeholder="Phone number"
+                value={form.contact_number}
+                onChange={(e) => update('contact_number', normalizeNationalNumber(e.target.value, form.country_code))}
+                style={{ flex: 1, border: 'none', outline: 'none', padding: '10px 12px', fontSize: 16, color: '#222', background: 'transparent' }}
+              />
             </div>
           </Field>
 

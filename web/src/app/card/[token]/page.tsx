@@ -2,6 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
+import {
+  formatStoredPhone,
+  isValidNationalNumber,
+  normalizeNationalNumber,
+  splitStoredPhone,
+} from '@squadhub/shared';
 
 // Web has no shared component lib by design — these constants/components mirror
 // the /connect brief form so a shared link looks identical to the form the
@@ -68,19 +74,6 @@ const COUNTRY_CODES = [
   { code: '+86', flag: '🇨🇳' },
 ];
 
-// Phone is stored as "+91 9447402340". Split by longest-matching prefix; +91 fallback.
-function splitPhone(stored: string | null | undefined): { code: string; number: string } {
-  const fallback = { code: '+91', number: '' };
-  if (!stored) return fallback;
-  const trimmed = stored.trim();
-  const sorted = [...COUNTRY_CODES].sort((a, b) => b.code.length - a.code.length);
-  for (const c of sorted) {
-    if (trimmed.startsWith(c.code)) {
-      return { code: c.code, number: trimmed.slice(c.code.length).trim() };
-    }
-  }
-  return { code: fallback.code, number: trimmed };
-}
 
 function expiryLabel(iso?: string): string {
   if (!iso) return '';
@@ -212,7 +205,7 @@ export default function CardShareTokenPage() {
           setLinkMeta(data.data);
           const pf: Prefill | undefined = data.data.prefill;
           if (data.data.valid && pf) {
-            const phone = splitPhone(pf.phone);
+            const phone = splitStoredPhone(pf.phone);
             setForm({
               brand_name: pf.brand_name || '',
               business_nature: pf.business_nature || '',
@@ -220,7 +213,7 @@ export default function CardShareTokenPage() {
               contact_name: pf.contact_name || '',
               email: pf.email || '',
               country_code: phone.code,
-              phone: phone.number,
+              phone: normalizeNationalNumber(phone.number, phone.code),
               business_location: pf.business_location || '',
               country_id: pf.country_id || '',
               state_regions: pf.state_regions || [],
@@ -302,6 +295,14 @@ export default function CardShareTokenPage() {
       setError('Please select at least one working day.');
       return;
     }
+    if (!isValidNationalNumber(form.phone, form.country_code)) {
+      setError(
+        form.country_code === '+91'
+          ? 'Enter a valid 10-digit phone number.'
+          : 'Enter a valid phone number.',
+      );
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -337,7 +338,7 @@ export default function CardShareTokenPage() {
           business_note: form.business_note.trim(),
           contact_name: form.contact_name.trim(),
           email: form.email.trim(),
-          phone: `${form.country_code} ${form.phone.trim()}`.trim(),
+          phone: formatStoredPhone(form.country_code, form.phone),
           business_location: form.business_location.trim() || undefined,
           // Location is optional — omit country when "Anywhere" is chosen.
           ...(form.country_id ? { country_id: form.country_id } : {}),
@@ -476,7 +477,14 @@ export default function CardShareTokenPage() {
               <div className="connect-phone">
                 <select
                   value={form.country_code}
-                  onChange={(e) => update('country_code', e.target.value)}
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    setForm((prev) => ({
+                      ...prev,
+                      country_code: code,
+                      phone: normalizeNationalNumber(prev.phone, code),
+                    }));
+                  }}
                   className="connect-phone-cc"
                 >
                   {COUNTRY_CODES.map((c) => (
@@ -486,9 +494,10 @@ export default function CardShareTokenPage() {
                 <div className="connect-phone-divider" />
                 <input
                   type="tel"
+                  inputMode="numeric"
                   required
                   value={form.phone}
-                  onChange={(e) => update('phone', e.target.value)}
+                  onChange={(e) => update('phone', normalizeNationalNumber(e.target.value, form.country_code))}
                   placeholder="Phone number"
                   className="connect-phone-input"
                 />

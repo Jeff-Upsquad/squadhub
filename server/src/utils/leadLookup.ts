@@ -4,6 +4,7 @@ import {
   resolveSquadhireBusiness,
   copyExternalLinksToClient,
 } from './clientExternalLinks';
+import { normalizeStoredPhone } from '@squadhub/shared';
 
 /**
  * Lead (client_submissions) lookup + find-or-create by contact identity.
@@ -92,11 +93,12 @@ export interface FindOrCreateSubmissionInput {
 export async function findOrCreateSubmissionByContact(
   input: FindOrCreateSubmissionInput,
 ): Promise<any | null> {
-  const existing = await findSubmissionByContact(input.email, input.phone);
+  const phone = input.phone?.trim() ? normalizeStoredPhone(input.phone) : null;
+  const existing = await findSubmissionByContact(input.email, phone);
   if (existing) return existing;
 
   // Need at least one contact identity to create a meaningful lead.
-  if (!input.email?.trim() && !phoneSuffix(input.phone)) return null;
+  if (!input.email?.trim() && !phoneSuffix(phone)) return null;
 
   let countryId: string | null = null;
   if (input.country_id) {
@@ -125,7 +127,7 @@ export async function findOrCreateSubmissionByContact(
     .insert({
       business_name: input.business_name?.trim() || input.contact_name?.trim() || 'Unknown business',
       contact_person: input.contact_name?.trim() || 'Unknown',
-      contact_number: input.phone?.trim() || '',
+      contact_number: phone || '',
       email: input.email?.trim().toLowerCase() || '',
       business_address: input.business_location?.trim() || null,
       country_id: countryId,

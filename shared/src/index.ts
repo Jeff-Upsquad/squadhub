@@ -3,6 +3,16 @@
 // Used by both the server and web frontend
 // ============================================================
 
+export {
+  KNOWN_CALLING_CODES,
+  normalizeNationalNumber,
+  formatStoredPhone,
+  splitStoredPhone,
+  normalizeStoredPhone,
+  isValidNationalNumber,
+  isValidStoredPhone,
+} from './phone';
+
 // ---- Users ----
 export type UserType = 'internal' | 'client' | 'client_staff' | 'partner' | 'partner_employee';
 

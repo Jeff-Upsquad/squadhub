@@ -2,6 +2,10 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  formatStoredPhone,
+  normalizeNationalNumber,
+} from '@squadhub/shared';
 import api from '@/services/api';
 import { showToast } from '@/components/Toast';
 import { STATES_BY_COUNTRY_NAME, LANGUAGE_OPTIONS } from './locationLanguageOptions';
@@ -295,7 +299,7 @@ export default function ClientBriefForm({
       // Send undefined (not "") when blank — the backend's email() check
       // would otherwise reject an empty string.
       email: form.email.trim() || undefined,
-      phone: form.phone.trim() ? `${form.country_code} ${form.phone.trim()}`.trim() : undefined,
+      phone: form.phone.trim() ? formatStoredPhone(form.country_code, form.phone) : undefined,
       business_location: form.business_location.trim() || undefined,
       country_id: form.country_id || undefined,
       state_regions: form.state_regions,
@@ -504,7 +508,14 @@ export default function ClientBriefForm({
                   <div className="connect-phone">
                     <select
                       value={form.country_code}
-                      onChange={(e) => update('country_code', e.target.value)}
+                      onChange={(e) => {
+                        const code = e.target.value;
+                        setForm((prev) => ({
+                          ...prev,
+                          country_code: code,
+                          phone: normalizeNationalNumber(prev.phone, code),
+                        }));
+                      }}
                       className="connect-phone-cc"
                       aria-label="Country code"
                     >
@@ -515,9 +526,9 @@ export default function ClientBriefForm({
                     <span className="connect-phone-divider" />
                     <input
                       type="tel"
-                      inputMode="tel"
+                      inputMode="numeric"
                       value={form.phone}
-                      onChange={(e) => update('phone', e.target.value)}
+                      onChange={(e) => update('phone', normalizeNationalNumber(e.target.value, form.country_code))}
                       placeholder="Phone number"
                       className="connect-phone-input"
                     />

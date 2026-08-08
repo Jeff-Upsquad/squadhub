@@ -1,6 +1,12 @@
 'use client';
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import {
+  formatStoredPhone,
+  isValidNationalNumber,
+  normalizeNationalNumber,
+  splitStoredPhone,
+} from '@squadhub/shared';
 
 // Imperative handle the parent form uses to flush a still-running recording at
 // submit time — so forgetting to press Stop can't drop the voice note.
@@ -155,20 +161,7 @@ function rolesToServiceTypes(roles: RoleSlug[]): ServiceType[] {
   return roles.length > 0 ? ['accountant'] : [];
 }
 
-// Phone is stored as "+91 9447402340". Split on autofill by longest-matching
-// prefix in COUNTRY_CODES; fallback to +91.
-function splitPhone(stored: string | null | undefined): { code: string; number: string } {
-  const fallback = { code: '+91', number: '' };
-  if (!stored) return fallback;
-  const trimmed = stored.trim();
-  const sorted = [...COUNTRY_CODES].sort((a, b) => b.code.length - a.code.length);
-  for (const c of sorted) {
-    if (trimmed.startsWith(c.code)) {
-      return { code: c.code, number: trimmed.slice(c.code.length).trim() };
-    }
-  }
-  return { code: fallback.code, number: trimmed };
-}
+// Phone helpers live in @squadhub/shared (normalize leading 0 / digit caps).
 
 type FormData = {
   brand_name: string;
@@ -280,7 +273,7 @@ export default function AccountantBriefForm({
     const phoneDigits = form.phone.replace(/\D/g, '');
     const phoneOk = phoneDigits.length >= 7;
     if (!emailOk && !phoneOk) return;
-    const phoneForLookup = phoneOk ? `${form.country_code} ${form.phone.trim()}`.trim() : '';
+    const phoneForLookup = phoneOk ? formatStoredPhone(form.country_code, form.phone) : '';
     const key = `${emailOk ? form.email.trim().toLowerCase() : ''}|${phoneForLookup}`;
     if (key === lastLookupKeyRef.current) return;
     lastLookupKeyRef.current = key;
@@ -302,13 +295,14 @@ export default function AccountantBriefForm({
         setPrefilledFromLead((already) => {
           if (already) return true;
 
-          const phoneParts = splitPhone(lead.phone);
+          const phoneParts = splitStoredPhone(lead.phone);
+          const national = normalizeNationalNumber(phoneParts.number, phoneParts.code);
           setForm((prev) => ({
             ...prev,
             contact_name: prev.contact_name || lead.contact_name || '',
             email: prev.email || lead.email || '',
             country_code: prev.phone ? prev.country_code : phoneParts.code,
-            phone: prev.phone || phoneParts.number,
+            phone: prev.phone || national,
             // Brand + talent prefs from the most recent brand (if any).
             brand_name: brand?.brand_name || prev.brand_name,
             business_nature: brand?.business_nature || prev.business_nature,
@@ -445,6 +439,14 @@ export default function AccountantBriefForm({
       setError('Please pick at least one working day.');
       return;
     }
+    if (!isValidNationalNumber(form.phone, form.country_code)) {
+      setError(
+        form.country_code === '+91'
+          ? 'Enter a valid 10-digit phone number.'
+          : 'Enter a valid phone number.',
+      );
+      return;
+    }
 
     // Single 'accountant' card. The engagement note becomes its requirement
     // note, and the build-your-own choices (tiers / plan or timeline / budget)
@@ -526,7 +528,7 @@ export default function AccountantBriefForm({
           business_note: form.business_note.trim(),
           contact_name: form.contact_name.trim(),
           email: form.email.trim(),
-          phone: `${form.country_code} ${form.phone.trim()}`.trim(),
+          phone: formatStoredPhone(form.country_code, form.phone),
           business_location: form.business_location.trim() || undefined,
           // Location is optional — omit country when "Anywhere" is chosen.
           ...(form.country_id ? { country_id: form.country_id } : {}),
@@ -705,7 +707,14 @@ export default function AccountantBriefForm({
                   <div className="connect-phone">
                     <select
                       value={form.country_code}
-                      onChange={(e) => update('country_code', e.target.value)}
+                      onChange={(e) => {
+                        const code = e.target.value;
+                        setForm((prev) => ({
+                          ...prev,
+                          country_code: code,
+                          phone: normalizeNationalNumber(prev.phone, code),
+                        }));
+                      }}
                       className="connect-phone-cc"
                       aria-label="Country code"
                     >
@@ -717,9 +726,9 @@ export default function AccountantBriefForm({
                     <input
                       type="tel"
                       required
-                      inputMode="tel"
+                      inputMode="numeric"
                       value={form.phone}
-                      onChange={(e) => update('phone', e.target.value)}
+                      onChange={(e) => update('phone', normalizeNationalNumber(e.target.value, form.country_code))}
                       placeholder="Phone number"
                       className="connect-phone-input"
                     />
