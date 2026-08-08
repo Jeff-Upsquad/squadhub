@@ -396,11 +396,15 @@ const submissionSchema = z.object({
 // directly, then sends the returned publicUrl back in /landing.
 const voiceUploadSchema = z.object({
   filename: z.string().trim().min(1).max(200).optional().default('voice-note.webm'),
+  // Browsers hand us parameterised MIMEs (`audio/webm;codecs=opus`). Drop the
+  // parameters before validating/signing so the base type is what R2 signs the
+  // presigned PUT against (the client uploads with the same base type).
   content_type: z
     .string()
     .trim()
-    .regex(/^audio\/[a-z0-9.+-]+$/i, 'content_type must be an audio MIME type')
-    .max(100),
+    .max(100)
+    .transform((s) => s.split(';')[0].trim())
+    .refine((s) => /^audio\/[a-z0-9.+-]+$/i.test(s), 'content_type must be an audio MIME type'),
 });
 
 router.post('/voice-upload-url', ipRateLimit, async (req: Request, res: Response) => {
@@ -580,19 +584,20 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
 
       const roleReq = body.role_requirements?.[slug];
 
-      // Per-tier budgets → tier_pricing (each tier's proposed_price), so a
-      // multi-tier publish fans out with each level's own price. proposed_price
-      // mirrors the single-tier case for back-compat (CHECK allows NULL or > 0).
+      // The client's stated per-tier budget is REFERENCE only — it lands in
+      // tier_pricing.<tier>.client_budget (and the scalar client_budget for a
+      // single tier), never proposed_price. The admin sets the proposed price
+      // themselves in the New Deals editor before publishing.
       const roleTiers = roleReq?.tiers || [];
       const roleTierBudgets = roleReq?.tier_budgets || {};
       // markup null = inherit the plan catalog margin (no per-card adjustment yet).
-      const roleTierPricing: Record<string, { proposed_price: number; markup: number | null }> = {};
+      const roleTierPricing: Record<string, { markup: number | null; client_budget: number }> = {};
       for (const tier of roleTiers) {
         const b = roleTierBudgets[tier];
-        if (typeof b === 'number' && b > 0) roleTierPricing[tier] = { proposed_price: b, markup: null };
+        if (typeof b === 'number' && b > 0) roleTierPricing[tier] = { markup: null, client_budget: b };
       }
-      const roleSingleProposed =
-        roleTiers.length === 1 ? roleTierPricing[roleTiers[0]]?.proposed_price ?? null : null;
+      const roleSingleBudget =
+        roleTiers.length === 1 ? roleTierPricing[roleTiers[0]]?.client_budget ?? null : null;
 
       const { data: card, error } = await supabaseAdmin
         .from('subscription_cards')
@@ -618,16 +623,19 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
                   pricing_mode: roleReq?.pricing_mode || 'priced',
                 }
               : null,
-          // Subscriptions: per-tier budgets → tier_pricing (multi-tier fan-out).
+          // Subscriptions: per-tier client budgets → tier_pricing (reference).
           // Assignments don't use per-tier pricing.
           tier_pricing: body.card_type === 'assignment' ? {} : roleTierPricing,
-          // chk_proposed_price requires NULL or > 0. Assignment: the single
-          // project budget; subscription: the single-tier proposed price
-          // (multi-tier publishes from tier_pricing). 0 ("not stated") → NULL.
+          // Assignment: the single project budget IS the proposed/offer price
+          // shown to talents. Subscription: proposed_price is left for the admin
+          // to set — the client's stated budget lives in client_budget instead.
+          // chk_proposed_price requires NULL or > 0, so 0 → NULL.
           proposed_price:
             body.card_type === 'assignment'
               ? (roleReq?.budget && roleReq.budget > 0 ? roleReq.budget : null)
-              : roleSingleProposed,
+              : null,
+          // Subscription only: the client's stated monthly budget (reference).
+          client_budget: body.card_type === 'assignment' ? null : roleSingleBudget,
           working_days: body.working_days,
           customer_name: body.contact_name,
           customer_email: body.email,

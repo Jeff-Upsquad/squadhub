@@ -465,7 +465,9 @@ const clientBriefSchema = z.object({
 router.post('/subscription-cards/voice-upload-url', async (req: Request, res: Response) => {
   try {
     const filename = String(req.body?.filename || 'voice-note.webm').slice(0, 200);
-    const contentType = String(req.body?.content_type || '');
+    // Drop MIME parameters (`audio/webm;codecs=opus`) so the base type is what
+    // R2 signs the presigned PUT against — matching the client's PUT header.
+    const contentType = String(req.body?.content_type || '').split(';')[0].trim();
     if (!/^audio\/[a-z0-9.+-]+$/i.test(contentType)) {
       res.status(400).json({ success: false, error: 'content_type must be an audio MIME type' });
       return;
@@ -526,12 +528,19 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
         requirement_voice_url: body.requirement_voice_url || null,
         hours_note: body.hours_note || null,
         target_tiers: body.target_tiers || [],
-        // Assignment cards have no weekly plan; proposed_price is the one-time
-        // project budget. chk_proposed_price requires NULL or > 0, so coerce 0
-        // ("no budget stated") to NULL rather than fail the insert.
+        // Assignment cards have no weekly plan; their budget IS the one-time
+        // proposed/offer price. Subscriptions leave proposed_price for the admin
+        // to set — the client's stated budget is reference only (client_budget).
+        // chk constraints require NULL or > 0, so coerce 0 ("not stated") → NULL.
         plan_name: body.card_type === 'assignment' ? null : body.plan_name || null,
         proposed_price:
-          body.proposed_price && body.proposed_price > 0 ? body.proposed_price : null,
+          body.card_type === 'assignment' && body.proposed_price && body.proposed_price > 0
+            ? body.proposed_price
+            : null,
+        client_budget:
+          body.card_type !== 'assignment' && body.proposed_price && body.proposed_price > 0
+            ? body.proposed_price
+            : null,
         card_type: body.card_type,
         assignment_details:
           body.card_type === 'assignment'
@@ -671,6 +680,9 @@ const editCardSchema = z.object({
         proposed_price: z.number().int().min(0),
         markup: z.number().int().min(0).nullable().optional(),
         subscription_price: z.number().int().positive().nullable().optional(),
+        // The client's stated budget for this tier — reference only, carried
+        // through so an editor save doesn't wipe it from the JSONB entry.
+        client_budget: z.number().int().positive().nullable().optional(),
       }),
     )
     .optional(),
