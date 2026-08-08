@@ -36,6 +36,17 @@ async function requireTaskAccess(userId: string, taskId: string, level: 'viewer'
   return listId;
 }
 
+// HTTP headers must be Latin-1. Build a Content-Disposition that keeps an
+// ASCII fallback `filename=` plus RFC 5987 `filename*=` for the real name
+// (Mac screenshots often include non-ASCII spaces/dashes that crash Node
+// with ERR_INVALID_CHAR if stuffed into a plain quoted filename).
+function attachmentContentDisposition(fileName: string): string {
+  const raw = (fileName || 'attachment').replace(/[\r\n"]/g, '_');
+  const ascii = raw.replace(/[^\x20-\x7E]/g, '_').trim() || 'attachment';
+  const encoded = encodeURIComponent(raw).replace(/['()]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
+
 // GET /pm/tasks/:taskId/attachments
 router.get('/tasks/:taskId/attachments', async (req: Request, res: Response) => {
   try {
@@ -251,9 +262,9 @@ router.get('/task-attachments/:id/download', async (req: Request, res: Response)
       return;
     }
 
-    const filename = String(row.file_name || 'attachment').replace(/["\\\r\n]/g, '_');
+    const filename = String(row.file_name || 'attachment');
     res.setHeader('Content-Type', obj.ContentType || row.mime_type || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', attachmentContentDisposition(filename));
     res.setHeader('Cache-Control', 'private, no-store');
     if (obj.ContentLength != null) {
       res.setHeader('Content-Length', String(obj.ContentLength));
