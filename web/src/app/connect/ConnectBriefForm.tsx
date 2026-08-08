@@ -632,16 +632,21 @@ export default function ConnectBriefForm({
 
     setSubmitting(true);
     try {
-      // Upload the voice note first (if any) so we can send its public URL
-      // with the brief. A failed upload isn't fatal — we fall back to the
-      // typed note, which validation already guarantees is present when the
-      // voice note is absent.
+      // Upload the voice note first (if any) so we can send its public URL with
+      // the brief. If the client recorded one, a failed upload must NOT be
+      // swallowed — silently dropping it means the note is lost with nobody the
+      // wiser. Surface it and stop so they can retry (or remove it and submit
+      // with just the typed note).
       let requirementVoiceUrl = '';
       if (audioBlobRef.current) {
         try {
           requirementVoiceUrl = await uploadVoiceNote(audioBlobRef.current);
-        } catch {
-          // Non-fatal; brief still submits with the typed note.
+        } catch (e) {
+          console.error('voice note upload failed', e);
+          setError(
+            'Your voice note couldn’t be uploaded. Please check your connection and try again — or remove the voice note to submit with just the typed note.',
+          );
+          return;
         }
       }
 

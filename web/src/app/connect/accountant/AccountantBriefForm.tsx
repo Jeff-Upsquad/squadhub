@@ -493,9 +493,19 @@ export default function AccountantBriefForm({
     setSubmitting(true);
     try {
       // Upload the voice note first (if any) so its URL rides with the brief.
+      // A failed upload must not be swallowed — surface it and stop so the note
+      // isn't silently lost.
       let requirementVoiceUrl = '';
       if (audioBlobRef.current) {
-        try { requirementVoiceUrl = await uploadVoiceNote(audioBlobRef.current); } catch { /* non-fatal */ }
+        try {
+          requirementVoiceUrl = await uploadVoiceNote(audioBlobRef.current);
+        } catch (e) {
+          console.error('voice note upload failed', e);
+          setError(
+            'Your voice note couldn’t be uploaded. Please check your connection and try again — or remove the voice note to submit with just the typed note.',
+          );
+          return;
+        }
       }
       const res = await fetch('/leads/landing', {
         method: 'POST',

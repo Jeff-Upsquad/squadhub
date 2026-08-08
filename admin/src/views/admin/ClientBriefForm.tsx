@@ -303,9 +303,20 @@ export default function ClientBriefForm({
     setSubmitting(true);
     try {
       // Upload the requirement voice note (if any) before creating the cards.
+      // Don't swallow a failed upload — surface it and stop so the note isn't
+      // silently dropped from the brief.
       let requirementVoiceUrl = '';
       if (audioBlobRef.current) {
-        try { requirementVoiceUrl = await uploadVoiceNote(audioBlobRef.current); } catch { /* non-fatal */ }
+        try {
+          requirementVoiceUrl = await uploadVoiceNote(audioBlobRef.current);
+        } catch (e) {
+          console.error('voice note upload failed', e);
+          const msg =
+            'The voice note couldn’t be uploaded. Check your connection and try again, or remove it to submit without the voice note.';
+          setError(msg);
+          showToast(msg, 'error');
+          return;
+        }
       }
       const briefNote = requirementNote.trim() || undefined;
       // Subscriptions always target all experience tiers now; assignments keep
