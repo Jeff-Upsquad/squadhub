@@ -497,7 +497,7 @@ function BrandCard({ brand, countries }: { brand: ClientSubmissionBrand; countri
   // cards that actually have something to display, so the section stays
   // tight when contacts skip the optional fields.
   const cards = (brand.cards || []).filter(
-    (c) => c.requirement_note || c.hours_note,
+    (c) => c.requirement_note || c.requirement_voice_url || c.hours_note,
   );
   // Fallback to the legacy brand-level requirement_note for older rows
   // that pre-date the per-role split (migration 083 onwards).
@@ -533,6 +533,18 @@ function BrandCard({ brand, countries }: { brand: ClientSubmissionBrand; countri
                   {(c.service_type && CARD_SERVICE_TYPE_LABEL[c.service_type]) || c.service_type || 'Role'}
                 </p>
                 {c.requirement_note && <InfoRow label="Requirement" value={c.requirement_note} />}
+                {c.requirement_voice_url && (
+                  <div className="border-b border-divider pb-2">
+                    <span className="text-xs text-foreground-dim">Voice note</span>
+                    {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                    <audio
+                      controls
+                      preload="none"
+                      src={c.requirement_voice_url}
+                      className="mt-1.5 h-9 w-full"
+                    />
+                  </div>
+                )}
                 {c.hours_note && <InfoRow label="Hours" value={c.hours_note} />}
               </div>
             ))}
