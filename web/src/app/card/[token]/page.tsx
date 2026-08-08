@@ -306,9 +306,19 @@ export default function CardShareTokenPage() {
     setSubmitting(true);
     try {
       // Upload the voice note first (if any) so its URL rides with the brief.
+      // A failed upload must not be swallowed — silently dropping it means the
+      // note is lost with nobody the wiser.
       let requirementVoiceUrl = '';
       if (audioBlobRef.current) {
-        try { requirementVoiceUrl = await uploadVoiceNote(audioBlobRef.current); } catch { /* non-fatal */ }
+        try {
+          requirementVoiceUrl = await uploadVoiceNote(audioBlobRef.current);
+        } catch (e) {
+          console.error('voice note upload failed', e);
+          setError(
+            'Your voice note couldn’t be uploaded. Please check your connection and try again — or remove the voice note to submit with just the typed note.',
+          );
+          return;
+        }
       }
       // Every brief now targets all experience tiers; the single plan budget is
       // replicated across them for the backend's per-tier pricing.
@@ -714,7 +724,10 @@ export default function CardShareTokenPage() {
 
 // Upload a recorded voice note to R2 via the public presigned-URL endpoint.
 async function uploadVoiceNote(blob: Blob): Promise<string> {
-  const contentType = blob.type || 'audio/webm';
+  // MediaRecorder blobs carry a parameterised MIME like `audio/webm;codecs=opus`.
+  // R2 signs the presigned PUT against the exact Content-Type — strip params so
+  // the base type is used for both the presign request and the PUT header.
+  const contentType = (blob.type || 'audio/webm').split(';')[0].trim() || 'audio/webm';
   const ext = contentType.includes('mp4') ? 'mp4' : contentType.includes('ogg') ? 'ogg' : 'webm';
   const presign = await fetch('/leads/voice-upload-url', {
     method: 'POST',

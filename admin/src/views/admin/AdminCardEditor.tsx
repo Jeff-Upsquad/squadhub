@@ -1308,8 +1308,8 @@ export default function AdminCardEditor({
                   className="sh-input resize-none"
                 />
               </Field>
-              {requirementVoiceUrl && (
-                <Field label="Requirement Voice Note">
+              <Field label="Requirement Voice Note" optional>
+                {requirementVoiceUrl ? (
                   <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
                     <svg className="h-4 w-4 flex-shrink-0 text-foreground-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m0 0h-3.75m3.75 0h3.75M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
@@ -1317,8 +1317,10 @@ export default function AdminCardEditor({
                     {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                     <audio controls src={requirementVoiceUrl} className="h-9 w-full" />
                   </div>
-                </Field>
-              )}
+                ) : (
+                  <p className="text-sm text-foreground-muted">No voice note was submitted with this brief.</p>
+                )}
+              </Field>
               <Field label="Hours" optional>
                 <input
                   type="text"
