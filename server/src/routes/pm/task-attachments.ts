@@ -4,13 +4,16 @@ import { supabaseAdmin } from '../../supabase';
 import { requireAuth } from '../../middleware/auth';
 import { requireUserType } from '../../middleware/userType';
 import { checkResourceAccess, meetsAccessLevel } from '../../middleware/permissions';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import { config } from '../../config';
 import {
   TASK_ATTACHMENT_MAX_BYTES,
   generateTaskUploadUrl,
-  generateR2DownloadUrl,
   headR2Object,
   deleteR2Object,
+  r2Client,
 } from '../../r2';
 import { PARTNER_USER_TYPES } from '@squadhub/shared';
 import { logTaskActivity } from '../../utils/taskActivity';
@@ -212,16 +215,17 @@ router.post('/task-attachments/confirm', async (req: Request, res: Response) => 
   }
 });
 
-// GET /pm/task-attachments/:id/download — short-lived signed GET URL with
-// Content-Disposition: attachment so the browser downloads the file under its
-// original name instead of rendering it inline (images/PDFs especially).
+// GET /pm/task-attachments/:id/download — streams the file through our API with
+// Content-Disposition: attachment. Same-origin + auth beats public R2 URLs,
+// which browsers render inline (and whose CORS often blocks a client-side blob
+// save, so the old path fell back to opening a new tab).
 router.get('/task-attachments/:id/download', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
 
     const { data: row, error: fetchErr } = await supabaseAdmin
       .from('task_attachments')
-      .select('id, task_id, object_key, file_name')
+      .select('id, task_id, object_key, file_name, mime_type')
       .eq('id', id)
       .single();
 
@@ -236,11 +240,31 @@ router.get('/task-attachments/:id/download', async (req: Request, res: Response)
       return;
     }
 
-    const url = await generateR2DownloadUrl(row.object_key, 3600, row.file_name);
-    res.json({ success: true, data: { url, expires_in: 3600 } });
+    const obj = await r2Client.send(
+      new GetObjectCommand({
+        Bucket: config.r2BucketName,
+        Key: row.object_key,
+      }),
+    );
+    if (!obj.Body) {
+      res.status(404).json({ success: false, error: 'File not found in storage' });
+      return;
+    }
+
+    const filename = String(row.file_name || 'attachment').replace(/["\\\r\n]/g, '_');
+    res.setHeader('Content-Type', obj.ContentType || row.mime_type || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (obj.ContentLength != null) {
+      res.setHeader('Content-Length', String(obj.ContentLength));
+    }
+
+    await pipeline(obj.Body as Readable, res);
   } catch (err) {
-    console.error('Task attachment download sign error:', err);
-    res.status(500).json({ success: false, error: 'Internal server error' });
+    console.error('Task attachment download error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
   }
 });
 

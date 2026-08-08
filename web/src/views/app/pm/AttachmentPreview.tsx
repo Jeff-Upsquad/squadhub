@@ -26,30 +26,16 @@ function kindOf(att: TaskAttachment): Kind {
   return 'other';
 }
 
-// Ask the API for a short-lived R2 URL with Content-Disposition: attachment
-// so the browser downloads under the original filename (public URLs + the
-// download attribute alone don't force a save for images/PDFs). Falls back
-// to a blob save, then a new tab if signing fails.
+// Pull bytes through our authenticated API (Content-Disposition: attachment)
+// and save via a blob URL. Never open the public R2 link — browsers render
+// images/PDFs inline, and cross-origin fetch often fails CORS then used to
+// fall back to window.open (new tab).
 async function downloadAttachment(att: TaskAttachment) {
   try {
-    const { data } = await api.get(`/pm/task-attachments/${att.id}/download`);
-    const signedUrl = data?.data?.url as string | undefined;
-    if (!signedUrl) throw new Error('No download URL');
-    const a = document.createElement('a');
-    a.href = signedUrl;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    return;
-  } catch {
-    // fall through
-  }
-
-  try {
-    const res = await fetch(att.file_url);
-    if (!res.ok) throw new Error(String(res.status));
-    const blob = await res.blob();
+    const res = await api.get(`/pm/task-attachments/${att.id}/download`, {
+      responseType: 'blob',
+    });
+    const blob = res.data as Blob;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -59,7 +45,7 @@ async function downloadAttachment(att: TaskAttachment) {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   } catch {
-    window.open(att.file_url, '_blank', 'noopener,noreferrer');
+    alert('Download failed. Please try again.');
   }
 }
 
