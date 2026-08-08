@@ -2,6 +2,7 @@
 import { useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { TaskAttachment } from '@squadhub/shared';
+import api from '../../../services/api';
 
 // Full-screen in-app preview for task attachments. Replaces the old
 // open-in-new-tab behavior; the new-tab and download actions live in the
@@ -25,13 +26,16 @@ function kindOf(att: TaskAttachment): Kind {
   return 'other';
 }
 
-// Signed storage URLs ignore the download attribute cross-origin, so pull
-// the bytes and save via an object URL; fall back to a plain new tab.
+// Pull bytes through our authenticated API (Content-Disposition: attachment)
+// and save via a blob URL. Never open the public R2 link — browsers render
+// images/PDFs inline, and cross-origin fetch often fails CORS then used to
+// fall back to window.open (new tab).
 async function downloadAttachment(att: TaskAttachment) {
   try {
-    const res = await fetch(att.file_url);
-    if (!res.ok) throw new Error(String(res.status));
-    const blob = await res.blob();
+    const res = await api.get(`/pm/task-attachments/${att.id}/download`, {
+      responseType: 'blob',
+    });
+    const blob = res.data as Blob;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -41,7 +45,7 @@ async function downloadAttachment(att: TaskAttachment) {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   } catch {
-    window.open(att.file_url, '_blank', 'noopener,noreferrer');
+    alert('Download failed. Please try again.');
   }
 }
 
