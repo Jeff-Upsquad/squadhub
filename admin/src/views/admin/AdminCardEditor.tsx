@@ -76,6 +76,10 @@ interface CardData {
   target_languages: string[];
   custom_deliverables: Deliverable[];
   proposed_price: number | null;
+  // The client's stated monthly budget from their brief. Read-only reference —
+  // distinct from proposed_price, which the admin sets. Per-tier budgets also
+  // live under tier_pricing.<tier>.client_budget.
+  client_budget: number | null;
   // Finalized monthly client price. null = not finalized (falls back to proposed).
   subscription_price: number | null;
   // Adjusted margin. null = inherit the plan catalog margin.
@@ -83,7 +87,7 @@ interface CardData {
   // Per-tier draft pricing: { Junior: { proposed_price, markup, subscription_price }, ... }.
   // Cleared at publish — fan-out copies each tier's values onto its own
   // sibling card. Empty {} on single-tier drafts.
-  tier_pricing: Record<string, { proposed_price: number; markup: number | null; subscription_price?: number | null }> | null;
+  tier_pricing: Record<string, { proposed_price: number; markup: number | null; subscription_price?: number | null; client_budget?: number | null }> | null;
   publish_targets: string[];
   customer_name: string | null;
   customer_email: string | null;
@@ -176,7 +180,7 @@ export default function AdminCardEditor({
   // sibling cards (2+ tiers), reading prices from this map either way.
   // markup null = inherit the plan catalog margin; subscriptionPrice null =
   // not finalized (falls back to proposedPrice).
-  const [tierPricing, setTierPricing] = useState<Record<string, { proposedPrice: number; markup: number | null; subscriptionPrice: number | null }>>({});
+  const [tierPricing, setTierPricing] = useState<Record<string, { proposedPrice: number; markup: number | null; subscriptionPrice: number | null; clientBudget: number | null }>>({});
   const [publishTargets, setPublishTargets] = useState<string[]>(['partner', 'talent']);
   const [distribution, setDistribution] = useState<string>('broadcast');
   const [brandName, setBrandName] = useState('');
@@ -215,13 +219,14 @@ export default function AdminCardEditor({
     const dbTierPricing = card.tier_pricing && typeof card.tier_pricing === 'object'
       ? card.tier_pricing
       : null;
-    const initialPricing: Record<string, { proposedPrice: number; markup: number | null; subscriptionPrice: number | null }> = {};
+    const initialPricing: Record<string, { proposedPrice: number; markup: number | null; subscriptionPrice: number | null; clientBudget: number | null }> = {};
     if (dbTierPricing) {
       Object.entries(dbTierPricing).forEach(([tier, p]) => {
         initialPricing[tier] = {
           proposedPrice: (p as any)?.proposed_price ?? 0,
           markup: (p as any)?.markup ?? null,
           subscriptionPrice: (p as any)?.subscription_price ?? null,
+          clientBudget: (p as any)?.client_budget ?? card.client_budget ?? null,
         };
       });
     }
@@ -231,6 +236,7 @@ export default function AdminCardEditor({
           proposedPrice: card.proposed_price || 0,
           markup: card.markup ?? null,
           subscriptionPrice: card.subscription_price ?? null,
+          clientBudget: card.client_budget ?? null,
         };
       }
     });
@@ -262,7 +268,7 @@ export default function AdminCardEditor({
         if (isOn) {
           delete np[tier];
         } else if (!np[tier]) {
-          np[tier] = { proposedPrice: 0, markup: null, subscriptionPrice: null };
+          np[tier] = { proposedPrice: 0, markup: null, subscriptionPrice: null, clientBudget: null };
         }
         return np;
       });
@@ -278,6 +284,7 @@ export default function AdminCardEditor({
           proposedPrice: prev[tier]?.proposedPrice ?? 0,
           markup: prev[tier]?.markup ?? null,
           subscriptionPrice: prev[tier]?.subscriptionPrice ?? null,
+          clientBudget: prev[tier]?.clientBudget ?? null,
           [field]: value,
         },
       }));
@@ -368,12 +375,15 @@ export default function AdminCardEditor({
 
   // Build the API tier_pricing map (snake_case shape) from the form state.
   const tierPricingPayload = useMemo(() => {
-    const out: Record<string, { proposed_price: number; markup: number | null; subscription_price: number | null }> = {};
+    const out: Record<string, { proposed_price: number; markup: number | null; subscription_price: number | null; client_budget: number | null }> = {};
     for (const [tier, entry] of Object.entries(tierPricing)) {
       out[tier] = {
         proposed_price: entry.proposedPrice ?? 0,
         markup: entry.markup ?? null,
         subscription_price: entry.subscriptionPrice ?? null,
+        // Reference only — carried through so a save doesn't drop the client's
+        // stated budget from the JSONB entry.
+        client_budget: entry.clientBudget ?? null,
       };
     }
     return out;
@@ -940,7 +950,7 @@ export default function AdminCardEditor({
                     override, else the proposed price), and Partner is derived as
                     Final − Margin. */}
                 <div className="overflow-x-auto rounded-xl border border-[var(--color-sh-warm-border)]">
-                  <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+                  <table className="w-full min-w-[880px] border-collapse text-left text-sm">
                     <thead>
                       <tr className="border-b border-[var(--color-sh-warm-border)] align-bottom">
                         <th className="bg-[var(--color-sh-cream)] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
@@ -948,6 +958,9 @@ export default function AdminCardEditor({
                         </th>
                         <th className="bg-[var(--color-sh-cream)] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
                           Subscription price
+                        </th>
+                        <th className="bg-[var(--color-sh-cream)] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                          Client&apos;s budget
                         </th>
                         <th className="bg-[var(--color-sh-cream)] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
                           Proposed price
@@ -1000,7 +1013,23 @@ export default function AdminCardEditor({
                               <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">Catalog default</div>
                             </td>
 
-                            {/* Proposed price — editable (client's brief budget) */}
+                            {/* Client's budget — read-only reference from the
+                                brief. Never auto-fills Proposed price; the admin
+                                sets that themselves. */}
+                            <td className="px-3 py-3">
+                              {entry.clientBudget && entry.clientBudget > 0 ? (
+                                <>
+                                  <div className="text-sm font-medium tabular-nums text-[var(--color-sh-ink-muted)]">
+                                    ₹{entry.clientBudget.toLocaleString()}
+                                  </div>
+                                  <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">Client shared</div>
+                                </>
+                              ) : (
+                                <div className="text-sm text-[var(--color-sh-ink-faint)]">—</div>
+                              )}
+                            </td>
+
+                            {/* Proposed price — editable (what we propose to charge) */}
                             <td className="px-3 py-3">
                               <PriceInput
                                 value={entry.proposedPrice || ''}
@@ -1085,7 +1114,7 @@ export default function AdminCardEditor({
                 </div>
 
                 <p className="px-1 text-[11px] leading-relaxed text-[var(--color-sh-ink-faint)]">
-                  All amounts are ₹/month. <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Subscription price</strong> is the catalog default · <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Proposed price</strong> is the client&apos;s brief budget · <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Final price</strong> is what the client pays (blank uses the proposed price) · <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Partner price</strong> = Final − Margin.
+                  All amounts are ₹/month. <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Subscription price</strong> is the catalog default · <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Client&apos;s budget</strong> is what the client stated in their brief (reference only) · <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Proposed price</strong> is what you propose to charge · <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Final price</strong> is what the client pays (blank uses the proposed price) · <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Partner price</strong> = Final − Margin.
                 </p>
               </div>
             )}

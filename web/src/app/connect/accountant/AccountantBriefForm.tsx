@@ -1255,7 +1255,11 @@ function PlanCompareModal({
 
 // Upload a recorded voice note to R2 via a server-issued presigned PUT URL.
 async function uploadVoiceNote(blob: Blob): Promise<string> {
-  const contentType = blob.type || 'audio/webm';
+  // MediaRecorder blobs carry a parameterised MIME like `audio/webm;codecs=opus`.
+  // R2 signs the presigned PUT against the exact Content-Type and the upload
+  // endpoint only accepts a bare `audio/<subtype>`, so strip the parameters and
+  // use the base type for both the presign request and the PUT header.
+  const contentType = (blob.type || 'audio/webm').split(';')[0].trim() || 'audio/webm';
   const ext = contentType.includes('mp4') ? 'mp4' : contentType.includes('ogg') ? 'ogg' : 'webm';
   const presign = await fetch('/leads/voice-upload-url', {
     method: 'POST',
