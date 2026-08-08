@@ -8,6 +8,7 @@ import { config } from '../../config';
 import {
   TASK_ATTACHMENT_MAX_BYTES,
   generateTaskUploadUrl,
+  generateR2DownloadUrl,
   headR2Object,
   deleteR2Object,
 } from '../../r2';
@@ -207,6 +208,38 @@ router.post('/task-attachments/confirm', async (req: Request, res: Response) => 
       return;
     }
     console.error('Task attachment confirm error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /pm/task-attachments/:id/download — short-lived signed GET URL with
+// Content-Disposition: attachment so the browser downloads the file under its
+// original name instead of rendering it inline (images/PDFs especially).
+router.get('/task-attachments/:id/download', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+
+    const { data: row, error: fetchErr } = await supabaseAdmin
+      .from('task_attachments')
+      .select('id, task_id, object_key, file_name')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr || !row) {
+      res.status(404).json({ success: false, error: 'Attachment not found' });
+      return;
+    }
+
+    const listId = await requireTaskAccess(req.userId!, row.task_id, 'viewer');
+    if (!listId) {
+      res.status(403).json({ success: false, error: 'No access to this task' });
+      return;
+    }
+
+    const url = await generateR2DownloadUrl(row.object_key, 3600, row.file_name);
+    res.json({ success: true, data: { url, expires_in: 3600 } });
+  } catch (err) {
+    console.error('Task attachment download sign error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

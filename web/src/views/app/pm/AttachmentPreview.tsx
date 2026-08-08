@@ -2,6 +2,7 @@
 import { useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { TaskAttachment } from '@squadhub/shared';
+import api from '../../../services/api';
 
 // Full-screen in-app preview for task attachments. Replaces the old
 // open-in-new-tab behavior; the new-tab and download actions live in the
@@ -25,9 +26,26 @@ function kindOf(att: TaskAttachment): Kind {
   return 'other';
 }
 
-// Signed storage URLs ignore the download attribute cross-origin, so pull
-// the bytes and save via an object URL; fall back to a plain new tab.
+// Ask the API for a short-lived R2 URL with Content-Disposition: attachment
+// so the browser downloads under the original filename (public URLs + the
+// download attribute alone don't force a save for images/PDFs). Falls back
+// to a blob save, then a new tab if signing fails.
 async function downloadAttachment(att: TaskAttachment) {
+  try {
+    const { data } = await api.get(`/pm/task-attachments/${att.id}/download`);
+    const signedUrl = data?.data?.url as string | undefined;
+    if (!signedUrl) throw new Error('No download URL');
+    const a = document.createElement('a');
+    a.href = signedUrl;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return;
+  } catch {
+    // fall through
+  }
+
   try {
     const res = await fetch(att.file_url);
     if (!res.ok) throw new Error(String(res.status));
