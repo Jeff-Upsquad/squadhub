@@ -495,10 +495,11 @@ async function hydrateBrandsBySubmission(submissionIds: string[]): Promise<Recor
 
   // Per-role requirement details live on subscription_cards now (one card
   // per role ticked on /connect). Pull the slim view needed for the New
-  // Clients slider so each BrandCard can render per-role notes + hours.
+  // Clients slider so each BrandCard can render per-role notes, voice
+  // notes, and hours.
   const { data: cards } = await supabaseAdmin
     .from('subscription_cards')
-    .select('id, brand_id, service_type, requirement_note, hours_note, state, created_at')
+    .select('id, brand_id, service_type, requirement_note, requirement_voice_url, hours_note, state, created_at')
     .in('brand_id', brandIds)
     .order('created_at', { ascending: true });
 

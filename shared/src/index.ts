@@ -1860,6 +1860,8 @@ export interface ClientSubmissionBrandCard {
   id: string;
   service_type: string | null;
   requirement_note: string | null;
+  /** Public R2 URL of the client's recorded requirement voice note (optional). */
+  requirement_voice_url: string | null;
   hours_note: string | null;
   state: string;
   created_at: string;
