@@ -11,7 +11,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 OUT = os.path.join(ROOT, 'admin', 'public', 'design-library', 'squadhub', 'assets', 'icons-data.js')
 
 SITE_MARKERS = ['/app/connect/', '/app/help/', '/app/onboard/', '/app/download-app/',
-                '/app/partner-app/', '/app/squad-chat-clients/', '/app/squad-chat-team/',
+                '/app/partner-app/', '/app/business-app/', '/app/squad-chat-clients/', '/app/squad-chat-team/',
                 '/app/(auth)/', 'views/LoginPage', 'views/SignupPage']
 
 KEBAB = {'strokeWidth': 'stroke-width', 'strokeLinecap': 'stroke-linecap',
