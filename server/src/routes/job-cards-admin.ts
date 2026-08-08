@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { normalizeStoredPhone } from '@squadhub/shared';
 import { requireAuth } from '../middleware/auth';
 import { requireMiniAppOrAdmin } from '../middleware/miniApp';
 import { supabaseAdmin } from '../supabase';
@@ -142,7 +143,11 @@ const jobBriefSchema = z.object({
   contact_name: z.string().max(200).optional(),
   business_name: z.string().max(200).optional(),
   email: z.string().email().optional(),
-  phone: z.string().max(30).optional(),
+  phone: z
+    .string()
+    .max(30)
+    .optional()
+    .transform((v) => (v?.trim() ? normalizeStoredPhone(v) : v)),
   business_location: z.string().max(500).optional(),
   country_id: z.string().uuid().optional(),
   brief_note: z.string().max(4000).optional(),
@@ -161,7 +166,12 @@ const patchCardSchema = z.object({
   customer_name: z.string().max(200).nullable().optional(),
   customer_company: z.string().max(200).nullable().optional(),
   customer_email: z.string().email().nullable().optional(),
-  customer_phone: z.string().max(30).nullable().optional(),
+  customer_phone: z
+    .string()
+    .max(30)
+    .nullable()
+    .optional()
+    .transform((v) => (v == null || !String(v).trim() ? v : normalizeStoredPhone(String(v)))),
   customer_location: z.string().max(500).nullable().optional(),
   package_min: z.number().int().min(0).nullable().optional(),
   package_max: z.number().int().min(0).nullable().optional(),

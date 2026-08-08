@@ -1,9 +1,20 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { isValidStoredPhone, normalizeStoredPhone } from '@squadhub/shared';
 import { supabaseAdmin } from '../supabase';
 import { getEligibleSalesUserIds } from './onboarding-links';
 
 const router = Router();
+
+const contactNumberSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(30)
+  .transform((v) => normalizeStoredPhone(v))
+  .refine((v) => isValidStoredPhone(v), {
+    message: 'Enter a valid phone number (10 digits for India)',
+  });
 
 // POST /clients/onboard — public onboarding form submission (no auth)
 // GET /clients/countries — public list of active countries (for onboarding form)
@@ -93,7 +104,7 @@ const onboardSchema = z.object({
   business_name: z.string().min(1).max(200),
   contact_person: z.string().min(1).max(200),
   designation: z.string().max(200).optional(),
-  contact_number: z.string().min(1).max(20),
+  contact_number: contactNumberSchema,
   email: z.string().email(),
   business_address: z.string().min(1).max(1000),
   gst_registered: z.boolean(),
