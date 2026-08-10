@@ -17,6 +17,10 @@ import { config } from '../config';
 import { logCardEvent } from '../utils/cardEvents';
 import { ensureHubContact } from '../utils/leadLookup';
 import { generateBriefVoiceUploadUrl } from '../r2';
+import {
+  buildCatalogTierPricing,
+  coerceProposedPrice,
+} from '../utils/subscriptionFormPricing';
 
 const router = Router();
 
@@ -509,6 +513,30 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
       country_id: countryId,
     });
 
+    const SERVICE_TYPE_TO_SLUG: Record<string, string> = {
+      Designers: 'designer',
+      Editors: 'video_editor',
+      'Designer plus Editor': 'designer_video_editor',
+      Accountants: 'accountant',
+    };
+    const briefTiers = body.target_tiers || [];
+    const briefClientBudget =
+      body.card_type !== 'assignment' && body.proposed_price && body.proposed_price > 0
+        ? body.proposed_price
+        : null;
+    const briefTierPricing =
+      body.card_type === 'assignment'
+        ? {}
+        : await buildCatalogTierPricing({
+            serviceSlug: SERVICE_TYPE_TO_SLUG[body.service_type] || '',
+            planName: body.plan_name || null,
+            tiers: briefTiers,
+            countryId,
+            clientBudget: briefClientBudget,
+          });
+    const briefFirstTier =
+      briefTiers.length === 1 ? briefTierPricing[briefTiers[0]] : undefined;
+
     const { data: card, error } = await supabaseAdmin
       .from('subscription_cards')
       .insert({
@@ -517,8 +545,7 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
         // the details and "Save Draft" promotes new → draft, which unlocks the
         // shareable client link (link generation is draft-gated).
         state: 'new',
-        // null = inherit the plan catalog margin until an admin adjusts it.
-        markup: null,
+        markup: briefFirstTier?.markup ?? null,
         created_by: req.userId!,
         service_type: body.service_type,
         brand_name: body.brand_name || null,
@@ -527,20 +554,22 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
         requirement_note: body.requirement_note || null,
         requirement_voice_url: body.requirement_voice_url || null,
         hours_note: body.hours_note || null,
-        target_tiers: body.target_tiers || [],
+        target_tiers: briefTiers,
         // Assignment cards have no weekly plan; their budget IS the one-time
-        // proposed/offer price. Subscriptions leave proposed_price for the admin
-        // to set — the client's stated budget is reference only (client_budget).
+        // proposed/offer price. Subscriptions leave proposed_price at 0 and
+        // seed Final/margin from the catalog when possible.
         // chk constraints require NULL or > 0, so coerce 0 ("not stated") → NULL.
         plan_name: body.card_type === 'assignment' ? null : body.plan_name || null,
         proposed_price:
           body.card_type === 'assignment' && body.proposed_price && body.proposed_price > 0
             ? body.proposed_price
-            : null,
-        client_budget:
-          body.card_type !== 'assignment' && body.proposed_price && body.proposed_price > 0
-            ? body.proposed_price
-            : null,
+            : coerceProposedPrice(briefFirstTier?.proposed_price),
+        subscription_price:
+          body.card_type === 'assignment'
+            ? null
+            : briefFirstTier?.subscription_price ?? null,
+        client_budget: briefClientBudget,
+        tier_pricing: briefTierPricing,
         card_type: body.card_type,
         assignment_details:
           body.card_type === 'assignment'

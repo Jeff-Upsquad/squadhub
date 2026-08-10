@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
 import { STATES_BY_COUNTRY_NAME, LANGUAGE_OPTIONS } from './locationLanguageOptions';
@@ -341,6 +341,59 @@ export default function AdminCardEditor({
     return map;
   }, [tiers, catalogQueries]);
 
+  // Once per card+plan+tiers: fill blank Margin (always) and blank Final (only
+  // when the client left no budget) from the catalog. Covers CRM/internal
+  // briefs that landed before server-side seeding, and plan changes in the editor.
+  const catalogSeedKeyRef = useRef('');
+  useEffect(() => {
+    if (!card) return;
+    const editable = card.state === 'draft' || card.state === 'new';
+    if (!editable) return;
+    if (!catalogPlan || tiers.length === 0) return;
+    // Wait until every selected tier's catalog lookup has settled.
+    if (catalogQueries.some((q) => q.isLoading || q.isFetching)) return;
+    const anyRow = tiers.some((t) => catalogByTier[t]?.pricing?.[0]);
+    if (!anyRow) return;
+
+    const seedKey = `${card.id}|${catalogPlan}|${tiers.join(',')}`;
+    if (catalogSeedKeyRef.current === seedKey) return;
+
+    const hasBudget = clientBudget != null && clientBudget > 0;
+    setTierPricing((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const tier of tiers) {
+        const row = catalogByTier[tier]?.pricing?.[0];
+        if (!row || !(row.price > 0)) continue;
+        const entry = next[tier] || {
+          proposedPrice: 0,
+          markup: null,
+          subscriptionPrice: null,
+        };
+        const marginAbs =
+          row.margin_type === 'percent'
+            ? Math.max(0, Math.round((row.price * row.margin_value) / 100))
+            : Math.max(0, row.margin_value);
+        const updated = { ...entry };
+        if (updated.markup == null) {
+          updated.markup = marginAbs;
+          changed = true;
+        }
+        if (
+          !hasBudget &&
+          updated.subscriptionPrice == null &&
+          !(updated.proposedPrice > 0)
+        ) {
+          updated.subscriptionPrice = row.price;
+          changed = true;
+        }
+        next[tier] = updated;
+      }
+      return changed ? next : prev;
+    });
+    catalogSeedKeyRef.current = seedKey;
+  }, [card, catalogPlan, tiers, catalogByTier, clientBudget, catalogQueries]);
+
   const workingDaysCount = useMemo(
     () => workingDaysThisMonth(workingDays),
     [workingDays],
@@ -357,18 +410,19 @@ export default function AdminCardEditor({
     [catalogByTier, workingDaysCount],
   );
 
-  // Catalog-suggested margin in rupees for a given tier given that tier's
-  // current proposed price. Mirrors the old single-tier helper.
+  // Catalog-suggested margin in rupees for a given tier. Fixed margins don't
+  // need a base price; percent margins apply to the finalized price.
   const catalogMarginForTier = useCallback(
     (tier: string): number | null => {
       const row = catalogByTier[tier]?.pricing?.[0] || null;
-      const entry = tierPricing[tier];
-      // Percent margins apply to the finalized price (what the client pays).
-      const base = entry?.subscriptionPrice ?? entry?.proposedPrice ?? 0;
-      if (!row || base <= 0) return null;
-      return row.margin_type === 'percent'
-        ? Math.round((base * row.margin_value) / 100)
-        : row.margin_value;
+      if (!row) return null;
+      if (row.margin_type === 'percent') {
+        const entry = tierPricing[tier];
+        const base = entry?.subscriptionPrice ?? entry?.proposedPrice ?? 0;
+        if (base <= 0) return null;
+        return Math.round((base * row.margin_value) / 100);
+      }
+      return row.margin_value;
     },
     [catalogByTier, tierPricing],
   );
