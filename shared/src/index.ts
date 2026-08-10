@@ -1664,13 +1664,17 @@ export interface SubscriptionPlanPricing {
 }
 
 /** Per-tier pricing stored in subscription_cards.tier_pricing JSONB for
- *  multi-tier draft cards: `{ [tier]: { proposed_price, markup, ... } }`. */
+ *  multi-tier draft cards: `{ [tier]: { proposed_price, markup, ... } }`.
+ *  The client's stated budget lives on subscription_cards.client_budget
+ *  (single field), not duplicated per tier. */
 export interface SubscriptionCardTierPricing {
   proposed_price?: number | null;
   /** Adjusted margin override; null/undefined = use the plan catalog margin. */
   markup?: number | null;
   /** Finalized monthly price for this tier; falls back to proposed_price. */
   subscription_price?: number | null;
+  /** @deprecated Prefer subscription_cards.client_budget. Kept for legacy rows. */
+  client_budget?: number | null;
 }
 
 // ---- Pricing resolution helpers (single source of truth) ----

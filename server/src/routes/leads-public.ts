@@ -4,6 +4,10 @@ import { isValidStoredPhone, normalizeStoredPhone } from '@squadhub/shared';
 import { supabaseAdmin } from '../supabase';
 import { ensureHubContact } from '../utils/leadLookup';
 import { generateBriefVoiceUploadUrl } from '../r2';
+import {
+  buildCatalogTierPricing,
+  coerceProposedPrice,
+} from '../utils/subscriptionFormPricing';
 
 const router = Router();
 
@@ -597,20 +601,29 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
 
       const roleReq = body.role_requirements?.[slug];
 
-      // The client's stated per-tier budget is REFERENCE only — it lands in
-      // tier_pricing.<tier>.client_budget (and the scalar client_budget for a
-      // single tier), never proposed_price. The admin sets the proposed price
-      // themselves in the New Deals editor before publishing.
+      // Subscription pricing seed from the admin catalog:
+      //   - proposed_price stays 0
+      //   - margin always auto-filled from catalog
+      //   - no client budget → customer price becomes Final (subscription_price)
+      //   - with client budget → Final left blank; budget stored on client_budget
+      // Assignments ignore catalog seeding (one-off project budget → proposed_price).
       const roleTiers = roleReq?.tiers || [];
-      const roleTierBudgets = roleReq?.tier_budgets || {};
-      // markup null = inherit the plan catalog margin (no per-card adjustment yet).
-      const roleTierPricing: Record<string, { markup: number | null; client_budget: number }> = {};
-      for (const tier of roleTiers) {
-        const b = roleTierBudgets[tier];
-        if (typeof b === 'number' && b > 0) roleTierPricing[tier] = { markup: null, client_budget: b };
-      }
-      const roleSingleBudget =
-        roleTiers.length === 1 ? roleTierPricing[roleTiers[0]]?.client_budget ?? null : null;
+      const roleClientBudget =
+        typeof roleReq?.budget === 'number' && roleReq.budget > 0 ? roleReq.budget : null;
+      const roleTierPricing =
+        body.card_type === 'assignment'
+          ? {}
+          : await buildCatalogTierPricing({
+              serviceSlug: slug,
+              planName: roleReq?.plan || null,
+              tiers: roleTiers,
+              countryId,
+              clientBudget: roleClientBudget,
+            });
+      // Single-tier cards also mirror the first tier onto the row columns so
+      // the legacy single-tier publish path has something to read.
+      const firstTierEntry =
+        roleTiers.length === 1 ? roleTierPricing[roleTiers[0]] : undefined;
 
       const { data: card, error } = await supabaseAdmin
         .from('subscription_cards')
@@ -619,8 +632,9 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
           // Lands in the New Deals queue as 'new'. An admin reviews it, fills in
           // the rest, and "Save Draft" promotes new → draft before publishing.
           state: 'new',
-          // null = inherit the plan catalog margin until an admin adjusts it.
-          markup: null,
+          // Prefer the seeded per-tier (or first-tier) margin; null = inherit
+          // the plan catalog margin when catalog lookup found nothing.
+          markup: firstTierEntry?.markup ?? null,
           service_type: SLUG_TO_SERVICE_TYPE[slug],
           target_tiers: roleReq?.tiers || [],
           // Assignments carry no weekly plan; subscriptions keep theirs.
@@ -636,19 +650,22 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
                   pricing_mode: roleReq?.pricing_mode || 'priced',
                 }
               : null,
-          // Subscriptions: per-tier client budgets → tier_pricing (reference).
-          // Assignments don't use per-tier pricing.
-          tier_pricing: body.card_type === 'assignment' ? {} : roleTierPricing,
+          // Subscriptions: catalog-seeded per-tier pricing. Assignments: none.
+          tier_pricing: roleTierPricing,
           // Assignment: the single project budget IS the proposed/offer price
-          // shown to talents. Subscription: proposed_price is left for the admin
-          // to set — the client's stated budget lives in client_budget instead.
+          // shown to talents. Subscription: proposed stays unset (0 in
+          // tier_pricing); Final may already be seeded from the catalog.
           // chk_proposed_price requires NULL or > 0, so 0 → NULL.
           proposed_price:
             body.card_type === 'assignment'
               ? (roleReq?.budget && roleReq.budget > 0 ? roleReq.budget : null)
-              : null,
-          // Subscription only: the client's stated monthly budget (reference).
-          client_budget: body.card_type === 'assignment' ? null : roleSingleBudget,
+              : coerceProposedPrice(firstTierEntry?.proposed_price),
+          subscription_price:
+            body.card_type === 'assignment'
+              ? null
+              : firstTierEntry?.subscription_price ?? null,
+          // Subscription only: the client's stated monthly budget (single field).
+          client_budget: body.card_type === 'assignment' ? null : roleClientBudget,
           working_days: body.working_days,
           customer_name: body.contact_name,
           customer_email: body.email,

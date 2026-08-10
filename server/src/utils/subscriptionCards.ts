@@ -1,6 +1,10 @@
 import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '../supabase';
 import { buildPlanSnapshotForCard } from './cardPlanSnapshot';
+import {
+  coerceProposedPrice,
+  tierHasPublishablePrice,
+} from './subscriptionFormPricing';
 import { notifySquadhireOfCardRecall } from './squadhireWebhook';
 
 /**
@@ -407,8 +411,10 @@ export async function fanOutTierCards(
     };
     if (targetTiers.length === 1) {
       const entry = tierPricing[targetTiers[0]];
-      if (entry && entry.proposed_price && entry.proposed_price > 0) {
-        updates.proposed_price = entry.proposed_price;
+      // Accept either a proposed price or a finalized subscription price
+      // (catalog-seeded briefs often have Final set with Proposed = 0).
+      if (tierHasPublishablePrice(entry)) {
+        updates.proposed_price = coerceProposedPrice(entry.proposed_price);
         // null markup = inherit the plan catalog margin (don't coerce to 0).
         updates.markup = entry.markup ?? null;
         updates.subscription_price = entry.subscription_price ?? null;
@@ -426,10 +432,11 @@ export async function fanOutTierCards(
     return [originalCardId];
   }
 
-  // Multi-tier: validate every selected tier has a non-zero price.
+  // Multi-tier: every selected tier needs a client-facing price (proposed
+  // OR finalized subscription price — catalog seeds often leave proposed at 0).
   for (const tier of targetTiers) {
     const entry = tierPricing[tier];
-    if (!entry || !entry.proposed_price || entry.proposed_price <= 0) {
+    if (!tierHasPublishablePrice(entry)) {
       throw new Error(`Missing pricing for tier "${tier}"`);
     }
   }
@@ -456,7 +463,7 @@ export async function fanOutTierCards(
       published_at: now,
       published_by: publishedBy,
       target_tiers: [firstTier],
-      proposed_price: firstEntry.proposed_price ?? null,
+      proposed_price: coerceProposedPrice(firstEntry.proposed_price),
       markup: firstEntry.markup ?? null,
       subscription_price: firstEntry.subscription_price ?? null,
       tier_pricing: {},
@@ -506,6 +513,7 @@ export async function fanOutTierCards(
     'squadhire_category_ids',
     'partner_price_override',
     'disabled_default_deliverable_ids',
+    'client_budget',
   ] as const;
 
   const siblingIds: string[] = [];
@@ -518,7 +526,7 @@ export async function fanOutTierCards(
       published_at: now,
       published_by: publishedBy,
       target_tiers: [tier],
-      proposed_price: entry.proposed_price ?? null,
+      proposed_price: coerceProposedPrice(entry.proposed_price),
       markup: entry.markup ?? null,
       subscription_price: entry.subscription_price ?? null,
       tier_pricing: {},

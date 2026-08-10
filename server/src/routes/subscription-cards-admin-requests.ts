@@ -928,12 +928,17 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
     }
 
     // Multi-tier validation: when 2+ tiers selected, every tier must have
-    // a non-zero price in tier_pricing. Single-tier (or untargeted) drafts
-    // fall through to the legacy proposed_price/markup display-price check.
+    // a client-facing price in tier_pricing (proposed OR finalized
+    // subscription_price — catalog-seeded briefs often leave proposed at 0).
+    // Single-tier (or untargeted) drafts fall through to the legacy
+    // proposed_price / subscription_price check.
     const targetTiers: string[] = Array.isArray(card.target_tiers)
       ? (card.target_tiers as string[]).filter(Boolean)
       : [];
-    const tierPricing: Record<string, { proposed_price?: number; markup?: number }> =
+    const tierPricing: Record<
+      string,
+      { proposed_price?: number; markup?: number; subscription_price?: number | null }
+    > =
       card.tier_pricing && typeof card.tier_pricing === 'object'
         ? card.tier_pricing
         : {};
@@ -941,7 +946,9 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
     if (targetTiers.length > 1) {
       for (const tier of targetTiers) {
         const entry = tierPricing[tier];
-        if (!entry || !entry.proposed_price || entry.proposed_price <= 0) {
+        const hasFinal = entry?.subscription_price != null && entry.subscription_price > 0;
+        const hasProposed = entry?.proposed_price != null && entry.proposed_price > 0;
+        if (!entry || (!hasFinal && !hasProposed)) {
           res.status(400).json({
             success: false,
             error: `Missing pricing for tier "${tier}"`,
@@ -949,9 +956,26 @@ router.post('/subscription-cards/:id/publish', async (req: Request, res: Respons
           return;
         }
       }
-    } else if (card.proposed_price && (card.proposed_price + (card.markup || 0)) <= 0) {
-      res.status(400).json({ success: false, error: 'Display price must be > 0' });
-      return;
+    } else {
+      const finalized =
+        (card.subscription_price != null && card.subscription_price > 0
+          ? card.subscription_price
+          : null) ??
+        (card.proposed_price != null && card.proposed_price > 0 ? card.proposed_price : null);
+      // Also accept a single-tier entry living only in tier_pricing.
+      const singleEntry = targetTiers.length === 1 ? tierPricing[targetTiers[0]] : null;
+      const singleFinalized =
+        finalized ??
+        (singleEntry?.subscription_price != null && singleEntry.subscription_price > 0
+          ? singleEntry.subscription_price
+          : null) ??
+        (singleEntry?.proposed_price != null && singleEntry.proposed_price > 0
+          ? singleEntry.proposed_price
+          : null);
+      if (singleFinalized == null || singleFinalized <= 0) {
+        res.status(400).json({ success: false, error: 'Display price must be > 0' });
+        return;
+      }
     }
 
     // Fan out (or single-publish) — returns the original id first, then
