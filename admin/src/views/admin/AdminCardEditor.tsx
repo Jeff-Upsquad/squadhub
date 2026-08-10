@@ -115,6 +115,8 @@ interface Deliverable {
 
 const VALID_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const VALID_TIERS = ['Junior', 'Pro', 'Top Talents', 'Custom'];
+// Always shown in the Pricing table (client-selected levels are highlighted).
+const PRICING_TABLE_TIERS = ['Top Talents', 'Pro', 'Junior'] as const;
 // Display order for the per-tier deliverables + pricing blocks: highest tier
 // first (Top Talents → Pro → Junior). Independent of selection order.
 // Custom sorts last.
@@ -161,14 +163,20 @@ export default function AdminCardEditor({
   const [planName, setPlanName] = useState('');
   const [originalProposedPrice, setOriginalProposedPrice] = useState<number | null>(null);
   const [tiers, setTiers] = useState<string[]>([]);
-  // Tier order for display blocks (deliverables + pricing): Top Talents → Pro
-  // → Junior. The stored `tiers` order is left untouched (it controls fan-out).
+  // Tier order for deliverables: selected tiers only, Top Talents → Pro → Junior.
+  // The stored `tiers` order is left untouched (it controls fan-out).
   const displayTiers = useMemo(
     () => [...tiers].sort(
       (a, b) => (TIER_DISPLAY_RANK[a.toLowerCase()] ?? 99) - (TIER_DISPLAY_RANK[b.toLowerCase()] ?? 99),
     ),
     [tiers],
   );
+  // Pricing table always shows Junior / Pro / Top Talents (+ Custom if selected).
+  const pricingTableTiers = useMemo(() => {
+    const base = [...PRICING_TABLE_TIERS] as string[];
+    if (tiers.includes('Custom')) base.push('Custom');
+    return base;
+  }, [tiers]);
   const [workingDays, setWorkingDays] = useState<string[]>([]);
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
@@ -329,13 +337,14 @@ export default function AdminCardEditor({
     [],
   );
 
-  // Catalog lookup: one query per selected tier. Each returns its own
-  // daily/weekly hours plus the per-country pricing row (used to suggest
-  // the default margin for that tier). Hidden tiers don't fire queries.
+  // Catalog lookup: one query per pricing-table tier (always Junior/Pro/Top
+  // Talents + any selected Custom) so unselected levels still show catalog
+  // prices. Deliverables use the same map for selected tiers.
   const catalogServiceSlug = SERVICE_TYPE_TO_SLUG[serviceType] || '';
   const catalogPlan = planName ? PLAN_TO_CANONICAL[planName.toLowerCase()] || '' : '';
+  const catalogLookupTiers = pricingTableTiers;
   const catalogQueries = useQueries({
-    queries: tiers.map((tier) => ({
+    queries: catalogLookupTiers.map((tier) => ({
       queryKey: ['admin-card-plan-lookup', catalogServiceSlug, tier, catalogPlan],
       enabled: !!catalogServiceSlug && !!catalogPlan && !!tier,
       queryFn: () =>
@@ -352,11 +361,11 @@ export default function AdminCardEditor({
   // tables. Keeps render code readable when iterating selected tiers.
   const catalogByTier = useMemo(() => {
     const map: Record<string, PlanLookupRow | null> = {};
-    tiers.forEach((tier, i) => {
+    catalogLookupTiers.forEach((tier, i) => {
       map[tier] = (catalogQueries[i]?.data as PlanLookupRow | null) ?? null;
     });
     return map;
-  }, [tiers, catalogQueries]);
+  }, [catalogLookupTiers, catalogQueries]);
 
   // Once per card+plan+tiers: fill blank Margin and blank Final from the
   // catalog. Covers CRM/internal briefs that landed before server-side seeding,
@@ -439,19 +448,43 @@ export default function AdminCardEditor({
     [catalogByTier, tierPricing],
   );
 
+  // Client-stated budget for a tier (from the brief). Used as "Client proposed
+  // price" for preferred levels only.
+  const clientProposedForTier = useCallback(
+    (tier: string): number | null => {
+      const fromMap = clientBudgetsByTier[tier];
+      if (typeof fromMap === 'number' && fromMap > 0) return fromMap;
+      // Uniform scalar budget only applies to currently selected tiers.
+      if (clientBudget && clientBudget > 0 && Object.keys(clientBudgetsByTier).length === 0 && tiers.includes(tier)) {
+        return clientBudget;
+      }
+      return null;
+    },
+    [clientBudgetsByTier, clientBudget, tiers],
+  );
+
   // Partner price preview: finalized price (subscription price, else proposed)
   // minus the final margin (the admin's adjusted markup, else the plan margin).
   // A blank markup inherits the catalog margin rather than meaning "zero".
+  // Unselected tiers fall back to catalog Final − catalog margin for display.
   const partnerPriceForTier = useCallback(
     (tier: string): number | null => {
       const entry = tierPricing[tier];
-      if (!entry) return null;
+      if (!entry) {
+        const row = catalogByTier[tier]?.pricing?.[0];
+        if (!row || !(row.price > 0)) return null;
+        const marginAbs =
+          row.margin_type === 'percent'
+            ? Math.max(0, Math.round((row.price * row.margin_value) / 100))
+            : Math.max(0, row.margin_value);
+        return Math.max(0, row.price - marginAbs);
+      }
       const finalized = entry.subscriptionPrice ?? (entry.proposedPrice > 0 ? entry.proposedPrice : null);
       if (finalized == null) return null;
       const margin = entry.markup ?? catalogMarginForTier(tier) ?? 0;
       return Math.max(0, finalized - margin);
     },
-    [tierPricing, catalogMarginForTier],
+    [tierPricing, catalogMarginForTier, catalogByTier],
   );
 
   // Whether at least one selected tier has catalog data loaded — used to
@@ -1025,184 +1058,127 @@ export default function AdminCardEditor({
             </div>
           </Section>
 
-          {/* Pricing — one labeled group per selected tier. With one tier
-              selected this renders a single block. With N tiers each gets its
-              own proposed/margin/partner-price row, and on publish they become
-              one card with a tab per tier (grouped via brief_group_id) rather
-              than N separate cards. */}
+          {/* Pricing — always shows Junior / Pro / Top Talents. Client-selected
+              levels are highlighted; their brief budget appears under
+              "Client proposed price". Unselected levels stay muted with no
+              client proposed amount. */}
           <Section title="Pricing">
-            {tiers.length === 0 ? (
-              <p className="text-xs text-[var(--color-sh-ink-faint)]">
-                Select at least one tier above to set pricing.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {/* Client preference summary — which levels they asked for and
-                    the budgets they named. Per-row detail is in the matrix. */}
-                <div className="rounded-xl border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-4 py-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
-                    Client preferences
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-[var(--color-sh-ink-faint)]">
-                    Levels the client selected in their brief, with the budget they proposed for each (reference only)
-                  </div>
-                  <div className="mt-2.5 flex flex-wrap gap-2">
-                    {displayTiers.map((tier) => {
-                      const budget = clientBudgetsByTier[tier]
-                        ?? (clientBudget && clientBudget > 0 && Object.keys(clientBudgetsByTier).length === 0
-                          ? clientBudget
-                          : null);
-                      const preferred = budget != null || (card?.target_tiers || []).includes(tier);
+            <div className="space-y-2">
+              {tiers.length > 1 && (
+                <p className="rounded-md bg-[var(--color-sh-cream)] px-2.5 py-1.5 text-[10px] leading-snug text-[var(--color-sh-ink-muted)]">
+                  Highlighted rows are levels the client asked for. Selected tiers publish as <strong>one card</strong> with a tab per tier.
+                </p>
+              )}
+
+              <div className="overflow-x-auto rounded-lg border border-[var(--color-sh-warm-border)]">
+                <table className="w-full min-w-[640px] border-collapse text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-[var(--color-sh-warm-border)]">
+                      <th className="bg-[var(--color-sh-cream)] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                        Level
+                      </th>
+                      <th className="bg-[var(--color-sh-cream)] px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                        Subscription
+                      </th>
+                      <th className="bg-[var(--color-sh-cream)] px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                        Client proposed price
+                      </th>
+                      <th className="bg-[var(--color-sh-cream)] px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink)]">
+                        Final price
+                      </th>
+                      <th className="bg-[var(--color-sh-cream)] px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                        Margin
+                      </th>
+                      <th className="bg-[var(--color-sh-cream)] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink)]">
+                        Partner
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pricingTableTiers.map((tier, rowIdx) => {
+                      const isSelected = tiers.includes(tier);
+                      const clientProposed = clientProposedForTier(tier);
+                      const isClientPreferred =
+                        clientProposed != null || (card?.target_tiers || []).includes(tier);
+                      const entry = tierPricing[tier] || {
+                        proposedPrice: 0,
+                        markup: null,
+                        subscriptionPrice: null,
+                      };
+                      const partnerPrice = partnerPriceForTier(tier);
+                      const catalogPricingRow = catalogByTier[tier]?.pricing?.[0] || null;
+                      const catalogMarginInRupees = isSelected
+                        ? catalogMarginForTier(tier)
+                        : catalogPricingRow
+                          ? (catalogPricingRow.margin_type === 'percent'
+                              ? Math.max(0, Math.round((catalogPricingRow.price * catalogPricingRow.margin_value) / 100))
+                              : Math.max(0, catalogPricingRow.margin_value))
+                          : null;
+                      // Selected tiers: admin-controlled Final. Unselected: catalog only.
+                      const effectiveFinal = isSelected
+                        ? (entry.subscriptionPrice
+                            ?? (entry.proposedPrice > 0 ? entry.proposedPrice : null)
+                            ?? (catalogPricingRow && catalogPricingRow.price > 0 ? catalogPricingRow.price : null))
+                        : (catalogPricingRow && catalogPricingRow.price > 0 ? catalogPricingRow.price : null);
+                      const rowHighlight = isClientPreferred || isSelected
+                        ? 'bg-[var(--color-sh-lime-soft)]/50'
+                        : 'bg-white';
                       return (
-                        <span
+                        <tr
                           key={tier}
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
-                            preferred
-                              ? 'border-[var(--color-sh-ink)] bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)]'
-                              : 'border-[var(--color-sh-warm-border)] bg-white text-[var(--color-sh-ink-muted)]'
-                          }`}
+                          className={`align-middle ${rowIdx > 0 ? 'border-t border-[var(--color-sh-warm-border)]' : ''} ${rowHighlight}`}
                         >
-                          {preferred && (
-                            <svg className="h-3 w-3 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                              <path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.8 5.7 21l2.3-7.2-6-4.4h7.6L12 2z" />
-                            </svg>
-                          )}
-                          <span>{tier}</span>
-                          {budget != null && (
-                            <span className="tabular-nums text-[var(--color-sh-ink-muted)]">
-                              · ₹{budget.toLocaleString()}
-                            </span>
-                          )}
-                        </span>
-                      );
-                    })}
-                    {displayTiers.length === 0 && (
-                      <span className="text-xs text-[var(--color-sh-ink-faint)]">No levels selected</span>
-                    )}
-                  </div>
-                </div>
-
-                {tiers.length > 1 && (
-                  <p className="rounded-lg bg-[var(--color-sh-cream)] px-3 py-2 text-[11px] text-[var(--color-sh-ink-muted)]">
-                    All {tiers.length} tiers publish as <strong>one card</strong> with a tab per tier — talents and the business each see only their tier&apos;s pricing.
-                  </p>
-                )}
-
-                {/* Pricing matrix — one row per selected tier. Columns run
-                    Client budget → Subscription → Proposed → Final → Margin → Partner.
-                    Final and Partner are the load-bearing figures (shaded). */}
-                <div className="overflow-x-auto rounded-xl border border-[var(--color-sh-warm-border)]">
-                  <table className="w-full min-w-[860px] border-collapse text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-[var(--color-sh-warm-border)] align-bottom">
-                        <th className="bg-[var(--color-sh-cream)] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
-                          Tier
-                        </th>
-                        <th className="bg-[var(--color-sh-cream)] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
-                          Client budget
-                        </th>
-                        <th className="bg-[var(--color-sh-cream)] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
-                          Subscription price
-                        </th>
-                        <th className="bg-[var(--color-sh-cream)] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
-                          Proposed price
-                        </th>
-                        <th className="bg-[var(--color-sh-cream)] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink)]">
-                          Final price
-                        </th>
-                        <th className="bg-[var(--color-sh-cream)] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
-                          Margin
-                        </th>
-                        <th className="bg-[var(--color-sh-cream)] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink)]">
-                          Partner price
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {displayTiers.map((tier, rowIdx) => {
-                        const entry = tierPricing[tier] || { proposedPrice: 0, markup: null, subscriptionPrice: null };
-                        const partnerPrice = partnerPriceForTier(tier);
-                        const catalogPricingRow = catalogByTier[tier]?.pricing?.[0] || null;
-                        const catalogMarginInRupees = catalogMarginForTier(tier);
-                        const showOriginal =
-                          tiers.length === 1 &&
-                          originalProposedPrice != null &&
-                          originalProposedPrice !== entry.proposedPrice;
-                        // The final price the client actually pays always resolves
-                        // to a number: the explicit override if set, otherwise the
-                        // proposed price (mirrors partnerPriceForTier's fallback).
-                        const effectiveFinal =
-                          entry.subscriptionPrice ?? (entry.proposedPrice > 0 ? entry.proposedPrice : null);
-                        const finalUsesProposed = entry.subscriptionPrice == null && effectiveFinal != null;
-                        const tierClientBudget =
-                          clientBudgetsByTier[tier]
-                          ?? (clientBudget && clientBudget > 0 && Object.keys(clientBudgetsByTier).length === 0
-                            ? clientBudget
-                            : null);
-                        const isPreferred = tierClientBudget != null || (card?.target_tiers || []).includes(tier);
-                        return (
-                          <tr
-                            key={tier}
-                            className={`align-top ${rowIdx > 0 ? 'border-t border-[var(--color-sh-warm-border)]' : ''} ${
-                              isPreferred ? 'bg-[var(--color-sh-lime-soft)]/40' : ''
-                            }`}
-                          >
-                            {/* Tier + preferred badge */}
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-1.5">
-                                {isPreferred && (
-                                  <svg className="h-3.5 w-3.5 flex-shrink-0 text-[var(--color-sh-ink)]" viewBox="0 0 24 24" fill="currentColor" aria-label="Client preferred">
-                                    <path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.8 5.7 21l2.3-7.2-6-4.4h7.6L12 2z" />
-                                  </svg>
-                                )}
-                                <div className="text-sm font-semibold text-[var(--color-sh-ink)]">{tier}</div>
-                              </div>
-                              <span className="mt-1 inline-block rounded-full bg-[var(--color-sh-cream)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-sh-ink-muted)]">
-                                {isPreferred ? 'Client preferred' : (tiers.length > 1 ? 'Tab in 1 card' : '1 card on publish')}
-                              </span>
-                            </td>
-
-                            {/* Client's stated budget for this level */}
-                            <td className="px-3 py-3">
-                              <div className="text-sm font-medium tabular-nums text-[var(--color-sh-ink)]">
-                                {tierClientBudget != null
-                                  ? `₹${tierClientBudget.toLocaleString()}`
-                                  : '—'}
-                              </div>
-                              <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">From brief</div>
-                            </td>
-
-                            {/* Subscription price — read-only catalog reference */}
-                            <td className="px-3 py-3">
-                              <div className="text-sm font-medium tabular-nums text-[var(--color-sh-ink-muted)]">
-                                {catalogPricingRow ? `₹${catalogPricingRow.price.toLocaleString()}` : '—'}
-                              </div>
-                              <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">Catalog default</div>
-                            </td>
-
-                            {/* Proposed price — editable (what we propose to charge) */}
-                            <td className="px-3 py-3">
-                              <PriceInput
-                                value={entry.proposedPrice || ''}
-                                onChange={(e) =>
-                                  updateTierPricing(tier, 'proposedPrice', parseInt(e.target.value) || 0)
-                                }
-                                disabled={!isEditable}
-                                ariaLabel={`${tier} proposed price`}
-                              />
-                              {showOriginal && (
-                                <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">
-                                  Was <span className="line-through">₹{originalProposedPrice!.toLocaleString()}</span>
-                                </div>
+                          <td className="px-2.5 py-1.5">
+                            <div className="flex items-center gap-1.5">
+                              {(isClientPreferred || isSelected) && (
+                                <span
+                                  className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--color-sh-ink)]"
+                                  title={isClientPreferred ? 'Client preferred' : 'Selected for publish'}
+                                />
                               )}
-                            </td>
+                              <span className={`text-xs font-semibold ${
+                                isClientPreferred || isSelected
+                                  ? 'text-[var(--color-sh-ink)]'
+                                  : 'text-[var(--color-sh-ink-muted)]'
+                              }`}>
+                                {tier}
+                              </span>
+                            </div>
+                            {(isClientPreferred || isSelected) && (
+                              <span className="mt-0.5 block text-[9px] font-medium text-[var(--color-sh-ink-muted)]">
+                                {isClientPreferred ? 'Client selected' : 'Selected'}
+                              </span>
+                            )}
+                          </td>
 
-                            {/* Final price — editable override, but always shows
-                                the resolved figure the client actually pays. */}
-                            <td className="bg-[var(--color-sh-cream)] px-3 py-3">
+                          <td className="px-2 py-1.5 tabular-nums text-[var(--color-sh-ink-muted)]">
+                            {catalogPricingRow ? `₹${catalogPricingRow.price.toLocaleString()}` : '—'}
+                          </td>
+
+                          {/* Client proposed price — brief budget for preferred levels only */}
+                          <td className="px-2 py-1.5">
+                            {isClientPreferred && clientProposed != null ? (
+                              <div className="text-xs font-semibold tabular-nums text-[var(--color-sh-ink)]">
+                                ₹{clientProposed.toLocaleString()}
+                              </div>
+                            ) : isClientPreferred ? (
+                              <span className="text-[var(--color-sh-ink-faint)]">—</span>
+                            ) : (
+                              <span className="text-[var(--color-sh-ink-faint)]">—</span>
+                            )}
+                          </td>
+
+                          <td className={`px-2 py-1.5 ${isSelected ? 'bg-[var(--color-sh-cream)]/80' : ''}`}>
+                            {isSelected ? (
                               <PriceInput
                                 value={entry.subscriptionPrice ?? ''}
-                                placeholder={entry.proposedPrice ? `${entry.proposedPrice}` : ''}
+                                placeholder={
+                                  clientProposed
+                                    ? `${clientProposed}`
+                                    : catalogPricingRow
+                                      ? `${catalogPricingRow.price}`
+                                      : ''
+                                }
                                 onChange={(e) => {
                                   const v = parseInt(e.target.value);
                                   updateTierPricing(tier, 'subscriptionPrice', Number.isFinite(v) && v > 0 ? v : null);
@@ -1211,23 +1187,15 @@ export default function AdminCardEditor({
                                 emphasis
                                 ariaLabel={`${tier} final price`}
                               />
-                              <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">
-                                {effectiveFinal != null ? (
-                                  <>
-                                    Client pays{' '}
-                                    <span className="font-semibold tabular-nums text-[var(--color-sh-ink)]">
-                                      ₹{effectiveFinal.toLocaleString()}
-                                    </span>
-                                    {finalUsesProposed ? ' (proposed)' : ''}
-                                  </>
-                                ) : (
-                                  'Set a proposed or final price'
-                                )}
-                              </div>
-                            </td>
+                            ) : (
+                              <span className="tabular-nums text-[var(--color-sh-ink-muted)]">
+                                {effectiveFinal != null ? `₹${effectiveFinal.toLocaleString()}` : '—'}
+                              </span>
+                            )}
+                          </td>
 
-                            {/* Margin — editable (blank inherits plan margin) */}
-                            <td className="px-3 py-3">
+                          <td className="px-2 py-1.5">
+                            {isSelected ? (
                               <PriceInput
                                 value={entry.markup ?? ''}
                                 placeholder={catalogMarginInRupees != null ? `${catalogMarginInRupees}` : ''}
@@ -1238,37 +1206,33 @@ export default function AdminCardEditor({
                                 disabled={!isEditable}
                                 ariaLabel={`${tier} margin`}
                               />
-                              {catalogPricingRow ? (
-                                <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">
-                                  {entry.markup == null ? 'Plan margin — ' : 'Plan: '}
-                                  {catalogPricingRow.margin_type === 'percent'
-                                    ? `${catalogPricingRow.margin_value}% (₹${(catalogMarginInRupees ?? 0).toLocaleString()})`
-                                    : `₹${catalogPricingRow.margin_value.toLocaleString()} flat`}
-                                </div>
-                              ) : (
-                                <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">Blank = plan margin</div>
-                              )}
-                            </td>
+                            ) : (
+                              <span className="tabular-nums text-[var(--color-sh-ink-muted)]">
+                                {catalogMarginInRupees != null
+                                  ? `₹${catalogMarginInRupees.toLocaleString()}`
+                                  : '—'}
+                              </span>
+                            )}
+                          </td>
 
-                            {/* Partner price — derived, read-only, emphasized */}
-                            <td className="bg-[var(--color-sh-cream)] px-4 py-3">
-                              <div className="text-sm font-bold tabular-nums text-[var(--color-sh-ink)]">
-                                {partnerPrice != null ? `₹${partnerPrice.toLocaleString()}` : '—'}
-                              </div>
-                              <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">Final − Margin</div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <p className="px-1 text-[11px] leading-relaxed text-[var(--color-sh-ink-faint)]">
-                  All amounts are ₹/month. <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Subscription price</strong> is the catalog default · <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Client&apos;s budget</strong> is what the client stated in their brief (reference only, shown above) · <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Proposed price</strong> is what you propose to charge · <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Final price</strong> is what the client pays (blank uses the proposed price) · <strong className="font-semibold text-[var(--color-sh-ink-muted)]">Partner price</strong> = Final − Margin.
-                </p>
+                          <td className={`px-2.5 py-1.5 tabular-nums font-semibold ${
+                            isSelected || isClientPreferred
+                              ? 'bg-[var(--color-sh-cream)]/80 text-[var(--color-sh-ink)]'
+                              : 'text-[var(--color-sh-ink-muted)]'
+                          }`}>
+                            {partnerPrice != null ? `₹${partnerPrice.toLocaleString()}` : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            )}
+
+              <p className="px-0.5 text-[10px] leading-snug text-[var(--color-sh-ink-faint)]">
+                ₹/mo · Highlighted = client-selected · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Client proposed</strong> = budget from brief · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Final</strong> = what the client pays · <strong className="font-medium text-[var(--color-sh-ink-muted)]">Partner</strong> = Final − Margin
+              </p>
+            </div>
           </Section>
 
           {/* Location & Language */}
@@ -1689,7 +1653,7 @@ function PriceInput({
         onChange={onChange}
         disabled={disabled}
         aria-label={ariaLabel}
-        className={`sh-input sh-input-sm w-full min-w-[90px] pl-6 tabular-nums ${emphasis ? 'font-semibold' : ''}`}
+        className={`sh-input sh-input-sm h-8 w-full min-w-[72px] max-w-[100px] pl-5 text-xs tabular-nums ${emphasis ? 'font-semibold' : ''}`}
       />
     </div>
   );
