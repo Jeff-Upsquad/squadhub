@@ -25,11 +25,7 @@ import {
   type CardActor,
   type CardLifecycleResult,
 } from '../utils/clientCardLink';
-import {
-  attachSubmissionToExistingClient,
-  findExistingClientForSubmission,
-  transitionSubmissionStatus,
-} from '../utils/submissionPipeline';
+import { promoteCardLeadToClient } from '../utils/submissionPipeline';
 import { logCardEvent } from '../utils/cardEvents';
 import { copyCardToNewDraft } from '../utils/duplicateCard';
 
@@ -2032,11 +2028,10 @@ router.delete('/:id', async (req: Request, res: Response) => {
 // changes, so a fresh selection re-opens the NEW badge automatically.
 //
 // Side effect: when the card is in the 'assigned' state, this also
-// commits the lead → client. If a client matching the lead already
-// exists (by submission_id / business / email / phone), the lead's
-// staged subscriptions are attached to that client. Otherwise a fresh
-// client is materialised. Submission status is flipped to 'converted'
-// either way, so the lead leaves the Leads section and shows in Clients.
+// commits the lead → client (via promoteCardLeadToClient). Resolves the
+// lead by submission_subscription_id first, then by customer email/phone
+// for orphan cards. Submission status flips to 'converted' so the lead
+// leaves Contacts and appears under Clients.
 // ============================================================
 router.post('/:id/mark-reviewed', async (req: Request, res: Response) => {
   try {
@@ -2044,7 +2039,7 @@ router.post('/:id/mark-reviewed', async (req: Request, res: Response) => {
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, selected_recipient_id, submission_subscription_id')
+      .select('id, state, selected_recipient_id, submission_subscription_id, customer_email, customer_phone')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) {
@@ -2060,74 +2055,17 @@ router.post('/:id/mark-reviewed', async (req: Request, res: Response) => {
       submissionId: string | null;
       clientId: string | null;
       action: 'promoted' | 'attached' | 'noop';
-      matchedBy?: 'submission_id' | 'business_name' | 'email' | 'phone';
+      matchedBy?: string;
       clientBusinessName?: string;
     } = { submissionId: null, clientId: null, action: 'noop' };
 
-    const shouldPromote = card.state === 'assigned' && !!card.submission_subscription_id;
-    if (shouldPromote) {
-      const { data: stagedSub, error: stagedErr } = await supabaseAdmin
-        .from('client_submission_subscriptions')
-        .select('submission_id')
-        .eq('id', card.submission_subscription_id)
-        .maybeSingle();
-      if (stagedErr) {
-        res.status(500).json({ success: false, error: stagedErr.message });
+    if (card.state === 'assigned') {
+      const result = await promoteCardLeadToClient(card);
+      if (!result.ok) {
+        res.status(result.code).json({ success: false, error: result.error });
         return;
       }
-
-      const submissionId = stagedSub?.submission_id ?? null;
-      if (submissionId) {
-        const { data: submission, error: subErr } = await supabaseAdmin
-          .from('client_submissions')
-          .select('*')
-          .eq('id', submissionId)
-          .maybeSingle();
-        if (subErr) {
-          res.status(500).json({ success: false, error: subErr.message });
-          return;
-        }
-
-        if (submission) {
-          let match;
-          try {
-            match = await findExistingClientForSubmission(submission);
-          } catch (e: any) {
-            res.status(500).json({ success: false, error: e?.message || 'Failed to find existing client' });
-            return;
-          }
-
-          if (match) {
-            const result = await attachSubmissionToExistingClient(submissionId, match.id);
-            if (!result.ok) {
-              res.status(result.code).json({ success: false, error: result.error });
-              return;
-            }
-            promotion = {
-              submissionId,
-              clientId: result.clientId,
-              action: 'attached',
-              matchedBy: match.matchedBy,
-              clientBusinessName: match.business_name,
-            };
-          } else {
-            const result = await transitionSubmissionStatus(submissionId, 'converted');
-            if (!result.ok) {
-              // 409 means the lead is already past 'converted' (e.g. onboarding/closed) — treat as noop, still stamp.
-              if (result.code !== 409) {
-                res.status(result.code).json({ success: false, error: result.error });
-                return;
-              }
-            } else {
-              promotion = {
-                submissionId,
-                clientId: result.clientId,
-                action: submission.status === 'converted' ? 'noop' : 'promoted',
-              };
-            }
-          }
-        }
-      }
+      promotion = result.promotion;
     }
 
     const { data: updated, error } = await supabaseAdmin

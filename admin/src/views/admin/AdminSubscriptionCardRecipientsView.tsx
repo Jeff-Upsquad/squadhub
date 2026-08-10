@@ -1316,11 +1316,10 @@ export default function AdminSubscriptionCardRecipientsView({
             {/* Tier tabs (incl. "All") pinned to the top of the detail. */}
             {tierTabs}
 
-            {/* Assignment offer negotiations — read LIVE from SquadHire (no
-                mirror). Admin can counter / accept (accept = select) / decline. */}
-            {card.card_type === 'assignment' && !allTiersMode && (
-              <AdminAssignmentOffers cardId={card.id} />
-            )}
+            {/* Bidding — live from SquadHire (subscription + assignment).
+                Accept locks the figure; Select stays on the recipients funnel. */}
+            {(card.card_type === 'assignment' || card.card_type === 'subscription' || !card.card_type) &&
+              !allTiersMode && <AdminAssignmentOffers cardId={card.id} />}
 
             {/* One-click broadcast for every tier still awaiting broadcast. */}
             {allTiersMode && (
@@ -1449,14 +1448,21 @@ export default function AdminSubscriptionCardRecipientsView({
             {/* Per-tier summary blocks — hidden in the merged "All tiers" view. */}
             {!allTiersMode && (
               <>
-            {/* Selected talent(s) — emerald card mirroring the SquadHire business view */}
-            {selectedRecipients.length > 0 && (
+            {/* Selected / Assigned talent(s) — stage-aware labels (same rules as All tiers).
+                Selected = state='assigned' without selected_recipient_id (awaiting Assign).
+                Assigned = selected_recipient_id stamped (engagement live). */}
+            {selectedRecipients.length > 0 && (() => {
+              const isAssignedStage = bucket === 'assigned';
+              const placementNoun = isAssignedStage ? 'Assigned Talent' : 'Selected Talent';
+              return (
               <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/50 p-5 sm:p-6 dark:border-emerald-500/30 dark:bg-emerald-500/10">
                 <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  {selectedRecipients.length === 1 ? 'Selected Talent' : `Selected Talents (${selectedRecipients.length})`}
+                  {selectedRecipients.length === 1
+                    ? placementNoun
+                    : `${placementNoun}s (${selectedRecipients.length})`}
                 </h2>
                 <div className="space-y-3">
                   {selectedRecipients.map((r) => (
@@ -1498,8 +1504,13 @@ export default function AdminSubscriptionCardRecipientsView({
                             </svg>
                           </a>
                         )}
-                        <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
-                          Selected
+                        <span
+                          className="shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                          style={isAssignedStage
+                            ? { backgroundColor: '#065F46', color: '#FFFFFF' }
+                            : { backgroundColor: '#D1FAE5', color: '#047857' }}
+                        >
+                          {isAssignedStage ? 'Assigned' : 'Selected'}
                         </span>
                       </div>
                     </div>
@@ -1562,7 +1573,8 @@ export default function AdminSubscriptionCardRecipientsView({
                   </div>
                 )}
               </div>
-            )}
+              );
+            })()}
 
             {/* Broadcast summary */}
             <div

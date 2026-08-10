@@ -14,7 +14,10 @@ import {
   deliverCardToSquadhire,
   previewSquadhireMatches,
 } from '../utils/squadhireWebhook';
-import { stageSubscriptionsFromAssignedCards } from '../utils/submissionPipeline';
+import {
+  promoteCardLeadToClient,
+  stageSubscriptionsFromAssignedCards,
+} from '../utils/submissionPipeline';
 import { logCardEvent } from '../utils/cardEvents';
 import {
   ensureActiveAssignmentTerm,
@@ -464,7 +467,7 @@ router.post('/subscription-cards/:id/finalize-selection', async (req: Request, r
 
     const { data: card, error: cardErr } = await supabaseAdmin
       .from('subscription_cards')
-      .select('id, state, selected_recipient_id')
+      .select('id, state, selected_recipient_id, submission_subscription_id, customer_email, customer_phone')
       .eq('id', cardId)
       .maybeSingle();
     if (cardErr) { res.status(500).json({ success: false, error: cardErr.message }); return; }
@@ -533,11 +536,30 @@ router.post('/subscription-cards/:id/finalize-selection', async (req: Request, r
     // work_start_date defaults to now (admin-approval time) = the engagement start.
     await ensureActiveAssignmentTerm({ cardId, recipientType, recipientId });
 
+    // Commit lead → Clients on assign (not only on mark-reviewed). Best-effort:
+    // assignment already succeeded; a failed convert must not roll it back.
+    const promote = await promoteCardLeadToClient({
+      id: cardId,
+      state: 'assigned',
+      submission_subscription_id: card.submission_subscription_id,
+      customer_email: card.customer_email,
+      customer_phone: card.customer_phone,
+    }).catch((err) => {
+      console.error('[finalize] promote lead failed', err);
+      return null;
+    });
+    if (promote && !promote.ok) {
+      console.error('[finalize] promote lead failed', promote.error);
+    }
+
     notifySquadhireOfActivation(cardId).catch((err) => {
       console.error('[finalize] notify squadhire failed', err);
     });
 
-    res.json({ success: true });
+    res.json({
+      success: true,
+      data: { promotion: promote && promote.ok ? promote.promotion : undefined },
+    });
   } catch (err: any) {
     console.error('Finalize selection error:', err);
     res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
@@ -681,11 +703,18 @@ router.post('/subscription-cards/:id/offer-previous-talent', async (req: Request
           },
           { onConflict: 'card_id,partner_id' },
         );
-      await supabaseAdmin
+      const { data: partnerCard } = await supabaseAdmin
         .from('subscription_cards')
         .update({ state: 'assigned', assigned_at: nowIso, admin_reviewed_at: null, selected_recipient_type: 'partner', selected_recipient_id: rId })
-        .eq('id', cardId);
+        .eq('id', cardId)
+        .select('id, state, submission_subscription_id, customer_email, customer_phone')
+        .maybeSingle();
       await ensureActiveAssignmentTerm({ cardId, recipientType: 'partner', recipientId: rId, recipientName: rName, assignedDate: todayIst });
+      if (partnerCard) {
+        promoteCardLeadToClient(partnerCard).catch((err) =>
+          console.error('[offer-previous-talent] promote lead failed', err),
+        );
+      }
       handOffSpaceToNewTalent({ cardId, oldRecipientType: null, oldRecipientId: null, newRecipientType: 'partner', newRecipientId: rId })
         .catch((err) => console.error('[offer-previous-talent] space hand-off failed', err));
     } else {

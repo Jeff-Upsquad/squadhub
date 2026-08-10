@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../supabase';
 import { copyExternalLinksToClient } from './clientExternalLinks';
 import { ensureClientPortalAccess } from './ensureClientPortalAccess';
+import { findSubmissionByContact } from './leadLookup';
 
 export const PIPELINE_STATUSES = [
   'new',
@@ -222,19 +223,22 @@ async function materialiseClientFromSubmission(submission: any, stagedSubs: any[
 
   if (existing) return { clientId: existing.id as string, created: false };
 
+  // clients.business_address (and a few other columns) are still NOT NULL, while
+  // client_submissions dropped that constraint (migration 081). Coerce nulls so
+  // assign/mark-reviewed convert never dies on incomplete lead capture.
   const { data: client, error: clientErr } = await supabaseAdmin
     .from('clients')
     .insert({
       submission_id: submission.id,
-      business_name: submission.business_name,
-      contact_person: submission.contact_person,
-      designation: submission.designation,
-      contact_number: submission.contact_number,
-      email: submission.email,
-      business_address: submission.business_address,
-      gst_registered: submission.gst_registered,
-      gst_number: submission.gst_number,
-      accounts_email: submission.accounts_email,
+      business_name: submission.business_name || 'Unknown',
+      contact_person: submission.contact_person || 'Unknown',
+      designation: submission.designation || null,
+      contact_number: submission.contact_number || '',
+      email: submission.email || '',
+      business_address: submission.business_address || '',
+      gst_registered: submission.gst_registered ?? false,
+      gst_number: submission.gst_number || null,
+      accounts_email: submission.accounts_email || null,
       country_id: submission.country_id,
       primary_sales_person_id: submission.primary_sales_person_id || null,
       secondary_sales_person_id: submission.secondary_sales_person_id || null,
@@ -461,6 +465,138 @@ export async function attachSubmissionToExistingClient(
   }
 
   return { ok: true, status: 'converted', clientId };
+}
+
+// ============================================================
+// promoteCardLeadToClient
+//
+// When a card lands in Assigned (state='assigned'), commit the linked Hub
+// contact → Clients. Prefer the staged subscription link when present; fall
+// back to matching the lead by customer email/phone so orphan cards (no
+// submission_subscription_id) still convert — the Aegis gap.
+//
+// Called from:
+//   - finalize-selection / partner-assign (when selected_recipient_id is stamped)
+//   - mark-reviewed (legacy path; still runs for cards reviewed after select)
+// Idempotent: already-converted leads attach missing staged subs or noop.
+// ============================================================
+export type CardLeadPromotion = {
+  submissionId: string | null;
+  clientId: string | null;
+  action: 'promoted' | 'attached' | 'noop';
+  matchedBy?: ClientMatchReason | 'contact';
+  clientBusinessName?: string;
+};
+
+export async function promoteCardLeadToClient(card: {
+  id: string;
+  state: string;
+  submission_subscription_id?: string | null;
+  customer_email?: string | null;
+  customer_phone?: string | null;
+}): Promise<{ ok: true; promotion: CardLeadPromotion } | { ok: false; code: number; error: string }> {
+  const empty: CardLeadPromotion = { submissionId: null, clientId: null, action: 'noop' };
+  if (card.state !== 'assigned') {
+    return { ok: true, promotion: empty };
+  }
+
+  let submissionId: string | null = null;
+  let contactMatched = false;
+
+  if (card.submission_subscription_id) {
+    const { data: stagedSub, error: stagedErr } = await supabaseAdmin
+      .from('client_submission_subscriptions')
+      .select('submission_id')
+      .eq('id', card.submission_subscription_id)
+      .maybeSingle();
+    if (stagedErr) return { ok: false, code: 500, error: stagedErr.message };
+    submissionId = stagedSub?.submission_id ?? null;
+  }
+
+  // Orphan cards (no submission_subscription_id, or staged row deleted) —
+  // still convert when the customer contact matches a Hub lead.
+  if (!submissionId) {
+    const contact = await findSubmissionByContact(card.customer_email, card.customer_phone);
+    if (contact?.id) {
+      submissionId = contact.id as string;
+      contactMatched = true;
+    }
+  }
+
+  if (!submissionId) {
+    return { ok: true, promotion: empty };
+  }
+
+  const { data: submission, error: subErr } = await supabaseAdmin
+    .from('client_submissions')
+    .select('*')
+    .eq('id', submissionId)
+    .maybeSingle();
+  if (subErr) return { ok: false, code: 500, error: subErr.message };
+  if (!submission) return { ok: true, promotion: empty };
+
+  // Ensure orphan assigned cards become staged subs before convert/attach.
+  // No-op when rows already exist or the card plan can't be resolved.
+  try {
+    await stageSubscriptionsFromAssignedCards(submissionId);
+  } catch (e: any) {
+    console.error('[promoteCardLeadToClient] auto-stage failed', submissionId, e?.message);
+  }
+
+  let match;
+  try {
+    match = await findExistingClientForSubmission(submission);
+  } catch (e: any) {
+    return { ok: false, code: 500, error: e?.message || 'Failed to find existing client' };
+  }
+
+  if (match) {
+    const result = await attachSubmissionToExistingClient(submissionId, match.id);
+    if (!result.ok) return result;
+    return {
+      ok: true,
+      promotion: {
+        submissionId,
+        clientId: result.clientId,
+        action: 'attached',
+        matchedBy: match.matchedBy,
+        clientBusinessName: match.business_name,
+      },
+    };
+  }
+
+  const wasConverted = submission.status === 'converted';
+  const result = await transitionSubmissionStatus(submissionId, 'converted');
+  if (!result.ok) {
+    // Already past converted (onboarding/closed) — treat as noop for the card action.
+    if (result.code === 409) {
+      const { data: existingClient } = await supabaseAdmin
+        .from('clients')
+        .select('id')
+        .eq('submission_id', submissionId)
+        .maybeSingle();
+      return {
+        ok: true,
+        promotion: {
+          submissionId,
+          clientId: existingClient?.id ?? null,
+          action: 'noop',
+          matchedBy: contactMatched ? 'contact' : undefined,
+        },
+      };
+    }
+    return result;
+  }
+
+  return {
+    ok: true,
+    promotion: {
+      submissionId,
+      clientId: result.clientId,
+      action: wasConverted ? 'noop' : 'promoted',
+      matchedBy: contactMatched ? 'contact' : undefined,
+    },
+  };
 }
 
 export async function transitionSubmissionStatus(
