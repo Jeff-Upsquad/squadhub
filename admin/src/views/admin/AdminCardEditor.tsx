@@ -341,9 +341,9 @@ export default function AdminCardEditor({
     return map;
   }, [tiers, catalogQueries]);
 
-  // Once per card+plan+tiers: fill blank Margin (always) and blank Final (only
-  // when the client left no budget) from the catalog. Covers CRM/internal
-  // briefs that landed before server-side seeding, and plan changes in the editor.
+  // Once per card+plan+tiers: fill blank Margin and blank Final from the
+  // catalog. Covers CRM/internal briefs that landed before server-side seeding,
+  // and plan changes in the editor. Client budget (if any) stays reference-only.
   const catalogSeedKeyRef = useRef('');
   useEffect(() => {
     if (!card) return;
@@ -358,7 +358,6 @@ export default function AdminCardEditor({
     const seedKey = `${card.id}|${catalogPlan}|${tiers.join(',')}`;
     if (catalogSeedKeyRef.current === seedKey) return;
 
-    const hasBudget = clientBudget != null && clientBudget > 0;
     setTierPricing((prev) => {
       let changed = false;
       const next = { ...prev };
@@ -379,11 +378,7 @@ export default function AdminCardEditor({
           updated.markup = marginAbs;
           changed = true;
         }
-        if (
-          !hasBudget &&
-          updated.subscriptionPrice == null &&
-          !(updated.proposedPrice > 0)
-        ) {
+        if (updated.subscriptionPrice == null && !(updated.proposedPrice > 0)) {
           updated.subscriptionPrice = row.price;
           changed = true;
         }
@@ -392,7 +387,7 @@ export default function AdminCardEditor({
       return changed ? next : prev;
     });
     catalogSeedKeyRef.current = seedKey;
-  }, [card, catalogPlan, tiers, catalogByTier, clientBudget, catalogQueries]);
+  }, [card, catalogPlan, tiers, catalogByTier, catalogQueries]);
 
   const workingDaysCount = useMemo(
     () => workingDaysThisMonth(workingDays),

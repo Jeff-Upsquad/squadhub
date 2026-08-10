@@ -604,8 +604,8 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
       // Subscription pricing seed from the admin catalog:
       //   - proposed_price stays 0
       //   - margin always auto-filled from catalog
-      //   - no client budget → customer price becomes Final (subscription_price)
-      //   - with client budget → Final left blank; budget stored on client_budget
+      //   - Final (subscription_price) = catalog customer price
+      //   - client budget (if any) stored on client_budget as reference only
       // Assignments ignore catalog seeding (one-off project budget → proposed_price).
       const roleTiers = roleReq?.tiers || [];
       const roleClientBudget =

@@ -8,10 +8,8 @@ import { supabaseAdmin } from '../supabase';
  * Rules:
  *   - proposed_price stays 0 (admin may fill later)
  *   - margin is always copied from the catalog (absolute ₹)
- *   - when the client did NOT state a budget, customer price → subscription_price
- *     (the Final price in the editor)
- *   - when they DID state a budget, subscription_price stays null (admin sets it);
- *     the budget itself lives on subscription_cards.client_budget
+ *   - customer price always → subscription_price (the Final price in the editor)
+ *   - client budget (if any) is reference only on subscription_cards.client_budget
  */
 
 const PLAN_TO_CANONICAL: Record<string, string> = {
@@ -71,7 +69,9 @@ export async function buildCatalogTierPricing(opts: {
   /** Client's stated monthly budget. null/undefined = not mentioned. */
   clientBudget: number | null | undefined;
 }): Promise<Record<string, CatalogTierPricingEntry>> {
-  const { serviceSlug, planName, tiers, countryId, clientBudget } = opts;
+  const { serviceSlug, planName, tiers, countryId } = opts;
+  // clientBudget is accepted for call-site compatibility; Final always comes
+  // from the catalog. Budget itself is stored on subscription_cards.client_budget.
   const canonicalPlan =
     planName ? PLAN_TO_CANONICAL[planName.toLowerCase()] || planName : '';
   if (!serviceSlug || !canonicalPlan || tiers.length === 0) return {};
@@ -125,7 +125,6 @@ export async function buildCatalogTierPricing(opts: {
     };
   }
 
-  const hasBudget = typeof clientBudget === 'number' && clientBudget > 0;
   const out: Record<string, CatalogTierPricingEntry> = {};
 
   for (const tier of tiers) {
@@ -145,9 +144,8 @@ export async function buildCatalogTierPricing(opts: {
     out[tier] = {
       proposed_price: 0,
       markup,
-      // No client budget → catalog customer price becomes the Final price.
-      // With a budget → leave Final for the admin; budget is on client_budget.
-      subscription_price: hasBudget ? null : pricing.price,
+      // Catalog customer price → Final. Client budget (if any) is reference only.
+      subscription_price: pricing.price,
     };
   }
 
