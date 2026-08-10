@@ -481,6 +481,50 @@ export default function MobileCardDetail({
               ) : card.partner_price_override != null ? (
                 <DetailRow label="Partner override" value={`${priceCurrency || '₹'} ${card.partner_price_override.toLocaleString()}`} />
               ) : null}
+              {/* Preferred levels + client budgets from the brief */}
+              {(() => {
+                const tiers = Array.isArray(card.target_tiers) ? card.target_tiers : [];
+                const tp = card.tier_pricing && typeof card.tier_pricing === 'object' ? card.tier_pricing : {};
+                if (tiers.length === 0) return null;
+                return (
+                  <div className="mt-2 border-t border-[var(--color-sh-warm-border)] pt-2">
+                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                      Client preferred levels
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {tiers.map((tier) => {
+                        const entry = (tp as any)[tier];
+                        const budget =
+                          (typeof entry?.client_budget === 'number' && entry.client_budget > 0
+                            ? entry.client_budget
+                            : null)
+                          ?? (typeof entry?.proposed_price === 'number' &&
+                            entry.proposed_price > 0 &&
+                            !(entry?.subscription_price > 0)
+                            ? entry.proposed_price
+                            : null)
+                          ?? (card.client_budget && card.client_budget > 0 ? card.client_budget : null);
+                        return (
+                          <span
+                            key={tier}
+                            className="inline-flex items-center gap-1 rounded-full border border-[var(--color-sh-ink)] bg-[var(--color-sh-lime-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-sh-ink)]"
+                          >
+                            <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                              <path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.8 5.7 21l2.3-7.2-6-4.4h7.6L12 2z" />
+                            </svg>
+                            {tier}
+                            {budget != null && (
+                              <span className="tabular-nums text-[var(--color-sh-ink-muted)]">
+                                · ₹{budget.toLocaleString()}
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </DetailCard>
 
             {/* Secondary cards (with create form) */}

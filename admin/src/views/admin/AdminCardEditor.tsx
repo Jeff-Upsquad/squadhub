@@ -184,9 +184,11 @@ export default function AdminCardEditor({
   // markup null = inherit the plan catalog margin; subscriptionPrice null =
   // not finalized (falls back to proposedPrice).
   const [tierPricing, setTierPricing] = useState<Record<string, { proposedPrice: number; markup: number | null; subscriptionPrice: number | null }>>({});
-  // Client's stated monthly budget from the brief — single field shown above
-  // the pricing table (not per tier). null = "no budget".
+  // Client's stated monthly budget from the brief — scalar fallback when all
+  // tiers share one amount (or only one is set). Per-tier amounts live in
+  // clientBudgetsByTier (from tier_pricing.<tier>.client_budget).
   const [clientBudget, setClientBudget] = useState<number | null>(null);
+  const [clientBudgetsByTier, setClientBudgetsByTier] = useState<Record<string, number>>({});
   const [publishTargets, setPublishTargets] = useState<string[]>(['partner', 'talent']);
   const [distribution, setDistribution] = useState<string>('broadcast');
   const [brandName, setBrandName] = useState('');
@@ -245,22 +247,37 @@ export default function AdminCardEditor({
       }
     });
     setTierPricing(initialPricing);
-    // Single budget field: prefer the scalar column; fall back to any legacy
-    // per-tier client_budget still sitting in tier_pricing JSONB.
-    let budgetFromTiers: number | null = null;
+    // Per-tier client budgets (preferred levels the client stated prices for).
+    // Prefer explicit client_budget; for assignment rows without client_budget,
+    // proposed_price on the tier IS the client's project budget.
+    const byTier: Record<string, number> = {};
     if (dbTierPricing) {
-      for (const p of Object.values(dbTierPricing)) {
+      for (const [tier, p] of Object.entries(dbTierPricing)) {
         const b = (p as any)?.client_budget;
         if (typeof b === 'number' && b > 0) {
-          budgetFromTiers = b;
-          break;
+          byTier[tier] = b;
+          continue;
+        }
+        const prop = (p as any)?.proposed_price;
+        const hasFinal =
+          typeof (p as any)?.subscription_price === 'number' && (p as any).subscription_price > 0;
+        // Assignment / legacy: proposed with no catalog Final = client's budget.
+        if (typeof prop === 'number' && prop > 0 && !hasFinal) {
+          byTier[tier] = prop;
         }
       }
     }
+    // Scalar client_budget applied to every selected tier when no per-tier map.
+    if (Object.keys(byTier).length === 0 && card.client_budget && card.client_budget > 0) {
+      for (const t of card.target_tiers || []) byTier[t] = card.client_budget;
+    }
+    setClientBudgetsByTier(byTier);
+    const vals = Object.values(byTier);
+    const uniform = vals.length > 0 && vals.every((v) => v === vals[0]) ? vals[0] : null;
     setClientBudget(
       card.client_budget && card.client_budget > 0
         ? card.client_budget
-        : budgetFromTiers,
+        : uniform,
     );
     setOriginalProposedPrice(card.proposed_price);
     setPublishTargets(card.publish_targets || ['partner', 'talent']);
@@ -443,17 +460,24 @@ export default function AdminCardEditor({
   const anyCatalogLoaded = tiers.some((t) => catalogByTier[t] != null);
 
   // Build the API tier_pricing map (snake_case shape) from the form state.
+  // Preserve client_budget from the brief so a save doesn't wipe preferred-
+  // level budgets the admin only uses as reference.
   const tierPricingPayload = useMemo(() => {
-    const out: Record<string, { proposed_price: number; markup: number | null; subscription_price: number | null }> = {};
+    const out: Record<
+      string,
+      { proposed_price: number; markup: number | null; subscription_price: number | null; client_budget?: number | null }
+    > = {};
     for (const [tier, entry] of Object.entries(tierPricing)) {
+      const client_budget = clientBudgetsByTier[tier] ?? null;
       out[tier] = {
         proposed_price: entry.proposedPrice ?? 0,
         markup: entry.markup ?? null,
         subscription_price: entry.subscriptionPrice ?? null,
+        ...(client_budget != null && client_budget > 0 ? { client_budget } : {}),
       };
     }
     return out;
-  }, [tierPricing]);
+  }, [tierPricing, clientBudgetsByTier]);
 
   // Legacy proposed_price / markup columns: only meaningful when there's
   // exactly one tier (single-card publish path reads from the row). With
@@ -1013,22 +1037,48 @@ export default function AdminCardEditor({
               </p>
             ) : (
               <div className="space-y-3">
-                {/* Client's budget — single line above the per-tier matrix.
-                    The form collects one monthly budget for the plan, not
-                    per experience level. */}
-                <div className="flex items-baseline justify-between gap-3 rounded-xl border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-4 py-3">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
-                      Client&apos;s budget
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-[var(--color-sh-ink-faint)]">
-                      What the client stated in their brief (reference only)
-                    </div>
+                {/* Client preference summary — which levels they asked for and
+                    the budgets they named. Per-row detail is in the matrix. */}
+                <div className="rounded-xl border border-[var(--color-sh-warm-border)] bg-[var(--color-sh-cream)] px-4 py-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                    Client preferences
                   </div>
-                  <div className="text-sm font-semibold tabular-nums text-[var(--color-sh-ink)]">
-                    {clientBudget && clientBudget > 0
-                      ? `₹${clientBudget.toLocaleString()}/mo`
-                      : 'no budget'}
+                  <div className="mt-0.5 text-[11px] text-[var(--color-sh-ink-faint)]">
+                    Levels the client selected in their brief, with the budget they proposed for each (reference only)
+                  </div>
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    {displayTiers.map((tier) => {
+                      const budget = clientBudgetsByTier[tier]
+                        ?? (clientBudget && clientBudget > 0 && Object.keys(clientBudgetsByTier).length === 0
+                          ? clientBudget
+                          : null);
+                      const preferred = budget != null || (card?.target_tiers || []).includes(tier);
+                      return (
+                        <span
+                          key={tier}
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+                            preferred
+                              ? 'border-[var(--color-sh-ink)] bg-[var(--color-sh-lime-soft)] text-[var(--color-sh-ink)]'
+                              : 'border-[var(--color-sh-warm-border)] bg-white text-[var(--color-sh-ink-muted)]'
+                          }`}
+                        >
+                          {preferred && (
+                            <svg className="h-3 w-3 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                              <path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.8 5.7 21l2.3-7.2-6-4.4h7.6L12 2z" />
+                            </svg>
+                          )}
+                          <span>{tier}</span>
+                          {budget != null && (
+                            <span className="tabular-nums text-[var(--color-sh-ink-muted)]">
+                              · ₹{budget.toLocaleString()}
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })}
+                    {displayTiers.length === 0 && (
+                      <span className="text-xs text-[var(--color-sh-ink-faint)]">No levels selected</span>
+                    )}
                   </div>
                 </div>
 
@@ -1039,18 +1089,17 @@ export default function AdminCardEditor({
                 )}
 
                 {/* Pricing matrix — one row per selected tier. Columns run
-                    Subscription → Proposed → Final → Margin → Partner so the
-                    money reads left-to-right from catalog reference to payout.
-                    Final and Partner are the load-bearing figures (shaded): Final
-                    always resolves to a concrete number the client pays (explicit
-                    override, else the proposed price), and Partner is derived as
-                    Final − Margin. */}
+                    Client budget → Subscription → Proposed → Final → Margin → Partner.
+                    Final and Partner are the load-bearing figures (shaded). */}
                 <div className="overflow-x-auto rounded-xl border border-[var(--color-sh-warm-border)]">
-                  <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+                  <table className="w-full min-w-[860px] border-collapse text-left text-sm">
                     <thead>
                       <tr className="border-b border-[var(--color-sh-warm-border)] align-bottom">
                         <th className="bg-[var(--color-sh-cream)] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
                           Tier
+                        </th>
+                        <th className="bg-[var(--color-sh-cream)] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                          Client budget
                         </th>
                         <th className="bg-[var(--color-sh-cream)] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
                           Subscription price
@@ -1085,17 +1134,42 @@ export default function AdminCardEditor({
                         const effectiveFinal =
                           entry.subscriptionPrice ?? (entry.proposedPrice > 0 ? entry.proposedPrice : null);
                         const finalUsesProposed = entry.subscriptionPrice == null && effectiveFinal != null;
+                        const tierClientBudget =
+                          clientBudgetsByTier[tier]
+                          ?? (clientBudget && clientBudget > 0 && Object.keys(clientBudgetsByTier).length === 0
+                            ? clientBudget
+                            : null);
+                        const isPreferred = tierClientBudget != null || (card?.target_tiers || []).includes(tier);
                         return (
                           <tr
                             key={tier}
-                            className={`align-top ${rowIdx > 0 ? 'border-t border-[var(--color-sh-warm-border)]' : ''}`}
+                            className={`align-top ${rowIdx > 0 ? 'border-t border-[var(--color-sh-warm-border)]' : ''} ${
+                              isPreferred ? 'bg-[var(--color-sh-lime-soft)]/40' : ''
+                            }`}
                           >
-                            {/* Tier + publish badge */}
+                            {/* Tier + preferred badge */}
                             <td className="px-4 py-3">
-                              <div className="text-sm font-semibold text-[var(--color-sh-ink)]">{tier}</div>
+                              <div className="flex items-center gap-1.5">
+                                {isPreferred && (
+                                  <svg className="h-3.5 w-3.5 flex-shrink-0 text-[var(--color-sh-ink)]" viewBox="0 0 24 24" fill="currentColor" aria-label="Client preferred">
+                                    <path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.8 5.7 21l2.3-7.2-6-4.4h7.6L12 2z" />
+                                  </svg>
+                                )}
+                                <div className="text-sm font-semibold text-[var(--color-sh-ink)]">{tier}</div>
+                              </div>
                               <span className="mt-1 inline-block rounded-full bg-[var(--color-sh-cream)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-sh-ink-muted)]">
-                                {tiers.length > 1 ? 'Tab in 1 card' : '1 card on publish'}
+                                {isPreferred ? 'Client preferred' : (tiers.length > 1 ? 'Tab in 1 card' : '1 card on publish')}
                               </span>
+                            </td>
+
+                            {/* Client's stated budget for this level */}
+                            <td className="px-3 py-3">
+                              <div className="text-sm font-medium tabular-nums text-[var(--color-sh-ink)]">
+                                {tierClientBudget != null
+                                  ? `₹${tierClientBudget.toLocaleString()}`
+                                  : '—'}
+                              </div>
+                              <div className="mt-1 text-[10px] text-[var(--color-sh-ink-faint)]">From brief</div>
                             </td>
 
                             {/* Subscription price — read-only catalog reference */}

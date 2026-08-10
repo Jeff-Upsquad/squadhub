@@ -91,6 +91,12 @@ const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
 // plural; stored values match subscription_cards.target_tiers' CHECK.
 // Descriptions mirror the UpSquad landing page so the client knows what each
 // level means before choosing.
+const EXPERIENCE_LEVELS: { label: string; value: string; desc: string }[] = [
+  { label: 'Juniors', value: 'Junior', desc: 'Less than 2 years of experience. Great for straightforward tasks and cost-effective output.' },
+  { label: 'Pros', value: 'Pro', desc: 'More than 2 years of experience with strong, well-rounded skill sets. Reliable quality across a wide range of work.' },
+  { label: 'Top Talents', value: 'Top Talents', desc: 'Top talents with 5+ years of experience. Best for high-stakes, complex, or premium creative work.' },
+];
+
 // Same five availability bands as /connect; stored as plan_name on the card.
 const PLAN_OPTIONS: { name: string; dailyHours: number; weeklyHours: number; monthlyHours: number }[] = [
   { name: 'Starter', dailyHours: 1, weeklyHours: 5, monthlyHours: 20 },
@@ -147,10 +153,7 @@ type FormData = {
   hours_note: string;
   tiers: string[];
   plan: string;
-  // Single monthly budget for the chosen plan (as the client types it).
-  budget: string;
-  // Per-tier budget as the client types it, keyed by tier value. Retained for
-  // prefill back-compat; the UI now captures one budget for the whole plan.
+  // Per-tier monthly budget as the client types it, keyed by tier value.
   tierBudgets: Record<string, string>;
 };
 
@@ -173,7 +176,6 @@ const emptyForm: FormData = {
   hours_note: '',
   tiers: [],
   plan: '',
-  budget: '',
   tierBudgets: {},
 };
 
@@ -223,11 +225,6 @@ export default function CardShareTokenPage() {
               hours_note: pf.hours_note || '',
               tiers: pf.tiers || [],
               plan: pf.plan_name || '',
-              // Collapse any prefilled per-tier budgets to one plan budget.
-              budget: (() => {
-                const vals = Object.values(pf.tier_budgets || {}).filter((v) => v > 0);
-                return vals.length ? String(vals[0]) : '';
-              })(),
               tierBudgets: Object.fromEntries(
                 Object.entries(pf.tier_budgets || {}).map(([t, v]) => [t, String(v)]),
               ),
@@ -321,13 +318,14 @@ export default function CardShareTokenPage() {
           return;
         }
       }
-      // Every brief now targets all experience tiers; the single plan budget is
-      // replicated across them for the backend's per-tier pricing.
-      const allTiers = ['Junior', 'Pro', 'Top Talents'];
-      const bn = form.budget.trim() ? Math.round(Number(form.budget)) : NaN;
-      const budget = Number.isFinite(bn) && bn > 0 ? bn : undefined;
+      // Selected experience levels + per-level monthly budgets.
       const tierBudgets: Record<string, number> = {};
-      if (budget !== undefined) for (const t of allTiers) tierBudgets[t] = budget;
+      for (const t of form.tiers) {
+        const raw = form.tierBudgets[t]?.trim();
+        if (!raw) continue;
+        const n = Math.round(Number(raw));
+        if (Number.isFinite(n) && n > 0) tierBudgets[t] = n;
+      }
 
       const res = await fetch(`/leads/card-link/${token}/submit`, {
         method: 'POST',
@@ -348,7 +346,7 @@ export default function CardShareTokenPage() {
           requirement_note: form.requirement_note.trim() || undefined,
           ...(requirementVoiceUrl ? { requirement_voice_url: requirementVoiceUrl } : {}),
           hours_note: form.hours_note.trim() || undefined,
-          tiers: allTiers,
+          tiers: form.tiers,
           plan: form.plan || undefined,
           tier_budgets: tierBudgets,
         }),
@@ -590,8 +588,8 @@ export default function CardShareTokenPage() {
 
           <Section
             eyebrow="Subscription"
-            title="Plan & budget"
-            hint="Confirm the weekly plan and your monthly budget. We'll match talent across all experience levels."
+            title="Plan, levels & budget"
+            hint="Confirm the weekly plan, pick the experience levels you want, and set a monthly budget for each."
           >
             <div>
               <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
@@ -645,25 +643,73 @@ export default function CardShareTokenPage() {
               </div>
             </div>
 
-            <Field
-              label={form.plan ? `Monthly budget for the ${form.plan} plan` : 'Monthly budget'}
-              optional
-              hint={
-                form.plan
-                  ? `What you're willing to pay per month for the ${form.plan} plan. We'll match talent across all experience levels.`
-                  : 'Pick a plan above, then tell us your monthly budget. We’ll match talent across all experience levels.'
-              }
-            >
-              <input
-                type="number"
-                min="0"
-                inputMode="numeric"
-                value={form.budget}
-                onChange={(e) => update('budget', e.target.value)}
-                placeholder="e.g. ₹25000"
-                className="connect-input"
-              />
-            </Field>
+            <div>
+              <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
+                <span>Experience level(s)</span>
+                <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+              </label>
+              <p className="mb-3 text-xs text-[#7A7568]">
+                Select one or more — we&apos;ll match talent across all chosen levels. For each level you pick, set a monthly budget.
+              </p>
+              <div className="space-y-2.5">
+                {EXPERIENCE_LEVELS.map((lvl) => {
+                  const on = form.tiers.includes(lvl.value);
+                  return (
+                    <div
+                      key={lvl.value}
+                      className={`overflow-hidden rounded-xl border transition ${on ? 'border-[#0a0a0a] bg-[#F2FCBC]/50' : 'border-[#E0DCCE] bg-white'}`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggle('tiers', lvl.value)}
+                        aria-pressed={on}
+                        className="flex w-full items-start gap-3 p-3.5 text-left"
+                      >
+                        <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5] bg-white'}`}>
+                          {on && (
+                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-[#0a0a0a]">{lvl.label}</span>
+                          <span className="mt-0.5 block text-xs leading-relaxed text-[#7A7568]">{lvl.desc}</span>
+                        </span>
+                      </button>
+                      {on && (
+                        <div className="border-t border-[#E0DCCE] px-3.5 py-3 sm:pl-11">
+                          <label className="mb-1 block text-xs font-medium text-[#222]">
+                            Monthly budget for {lvl.label}{' '}
+                            <span className="font-normal text-[#9C9486]">(optional)</span>
+                          </label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={form.tierBudgets[lvl.value] ?? ''}
+                            onChange={(e) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                tierBudgets: {
+                                  ...prev.tierBudgets,
+                                  [lvl.value]: e.target.value.replace(/[^0-9]/g, ''),
+                                },
+                              }))
+                            }
+                            placeholder="e.g. ₹25000"
+                            className="connect-input"
+                          />
+                          <p className="mt-1 text-[11px] text-[#9C9486]">
+                            What you&apos;re willing to pay per month for a {lvl.label} on this plan.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </Section>
 
           <Section eyebrow="Preferences" title="Talent preferences" hint="Where the talent should be, languages, and working days.">

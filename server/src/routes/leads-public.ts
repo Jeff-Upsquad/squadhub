@@ -6,6 +6,7 @@ import { ensureHubContact } from '../utils/leadLookup';
 import { generateBriefVoiceUploadUrl } from '../r2';
 import {
   buildCatalogTierPricing,
+  resolveScalarClientBudget,
   coerceProposedPrice,
 } from '../utils/subscriptionFormPricing';
 
@@ -605,25 +606,64 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
       //   - proposed_price stays 0
       //   - margin always auto-filled from catalog
       //   - Final (subscription_price) = catalog customer price
-      //   - client budget (if any) stored on client_budget as reference only
-      // Assignments ignore catalog seeding (one-off project budget → proposed_price).
+      //   - client budgets (per level) stored on tier_pricing.<tier>.client_budget
+      // Assignments: per-level project budgets → proposed_price on each tier.
       const roleTiers = roleReq?.tiers || [];
-      const roleClientBudget =
+      const roleTierBudgets: Record<string, number> = {};
+      if (roleReq?.tier_budgets && typeof roleReq.tier_budgets === 'object') {
+        for (const [t, v] of Object.entries(roleReq.tier_budgets)) {
+          if (typeof v === 'number' && v > 0) roleTierBudgets[t] = v;
+        }
+      }
+      // Legacy single budget → apply to every selected tier when no per-tier map.
+      const roleScalarBudget =
         typeof roleReq?.budget === 'number' && roleReq.budget > 0 ? roleReq.budget : null;
-      const roleTierPricing =
-        body.card_type === 'assignment'
-          ? {}
-          : await buildCatalogTierPricing({
-              serviceSlug: slug,
-              planName: roleReq?.plan || null,
-              tiers: roleTiers,
-              countryId,
-              clientBudget: roleClientBudget,
-            });
+      if (roleScalarBudget != null && Object.keys(roleTierBudgets).length === 0) {
+        for (const t of roleTiers) roleTierBudgets[t] = roleScalarBudget;
+      }
+      const roleClientBudget = resolveScalarClientBudget(roleTierBudgets, roleScalarBudget);
+
+      let roleTierPricing: Record<string, {
+        proposed_price: number;
+        markup: number | null;
+        subscription_price: number | null;
+        client_budget?: number | null;
+      }> = {};
+
+      if (body.card_type === 'assignment') {
+        // Assignment: each selected level's project budget becomes its
+        // proposed_price (the offer / ceiling the talent sees).
+        for (const t of roleTiers) {
+          const b = roleTierBudgets[t];
+          roleTierPricing[t] = {
+            proposed_price: typeof b === 'number' && b > 0 ? b : 0,
+            markup: null,
+            subscription_price: null,
+            ...(typeof b === 'number' && b > 0 ? { client_budget: b } : {}),
+          };
+        }
+      } else {
+        roleTierPricing = await buildCatalogTierPricing({
+          serviceSlug: slug,
+          planName: roleReq?.plan || null,
+          tiers: roleTiers,
+          countryId,
+          clientBudget: roleScalarBudget,
+          tierBudgets: roleTierBudgets,
+        });
+      }
       // Single-tier cards also mirror the first tier onto the row columns so
       // the legacy single-tier publish path has something to read.
       const firstTierEntry =
         roleTiers.length === 1 ? roleTierPricing[roleTiers[0]] : undefined;
+
+      // Assignment proposed_price: single-tier amount, else first positive, else null.
+      const assignmentProposed =
+        body.card_type === 'assignment'
+          ? (firstTierEntry?.proposed_price && firstTierEntry.proposed_price > 0
+              ? firstTierEntry.proposed_price
+              : roleClientBudget)
+          : null;
 
       const { data: card, error } = await supabaseAdmin
         .from('subscription_cards')
@@ -650,21 +690,21 @@ router.post('/landing', ipRateLimit, async (req: Request, res: Response) => {
                   pricing_mode: roleReq?.pricing_mode || 'priced',
                 }
               : null,
-          // Subscriptions: catalog-seeded per-tier pricing. Assignments: none.
+          // Subscriptions: catalog-seeded per-tier pricing. Assignments: per-level offers.
           tier_pricing: roleTierPricing,
-          // Assignment: the single project budget IS the proposed/offer price
-          // shown to talents. Subscription: proposed stays unset (0 in
-          // tier_pricing); Final may already be seeded from the catalog.
+          // Assignment: project budget(s) → proposed. Subscription: proposed stays
+          // unset (0 in tier_pricing); Final may already be seeded from the catalog.
           // chk_proposed_price requires NULL or > 0, so 0 → NULL.
           proposed_price:
             body.card_type === 'assignment'
-              ? (roleReq?.budget && roleReq.budget > 0 ? roleReq.budget : null)
+              ? coerceProposedPrice(assignmentProposed)
               : coerceProposedPrice(firstTierEntry?.proposed_price),
           subscription_price:
             body.card_type === 'assignment'
               ? null
               : firstTierEntry?.subscription_price ?? null,
-          // Subscription only: the client's stated monthly budget (single field).
+          // Subscription: client's stated monthly budget (scalar when uniform).
+          // Assignment: leave null — budgets live as proposed_price / tier_pricing.
           client_budget: body.card_type === 'assignment' ? null : roleClientBudget,
           working_days: body.working_days,
           customer_name: body.contact_name,
@@ -792,16 +832,19 @@ router.get('/card-link/:token', ipRateLimit, async (req: Request, res: Response)
       stateRegions = (tr || []).map((r: any) => r.region);
     }
 
-    // Per-tier budgets the client previously stated — read from tier_pricing
-    // (each tier's proposed_price). Falls back to the single proposed_price
-    // applied to the first tier for legacy / single-tier cards.
+    // Per-tier budgets the client previously stated — prefer client_budget
+    // (reference), fall back to proposed_price for legacy rows, then the
+    // scalar proposed_price on the first tier.
     const tp =
       card.tier_pricing && typeof card.tier_pricing === 'object'
-        ? (card.tier_pricing as Record<string, { proposed_price?: number }>)
+        ? (card.tier_pricing as Record<string, { proposed_price?: number; client_budget?: number }>)
         : {};
     const tierBudgets: Record<string, number> = {};
     for (const [tier, entry] of Object.entries(tp)) {
-      if (entry && typeof entry.proposed_price === 'number' && entry.proposed_price > 0) {
+      if (!entry) continue;
+      if (typeof entry.client_budget === 'number' && entry.client_budget > 0) {
+        tierBudgets[tier] = entry.client_budget;
+      } else if (typeof entry.proposed_price === 'number' && entry.proposed_price > 0) {
         tierBudgets[tier] = entry.proposed_price;
       }
     }
@@ -957,18 +1000,26 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
       return (countryRow as any)?.id ?? null;
     })();
 
-    // The client's per-tier budgets → tier_pricing (each tier's proposed_price),
-    // so a multi-tier publish fans out with each level's own price. Only
-    // selected tiers with a budget > 0 are stored. proposed_price mirrors the
-    // single-tier case for back-compat (multi-tier reads from tier_pricing).
-    // markup null = inherit the plan catalog margin (no per-card adjustment yet).
-    const tierPricing: Record<string, { proposed_price: number; markup: number | null }> = {};
+    // The client's per-tier budgets → tier_pricing.client_budget (reference),
+    // so the admin pricing table can show preferred levels + stated budgets.
+    // Only selected tiers are stored. When amounts differ, scalar client_budget
+    // is null; when uniform/single, it mirrors the amount for back-compat.
+    const tierPricing: Record<
+      string,
+      { proposed_price: number; markup: number | null; client_budget?: number }
+    > = {};
+    const collectedBudgets: Record<string, number> = {};
     for (const tier of body.tiers) {
       const b = body.tier_budgets?.[tier];
-      if (typeof b === 'number' && b > 0) tierPricing[tier] = { proposed_price: b, markup: null };
+      const hasBudget = typeof b === 'number' && b > 0;
+      if (hasBudget) collectedBudgets[tier] = b;
+      tierPricing[tier] = {
+        proposed_price: 0,
+        markup: null,
+        ...(hasBudget ? { client_budget: b } : {}),
+      };
     }
-    const singleProposed =
-      body.tiers.length === 1 ? tierPricing[body.tiers[0]]?.proposed_price ?? null : null;
+    const scalarBudget = resolveScalarClientBudget(collectedBudgets);
 
     // 1. UPDATE the SAME card. service_type/internal markup/state are NOT
     //    touched, but the client's own subscription choices (plan, experience
@@ -991,7 +1042,9 @@ router.post('/card-link/:token/submit', ipRateLimit, async (req: Request, res: R
         plan_name: body.plan || null,
         target_tiers: body.tiers,
         tier_pricing: tierPricing,
-        proposed_price: singleProposed,
+        client_budget: scalarBudget,
+        // Client budgets are reference-only; proposed stays unset until admin.
+        proposed_price: null,
         // The client reviewed the brief via the share link and submitted it —
         // surfaces as "Client approved" on the Form Requests queue.
         client_approved_at: new Date().toISOString(),

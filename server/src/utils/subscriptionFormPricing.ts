@@ -9,7 +9,9 @@ import { supabaseAdmin } from '../supabase';
  *   - proposed_price stays 0 (admin may fill later)
  *   - margin is always copied from the catalog (absolute ₹)
  *   - customer price always → subscription_price (the Final price in the editor)
- *   - client budget (if any) is reference only on subscription_cards.client_budget
+ *   - client budget (if any) is reference only: stored per tier as
+ *     tier_pricing.<tier>.client_budget, and optionally as a scalar
+ *     subscription_cards.client_budget when a single amount applies
  */
 
 const PLAN_TO_CANONICAL: Record<string, string> = {
@@ -24,6 +26,8 @@ export type CatalogTierPricingEntry = {
   proposed_price: number;
   markup: number | null;
   subscription_price: number | null;
+  /** Client's stated monthly budget for this tier (reference only). */
+  client_budget?: number | null;
 };
 
 function marginInRupees(
@@ -66,12 +70,23 @@ export async function buildCatalogTierPricing(opts: {
   planName: string | null | undefined;
   tiers: string[];
   countryId: string | null | undefined;
-  /** Client's stated monthly budget. null/undefined = not mentioned. */
-  clientBudget: number | null | undefined;
+  /**
+   * Client's stated monthly budget(s). Prefer `tierBudgets` (per level).
+   * A scalar `clientBudget` is applied to every selected tier when no
+   * per-tier map is provided (legacy single-budget briefs).
+   */
+  clientBudget?: number | null | undefined;
+  tierBudgets?: Record<string, number> | null | undefined;
 }): Promise<Record<string, CatalogTierPricingEntry>> {
-  const { serviceSlug, planName, tiers, countryId } = opts;
-  // clientBudget is accepted for call-site compatibility; Final always comes
-  // from the catalog. Budget itself is stored on subscription_cards.client_budget.
+  const { serviceSlug, planName, tiers, countryId, clientBudget, tierBudgets } = opts;
+  // Final always comes from the catalog. Client budgets are attached as
+  // reference-only client_budget on each tier entry.
+  const budgetFor = (tier: string): number | null => {
+    const fromMap = tierBudgets?.[tier];
+    if (typeof fromMap === 'number' && fromMap > 0) return fromMap;
+    if (typeof clientBudget === 'number' && clientBudget > 0) return clientBudget;
+    return null;
+  };
   const canonicalPlan =
     planName ? PLAN_TO_CANONICAL[planName.toLowerCase()] || planName : '';
   if (!serviceSlug || !canonicalPlan || tiers.length === 0) return {};
@@ -130,12 +145,14 @@ export async function buildCatalogTierPricing(opts: {
   for (const tier of tiers) {
     const planId = planIdByTier[tier];
     const pricing = planId ? pricingByPlanId[planId] : undefined;
+    const client_budget = budgetFor(tier);
     if (!pricing || !(pricing.price > 0)) {
       // Still seed a row so the editor shows the tier; margin/final stay blank.
       out[tier] = {
         proposed_price: 0,
         markup: null,
         subscription_price: null,
+        ...(client_budget != null ? { client_budget } : {}),
       };
       continue;
     }
@@ -146,10 +163,26 @@ export async function buildCatalogTierPricing(opts: {
       markup,
       // Catalog customer price → Final. Client budget (if any) is reference only.
       subscription_price: pricing.price,
+      ...(client_budget != null ? { client_budget } : {}),
     };
   }
 
   return out;
+}
+
+/** Scalar client_budget for the card row: single amount when only one tier
+ *  has a budget, or when every stated budget is identical; otherwise null
+ *  (per-tier values live on tier_pricing). */
+export function resolveScalarClientBudget(
+  tierBudgets: Record<string, number> | null | undefined,
+  fallback?: number | null | undefined,
+): number | null {
+  const vals = Object.values(tierBudgets || {}).filter((v) => typeof v === 'number' && v > 0);
+  if (vals.length === 0) {
+    return typeof fallback === 'number' && fallback > 0 ? fallback : null;
+  }
+  if (vals.every((v) => v === vals[0])) return vals[0];
+  return null;
 }
 
 /** True when a tier_pricing entry has a usable client-facing price. */

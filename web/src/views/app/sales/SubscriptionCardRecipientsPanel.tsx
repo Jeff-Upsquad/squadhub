@@ -236,7 +236,7 @@ function CardDetails({ card, countries }: { card: SubscriptionCardItem; countrie
         </DetailSection>
       )}
 
-      {(planPrice || finalizedPrice != null || card.partner_price_override != null) && (
+      {(planPrice || finalizedPrice != null || card.partner_price_override != null || (card.target_tiers && card.target_tiers.length > 0)) && (
         <DetailSection title="Pricing">
           {planPrice && <DetailRow label="Plan price" value={`${cur} ${planPrice.price.toLocaleString()}`} />}
           {card.proposed_price != null && (
@@ -250,6 +250,46 @@ function CardDetails({ card, countries }: { card: SubscriptionCardItem; countrie
           )}
           {card.partner_price_override != null && (
             <DetailRow label="Partner override" value={`${cur} ${card.partner_price_override.toLocaleString()}`} />
+          )}
+          {card.target_tiers && card.target_tiers.length > 0 && (
+            <div className="pt-1">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--sh-ink-4)]">
+                Client preferred levels
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {card.target_tiers.map((tier) => {
+                  const entry = card.tier_pricing?.[tier];
+                  const budget =
+                    (typeof entry?.client_budget === 'number' && entry.client_budget > 0
+                      ? entry.client_budget
+                      : null)
+                    ?? (typeof entry?.proposed_price === 'number' &&
+                      entry.proposed_price > 0 &&
+                      !(typeof entry?.subscription_price === 'number' && entry.subscription_price > 0)
+                      ? entry.proposed_price
+                      : null)
+                    ?? (typeof card.client_budget === 'number' && card.client_budget > 0
+                      ? card.client_budget
+                      : null);
+                  return (
+                    <span
+                      key={tier}
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--sh-ink)] bg-[var(--sh-lime-soft,#F2FCBC)] px-2 py-0.5 text-[11px] font-medium text-[var(--sh-ink)]"
+                    >
+                      <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                        <path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.8 5.7 21l2.3-7.2-6-4.4h7.6L12 2z" />
+                      </svg>
+                      {tier}
+                      {budget != null && (
+                        <span className="tabular-nums text-[var(--sh-ink-3)]">
+                          · {cur} {budget.toLocaleString()}
+                        </span>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </DetailSection>
       )}

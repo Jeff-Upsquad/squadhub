@@ -1665,15 +1665,16 @@ export interface SubscriptionPlanPricing {
 
 /** Per-tier pricing stored in subscription_cards.tier_pricing JSONB for
  *  multi-tier draft cards: `{ [tier]: { proposed_price, markup, ... } }`.
- *  The client's stated budget lives on subscription_cards.client_budget
- *  (single field), not duplicated per tier. */
+ *  Client-stated budgets may live per tier as `client_budget` (when the
+ *  brief named different amounts per level) and/or as the scalar
+ *  subscription_cards.client_budget when a single amount applies. */
 export interface SubscriptionCardTierPricing {
   proposed_price?: number | null;
   /** Adjusted margin override; null/undefined = use the plan catalog margin. */
   markup?: number | null;
   /** Finalized monthly price for this tier; falls back to proposed_price. */
   subscription_price?: number | null;
-  /** @deprecated Prefer subscription_cards.client_budget. Kept for legacy rows. */
+  /** Client's stated budget for this experience level from their brief. */
   client_budget?: number | null;
 }
 
@@ -2015,6 +2016,12 @@ export interface SubscriptionCard {
   proposed_price: number | null;
   /** Finalized monthly price the client pays (INR). null = use proposed_price. */
   subscription_price: number | null;
+  /**
+   * Client's stated monthly budget from their brief (INR). Scalar when a single
+   * amount applies (or all levels share one); per-level amounts also live on
+   * tier_pricing.<tier>.client_budget.
+   */
+  client_budget?: number | null;
   /** Adjusted margin (INR/month). null = use the plan catalog margin. */
   markup: number | null;
   /** Per-tier pricing for multi-tier draft cards: { [tier]: {...} }. */

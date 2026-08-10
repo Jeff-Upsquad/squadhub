@@ -1484,6 +1484,50 @@ function CardDetails({ card, activeCard, isSecondaryView, countries, squadhireCa
           label="Subscription price"
           value={card.subscription_price ? `${cur} ${card.subscription_price.toLocaleString()}/mo` : EMPTY}
         />
+        {/* Preferred levels + client budgets from the brief. */}
+        {(() => {
+          const tiers = Array.isArray(card.target_tiers) ? card.target_tiers : [];
+          const tp = card.tier_pricing && typeof card.tier_pricing === 'object' ? card.tier_pricing : {};
+          if (tiers.length === 0 && !card.client_budget) return null;
+          return (
+            <div className="pt-1">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-sh-ink-muted)]">
+                Client preferred levels
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {tiers.map((tier) => {
+                  const entry = (tp as any)[tier];
+                  const budget =
+                    (typeof entry?.client_budget === 'number' && entry.client_budget > 0
+                      ? entry.client_budget
+                      : null)
+                    ?? (typeof entry?.proposed_price === 'number' &&
+                      entry.proposed_price > 0 &&
+                      !(entry?.subscription_price > 0)
+                      ? entry.proposed_price
+                      : null)
+                    ?? (card.client_budget && card.client_budget > 0 ? card.client_budget : null);
+                  return (
+                    <span
+                      key={tier}
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--color-sh-ink)] bg-[var(--color-sh-lime-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-sh-ink)]"
+                    >
+                      <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                        <path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.8 5.7 21l2.3-7.2-6-4.4h7.6L12 2z" />
+                      </svg>
+                      {tier}
+                      {budget != null && (
+                        <span className="tabular-nums text-[var(--color-sh-ink-muted)]">
+                          · {cur} {budget.toLocaleString()}
+                        </span>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
       </DetailSection>
 
       <DetailSection title="Margin">

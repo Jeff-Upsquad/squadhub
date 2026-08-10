@@ -77,6 +77,18 @@ export type AdminSubscriptionCard = {
   proposed_price?: number | null;
   /** Finalized monthly price the client pays. null = falls back to proposed_price. */
   subscription_price?: number | null;
+  /** Client's stated monthly budget from the brief (scalar when uniform). */
+  client_budget?: number | null;
+  /** Per-tier draft pricing including client_budget per preferred level. */
+  tier_pricing?: Record<
+    string,
+    {
+      proposed_price?: number | null;
+      markup?: number | null;
+      subscription_price?: number | null;
+      client_budget?: number | null;
+    }
+  > | null;
   markup?: number | null;
   publish_targets?: string[] | null;
   plan_name?: string | null;

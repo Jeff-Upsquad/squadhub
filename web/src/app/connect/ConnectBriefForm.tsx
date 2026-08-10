@@ -526,6 +526,16 @@ export default function ConnectBriefForm({
     }));
   }
 
+  function updateRoleTierBudget(slug: RoleSlug, tier: string, value: string) {
+    setRoleRequirements((prev) => ({
+      ...prev,
+      [slug]: {
+        ...prev[slug],
+        tierBudgets: { ...prev[slug].tierBudgets, [tier]: value.replace(/[^0-9]/g, '') },
+      },
+    }));
+  }
+
   function toggleRoleReqTier(slug: RoleSlug, value: string) {
     setRoleRequirements((prev) => {
       const cur = prev[slug];
@@ -601,17 +611,27 @@ export default function ConnectBriefForm({
       const tiers = entry.tiers;
 
       if (isAssignment) {
-        // Assignment: one-off project budget + timeline; no plan / per-tier price.
-        const n = entry.budget.trim() ? Math.round(Number(entry.budget)) : NaN;
-        const budget = Number.isFinite(n) && n > 0 ? n : undefined;
+        // Assignment: levels + per-level project budgets + timeline.
+        // Per-level budgets ride on tier_budgets; a single budget is also sent
+        // when exactly one level has a price (legacy assignment column).
+        const tierBudgets: Record<string, number> = {};
+        for (const t of tiers) {
+          const raw = entry.tierBudgets[t]?.trim();
+          if (!raw) continue;
+          const n = Math.round(Number(raw));
+          if (Number.isFinite(n) && n > 0) tierBudgets[t] = n;
+        }
+        const budgetValues = Object.values(tierBudgets);
+        const budget = budgetValues.length === 1 ? budgetValues[0] : undefined;
         const duration = entry.duration.trim();
         const startDate = entry.startDate;
         const deadline = entry.deadline;
-        if (note || tiers.length || budget !== undefined || duration || startDate || deadline) {
+        if (note || tiers.length || budgetValues.length || duration || startDate || deadline) {
           roleReqsPayload[roleToServiceTypeSlug(r)] = {
             ...(note ? { note } : {}),
             ...(tiers.length ? { tiers } : {}),
             ...(budget !== undefined ? { budget } : {}),
+            ...(Object.keys(tierBudgets).length ? { tier_budgets: tierBudgets } : {}),
             ...(duration ? { duration } : {}),
             ...(startDate ? { start_date: startDate } : {}),
             ...(deadline ? { deadline } : {}),
@@ -622,19 +642,23 @@ export default function ConnectBriefForm({
       }
 
       const plan = entry.plan;
-      // Every subscription brief now goes out to all experience tiers by
-      // default — the client no longer picks levels.
-      const allTiers = EXPERIENCE_LEVELS.map((l) => l.value);
-      // Single monthly budget for the chosen plan (0 / blank = not stated).
-      const bn = entry.budget.trim() ? Math.round(Number(entry.budget)) : NaN;
-      const budget = Number.isFinite(bn) && bn > 0 ? bn : undefined;
-      // Replicate across every tier so downstream per-tier consumers still
-      // resolve a number until the backend adopts the single-budget shape.
+      // Selected experience levels + per-level monthly budgets.
       const tierBudgets: Record<string, number> = {};
-      if (budget !== undefined) for (const t of allTiers) tierBudgets[t] = budget;
+      for (const t of tiers) {
+        const raw = entry.tierBudgets[t]?.trim();
+        if (!raw) continue;
+        const n = Math.round(Number(raw));
+        if (Number.isFinite(n) && n > 0) tierBudgets[t] = n;
+      }
+      // Scalar budget: when every selected tier shares one amount (or only one
+      // has a budget), surface it as `budget` for back-compat consumers.
+      const budgetValues = Object.values(tierBudgets);
+      const allSame =
+        budgetValues.length > 0 && budgetValues.every((v) => v === budgetValues[0]);
+      const budget = allSame ? budgetValues[0] : undefined;
       roleReqsPayload[roleToServiceTypeSlug(r)] = {
         ...(note ? { note } : {}),
-        tiers: allTiers,
+        ...(tiers.length ? { tiers } : {}),
         ...(plan ? { plan } : {}),
         ...(budget !== undefined ? { budget } : {}),
         ...(Object.keys(tierBudgets).length ? { tier_budgets: tierBudgets } : {}),
@@ -997,11 +1021,11 @@ export default function ConnectBriefForm({
                 optional; empties are dropped on submit. */}
             <Section
               eyebrow={product === 'assignment' ? 'Assignment' : 'Subscription'}
-              title={product === 'assignment' ? 'Scope, budget & timeline' : 'Experience level & plan'}
+              title={product === 'assignment' ? 'Scope, budget & timeline' : 'Plan, levels & budget'}
               hint={
                 product === 'assignment'
-                  ? 'Pick the talent experience per role, set a project budget and timeline, and describe the scope. All optional — we can finalize on the call.'
-                  : 'Pick the talent experience and a weekly plan per role, add a short note, and a monthly budget per level. All optional — we can finalize on the call.'
+                  ? 'Pick the talent experience levels you want, set a project budget per level, and describe the timeline. All optional — we can finalize on the call.'
+                  : 'Pick a weekly plan, choose which experience levels you want, and set a monthly budget for each. All optional — we can finalize on the call.'
               }
             >
               {product === 'assignment' && (
@@ -1044,51 +1068,7 @@ export default function ConnectBriefForm({
                       <span className="text-lg font-bold tracking-tight text-[#0a0a0a]">{opt.title}</span>
                     </div>
                     <div className="space-y-4">
-                      {product === 'assignment' ? (
-                      <>
-                        {/* Experience level(s) — for matching only (no per-tier budget) */}
-                        <div>
-                          <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
-                            <span>Experience level(s)</span>
-                            <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
-                          </label>
-                          <p className="mb-3 text-xs text-[#7A7568]">Select one or more — we&apos;ll match talent across all chosen levels.</p>
-                          <div className="space-y-2.5">
-                            {EXPERIENCE_LEVELS.map((lvl) => {
-                              const on = req.tiers.includes(lvl.value);
-                              return (
-                                <div key={lvl.value} className={`overflow-hidden rounded-xl border transition ${on ? 'border-[#0a0a0a] bg-[#F2FCBC]/50' : 'border-[#E0DCCE] bg-white'}`}>
-                                  <button type="button" onClick={() => toggleRoleReqTier(opt.slug, lvl.value)} aria-pressed={on} className="flex w-full items-start gap-3 p-3.5 text-left">
-                                    <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5] bg-white'}`}>
-                                      {on && (<svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>)}
-                                    </span>
-                                    <span className="min-w-0">
-                                      <span className="block text-sm font-semibold text-[#0a0a0a]">{lvl.label}</span>
-                                      <span className="mt-0.5 block text-xs leading-relaxed text-[#7A7568]">{lvl.desc}</span>
-                                    </span>
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                        <Field label={pricingMode === 'unpriced' ? 'Budget ceiling' : 'Project budget'} optional hint={pricingMode === 'unpriced' ? `Internal maximum — not shown to talents, they submit their own offer. In ${currencySymbol}.` : `Total budget for this project in ${currencySymbol}.`}>
-                          <input type="text" inputMode="numeric" pattern="[0-9]*" value={req.budget} onChange={(e) => updateRoleReq(opt.slug, 'budget', e.target.value.replace(/[^0-9]/g, ''))} placeholder={`e.g. ${currencySymbol}50000`} className="connect-input" />
-                        </Field>
-                        <Field label="Duration / timeline" optional hint="Rough length of the engagement.">
-                          <input type="text" value={req.duration} onChange={(e) => updateRoleReq(opt.slug, 'duration', e.target.value)} placeholder="e.g. 4 weeks, 2 months" className="connect-input" />
-                        </Field>
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                          <Field label="Start date" optional>
-                            <input type="date" value={req.startDate} onChange={(e) => updateRoleReq(opt.slug, 'startDate', e.target.value)} className="connect-input" />
-                          </Field>
-                          <Field label="Deadline" optional>
-                            <input type="date" value={req.deadline} onChange={(e) => updateRoleReq(opt.slug, 'deadline', e.target.value)} className="connect-input" />
-                          </Field>
-                        </div>
-                      </>
-                      ) : (
-                      <>
+                      {product !== 'assignment' && (
                       <div>
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <label className="flex items-baseline gap-2 text-sm font-medium text-[#222]">
@@ -1153,30 +1133,97 @@ export default function ConnectBriefForm({
                           </table>
                         </div>
                       </div>
+                      )}
 
-                      {/* Single monthly budget for the chosen plan. Experience
-                          tiers (Junior / Pro / Top Talent) are no longer picked
-                          here — every brief goes out to all tiers by default. */}
-                      <Field
-                        label={req.plan ? `Monthly budget for the ${req.plan} plan` : 'Monthly budget'}
-                        optional
-                        hint={
-                          req.plan
-                            ? `What you're willing to pay per month for the ${req.plan} plan. We'll match talent across all experience levels.`
-                            : 'Pick a plan above, then tell us your monthly budget for it. We’ll match talent across all experience levels.'
-                        }
-                      >
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          value={req.budget}
-                          onChange={(e) => updateRoleReq(opt.slug, 'budget', e.target.value.replace(/[^0-9]/g, ''))}
-                          placeholder={`e.g. ${currencySymbol}25000`}
-                          className="connect-input"
-                        />
-                      </Field>
-                      </>
+                      {/* Experience levels + per-level budget (subscription monthly
+                          / assignment project). Descriptions mirror the pricing
+                          page so the client knows what each level means. */}
+                      <div>
+                        <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
+                          <span>Experience level(s)</span>
+                          <span className="text-xs font-normal text-[#9C9486]">(optional)</span>
+                        </label>
+                        <p className="mb-3 text-xs text-[#7A7568]">
+                          Select one or more — we&apos;ll match talent across all chosen levels.
+                          {product === 'assignment'
+                            ? pricingMode === 'unpriced'
+                              ? ' For each level you pick, you can set an internal budget ceiling.'
+                              : ' For each level you pick, set a project budget.'
+                            : ' For each level you pick, set a monthly budget.'}
+                        </p>
+                        <div className="space-y-2.5">
+                          {EXPERIENCE_LEVELS.map((lvl) => {
+                            const on = req.tiers.includes(lvl.value);
+                            return (
+                              <div
+                                key={lvl.value}
+                                className={`overflow-hidden rounded-xl border transition ${on ? 'border-[#0a0a0a] bg-[#F2FCBC]/50' : 'border-[#E0DCCE] bg-white'}`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => toggleRoleReqTier(opt.slug, lvl.value)}
+                                  aria-pressed={on}
+                                  className="flex w-full items-start gap-3 p-3.5 text-left"
+                                >
+                                  <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5] bg-white'}`}>
+                                    {on && (
+                                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    )}
+                                  </span>
+                                  <span className="min-w-0">
+                                    <span className="block text-sm font-semibold text-[#0a0a0a]">{lvl.label}</span>
+                                    <span className="mt-0.5 block text-xs leading-relaxed text-[#7A7568]">{lvl.desc}</span>
+                                  </span>
+                                </button>
+                                {on && (
+                                  <div className="border-t border-[#E0DCCE] px-3.5 py-3 sm:pl-11">
+                                    <label className="mb-1 block text-xs font-medium text-[#222]">
+                                      {product === 'assignment'
+                                        ? (pricingMode === 'unpriced' ? `Budget ceiling for ${lvl.label}` : `Project budget for ${lvl.label}`)
+                                        : `Monthly budget for ${lvl.label}`}
+                                      {' '}
+                                      <span className="font-normal text-[#9C9486]">(optional)</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      pattern="[0-9]*"
+                                      value={req.tierBudgets[lvl.value] ?? ''}
+                                      onChange={(e) => updateRoleTierBudget(opt.slug, lvl.value, e.target.value)}
+                                      placeholder={`e.g. ${currencySymbol}${product === 'assignment' ? '50000' : '25000'}`}
+                                      className="connect-input"
+                                    />
+                                    <p className="mt-1 text-[11px] text-[#9C9486]">
+                                      {product === 'assignment'
+                                        ? (pricingMode === 'unpriced'
+                                          ? `Internal maximum for this level — not shown to talents. In ${currencySymbol}.`
+                                          : `What you're willing to pay for this project at the ${lvl.label} level.`)
+                                        : `What you're willing to pay per month for a ${lvl.label} on this plan.`}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {product === 'assignment' && (
+                        <>
+                          <Field label="Duration / timeline" optional hint="Rough length of the engagement.">
+                            <input type="text" value={req.duration} onChange={(e) => updateRoleReq(opt.slug, 'duration', e.target.value)} placeholder="e.g. 4 weeks, 2 months" className="connect-input" />
+                          </Field>
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <Field label="Start date" optional>
+                              <input type="date" value={req.startDate} onChange={(e) => updateRoleReq(opt.slug, 'startDate', e.target.value)} className="connect-input" />
+                            </Field>
+                            <Field label="Deadline" optional>
+                              <input type="date" value={req.deadline} onChange={(e) => updateRoleReq(opt.slug, 'deadline', e.target.value)} className="connect-input" />
+                            </Field>
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>

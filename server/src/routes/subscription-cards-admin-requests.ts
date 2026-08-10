@@ -20,6 +20,7 @@ import { generateBriefVoiceUploadUrl } from '../r2';
 import {
   buildCatalogTierPricing,
   coerceProposedPrice,
+  resolveScalarClientBudget,
 } from '../utils/subscriptionFormPricing';
 
 const router = Router();
@@ -450,6 +451,10 @@ const clientBriefSchema = z.object({
     .default([]),
   plan_name: z.string().optional(),
   proposed_price: z.number().int().nonnegative().optional(),
+  // Per-level budgets the client stated (monthly for subscription, project
+  // for assignment). Keyed by tier → stored on tier_pricing.<tier>.client_budget
+  // (and proposed_price for assignments).
+  tier_budgets: z.record(z.string(), z.number().int().nonnegative()).optional(),
   // Product line. 'assignment' is a one-off freelance project — the plan is
   // dropped and proposed_price is the one-time project budget; the timeline
   // fields below are stored in assignment_details.
@@ -520,22 +525,60 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
       Accountants: 'accountant',
     };
     const briefTiers = body.target_tiers || [];
+    const briefTierBudgets: Record<string, number> = {};
+    if (body.tier_budgets && typeof body.tier_budgets === 'object') {
+      for (const [t, v] of Object.entries(body.tier_budgets)) {
+        if (typeof v === 'number' && v > 0) briefTierBudgets[t] = v;
+      }
+    }
+    // Legacy scalar proposed_price → fill every tier when no per-tier map.
+    if (
+      body.proposed_price &&
+      body.proposed_price > 0 &&
+      Object.keys(briefTierBudgets).length === 0
+    ) {
+      for (const t of briefTiers) briefTierBudgets[t] = body.proposed_price;
+    }
     const briefClientBudget =
-      body.card_type !== 'assignment' && body.proposed_price && body.proposed_price > 0
-        ? body.proposed_price
+      body.card_type !== 'assignment'
+        ? resolveScalarClientBudget(
+            briefTierBudgets,
+            body.proposed_price && body.proposed_price > 0 ? body.proposed_price : null,
+          )
         : null;
-    const briefTierPricing =
-      body.card_type === 'assignment'
-        ? {}
-        : await buildCatalogTierPricing({
-            serviceSlug: SERVICE_TYPE_TO_SLUG[body.service_type] || '',
-            planName: body.plan_name || null,
-            tiers: briefTiers,
-            countryId,
-            clientBudget: briefClientBudget,
-          });
+
+    let briefTierPricing: Record<
+      string,
+      { proposed_price: number; markup: number | null; subscription_price: number | null; client_budget?: number | null }
+    > = {};
+    if (body.card_type === 'assignment') {
+      for (const t of briefTiers) {
+        const b = briefTierBudgets[t];
+        briefTierPricing[t] = {
+          proposed_price: typeof b === 'number' && b > 0 ? b : 0,
+          markup: null,
+          subscription_price: null,
+          ...(typeof b === 'number' && b > 0 ? { client_budget: b } : {}),
+        };
+      }
+    } else {
+      briefTierPricing = await buildCatalogTierPricing({
+        serviceSlug: SERVICE_TYPE_TO_SLUG[body.service_type] || '',
+        planName: body.plan_name || null,
+        tiers: briefTiers,
+        countryId,
+        clientBudget: body.proposed_price && body.proposed_price > 0 ? body.proposed_price : null,
+        tierBudgets: briefTierBudgets,
+      });
+    }
     const briefFirstTier =
       briefTiers.length === 1 ? briefTierPricing[briefTiers[0]] : undefined;
+    const assignmentProposed =
+      body.card_type === 'assignment'
+        ? (briefFirstTier?.proposed_price && briefFirstTier.proposed_price > 0
+            ? briefFirstTier.proposed_price
+            : resolveScalarClientBudget(briefTierBudgets, body.proposed_price))
+        : null;
 
     const { data: card, error } = await supabaseAdmin
       .from('subscription_cards')
@@ -561,8 +604,8 @@ router.post('/subscription-cards/client-brief', async (req: Request, res: Respon
         // chk constraints require NULL or > 0, so coerce 0 ("not stated") → NULL.
         plan_name: body.card_type === 'assignment' ? null : body.plan_name || null,
         proposed_price:
-          body.card_type === 'assignment' && body.proposed_price && body.proposed_price > 0
-            ? body.proposed_price
+          body.card_type === 'assignment'
+            ? coerceProposedPrice(assignmentProposed)
             : coerceProposedPrice(briefFirstTier?.proposed_price),
         subscription_price:
           body.card_type === 'assignment'

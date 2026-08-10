@@ -66,10 +66,12 @@ const LANGUAGES = [
 // Build-your-own-subscription workflow (mirrors /connect and the pricing page):
 // experience level(s) → plan → budget. Display labels are plural; stored
 // values match subscription_cards.target_tiers' CHECK (Junior/Pro/Top Talents).
-const EXPERIENCE_LEVELS: { label: string; value: string }[] = [
-  { label: 'Juniors', value: 'Junior' },
-  { label: 'Pros', value: 'Pro' },
-  { label: 'Top Talents', value: 'Top Talents' },
+// Descriptions mirror the UpSquad landing page so the client knows what each
+// level means before choosing.
+const EXPERIENCE_LEVELS: { label: string; value: string; desc: string }[] = [
+  { label: 'Juniors', value: 'Junior', desc: 'Less than 2 years of experience. Great for straightforward bookkeeping and cost-effective support.' },
+  { label: 'Pros', value: 'Pro', desc: 'More than 2 years of experience with strong, well-rounded skill sets. Reliable quality across a wide range of finance work.' },
+  { label: 'Top Talents', value: 'Top Talents', desc: 'Top talents with 5+ years of experience. Best for complex filings, audits, or high-stakes financial work.' },
 ];
 
 // Plans differ by availability (Mon–Fri) — the same five bands seeded for
@@ -196,14 +198,15 @@ const initialForm: FormData = {
 // Build-your-own details for the single accountant card. Unlike /connect (one
 // block per role/card), every accountant specialty collapses into one card, so
 // we capture experience level(s), plan/budget, and a note once for the whole
-// engagement. Subscription uses plan + monthly budget; assignment swaps those
-// for a one-off project budget + timeline. All optional; empties dropped on submit.
+// engagement. Per-level budgets live in tierBudgets; assignment adds timeline.
+// All optional; empties dropped on submit.
 type Subscription = {
   tiers: string[];
   plan: string;
-  budget: string;
+  // Per-tier budget (monthly for subscription, project for assignment).
+  tierBudgets: Record<string, string>;
   note: string;
-  // Assignment path only: a single one-off project budget + timeline.
+  // Assignment path only: timeline fields.
   duration: string;
   startDate: string;
   deadline: string;
@@ -211,7 +214,7 @@ type Subscription = {
 const initialSubscription: Subscription = {
   tiers: [],
   plan: '',
-  budget: '',
+  tierBudgets: {},
   note: '',
   duration: '',
   startDate: '',
@@ -388,10 +391,17 @@ export default function AccountantBriefForm({
   }
 
   function updateSub(
-    field: 'plan' | 'budget' | 'note' | 'duration' | 'startDate' | 'deadline',
+    field: 'plan' | 'note' | 'duration' | 'startDate' | 'deadline',
     value: string,
   ) {
     setSubscription((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function updateSubTierBudget(tier: string, value: string) {
+    setSubscription((prev) => ({
+      ...prev,
+      tierBudgets: { ...prev.tierBudgets, [tier]: value.replace(/[^0-9]/g, '') },
+    }));
   }
 
   function toggleSubTier(value: string) {
@@ -452,18 +462,27 @@ export default function AccountantBriefForm({
     // note, and the build-your-own choices (tiers / plan or timeline / budget)
     // are attached so the admin sees the full picture.
     const combinedNote = subscription.note.trim();
+    const tiers = subscription.tiers;
+    const tierBudgets: Record<string, number> = {};
+    for (const t of tiers) {
+      const raw = subscription.tierBudgets[t]?.trim();
+      if (!raw) continue;
+      const n = Math.round(Number(raw));
+      if (Number.isFinite(n) && n > 0) tierBudgets[t] = n;
+    }
+    const budgetValues = Object.values(tierBudgets);
+    const allSame =
+      budgetValues.length > 0 && budgetValues.every((v) => v === budgetValues[0]);
+    // Scalar budget for back-compat (single-tier or identical amounts).
+    const budget = allSame
+      ? budgetValues[0]
+      : budgetValues.length === 1
+        ? budgetValues[0]
+        : undefined;
 
-    const budgetNum = subscription.budget.trim()
-      ? Math.round(Number(subscription.budget))
-      : NaN;
-    // > 0, not >= 0: a budget of 0 means "not stated" and must not be sent —
-    // the server's proposed_price column rejects non-positive values.
-    const budget =
-      Number.isFinite(budgetNum) && budgetNum > 0 ? budgetNum : undefined;
-
-    // Subscription: tiers + weekly plan + monthly budget.
-    // Assignment: tiers (matching only) + one-off project budget + timeline +
-    // pricing mode. Shapes diverge to match the backend's role_requirements zod.
+    // Subscription: selected levels + weekly plan + per-level monthly budget.
+    // Assignment: selected levels + per-level project budget + timeline +
+    // pricing mode. Shapes match the backend's role_requirements zod.
     const accountantReq: {
       note?: string;
       tiers?: string[];
@@ -477,27 +496,21 @@ export default function AccountantBriefForm({
     } = isAssignment
       ? {
           ...(combinedNote ? { note: combinedNote } : {}),
-          ...(subscription.tiers.length ? { tiers: subscription.tiers } : {}),
+          ...(tiers.length ? { tiers } : {}),
           ...(budget !== undefined ? { budget } : {}),
+          ...(Object.keys(tierBudgets).length ? { tier_budgets: tierBudgets } : {}),
           ...(subscription.duration.trim() ? { duration: subscription.duration.trim() } : {}),
           ...(subscription.startDate ? { start_date: subscription.startDate } : {}),
           ...(subscription.deadline ? { deadline: subscription.deadline } : {}),
           pricing_mode: pricingMode,
         }
-      : (() => {
-          // Subscriptions go out to all experience tiers by default; the single
-          // plan budget is replicated across them for the backend's tier_pricing.
-          const allTiers = ['Junior', 'Pro', 'Top Talents'];
-          const tierBudgets: Record<string, number> = {};
-          if (budget !== undefined) for (const t of allTiers) tierBudgets[t] = budget;
-          return {
-            ...(combinedNote ? { note: combinedNote } : {}),
-            tiers: allTiers,
-            ...(subscription.plan ? { plan: subscription.plan } : {}),
-            ...(budget !== undefined ? { budget } : {}),
-            ...(Object.keys(tierBudgets).length ? { tier_budgets: tierBudgets } : {}),
-          };
-        })();
+      : {
+          ...(combinedNote ? { note: combinedNote } : {}),
+          ...(tiers.length ? { tiers } : {}),
+          ...(subscription.plan ? { plan: subscription.plan } : {}),
+          ...(budget !== undefined ? { budget } : {}),
+          ...(Object.keys(tierBudgets).length ? { tier_budgets: tierBudgets } : {}),
+        };
     const roleReqsPayload: Record<string, typeof accountantReq> =
       Object.keys(accountantReq).length > 0 ? { accountant: accountantReq } : {};
 
@@ -835,11 +848,11 @@ export default function AccountantBriefForm({
                 timeline. All optional; empties are dropped on submit. */}
             <Section
               eyebrow={isAssignment ? 'Assignment' : 'Subscription'}
-              title={isAssignment ? 'Scope, budget & timeline' : 'Plan & budget'}
+              title={isAssignment ? 'Scope, budget & timeline' : 'Plan, levels & budget'}
               hint={
                 isAssignment
-                  ? 'Pick the accountant experience, set a project budget and timeline, and describe the scope. All optional — we can finalize on the call.'
-                  : 'Pick the accountant experience and a weekly plan, add a short note, and name a monthly budget. All optional — we can finalize on the call.'
+                  ? 'Pick the experience levels you want, set a project budget per level, and describe the timeline. All optional — we can finalize on the call.'
+                  : 'Pick a weekly plan, choose experience levels, and set a monthly budget for each. All optional — we can finalize on the call.'
               }
             >
               {isAssignment && (
@@ -946,9 +959,6 @@ export default function AccountantBriefForm({
                   </div>
                   )}
 
-                  {/* Subscriptions go out to all experience tiers by default —
-                      only assignments narrow by level. */}
-                  {isAssignment && (
                   <div>
                     <label className="mb-1 flex items-baseline gap-2 text-sm font-medium text-[#222]">
                       <span>Experience level(s)</span>
@@ -956,49 +966,70 @@ export default function AccountantBriefForm({
                     </label>
                     <p className="mb-3 text-xs text-[#7A7568]">
                       Select one or more — we&apos;ll match accountants across all chosen levels.
+                      {isAssignment
+                        ? pricingMode === 'unpriced'
+                          ? ' For each level you pick, you can set an internal budget ceiling.'
+                          : ' For each level you pick, set a project budget.'
+                        : ' For each level you pick, set a monthly budget.'}
                     </p>
-                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                    <div className="space-y-2.5">
                       {EXPERIENCE_LEVELS.map((lvl) => {
                         const on = subscription.tiers.includes(lvl.value);
                         return (
-                          <button
+                          <div
                             key={lvl.value}
-                            type="button"
-                            onClick={() => toggleSubTier(lvl.value)}
-                            aria-pressed={on}
-                            className={`connect-chip ${on ? 'connect-chip-on' : ''}`}
+                            className={`overflow-hidden rounded-xl border transition ${on ? 'border-[#0a0a0a] bg-[#F2FCBC]/50' : 'border-[#E0DCCE] bg-white'}`}
                           >
-                            {on ? `✓ ${lvl.label}` : lvl.label}
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleSubTier(lvl.value)}
+                              aria-pressed={on}
+                              className="flex w-full items-start gap-3 p-3.5 text-left"
+                            >
+                              <span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border ${on ? 'border-[#0a0a0a] bg-[#FCF487]' : 'border-[#C9C4B5] bg-white'}`}>
+                                {on && (
+                                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block text-sm font-semibold text-[#0a0a0a]">{lvl.label}</span>
+                                <span className="mt-0.5 block text-xs leading-relaxed text-[#7A7568]">{lvl.desc}</span>
+                              </span>
+                            </button>
+                            {on && (
+                              <div className="border-t border-[#E0DCCE] px-3.5 py-3 sm:pl-11">
+                                <label className="mb-1 block text-xs font-medium text-[#222]">
+                                  {isAssignment
+                                    ? (pricingMode === 'unpriced' ? `Budget ceiling for ${lvl.label}` : `Project budget for ${lvl.label}`)
+                                    : `Monthly budget for ${lvl.label}`}
+                                  {' '}
+                                  <span className="font-normal text-[#9C9486]">(optional)</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  value={subscription.tierBudgets[lvl.value] ?? ''}
+                                  onChange={(e) => updateSubTierBudget(lvl.value, e.target.value)}
+                                  placeholder={`e.g. ${currencySymbol}${isAssignment ? '50000' : '25000'}`}
+                                  className="connect-input"
+                                />
+                                <p className="mt-1 text-[11px] text-[#9C9486]">
+                                  {isAssignment
+                                    ? (pricingMode === 'unpriced'
+                                      ? `Internal maximum for this level — not shown to accountants. In ${currencySymbol}.`
+                                      : `What you're willing to pay for this project at the ${lvl.label} level.`)
+                                    : `What you're willing to pay per month for a ${lvl.label} on this plan.`}
+                                </p>
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
                   </div>
-                  )}
-
-                  <Field
-                    label={isAssignment ? (pricingMode === 'unpriced' ? 'Budget ceiling' : 'Project budget') : (subscription.plan ? `Monthly budget for the ${subscription.plan} plan` : 'Monthly budget')}
-                    optional
-                    hint={
-                      isAssignment
-                        ? (pricingMode === 'unpriced'
-                            ? `Internal maximum — not shown to accountants, they submit their own offer. In ${currencySymbol}.`
-                            : `Total budget for this project in ${currencySymbol}.`)
-                        : (subscription.plan
-                            ? `Target monthly spend for the ${subscription.plan} plan in ${currencySymbol}. Matches accountants across all experience levels.`
-                            : `Pick a plan above, then set the monthly budget in ${currencySymbol}. Matches accountants across all experience levels.`)
-                    }
-                  >
-                    <input
-                      type="number"
-                      min="0"
-                      inputMode="numeric"
-                      value={subscription.budget}
-                      onChange={(e) => updateSub('budget', e.target.value)}
-                      placeholder={`e.g. ${currencySymbol}${isAssignment ? '50000' : '25000'}`}
-                      className="connect-input"
-                    />
-                  </Field>
 
                   {isAssignment && (
                     <>
