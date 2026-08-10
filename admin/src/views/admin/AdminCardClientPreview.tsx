@@ -6,6 +6,7 @@ import api from '@/services/api';
 import { useSquadhireConfig } from '@/hooks/useSquadhireConfig';
 import { resolveFinalizedPrice } from '@squadhub/shared';
 import CardViewToggle, { type CardViewMode } from './CardViewToggle';
+import AdminAssignmentOffers from './AdminAssignmentOffers';
 import {
   buildUnifiedRecipients,
   formatRelative,
@@ -356,6 +357,9 @@ export default function AdminCardClientPreview({
 
         {/* Tier sub-tabs (multi-tier briefs) — switches the active tier card. */}
         {tierTabs && <div>{tierTabs}</div>}
+
+        {/* ═══ Bidding (above Shortlisted) — live from SquadHire ═══ */}
+        <AdminAssignmentOffers cardId={card.id} />
 
         {/* ═══ Shortlisted ═══ */}
         <ListCard title="Shortlisted" count={shortlisted.length} emptyText="No shortlisted talents yet.">

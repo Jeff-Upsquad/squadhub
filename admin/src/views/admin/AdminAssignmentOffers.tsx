@@ -32,10 +32,12 @@ interface AdminOffer {
   events: OfferEvent[];
 }
 
+const OFFER_STEP = 500;
+
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   pending_business: { label: 'Needs review', cls: 'bg-[#FEF3C7] text-[#92400E]' },
   pending_talent: { label: 'Awaiting talent', cls: 'bg-[#EEF2F6] text-[#475569]' },
-  accepted: { label: 'Accepted — selected', cls: 'bg-[#DCFCE7] text-[#166534]' },
+  accepted: { label: 'Accepted', cls: 'bg-[#DCFCE7] text-[#166534]' },
   declined: { label: 'Declined', cls: 'bg-[#F1F1F3] text-[#737373]' },
   withdrawn: { label: 'Withdrawn', cls: 'bg-[#F1F1F3] text-[#737373]' },
   expired: { label: 'Expired', cls: 'bg-[#F1F1F3] text-[#737373]' },
@@ -82,7 +84,7 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
     mutationFn: (offerId: string) => api.post(`/admin/subscription-cards/${cardId}/offers/${offerId}/accept`, {}),
     onSuccess: () => {
       invalidate();
-      showToast('Offer accepted — talent selected', 'success');
+      showToast('Bid accepted — talent shortlisted; Select from the funnel', 'success');
     },
     onError: (e: any) => showToast(e?.response?.data?.error || 'Could not accept', 'error'),
   });
@@ -105,7 +107,10 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
 
   const submitCounter = (offerId: string) => {
     const n = Math.round(Number(counterVal));
-    if (!Number.isFinite(n) || n <= 0) return;
+    if (!Number.isFinite(n) || n <= 0 || n % OFFER_STEP !== 0) {
+      showToast(`Amount must be a positive multiple of ₹${OFFER_STEP}`, 'error');
+      return;
+    }
     counter.mutate(
       { offerId, amount: { amount: n, currency: 'INR', period: 'project' } },
       {
@@ -120,7 +125,7 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
   return (
     <div className="rounded-2xl border border-[#E7E7EA] bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
       <div className="flex items-center justify-between border-b border-[#E7E7EA] px-5 py-4">
-        <h2 className="text-sm font-semibold text-foreground">Offers &amp; negotiations</h2>
+        <h2 className="text-sm font-semibold text-foreground">Bidding</h2>
         <div className="flex items-center gap-2">
           {source === 'live' && (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#166534]">
@@ -146,7 +151,7 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
         </div>
       ) : offers.length === 0 ? (
         <div className="px-6 py-8 text-center text-sm text-foreground-muted">
-          No offers yet. Talents&apos; submitted offers and counter-offers appear here live from SquadHire.
+          No bids yet. Talent bids and business offers appear here live from SquadHire.
         </div>
       ) : (
         <ul className="divide-y divide-[#E7E7EA]">
@@ -206,7 +211,7 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
                         onClick={() => accept.mutate(o.id)}
                         className="rounded-lg bg-[#0a0a0a] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#1a1a1a] disabled:opacity-40"
                       >
-                        Accept &amp; select
+                        Accept bid
                       </button>
                     </div>
                   )}
@@ -217,9 +222,22 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
 
                 {counterFor === o.id && (
                   <div className="mt-3 flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        setCounterVal((v) =>
+                          String(Math.max(OFFER_STEP, (Number(v) || OFFER_STEP) - OFFER_STEP)),
+                        )
+                      }
+                      className="rounded-lg border border-[#E7E7EA] px-2.5 py-1.5 text-sm font-semibold disabled:opacity-40"
+                    >
+                      −{OFFER_STEP}
+                    </button>
                     <input
                       type="number"
-                      min={1}
+                      min={OFFER_STEP}
+                      step={OFFER_STEP}
                       value={counterVal}
                       onChange={(e) => setCounterVal(e.target.value)}
                       placeholder="Your figure (₹)"
@@ -227,7 +245,17 @@ export default function AdminAssignmentOffers({ cardId }: { cardId: string }) {
                     />
                     <button
                       type="button"
-                      disabled={busy || !(Number(counterVal) > 0)}
+                      disabled={busy}
+                      onClick={() =>
+                        setCounterVal((v) => String((Number(v) || 0) + OFFER_STEP))
+                      }
+                      className="rounded-lg border border-[#E7E7EA] px-2.5 py-1.5 text-sm font-semibold disabled:opacity-40"
+                    >
+                      +{OFFER_STEP}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy || !(Number(counterVal) > 0) || Number(counterVal) % OFFER_STEP !== 0}
                       onClick={() => submitCounter(o.id)}
                       className="rounded-lg bg-[#0a0a0a] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
                     >

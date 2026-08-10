@@ -6,7 +6,7 @@ import { config } from '../config';
 import { supabaseAdmin } from '../supabase';
 
 /**
- * Assignments — admin offer / counter-offer management.
+ * Card offers / bids — admin management for subscription + assignment cards.
  *
  * SquadHire (Profiles) is CANONICAL for the offer negotiation, and the admin
  * reads it LIVE (the "synced, not mirrored, fetched live" requirement): there
@@ -14,6 +14,9 @@ import { supabaseAdmin } from '../supabase';
  * Profiles; every write is a signed proxy to its admin-mirror webhook
  * (/api/webhooks/squadhub/cards/offers) with actor {type:'admin',
  * source:'squadhub'} (Profiles applies it canonically + notifies the talent).
+ *
+ * Accept ≠ Select: accepting a bid only locks the figure + shortlists; Select
+ * stays on the recipients funnel.
  *
  * Resilience mirrors job-cards-admin-candidates.ts: per-call timeout + a
  * circuit breaker. With no mirror, a degraded upstream yields an empty list
@@ -139,13 +142,15 @@ async function proxyOfferAction(req: Request, res: Response, body: Record<string
   }
 }
 
-async function assignmentCardExists(cardId: string): Promise<boolean> {
+const OFFERABLE_TYPES = new Set(['subscription', 'assignment']);
+
+async function offerableCardExists(cardId: string): Promise<boolean> {
   const { data } = await supabaseAdmin
     .from('subscription_cards')
     .select('id, card_type')
     .eq('id', cardId)
     .maybeSingle();
-  return !!data && (data as any).card_type === 'assignment';
+  return !!data && OFFERABLE_TYPES.has((data as any).card_type as string);
 }
 
 // ============================================================
@@ -156,8 +161,8 @@ async function assignmentCardExists(cardId: string): Promise<boolean> {
 router.get('/:id/offers', async (req: Request, res: Response) => {
   try {
     const cardId = req.params.id as string;
-    if (!(await assignmentCardExists(cardId))) {
-      res.status(404).json({ success: false, error: 'Assignment card not found' });
+    if (!(await offerableCardExists(cardId))) {
+      res.status(404).json({ success: false, error: 'Card not found' });
       return;
     }
     if (!configured() || breakerIsOpen()) {
@@ -179,11 +184,51 @@ router.get('/:id/offers', async (req: Request, res: Response) => {
   }
 });
 
+const OFFER_STEP = 500;
 const counterSchema = z.object({
-  amount: z.object({ amount: z.number().nonnegative() }).passthrough(),
+  amount: z
+    .object({
+      amount: z
+        .number()
+        .positive()
+        .refine((n) => Math.round(n) === n && n % OFFER_STEP === 0, {
+          message: `Amount must be a positive multiple of ₹${OFFER_STEP}`,
+        }),
+    })
+    .passthrough(),
   note: z.string().trim().max(2000).optional(),
 });
 const actionSchema = z.object({ note: z.string().trim().max(2000).optional() });
+const sendSchema = z.object({
+  recipient_id: z.string().min(1),
+  amount: z
+    .object({
+      amount: z
+        .number()
+        .positive()
+        .refine((n) => Math.round(n) === n && n % OFFER_STEP === 0, {
+          message: `Amount must be a positive multiple of ₹${OFFER_STEP}`,
+        }),
+    })
+    .passthrough(),
+  note: z.string().trim().max(2000).optional(),
+});
+
+// POST /:id/offers/send — admin sends an offer to a talent (auto-shortlists).
+router.post('/:id/offers/send', async (req: Request, res: Response) => {
+  const parsed = sendSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: parsed.error.errors[0].message });
+    return;
+  }
+  await proxyOfferAction(req, res, {
+    op: 'send',
+    external_id: req.params.id,
+    recipient_id: parsed.data.recipient_id,
+    amount: parsed.data.amount,
+    ...(parsed.data.note ? { note: parsed.data.note } : {}),
+  });
+});
 
 // POST /:id/offers/:offerId/counter — admin counters the talent's figure.
 router.post('/:id/offers/:offerId/counter', async (req: Request, res: Response) => {
@@ -201,7 +246,7 @@ router.post('/:id/offers/:offerId/counter', async (req: Request, res: Response) 
   });
 });
 
-// POST /:id/offers/:offerId/accept — admin accepts (accept + select the talent).
+// POST /:id/offers/:offerId/accept — admin accepts the bid (does NOT select).
 router.post('/:id/offers/:offerId/accept', async (req: Request, res: Response) => {
   const parsed = actionSchema.safeParse(req.body ?? {});
   await proxyOfferAction(req, res, {
